@@ -35,6 +35,7 @@ interface NewPostInput {
   match?: MatchResult;
   session?: SessionDetail;
   mediaLabel?: string;
+  videoUrl?: string;
 }
 
 interface NewQuestionInput {
@@ -55,6 +56,7 @@ interface AppActions {
   signIn: (handle: string) => Promise<void>;
   signOut: () => void;
   completeOnboarding: (profile: PlayerProfile) => void;
+  updateIdentity: (patch: Pick<User, 'name' | 'bio' | 'location'>) => void;
   updateProfile: (patch: Partial<PlayerProfile>) => void;
 
   toggleLike: (postId: ID) => void;
@@ -167,6 +169,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     [patchCurrentUser],
   );
+
+  const updateIdentity = useCallback((patch: Pick<User, 'name' | 'bio' | 'location'>) => { patchCurrentUser(u => ({ ...u, ...patch })); }, [patchCurrentUser]);
 
   const updateProfile = useCallback(
     (patch: Partial<PlayerProfile>) => {
@@ -342,6 +346,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       signOut,
       completeOnboarding,
       updateProfile,
+      updateIdentity,
       toggleLike,
       addPost,
       addComment,
@@ -357,6 +362,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       signOut,
       completeOnboarding,
       updateProfile,
+      updateIdentity,
       toggleLike,
       addPost,
       addComment,

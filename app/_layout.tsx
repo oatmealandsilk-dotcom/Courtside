@@ -18,7 +18,7 @@ export default function RootLayout() {
             animation: 'slide_from_right',
           }}
         >
-          <Stack.Screen name="compose" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="compose" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="ask" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         </Stack>
       </AppProvider>

@@ -116,7 +116,7 @@ export interface Achievement {
 
 /* ---------------------------------- Feed --------------------------------- */
 
-export type PostKind = 'match' | 'session' | 'note' | 'gear' | 'milestone';
+export type PostKind = 'reel' | 'match' | 'session' | 'note' | 'gear' | 'milestone';
 
 export interface MatchResult {
   opponentName: string;
@@ -141,6 +141,8 @@ export interface Post {
   body: string;
   /** Placeholder media: rendered as a tinted court card, not a network image. */
   mediaLabel?: string;
+  videoUrl?: string;
+  taggedUserIds?: ID[];
   location?: string;
   match?: MatchResult;
   session?: SessionDetail;

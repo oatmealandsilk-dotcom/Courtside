@@ -24,11 +24,10 @@ interface NavItem {
 }
 
 const ITEMS: NavItem[] = [
-  { route: 'index', label: 'Feed', icon: 'home-outline', activeIcon: 'home' },
-  { route: 'discuss', label: 'Discuss', icon: 'chatbubbles-outline', activeIcon: 'chatbubbles' },
-  { route: 'train', label: 'Train', icon: 'sparkles-outline', activeIcon: 'sparkles' },
-  { route: 'coaches', label: 'Coaches', icon: 'people-outline', activeIcon: 'people' },
-  { route: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
+  { route: 'index', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
+  { route: 'discuss', label: 'Community', icon: 'people-outline', activeIcon: 'people' },
+  { route: 'coaches', label: 'Coaching', icon: 'chatbubble-outline', activeIcon: 'chatbubble' },
+  { route: 'profile', label: 'Me', icon: 'person-outline', activeIcon: 'person' },
 ];
 
 export function NavBar({ state, navigation }: NavBarProps) {
@@ -39,11 +38,12 @@ export function NavBar({ state, navigation }: NavBarProps) {
   if (isPhone) {
     return (
       <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
-        {ITEMS.map((item) => {
+        {ITEMS.map((item, index) => {
           const active = item.route === activeRoute;
           return (
+            <React.Fragment key={item.route}>
+            {index === 2 && <View style={styles.createSlot}><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => router.push('/compose')} style={styles.createButton}><Ionicons name="add" size={30} color={colors.brandInk} /></Pressable></View>}
             <Pressable
-              key={item.route}
               onPress={() => navigation.navigate(item.route)}
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
@@ -53,10 +53,11 @@ export function NavBar({ state, navigation }: NavBarProps) {
               <Ionicons
                 name={active ? item.activeIcon : item.icon}
                 size={23}
-                color={active ? colors.text : colors.textFaint}
+                color={active ? (item.route === 'coaches' ? colors.info : item.route === 'discuss' ? colors.warning : colors.brand) : colors.textFaint}
               />
-              <Text style={[styles.bottomLabel, active && { color: colors.text }]}>{item.label}</Text>
+              <Text style={[styles.bottomLabel, active && { color: item.route === 'coaches' ? colors.info : item.route === 'discuss' ? colors.warning : colors.brand }]}>{item.label}</Text>
             </Pressable>
+            </React.Fragment>
           );
         })}
       </View>
@@ -134,6 +135,8 @@ export function NavBar({ state, navigation }: NavBarProps) {
 }
 
 const styles = StyleSheet.create({
+  createSlot: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  createButton: { width: 48, height: 48, borderRadius: 14, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   bottomBar: {
     flexDirection: 'row',
     backgroundColor: colors.bgElevated,
@@ -141,7 +144,7 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
     paddingTop: spacing.sm,
   },
-  bottomItem: { flex: 1, alignItems: 'center', gap: 3 },
+  bottomItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 48 },
   bottomLabel: { ...typography.caption, fontSize: 10, color: colors.textFaint, letterSpacing: 0 },
 
   sidebar: {

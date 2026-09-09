@@ -8,12 +8,12 @@ import { colors, radius, spacing, surfaceColorFor, typography } from '@/theme';
  * Stand-in for uploaded photo/video. The mock build ships no binary assets, so
  * media renders as a deterministic tinted court card instead of a broken image.
  */
-export function MediaPlaceholder({ label, seed }: { label: string; seed: string }) {
+export function MediaPlaceholder({ label, seed, portrait = false }: { label: string; seed: string; portrait?: boolean }) {
   const tint = surfaceColorFor(seed);
   const isVideo = /·\s*\d+:\d+/.test(label);
 
   return (
-    <View style={[styles.wrap, { backgroundColor: `${tint}22`, borderColor: `${tint}55` }]}>
+    <View style={[styles.wrap, portrait && { aspectRatio: 9 / 12, maxHeight: 600, backgroundColor: '#203E2A' }, { backgroundColor: `${tint}22`, borderColor: `${tint}55` }]}>
       <View style={styles.court}>
         <View style={[styles.line, styles.baseline]} />
         <View style={[styles.line, styles.service]} />
@@ -26,6 +26,7 @@ export function MediaPlaceholder({ label, seed }: { label: string; seed: string 
           color={colors.text}
         />
         <Text style={styles.label}>{label}</Text>
+        {portrait && <Text style={styles.label}>Demo reel preview</Text>}
       </View>
     </View>
   );

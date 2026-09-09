@@ -2,7 +2,8 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { Card, Chip } from '@/components/ui';
+import { LevelPill } from '@/components/LevelPill';
+import { Avatar, Card, Chip } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
 import type { Question, QuestionTopic, User } from '@/data/types';
 import { colors, spacing, typography } from '@/theme';
@@ -29,44 +30,25 @@ export function QuestionCard({ question, author, onPress, answered }: Props) {
 
   return (
     <Card onPress={onPress} style={styles.card}>
-      <View style={styles.row}>
-        <View style={styles.voteBox}>
-          <Text style={styles.voteCount}>{question.votes}</Text>
-          <Text style={styles.voteLabel}>VOTES</Text>
-        </View>
-
-        <View style={styles.main}>
-          <Text style={styles.title}>{question.title}</Text>
-          <Text style={styles.preview} numberOfLines={2}>
-            {question.body}
-          </Text>
-          <View style={styles.metaRow}>
-            <Chip label={meta.label} small selected tint={meta.tint} ink="#0A1120" />
-            {question.tags.slice(0, 2).map((tag) => (
-              <Chip key={tag} label={`#${tag}`} small />
-            ))}
-          </View>
-          <View style={styles.footer}>
-            <Ionicons
-              name={answered ? 'checkmark-circle' : 'chatbubbles-outline'}
-              size={14}
-              color={answered ? colors.court : colors.textFaint}
-            />
-            <Text style={[styles.footerText, answered && { color: colors.court }]}>
-              {question.answerIds.length} {question.answerIds.length === 1 ? 'answer' : 'answers'}
-            </Text>
-            <Text style={styles.footerText}>
-              · {author ? `@${author.handle}` : 'unknown'} · {relativeTime(question.createdAt)}
-            </Text>
-          </View>
-        </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        {author && <Avatar name={author.name} seed={author.avatarSeed} size={30} />}
+        <Text style={styles.footerText}>@{author?.handle ?? 'player'}</Text>
+        {author && <LevelPill profile={author.profile} small />}
+        <Text style={[styles.footerText, { marginLeft: 'auto' }]}>{relativeTime(question.createdAt)}</Text>
+      </View>
+      <Text style={styles.title}>{question.title}</Text>
+      <View style={styles.footer}>
+        <Ionicons name="caret-up" size={16} color={colors.textMuted} /><Text style={styles.footerText}>{question.votes}</Text>
+        <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted} style={{ marginLeft: 12 }} /><Text style={styles.footerText}>{question.answerIds.length}</Text>
+        <Chip label={meta.label} small />
+        {answered && <Ionicons name="checkmark-circle" size={16} color={colors.court} />}
       </View>
     </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { gap: 0 },
+  card: { gap: 16, borderWidth: 0, borderBottomWidth: 1, borderRadius: 0, paddingHorizontal: 0, paddingVertical: 20, backgroundColor: colors.bg },
   row: { flexDirection: 'row', gap: spacing.lg },
   voteBox: { alignItems: 'center', width: 44, gap: 1 },
   voteCount: { ...typography.title, color: colors.brand },

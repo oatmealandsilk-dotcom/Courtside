@@ -6,7 +6,7 @@ export const posts: Post[] = [
   {
     id: 'p1',
     authorId: 'u-mira',
-    kind: 'match',
+    kind: 'reel',
     createdAt: isoDaysAgo(0, 3),
     body: 'Third set tiebreak against a lefty who would not miss. Finally started taking the forehand early instead of backing up five feet. That was the whole match.',
     mediaLabel: 'Match highlights · 0:42',
@@ -57,7 +57,7 @@ export const posts: Post[] = [
   {
     id: 'p5',
     authorId: 'u-tomas',
-    kind: 'note',
+    kind: 'reel',
     createdAt: isoDaysAgo(2, 6),
     body: 'Watching club players all week: nearly every double fault starts with a rushed ritual, not a bad motion. Same bounce count, same breath, every single time. That is the fix.',
     mediaLabel: 'Coaching clip · 1:10',

@@ -4,12 +4,13 @@ import { router } from 'expo-router';
 
 import { Button, Chip, Field, Screen, SegmentedControl, type Segment } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
-import type { PostKind, SurfacePreference } from '@/data/types';
+import { TOPIC_META } from '@/components/QuestionCard';
+import type { QuestionTopic, PostKind, SurfacePreference } from '@/data/types';
 import { colors, spacing, typography } from '@/theme';
 
 const KINDS: Segment<PostKind>[] = [
   { value: 'session', label: 'Session' },
-  { value: 'match', label: 'Match' },
+  { value: 'match', label: 'Set play' },
   { value: 'note', label: 'Note' },
   { value: 'gear', label: 'Gear' },
 ];
@@ -19,7 +20,11 @@ const SURFACES: SurfacePreference[] = ['hard', 'clay', 'grass', 'indoor'];
 export default function Compose() {
   const { actions } = useApp();
 
-  const [kind, setKind] = useState<PostKind>('session');
+  const [mode, setMode] = useState<'post' | 'question' | 'reel'>('post');
+  const [questionTitle, setQuestionTitle] = useState('');
+  const [topic, setTopic] = useState<QuestionTopic>('gear');
+  const [kind, setKind] = useState<PostKind>('note');
+  const [videoUrl, setVideoUrl] = useState('');
   const [body, setBody] = useState('');
   const [location, setLocation] = useState('');
   const [tags, setTags] = useState('');
@@ -37,7 +42,8 @@ export default function Compose() {
   const [won, setWon] = useState(true);
   const [surface, setSurface] = useState<SurfacePreference>('hard');
 
-  const canSubmit = body.trim().length > 0;
+  const validVideo = /^https:\/\/[^\s]+$/i.test(videoUrl.trim());
+  const canSubmit = body.trim().length > 0 && (mode !== 'reel' || validVideo) && (mode !== 'question' || questionTitle.trim().length > 8 && body.trim().length > 20);
 
   const submit = () => {
     if (!canSubmit) return;
@@ -47,8 +53,14 @@ export default function Compose() {
       .map((t) => t.trim().replace(/^#/, ''))
       .filter(Boolean);
 
+    if (mode === 'question') {
+      const id = actions.addQuestion({ title: questionTitle.trim(), body: body.trim(), topic, tags: tagList });
+      router.replace(`/question/${id}`);
+      return;
+    }
     actions.addPost({
       kind,
+      videoUrl: kind === 'reel' ? videoUrl.trim() : undefined,
       body: body.trim(),
       location: location.trim() || undefined,
       tags: tagList,
@@ -83,17 +95,22 @@ export default function Compose() {
   };
 
   return (
-    <Screen title="New post" compactTitle onBack={() => router.back()}>
+    <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay }}><View style={{ height: '88%', maxWidth: 700, width: '100%', alignSelf: 'center', borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden', backgroundColor: colors.bg }}>
+    <Screen title="New Post" compactTitle onBack={() => router.back()} right={<Button label="Share" variant="secondary" onPress={submit} disabled={!canSubmit} />}>
       <View style={styles.form}>
-        <SegmentedControl segments={KINDS} value={kind} onChange={setKind} />
+        <SegmentedControl segments={[{value:'post',label:'Post'},{value:'question',label:'Question'},{value:'reel',label:'Reel'}]} value={mode} onChange={(value: 'post' | 'question' | 'reel') => { setMode(value); setKind(value === 'reel' ? 'reel' : 'note'); }} />
+        {mode === 'post' && <SegmentedControl segments={KINDS} value={kind} onChange={setKind} />}
+        {mode === 'question' && <><Field label="Question" value={questionTitle} onChangeText={setQuestionTitle} placeholder="What would you like to ask the community?"/><View style={styles.row}>{(Object.keys(TOPIC_META) as QuestionTopic[]).map(t => <Chip key={t} label={TOPIC_META[t].label} selected={topic===t} onPress={()=>setTopic(t)}/>)}</View></>}
 
         <Field
-          label="What happened?"
+          label={mode === 'question' ? 'Details' : 'Caption'}
           value={body}
           onChangeText={setBody}
           placeholder="Say what you worked on and what actually changed."
           multiline
         />
+
+        {kind === 'reel' ? <Field label="Video URL" value={videoUrl} onChangeText={setVideoUrl} autoCapitalize="none" placeholder="https://…/your-video.mp4" hint="Paste a direct HTTPS video link (MP4 recommended). Videos play inline on iPhone and desktop web. Posts are kept for this demo session." /> : null}
 
         {kind === 'session' ? (
           <>
@@ -155,6 +172,7 @@ export default function Compose() {
           autoCapitalize="none"
         />
 
+        {mode === 'post' && <>
         <Button
           label={attachMedia ? 'Media attached ✓' : 'Attach photo or clip'}
           variant="secondary"
@@ -164,9 +182,11 @@ export default function Compose() {
           Media uploads are stubbed — attaching renders a placeholder card so the layout is real.
         </Text>
 
-        <Button label="Post" onPress={submit} disabled={!canSubmit} full />
+        </>}
+        {mode === 'question' && !canSubmit && <Text style={styles.note}>Add a question over 8 characters and details over 20 characters.</Text>}
       </View>
     </Screen>
+    </View></View>
   );
 }
 

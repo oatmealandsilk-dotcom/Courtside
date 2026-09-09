@@ -36,7 +36,7 @@ export default function Train() {
 
   if (!currentUser || !plan) {
     return (
-      <Screen title="Train">
+      <Screen title="AI Coach">
         <ActivityIndicator color={colors.brand} />
       </Screen>
     );
@@ -69,7 +69,7 @@ export default function Train() {
   };
 
   return (
-    <Screen title="Train" subtitle={plan.headline}>
+    <Screen title="AI Coach" subtitle={plan.headline} onBack={() => router.back()}>
       <Card style={styles.summaryCard}>
         <View style={styles.summaryHead}>
           <Ionicons name="sparkles" size={16} color={colors.brand} />

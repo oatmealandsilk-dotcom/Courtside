@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import { ReelVideo } from '@/components/ReelVideo';
 import { Avatar, Card, Chip } from '@/components/ui';
 import { LevelPill } from '@/components/LevelPill';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
@@ -19,7 +20,8 @@ interface Props {
 }
 
 const KIND_META: Record<Post['kind'], { label: string; icon: keyof typeof Ionicons.glyphMap; tint: string }> = {
-  match: { label: 'Match', icon: 'trophy-outline', tint: colors.brand },
+  reel: { label: 'Reel', icon: 'videocam-outline', tint: colors.brand },
+  match: { label: 'Set play', icon: 'trophy-outline', tint: colors.brand },
   session: { label: 'Session', icon: 'barbell-outline', tint: colors.court },
   note: { label: 'Note', icon: 'chatbubble-ellipses-outline', tint: colors.hard },
   gear: { label: 'Gear', icon: 'pricetag-outline', tint: colors.clay },
@@ -50,6 +52,7 @@ export function PostCard({ post, author, liked, onToggleLike, onPress, onPressAu
         <LevelPill profile={author.profile} small />
       </Pressable>
 
+      {post.videoUrl ? <ReelVideo uri={post.videoUrl} /> : post.kind === 'reel' ? <MediaPlaceholder label={post.mediaLabel ?? 'Reel'} seed={post.id} portrait /> : null}
       <Pressable onPress={onPress} style={styles.body}>
         <View style={[styles.kindRow, { borderColor: `${meta.tint}55` }]}>
           <Ionicons name={meta.icon} size={13} color={meta.tint} />
@@ -93,7 +96,7 @@ export function PostCard({ post, author, liked, onToggleLike, onPress, onPressAu
           </View>
         ) : null}
 
-        {post.mediaLabel ? <MediaPlaceholder label={post.mediaLabel} seed={post.id} /> : null}
+        {post.mediaLabel && !post.videoUrl && post.kind !== 'reel' ? <MediaPlaceholder label={post.mediaLabel} seed={post.id}  /> : null}
 
         {post.tags.length > 0 ? (
           <View style={styles.tagRow}>
