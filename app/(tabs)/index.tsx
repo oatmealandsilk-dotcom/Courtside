@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import { useResponsive } from '@/lib/useResponsive';
 import { PostCard } from '@/components/PostCard';
-import { EmptyState, Screen, SegmentedControl, type Segment } from '@/components/ui';
+import { Avatar, EmptyState, Screen, SegmentedControl, type Segment } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -19,6 +20,7 @@ const SEGMENTS: Segment<FeedFilter>[] = [
 
 export default function Feed() {
   const { posts, users, currentUserId, actions, ready } = useApp();
+  const { isPhone } = useResponsive();
   const [filter, setFilter] = useState<FeedFilter>('all');
 
   const visible = useMemo(() => {
@@ -31,8 +33,20 @@ export default function Feed() {
   return (
     <Screen
       title="CourtSide"
+      rail={<View style={{ gap: 24 }}>
+        {users.filter(u => u.id === currentUserId).map(u => <Pressable key={u.id} onPress={() => router.push('/profile')} style={styles.person}>
+          <Avatar name={u.name} seed={u.avatarSeed} size={46} /><View style={{ flex: 1 }}><Text style={styles.personName}>{u.name}</Text><Text style={styles.personMeta}>@{u.handle}</Text></View>
+        </Pressable>)}
+        <View style={styles.railHeading}><Text style={styles.personMeta}>Suggested for you</Text><Text style={styles.railLabel}>EXPLORE</Text></View>
+        {users.filter(u => u.id !== currentUserId).slice(0, 5).map(u => <Pressable key={u.id} accessibilityRole="link" onPress={() => router.push(`/user/${u.id}`)} style={styles.person}>
+          <Avatar name={u.name} seed={u.avatarSeed} size={38} /><View style={{ flex: 1 }}><Text style={styles.personName}>{u.name}</Text><Text style={styles.personMeta}>{u.isCoach ? 'Coach' : 'Tennis player'}</Text></View><Ionicons name="chevron-forward" size={15} color={colors.textFaint} />
+        </Pressable>)}
+        <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 24, gap: 8 }}><Text style={styles.personName}>Make time for your game.</Text><Text style={styles.personMeta}>Find your next session, share the small wins, and keep showing up.</Text></View>
+        <Text style={styles.railLabel}>© COURTSIDE · SEE YOU ON COURT</Text>
+      </View>}
+
       subtitle="What your circle has been working on"
-      right={
+      right={isPhone &&
         <Pressable
           onPress={() => router.push('/compose')}
           style={styles.fab}
@@ -43,6 +57,12 @@ export default function Feed() {
         </Pressable>
       }
     >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 20, paddingBottom: 24, paddingTop: 6 }}>
+        {users.filter(u => u.id !== currentUserId).map(u => <Pressable key={u.id} accessibilityRole="link" accessibilityLabel={`View ${u.name}`} onPress={() => router.push(`/user/${u.id}`)} style={{ alignItems: 'center', gap: 8, width: 62 }}>
+          <View style={{ borderWidth: 1, borderColor: colors.borderStrong, padding: 4, borderRadius: 40 }}><Avatar name={u.name} seed={u.avatarSeed} size={52} /></View>
+          <Text numberOfLines={1} style={styles.personMeta}>{u.name.split(' ')[0]}</Text>
+        </Pressable>)}
+      </ScrollView>
       <View style={styles.filters}>
         <SegmentedControl segments={SEGMENTS} value={filter} onChange={setFilter} />
       </View>
@@ -79,6 +99,11 @@ export default function Feed() {
 }
 
 const styles = StyleSheet.create({
+  person: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  personName: { fontSize: 13, fontWeight: '600', color: colors.text },
+  personMeta: { fontSize: 12, color: colors.textMuted, lineHeight: 19 },
+  railHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  railLabel: { fontSize: 9, color: colors.textFaint, letterSpacing: 0.6 },
   fab: {
     width: 38,
     height: 38,

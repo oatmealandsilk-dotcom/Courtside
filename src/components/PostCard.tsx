@@ -125,7 +125,7 @@ export function PostCard({ post, author, liked, onToggleLike, onPress, onPressAu
 }
 
 const styles = StyleSheet.create({
-  card: { gap: spacing.md },
+  card: { gap: spacing.md, borderRadius: 0, borderWidth: 0, borderBottomWidth: 1, paddingHorizontal: 0, paddingBottom: spacing.xl, backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headerText: { flex: 1, gap: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },

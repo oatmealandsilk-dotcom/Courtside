@@ -1,35 +1,12 @@
-/**
- * CourtSide design tokens.
- * Dark-first palette: deep navy court at night, tennis-ball lime as the accent.
- */
-
+/** CourtSide: warm neutrals and muted court-green accents. */
 export const colors = {
-  bg: '#0B1220',
-  bgElevated: '#111A2B',
-  surface: '#152036',
-  surfaceAlt: '#1C2942',
-  border: '#25334D',
-  borderStrong: '#334566',
-
-  text: '#E9EEF9',
-  textMuted: '#93A2BD',
-  textFaint: '#647694',
-
-  brand: '#D8F55E',
-  brandInk: '#16210A',
-  brandDim: '#3B4720',
-
-  court: '#2FA36B',
-  clay: '#E0714A',
-  hard: '#4C8DF6',
-  grass: '#5DBE7C',
-
-  info: '#4C8DF6',
-  success: '#37C08A',
-  warning: '#F2B441',
-  danger: '#F0616D',
-
-  overlay: 'rgba(6, 10, 18, 0.72)',
+  bg: '#FAFAF8', bgElevated: '#F3F4F0', surface: '#FFFFFF', surfaceAlt: '#EBEEE8',
+  border: '#E1E5DE', borderStrong: '#C5CDC2',
+  text: '#242B27', textMuted: '#626D65', textFaint: '#737D75',
+  brand: '#456953', brandInk: '#FFFFFF', brandDim: '#E5EDE6',
+  court: '#54775F', clay: '#A56D52', hard: '#59788E', grass: '#6E8260',
+  info: '#59788E', success: '#54775F', warning: '#966F32', danger: '#B45159',
+  overlay: 'rgba(24, 32, 27, 0.5)',
 } as const;
 
 export const spacing = {
@@ -61,8 +38,9 @@ export const typography = {
   caption: { fontSize: 11, fontWeight: '600' as const, letterSpacing: 0.4 },
 } as const;
 
+/** Muted avatar tints — deterministic per seed, none of them loud. */
 export const surfaceColorFor = (seed: string): string => {
-  const palette = [colors.court, colors.clay, colors.hard, colors.grass, '#8A6BE0', '#E05A9B'];
+  const palette = ['#4E8C6A', '#BE7458', '#5C86BC', '#6FA184', '#7C6BA8', '#B06A8A'];
   let hash = 0;
   for (let i = 0; i < seed.length; i += 1) {
     hash = (hash * 31 + seed.charCodeAt(i)) % 100000;

@@ -33,7 +33,8 @@ export function MediaPlaceholder({ label, seed }: { label: string; seed: string 
 
 const styles = StyleSheet.create({
   wrap: {
-    height: 168,
+    aspectRatio: 1.65,
+    width: '100%',
     borderRadius: radius.md,
     borderWidth: 1,
     overflow: 'hidden',

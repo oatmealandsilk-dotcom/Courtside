@@ -1,0 +1,171 @@
+import React from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { LAYOUT, useResponsive } from '@/lib/useResponsive';
+import { colors, radius, spacing, typography } from '@/theme';
+
+/**
+ * Minimal shape of what react-navigation hands a custom tabBar. Typed locally
+ * so the app does not depend on @react-navigation/bottom-tabs directly.
+ */
+export interface NavBarProps {
+  state: { index: number; routes: { key: string; name: string }[] };
+  navigation: { navigate: (name: string) => void };
+}
+
+interface NavItem {
+  route: string;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  activeIcon: keyof typeof Ionicons.glyphMap;
+}
+
+const ITEMS: NavItem[] = [
+  { route: 'index', label: 'Feed', icon: 'home-outline', activeIcon: 'home' },
+  { route: 'discuss', label: 'Discuss', icon: 'chatbubbles-outline', activeIcon: 'chatbubbles' },
+  { route: 'train', label: 'Train', icon: 'sparkles-outline', activeIcon: 'sparkles' },
+  { route: 'coaches', label: 'Coaches', icon: 'people-outline', activeIcon: 'people' },
+  { route: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
+];
+
+export function NavBar({ state, navigation }: NavBarProps) {
+  const { isPhone, isCompactSidebar } = useResponsive();
+  const insets = useSafeAreaInsets();
+  const activeRoute = state.routes[state.index]?.name ?? 'index';
+
+  if (isPhone) {
+    return (
+      <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
+        {ITEMS.map((item) => {
+          const active = item.route === activeRoute;
+          return (
+            <Pressable
+              key={item.route}
+              onPress={() => navigation.navigate(item.route)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={item.label}
+              style={styles.bottomItem}
+            >
+              <Ionicons
+                name={active ? item.activeIcon : item.icon}
+                size={23}
+                color={active ? colors.text : colors.textFaint}
+              />
+              <Text style={[styles.bottomLabel, active && { color: colors.text }]}>{item.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    );
+  }
+
+  const compact = isCompactSidebar;
+
+  return (
+    <View
+      style={[
+        styles.sidebar,
+        { width: compact ? LAYOUT.sidebarCompact : LAYOUT.sidebar, paddingTop: insets.top + spacing.xl },
+      ]}
+    >
+      <View style={[styles.brandRow, compact && styles.brandRowCompact]}>
+        {compact ? (
+          <Ionicons name="tennisball" size={24} color={colors.brand} />
+        ) : (
+          <Text style={styles.wordmark}>CourtSide</Text>
+        )}
+      </View>
+
+      <View style={styles.sidebarItems}>
+        {ITEMS.map((item) => {
+          const active = item.route === activeRoute;
+          return (
+            <Pressable
+              key={item.route}
+              onPress={() => navigation.navigate(item.route)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={item.label}
+              style={({ pressed }) => [
+                styles.sidebarItem,
+                compact && styles.sidebarItemCompact,
+                active && styles.sidebarItemActive,
+                pressed && { backgroundColor: colors.surfaceAlt },
+              ]}
+            >
+              <Ionicons
+                name={active ? item.activeIcon : item.icon}
+                size={23}
+                color={active ? colors.text : colors.textMuted}
+              />
+              {compact ? null : (
+                <Text style={[styles.sidebarLabel, active && styles.sidebarLabelActive]}>
+                  {item.label}
+                </Text>
+              )}
+            </Pressable>
+          );
+        })}
+
+        <Pressable
+          onPress={() => router.push('/compose')}
+          accessibilityRole="button"
+          accessibilityLabel="Create a post"
+          style={({ pressed }) => [
+            styles.sidebarItem,
+            compact && styles.sidebarItemCompact,
+            pressed && { backgroundColor: colors.surfaceAlt },
+          ]}
+        >
+          <Ionicons name="add-circle-outline" size={23} color={colors.textMuted} />
+          {compact ? null : <Text style={styles.sidebarLabel}>Create</Text>}
+        </Pressable>
+      </View>
+
+      {compact ? null : (
+        <Text style={styles.sidebarFootnote}>Demo build · mock data only</Text>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  bottomBar: {
+    flexDirection: 'row',
+    backgroundColor: colors.bgElevated,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    paddingTop: spacing.sm,
+  },
+  bottomItem: { flex: 1, alignItems: 'center', gap: 3 },
+  bottomLabel: { ...typography.caption, fontSize: 10, color: colors.textFaint, letterSpacing: 0 },
+
+  sidebar: {
+    backgroundColor: colors.bg,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.xl,
+  },
+  brandRow: { paddingHorizontal: spacing.md, paddingBottom: spacing.xxl },
+  brandRowCompact: { paddingHorizontal: 0, alignItems: 'center' },
+  wordmark: { fontSize: 23, fontWeight: '800', color: colors.text, letterSpacing: -0.5 },
+  sidebarItems: { flex: 1, gap: spacing.xs },
+  sidebarItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+  },
+  sidebarItemCompact: { justifyContent: 'center', paddingHorizontal: 0, gap: 0 },
+  sidebarItemActive: { backgroundColor: colors.surface },
+  sidebarLabel: { ...typography.body, color: colors.textMuted },
+  sidebarLabelActive: { color: colors.text, fontWeight: '700' },
+  sidebarFootnote: { ...typography.caption, color: colors.textFaint, paddingHorizontal: spacing.md },
+});

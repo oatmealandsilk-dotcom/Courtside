@@ -36,5 +36,5 @@ export function Avatar({ name, seed, size = 40, style, ring = false }: Props) {
 
 const styles = StyleSheet.create({
   base: { alignItems: 'center', justifyContent: 'center' },
-  label: { color: '#08111F', fontWeight: '800' },
+  label: { color: '#FFFFFF', fontWeight: '800' },
 });
