@@ -9,17 +9,24 @@
 import { achievements } from './mock/achievements';
 import { coaches, coachingRequests } from './mock/coaching';
 import { answers, questions } from './mock/discussions';
+import { coachQuestions, coachReplies } from './mock/coachQuestions';
 import { comments, posts } from './mock/feed';
+import { conversations, messages } from './mock/messages';
 import { healthHistory, integrations } from './mock/health';
 import { users } from './mock/users';
 import type {
   Achievement,
   Answer,
   Coach,
+  CoachApplication,
   CoachingRequest,
+  CoachQuestion,
+  CoachReply,
   Comment,
+  Conversation,
   DailyHealth,
   Integration,
+  Message,
   Post,
   Question,
   User,
@@ -47,6 +54,11 @@ export interface Bootstrap {
   integrations: Integration[];
   healthHistory: DailyHealth[];
   achievements: Achievement[];
+  coachQuestions: CoachQuestion[];
+  coachReplies: CoachReply[];
+  coachApplications: CoachApplication[];
+  conversations: Conversation[];
+  messages: Message[];
 }
 
 export async function fetchBootstrap(): Promise<Bootstrap> {
@@ -58,6 +70,11 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       questions,
       answers,
       coaches,
+      coachQuestions,
+      coachReplies,
+      coachApplications: [],
+      conversations,
+      messages,
       coachingRequests,
       integrations,
       healthHistory,

@@ -13,15 +13,22 @@ import { connectProvider, disconnectProvider } from '@/lib/integrations';
 import type {
   Answer,
   Coach,
+  CoachApplication,
   CoachingRequest,
+  CoachQuestion,
+  CoachReply,
+  CoachSpecialty,
   Comment,
+  Conversation,
   ID,
   Integration,
   MatchResult,
+  Message,
   Post,
   PostKind,
   Question,
   QuestionTopic,
+  SavedItems,
   SessionDetail,
   User,
   PlayerProfile,
@@ -30,13 +37,22 @@ import type {
 interface NewPostInput {
   kind: PostKind;
   body: string;
-  location?: string;
   tags: string[];
   match?: MatchResult;
   session?: SessionDetail;
   mediaLabel?: string;
   videoUrl?: string;
 }
+
+interface NewCoachQuestionInput {
+  title: string;
+  body: string;
+  specialty: CoachSpecialty;
+  videoUrl?: string;
+  mediaLabel?: string;
+}
+
+export type CoachApplicationInput = Omit<CoachApplication, 'id' | 'userId' | 'status' | 'createdAt'>;
 
 interface NewQuestionInput {
   title: string;
@@ -50,6 +66,7 @@ interface AppState extends Bootstrap {
   currentUserId: ID | null;
   onboardingComplete: boolean;
   error: string | null;
+  saved: SavedItems;
 }
 
 interface AppActions {
@@ -70,6 +87,24 @@ interface AppActions {
 
   submitCoachingRequest: (coachId: ID, serviceId: ID, question: string, videoLabel?: string) => ID;
   toggleIntegration: (provider: Integration['provider']) => Promise<void>;
+
+  /* Ask a coach */
+  askCoach: (input: NewCoachQuestionInput) => ID;
+  replyToCoachQuestion: (questionId: ID, body: string) => void;
+  toggleReplyHelpful: (replyId: ID) => void;
+
+  /* Become a coach */
+  submitCoachApplication: (input: CoachApplicationInput) => ID;
+
+  /* Saved */
+  toggleSavePost: (postId: ID) => void;
+  toggleSaveQuestion: (questionId: ID) => void;
+
+  /* Messaging */
+  openConversationWith: (userId: ID) => ID;
+  sendMessage: (conversationId: ID, body: string) => void;
+  shareToUsers: (userIds: ID[], kind: 'post' | 'question', sharedId: ID, note?: string) => void;
+  markConversationRead: (conversationId: ID) => void;
 }
 
 interface AppContextValue extends AppState {
@@ -90,6 +125,11 @@ const emptyBootstrap: Bootstrap = {
   integrations: [],
   healthHistory: [],
   achievements: [],
+  coachQuestions: [],
+  coachReplies: [],
+  coachApplications: [],
+  conversations: [],
+  messages: [],
 };
 
 let idCounter = 0;
@@ -105,6 +145,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     currentUserId: null,
     onboardingComplete: false,
     error: null,
+    saved: { postIds: [], questionIds: [] },
   });
 
   useEffect(() => {
@@ -178,6 +219,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     [patchCurrentUser],
   );
+
+  // Keep a ref so async actions read fresh state without re-creating callbacks.
+  const stateRef = React.useRef(state);
+  stateRef.current = state;
 
   const toggleLike = useCallback(
     (postId: ID) => {
@@ -324,9 +369,213 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [requireUser],
   );
 
-  // Keep a ref so async actions read fresh state without re-creating callbacks.
-  const stateRef = React.useRef(state);
-  stateRef.current = state;
+  /* ------------------------------ Ask a coach ----------------------------- */
+
+  const askCoach = useCallback(
+    (input: NewCoachQuestionInput): ID => {
+      const me = requireUser();
+      const question: CoachQuestion = {
+        id: nextId('cq'),
+        authorId: me,
+        createdAt: new Date().toISOString(),
+        replyIds: [],
+        resolved: false,
+        ...input,
+      };
+      setState((prev) => ({ ...prev, coachQuestions: [question, ...prev.coachQuestions] }));
+      return question.id;
+    },
+    [requireUser],
+  );
+
+  const replyToCoachQuestion = useCallback(
+    (questionId: ID, body: string) => {
+      const me = requireUser();
+      const reply: CoachReply = {
+        id: nextId('cr'),
+        questionId,
+        coachUserId: me,
+        body,
+        createdAt: new Date().toISOString(),
+        helpfulBy: [],
+      };
+      setState((prev) => ({
+        ...prev,
+        coachReplies: [...prev.coachReplies, reply],
+        coachQuestions: prev.coachQuestions.map((q) =>
+          q.id === questionId ? { ...q, replyIds: [...q.replyIds, reply.id] } : q,
+        ),
+      }));
+    },
+    [requireUser],
+  );
+
+  const toggleReplyHelpful = useCallback(
+    (replyId: ID) => {
+      const me = requireUser();
+      setState((prev) => ({
+        ...prev,
+        coachReplies: prev.coachReplies.map((r) =>
+          r.id === replyId
+            ? {
+                ...r,
+                helpfulBy: r.helpfulBy.includes(me)
+                  ? r.helpfulBy.filter((id) => id !== me)
+                  : [...r.helpfulBy, me],
+              }
+            : r,
+        ),
+      }));
+    },
+    [requireUser],
+  );
+
+  /* --------------------------- Coach application -------------------------- */
+
+  const submitCoachApplication = useCallback(
+    (input: CoachApplicationInput): ID => {
+      const me = requireUser();
+      const application: CoachApplication = {
+        id: nextId('ca'),
+        userId: me,
+        status: 'submitted',
+        createdAt: new Date().toISOString(),
+        ...input,
+      };
+      setState((prev) => ({ ...prev, coachApplications: [application, ...prev.coachApplications] }));
+      return application.id;
+    },
+    [requireUser],
+  );
+
+  /* --------------------------------- Saved -------------------------------- */
+
+  const toggleSavePost = useCallback((postId: ID) => {
+    setState((prev) => ({
+      ...prev,
+      saved: {
+        ...prev.saved,
+        postIds: prev.saved.postIds.includes(postId)
+          ? prev.saved.postIds.filter((id) => id !== postId)
+          : [postId, ...prev.saved.postIds],
+      },
+    }));
+  }, []);
+
+  const toggleSaveQuestion = useCallback((questionId: ID) => {
+    setState((prev) => ({
+      ...prev,
+      saved: {
+        ...prev.saved,
+        questionIds: prev.saved.questionIds.includes(questionId)
+          ? prev.saved.questionIds.filter((id) => id !== questionId)
+          : [questionId, ...prev.saved.questionIds],
+      },
+    }));
+  }, []);
+
+  /* ------------------------------- Messaging ------------------------------ */
+
+  /** Returns the existing 1:1 thread with a user, creating one if needed. */
+  const openConversationWith = useCallback(
+    (userId: ID): ID => {
+      const me = requireUser();
+      const existing = stateRef.current.conversations.find(
+        (c) => c.participantIds.length === 2 && c.participantIds.includes(userId) && c.participantIds.includes(me),
+      );
+      if (existing) return existing.id;
+
+      const conversation: Conversation = {
+        id: nextId('cv'),
+        participantIds: [me, userId],
+        messageIds: [],
+        updatedAt: new Date().toISOString(),
+        unreadCount: 0,
+      };
+      setState((prev) => ({ ...prev, conversations: [conversation, ...prev.conversations] }));
+      return conversation.id;
+    },
+    [requireUser],
+  );
+
+  const appendMessage = useCallback(
+    (
+      prev: AppState,
+      conversationId: ID,
+      senderId: ID,
+      body: string,
+      kind: Message['kind'] = 'text',
+      sharedId?: ID,
+    ): AppState => {
+      const message: Message = {
+        id: nextId('m'),
+        conversationId,
+        senderId,
+        body,
+        createdAt: new Date().toISOString(),
+        kind,
+        sharedId,
+      };
+      return {
+        ...prev,
+        messages: [...prev.messages, message],
+        conversations: prev.conversations.map((c) =>
+          c.id === conversationId
+            ? { ...c, messageIds: [...c.messageIds, message.id], updatedAt: message.createdAt }
+            : c,
+        ),
+      };
+    },
+    [],
+  );
+
+  const sendMessage = useCallback(
+    (conversationId: ID, body: string) => {
+      const me = requireUser();
+      const trimmed = body.trim();
+      if (!trimmed) return;
+      setState((prev) => appendMessage(prev, conversationId, me, trimmed));
+    },
+    [requireUser, appendMessage],
+  );
+
+  /** Share a reel or a thread into one or more DMs, Instagram style. */
+  const shareToUsers = useCallback(
+    (userIds: ID[], kind: 'post' | 'question', sharedId: ID, note?: string) => {
+      const me = requireUser();
+      setState((prev) => {
+        let next = prev;
+        for (const userId of userIds) {
+          let conversation = next.conversations.find(
+            (c) => c.participantIds.length === 2 && c.participantIds.includes(userId) && c.participantIds.includes(me),
+          );
+          if (!conversation) {
+            conversation = {
+              id: nextId('cv'),
+              participantIds: [me, userId],
+              messageIds: [],
+              updatedAt: new Date().toISOString(),
+              unreadCount: 0,
+            };
+            next = { ...next, conversations: [conversation, ...next.conversations] };
+          }
+          next = appendMessage(next, conversation.id, me, '', kind, sharedId);
+          if (note?.trim()) next = appendMessage(next, conversation.id, me, note.trim());
+        }
+        return next;
+      });
+    },
+    [requireUser, appendMessage],
+  );
+
+  const markConversationRead = useCallback((conversationId: ID) => {
+    setState((prev) => ({
+      ...prev,
+      conversations: prev.conversations.map((c) =>
+        c.id === conversationId ? { ...c, unreadCount: 0 } : c,
+      ),
+    }));
+  }, []);
 
   const toggleIntegration = useCallback(async (provider: Integration['provider']) => {
     const current = stateRef.current.integrations.find((i) => i.provider === provider);
@@ -356,6 +605,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       voteAnswer,
       submitCoachingRequest,
       toggleIntegration,
+      askCoach,
+      replyToCoachQuestion,
+      toggleReplyHelpful,
+      submitCoachApplication,
+      toggleSavePost,
+      toggleSaveQuestion,
+      openConversationWith,
+      sendMessage,
+      shareToUsers,
+      markConversationRead,
     }),
     [
       signIn,
@@ -372,6 +631,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       voteAnswer,
       submitCoachingRequest,
       toggleIntegration,
+      askCoach,
+      replyToCoachQuestion,
+      toggleReplyHelpful,
+      submitCoachApplication,
+      toggleSavePost,
+      toggleSaveQuestion,
+      openConversationWith,
+      sendMessage,
+      shareToUsers,
+      markConversationRead,
     ],
   );
 

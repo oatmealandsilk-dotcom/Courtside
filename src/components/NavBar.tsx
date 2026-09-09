@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
+import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /**
@@ -27,11 +28,13 @@ const ITEMS: NavItem[] = [
   { route: 'index', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
   { route: 'discuss', label: 'Community', icon: 'people-outline', activeIcon: 'people' },
   { route: 'coaches', label: 'Coaching', icon: 'chatbubble-outline', activeIcon: 'chatbubble' },
-  { route: 'profile', label: 'Me', icon: 'person-outline', activeIcon: 'person' },
+  { route: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
 ];
 
 export function NavBar({ state, navigation }: NavBarProps) {
   const { isPhone, isCompactSidebar } = useResponsive();
+  const { conversations } = useApp();
+  const unread = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
   const insets = useSafeAreaInsets();
   const activeRoute = state.routes[state.index]?.name ?? 'index';
 
@@ -113,6 +116,41 @@ export function NavBar({ state, navigation }: NavBarProps) {
         })}
 
         <Pressable
+          onPress={() => router.push('/search')}
+          accessibilityRole="button"
+          accessibilityLabel="Search"
+          style={({ pressed }) => [
+            styles.sidebarItem,
+            compact && styles.sidebarItemCompact,
+            pressed && { backgroundColor: colors.surfaceAlt },
+          ]}
+        >
+          <Ionicons name="search-outline" size={23} color={colors.textMuted} />
+          {compact ? null : <Text style={styles.sidebarLabel}>Search</Text>}
+        </Pressable>
+
+        <Pressable
+          onPress={() => router.push('/messages')}
+          accessibilityRole="button"
+          accessibilityLabel={unread ? `Messages, ${unread} unread` : 'Messages'}
+          style={({ pressed }) => [
+            styles.sidebarItem,
+            compact && styles.sidebarItemCompact,
+            pressed && { backgroundColor: colors.surfaceAlt },
+          ]}
+        >
+          <View>
+            <Ionicons name="paper-plane-outline" size={23} color={colors.textMuted} />
+            {unread > 0 ? (
+              <View style={styles.sidebarBadge}>
+                <Text style={styles.sidebarBadgeText}>{unread > 9 ? '9+' : unread}</Text>
+              </View>
+            ) : null}
+          </View>
+          {compact ? null : <Text style={styles.sidebarLabel}>Messages</Text>}
+        </Pressable>
+
+        <Pressable
           onPress={() => router.push('/compose')}
           accessibilityRole="button"
           accessibilityLabel="Create a post"
@@ -170,5 +208,18 @@ const styles = StyleSheet.create({
   sidebarItemActive: { backgroundColor: colors.surface },
   sidebarLabel: { ...typography.body, color: colors.textMuted },
   sidebarLabelActive: { color: colors.text, fontWeight: '700' },
+  sidebarBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -7,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    backgroundColor: colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sidebarBadgeText: { color: colors.brandInk, fontSize: 9, fontWeight: '700' },
   sidebarFootnote: { ...typography.caption, color: colors.textFaint, paddingHorizontal: spacing.md },
 });

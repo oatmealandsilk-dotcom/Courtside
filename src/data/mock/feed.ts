@@ -10,7 +10,6 @@ export const posts: Post[] = [
     createdAt: isoDaysAgo(0, 3),
     body: 'Third set tiebreak against a lefty who would not miss. Finally started taking the forehand early instead of backing up five feet. That was the whole match.',
     mediaLabel: 'Match highlights · 0:42',
-    location: 'Caswell Tennis Center, Austin',
     match: { opponentName: 'K. Oyelaran', sets: ['6-4', '4-6', '7-6(5)'], won: true, surface: 'hard' },
     likedBy: ['u-dev', 'u-june', CURRENT_USER_ID],
     commentIds: ['c1', 'c2'],
@@ -22,7 +21,6 @@ export const posts: Post[] = [
     kind: 'session',
     createdAt: isoDaysAgo(0, 9),
     body: 'Serve day. Kept the toss further in front and the second serve stopped sitting up. Shoulder felt fine at 80 balls, stopped there on purpose.',
-    location: 'Griffith Park Courts',
     session: {
       focus: 'Second serve consistency',
       minutes: 75,

@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { ScrollView, TextInput, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
+import { Ionicons } from '@expo/vector-icons';
+
 import { LevelPill } from '@/components/LevelPill';
 import { QuestionCard } from '@/components/QuestionCard';
 import { Avatar, Chip, EmptyState, Screen } from '@/components/ui';
@@ -21,7 +23,7 @@ const TOPICS: (QuestionTopic | 'all')[] = [
 ];
 
 export default function Discuss() {
-  const { questions, users, currentUserId } = useApp();
+  const { questions, users, currentUserId, saved, actions } = useApp();
   const params = useLocalSearchParams<{ section?: string }>();
   const section = params.section === 'players' ? 'players' : 'discussions';
   const setSection = (value: string) => router.setParams({ section: value });
@@ -41,7 +43,16 @@ export default function Discuss() {
     <Screen
       title="Community"
       subtitle="Find your people. Talk about your game."
-
+      right={
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel="Search discussions and players"
+          onPress={() => router.push('/search')}
+          hitSlop={8}
+        >
+          <Ionicons name="search" size={23} color={colors.text} />
+        </Pressable>
+      }
     >
       <View style={styles.sections}>
         {(['discussions', 'players'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: section === value }} onPress={() => setSection(value)} style={[styles.section, section === value && styles.sectionActive]}><Text style={{ fontSize: 16, fontWeight: '600', color: section === value ? colors.warning : colors.textMuted }}>{value === 'discussions' ? 'Discussions' : 'Find Players'}</Text></Pressable>)}
@@ -52,6 +63,15 @@ export default function Discuss() {
           <Avatar name={user.name} seed={user.avatarSeed} size={44} />
           <View style={{ flex: 1, gap: 4 }}><Text style={styles.playerName}>{user.name}</Text><Text style={styles.playerMeta}>@{user.handle} · {user.location}</Text></View>
           <LevelPill profile={user.profile} small />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Message ${user.name}`}
+            hitSlop={8}
+            onPress={() => router.push(`/messages/${actions.openConversationWith(user.id)}`)}
+            style={{ paddingLeft: 4 }}
+          >
+            <Ionicons name="paper-plane-outline" size={19} color={colors.textMuted} />
+          </Pressable>
         </Pressable>)}
         {!players.length && <EmptyState title="No players found" body="Try another name or city." />}
       </View> : <>
@@ -85,6 +105,9 @@ export default function Discuss() {
               question={q}
               author={users.find((u) => u.id === q.authorId)}
               answered={Boolean(q.acceptedAnswerId)}
+              saved={saved.questionIds.includes(q.id)}
+              onToggleSave={() => actions.toggleSaveQuestion(q.id)}
+              onShare={() => router.push(`/share?kind=question&id=${q.id}`)}
               onPress={() => router.push(`/question/${q.id}`)}
             />
           ))}

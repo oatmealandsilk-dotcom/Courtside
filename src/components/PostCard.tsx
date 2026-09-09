@@ -17,6 +17,9 @@ interface Props {
   onToggleLike: () => void;
   onPress: () => void;
   onPressAuthor?: () => void;
+  saved?: boolean;
+  onToggleSave?: () => void;
+  onShare?: () => void;
 }
 
 const KIND_META: Record<Post['kind'], { label: string; icon: keyof typeof Ionicons.glyphMap; tint: string }> = {
@@ -28,7 +31,17 @@ const KIND_META: Record<Post['kind'], { label: string; icon: keyof typeof Ionico
   milestone: { label: 'Milestone', icon: 'flag-outline', tint: colors.warning },
 };
 
-export function PostCard({ post, author, liked, onToggleLike, onPress, onPressAuthor }: Props) {
+export function PostCard({
+  post,
+  author,
+  liked,
+  onToggleLike,
+  onPress,
+  onPressAuthor,
+  saved = false,
+  onToggleSave,
+  onShare,
+}: Props) {
   const meta = KIND_META[post.kind];
 
   return (
@@ -46,7 +59,6 @@ export function PostCard({ post, author, liked, onToggleLike, onPress, onPressAu
           </View>
           <Text style={styles.sub} numberOfLines={1}>
             @{author.handle} · {relativeTime(post.createdAt)}
-            {post.location ? ` · ${post.location}` : ''}
           </Text>
         </View>
         <LevelPill profile={author.profile} small />
@@ -122,6 +134,30 @@ export function PostCard({ post, author, liked, onToggleLike, onPress, onPressAu
           <Ionicons name="chatbubble-outline" size={18} color={colors.textMuted} />
           <Text style={styles.actionText}>{compactNumber(post.commentIds.length)}</Text>
         </Pressable>
+        {onShare ? (
+          <Pressable
+            onPress={onShare}
+            style={styles.action}
+            accessibilityRole="button"
+            accessibilityLabel="Share this post"
+          >
+            <Ionicons name="paper-plane-outline" size={18} color={colors.textMuted} />
+          </Pressable>
+        ) : null}
+        {onToggleSave ? (
+          <Pressable
+            onPress={onToggleSave}
+            style={[styles.action, { marginLeft: 'auto' }]}
+            accessibilityRole="button"
+            accessibilityLabel={saved ? 'Remove from saved' : 'Save this post'}
+          >
+            <Ionicons
+              name={saved ? 'bookmark' : 'bookmark-outline'}
+              size={18}
+              color={saved ? colors.brand : colors.textMuted}
+            />
+          </Pressable>
+        ) : null}
       </View>
     </Card>
   );

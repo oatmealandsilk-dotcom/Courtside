@@ -143,7 +143,6 @@ export interface Post {
   mediaLabel?: string;
   videoUrl?: string;
   taggedUserIds?: ID[];
-  location?: string;
   match?: MatchResult;
   session?: SessionDetail;
   likedBy: ID[];
@@ -315,6 +314,94 @@ export interface AiMessage {
   role: 'user' | 'coach';
   body: string;
   createdAt: string;
+}
+
+/* ------------------------- Ask a coach (open board) ---------------------- */
+
+/**
+ * A question addressed to the coaching pool rather than a single coach.
+ * Free to post; any verified coach can answer. This is the funnel that turns
+ * a struggling player into a paying client.
+ */
+export interface CoachQuestion {
+  id: ID;
+  authorId: ID;
+  title: string;
+  body: string;
+  specialty: CoachSpecialty;
+  createdAt: string;
+  /** Optional clip the player is asking about. */
+  videoUrl?: string;
+  mediaLabel?: string;
+  replyIds: ID[];
+  resolved: boolean;
+}
+
+export interface CoachReply {
+  id: ID;
+  questionId: ID;
+  coachUserId: ID;
+  body: string;
+  createdAt: string;
+  helpfulBy: ID[];
+}
+
+/* --------------------------- Coach applications -------------------------- */
+
+export type CoachApplicationStatus = 'submitted' | 'in-review' | 'approved' | 'rejected';
+
+/** Everything we collect to verify a coach before they can take money. */
+export interface CoachApplication {
+  id: ID;
+  userId: ID;
+  fullName: string;
+  email: string;
+  phone: string;
+  /** Highest verified rating the applicant holds. */
+  utr?: string;
+  ntrp?: string;
+  yearsCoaching: number;
+  certifications: string;
+  /** Résumé / CV, stored as a file label in the mock build. */
+  resumeLabel?: string;
+  currentClients: string;
+  specialties: CoachSpecialty[];
+  references: string;
+  about: string;
+  status: CoachApplicationStatus;
+  createdAt: string;
+}
+
+/* -------------------------------- Messaging ------------------------------ */
+
+export type MessageKind = 'text' | 'post' | 'question';
+
+export interface Message {
+  id: ID;
+  conversationId: ID;
+  senderId: ID;
+  body: string;
+  createdAt: string;
+  kind: MessageKind;
+  /** Set when kind is 'post' or 'question' — the shared item. */
+  sharedId?: ID;
+}
+
+export interface Conversation {
+  id: ID;
+  /** Exactly two participants in this build; the shape allows groups later. */
+  participantIds: ID[];
+  messageIds: ID[];
+  updatedAt: string;
+  /** Message ids the current user has not opened. */
+  unreadCount: number;
+}
+
+/* --------------------------------- Saved --------------------------------- */
+
+export interface SavedItems {
+  postIds: ID[];
+  questionIds: ID[];
 }
 
 /* ---------------------------------- Auth --------------------------------- */

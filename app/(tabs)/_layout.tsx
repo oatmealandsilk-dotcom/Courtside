@@ -31,7 +31,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ title: 'Home' }} />
       <Tabs.Screen name="discuss" options={{ title: 'Community' }} />
       <Tabs.Screen name="coaches" options={{ title: 'Coaching' }} />
-      <Tabs.Screen name="profile" options={{ title: 'Me' }} />
+      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
     </Tabs>
     </SwipeSurface>
   );

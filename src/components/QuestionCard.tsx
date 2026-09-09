@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { LevelPill } from '@/components/LevelPill';
@@ -23,9 +23,20 @@ interface Props {
   author: User | undefined;
   onPress: () => void;
   answered: boolean;
+  saved?: boolean;
+  onToggleSave?: () => void;
+  onShare?: () => void;
 }
 
-export function QuestionCard({ question, author, onPress, answered }: Props) {
+export function QuestionCard({
+  question,
+  author,
+  onPress,
+  answered,
+  saved = false,
+  onToggleSave,
+  onShare,
+}: Props) {
   const meta = TOPIC_META[question.topic];
 
   return (
@@ -42,6 +53,33 @@ export function QuestionCard({ question, author, onPress, answered }: Props) {
         <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted} style={{ marginLeft: 12 }} /><Text style={styles.footerText}>{question.answerIds.length}</Text>
         <Chip label={meta.label} small />
         {answered && <Ionicons name="checkmark-circle" size={16} color={colors.court} />}
+
+        <View style={styles.spacer} />
+        {onShare ? (
+          <Pressable
+            onPress={onShare}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Share this discussion"
+          >
+            <Ionicons name="paper-plane-outline" size={17} color={colors.textMuted} />
+          </Pressable>
+        ) : null}
+        {onToggleSave ? (
+          <Pressable
+            onPress={onToggleSave}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={saved ? 'Remove from saved' : 'Save this discussion'}
+            style={{ marginLeft: 14 }}
+          >
+            <Ionicons
+              name={saved ? 'bookmark' : 'bookmark-outline'}
+              size={17}
+              color={saved ? colors.brand : colors.textMuted}
+            />
+          </Pressable>
+        ) : null}
       </View>
     </Card>
   );
@@ -59,4 +97,5 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
   footer: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
   footerText: { ...typography.small, color: colors.textFaint },
+  spacer: { flex: 1 },
 });
