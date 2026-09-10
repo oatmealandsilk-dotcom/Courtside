@@ -27,6 +27,7 @@ export default function Thread() {
   const { conversations, messages, users, posts, questions, currentUserId, actions } = useApp();
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<ScrollView | null>(null);
+  const inputRef = useRef<TextInput>(null);
   const focused = useIsFocused();
 
   const conversation = conversations.find((c) => c.id === id);
@@ -66,6 +67,8 @@ export default function Thread() {
     if (!body) return;
     actions.sendMessage(conversation.id, body);
     setDraft('');
+    // Stay in the box so the next message can be typed straight away.
+    inputRef.current?.focus();
     requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
   };
 
@@ -159,12 +162,16 @@ export default function Thread() {
 
       <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
         <TextInput
+          ref={inputRef}
           value={draft}
           onChangeText={setDraft}
           placeholder="Message…"
           placeholderTextColor={colors.textFaint}
           style={styles.input}
           onSubmitEditing={send}
+          // Without this the field blurs on submit and every message needs a fresh click.
+          blurOnSubmit={false}
+          submitBehavior="submit"
           returnKeyType="send"
           accessibilityLabel="Message text"
         />

@@ -68,7 +68,7 @@ export function PostCard({
       </Pressable>
 
       {post.imageUrl && <Image accessibilityLabel={post.mediaLabel ?? "Post photo"} source={{uri:post.imageUrl}} style={{width:"100%",aspectRatio:1,borderRadius:12}} resizeMode="cover"/>}
-      {post.videoUrl ? <ReelVideo uri={post.videoUrl} /> : post.kind === 'reel' ? <MediaPlaceholder label={post.mediaLabel ?? 'Reel'} seed={post.id} portrait /> : null}
+      {post.videoUrl ? <ReelVideo uri={post.videoUrl} poster={post.thumbnailUrl} /> : post.kind === 'reel' ? <MediaPlaceholder label={post.mediaLabel ?? 'Reel'} seed={post.id} portrait /> : null}
       <Pressable onPress={onPress} style={styles.body}>
         <View style={[styles.kindRow, { borderColor: `${meta.tint}55` }]}>
           <Ionicons name={meta.icon} size={13} color={meta.tint} />

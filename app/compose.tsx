@@ -54,6 +54,7 @@ export default function Compose() {
       imageUrl: media?.kind === 'photo' ? media.uri : undefined,
       videoUrl: media?.kind === 'video' ? media.uri : undefined,
       mediaLabel: media?.label,
+      thumbnailUrl: media?.thumbnailUrl ?? (media?.kind === 'photo' ? media.uri : undefined),
       session:
         onCourt > 0
           ? { focus: 'On court', minutes: onCourt, drills: [], intensity: 3 }

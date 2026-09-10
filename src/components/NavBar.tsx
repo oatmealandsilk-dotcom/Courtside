@@ -29,7 +29,7 @@ interface NavItem {
 const ITEMS: NavItem[] = [
   { route: 'index', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
   { route: 'discuss', label: 'Community', icon: 'people-outline', activeIcon: 'people' },
-  { route: 'coaches', label: 'Coaching', icon: 'fitness-outline', activeIcon: 'fitness' },
+  { route: 'coaches', label: 'Coaching', icon: 'clipboard-outline', activeIcon: 'clipboard' },
   { route: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
 ];
 

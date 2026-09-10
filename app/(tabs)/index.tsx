@@ -1,7 +1,7 @@
 import { ThreadReplies } from '@/components/ThreadReplies';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,8 +26,15 @@ export default function Home() {
   latest.current = app;
   const [order, setOrder] = useState<string[]>([]);
 
+  // Re-rank when the session itself changes, not every time this screen regains
+  // focus — otherwise stepping into a thread and back would reshuffle the feed
+  // and throw you to the top.
+  const rankedFor = useRef<string | null>(null);
   useFocusEffect(
     useCallback(() => {
+      const stamp = `${ready}:${currentUserId}`;
+      if (rankedFor.current === stamp) return;
+      rankedFor.current = stamp;
       const data = latest.current;
       setOrder(
         rankFeed(data.posts, data.questions, data.comments, data.currentUserId).map((i) =>
@@ -69,7 +76,7 @@ export default function Home() {
         />
       ) : (
         <View style={styles.viewer}>
-          <VerticalPager key={visit} onIndex={setActive}>
+          <VerticalPager key={visit} initialIndex={active} onIndex={setActive}>
             {feed.map((item, index) => {
               if (item.type === 'question') {
                 const isSaved = saved.questionIds.includes(item.question.id);
@@ -135,7 +142,18 @@ export default function Home() {
               return (
                 <View key={post.id} style={styles.reel}>
                   {post.videoUrl ? (
-                    <ReelPlayback uri={post.videoUrl} active={focused && active === index} />
+                    <ReelPlayback
+                      uri={post.videoUrl}
+                      poster={post.thumbnailUrl}
+                      active={focused && active === index}
+                    />
+                  ) : post.thumbnailUrl ? (
+                    <Image
+                      accessibilityIgnoresInvertColors
+                      source={{ uri: post.thumbnailUrl }}
+                      style={StyleSheet.absoluteFill}
+                      resizeMode="cover"
+                    />
                   ) : (
                     <View style={styles.preview}>
                       <View style={styles.court}>

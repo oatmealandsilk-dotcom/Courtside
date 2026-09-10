@@ -145,6 +145,8 @@ export interface Post {
   mediaLabel?: string;
   imageUrl?: string;
   videoUrl?: string;
+  /** Cover image shown before a reel plays and in every grid tile. */
+  thumbnailUrl?: string;
   taggedUserIds?: ID[];
   match?: MatchResult;
   session?: SessionDetail;

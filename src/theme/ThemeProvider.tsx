@@ -2,11 +2,16 @@ import React, { createContext, useContext, useMemo, useState } from 'react';
 import { Platform } from 'react-native';
 import { colors, lightColors } from './index';
 
+/**
+ * Dark palette. The neutrals keep only a trace of green so they read as a dark
+ * surface rather than olive, and the accents stay saturated — desaturating them
+ * to match the light theme is what made the whole thing look muddy.
+ */
 export const darkColors: Record<keyof typeof lightColors, string> = {
-  bg: '#121713', bgElevated: '#1C231D', surface: '#202820', surfaceAlt: '#2A342B',
-  border: '#354237', borderStrong: '#617063', text: '#F0F2E9', textMuted: '#BDC6B9', textFaint: '#9CA994',
-  brand: '#9CC59E', brandInk: '#142317', brandDim: '#304732', court: '#9DC29D', clay: '#D3A888',
-  hard: '#93BDD5', grass: '#B2C59C', info: '#93BDD5', success: '#9DC29D', warning: '#D7BE7D', danger: '#F09585',
+  bg: '#0F1412', bgElevated: '#161D19', surface: '#1A221E', surfaceAlt: '#232C27',
+  border: '#2C3832', borderStrong: '#46554D', text: '#EDF1EE', textMuted: '#A6B1AB', textFaint: '#7C8781',
+  brand: '#8FD79B', brandInk: '#0C1710', brandDim: '#26382C', court: '#8FD79B', clay: '#E09A76',
+  hard: '#89C0DE', grass: '#A9CF92', info: '#89C0DE', success: '#8FD79B', warning: '#E8C574', danger: '#F2897B',
   overlay: 'rgba(0, 0, 0, 0.65)',
 };
 const ThemeContext = createContext({ night: false, setNight: (_value: boolean) => {} });

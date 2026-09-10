@@ -45,6 +45,7 @@ interface NewPostInput {
   mediaLabel?: string;
   imageUrl?: string;
   videoUrl?: string;
+  thumbnailUrl?: string;
 }
 
 interface NewCoachQuestionInput {

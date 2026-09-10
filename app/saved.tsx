@@ -1,7 +1,7 @@
 import { PlayerName } from '@/components/PlayerName';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -54,6 +54,17 @@ export default function Saved() {
                   onPress={() => router.push(`/post/${post.id}`)}
                   style={styles.tile}
                 >
+                  {post.thumbnailUrl ? (
+                    <>
+                      <Image
+                        accessibilityIgnoresInvertColors
+                        source={{ uri: post.thumbnailUrl }}
+                        style={StyleSheet.absoluteFill}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.tileScrim} pointerEvents="none" />
+                    </>
+                  ) : null}
                   <View style={styles.tileTop}>
                     <Ionicons
                       name={post.kind === 'reel' ? 'play' : 'document-text-outline'}
@@ -124,6 +135,7 @@ const styleDefinitions = StyleSheet.create({
     padding: spacing.md,
     justifyContent: 'space-between',
   },
+  tileScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(20, 32, 24, 0.42)' },
   tileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   tileText: { fontSize: 12, lineHeight: 17, color: '#E6E7D9' },
   tileMeta: { fontSize: 10, color: '#B9C4AE' },

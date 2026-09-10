@@ -2,9 +2,11 @@ import React, { useEffect, useRef } from 'react';
 import { pagerStep } from '@/lib/pagerGesture';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 
-export function VerticalPager({ children, onIndex }: {
+export function VerticalPager({ children, onIndex, initialIndex = 0 }: {
   children: React.ReactNode[];
   onIndex: (index: number) => void;
+  /** Feed item to open on, so returning from a thread keeps your place. */
+  initialIndex?: number;
 }) {
   const pager = useRef<HTMLDivElement>(null);
   const drag = useRef<{y:number;x:number;top:number;active:boolean;target:HTMLElement;scroll?:HTMLElement;scrollTop?:number;lastY:number;lastTime:number;velocity:number} | null>(null);
@@ -34,6 +36,16 @@ export function VerticalPager({ children, onIndex }: {
     animation.current = requestAnimationFrame(frame);
   };
   useEffect(() => () => stop(), []);
+
+  // Restore the caller's position once the children have laid out. Runs on
+  // mount only: later index changes are the user scrolling, not a restore.
+  const restored = useRef(false);
+  useEffect(() => {
+    const el = pager.current;
+    if (restored.current || !el || !initialIndex || !el.clientHeight) return;
+    restored.current = true;
+    el.scrollTop = initialIndex * el.clientHeight;
+  }, [initialIndex, children.length]);
 
   useEffect(() => {
     const el = pager.current;
