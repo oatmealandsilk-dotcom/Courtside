@@ -1,7 +1,7 @@
 import { ThreadReplies } from '@/components/ThreadReplies';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -76,7 +76,7 @@ export default function Home() {
                 return (
                   <View key={item.question.id} style={styles.article}>
                     <Text style={styles.eyebrow}>FROM THE COMMUNITY</Text>
-                    <ScrollView>
+                    <View style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
                       <QuestionCard
                         question={item.question}
                         author={users.find((u) => u.id === item.question.authorId)}
@@ -86,9 +86,15 @@ export default function Home() {
                         onShare={() => share('question', item.question.id)}
                         onPress={() => router.push(`/question/${item.question.id}`)}
                       />
-                      <ThreadReplies questionId={item.question.id}/>
-                    </ScrollView>
-                    <Text style={styles.hint}>Swipe up for more · swipe left for Community</Text>
+                      <Pressable accessibilityRole="link" accessibilityLabel="Read full thread" onPress={() => router.push(`/question/${item.question.id}`)}>
+                        <View pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+                          <ThreadReplies questionId={item.question.id}/>
+                        </View>
+                      </Pressable>
+                    </View>
+                    <Pressable accessibilityRole="link" onPress={() => router.push(`/question/${item.question.id}`)}>
+                      <Text style={styles.hint}>Tap to read the full thread</Text>
+                    </Pressable>
                   </View>
                 );
               }
@@ -104,7 +110,7 @@ export default function Home() {
                     <Text style={styles.eyebrow}>
                       {post.kind === 'match' ? 'SET PLAY' : post.kind.toUpperCase()} · FOR YOU
                     </Text>
-                    <ScrollView>
+                    <View style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
                       <PostCard
                         post={post}
                         author={author}
@@ -116,8 +122,10 @@ export default function Home() {
                         onPress={() => router.push(`/post/${post.id}`)}
                         onPressAuthor={() => router.push(`/user/${author.id}`)}
                       />
-                    </ScrollView>
-                    <Text style={styles.hint}>Swipe up for more</Text>
+                    </View>
+                    <Pressable accessibilityRole="link" onPress={() => router.push(`/post/${post.id}`)}>
+                      <Text style={styles.hint}>Tap to view the full post</Text>
+                    </Pressable>
                   </View>
                 );
               }
@@ -214,7 +222,7 @@ export default function Home() {
 const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, alignItems: 'center' },
   wordmarkOverlay: {
-    position: 'absolute', top: 16, width: '100%', maxWidth: 520,
+    position: 'absolute', top: 16, width: '100%',
     paddingHorizontal: 20, zIndex: 5,
   },
   wordmark: { color: colors.text, fontSize: 23, fontWeight: '800' },
@@ -222,7 +230,7 @@ const styleDefinitions = StyleSheet.create({
     color: 'white', textShadowColor: '#0006',
     textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
   },
-  viewer: { flex: 1, width: '100%', maxWidth: 520, minHeight: 0 },
+  viewer: { flex: 1, width: '100%', minHeight: 0 },
   reel: { flex: 1, backgroundColor: '#203E2A', overflow: 'hidden' },
   preview: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30, gap: 14 },
   court: {
@@ -258,7 +266,7 @@ const styleDefinitions = StyleSheet.create({
     right: 0,
     padding: 18,
     paddingRight: 70,
-    backgroundColor: '#0C160ED9',
+    backgroundColor: 'transparent',
     gap: 10,
   },
   author: { flexDirection: 'row', gap: 9, alignItems: 'center' },

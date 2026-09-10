@@ -1,5 +1,6 @@
 import { useTheme } from '@/theme/ThemeProvider';
 import React from 'react';
+import { Platform } from 'react-native';
 import Home from './index';
 import Discuss from './discuss';
 import Coaches from './coaches';
@@ -36,7 +37,7 @@ export default function TabsLayout() {
       tabBar={() => null}
       screenOptions={{
         headerShown: false,
-        animation: 'none',
+        animation: Platform.OS === 'web' ? 'none' : 'fade',
         tabBarPosition: isPhone ? 'bottom' : 'left',
         sceneStyle: { backgroundColor: colors.bg },
       }}

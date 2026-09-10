@@ -9,6 +9,8 @@ import React, {
 } from 'react';
 
 import { fetchBootstrap, signIn as apiSignIn, type Bootstrap } from '@/data/api';
+import { markMessagesOpened } from '@/features/messaging/readReceipts';
+import { readReceiptPreference, saveReceiptPreference } from '@/features/messaging/preferences';
 import { connectProvider, disconnectProvider } from '@/lib/integrations';
 import type {
   Answer,
@@ -71,6 +73,7 @@ interface AppState extends Bootstrap {
 }
 
 interface AppActions {
+  setReadReceiptsEnabled: (enabled: boolean) => void;
   signIn: (handle: string) => Promise<void>;
   signOut: () => void;
   completeOnboarding: (profile: PlayerProfile) => void;
@@ -154,7 +157,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     fetchBootstrap()
       .then((data) => {
         if (cancelled) return;
-        setState((prev) => ({ ...prev, ...data, ready: true }));
+        setState((prev) => ({ ...prev, ...data, users: data.users.map(user => ({...user, readReceiptsEnabled: readReceiptPreference(user.id)})), ready: true }));
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -213,6 +216,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const updateIdentity = useCallback((patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string }) => { patchCurrentUser(u => ({ ...u, ...patch })); }, [patchCurrentUser]);
+  const setReadReceiptsEnabled = useCallback((enabled: boolean) => {
+    const me = requireUser();
+    saveReceiptPreference(me, enabled);
+    patchCurrentUser(user => ({...user, readReceiptsEnabled: enabled}));
+  }, [requireUser, patchCurrentUser]);
 
   const updateProfile = useCallback(
     (patch: Partial<PlayerProfile>) => {
@@ -571,12 +579,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const markConversationRead = useCallback((conversationId: ID) => {
-    setState((prev) => ({
-      ...prev,
-      conversations: prev.conversations.map((c) =>
-        c.id === conversationId ? { ...c, unreadCount: 0 } : c,
-      ),
-    }));
+    setState(prev => {
+      const conversation = prev.conversations.find(c => c.id === conversationId);
+      const me = prev.currentUserId;
+      if (!conversation || !me || !conversation.participantIds.includes(me)) return prev;
+      const user = prev.users.find(u => u.id === me);
+      const messages = markMessagesOpened(prev.messages, conversation, me, user?.readReceiptsEnabled !== false, new Date().toISOString());
+      if (messages === prev.messages && conversation.unreadCount === 0) return prev;
+      return {...prev, messages, conversations: prev.conversations.map(c => c.id === conversationId ? {...c, unreadCount: 0} : c)};
+    });
   }, []);
 
   const toggleIntegration = useCallback(async (provider: Integration['provider']) => {
@@ -593,6 +604,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const actions = useMemo<AppActions>(
     () => ({
+      setReadReceiptsEnabled,
       signIn,
       signOut,
       completeOnboarding,
@@ -619,6 +631,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       markConversationRead,
     }),
     [
+      setReadReceiptsEnabled,
       signIn,
       signOut,
       completeOnboarding,

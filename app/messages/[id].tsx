@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -26,6 +27,7 @@ export default function Thread() {
   const { conversations, messages, users, posts, questions, currentUserId, actions } = useApp();
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<ScrollView | null>(null);
+  const focused = useIsFocused();
 
   const conversation = conversations.find((c) => c.id === id);
   const other = users.find(
@@ -33,8 +35,15 @@ export default function Thread() {
   );
 
   useEffect(() => {
-    if (conversation && conversation.unreadCount > 0) actions.markConversationRead(conversation.id);
-  }, [conversation, actions]);
+    const mark = () => {
+      if (focused && conversation && (typeof document === 'undefined' || document.visibilityState === 'visible')) actions.markConversationRead(conversation.id);
+    };
+    mark();
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', mark);
+      return () => document.removeEventListener('visibilitychange', mark);
+    }
+  }, [focused, conversation?.id, messages, currentUserId, actions]);
 
   const thread = useMemo(
     () =>
@@ -142,6 +151,9 @@ export default function Thread() {
             </View>
           );
         })}
+        {thread.length > 0 && thread[thread.length - 1].senderId === currentUserId && <Text accessibilityLiveRegion="polite" style={styles.timestamp}>
+          {other.readReceiptsEnabled !== false && thread[thread.length - 1].readAtBy?.[other.id] ? 'Read' : 'Sent'}
+        </Text>}
         <Text style={styles.timestamp}>{relativeTime(conversation.updatedAt)}</Text>
       </ScrollView>
 

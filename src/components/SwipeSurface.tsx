@@ -1,10 +1,13 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Animated, PanResponder, View } from 'react-native';
+import { useResponsive } from '@/lib/useResponsive';
 
-export function SwipeSurface({ children, onSwipe, enabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false }: {
+export function SwipeSurface({ children, onSwipe, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false }: {
   children: React.ReactNode; onSwipe: (direction: 1 | -1) => void;
   delegateLeft?: boolean; delegateRight?: boolean; enabled?: boolean; fill?: boolean; renderPreview?: (direction: 1 | -1) => React.ReactNode;
 }) {
+  const { isPhone } = useResponsive();
+  const enabled = requestedEnabled && isPhone;
   const offset = useRef(new Animated.Value(0)).current;
   const width = useRef(1);
   const busy = useRef(false);
@@ -19,7 +22,7 @@ export function SwipeSurface({ children, onSwipe, enabled = true, fill = true, r
       const commit = !cancelled && available && (Math.abs(dx) > width.current * 0.36 || (Math.abs(dx) > 35 && Math.abs(velocity) > 0.5 && Math.sign(dx) === Math.sign(velocity)));
       busy.current = true;
       Animated.spring(offset, { toValue: commit ? -next * width.current : 0, stiffness: 220, damping: 28, mass: 1, useNativeDriver: true }).start(() => {
-        if (commit) props.current.onSwipe(next);
+        if (commit && props.current.enabled) props.current.onSwipe(next);
         offset.setValue(0); setDragging(false); busy.current = false;
       });
     };

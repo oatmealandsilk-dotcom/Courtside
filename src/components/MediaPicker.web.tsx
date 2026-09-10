@@ -36,7 +36,7 @@ function clock(seconds: number): string {
  * Web media picker: opens the real file dialog, previews the selection
  * inline, and hands back a blob URL the feed can actually play.
  */
-export function MediaPicker({ value, onChange, compact }: MediaPickerProps) {
+export function MediaPicker({ value, onChange, compact, selection = 'all', label }: MediaPickerProps) {
   const styles = useThemedStyles(styleDefinitions);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const createdUrl = useRef<string | null>(null);
@@ -55,6 +55,9 @@ export function MediaPicker({ value, onChange, compact }: MediaPickerProps) {
     async (files: FileList | null) => {
       const file = files?.[0];
       if (!file) return;
+      if (selection === 'video' && !file.type.startsWith('video/')) return;
+      if (selection === 'photo' && !file.type.startsWith('image/')) return;
+      if (!file.type.startsWith('video/') && !file.type.startsWith('image/')) return;
       setBusy(true);
       revoke();
 
@@ -72,14 +75,14 @@ export function MediaPicker({ value, onChange, compact }: MediaPickerProps) {
       setBusy(false);
       onChange(picked);
     },
-    [onChange, revoke],
+    [onChange, revoke, selection],
   );
 
   const hiddenInput = (
     <input
       ref={inputRef}
       type="file"
-      accept="image/*,video/*"
+      accept={selection === 'video' ? 'video/*' : selection === 'photo' ? 'image/*' : 'image/*,video/*'}
       style={{ display: 'none' }}
       onChange={(event) => {
         void onFiles(event.target.value ? (event.target as HTMLInputElement).files : null);
@@ -143,15 +146,15 @@ export function MediaPicker({ value, onChange, compact }: MediaPickerProps) {
     <Pressable
       onPress={() => inputRef.current?.click()}
       accessibilityRole="button"
-      accessibilityLabel="Choose a photo or video"
+      accessibilityLabel={label ?? 'Choose a photo or video'}
       style={compact ? styles.choice : styles.dropzone}
     >
       {hiddenInput}
       <View style={styles.dropIcon}>
-        <Ionicons name="images-outline" size={30} color={colors.textMuted} />
+        <Ionicons name={selection === 'video' ? 'videocam-outline' : 'images-outline'} size={30} color={colors.textMuted} />
       </View>
-      <Text style={styles.dropTitle}>{busy ? 'Reading file…' : compact ? 'Photo or video' : 'Select a photo or video'}</Text>
-      <Text style={styles.dropHint}>Choose from your photos and videos.</Text>
+      <Text style={styles.dropTitle}>{busy ? 'Reading file…' : label ?? (compact ? 'Photo or video' : 'Select a photo or video')}</Text>
+      <Text style={styles.dropHint}>{selection === 'video' ? 'Share a video from your device.' : 'Choose from your photos and videos.'}</Text>
     </Pressable>
   );
 }

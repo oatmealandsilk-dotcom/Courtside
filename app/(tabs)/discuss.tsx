@@ -112,7 +112,9 @@ export default function Discuss({ previewSection }: { previewSection?: string } 
       <View style={styles.sections}>
         {(['discussions', 'players'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: section === value }} onPress={() => setSection(value)} style={[styles.section, section === value && styles.sectionActive]}><Text style={{ fontSize: 16, fontWeight: '600', color: section === value ? colors.warning : colors.textMuted }}>{value === 'discussions' ? 'Discussions' : 'Find Players'}</Text></Pressable>)}
       </View>
-      <SwipeSurface fill={false} enabled={!previewSection} delegateRight={section === 'discussions'} delegateLeft={section === 'players'}
+      <SwipeSurface fill={false} enabled={!previewSection}
+        delegateLeft={section === 'players'}
+        delegateRight={section === 'discussions'}
         onSwipe={direction=>setSection(direction===1 ? 'players' : 'discussions')}
         renderPreview={direction=>direction===1 && section==='discussions' ? content('players') : direction===-1 && section==='players' ? content('discussions') : null}>
         {content(section)}

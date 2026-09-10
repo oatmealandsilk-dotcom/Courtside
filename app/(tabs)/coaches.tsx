@@ -19,7 +19,7 @@ export default function Coaching() {
   const unanswered = coachQuestions.filter((q) => q.replyIds.length === 0).length;
 
   return (
-    <Screen title="courtside" subtitle="Coaching">
+    <Screen title="Coaching">
       <View style={styles.ai}>
         <Pressable
           accessibilityRole="button"

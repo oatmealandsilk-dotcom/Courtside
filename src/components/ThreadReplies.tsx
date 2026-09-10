@@ -19,8 +19,8 @@ export function ThreadReplies({questionId}:{questionId:string}) {
   const thread=answers.filter(a=>a.questionId===questionId).sort((a,b)=>Number(b.id===question?.acceptedAnswerId)-Number(a.id===question?.acceptedAnswerId)||b.votes-a.votes);
   return <View>{thread.filter(a=>!a.parentAnswerId||!thread.some(p=>p.id===a.parentAnswerId)).map(a=><ThreadReply key={a.id} answer={a} thread={thread} acceptedId={question?.acceptedAnswerId}/>)}</View>;
 }
-export function ThreadReply({ answer, thread, acceptedId, depth = 0, isLast = true }: {
-  answer: Answer; thread: Answer[]; acceptedId?: string; depth?: number; isLast?: boolean;
+export function ThreadReply({ answer, thread, acceptedId, depth = 0 }: {
+  answer: Answer; thread: Answer[]; acceptedId?: string; depth?: number;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { users, currentUserId, actions } = useApp();
@@ -28,22 +28,23 @@ export function ThreadReply({ answer, thread, acceptedId, depth = 0, isLast = tr
   const [draft, setDraft] = useState('');
   const [collapsed, setCollapsed] = useState(false);
   const responder = users.find(user => user.id === answer.authorId);
-  const children = thread.filter(child => child.parentAnswerId === answer.id);
-  return <View style={depth && depth < 5 ? styles.nested : undefined}>
-    {!!depth && depth < 5 && <><View style={[styles.rail, {height: isLast ? 30 : "100%"}]} /><View style={styles.elbow}/></>}
+  const children = thread.filter(child => child.parentAnswerId === answer.id)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  return <View>
     <View style={styles.answerCard}>
+      {!collapsed && children.length > 0 && <View pointerEvents="none" style={styles.avatarRail}/>}
       <Pressable accessibilityRole="button" accessibilityLabel={`${collapsed ? 'Expand' : 'Collapse'} reply by ${responder?.name ?? 'player'}`}
         onPress={() => setCollapsed(value => !value)} style={styles.answerHead}>
         <Avatar name={responder?.name ?? '?'} seed={responder?.avatarSeed ?? answer.authorId} size={30}/>
         <PlayerName userId={responder?.id} style={styles.answerName}>{responder?.name ?? 'Unknown'}</PlayerName>
         <Text style={styles.time}>{relativeTime(answer.createdAt)}</Text>
         {answer.fromCoach && <Ionicons name="shield-checkmark" size={14} color={colors.brand}/>}
-        <Ionicons name={collapsed ? 'add-circle-outline' : 'remove-circle-outline'} size={17} color={colors.textFaint}/>
       </Pressable>
       {!collapsed && <>
         {acceptedId === answer.id && <Text style={styles.acceptedText}>Accepted by the asker</Text>}
         <Text style={styles.replyBody}>{answer.body}</Text>
         <View style={styles.replyActions}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Collapse reply by ${responder?.name ?? 'player'}`} onPress={()=>setCollapsed(true)} style={styles.collapse}><Ionicons name="remove-circle-outline" size={20} color={colors.textMuted}/></Pressable>
           <VoteControls item={answer} userId={currentUserId} onVote={direction => actions.voteAnswer(answer.id, direction)}/>
           <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} onPress={() => setReplying(true)} style={styles.replyButton}>
             <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted}/><Text style={styles.time}>Reply</Text>
@@ -60,7 +61,15 @@ export function ThreadReply({ answer, thread, acceptedId, depth = 0, isLast = tr
         </View>}
       </>}
     </View>
-    {!collapsed && children.map((child, index) => <ThreadReply key={child.id} answer={child} thread={thread} acceptedId={acceptedId} depth={depth + 1} isLast={index === children.length - 1}/>)}
+    {!collapsed && children.map((child, index) => (
+      <View key={child.id} style={styles.nested}>
+        {/* The parent rail passes earlier siblings and their descendants,
+            ending at the last child's elbow, never at a grandchild. */}
+        <View pointerEvents="none" style={[styles.rail, index === children.length - 1 ? {height:16} : {bottom:0}]} />
+        <View pointerEvents="none" style={styles.elbow}/>
+        <ThreadReply answer={child} thread={thread} acceptedId={acceptedId} depth={depth + 1}/>
+      </View>
+    ))}
   </View>;
 }
 
@@ -86,12 +95,14 @@ const styleDefinitions = StyleSheet.create({
   sectionTitle: { ...typography.heading, color: colors.text },
   answerCard: { gap: 12, paddingVertical: 16 },
   nested: { marginLeft: 15, paddingLeft: 20 },
-  rail: {position:'absolute',left:0,top:0,width:1,backgroundColor:colors.border},
-  elbow: {position:'absolute',left:0,top:16,width:18,height:15,borderLeftWidth:1,borderBottomWidth:1,borderColor:colors.border,borderBottomLeftRadius:12},
-  replyBody: { fontSize: 15, lineHeight: 23, color: colors.text, paddingLeft: 8 },
+  rail: {position:'absolute',left:0,top:0,width:1.5,backgroundColor:colors.borderStrong},
+  elbow: {position:'absolute',left:0,top:16,width:20,height:15,borderLeftWidth:1.5,borderBottomWidth:1.5,borderColor:colors.borderStrong,borderBottomLeftRadius:12},
+  avatarRail: {position:'absolute',left:15,top:46,bottom:0,width:1.5,backgroundColor:colors.borderStrong},
+  collapse: {position:'absolute',left:5,width:20,height:28,backgroundColor:colors.bg,justifyContent:'center'},
+  replyBody: { fontSize: 15, lineHeight: 23, color: colors.text, paddingLeft: 42 },
   inlineComposer: { gap: 10, padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 16 },
   replyInput: { minHeight: 80, color: colors.text, fontSize: 15, textAlignVertical: 'top' },
-  replyActions: { flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
+  replyActions: { flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap',paddingLeft:42 },
   replyButton: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36 },
   acceptedRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   acceptedText: { ...typography.caption, color: colors.court },

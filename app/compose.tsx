@@ -6,7 +6,7 @@ import { router } from 'expo-router';
 
 import { MediaPicker, type PickedMedia } from '@/components/MediaPicker';
 import { TOPIC_META } from '@/components/QuestionCard';
-import { Button, Chip, Field, Screen, SegmentedControl } from '@/components/ui';
+import { Button, Chip, Field, Screen } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import type { QuestionTopic } from '@/data/types';
 import { colors, spacing, typography } from '@/theme';
@@ -21,16 +21,16 @@ export default function Compose() {
   const { actions } = useApp();
 
   const [choosing, setChoosing] = useState(true);
-  const [mode, setMode] = useState<'post' | 'question'>('post');
+  const [mode, setMode] = useState<'reel' | 'post' | 'question'>('post');
   const [media, setMedia] = useState<PickedMedia | null>(null);
   const [body, setBody] = useState('');
   const [minutes, setMinutes] = useState('');
   const [questionTitle, setQuestionTitle] = useState('');
   const [topic, setTopic] = useState<QuestionTopic>('gear');
 
-  const canPost = body.trim().length > 0;
+  const canPost = !!media?.uri && (mode !== 'reel' || media.kind === 'video');
   const canAsk = questionTitle.trim().length > 8 && body.trim().length > 20;
-  const canSubmit = mode === 'post' ? canPost : canAsk;
+  const canSubmit = mode === 'question' ? canAsk : canPost;
 
   const submit = () => {
     if (!canSubmit) return;
@@ -48,7 +48,7 @@ export default function Compose() {
 
     const onCourt = Number(minutes);
     actions.addPost({
-      kind: media?.kind === 'video' ? 'reel' : 'note',
+      kind: mode === 'reel' ? 'reel' : 'note',
       body: body.trim(),
       tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
       imageUrl: media?.kind === 'photo' ? media.uri : undefined,
@@ -66,7 +66,8 @@ export default function Compose() {
     <Pressable accessibilityRole="button" accessibilityLabel="Close create menu" onPress={() => router.back()} style={StyleSheet.absoluteFill}/>
     <View style={styles.choiceSheet}>
       <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>Create</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => router.back()}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
-      <MediaPicker compact value={media} onChange={next => { setMedia(next); if (next) { setMode('post'); setChoosing(false); } }}/>
+      <MediaPicker compact label="Reel" selection="video" value={null} onChange={next => { if (next) { setMedia(next); setMode('reel'); setChoosing(false); } }}/>
+      <MediaPicker compact label="Post" value={null} onChange={next => { if (next) { setMedia(next); setMode('post'); setChoosing(false); } }}/>
       <Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => { setMode('question'); setChoosing(false); }} style={styles.choiceOption}>
         <Ionicons name="chatbubbles-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Thread or question</Text><Text style={styles.note}>Ask the community or start a conversation.</Text>
       </Pressable>
@@ -77,24 +78,15 @@ export default function Compose() {
     <View style={styles.backdrop}>
       <View style={styles.sheet}>
         <Screen
-          title={mode === 'post' ? 'New post' : 'Ask the room'}
+          title={mode === 'reel' ? 'New reel' : mode === 'post' ? 'New post' : 'Ask the room'}
           compactTitle
           onBack={() => router.back()}
           right={<Button label="Share" variant="secondary" onPress={submit} disabled={!canSubmit} />}
         >
           <View style={styles.form}>
-            <SegmentedControl
-              segments={[
-                { value: 'post', label: 'Post' },
-                { value: 'question', label: 'Question' },
-              ]}
-              value={mode}
-              onChange={(value: 'post' | 'question') => setMode(value)}
-            />
-
-            {mode === 'post' ? (
+            {mode !== 'question' ? (
               <>
-                <MediaPicker value={media} onChange={setMedia} />
+                <MediaPicker selection={mode === 'reel' ? 'video' : 'all'} value={media} onChange={setMedia} />
 
                 <Field
                   label="Caption"
@@ -155,13 +147,13 @@ export default function Compose() {
 }
 
 const styleDefinitions = StyleSheet.create({
-  choiceBackdrop: { flex: 1, backgroundColor: colors.overlay, alignItems: 'center', justifyContent: 'center', padding: 20 },
+  choiceBackdrop: { flex: 1, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', padding: 20 },
   choiceSheet: { width: '100%', maxWidth: 400, borderRadius: 24, padding: 20, gap: 12, backgroundColor: colors.bg },
   choiceHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8 },
   choiceTitle: { fontSize: 22, fontWeight: '700', color: colors.text },
   choiceOption: { padding: 20, gap: 8, borderRadius: 18, backgroundColor: colors.surface },
   choiceLabel: { fontSize: 16, fontWeight: '600', color: colors.text },
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay },
+  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' },
   sheet: {
     height: '88%',
     maxWidth: 700,

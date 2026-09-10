@@ -4,7 +4,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { Button, Card, Chip, Field, Screen, StatTile } from '@/components/ui';
+import { Button, Card, Chip, Field, Screen, StatTile, SegmentedControl } from '@/components/ui';
 import { askAiCoach } from '@/data/api';
 import { generatePlan } from '@/features/aiCoach/planGenerator';
 import { duration, formatDate } from '@/lib/format';
@@ -24,7 +24,9 @@ const BLOCK_META: Record<TrainingBlockKind, { icon: keyof typeof Ionicons.glyphM
 export default function Train() {
   const styles = useThemedStyles(styleDefinitions);
   const { currentUser, healthHistory, integrations } = useApp();
-  const [openDay, setOpenDay] = useState<number | null>(0);
+  const [openDay, setOpenDay] = useState<number | null>(null);
+  const [section, setSection] = useState<'ask' | 'plan'>('ask');
+  const [showHealth, setShowHealth] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [thinking, setThinking] = useState(false);
   const [messages, setMessages] = useState<AiMessage[]>([]);
@@ -71,7 +73,9 @@ export default function Train() {
   };
 
   return (
-    <Screen title="AI Coach" subtitle={plan.headline} onBack={() => router.back()}>
+    <Screen title="AI Coach" subtitle="Your next step on court." onBack={() => router.back()}>
+      <SegmentedControl segments={[{value:'ask',label:'Ask coach'},{value:'plan',label:'My plan'}]} value={section} onChange={setSection}/>
+      {section === 'plan' && <>
       <Card style={styles.summaryCard}>
         <View style={styles.summaryHead}>
           <Ionicons name="sparkles" size={16} color={colors.brand} />
@@ -166,10 +170,10 @@ export default function Train() {
 
       <View style={styles.section}>
         <View style={styles.rowBetween}>
-          <Text style={styles.sectionTitle}>Health inputs</Text>
-          <Button label="Manage" variant="ghost" onPress={() => router.push('/health')} />
+          <Text style={styles.sectionTitle}>Recovery & health</Text>
+          <Button label={showHealth ? 'Hide' : 'Show details'} variant="ghost" onPress={() => setShowHealth(value => !value)} />
         </View>
-        <Card style={styles.healthCard}>
+        {showHealth && <Card style={styles.healthCard}>
           <View style={styles.tileRow}>
             <StatTile
               label="Sleep"
@@ -188,11 +192,18 @@ export default function Train() {
               ? 'Recovery and nutrition are both feeding the plan. Intensity moves automatically when these drop.'
               : 'Connect a wearable and a nutrition app so the plan can react to how you actually recover.'}
           </Text>
-        </Card>
+          <Button label="Manage connections" variant="ghost" onPress={() => router.push('/health')}/>
+        </Card>}
       </View>
-
-      <View style={styles.section}>
+      </>}
+      {section === 'ask' && <View style={styles.section}>
         <Text style={styles.sectionTitle}>Ask your coach</Text>
+        {!messages.length && <View style={{gap:12}}>
+          <Text style={styles.healthNote}>Get help with your next session, technique, or recovery.</Text>
+          <View style={{flexDirection:'row',gap:8,flexWrap:'wrap'}}>
+            {['What should I work on today?', 'How can I improve my serve?', 'Help me plan a lighter session'].map(text=><Chip key={text} label={text} onPress={()=>setPrompt(text)}/>)}
+          </View>
+        </View>}
         {messages.map((m) => (
           <View
             key={m.id}
@@ -209,12 +220,12 @@ export default function Train() {
         <Field
           value={prompt}
           onChangeText={setPrompt}
-          placeholder="e.g. My shoulder is sore, what should I swap out on Thursday?"
+          placeholder="What would you like help with?"
           multiline
           minHeight={80}
         />
         <Button label="Send" onPress={send} disabled={thinking || prompt.trim().length === 0} />
-      </View>
+      </View>}
     </Screen>
   );
 }

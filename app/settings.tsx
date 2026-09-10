@@ -64,6 +64,7 @@ export default function Settings() {
     {
       title: 'Who can see your content',
       rows: [
+        { icon: 'checkmark-done-outline', label: 'Read receipts', detail: 'Let people see when you read their messages', toggle: { value: currentUser?.readReceiptsEnabled !== false, onChange: actions.setReadReceiptsEnabled } },
         {
           icon: 'lock-closed-outline',
           label: 'Private account',

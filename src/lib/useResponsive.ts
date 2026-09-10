@@ -5,6 +5,7 @@ import { useWindowDimensions } from 'react-native';
  * `desktop` is the Instagram-style layout (left sidebar, centred column, right rail).
  */
 export const BREAKPOINTS = {
+  landscape: 600,
   tablet: 768,
   desktop: 1200,
 } as const;
@@ -21,6 +22,7 @@ export const LAYOUT = {
 export interface Responsive {
   width: number;
   height: number;
+  /** Compact portrait layout, not the physical device type. */
   isPhone: boolean;
   isTablet: boolean;
   isDesktop: boolean;
@@ -30,13 +32,16 @@ export interface Responsive {
 
 export function useResponsive(): Responsive {
   const { width, height } = useWindowDimensions();
-  const isDesktop = width >= BREAKPOINTS.desktop;
-  const isTablet = width >= BREAKPOINTS.tablet && !isDesktop;
+  // Medium-width browser panels should use the sidebar before they become
+  // wider than their full height. Narrow portrait views retain bottom tabs.
+  const isLandscape = width >= BREAKPOINTS.landscape || width > height;
+  const isDesktop = isLandscape && width >= BREAKPOINTS.desktop;
+  const isTablet = isLandscape && !isDesktop;
 
   return {
     width,
     height,
-    isPhone: width < BREAKPOINTS.tablet,
+    isPhone: !isLandscape,
     isTablet,
     isDesktop,
     isCompactSidebar: isTablet,

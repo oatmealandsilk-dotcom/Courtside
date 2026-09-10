@@ -3,6 +3,7 @@ import React, { useRef } from 'react';
 import { View } from 'react-native';
 import { router, usePathname } from 'expo-router';
 import { NavBar } from './NavBar';
+import { RouteTransition } from './RouteTransition';
 import { useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
@@ -26,7 +27,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   } }} />;
   return <View style={{ flex: 1, minHeight: 0, backgroundColor: colors.bg, flexDirection: isPhone ? 'column' : 'row' }}>
     {showNav && !isPhone && nav}
-    <View style={{ flex: 1, minWidth: 0, minHeight: 0 }}>{children}</View>
+    <View style={{ flex: 1, minWidth: 0, minHeight: 0 }}><RouteTransition>{children}</RouteTransition></View>
     {showNav && isPhone && nav}
   </View>;
 }

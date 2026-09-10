@@ -146,7 +146,7 @@ export default function ShareSheet() {
 }
 
 const styleDefinitions = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay },
+  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' },
   dismissArea: { flex: 1 },
   sheet: {
     maxHeight: '86%',

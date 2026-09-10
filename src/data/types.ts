@@ -84,6 +84,7 @@ export interface User {
   /** Deterministic avatar tint; no network images in the mock build. */
   avatarSeed: string;
   avatarUrl?: string;
+  readReceiptsEnabled?: boolean;
   isCoach: boolean;
   followers: number;
   following: number;
@@ -380,6 +381,8 @@ export interface CoachApplication {
 export type MessageKind = 'text' | 'post' | 'question' | 'profile';
 
 export interface Message {
+  openedAtBy?: Record<ID, string>;
+  readAtBy?: Record<ID, string>;
   id: ID;
   conversationId: ID;
   senderId: ID;

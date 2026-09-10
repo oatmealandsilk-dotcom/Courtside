@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useResponsive } from '@/lib/useResponsive';
 
 export interface SwipeSurfaceProps {
   children: React.ReactNode;
@@ -10,7 +11,9 @@ export interface SwipeSurfaceProps {
   renderPreview?: (direction: 1 | -1) => React.ReactNode;
 }
 
-export function SwipeSurface({ children, onSwipe, enabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false }: SwipeSurfaceProps) {
+export function SwipeSurface({ children, onSwipe, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false }: SwipeSurfaceProps) {
+  const { isPhone } = useResponsive();
+  const enabled = requestedEnabled && isPhone;
   const start = useRef<{ x: number; y: number; lastX: number; time: number; velocity: number; horizontal: boolean; delegateOnly?: boolean; delegateDirection?: string | null } | null>(null);
   const surface = useRef<HTMLDivElement>(null);
   const suppressClick = useRef(false);
@@ -19,6 +22,14 @@ export function SwipeSurface({ children, onSwipe, enabled = true, fill = true, r
   const [direction, setDirection] = useState<1 | -1>(1);
   const [settling, setSettling] = useState(false);
   useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(() => {
+    if (!enabled) {
+      clearTimeout(timer.current);
+      start.current = null;
+      setOffset(0);
+      setSettling(false);
+    }
+  }, [enabled]);
   const settle = (commit: boolean, next: 1 | -1) => {
     const width = surface.current?.clientWidth ?? 1;
     setSettling(true);
@@ -34,7 +45,7 @@ export function SwipeSurface({ children, onSwipe, enabled = true, fill = true, r
   const transition = settling ? 'transform 320ms cubic-bezier(.22,.78,.22,1)' : 'none';
   return <div ref={surface} data-swipe-delegate-right={delegateRight ? "true" : undefined} data-swipe-delegate-left={delegateLeft ? "true" : undefined} data-swipe-surface={enabled ? 'true' : undefined}
     style={{ display: 'flex', flexDirection: 'column', flex: fill ? 1 : undefined, minWidth: 0, minHeight: 0,
-      position: 'relative', overflow: 'hidden', touchAction: 'pan-y', userSelect: 'none' }}
+      position: 'relative', overflow: 'hidden', touchAction: enabled ? 'pan-y' : 'auto', userSelect: enabled ? 'none' : 'auto' }}
     onPointerDownCapture={event => {
       suppressClick.current = false;
       if (!enabled || settling || !event.isPrimary || event.button !== 0) return;

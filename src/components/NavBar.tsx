@@ -1,4 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { BrandMark } from './BrandMark';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -28,7 +29,7 @@ interface NavItem {
 const ITEMS: NavItem[] = [
   { route: 'index', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
   { route: 'discuss', label: 'Community', icon: 'people-outline', activeIcon: 'people' },
-  { route: 'coaches', label: 'Coaching', icon: 'school-outline', activeIcon: 'school' },
+  { route: 'coaches', label: 'Coaching', icon: 'fitness-outline', activeIcon: 'fitness' },
   { route: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
 ];
 
@@ -80,9 +81,9 @@ export function NavBar({ state, navigation }: NavBarProps) {
     >
       <View style={[styles.brandRow, compact && styles.brandRowCompact]}>
         {compact ? (
-          <Ionicons name="tennisball" size={24} color={colors.brand} />
+          <BrandMark size={34} />
         ) : (
-          <Text style={styles.wordmark}>CourtSide</Text>
+          <View style={{flexDirection:'row',alignItems:'center',gap:8}}><BrandMark size={30}/><Text style={styles.wordmark}>CourtSide</Text></View>
         )}
       </View>
 
