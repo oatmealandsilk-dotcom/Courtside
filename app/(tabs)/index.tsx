@@ -15,7 +15,7 @@ import { colors } from '@/theme';
 
 export default function Home() {
   const app = useApp();
-  const { posts, questions, comments, users, currentUserId, saved, conversations, actions, ready } = app;
+  const { posts, questions, comments, users, currentUserId, saved, actions, ready } = app;
   const [active, setActive] = useState(0);
   const [visit, setVisit] = useState(0);
   const focused = useIsFocused();
@@ -50,32 +50,15 @@ export default function Home() {
     [order, posts, questions],
   );
 
-  const unread = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
-
   const share = (kind: 'post' | 'question', id: string) =>
     router.push(`/share?kind=${kind}&id=${id}`);
 
   return (
     <View style={styles.root}>
-      {/* Fixed chrome: wordmark left, direct messages right. */}
-      <View style={styles.chrome}>
-        <Text style={styles.logo}>courtside</Text>
-        <Pressable
-          accessibilityRole="link"
-          accessibilityLabel={unread ? `Messages, ${unread} unread` : 'Messages'}
-          onPress={() => router.push('/messages')}
-          style={styles.messageButton}
-          hitSlop={8}
-        >
-          <Ionicons name="paper-plane-outline" size={24} color={colors.text} />
-          {unread > 0 ? (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{unread > 9 ? '9+' : unread}</Text>
-            </View>
-          ) : null}
-        </Pressable>
+      <View pointerEvents="none" style={styles.wordmarkOverlay}>
+        <Text style={[styles.wordmark, feed[active]?.type === 'post' &&
+          feed[active].post.kind === 'reel' && styles.wordmarkOnReel]}>courtside</Text>
       </View>
-
       {!ready || !feed.length ? (
         <EmptyState
           title={ready ? 'Your court is quiet' : 'Loading your reels'}
@@ -225,33 +208,16 @@ export default function Home() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#101A14', alignItems: 'center' },
-  chrome: {
-    width: '100%',
-    maxWidth: 520,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    paddingBottom: 10,
-    zIndex: 5,
+  root: { flex: 1, backgroundColor: colors.bg, alignItems: 'center' },
+  wordmarkOverlay: {
+    position: 'absolute', top: 16, width: '100%', maxWidth: 520,
+    paddingHorizontal: 20, zIndex: 5,
   },
-  logo: { color: '#FFF', fontSize: 23, fontWeight: '800' },
-  messageButton: { padding: 2 },
-  badge: {
-    position: 'absolute',
-    top: -3,
-    right: -6,
-    minWidth: 17,
-    height: 17,
-    borderRadius: 9,
-    paddingHorizontal: 4,
-    backgroundColor: '#C4553F',
-    alignItems: 'center',
-    justifyContent: 'center',
+  wordmark: { color: colors.text, fontSize: 23, fontWeight: '800' },
+  wordmarkOnReel: {
+    color: 'white', textShadowColor: '#0006',
+    textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
   },
-  badgeText: { color: 'white', fontSize: 10, fontWeight: '700' },
   viewer: { flex: 1, width: '100%', maxWidth: 520, minHeight: 0 },
   reel: { flex: 1, backgroundColor: '#203E2A', overflow: 'hidden' },
   preview: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30, gap: 14 },
@@ -299,7 +265,7 @@ const styles = StyleSheet.create({
   actions: { position: 'absolute', right: 14, bottom: 100, gap: 22 },
   action: { alignItems: 'center', gap: 5 },
   actionLabel: { color: 'white', fontSize: 12 },
-  article: { flex: 1, backgroundColor: colors.bg, padding: 20, paddingTop: 30, gap: 20 },
+  article: { flex: 1, backgroundColor: colors.bg, padding: 20, paddingTop: 64, gap: 20 },
   eyebrow: { color: colors.warning, fontWeight: '700', letterSpacing: 1.2, fontSize: 11 },
   hint: { color: colors.textMuted, fontSize: 11, textAlign: 'center', paddingBottom: 10 },
 });
