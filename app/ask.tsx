@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -11,6 +12,7 @@ import { colors, spacing, typography } from '@/theme';
 const TOPICS = Object.keys(TOPIC_META) as QuestionTopic[];
 
 export default function Ask() {
+  const styles = useThemedStyles(styleDefinitions);
   const { actions } = useApp();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -85,7 +87,7 @@ export default function Ask() {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   form: { gap: spacing.lg, paddingTop: spacing.sm },
   group: { gap: spacing.sm },
   label: { ...typography.smallStrong, color: colors.textMuted },

@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -23,6 +24,7 @@ const SPECIALTIES: { value: CoachSpecialty; label: string }[] = [
 
 /** Free, public question addressed to the whole coaching pool. */
 export default function AskCoach() {
+  const styles = useThemedStyles(styleDefinitions);
   const { actions, coaches } = useApp();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -112,7 +114,7 @@ export default function AskCoach() {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   banner: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -21,6 +22,7 @@ const BLOCK_META: Record<TrainingBlockKind, { icon: keyof typeof Ionicons.glyphM
 };
 
 export default function Train() {
+  const styles = useThemedStyles(styleDefinitions);
   const { currentUser, healthHistory, integrations } = useApp();
   const [openDay, setOpenDay] = useState<number | null>(0);
   const [prompt, setPrompt] = useState('');
@@ -217,7 +219,7 @@ export default function Train() {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   summaryCard: { gap: spacing.md, marginBottom: spacing.lg },
   summaryHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   summaryTag: { ...typography.caption, color: colors.brand },

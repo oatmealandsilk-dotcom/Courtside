@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -27,11 +28,12 @@ interface NavItem {
 const ITEMS: NavItem[] = [
   { route: 'index', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
   { route: 'discuss', label: 'Community', icon: 'people-outline', activeIcon: 'people' },
-  { route: 'coaches', label: 'Coaching', icon: 'chatbubble-outline', activeIcon: 'chatbubble' },
+  { route: 'coaches', label: 'Coaching', icon: 'school-outline', activeIcon: 'school' },
   { route: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
 ];
 
 export function NavBar({ state, navigation }: NavBarProps) {
+  const styles = useThemedStyles(styleDefinitions);
   const { isPhone, isCompactSidebar } = useResponsive();
   const { conversations } = useApp();
   const unread = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
@@ -172,7 +174,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   createSlot: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   createButton: { width: 48, height: 48, borderRadius: 14, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   bottomBar: {

@@ -1,3 +1,5 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
+import { PlayerName } from '@/components/PlayerName';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -9,8 +11,8 @@ import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 
 export default function Coaching() {
+  const styles = useThemedStyles(styleDefinitions);
   const { coaches, users, coachingRequests, coachQuestions, currentUserId, currentUser } = useApp();
-  const requests = coachingRequests.filter((r) => r.userId === currentUserId);
   const recentQuestions = [...coachQuestions]
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
     .slice(0, 3);
@@ -69,7 +71,7 @@ export default function Coaching() {
               style={{ backgroundColor: colors.borderStrong }}
             />
             <View style={{ flex: 1, gap: 7 }}>
-              <Text style={styles.name}>{user?.name}</Text>
+              <PlayerName userId={user?.id} style={styles.name}>{user?.name}</PlayerName>
               <Text style={styles.credential}>{coach.credentials[0]}</Text>
               <Text style={styles.muted}>
                 {coach.specialties
@@ -88,23 +90,6 @@ export default function Coaching() {
           </Pressable>
         );
       })}
-
-      {requests.length > 0 ? (
-        <View style={{ marginTop: 24, gap: 12 }}>
-          <Text style={styles.eyebrow}>YOUR REQUESTS</Text>
-          {requests.map((r) => (
-            <Pressable
-              key={r.id}
-              accessibilityRole="link"
-              onPress={() => router.push(`/coach/${r.coachId}`)}
-              style={styles.request}
-            >
-              <Text style={styles.name}>{r.question}</Text>
-              <Text style={styles.muted}>{r.status.replace('-', ' ')}</Text>
-            </Pressable>
-          ))}
-        </View>
-      ) : null}
 
       {/* ------------------------------ Ask a coach ----------------------------- */}
       <View style={styles.heading}>
@@ -145,12 +130,12 @@ export default function Coaching() {
               <Text style={styles.questionTitle} numberOfLines={2}>
                 {question.title}
               </Text>
-              <Text style={styles.small}>
+              <PlayerName userId={author?.id} style={styles.small}>
                 @{author?.handle ?? 'player'} · {relativeTime(question.createdAt)} ·{' '}
                 {question.replyIds.length
                   ? `${question.replyIds.length} ${question.replyIds.length === 1 ? 'reply' : 'replies'}`
                   : 'awaiting a coach'}
-              </Text>
+              </PlayerName>
             </View>
             {question.resolved ? (
               <Ionicons name="checkmark-circle" size={18} color={colors.success} />
@@ -197,7 +182,7 @@ export default function Coaching() {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   ai: {
     backgroundColor: '#EBEEEA',
     borderColor: '#CBD5D8',

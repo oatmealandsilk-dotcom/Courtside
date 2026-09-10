@@ -1,3 +1,5 @@
+import { ThreadReplies } from '@/components/ThreadReplies';
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
@@ -14,6 +16,7 @@ import { useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
 
 export default function Home() {
+  const styles = useThemedStyles(styleDefinitions);
   const app = useApp();
   const { posts, questions, comments, users, currentUserId, saved, actions, ready } = app;
   const [active, setActive] = useState(0);
@@ -83,6 +86,7 @@ export default function Home() {
                         onShare={() => share('question', item.question.id)}
                         onPress={() => router.push(`/question/${item.question.id}`)}
                       />
+                      <ThreadReplies questionId={item.question.id}/>
                     </ScrollView>
                     <Text style={styles.hint}>Swipe up for more · swipe left for Community</Text>
                   </View>
@@ -149,7 +153,7 @@ export default function Home() {
                     <Text numberOfLines={3} style={styles.body}>
                       {post.body}
                     </Text>
-                    <Text style={styles.tags}>{post.tags.map((t) => '#' + t).join('  ')}</Text>
+                    <Text style={styles.tags}>{post.tags.map(t=><Text key={t} accessibilityRole="link" onPress={()=>router.push({pathname:'/search',params:{q:`#${t}`}})}>#{t}{'  '}</Text>)}</Text>
                     <Text style={styles.swipeHint}>↑ Next moment   ·   ← Community</Text>
                   </View>
 
@@ -207,7 +211,7 @@ export default function Home() {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, alignItems: 'center' },
   wordmarkOverlay: {
     position: 'absolute', top: 16, width: '100%', maxWidth: 520,

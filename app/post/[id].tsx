@@ -1,3 +1,5 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
+import { PlayerName } from '@/components/PlayerName';
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -9,6 +11,7 @@ import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
 
 export default function PostDetail() {
+  const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { posts, comments, users, currentUserId, actions } = useApp();
   const [draft, setDraft] = useState('');
@@ -63,7 +66,7 @@ export default function PostDetail() {
               />
               <View style={styles.commentBody}>
                 <Text style={styles.commentMeta}>
-                  {commenter?.name ?? 'Unknown'} · {relativeTime(comment.createdAt)}
+                  <PlayerName userId={commenter?.id}>{commenter?.name ?? 'Unknown'}</PlayerName> · {relativeTime(comment.createdAt)}
                 </Text>
                 <Text style={styles.commentText}>{comment.body}</Text>
               </View>
@@ -80,7 +83,7 @@ export default function PostDetail() {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   section: { gap: spacing.lg, paddingTop: spacing.xl },
   sectionTitle: { ...typography.heading, color: colors.text },
   comment: { flexDirection: 'row', gap: spacing.md },

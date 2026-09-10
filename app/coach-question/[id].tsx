@@ -1,3 +1,5 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
+import { PlayerName } from '@/components/PlayerName';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -12,6 +14,7 @@ import { colors, radius, spacing, typography } from '@/theme';
 
 /** One Ask-a-Coach thread: the player's question and every coach reply. */
 export default function CoachQuestionDetail() {
+  const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { coachQuestions, coachReplies, users, coaches, currentUser, currentUserId, actions } = useApp();
   const [draft, setDraft] = useState('');
@@ -39,10 +42,10 @@ export default function CoachQuestionDetail() {
         <View style={styles.authorRow}>
           <Avatar name={author?.name ?? '?'} seed={author?.avatarSeed ?? question.id} size={38} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.authorName}>{author?.name ?? 'Player'}</Text>
-            <Text style={styles.meta}>
+            <PlayerName userId={author?.id} style={styles.authorName}>{author?.name ?? 'Player'}</PlayerName>
+            <PlayerName userId={author?.id} style={styles.meta}>
               @{author?.handle ?? 'player'} · {relativeTime(question.createdAt)}
-            </Text>
+            </PlayerName>
           </View>
           <Chip label={question.specialty} small />
         </View>
@@ -90,7 +93,7 @@ export default function CoachQuestionDetail() {
               <Avatar name={coachUser?.name ?? 'Coach'} seed={reply.coachUserId} size={34} />
               <View style={{ flex: 1 }}>
                 <View style={styles.nameRow}>
-                  <Text style={styles.authorName}>{coachUser?.name ?? 'Coach'}</Text>
+                  <PlayerName userId={coachUser?.id} style={styles.authorName}>{coachUser?.name ?? 'Coach'}</PlayerName>
                   <Ionicons name="shield-checkmark" size={14} color={colors.brand} />
                 </View>
                 <Text style={styles.meta}>
@@ -173,7 +176,7 @@ export default function CoachQuestionDetail() {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   head: { gap: spacing.md, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   authorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },

@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export function StatTile({ label, value, hint, tint }: Props) {
+  const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.tile}>
       <Text style={styles.label}>{label.toUpperCase()}</Text>
@@ -20,7 +22,7 @@ export function StatTile({ label, value, hint, tint }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   tile: {
     flex: 1,
     minWidth: 96,

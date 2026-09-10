@@ -1,5 +1,7 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
 import { MediaPicker, type PickedMedia } from '@/components/MediaPicker';
@@ -15,8 +17,10 @@ import { colors, spacing, typography } from '@/theme';
  * Questions get their own mode because they need a title and a topic.
  */
 export default function Compose() {
+  const styles = useThemedStyles(styleDefinitions);
   const { actions } = useApp();
 
+  const [choosing, setChoosing] = useState(true);
   const [mode, setMode] = useState<'post' | 'question'>('post');
   const [media, setMedia] = useState<PickedMedia | null>(null);
   const [body, setBody] = useState('');
@@ -36,7 +40,7 @@ export default function Compose() {
         title: questionTitle.trim(),
         body: body.trim(),
         topic,
-        tags: [],
+        tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
       });
       router.replace(`/question/${id}`);
       return;
@@ -46,7 +50,8 @@ export default function Compose() {
     actions.addPost({
       kind: media?.kind === 'video' ? 'reel' : 'note',
       body: body.trim(),
-      tags: [],
+      tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
+      imageUrl: media?.kind === 'photo' ? media.uri : undefined,
       videoUrl: media?.kind === 'video' ? media.uri : undefined,
       mediaLabel: media?.label,
       session:
@@ -56,6 +61,17 @@ export default function Compose() {
     });
     router.back();
   };
+
+  if (choosing) return <View style={styles.choiceBackdrop}>
+    <Pressable accessibilityRole="button" accessibilityLabel="Close create menu" onPress={() => router.back()} style={StyleSheet.absoluteFill}/>
+    <View style={styles.choiceSheet}>
+      <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>Create</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => router.back()}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
+      <MediaPicker compact value={media} onChange={next => { setMedia(next); if (next) { setMode('post'); setChoosing(false); } }}/>
+      <Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => { setMode('question'); setChoosing(false); }} style={styles.choiceOption}>
+        <Ionicons name="chatbubbles-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Thread or question</Text><Text style={styles.note}>Ask the community or start a conversation.</Text>
+      </Pressable>
+    </View>
+  </View>;
 
   return (
     <View style={styles.backdrop}>
@@ -138,7 +154,13 @@ export default function Compose() {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
+  choiceBackdrop: { flex: 1, backgroundColor: colors.overlay, alignItems: 'center', justifyContent: 'center', padding: 20 },
+  choiceSheet: { width: '100%', maxWidth: 400, borderRadius: 24, padding: 20, gap: 12, backgroundColor: colors.bg },
+  choiceHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8 },
+  choiceTitle: { fontSize: 22, fontWeight: '700', color: colors.text },
+  choiceOption: { padding: 20, gap: 8, borderRadius: 18, backgroundColor: colors.surface },
+  choiceLabel: { fontSize: 16, fontWeight: '600', color: colors.text },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay },
   sheet: {
     height: '88%',

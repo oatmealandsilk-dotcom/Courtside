@@ -1,3 +1,5 @@
+import { PlayerName } from '@/components/PlayerName';
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -13,6 +15,7 @@ import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 
 export default function Profile() {
+  const styles = useThemedStyles(styleDefinitions);
   const { currentUser, posts, currentUserId, actions } = useApp();
 
   if (!currentUser) {
@@ -41,8 +44,8 @@ export default function Profile() {
         <View style={styles.identityRow}>
           <Avatar name={currentUser.name} seed={currentUser.avatarSeed} size={64} ring />
           <View style={styles.identityText}>
-            <Text style={styles.name}>{currentUser.name}</Text>
-            <Text style={styles.handle}>@{currentUser.handle} · {currentUser.location}</Text>
+            <PlayerName userId={currentUser.id} style={styles.name}>{currentUser.name}</PlayerName>
+            <PlayerName userId={currentUser.id} style={styles.handle}>@{currentUser.handle} · {currentUser.location}</PlayerName>
             <View style={styles.pillRow}>
               <LevelPill profile={profile} />
               <Chip label={playStyleLabel[profile.playStyle]} small />
@@ -188,6 +191,7 @@ export default function Profile() {
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -197,6 +201,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
+  const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.detailRow}>
       <Text style={styles.detailLabel}>{label}</Text>
@@ -205,7 +210,7 @@ function Detail({ label, value }: { label: string; value: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   identity: { gap: spacing.md },
   identityRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
   identityText: { flex: 1, gap: 4 },

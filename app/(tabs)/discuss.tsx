@@ -1,3 +1,5 @@
+import { SwipeSurface } from '@/components/SwipeSurface';
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useMemo, useState } from 'react';
 import { ScrollView, TextInput, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -22,10 +24,11 @@ const TOPICS: (QuestionTopic | 'all')[] = [
   'mental',
 ];
 
-export default function Discuss() {
+export default function Discuss({ previewSection }: { previewSection?: string } = {}) {
+  const styles = useThemedStyles(styleDefinitions);
   const { questions, users, currentUserId, saved, actions } = useApp();
   const params = useLocalSearchParams<{ section?: string }>();
-  const section = params.section === 'players' ? 'players' : 'discussions';
+  const section = (previewSection ?? params.section) === 'players' ? 'players' : 'discussions';
   const setSection = (value: string) => router.setParams({ section: value });
   const [search, setSearch] = useState('');
   const players = users.filter(u => u.id !== currentUserId && `${u.name} ${u.handle} ${u.location}`.toLowerCase().includes(search.toLowerCase()));
@@ -39,39 +42,12 @@ export default function Discuss() {
     return list;
   }, [questions, topic]);
 
-  return (
-    <Screen
-      title="Community"
-      subtitle="Find your people. Talk about your game."
-      right={
-        <Pressable
-          accessibilityRole="link"
-          accessibilityLabel="Search discussions and players"
-          onPress={() => router.push('/search')}
-          hitSlop={8}
-        >
-          <Ionicons name="search" size={23} color={colors.text} />
-        </Pressable>
-      }
-    >
-      <View style={styles.sections}>
-        {(['discussions', 'players'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: section === value }} onPress={() => setSection(value)} style={[styles.section, section === value && styles.sectionActive]}><Text style={{ fontSize: 16, fontWeight: '600', color: section === value ? colors.warning : colors.textMuted }}>{value === 'discussions' ? 'Discussions' : 'Find Players'}</Text></Pressable>)}
-      </View>
-      {section === 'players' ? <View style={{ gap: 16 }}>
+  const content = (section:string) => (section === 'players' ? <View style={{ gap: 16 }}>
         <TextInput accessibilityLabel="Search players" placeholder="Search by name, handle, or city" placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} style={styles.search} />
         {players.map(user => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.player}>
           <Avatar name={user.name} seed={user.avatarSeed} size={44} />
-          <View style={{ flex: 1, gap: 4 }}><Text style={styles.playerName}>{user.name}</Text><Text style={styles.playerMeta}>@{user.handle} · {user.location}</Text></View>
-          <LevelPill profile={user.profile} small />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Message ${user.name}`}
-            hitSlop={8}
-            onPress={() => router.push(`/messages/${actions.openConversationWith(user.id)}`)}
-            style={{ paddingLeft: 4 }}
-          >
-            <Ionicons name="paper-plane-outline" size={19} color={colors.textMuted} />
-          </Pressable>
+          <View style={{ flex: 1, gap: 4 }}><View style={{flexDirection:"row",alignItems:"center",gap:8,flexWrap:"wrap"}}><Text style={styles.playerName}>{user.name}</Text><LevelPill profile={user.profile} small /></View><Text style={styles.playerMeta}>@{user.handle} · {user.location}</Text></View>
+
         </Pressable>)}
         {!players.length && <EmptyState title="No players found" body="Try another name or city." />}
       </View> : <>
@@ -116,12 +92,36 @@ export default function Discuss() {
           </Text>
         </View>
       )}
-      </>}
+      </>);
+
+  return (
+    <Screen
+      title="Community"
+      subtitle="Find your people. Talk about your game."
+      right={
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel="Search discussions and players"
+          onPress={() => router.push('/search')}
+          hitSlop={8}
+        >
+          <Ionicons name="search" size={23} color={colors.text} />
+        </Pressable>
+      }
+    >
+      <View style={styles.sections}>
+        {(['discussions', 'players'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: section === value }} onPress={() => setSection(value)} style={[styles.section, section === value && styles.sectionActive]}><Text style={{ fontSize: 16, fontWeight: '600', color: section === value ? colors.warning : colors.textMuted }}>{value === 'discussions' ? 'Discussions' : 'Find Players'}</Text></Pressable>)}
+      </View>
+      <SwipeSurface fill={false} enabled={!previewSection} delegateRight={section === 'discussions'} delegateLeft={section === 'players'}
+        onSwipe={direction=>setSection(direction===1 ? 'players' : 'discussions')}
+        renderPreview={direction=>direction===1 && section==='discussions' ? content('players') : direction===-1 && section==='players' ? content('discussions') : null}>
+        {content(section)}
+      </SwipeSurface>
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   sections: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: 16 },
   section: { flex: 1, alignItems: 'center', paddingVertical: 18, borderBottomWidth: 3, borderBottomColor: 'transparent' },
   sectionActive: { borderBottomColor: colors.warning },

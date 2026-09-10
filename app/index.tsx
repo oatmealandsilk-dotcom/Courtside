@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Redirect } from 'expo-router';
@@ -6,6 +7,7 @@ import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
 
 export default function Index() {
+  const styles = useThemedStyles(styleDefinitions);
   const { ready, currentUserId, onboardingComplete } = useApp();
 
   if (!ready) {
@@ -22,7 +24,7 @@ export default function Index() {
   return <Redirect href="/(tabs)" />;
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   splash: {
     flex: 1,
     backgroundColor: colors.bg,

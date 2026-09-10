@@ -1,8 +1,11 @@
+import { PlayerName } from '@/components/PlayerName';
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Share as RNShare, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import { shareOutside } from '@/lib/shareOutside';
 import { Avatar, Button, Field } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -12,20 +15,21 @@ import { colors, radius, spacing, typography } from '@/theme';
  * in each DM thread. "Share outside CourtSide" falls back to the OS sheet.
  */
 export default function ShareSheet() {
+  const styles = useThemedStyles(styleDefinitions);
   const params = useLocalSearchParams<{ kind?: string; id?: string }>();
-  const kind = params.kind === 'question' ? 'question' : 'post';
+  const kind = params.kind === 'profile' ? 'profile' : params.kind === 'question' ? 'question' : 'post';
   const id = params.id ?? '';
 
-  const { users, posts, questions, currentUserId, actions } = useApp();
+  const { users, posts, questions, conversations, currentUserId, actions } = useApp();
   const [selected, setSelected] = useState<string[]>([]);
   const [note, setNote] = useState('');
   const [search, setSearch] = useState('');
   const [sent, setSent] = useState(false);
   const [fallbackNote, setFallbackNote] = useState('');
 
-  const item = kind === 'post' ? posts.find((p) => p.id === id) : questions.find((q) => q.id === id);
+  const item = kind === 'profile' ? users.find(u => u.id === id) : kind === 'post' ? posts.find((p) => p.id === id) : questions.find((q) => q.id === id);
   const title = item
-    ? kind === 'post'
+    ? kind === 'profile' ? (item as {name:string}).name : kind === 'post'
       ? (item as { body: string }).body
       : (item as { title: string }).title
     : 'This item is no longer available';
@@ -34,10 +38,14 @@ export default function ShareSheet() {
     () =>
       users
         .filter((u) => u.id !== currentUserId)
+        .sort((a,b) => {
+          const latest = (id:string) => Math.max(0,...conversations.filter(c=>c.participantIds.includes(id)).map(c=>new Date(c.updatedAt).getTime()));
+          return latest(b.id)-latest(a.id);
+        })
         .filter((u) =>
           `${u.name} ${u.handle}`.toLowerCase().includes(search.trim().toLowerCase()),
         ),
-    [users, currentUserId, search],
+    [users, conversations, currentUserId, search],
   );
 
   const toggle = (userId: string) =>
@@ -52,12 +60,10 @@ export default function ShareSheet() {
     setTimeout(() => router.back(), 700);
   };
 
+  const url = `https://oatmealandsilk-dotcom.github.io/Courtside/${kind === 'profile' ? 'user' : kind}/${id}`;
   const shareOut = async () => {
-    try {
-      await RNShare.share({ message: `${title}\n\nShared from CourtSide` });
-    } catch {
-      setFallbackNote('Your browser blocked the share sheet — copy the text above instead.');
-    }
+    try { setFallbackNote(await shareOutside(title, url)); }
+    catch { setFallbackNote(`Share this link: ${url}`); }
   };
 
   return (
@@ -80,7 +86,7 @@ export default function ShareSheet() {
 
         <View style={styles.itemPreview}>
           <Ionicons
-            name={kind === 'post' ? 'play-circle-outline' : 'chatbubbles-outline'}
+            name={kind === 'profile' ? 'person-outline' : kind === 'post' ? 'play-circle-outline' : 'chatbubbles-outline'}
             size={20}
             color={colors.brand}
           />
@@ -91,6 +97,7 @@ export default function ShareSheet() {
 
         <Field value={search} onChangeText={setSearch} placeholder="Search" autoCapitalize="none" />
 
+        <Text style={styles.personHandle}>{search ? "Search results" : "Recent conversations"}</Text>
         <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
           {people.map((user) => {
             const on = selected.includes(user.id);
@@ -104,8 +111,8 @@ export default function ShareSheet() {
               >
                 <Avatar name={user.name} seed={user.avatarSeed} size={44} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.personName}>{user.name}</Text>
-                  <Text style={styles.personHandle}>@{user.handle}</Text>
+                  <PlayerName userId={user.id} style={styles.personName}>{user.name}</PlayerName>
+                  <PlayerName userId={user.id} style={styles.personHandle}>@{user.handle}</PlayerName>
                 </View>
                 <View style={[styles.check, on && styles.checkOn]}>
                   {on ? <Ionicons name="checkmark" size={16} color={colors.brandInk} /> : null}
@@ -124,21 +131,21 @@ export default function ShareSheet() {
           <Button
             label={sent ? 'Sent ✓' : selected.length ? `Send to ${selected.length}` : 'Send'}
             onPress={send}
-            disabled={!selected.length || sent}
+            disabled={!selected.length || sent || !item}
             full
           />
           <Pressable onPress={shareOut} accessibilityRole="button" style={styles.externalRow}>
             <Ionicons name="share-outline" size={18} color={colors.textMuted} />
             <Text style={styles.external}>Share outside CourtSide</Text>
           </Pressable>
-          {fallbackNote ? <Text style={styles.empty}>{fallbackNote}</Text> : null}
+          {fallbackNote ? <Text selectable style={styles.empty}>{fallbackNote}</Text> : null}
         </View>
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay },
   dismissArea: { flex: 1 },
   sheet: {

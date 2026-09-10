@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -25,6 +26,7 @@ const SPECIALTIES: CoachSpecialty[] = [
  * playing and coaching history before they can charge anyone.
  */
 export default function CoachApply() {
+  const styles = useThemedStyles(styleDefinitions);
   const { currentUser, coachApplications, actions } = useApp();
   const existing = coachApplications.find((a) => a.userId === currentUser?.id);
 
@@ -236,7 +238,7 @@ export default function CoachApply() {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   intro: {
     flexDirection: 'row',
     gap: spacing.md,

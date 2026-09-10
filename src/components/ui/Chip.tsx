@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function Chip({ label, selected = false, onPress, tint, ink, small = false }: Props) {
+  const styles = useThemedStyles(styleDefinitions);
   const background = selected ? (tint ?? colors.brand) : colors.surfaceAlt;
   const color = selected ? (ink ?? colors.brandInk) : colors.textMuted;
 
@@ -38,7 +40,7 @@ export function Chip({ label, selected = false, onPress, tint, ink, small = fals
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   chip: {
     paddingHorizontal: spacing.md,
     paddingVertical: 7,

@@ -4,14 +4,16 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppProvider } from '@/store/AppContext';
+import { AppShell } from '@/components/AppShell';
+import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 import { colors } from '@/theme';
 
 export default function RootLayout() {
   return (
-    <SafeAreaProvider>
+    <ThemeProvider><SafeAreaProvider>
       <AppProvider>
-        <StatusBar style="dark" />
-        <Stack
+        <ThemedStatusBar/>
+        <AppShell><Stack
           screenOptions={{
             headerShown: false,
             contentStyle: { backgroundColor: colors.bg },
@@ -29,8 +31,10 @@ export default function RootLayout() {
             }}
           />
           <Stack.Screen name="ask-coach" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-        </Stack>
+        </Stack></AppShell>
       </AppProvider>
-    </SafeAreaProvider>
+    </SafeAreaProvider></ThemeProvider>
   );
 }
+
+function ThemedStatusBar() { const { night } = useTheme(); return <StatusBar style={night ? "light" : "dark"}/>; }

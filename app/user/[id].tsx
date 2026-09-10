@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -6,12 +7,13 @@ import { AchievementGrid } from '@/components/AchievementGrid';
 import { LevelPill } from '@/components/LevelPill';
 import { PostCard } from '@/components/PostCard';
 import { Avatar, Button, Card, Chip, EmptyState, Screen, StatTile } from '@/components/ui';
-import { evaluateAchievements, fitnessLabel, playStyleLabel, surfaceLabel, winRate } from '@/lib/badges';
+import { evaluateAchievements, playStyleLabel } from '@/lib/badges';
 import { compactNumber, formatDate } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
 
 export default function UserProfile() {
+  const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { users, posts, coaches, currentUserId, actions } = useApp();
 
@@ -54,6 +56,7 @@ export default function UserProfile() {
           </Text>
           <Text style={styles.followText}>Joined {formatDate(user.joinedAt)}</Text>
         </View>
+        {currentUserId !== user.id && <Button label="Message" variant="secondary" onPress={() => router.push(`/messages/${actions.openConversationWith(user.id)}`)} full/>}
         {coach ? (
           <Button label="See coaching services" onPress={() => router.push(`/coach/${coach.id}`)} full />
         ) : null}
@@ -62,28 +65,6 @@ export default function UserProfile() {
       <View style={styles.tileRow}>
         <StatTile label="Sessions" value={String(user.stats.sessionsLogged)} />
         <StatTile label="Hours" value={String(user.stats.hoursOnCourt)} />
-        <StatTile
-          label="Win rate"
-          value={`${winRate(user.stats)}%`}
-          hint={`${user.stats.matchesWon}/${user.stats.matchesPlayed}`}
-        />
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Game</Text>
-        <Card style={styles.gameCard}>
-          <Text style={styles.gameLine}>
-            {playStyleLabel[user.profile.playStyle]} · {fitnessLabel[user.profile.fitnessLevel]} fitness
-          </Text>
-          <Text style={styles.gameLine}>
-            {user.profile.handedness === 'right' ? 'Right' : 'Left'}-handed,{' '}
-            {user.profile.backhand === 'one-handed' ? 'one' : 'two'}-handed backhand
-          </Text>
-          <Text style={styles.gameLine}>
-            Prefers {surfaceLabel[user.profile.preferredSurface].toLowerCase()} · {user.profile.yearsPlaying} years
-            playing
-          </Text>
-        </Card>
       </View>
 
       {unlocked.length > 0 ? (
@@ -116,7 +97,7 @@ export default function UserProfile() {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   identity: { gap: spacing.md },
   identityRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
   identityText: { flex: 1, gap: 4 },

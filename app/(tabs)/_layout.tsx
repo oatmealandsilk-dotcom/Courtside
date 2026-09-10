@@ -1,29 +1,42 @@
+import { useTheme } from '@/theme/ThemeProvider';
 import React from 'react';
+import Home from './index';
+import Discuss from './discuss';
+import Coaches from './coaches';
+import Profile from './profile';
 import { Redirect, Tabs, router, usePathname, useGlobalSearchParams } from 'expo-router';
 import { SwipeSurface } from '@/components/SwipeSurface';
 import { swipeDestination } from '@/features/navigation/swipeOrder';
-import { NavBar, type NavBarProps } from '@/components/NavBar';
 import { useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
 
 export default function TabsLayout() {
+  useTheme();
   const pathname = usePathname();
   const params = useGlobalSearchParams<{ section?: string }>();
   const swipe = (direction: 1 | -1) => {
-    const next = swipeDestination(pathname, params.section, direction);
+    const next = swipeDestination(pathname, pathname === "/discuss" ? (direction === 1 ? "players" : "discussions") : params.section, direction);
     if (next) router.navigate({ pathname: next.pathname, params: { section: next.section } });
   };
   const { ready, currentUserId } = useApp();
   const { isPhone } = useResponsive();
   if (ready && !currentUserId) return <Redirect href="/sign-in" />;
   return (
-    <SwipeSurface onSwipe={swipe}>
+    <SwipeSurface onSwipe={swipe} enabled={pathname !== "/profile"} renderPreview={direction => {
+      const next = swipeDestination(pathname, pathname === "/discuss" ? (direction === 1 ? "players" : "discussions") : params.section, direction);
+      if (!next) return null;
+      if (next.pathname === '/') return <Home/>;
+      if (next.pathname === '/discuss') return <Discuss previewSection={next.section}/>;
+      if (next.pathname === '/coaches') return <Coaches/>;
+      return <Profile previewSection={next.section}/>;
+    }}>
     <Tabs
-      // Phone keeps the familiar bottom bar; anything wider gets a left sidebar.
-      tabBar={(props: NavBarProps) => <NavBar {...props} />}
+      // The root shell keeps navigation visible across both tabs and detail pages.
+      tabBar={() => null}
       screenOptions={{
         headerShown: false,
+        animation: 'none',
         tabBarPosition: isPhone ? 'bottom' : 'left',
         sceneStyle: { backgroundColor: colors.bg },
       }}

@@ -1,3 +1,5 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
+import { PlayerName } from '@/components/PlayerName';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +16,7 @@ interface Props {
 }
 
 export function CoachCard({ coach, user, onPress }: Props) {
+  const styles = useThemedStyles(styleDefinitions);
   const cheapest = coach.services.reduce(
     (min, s) => (s.priceCents < min ? s.priceCents : min),
     coach.services[0]?.priceCents ?? 0,
@@ -25,9 +28,9 @@ export function CoachCard({ coach, user, onPress }: Props) {
         <Avatar name={user?.name ?? 'Coach'} seed={user?.avatarSeed ?? coach.id} size={52} ring />
         <View style={styles.headerText}>
           <View style={styles.nameRow}>
-            <Text style={styles.name} numberOfLines={1}>
+            <PlayerName userId={user?.id} style={styles.name} numberOfLines={1}>
               {user?.name ?? 'Coach'}
-            </Text>
+            </PlayerName>
             {coach.verified ? <Ionicons name="shield-checkmark" size={15} color={colors.brand} /> : null}
           </View>
           <Text style={styles.headline} numberOfLines={2}>
@@ -60,7 +63,7 @@ export function CoachCard({ coach, user, onPress }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   card: { gap: spacing.md },
   header: { flexDirection: 'row', gap: spacing.md },
   headerText: { flex: 1, gap: 3 },

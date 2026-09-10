@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +10,7 @@ import { colors, radius, spacing, surfaceColorFor, typography } from '@/theme';
  * media renders as a deterministic tinted court card instead of a broken image.
  */
 export function MediaPlaceholder({ label, seed, portrait = false }: { label: string; seed: string; portrait?: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
   const tint = surfaceColorFor(seed);
   const isVideo = /·\s*\d+:\d+/.test(label);
 
@@ -32,7 +34,7 @@ export function MediaPlaceholder({ label, seed, portrait = false }: { label: str
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   wrap: {
     aspectRatio: 1.65,
     width: '100%',

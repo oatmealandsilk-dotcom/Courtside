@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -21,6 +22,7 @@ export function SegmentedControl<T extends string>({
   onChange,
   scrollable = false,
 }: Props<T>) {
+  const styles = useThemedStyles(styleDefinitions);
   const items = segments.map((segment) => {
     const active = segment.value === value;
     return (
@@ -53,7 +55,7 @@ export function SegmentedControl<T extends string>({
   return <View style={styles.track}>{items}</View>;
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   track: {
     flexDirection: 'row',
     backgroundColor: colors.surface,

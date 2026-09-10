@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { type ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export function Card({ children, onPress, style, padded = true }: Props) {
+  const styles = useThemedStyles(styleDefinitions);
   const content = (
     <View style={[styles.card, padded && styles.padded, style]}>{children}</View>
   );
@@ -24,7 +26,7 @@ export function Card({ children, onPress, style, padded = true }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,

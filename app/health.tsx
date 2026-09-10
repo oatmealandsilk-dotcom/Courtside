@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -19,6 +20,7 @@ const CATEGORY_LABEL: Record<Integration['category'], string> = {
 const CATEGORY_ORDER: Integration['category'][] = ['wearable', 'nutrition', 'activity'];
 
 export default function Health() {
+  const styles = useThemedStyles(styleDefinitions);
   const { integrations, healthHistory, actions } = useApp();
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -106,7 +108,7 @@ export default function Health() {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   section: { gap: spacing.md, paddingBottom: spacing.xl },
   sectionTitle: { ...typography.heading, color: colors.text },
   tileRow: { flexDirection: 'row', gap: spacing.sm },

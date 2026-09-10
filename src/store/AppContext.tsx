@@ -41,6 +41,7 @@ interface NewPostInput {
   match?: MatchResult;
   session?: SessionDetail;
   mediaLabel?: string;
+  imageUrl?: string;
   videoUrl?: string;
 }
 
@@ -73,7 +74,7 @@ interface AppActions {
   signIn: (handle: string) => Promise<void>;
   signOut: () => void;
   completeOnboarding: (profile: PlayerProfile) => void;
-  updateIdentity: (patch: Pick<User, 'name' | 'bio' | 'location'>) => void;
+  updateIdentity: (patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string }) => void;
   updateProfile: (patch: Partial<PlayerProfile>) => void;
 
   toggleLike: (postId: ID) => void;
@@ -82,7 +83,7 @@ interface AppActions {
 
   addQuestion: (input: NewQuestionInput) => ID;
   voteQuestion: (questionId: ID, direction: 1 | -1) => void;
-  addAnswer: (questionId: ID, body: string) => void;
+  addAnswer: (questionId: ID, body: string, parentAnswerId?: ID) => void;
   voteAnswer: (answerId: ID, direction: 1 | -1) => void;
 
   submitCoachingRequest: (coachId: ID, serviceId: ID, question: string, videoLabel?: string) => ID;
@@ -103,7 +104,7 @@ interface AppActions {
   /* Messaging */
   openConversationWith: (userId: ID) => ID;
   sendMessage: (conversationId: ID, body: string) => void;
-  shareToUsers: (userIds: ID[], kind: 'post' | 'question', sharedId: ID, note?: string) => void;
+  shareToUsers: (userIds: ID[], kind: 'post' | 'question' | 'profile', sharedId: ID, note?: string) => void;
   markConversationRead: (conversationId: ID) => void;
 }
 
@@ -211,7 +212,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [patchCurrentUser],
   );
 
-  const updateIdentity = useCallback((patch: Pick<User, 'name' | 'bio' | 'location'>) => { patchCurrentUser(u => ({ ...u, ...patch })); }, [patchCurrentUser]);
+  const updateIdentity = useCallback((patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string }) => { patchCurrentUser(u => ({ ...u, ...patch })); }, [patchCurrentUser]);
 
   const updateProfile = useCallback(
     (patch: Partial<PlayerProfile>) => {
@@ -324,12 +325,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const addAnswer = useCallback(
-    (questionId: ID, body: string) => {
+    (questionId: ID, body: string, parentAnswerId?: ID) => {
       const me = requireUser();
       setState((prev) => {
         const author = prev.users.find((u) => u.id === me);
         const answer: Answer = {
           id: nextId('a'),
+          parentAnswerId: prev.answers.some(a => a.id === parentAnswerId && a.questionId === questionId) ? parentAnswerId : undefined,
           questionId,
           authorId: me,
           body,
@@ -389,7 +391,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const replyToCoachQuestion = useCallback(
-    (questionId: ID, body: string) => {
+    (questionId: ID, body: string, parentAnswerId?: ID) => {
       const me = requireUser();
       const reply: CoachReply = {
         id: nextId('cr'),
@@ -541,7 +543,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   /** Share a reel or a thread into one or more DMs, Instagram style. */
   const shareToUsers = useCallback(
-    (userIds: ID[], kind: 'post' | 'question', sharedId: ID, note?: string) => {
+    (userIds: ID[], kind: 'post' | 'question' | 'profile', sharedId: ID, note?: string) => {
       const me = requireUser();
       setState((prev) => {
         let next = prev;

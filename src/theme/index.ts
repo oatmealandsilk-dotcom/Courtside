@@ -1,5 +1,5 @@
 /** CourtSide: warm neutrals and muted court-green accents. */
-export const colors = {
+export const lightColors = {
   bg: '#F8F7F2', bgElevated: '#F1EFE6', surface: '#F4F2E9', surfaceAlt: '#E9E6DA',
   border: '#DCD6C8', borderStrong: '#B8AF9D',
   text: '#24251F', textMuted: '#7C7565', textFaint: '#8B8373',
@@ -8,6 +8,8 @@ export const colors = {
   info: '#3E6982', success: '#527C56', warning: '#957328', danger: '#A34D40',
   overlay: 'rgba(24, 32, 27, 0.5)',
 } as const;
+
+export const colors: Record<keyof typeof lightColors, string> = { ...lightColors };
 
 export const spacing = {
   xs: 4,

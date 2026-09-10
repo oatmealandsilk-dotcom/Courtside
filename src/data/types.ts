@@ -83,6 +83,7 @@ export interface User {
   joinedAt: string;
   /** Deterministic avatar tint; no network images in the mock build. */
   avatarSeed: string;
+  avatarUrl?: string;
   isCoach: boolean;
   followers: number;
   following: number;
@@ -141,6 +142,7 @@ export interface Post {
   body: string;
   /** Placeholder media: rendered as a tinted court card, not a network image. */
   mediaLabel?: string;
+  imageUrl?: string;
   videoUrl?: string;
   taggedUserIds?: ID[];
   match?: MatchResult;
@@ -178,6 +180,7 @@ export interface Question {
 }
 
 export interface Answer {
+  parentAnswerId?: ID;
   id: ID;
   questionId: ID;
   authorId: ID;
@@ -374,7 +377,7 @@ export interface CoachApplication {
 
 /* -------------------------------- Messaging ------------------------------ */
 
-export type MessageKind = 'text' | 'post' | 'question';
+export type MessageKind = 'text' | 'post' | 'question' | 'profile';
 
 export interface Message {
   id: ID;

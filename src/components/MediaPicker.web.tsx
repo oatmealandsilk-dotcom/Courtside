@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,7 +36,8 @@ function clock(seconds: number): string {
  * Web media picker: opens the real file dialog, previews the selection
  * inline, and hands back a blob URL the feed can actually play.
  */
-export function MediaPicker({ value, onChange }: MediaPickerProps) {
+export function MediaPicker({ value, onChange, compact }: MediaPickerProps) {
+  const styles = useThemedStyles(styleDefinitions);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const createdUrl = useRef<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -47,7 +49,7 @@ export function MediaPicker({ value, onChange }: MediaPickerProps) {
       createdUrl.current = null;
     }
   }, []);
-  useEffect(() => revoke, [revoke]);
+  // Selected object URLs remain usable by posts after the composer closes.
 
   const onFiles = useCallback(
     async (files: FileList | null) => {
@@ -142,19 +144,20 @@ export function MediaPicker({ value, onChange }: MediaPickerProps) {
       onPress={() => inputRef.current?.click()}
       accessibilityRole="button"
       accessibilityLabel="Choose a photo or video"
-      style={styles.dropzone}
+      style={compact ? styles.choice : styles.dropzone}
     >
       {hiddenInput}
       <View style={styles.dropIcon}>
         <Ionicons name="images-outline" size={30} color={colors.textMuted} />
       </View>
-      <Text style={styles.dropTitle}>{busy ? 'Reading file…' : 'Select a photo or video'}</Text>
-      <Text style={styles.dropHint}>Tap to open your library. Videos play inline in the feed.</Text>
+      <Text style={styles.dropTitle}>{busy ? 'Reading file…' : compact ? 'Photo or video' : 'Select a photo or video'}</Text>
+      <Text style={styles.dropHint}>Choose from your photos and videos.</Text>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
+  choice: { padding: 20, borderRadius: 18, backgroundColor: colors.surface, gap: 6 },
   dropzone: {
     borderWidth: 1,
     borderStyle: 'dashed',

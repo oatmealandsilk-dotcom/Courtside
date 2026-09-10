@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export function Meter({ label, value, caption, tint = colors.brand }: Props) {
+  const styles = useThemedStyles(styleDefinitions);
   const pct = Math.min(100, Math.max(0, Math.round(value * 100)));
   return (
     <View style={styles.wrap}>
@@ -30,7 +32,7 @@ export function Meter({ label, value, caption, tint = colors.brand }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   wrap: { gap: spacing.xs },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   label: { ...typography.smallStrong, color: colors.text },

@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export function EmptyState({ icon = 'tennisball-outline', title, body }: Props) {
+  const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.wrap}>
       <Ionicons name={icon} size={30} color={colors.textFaint} />
@@ -20,7 +22,7 @@ export function EmptyState({ icon = 'tennisball-outline', title, body }: Props) 
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   wrap: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xxl },
   title: { ...typography.heading, color: colors.text, textAlign: 'center' },
   body: { ...typography.small, color: colors.textMuted, textAlign: 'center', maxWidth: 320 },

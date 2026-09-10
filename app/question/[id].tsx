@@ -1,8 +1,14 @@
-import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ThreadReply } from '@/components/ThreadReplies';
+import { SwipeSurface } from '@/components/SwipeSurface';
+import Discuss from '../(tabs)/discuss';
+import { useThemedStyles } from '@/theme/ThemeProvider';
+import { PlayerName } from '@/components/PlayerName';
+import React, { useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import { VoteControls } from '@/components/VoteControls';
 import { TOPIC_META } from '@/components/QuestionCard';
 import { Avatar, Button, Card, Chip, EmptyState, Field, Screen } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
@@ -11,9 +17,11 @@ import type { Answer } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
 
 export default function QuestionDetail() {
+  const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { questions, answers, users, currentUserId, actions } = useApp();
   const [draft, setDraft] = useState('');
+  const replyInput = useRef<TextInput>(null);
 
   const question = questions.find((q) => q.id === id);
   const asker = users.find((u) => u.id === question?.authorId);
@@ -36,7 +44,6 @@ export default function QuestionDetail() {
       return b.votes - a.votes;
     });
 
-  const myVote = currentUserId ? question.votedBy[currentUserId] : undefined;
 
   const submit = () => {
     const text = draft.trim();
@@ -46,39 +53,31 @@ export default function QuestionDetail() {
   };
 
   return (
-    <Screen title="Thread" compactTitle onBack={() => router.back()}>
+    <SwipeSurface onSwipe={direction=>{if(direction===-1) router.navigate("/discuss?section=discussions");}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => router.back()}>
       <Card style={styles.questionCard}>
         <View style={styles.topRow}>
           <Chip label={meta.label} selected tint={meta.tint} ink="#0A1120" small />
           <Text style={styles.time}>
-            {asker ? `@${asker.handle}` : 'unknown'} · {relativeTime(question.createdAt)}
+            <PlayerName userId={asker?.id}>{asker ? `@${asker.handle}` : 'unknown'}</PlayerName> · {relativeTime(question.createdAt)}
           </Text>
         </View>
         <Text style={styles.title}>{question.title}</Text>
         <Text style={styles.body}>{question.body}</Text>
         <View style={styles.tagRow}>
           {question.tags.map((tag) => (
-            <Chip key={tag} label={`#${tag}`} small />
+            <Chip key={tag} label={`#${tag}`} onPress={() => router.push({pathname:"/search",params:{q:`#${tag}`}})} small />
           ))}
         </View>
         <View style={styles.voteRow}>
-          <VoteButton
-            direction={1}
-            active={myVote === 1}
-            onPress={() => actions.voteQuestion(question.id, 1)}
-          />
-          <Text style={styles.voteCount}>{question.votes}</Text>
-          <VoteButton
-            direction={-1}
-            active={myVote === -1}
-            onPress={() => actions.voteQuestion(question.id, -1)}
-          />
+          <VoteControls item={question} userId={currentUserId} onVote={direction => actions.voteQuestion(question.id, direction)} />
+          <Ionicons name="chatbubble-outline" size={18} color={colors.textMuted}/>
+          <Text style={styles.time}>{thread.length} {thread.length === 1 ? 'reply' : 'replies'}</Text>
         </View>
       </Card>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>
-          {thread.length} {thread.length === 1 ? 'answer' : 'answers'}
+          {thread.length} {thread.length === 1 ? 'reply' : 'replies'}
         </Text>
 
         {thread.length === 0 ? (
@@ -89,95 +88,28 @@ export default function QuestionDetail() {
           />
         ) : null}
 
-        {thread.map((answer) => {
-          const responder = users.find((u) => u.id === answer.authorId);
-          const accepted = question.acceptedAnswerId === answer.id;
-          const vote = currentUserId ? answer.votedBy[currentUserId] : undefined;
-          return (
-            <Card
-              key={answer.id}
-              style={[styles.answerCard, accepted ? { borderColor: `${colors.court}77` } : null]}
-            >
-              {accepted ? (
-                <View style={styles.acceptedRow}>
-                  <Ionicons name="checkmark-circle" size={15} color={colors.court} />
-                  <Text style={styles.acceptedText}>ACCEPTED BY THE ASKER</Text>
-                </View>
-              ) : null}
-
-              <View style={styles.answerHead}>
-                <Avatar
-                  name={responder?.name ?? '?'}
-                  seed={responder?.avatarSeed ?? answer.authorId}
-                  size={34}
-                />
-                <View style={styles.answerMeta}>
-                  <View style={styles.answerNameRow}>
-                    <Text style={styles.answerName}>{responder?.name ?? 'Unknown'}</Text>
-                    {answer.fromCoach ? (
-                      <View style={styles.coachTag}>
-                        <Ionicons name="shield-checkmark" size={11} color={colors.brandInk} />
-                        <Text style={styles.coachTagText}>COACH</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <Text style={styles.time}>{relativeTime(answer.createdAt)}</Text>
-                </View>
-              </View>
-
-              <Text style={styles.answerBody}>{answer.body}</Text>
-
-              <View style={styles.voteRow}>
-                <VoteButton direction={1} active={vote === 1} onPress={() => actions.voteAnswer(answer.id, 1)} />
-                <Text style={styles.voteCount}>{answer.votes}</Text>
-                <VoteButton direction={-1} active={vote === -1} onPress={() => actions.voteAnswer(answer.id, -1)} />
-              </View>
-            </Card>
-          );
-        })}
+        {thread.filter(answer => !answer.parentAnswerId || !thread.some(parent => parent.id === answer.parentAnswerId)).map(answer => (
+          <ThreadReply key={answer.id} answer={answer} thread={thread} acceptedId={question.acceptedAnswerId} />
+        ))}
 
         <View style={styles.composer}>
           <Field
-            label="Your answer"
+            inputRef={replyInput}
+            label="Join the conversation"
             value={draft}
             onChangeText={setDraft}
-            placeholder="Answer from experience. Say what you did and what happened."
+            placeholder="Write a thoughtful reply…"
             multiline
           />
-          <Button label="Post answer" onPress={submit} disabled={draft.trim().length === 0} />
+          <Button label="Post reply" onPress={submit} disabled={draft.trim().length === 0} />
         </View>
       </View>
-    </Screen>
+    </Screen></SwipeSurface>
   );
 }
 
-function VoteButton({
-  direction,
-  active,
-  onPress,
-}: {
-  direction: 1 | -1;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={direction === 1 ? 'Upvote' : 'Downvote'}
-      style={[styles.voteButton, active && { borderColor: colors.brand, backgroundColor: colors.brandDim }]}
-    >
-      <Ionicons
-        name={direction === 1 ? 'chevron-up' : 'chevron-down'}
-        size={16}
-        color={active ? colors.brand : colors.textMuted}
-      />
-    </Pressable>
-  );
-}
-
-const styles = StyleSheet.create({
-  questionCard: { gap: spacing.md },
+const styleDefinitions = StyleSheet.create({
+  questionCard: { gap: spacing.md, borderWidth: 0, borderRadius: 0, backgroundColor: colors.bg, paddingHorizontal: 0, paddingBottom: 24, borderBottomWidth: 1, borderBottomColor: colors.border },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   time: { ...typography.small, color: colors.textFaint },
   title: { ...typography.title, color: colors.text, lineHeight: 28 },
@@ -196,7 +128,13 @@ const styles = StyleSheet.create({
   voteCount: { ...typography.bodyStrong, color: colors.text, minWidth: 24, textAlign: 'center' },
   section: { gap: spacing.md, paddingTop: spacing.xl },
   sectionTitle: { ...typography.heading, color: colors.text },
-  answerCard: { gap: spacing.md },
+  answerCard: { gap: 12, paddingVertical: 16 },
+  nested: { marginLeft: 16, paddingLeft: 12, borderLeftWidth: 1, borderLeftColor: colors.border },
+  replyBody: { fontSize: 15, lineHeight: 23, color: colors.text, paddingLeft: 8 },
+  inlineComposer: { gap: 10, padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 16 },
+  replyInput: { minHeight: 80, color: colors.text, fontSize: 15, textAlignVertical: 'top' },
+  replyActions: { flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
+  replyButton: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36 },
   acceptedRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   acceptedText: { ...typography.caption, color: colors.court },
   answerHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
@@ -213,6 +151,6 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
   },
   coachTagText: { ...typography.caption, fontSize: 9, color: colors.brandInk },
-  answerBody: { ...typography.body, color: colors.text, lineHeight: 22 },
+  answerBody: { ...typography.body, color: colors.text, lineHeight: 24, marginLeft: 16, paddingLeft: 29, borderLeftWidth: 1, borderLeftColor: colors.border },
   composer: { gap: spacing.md, paddingTop: spacing.lg },
 });

@@ -1,7 +1,11 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
+import { PlayerName } from '@/components/PlayerName';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import { VoteControls } from './VoteControls';
+import { useApp } from '@/store/AppContext';
 import { LevelPill } from '@/components/LevelPill';
 import { Avatar, Card, Chip } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
@@ -37,19 +41,21 @@ export function QuestionCard({
   onToggleSave,
   onShare,
 }: Props) {
+  const styles = useThemedStyles(styleDefinitions);
   const meta = TOPIC_META[question.topic];
+  const { currentUserId, actions } = useApp();
 
   return (
     <Card onPress={onPress} style={styles.card}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         {author && <Avatar name={author.name} seed={author.avatarSeed} size={30} />}
-        <Text style={styles.footerText}>@{author?.handle ?? 'player'}</Text>
+        <PlayerName userId={author?.id} style={styles.footerText}>@{author?.handle ?? 'player'}</PlayerName>
         {author && <LevelPill profile={author.profile} small />}
         <Text style={[styles.footerText, { marginLeft: 'auto' }]}>{relativeTime(question.createdAt)}</Text>
       </View>
       <Text style={styles.title}>{question.title}</Text>
       <View style={styles.footer}>
-        <Ionicons name="caret-up" size={16} color={colors.textMuted} /><Text style={styles.footerText}>{question.votes}</Text>
+        <VoteControls item={question} userId={currentUserId} onVote={direction => actions.voteQuestion(question.id, direction)} />
         <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted} style={{ marginLeft: 12 }} /><Text style={styles.footerText}>{question.answerIds.length}</Text>
         <Chip label={meta.label} small />
         {answered && <Ionicons name="checkmark-circle" size={16} color={colors.court} />}
@@ -85,7 +91,7 @@ export function QuestionCard({
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   card: { gap: 16, borderWidth: 0, borderBottomWidth: 1, borderRadius: 0, paddingHorizontal: 0, paddingVertical: 20, backgroundColor: colors.bg },
   row: { flexDirection: 'row', gap: spacing.lg },
   voteBox: { alignItems: 'center', width: 44, gap: 1 },

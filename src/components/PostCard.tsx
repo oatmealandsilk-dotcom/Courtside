@@ -1,5 +1,7 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ReelVideo } from '@/components/ReelVideo';
@@ -42,11 +44,12 @@ export function PostCard({
   onToggleSave,
   onShare,
 }: Props) {
+  const styles = useThemedStyles(styleDefinitions);
   const meta = KIND_META[post.kind];
 
   return (
     <Card style={styles.card}>
-      <Pressable onPress={onPressAuthor} style={styles.header}>
+      <Pressable accessibilityRole="link" accessibilityLabel={`View ${author.name} profile`} onPress={onPressAuthor ?? (() => router.push(`/user/${author.id}`))} style={styles.header}>
         <Avatar name={author.name} seed={author.avatarSeed} size={42} />
         <View style={styles.headerText}>
           <View style={styles.nameRow}>
@@ -64,6 +67,7 @@ export function PostCard({
         <LevelPill profile={author.profile} small />
       </Pressable>
 
+      {post.imageUrl && <Image accessibilityLabel={post.mediaLabel ?? "Post photo"} source={{uri:post.imageUrl}} style={{width:"100%",aspectRatio:1,borderRadius:12}} resizeMode="cover"/>}
       {post.videoUrl ? <ReelVideo uri={post.videoUrl} /> : post.kind === 'reel' ? <MediaPlaceholder label={post.mediaLabel ?? 'Reel'} seed={post.id} portrait /> : null}
       <Pressable onPress={onPress} style={styles.body}>
         <View style={[styles.kindRow, { borderColor: `${meta.tint}55` }]}>
@@ -108,12 +112,12 @@ export function PostCard({
           </View>
         ) : null}
 
-        {post.mediaLabel && !post.videoUrl && post.kind !== 'reel' ? <MediaPlaceholder label={post.mediaLabel} seed={post.id}  /> : null}
+        {post.mediaLabel && !post.imageUrl && !post.videoUrl && post.kind !== 'reel' ? <MediaPlaceholder label={post.mediaLabel} seed={post.id}  /> : null}
 
         {post.tags.length > 0 ? (
           <View style={styles.tagRow}>
             {post.tags.map((tag) => (
-              <Chip key={tag} label={`#${tag}`} small />
+              <Chip key={tag} label={`#${tag}`} onPress={() => router.push({pathname:"/search",params:{q:`#${tag}`}})} small />
             ))}
           </View>
         ) : null}
@@ -163,7 +167,7 @@ export function PostCard({
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   card: { gap: spacing.md, borderRadius: 0, borderWidth: 0, borderBottomWidth: 1, paddingHorizontal: 0, paddingBottom: spacing.xl, backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headerText: { flex: 1, gap: 1 },

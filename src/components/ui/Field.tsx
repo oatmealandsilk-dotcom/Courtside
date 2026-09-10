@@ -1,9 +1,11 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { StyleSheet, Text, TextInput, View, type KeyboardTypeOptions } from 'react-native';
 
 import { colors, radius, spacing, typography } from '@/theme';
 
 interface Props {
+  inputRef?: React.Ref<TextInput>;
   label?: string;
   value: string;
   onChangeText: (next: string) => void;
@@ -16,6 +18,7 @@ interface Props {
 }
 
 export function Field({
+  inputRef,
   label,
   value,
   onChangeText,
@@ -26,10 +29,13 @@ export function Field({
   keyboardType,
   hint,
 }: Props) {
+  const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.wrap}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
       <TextInput
+        ref={inputRef}
+        accessibilityLabel={label}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
@@ -47,7 +53,7 @@ export function Field({
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   wrap: { gap: spacing.sm },
   label: { ...typography.smallStrong, color: colors.textMuted },
   input: {

@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -40,6 +41,7 @@ const SURFACES: SurfacePreference[] = ['hard', 'clay', 'grass', 'indoor'];
 const STEP_TITLES = ['Your level', 'Your game', 'Your body', 'Your goals', 'Your calendar'];
 
 export default function Onboarding() {
+  const styles = useThemedStyles(styleDefinitions);
   const { currentUser, actions } = useApp();
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState(0);
@@ -326,6 +328,7 @@ export default function Onboarding() {
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -335,6 +338,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function Row({ children }: { children: React.ReactNode }) {
+  const styles = useThemedStyles(styleDefinitions);
   return <View style={styles.row}>{children}</View>;
 }
 
@@ -349,6 +353,7 @@ function StyleOption({
   selected: boolean;
   onPress: () => void;
 }) {
+  const styles = useThemedStyles(styleDefinitions);
   return (
     <Pressable
       accessibilityRole="radio"
@@ -366,7 +371,7 @@ function StyleOption({
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   head: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.lg },
   step: { ...typography.caption, color: colors.brand },

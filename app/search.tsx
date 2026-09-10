@@ -1,6 +1,9 @@
-import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { PostCard } from '@/components/PostCard';
+import { useThemedStyles } from '@/theme/ThemeProvider';
+import { PlayerName } from '@/components/PlayerName';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ScrollView, Pressable, StyleSheet, Text, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { LevelPill } from '@/components/LevelPill';
@@ -9,24 +12,28 @@ import { Avatar, EmptyState, Field, Screen, SegmentedControl } from '@/component
 import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
 
-type Scope = 'all' | 'threads' | 'players' | 'coaches';
+type Scope = 'all' | 'reels' | 'posts' | 'threads' | 'players' | 'coaches';
 
 /** One search box across discussions, players, and coaches. */
 export default function Search() {
-  const { questions, users, coaches, currentUserId, saved, actions } = useApp();
-  const [term, setTerm] = useState('');
+  const styles = useThemedStyles(styleDefinitions);
+  const { posts, questions, users, coaches, currentUserId, saved, actions } = useApp();
+  const params=useLocalSearchParams<{q?:string}>();
+  const [term, setTerm] = useState(params.q ?? '');
+  useEffect(()=>{setTerm(params.q ?? '');setScope('all');},[params.q]);
   const [scope, setScope] = useState<Scope>('all');
 
   const q = term.trim().toLowerCase();
+  const matches=(text:string,tags:string[])=>q.startsWith('#') ? tags.some(t=>t.replace(/^#/,'').toLowerCase()===q.slice(1)) || text.toLowerCase().split(/[^#\p{L}\p{N}_]+/u).includes(q) : `${text} ${tags.join(' ')}`.toLowerCase().includes(q);
+  const matchedPosts = posts.filter(p=>q && matches(p.body,p.tags) && (scope==='reels' ? p.kind==='reel' : scope==='posts' ? p.kind!=='reel' : true));
+  const showPosts=scope==='all'||scope==='posts'||scope==='reels';
 
   const matchedQuestions = useMemo(
     () =>
       !q
         ? []
         : questions.filter((question) =>
-            `${question.title} ${question.body} ${question.topic} ${question.tags.join(' ')}`
-              .toLowerCase()
-              .includes(q),
+            matches(`${question.title} ${question.body} ${question.topic}`,question.tags),
           ),
     [questions, q],
   );
@@ -59,7 +66,7 @@ export default function Search() {
   const showThreads = scope === 'all' || scope === 'threads';
   const showPlayers = scope === 'all' || scope === 'players';
   const showCoaches = scope === 'all' || scope === 'coaches';
-  const total =
+  const total = (showPosts ? matchedPosts.length : 0) +
     (showThreads ? matchedQuestions.length : 0) +
     (showPlayers ? matchedPlayers.length : 0) +
     (showCoaches ? matchedCoaches.length : 0);
@@ -73,16 +80,18 @@ export default function Search() {
           placeholder="Threads, players, coaches, gear…"
           autoCapitalize="none"
         />
-        <SegmentedControl
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}><SegmentedControl
           segments={[
             { value: 'all', label: 'All' },
+            {value:'reels',label:'Reels'},
+            {value:'posts',label:'Posts'},
             { value: 'threads', label: 'Threads' },
             { value: 'players', label: 'Players' },
             { value: 'coaches', label: 'Coaches' },
           ]}
           value={scope}
           onChange={setScope}
-        />
+        /></ScrollView>
       </View>
 
       {!q ? (
@@ -95,6 +104,7 @@ export default function Search() {
         <EmptyState icon="search-outline" title={`No results for “${term}”`} body="Try a different word." />
       ) : (
         <View style={{ gap: spacing.xl }}>
+          {showPosts && matchedPosts.map(post=>{const author=users.find(u=>u.id===post.authorId);return author ? <PostCard key={post.id} post={post} author={author} liked={post.likedBy.includes(currentUserId ?? '')} onToggleLike={()=>actions.toggleLike(post.id)} onPress={()=>router.push(`/post/${post.id}`)} saved={saved.postIds.includes(post.id)} onToggleSave={()=>actions.toggleSavePost(post.id)} onShare={()=>router.push(`/share?kind=post&id=${post.id}`)}/> : null;})}
           {showPlayers && matchedPlayers.length ? (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>PLAYERS</Text>
@@ -138,7 +148,7 @@ export default function Search() {
                     />
                     <View style={{ flex: 1, gap: 3 }}>
                       <View style={styles.nameRow}>
-                        <Text style={styles.name}>{user?.name}</Text>
+                        <PlayerName userId={user?.id} style={styles.name}>{user?.name}</PlayerName>
                         <Ionicons name="shield-checkmark" size={14} color={colors.brand} />
                       </View>
                       <Text style={styles.meta} numberOfLines={1}>
@@ -175,7 +185,7 @@ export default function Search() {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   top: { gap: spacing.md, paddingBottom: spacing.lg },
   section: { gap: spacing.xs },
   sectionTitle: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.3, paddingBottom: spacing.sm },

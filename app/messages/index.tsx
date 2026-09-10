@@ -1,3 +1,5 @@
+import { PlayerName } from '@/components/PlayerName';
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -10,6 +12,7 @@ import { colors, spacing, typography } from '@/theme';
 
 /** DM inbox — threads newest first, unread dot, search by name. */
 export default function Inbox() {
+  const styles = useThemedStyles(styleDefinitions);
   const { conversations, messages, users, currentUserId } = useApp();
   const [search, setSearch] = useState('');
 
@@ -34,6 +37,7 @@ export default function Inbox() {
   const preview = (kind?: string, body?: string) => {
     if (kind === 'post') return 'Sent a reel';
     if (kind === 'question') return 'Sent a discussion';
+    if (kind === 'profile') return 'Shared a profile';
     return body || 'Say hello';
   };
 
@@ -44,7 +48,7 @@ export default function Inbox() {
       onBack={() => router.back()}
       right={
         <Pressable
-          onPress={() => router.push('/(tabs)/discuss?section=players')}
+          onPress={() => router.push('/messages/new')}
           accessibilityRole="button"
           accessibilityLabel="Start a new message"
         >
@@ -73,9 +77,9 @@ export default function Inbox() {
           >
             <Avatar name={other?.name ?? '?'} seed={other?.avatarSeed ?? conversation.id} size={54} />
             <View style={styles.rowBody}>
-              <Text style={[styles.name, conversation.unreadCount > 0 && styles.unreadName]}>
+              <PlayerName userId={other?.id} style={[styles.name, conversation.unreadCount > 0 && styles.unreadName]}>
                 {other?.name}
-              </Text>
+              </PlayerName>
               <Text
                 numberOfLines={1}
                 style={[styles.preview, conversation.unreadCount > 0 && styles.unreadPreview]}
@@ -91,7 +95,7 @@ export default function Inbox() {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   searchWrap: { paddingBottom: spacing.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
   rowBody: { flex: 1, gap: 3 },

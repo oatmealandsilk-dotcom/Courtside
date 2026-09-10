@@ -1,10 +1,13 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
+import { useApp } from '@/store/AppContext';
 import { initials } from '@/lib/format';
 import { colors, radius, surfaceColorFor } from '@/theme';
 
 interface Props {
+  uri?: string;
   name: string;
   seed: string;
   size?: number;
@@ -12,7 +15,10 @@ interface Props {
   ring?: boolean;
 }
 
-export function Avatar({ name, seed, size = 40, style, ring = false }: Props) {
+export function Avatar({ uri, name, seed, size = 40, style, ring = false }: Props) {
+  const styles = useThemedStyles(styleDefinitions);
+  const { users } = useApp();
+  const photo = uri ?? users.find(user => user.avatarSeed === seed || user.id === seed)?.avatarUrl;
   const tint = surfaceColorFor(seed);
   return (
     <View
@@ -30,11 +36,12 @@ export function Avatar({ name, seed, size = 40, style, ring = false }: Props) {
       ]}
     >
       <Text style={[styles.label, { fontSize: size * 0.38 }]}>{initials(name)}</Text>
+      {photo && <Image source={{uri:photo}} accessibilityLabel={`${name} profile photo`} style={{position:"absolute",width:size,height:size,borderRadius:size/2}}/>}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   base: { alignItems: 'center', justifyContent: 'center' },
   label: { color: '#FFFFFF', fontWeight: '800' },
 });

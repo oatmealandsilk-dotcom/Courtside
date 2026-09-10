@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -7,6 +8,7 @@ import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
 
 export default function SignIn() {
+  const styles = useThemedStyles(styleDefinitions);
   const { actions } = useApp();
   const [handle, setHandle] = useState('you');
   const [busy, setBusy] = useState(false);
@@ -58,7 +60,7 @@ export default function SignIn() {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, padding: spacing.xl, justifyContent: 'center', gap: spacing.xxxl },
   hero: { gap: spacing.md },
   wordmark: { fontSize: 44, fontWeight: '800', color: colors.brand, letterSpacing: -1.4 },

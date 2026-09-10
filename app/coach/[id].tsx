@@ -1,3 +1,5 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
+import { PlayerName } from '@/components/PlayerName';
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -17,6 +19,7 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 export default function CoachDetail() {
+  const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { coaches, users, coachingRequests, currentUserId, actions } = useApp();
 
@@ -63,7 +66,7 @@ export default function CoachDetail() {
           <Avatar name={user.name} seed={user.avatarSeed} size={62} ring />
           <View style={styles.heroText}>
             <View style={styles.nameRow}>
-              <Text style={styles.name}>{user.name}</Text>
+              <PlayerName userId={user.id} style={styles.name}>{user.name}</PlayerName>
               {coach.verified ? <Ionicons name="shield-checkmark" size={16} color={colors.brand} /> : null}
             </View>
             <Text style={styles.headline}>{coach.headline}</Text>
@@ -179,7 +182,7 @@ export default function CoachDetail() {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   hero: { gap: spacing.md },
   heroRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
   heroText: { flex: 1, gap: 4 },

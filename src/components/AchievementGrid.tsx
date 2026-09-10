@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,6 +7,7 @@ import { tierColor, type AchievementProgress } from '@/lib/badges';
 import { colors, radius, spacing, typography } from '@/theme';
 
 export function AchievementGrid({ items }: { items: AchievementProgress[] }) {
+  const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.grid}>
       {items.map(({ achievement, unlocked, progress }) => {
@@ -45,7 +47,7 @@ export function AchievementGrid({ items }: { items: AchievementProgress[] }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   tile: {
     width: 150,

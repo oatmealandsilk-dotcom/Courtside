@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +18,7 @@ interface Props {
   compactTitle?: boolean;
   /** Desktop-only right-hand column, Instagram style. Ignored below the desktop breakpoint. */
   rail?: ReactNode;
+  headerWrapper?: (header: ReactNode) => ReactNode;
 }
 
 export function Screen({
@@ -29,7 +31,9 @@ export function Screen({
   onBack,
   compactTitle = false,
   rail,
+  headerWrapper,
 }: Props) {
+  const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const { isPhone, isDesktop } = useResponsive();
 
@@ -83,7 +87,7 @@ export function Screen({
 
   return (
     <View style={[styles.root, { paddingTop: isPhone ? insets.top : spacing.sm }]}>
-      {header}
+      {headerWrapper ? headerWrapper(header) : header}
       {scroll ? (
         <ScrollView
           style={styles.flex}
@@ -100,7 +104,7 @@ export function Screen({
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
   scrollContent: { flexGrow: 1 },

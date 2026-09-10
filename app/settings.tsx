@@ -1,3 +1,5 @@
+import { PlayerName } from '@/components/PlayerName';
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -5,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar, Field, Screen } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
+import { useTheme } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography } from '@/theme';
 
 interface Row {
@@ -22,7 +25,9 @@ interface Row {
  * grouped sections of single-line rows, account actions last.
  */
 export default function Settings() {
+  const styles = useThemedStyles(styleDefinitions);
   const { currentUser, saved, actions } = useApp();
+  const { night, setNight } = useTheme();
   const [search, setSearch] = useState('');
   const [privateAccount, setPrivateAccount] = useState(false);
   const [activityStatus, setActivityStatus] = useState(true);
@@ -35,6 +40,7 @@ export default function Settings() {
     {
       title: 'Your app and media',
       rows: [
+        { icon: 'moon-outline', label: 'Night mode', toggle: { value: night, onChange: setNight } },
         {
           icon: 'bookmark-outline',
           label: 'Saved',
@@ -128,8 +134,8 @@ export default function Settings() {
         >
           <Avatar name={currentUser.name} seed={currentUser.avatarSeed} size={52} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.accountName}>{currentUser.name}</Text>
-            <Text style={styles.accountHandle}>@{currentUser.handle}</Text>
+            <PlayerName userId={currentUser.id} style={styles.accountName}>{currentUser.name}</PlayerName>
+            <PlayerName userId={currentUser.id} style={styles.accountHandle}>@{currentUser.handle}</PlayerName>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
         </Pressable>
@@ -144,6 +150,7 @@ export default function Settings() {
                 key={row.label}
                 accessibilityRole={row.toggle ? 'switch' : 'button'}
                 accessibilityLabel={row.label}
+                accessibilityState={row.toggle ? { checked: row.toggle.value } : undefined}
                 disabled={!row.onPress && !row.toggle}
                 onPress={row.toggle ? () => row.toggle?.onChange(!row.toggle.value) : row.onPress}
                 style={({ pressed }) => [
@@ -183,7 +190,7 @@ export default function Settings() {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   searchWrap: { paddingBottom: spacing.lg },
   accountCard: {
     flexDirection: 'row',

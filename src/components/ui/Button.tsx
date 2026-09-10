@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import {
   ActivityIndicator,
@@ -32,6 +33,7 @@ export function Button({
   style,
   full = false,
 }: Props) {
+  const styles = useThemedStyles(styleDefinitions);
   const palette = paletteFor(variant);
   const inactive = disabled || loading;
 
@@ -72,7 +74,7 @@ function paletteFor(variant: Variant): { bg: string; fg: string; border: string 
   }
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   base: {
     paddingVertical: 13,
     paddingHorizontal: spacing.xl,

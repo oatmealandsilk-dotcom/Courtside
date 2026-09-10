@@ -1,3 +1,5 @@
+import { PlayerName } from '@/components/PlayerName';
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -11,6 +13,7 @@ import { colors, radius, spacing, typography } from '@/theme';
 
 /** Everything the player has bookmarked: reels and posts, plus discussions. */
 export default function Saved() {
+  const styles = useThemedStyles(styleDefinitions);
   const { saved, posts, questions, users, actions } = useApp();
   const [tab, setTab] = useState<'videos' | 'discussions'>('videos');
 
@@ -69,9 +72,9 @@ export default function Saved() {
                   <Text numberOfLines={4} style={styles.tileText}>
                     {post.body}
                   </Text>
-                  <Text style={styles.tileMeta}>
+                  <PlayerName userId={author?.id} style={styles.tileMeta}>
                     @{author?.handle ?? 'player'} · {relativeTime(post.createdAt)}
-                  </Text>
+                  </PlayerName>
                 </Pressable>
               );
             })}
@@ -108,7 +111,7 @@ export default function Saved() {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   top: { gap: spacing.sm, paddingBottom: spacing.lg },
   note: { ...typography.small, color: colors.textFaint },
   list: { gap: spacing.md },

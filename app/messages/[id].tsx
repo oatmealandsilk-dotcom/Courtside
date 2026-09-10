@@ -1,3 +1,5 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
+import { PlayerName } from '@/components/PlayerName';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
@@ -18,6 +20,7 @@ import { colors, radius, spacing, typography } from '@/theme';
 
 /** One conversation. Bubbles, shared-item cards, and a composer bar. */
 export default function Thread() {
+  const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const { conversations, messages, users, posts, questions, currentUserId, actions } = useApp();
@@ -70,8 +73,8 @@ export default function Thread() {
         >
           <Avatar name={other.name} seed={other.avatarSeed} size={34} />
           <View>
-            <Text style={styles.headerName}>{other.name}</Text>
-            <Text style={styles.headerHandle}>@{other.handle}</Text>
+            <PlayerName userId={other.id} style={styles.headerName}>{other.name}</PlayerName>
+            <PlayerName userId={other.id} style={styles.headerHandle}>@{other.handle}</PlayerName>
           </View>
         </Pressable>
       </View>
@@ -88,11 +91,11 @@ export default function Thread() {
 
           if (message.kind !== 'text' && message.sharedId) {
             const shared =
-              message.kind === 'post'
+              message.kind === 'profile' ? users.find(u=>u.id===message.sharedId) : message.kind === 'post'
                 ? posts.find((p) => p.id === message.sharedId)
                 : questions.find((q) => q.id === message.sharedId);
             const label = shared
-              ? message.kind === 'post'
+              ? message.kind === 'profile' ? (shared as {name:string}).name : message.kind === 'post'
                 ? (shared as { body: string }).body
                 : (shared as { title: string }).title
               : 'This item was removed';
@@ -103,7 +106,7 @@ export default function Thread() {
                 onPress={() =>
                   shared
                     ? router.push(
-                        message.kind === 'post'
+                        message.kind === 'profile' ? `/user/${message.sharedId}` : message.kind === 'post'
                           ? `/post/${message.sharedId}`
                           : `/question/${message.sharedId}`,
                       )
@@ -113,12 +116,12 @@ export default function Thread() {
               >
                 <View style={styles.sharedHead}>
                   <Ionicons
-                    name={message.kind === 'post' ? 'play-circle-outline' : 'chatbubbles-outline'}
+                    name={message.kind === 'profile' ? 'person-outline' : message.kind === 'post' ? 'play-circle-outline' : 'chatbubbles-outline'}
                     size={16}
                     color={colors.brand}
                   />
                   <Text style={styles.sharedKind}>
-                    {message.kind === 'post' ? 'Reel' : 'Discussion'}
+                    {message.kind === 'profile' ? 'Profile' : message.kind === 'post' ? 'Reel' : 'Discussion'}
                   </Text>
                 </View>
                 <Text numberOfLines={3} style={styles.sharedBody}>
@@ -167,7 +170,7 @@ export default function Thread() {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: 'row',
