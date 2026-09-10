@@ -13,14 +13,14 @@ import { useApp } from '@/store/AppContext';
 import type { Answer } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
 
-export function ThreadReplies({questionId}:{questionId:string}) {
+export function ThreadReplies({questionId, preview = false}:{questionId:string; preview?:boolean}) {
   const {questions,answers}=useApp();
   const question=questions.find(q=>q.id===questionId);
   const thread=answers.filter(a=>a.questionId===questionId).sort((a,b)=>Number(b.id===question?.acceptedAnswerId)-Number(a.id===question?.acceptedAnswerId)||b.votes-a.votes);
-  return <View>{thread.filter(a=>!a.parentAnswerId||!thread.some(p=>p.id===a.parentAnswerId)).map(a=><ThreadReply key={a.id} answer={a} thread={thread} acceptedId={question?.acceptedAnswerId}/>)}</View>;
+  return <View>{thread.filter(a=>!a.parentAnswerId||!thread.some(p=>p.id===a.parentAnswerId)).map(a=><ThreadReply key={a.id} answer={a} thread={thread} acceptedId={question?.acceptedAnswerId} preview={preview}/>)}</View>;
 }
-export function ThreadReply({ answer, thread, acceptedId, depth = 0 }: {
-  answer: Answer; thread: Answer[]; acceptedId?: string; depth?: number;
+export function ThreadReply({ answer, thread, acceptedId, depth = 0, preview = false }: {
+  answer: Answer; thread: Answer[]; acceptedId?: string; depth?: number; preview?:boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { users, currentUserId, actions } = useApp();
@@ -43,13 +43,13 @@ export function ThreadReply({ answer, thread, acceptedId, depth = 0 }: {
       {!collapsed && <>
         {acceptedId === answer.id && <Text style={styles.acceptedText}>Accepted by the asker</Text>}
         <Text style={styles.replyBody}>{answer.body}</Text>
-        <View style={styles.replyActions}>
+        {!preview && <View style={styles.replyActions}>
           <Pressable accessibilityRole="button" accessibilityLabel={`Collapse reply by ${responder?.name ?? 'player'}`} onPress={()=>setCollapsed(true)} style={styles.collapse}><Ionicons name="remove-circle-outline" size={20} color={colors.textMuted}/></Pressable>
           <VoteControls item={answer} userId={currentUserId} onVote={direction => actions.voteAnswer(answer.id, direction)}/>
           <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} onPress={() => setReplying(true)} style={styles.replyButton}>
             <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted}/><Text style={styles.time}>Reply</Text>
           </Pressable>
-        </View>
+        </View>}
         {replying && <View style={styles.inlineComposer}>
           <TextInput autoFocus accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} placeholder="Write a reply…" multiline value={draft} onChangeText={setDraft} style={styles.replyInput}/>
           <View style={styles.replyActions}>
@@ -67,7 +67,7 @@ export function ThreadReply({ answer, thread, acceptedId, depth = 0 }: {
             ending at the last child's elbow, never at a grandchild. */}
         <View pointerEvents="none" style={[styles.rail, index === children.length - 1 ? {height:16} : {bottom:0}]} />
         <View pointerEvents="none" style={styles.elbow}/>
-        <ThreadReply answer={child} thread={thread} acceptedId={acceptedId} depth={depth + 1}/>
+        <ThreadReply answer={child} thread={thread} acceptedId={acceptedId} depth={depth + 1} preview={preview}/>
       </View>
     ))}
   </View>;

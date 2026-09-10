@@ -74,10 +74,11 @@ export default function Home() {
               if (item.type === 'question') {
                 const isSaved = saved.questionIds.includes(item.question.id);
                 return (
-                  <View key={item.question.id} style={styles.article}>
+                  <View key={item.question.id} style={[styles.article, styles.threadArticle]}>
                     <Text style={styles.eyebrow}>FROM THE COMMUNITY</Text>
                     <View style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
                       <QuestionCard
+                        showBody
                         question={item.question}
                         author={users.find((u) => u.id === item.question.authorId)}
                         answered={Boolean(item.question.acceptedAnswerId)}
@@ -88,7 +89,7 @@ export default function Home() {
                       />
                       <Pressable accessibilityRole="link" accessibilityLabel="Read full thread" onPress={() => router.push(`/question/${item.question.id}`)}>
                         <View pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-                          <ThreadReplies questionId={item.question.id}/>
+                          <ThreadReplies questionId={item.question.id} preview/>
                         </View>
                       </Pressable>
                     </View>
@@ -278,6 +279,7 @@ const styleDefinitions = StyleSheet.create({
   action: { alignItems: 'center', gap: 5 },
   actionLabel: { color: 'white', fontSize: 12 },
   article: { flex: 1, backgroundColor: colors.bg, padding: 20, paddingTop: 64, gap: 20 },
+  threadArticle: { gap: 8, paddingBottom: 8 },
   eyebrow: { color: colors.warning, fontWeight: '700', letterSpacing: 1.2, fontSize: 11 },
   hint: { color: colors.textMuted, fontSize: 11, textAlign: 'center', paddingBottom: 10 },
 });

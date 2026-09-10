@@ -23,6 +23,7 @@ export const TOPIC_META: Record<QuestionTopic, { label: string; tint: string; ic
 };
 
 interface Props {
+  showBody?: boolean;
   question: Question;
   author: User | undefined;
   onPress: () => void;
@@ -40,6 +41,7 @@ export function QuestionCard({
   saved = false,
   onToggleSave,
   onShare,
+  showBody = false,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const meta = TOPIC_META[question.topic];
@@ -54,6 +56,7 @@ export function QuestionCard({
         <Text style={[styles.footerText, { marginLeft: 'auto' }]}>{relativeTime(question.createdAt)}</Text>
       </View>
       <Text style={styles.title}>{question.title}</Text>
+      {showBody && !!question.body && <Text style={styles.preview}>{question.body}</Text>}
       <View style={styles.footer}>
         <VoteControls item={question} userId={currentUserId} onVote={direction => actions.voteQuestion(question.id, direction)} />
         <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted} style={{ marginLeft: 12 }} /><Text style={styles.footerText}>{question.answerIds.length}</Text>
