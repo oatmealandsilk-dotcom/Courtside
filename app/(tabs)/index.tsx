@@ -12,7 +12,6 @@ import { PostCard } from '@/components/PostCard';
 import { VerticalPager } from '@/components/VerticalPager';
 import { ReelPlayback } from '@/components/ReelPlayback';
 import { rankFeed, type FeedItem } from '@/features/feed/rankFeed';
-import { compactNumber } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
 
@@ -272,10 +271,6 @@ export default function Home() {
                       />
                       <Text style={styles.actionLabel}>{post.savedBy?.length ?? 0}</Text>
                     </Pressable>
-                    <View style={styles.action}>
-                      <Ionicons name="eye-outline" size={26} color="white" />
-                      <Text style={styles.actionLabel}>{compactNumber(post.views ?? 0)}</Text>
-                    </View>
                   </View>
                 </View>
               );
