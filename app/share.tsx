@@ -1,4 +1,3 @@
-import { PlayerName } from '@/components/PlayerName';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -111,8 +110,8 @@ export default function ShareSheet() {
               >
                 <Avatar name={user.name} seed={user.avatarSeed} size={44} />
                 <View style={{ flex: 1 }}>
-                  <PlayerName userId={user.id} style={styles.personName}>{user.name}</PlayerName>
-                  <PlayerName userId={user.id} style={styles.personHandle}>@{user.handle}</PlayerName>
+                  <Text style={styles.personName}>{user.name}</Text>
+                  <Text style={styles.personHandle}>@{user.handle}</Text>
                 </View>
                 <View style={[styles.check, on && styles.checkOn]}>
                   {on ? <Ionicons name="checkmark" size={16} color={colors.brandInk} /> : null}

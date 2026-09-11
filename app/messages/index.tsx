@@ -1,4 +1,3 @@
-import { PlayerName } from '@/components/PlayerName';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -77,9 +76,9 @@ export default function Inbox() {
           >
             <Avatar name={other?.name ?? '?'} seed={other?.avatarSeed ?? conversation.id} size={54} />
             <View style={styles.rowBody}>
-              <PlayerName userId={other?.id} style={[styles.name, conversation.unreadCount > 0 && styles.unreadName]}>
+              <Text style={[styles.name, conversation.unreadCount > 0 && styles.unreadName]}>
                 {other?.name}
-              </PlayerName>
+              </Text>
               <Text
                 numberOfLines={1}
                 style={[styles.preview, conversation.unreadCount > 0 && styles.unreadPreview]}
