@@ -40,6 +40,9 @@ export function VerticalPager({ children, onIndex, initialIndex = 0 }: {
   // Restore the caller's position once the children have laid out. Runs on
   // mount only: later index changes are the user scrolling, not a restore.
   const restored = useRef(false);
+  // Scroll fires continuously; without this every frame of a swipe would set
+  // state upstream and rebuild the feed mid-gesture.
+  const reported = useRef(initialIndex);
   useEffect(() => {
     const el = pager.current;
     if (restored.current || !el || !initialIndex || !el.clientHeight) return;
@@ -113,7 +116,11 @@ export function VerticalPager({ children, onIndex, initialIndex = 0 }: {
     onClickCapture={event=>{if(suppressClick.current){event.preventDefault();event.stopPropagation();suppressClick.current=false;}}}
     onScroll={e => {
       const el = e.currentTarget;
-      if (el.clientHeight) onIndex(Math.round(el.scrollTop / el.clientHeight));
+      if (!el.clientHeight) return;
+      const index = Math.round(el.scrollTop / el.clientHeight);
+      if (index === reported.current) return;
+      reported.current = index;
+      onIndex(index);
     }}
     style={{ height: '100%', width: '100%', overflowY: 'auto', scrollSnapType: 'y mandatory', touchAction:'none', userSelect:'none',
       overscrollBehaviorY: 'contain', scrollbarWidth: 'thin', scrollbarColor: '#8B8373 #F1EFE6' }}>

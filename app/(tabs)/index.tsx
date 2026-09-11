@@ -1,7 +1,7 @@
 import { ThreadReplies } from '@/components/ThreadReplies';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -64,6 +64,29 @@ export default function Home() {
   const share = (kind: 'post' | 'question', id: string) =>
     router.push(`/share?kind=${kind}&id=${id}`);
 
+  /**
+   * How many items either side of the current one stay mounted.
+   *
+   * Everything outside this becomes an empty page of the same height, so the
+   * scrollbar and snap points are unchanged but the work per swipe stops
+   * growing with the length of the feed. Two is enough that you never catch a
+   * page mid-build, even swiping fast.
+   */
+  const WINDOW = 2;
+
+  // Warm the covers on either side so a swipe never lands on a grey rectangle.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    for (const offset of [1, -1, 2]) {
+      const item = feed[active + offset];
+      const url = item?.type === 'post' ? item.post.thumbnailUrl : undefined;
+      if (url) {
+        const img = new window.Image();
+        img.src = url;
+      }
+    }
+  }, [active, feed]);
+
   // Whatever is settled on screen counts as watched, once per session.
   const showing = feed[active];
   useEffect(() => {
@@ -89,6 +112,14 @@ export default function Home() {
         <View style={styles.viewer}>
           <VerticalPager key={visit} initialIndex={active} onIndex={setActive}>
             {feed.map((item, index) => {
+              const distance = Math.abs(index - active);
+              if (distance > WINDOW) {
+                // A placeholder page: holds its slot, costs nothing to render.
+                return <View key={item.type === 'post' ? item.post.id : item.question.id} />;
+              }
+              // One page either side keeps its video buffered, ready to play.
+              const near = distance <= 1;
+
               if (item.type === 'question') {
                 const isSaved = saved.questionIds.includes(item.question.id);
                 return (
@@ -157,6 +188,7 @@ export default function Home() {
                       uri={post.videoUrl}
                       poster={post.thumbnailUrl}
                       active={focused && active === index}
+                      preload={near}
                     />
                   ) : post.thumbnailUrl ? (
                     <Image
