@@ -36,8 +36,9 @@ const ITEMS: NavItem[] = [
 export function NavBar({ state, navigation }: NavBarProps) {
   const styles = useThemedStyles(styleDefinitions);
   const { isPhone, isCompactSidebar } = useResponsive();
-  const { conversations } = useApp();
+  const { conversations, notifications, currentUserId } = useApp();
   const unread = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
+  const unseen = notifications.filter((n) => n.userId === currentUserId && !n.read).length;
   const insets = useSafeAreaInsets();
   const activeRoute = state.routes[state.index]?.name ?? 'index';
 
@@ -130,6 +131,27 @@ export function NavBar({ state, navigation }: NavBarProps) {
         >
           <Ionicons name="search-outline" size={23} color={colors.textMuted} />
           {compact ? null : <Text style={styles.sidebarLabel}>Search</Text>}
+        </Pressable>
+
+        <Pressable
+          onPress={() => router.push('/notifications')}
+          accessibilityRole="button"
+          accessibilityLabel={unseen ? `Notifications, ${unseen} new` : 'Notifications'}
+          style={({ pressed }) => [
+            styles.sidebarItem,
+            compact && styles.sidebarItemCompact,
+            pressed && { backgroundColor: colors.surfaceAlt },
+          ]}
+        >
+          <View>
+            <Ionicons name={unseen ? 'notifications' : 'notifications-outline'} size={23} color={colors.textMuted} />
+            {unseen > 0 ? (
+              <View style={styles.sidebarBadge}>
+                <Text style={styles.sidebarBadgeText}>{unseen > 9 ? '9+' : unseen}</Text>
+              </View>
+            ) : null}
+          </View>
+          {compact ? null : <Text style={styles.sidebarLabel}>Notifications</Text>}
         </Pressable>
 
         <Pressable

@@ -4,6 +4,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -12,6 +13,7 @@ import { fetchBootstrap, signIn as apiSignIn, type Bootstrap } from '@/data/api'
 import { markMessagesOpened } from '@/features/messaging/readReceipts';
 import { readReceiptPreference, saveReceiptPreference } from '@/features/messaging/preferences';
 import { connectProvider, disconnectProvider } from '@/lib/integrations';
+import * as haptics from '@/lib/haptics';
 import type {
   Answer,
   Coach,
@@ -26,6 +28,8 @@ import type {
   Integration,
   MatchResult,
   Message,
+  Notification,
+  NotificationTarget,
   Post,
   PostKind,
   Question,
@@ -63,6 +67,37 @@ interface NewQuestionInput {
   body: string;
   topic: QuestionTopic;
   tags: string[];
+}
+
+/**
+ * Files a notification, unless you caused it yourself — nobody wants to be told
+ * they liked their own post. Pure, so it composes inside a setState updater.
+ */
+function withNotification(
+  state: AppState,
+  entry: {
+    userId: ID;
+    actorId: ID;
+    kind: Notification['kind'];
+    targetId: ID;
+    targetKind: NotificationTarget;
+    preview?: string;
+  },
+): AppState {
+  if (!entry.userId || entry.userId === entry.actorId) return state;
+  const notification: Notification = {
+    ...entry,
+    id: nextId('n'),
+    createdAt: new Date().toISOString(),
+    read: false,
+  };
+  return { ...state, notifications: [notification, ...state.notifications] };
+}
+
+/** First line of a body, trimmed to something that fits one row. */
+function snippet(text: string, max = 80): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
 interface AppState extends Bootstrap {
@@ -105,6 +140,13 @@ interface AppActions {
   toggleSavePost: (postId: ID) => void;
   toggleSaveQuestion: (questionId: ID) => void;
 
+  /* Notifications */
+  markNotificationsRead: () => void;
+  markNotificationRead: (notificationId: ID) => void;
+
+  /* Counting */
+  recordView: (targetKind: 'post' | 'question', targetId: ID) => void;
+
   /* Messaging */
   openConversationWith: (userId: ID) => ID;
   sendMessage: (conversationId: ID, body: string) => void;
@@ -135,6 +177,7 @@ const emptyBootstrap: Bootstrap = {
   coachApplications: [],
   conversations: [],
   messages: [],
+  notifications: [],
 };
 
 let idCounter = 0;
@@ -237,19 +280,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const toggleLike = useCallback(
     (postId: ID) => {
       const me = requireUser();
-      setState((prev) => ({
-        ...prev,
-        posts: prev.posts.map((p) =>
-          p.id === postId
-            ? {
-                ...p,
-                likedBy: p.likedBy.includes(me)
-                  ? p.likedBy.filter((id) => id !== me)
-                  : [...p.likedBy, me],
-              }
-            : p,
-        ),
-      }));
+      setState((prev) => {
+        const post = prev.posts.find((p) => p.id === postId);
+        const liking = !!post && !post.likedBy.includes(me);
+        liking ? haptics.tap() : haptics.untap();
+        const next: AppState = {
+          ...prev,
+          posts: prev.posts.map((p) =>
+            p.id === postId
+              ? {
+                  ...p,
+                  likedBy: p.likedBy.includes(me)
+                    ? p.likedBy.filter((id) => id !== me)
+                    : [...p.likedBy, me],
+                }
+              : p,
+          ),
+        };
+        // Only the like fires a notification; taking it back should not.
+        return liking && post
+          ? withNotification(next, {
+              userId: post.authorId,
+              actorId: me,
+              kind: 'like',
+              targetId: post.id,
+              targetKind: 'post',
+              preview: snippet(post.body),
+            })
+          : next;
+      });
     },
     [requireUser],
   );
@@ -257,6 +316,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addPost = useCallback(
     (input: NewPostInput): ID => {
       const me = requireUser();
+      haptics.commit();
       const post: Post = {
         id: nextId('p'),
         authorId: me,
@@ -282,13 +342,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createdAt: new Date().toISOString(),
         likedBy: [],
       };
-      setState((prev) => ({
-        ...prev,
-        comments: [...prev.comments, comment],
-        posts: prev.posts.map((p) =>
-          p.id === postId ? { ...p, commentIds: [...p.commentIds, comment.id] } : p,
-        ),
-      }));
+      haptics.commit();
+      setState((prev) => {
+        const post = prev.posts.find((p) => p.id === postId);
+        const next: AppState = {
+          ...prev,
+          comments: [...prev.comments, comment],
+          posts: prev.posts.map((p) =>
+            p.id === postId ? { ...p, commentIds: [...p.commentIds, comment.id] } : p,
+          ),
+        };
+        return post
+          ? withNotification(next, {
+              userId: post.authorId,
+              actorId: me,
+              kind: 'comment',
+              targetId: post.id,
+              targetKind: 'post',
+              preview: snippet(body),
+            })
+          : next;
+      });
     },
     [requireUser],
   );
@@ -313,6 +387,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const voteQuestion = useCallback(
     (questionId: ID, direction: 1 | -1) => {
+      haptics.tap();
       const me = requireUser();
       setState((prev) => ({
         ...prev,
@@ -324,6 +399,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const voteAnswer = useCallback(
     (answerId: ID, direction: 1 | -1) => {
+      haptics.tap();
       const me = requireUser();
       setState((prev) => ({
         ...prev,
@@ -349,13 +425,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
           votedBy: {},
           fromCoach: Boolean(author?.isCoach),
         };
-        return {
+        const question = prev.questions.find((q) => q.id === questionId);
+        const parent = prev.answers.find((a) => a.id === answer.parentAnswerId);
+        let next: AppState = {
           ...prev,
           answers: [...prev.answers, answer],
           questions: prev.questions.map((q) =>
             q.id === questionId ? { ...q, answerIds: [...q.answerIds, answer.id] } : q,
           ),
         };
+        if (question) {
+          next = withNotification(next, {
+            userId: question.authorId,
+            actorId: me,
+            kind: 'answer',
+            targetId: question.id,
+            targetKind: 'question',
+            preview: snippet(body),
+          });
+        }
+        // A reply under someone else's answer should reach them too.
+        if (parent && parent.authorId !== question?.authorId) {
+          next = withNotification(next, {
+            userId: parent.authorId,
+            actorId: me,
+            kind: 'answer',
+            targetId: questionId,
+            targetKind: 'question',
+            preview: snippet(body),
+          });
+        }
+        return next;
       });
     },
     [requireUser],
@@ -410,13 +510,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createdAt: new Date().toISOString(),
         helpfulBy: [],
       };
-      setState((prev) => ({
-        ...prev,
-        coachReplies: [...prev.coachReplies, reply],
-        coachQuestions: prev.coachQuestions.map((q) =>
-          q.id === questionId ? { ...q, replyIds: [...q.replyIds, reply.id] } : q,
-        ),
-      }));
+      haptics.commit();
+      setState((prev) => {
+        const question = prev.coachQuestions.find((q) => q.id === questionId);
+        const next: AppState = {
+          ...prev,
+          coachReplies: [...prev.coachReplies, reply],
+          coachQuestions: prev.coachQuestions.map((q) =>
+            q.id === questionId ? { ...q, replyIds: [...q.replyIds, reply.id] } : q,
+          ),
+        };
+        return question
+          ? withNotification(next, {
+              userId: question.authorId,
+              actorId: me,
+              kind: 'coach-reply',
+              targetId: question.id,
+              targetKind: 'coach-question',
+              preview: snippet(body),
+            })
+          : next;
+      });
     },
     [requireUser],
   );
@@ -424,19 +538,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const toggleReplyHelpful = useCallback(
     (replyId: ID) => {
       const me = requireUser();
-      setState((prev) => ({
-        ...prev,
-        coachReplies: prev.coachReplies.map((r) =>
-          r.id === replyId
-            ? {
-                ...r,
-                helpfulBy: r.helpfulBy.includes(me)
-                  ? r.helpfulBy.filter((id) => id !== me)
-                  : [...r.helpfulBy, me],
-              }
-            : r,
-        ),
-      }));
+      setState((prev) => {
+        const reply = prev.coachReplies.find((r) => r.id === replyId);
+        const marking = !!reply && !reply.helpfulBy.includes(me);
+        marking ? haptics.tap() : haptics.untap();
+        const next: AppState = {
+          ...prev,
+          coachReplies: prev.coachReplies.map((r) =>
+            r.id === replyId
+              ? {
+                  ...r,
+                  helpfulBy: r.helpfulBy.includes(me)
+                    ? r.helpfulBy.filter((id) => id !== me)
+                    : [...r.helpfulBy, me],
+                }
+              : r,
+          ),
+        };
+        return marking && reply
+          ? withNotification(next, {
+              userId: reply.coachUserId,
+              actorId: me,
+              kind: 'helpful',
+              targetId: reply.questionId,
+              targetKind: 'coach-question',
+              preview: snippet(reply.body),
+            })
+          : next;
+      });
     },
     [requireUser],
   );
@@ -461,28 +590,98 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   /* --------------------------------- Saved -------------------------------- */
 
-  const toggleSavePost = useCallback((postId: ID) => {
+  const markNotificationsRead = useCallback(() => {
+    setState((prev) =>
+      prev.notifications.some((n) => !n.read)
+        ? { ...prev, notifications: prev.notifications.map((n) => ({ ...n, read: true })) }
+        : prev,
+    );
+  }, []);
+
+  const markNotificationRead = useCallback((notificationId: ID) => {
     setState((prev) => ({
       ...prev,
-      saved: {
-        ...prev.saved,
-        postIds: prev.saved.postIds.includes(postId)
-          ? prev.saved.postIds.filter((id) => id !== postId)
-          : [postId, ...prev.saved.postIds],
-      },
+      notifications: prev.notifications.map((n) =>
+        n.id === notificationId ? { ...n, read: true } : n,
+      ),
     }));
   }, []);
 
+  /**
+   * Counts a view once per item per session. Without the guard, scrolling a reel
+   * back into sight would inflate the number every time it passed.
+   */
+  const seenThisSession = useRef<Set<string>>(new Set());
+  const recordView = useCallback((targetKind: 'post' | 'question', targetId: ID) => {
+    const key = `${targetKind}:${targetId}`;
+    if (seenThisSession.current.has(key)) return;
+    seenThisSession.current.add(key);
+    setState((prev) =>
+      targetKind === 'post'
+        ? {
+            ...prev,
+            posts: prev.posts.map((p) =>
+              p.id === targetId ? { ...p, views: (p.views ?? 0) + 1 } : p,
+            ),
+          }
+        : {
+            ...prev,
+            questions: prev.questions.map((q) =>
+              q.id === targetId ? { ...q, views: (q.views ?? 0) + 1 } : q,
+            ),
+          },
+    );
+  }, []);
+
+  const toggleSavePost = useCallback((postId: ID) => {
+    setState((prev) => {
+      const me = prev.currentUserId;
+      const saving = !prev.saved.postIds.includes(postId);
+      saving ? haptics.tap() : haptics.untap();
+      return {
+        ...prev,
+        saved: {
+          ...prev.saved,
+          postIds: saving
+            ? [postId, ...prev.saved.postIds]
+            : prev.saved.postIds.filter((id) => id !== postId),
+        },
+        // savedBy is the public tally; saved.postIds is just this user's shelf.
+        posts: prev.posts.map((p) => {
+          if (p.id !== postId || !me) return p;
+          const savedBy = p.savedBy ?? [];
+          return {
+            ...p,
+            savedBy: saving ? [...new Set([...savedBy, me])] : savedBy.filter((id) => id !== me),
+          };
+        }),
+      };
+    });
+  }, []);
+
   const toggleSaveQuestion = useCallback((questionId: ID) => {
-    setState((prev) => ({
-      ...prev,
-      saved: {
-        ...prev.saved,
-        questionIds: prev.saved.questionIds.includes(questionId)
-          ? prev.saved.questionIds.filter((id) => id !== questionId)
-          : [questionId, ...prev.saved.questionIds],
-      },
-    }));
+    setState((prev) => {
+      const me = prev.currentUserId;
+      const saving = !prev.saved.questionIds.includes(questionId);
+      saving ? haptics.tap() : haptics.untap();
+      return {
+        ...prev,
+        saved: {
+          ...prev.saved,
+          questionIds: saving
+            ? [questionId, ...prev.saved.questionIds]
+            : prev.saved.questionIds.filter((id) => id !== questionId),
+        },
+        questions: prev.questions.map((q) => {
+          if (q.id !== questionId || !me) return q;
+          const savedBy = q.savedBy ?? [];
+          return {
+            ...q,
+            savedBy: saving ? [...new Set([...savedBy, me])] : savedBy.filter((id) => id !== me),
+          };
+        }),
+      };
+    });
   }, []);
 
   /* ------------------------------- Messaging ------------------------------ */
@@ -542,6 +741,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const sendMessage = useCallback(
     (conversationId: ID, body: string) => {
+      haptics.commit();
       const me = requireUser();
       const trimmed = body.trim();
       if (!trimmed) return;
@@ -572,6 +772,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
           next = appendMessage(next, conversation.id, me, '', kind, sharedId);
           if (note?.trim()) next = appendMessage(next, conversation.id, me, note.trim());
+        }
+
+        // One share tally per send, however many people it went to.
+        if (kind === 'post') {
+          const post = next.posts.find((p) => p.id === sharedId);
+          next = {
+            ...next,
+            posts: next.posts.map((p) =>
+              p.id === sharedId ? { ...p, shares: (p.shares ?? 0) + userIds.length } : p,
+            ),
+          };
+          if (post) {
+            next = withNotification(next, {
+              userId: post.authorId,
+              actorId: me,
+              kind: 'share',
+              targetId: post.id,
+              targetKind: 'post',
+              preview: snippet(post.body),
+            });
+          }
+        } else if (kind === 'question') {
+          const question = next.questions.find((q) => q.id === sharedId);
+          next = {
+            ...next,
+            questions: next.questions.map((q) =>
+              q.id === sharedId ? { ...q, shares: (q.shares ?? 0) + userIds.length } : q,
+            ),
+          };
+          if (question) {
+            next = withNotification(next, {
+              userId: question.authorId,
+              actorId: me,
+              kind: 'share',
+              targetId: question.id,
+              targetKind: 'question',
+              preview: snippet(question.title),
+            });
+          }
         }
         return next;
       });
@@ -626,6 +865,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       submitCoachApplication,
       toggleSavePost,
       toggleSaveQuestion,
+      markNotificationsRead,
+      markNotificationRead,
+      recordView,
       openConversationWith,
       sendMessage,
       shareToUsers,
@@ -653,6 +895,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       submitCoachApplication,
       toggleSavePost,
       toggleSaveQuestion,
+      markNotificationsRead,
+      markNotificationRead,
+      recordView,
       openConversationWith,
       sendMessage,
       shareToUsers,

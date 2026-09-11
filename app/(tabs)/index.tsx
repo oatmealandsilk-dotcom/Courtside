@@ -1,6 +1,6 @@
 import { ThreadReplies } from '@/components/ThreadReplies';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
@@ -12,6 +12,7 @@ import { PostCard } from '@/components/PostCard';
 import { VerticalPager } from '@/components/VerticalPager';
 import { ReelPlayback } from '@/components/ReelPlayback';
 import { rankFeed, type FeedItem } from '@/features/feed/rankFeed';
+import { compactNumber } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
 
@@ -62,6 +63,16 @@ export default function Home() {
 
   const share = (kind: 'post' | 'question', id: string) =>
     router.push(`/share?kind=${kind}&id=${id}`);
+
+  // Whatever is settled on screen counts as watched, once per session.
+  const showing = feed[active];
+  useEffect(() => {
+    if (!focused || !showing) return;
+    actions.recordView(
+      showing.type === 'post' ? 'post' : 'question',
+      showing.type === 'post' ? showing.post.id : showing.question.id,
+    );
+  }, [focused, showing, actions]);
 
   return (
     <View style={styles.root}>
@@ -214,6 +225,7 @@ export default function Home() {
                       style={styles.action}
                     >
                       <Ionicons name="paper-plane-outline" size={28} color="white" />
+                      <Text style={styles.actionLabel}>{post.shares ?? 0}</Text>
                     </Pressable>
                     <Pressable
                       accessibilityRole="button"
@@ -226,7 +238,12 @@ export default function Home() {
                         size={27}
                         color="white"
                       />
+                      <Text style={styles.actionLabel}>{post.savedBy?.length ?? 0}</Text>
                     </Pressable>
+                    <View style={styles.action}>
+                      <Ionicons name="eye-outline" size={26} color="white" />
+                      <Text style={styles.actionLabel}>{compactNumber(post.views ?? 0)}</Text>
+                    </View>
                   </View>
                 </View>
               );

@@ -27,6 +27,7 @@ import type {
   DailyHealth,
   Integration,
   Message,
+  Notification,
   Post,
   Question,
   User,
@@ -59,6 +60,7 @@ export interface Bootstrap {
   coachApplications: CoachApplication[];
   conversations: Conversation[];
   messages: Message[];
+  notifications: Notification[];
 }
 
 export async function fetchBootstrap(): Promise<Bootstrap> {
@@ -75,6 +77,7 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       coachApplications: [],
       conversations,
       messages,
+      notifications: [],
       coachingRequests,
       integrations,
       healthHistory,

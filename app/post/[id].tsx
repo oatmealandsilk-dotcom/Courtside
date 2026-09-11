@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
@@ -14,6 +14,8 @@ export default function PostDetail() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { posts, comments, users, currentUserId, actions } = useApp();
+  const view = actions.recordView;
+  useEffect(() => { view('post', String(id)); }, [view, id]);
   const [draft, setDraft] = useState('');
 
   const post = posts.find((p) => p.id === id);

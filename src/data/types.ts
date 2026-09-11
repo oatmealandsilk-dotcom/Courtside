@@ -153,6 +153,12 @@ export interface Post {
   likedBy: ID[];
   commentIds: ID[];
   tags: string[];
+  /** Times this has been watched or opened. */
+  views?: number;
+  /** Times this has been sent to someone or shared out. */
+  shares?: number;
+  /** Everyone who bookmarked it, so the count is global rather than per-device. */
+  savedBy?: ID[];
 }
 
 export interface Comment {
@@ -180,6 +186,9 @@ export interface Question {
   votedBy: Record<ID, 1 | -1>;
   answerIds: ID[];
   acceptedAnswerId?: ID;
+  views?: number;
+  shares?: number;
+  savedBy?: ID[];
 }
 
 export interface Answer {
@@ -410,6 +419,35 @@ export interface Conversation {
 export interface SavedItems {
   postIds: ID[];
   questionIds: ID[];
+}
+
+/* ------------------------------ Notifications ---------------------------- */
+
+export type NotificationKind =
+  | 'like'
+  | 'comment'
+  | 'answer'
+  | 'coach-reply'
+  | 'helpful'
+  | 'share'
+  | 'follow';
+
+export type NotificationTarget = 'post' | 'question' | 'coach-question' | 'coach-reply';
+
+export interface Notification {
+  id: ID;
+  /** Who should see this. */
+  userId: ID;
+  /** Who caused it. Never the recipient. */
+  actorId: ID;
+  kind: NotificationKind;
+  /** What was acted on, and which screen opens it. */
+  targetId: ID;
+  targetKind: NotificationTarget;
+  createdAt: string;
+  read: boolean;
+  /** Snippet of the thing, cached so a row reads well on its own. */
+  preview?: string;
 }
 
 /* ---------------------------------- Auth --------------------------------- */

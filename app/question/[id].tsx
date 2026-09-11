@@ -3,7 +3,7 @@ import { SwipeSurface } from '@/components/SwipeSurface';
 import Discuss from '../(tabs)/discuss';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +20,8 @@ export default function QuestionDetail() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { questions, answers, users, currentUserId, actions } = useApp();
+  const view = actions.recordView;
+  useEffect(() => { view('question', String(id)); }, [view, id]);
   const [draft, setDraft] = useState('');
   const replyInput = useRef<TextInput>(null);
 

@@ -16,7 +16,7 @@ import { colors } from '@/theme';
 
 export default function Profile({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
- const { currentUser: user, posts, saved, conversations } = useApp();
+ const { currentUser: user, posts, saved, conversations, notifications, currentUserId } = useApp();
  const params = useLocalSearchParams<{ section?: string }>();
  const section = previewSection ?? params.section;
  const tab = section === 'Reels' || section === 'Tagged' ? section : 'Posts';
@@ -28,6 +28,7 @@ export default function Profile({ previewSection }: { previewSection?: string } 
  const profile = user.profile;
  const share = () => router.push(`/share?kind=profile&id=${user.id}`);
  const unread = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
+ const unseen = notifications.filter(n => n.userId === currentUserId && !n.read).length;
  const savedCount = saved.postIds.length + saved.questionIds.length;
  const swipe = (direction: 1 | -1) => {
    const next = swipeDestination('/profile', tab, direction);
@@ -41,6 +42,10 @@ export default function Profile({ previewSection }: { previewSection?: string } 
    </View>;
  };
  return <SwipeSurface enabled={!previewSection} onSwipe={direction => { if (direction === -1) router.navigate('/coaches'); }} renderPreview={direction => direction === -1 ? <Coaches/> : null}><Screen title="Profile" subtitle={`@${user.handle}`} right={<View style={styles.headerActions}>
+   <Pressable accessibilityRole="link" accessibilityLabel={unseen ? `Notifications, ${unseen} new` : 'Notifications'} onPress={() => router.push('/notifications')} hitSlop={8}>
+     <Ionicons name={unseen ? 'notifications' : 'notifications-outline'} size={23} color={colors.text}/>
+     {unseen > 0 && <View style={styles.headerBadge}><Text style={styles.headerBadgeText}>{unseen > 9 ? '9+' : unseen}</Text></View>}
+   </Pressable>
    <Pressable accessibilityRole="link" accessibilityLabel={unread ? `Messages, ${unread} unread` : 'Messages'} onPress={() => router.push('/messages')} hitSlop={8}>
      <Ionicons name="paper-plane-outline" size={23} color={colors.text}/>
      {unread > 0 && <View style={styles.headerBadge}><Text style={styles.headerBadgeText}>{unread > 9 ? '9+' : unread}</Text></View>}

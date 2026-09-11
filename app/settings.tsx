@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar, Field, Screen } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
-import { useTheme } from '@/theme/ThemeProvider';
+import { useTheme, themeList, themes } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography } from '@/theme';
 
 interface Row {
@@ -27,7 +27,7 @@ interface Row {
 export default function Settings() {
   const styles = useThemedStyles(styleDefinitions);
   const { currentUser, saved, actions } = useApp();
-  const { night, setNight } = useTheme();
+  const { theme, setTheme } = useTheme();
   const [search, setSearch] = useState('');
   const [privateAccount, setPrivateAccount] = useState(false);
   const [activityStatus, setActivityStatus] = useState(true);
@@ -40,7 +40,7 @@ export default function Settings() {
     {
       title: 'Your app and media',
       rows: [
-        { icon: 'moon-outline', label: 'Night mode', toggle: { value: night, onChange: setNight } },
+
         {
           icon: 'bookmark-outline',
           label: 'Saved',
@@ -142,6 +142,36 @@ export default function Settings() {
         </Pressable>
       ) : null}
 
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Court</Text>
+        <View style={styles.themeGrid}>
+          {themeList.map((option) => {
+            const palette = themes[option.name];
+            const active = theme === option.name;
+            return (
+              <Pressable
+                key={option.name}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`${option.label} theme`}
+                onPress={() => setTheme(option.name)}
+                style={[styles.themeCard, active && styles.themeCardActive]}
+              >
+                <View style={[styles.swatch, { backgroundColor: palette.bg, borderColor: palette.border }]}>
+                  <View style={[styles.swatchBar, { backgroundColor: palette.brand }]} />
+                  <View style={[styles.swatchDot, { backgroundColor: palette.court }]} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.themeName}>{option.label}</Text>
+                  <Text style={styles.themeBlurb}>{option.blurb}</Text>
+                </View>
+                {active ? <Ionicons name="checkmark-circle" size={19} color={colors.brand} /> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
       {filtered.map((section) => (
         <View key={section.title} style={styles.section}>
           <Text style={styles.sectionTitle}>{section.title}</Text>
@@ -192,6 +222,30 @@ export default function Settings() {
 }
 
 const styleDefinitions = StyleSheet.create({
+  themeGrid: { gap: 2 },
+  themeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    borderRadius: radius.md,
+  },
+  themeCardActive: { borderColor: colors.brand },
+  swatch: {
+    width: 42,
+    height: 42,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    padding: 6,
+    justifyContent: 'space-between',
+  },
+  swatchBar: { height: 5, borderRadius: 3 },
+  swatchDot: { width: 11, height: 11, borderRadius: 6 },
+  themeName: { ...typography.smallStrong, color: colors.text },
+  themeBlurb: { ...typography.caption, color: colors.textFaint, letterSpacing: 0 },
   searchWrap: { paddingBottom: spacing.lg },
   accountCard: {
     flexDirection: 'row',
