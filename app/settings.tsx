@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Avatar, Field, Screen } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { useTheme, themeList, themes } from '@/theme/ThemeProvider';
+import { Tappable } from '@/components/Tappable';
 import { colors, radius, spacing, typography } from '@/theme';
 
 interface Row {
@@ -26,7 +27,7 @@ interface Row {
  */
 export default function Settings() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, saved, actions } = useApp();
+  const { currentUser, saved, defaultReaction, actions } = useApp();
   const { theme, setTheme } = useTheme();
   const [search, setSearch] = useState('');
   const [privateAccount, setPrivateAccount] = useState(false);
@@ -172,6 +173,28 @@ export default function Settings() {
         </View>
       </View>
 
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Double tap</Text>
+        <View style={styles.card}>
+          <View style={styles.reactionRow}>
+            <Text style={styles.reactionHint}>Left on a message when you double tap it.</Text>
+            <View style={styles.reactionKeys}>
+              {['❤️', '😂', '🔥', '👏', '😮', '👍', '🎾'].map((emoji) => (
+                <Tappable
+                  key={emoji}
+                  accessibilityLabel={`Use ${emoji} for double tap`}
+                  accessibilityState={{ selected: defaultReaction === emoji }}
+                  onPress={() => actions.setDefaultReaction(emoji)}
+                  style={[styles.reactionKey, defaultReaction === emoji && styles.reactionKeyOn]}
+                >
+                  <Text style={{ fontSize: 21 }}>{emoji}</Text>
+                </Tappable>
+              ))}
+            </View>
+          </View>
+        </View>
+      </View>
+
       {filtered.map((section) => (
         <View key={section.title} style={styles.section}>
           <Text style={styles.sectionTitle}>{section.title}</Text>
@@ -222,6 +245,17 @@ export default function Settings() {
 }
 
 const styleDefinitions = StyleSheet.create({
+  reactionRow: { padding: spacing.md, gap: spacing.md },
+  reactionHint: { ...typography.small, color: colors.textMuted },
+  reactionKeys: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  reactionKey: {
+    padding: 7,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    backgroundColor: colors.surfaceAlt,
+  },
+  reactionKeyOn: { borderColor: colors.brand, backgroundColor: colors.brandDim },
   themeGrid: { gap: 2 },
   themeCard: {
     flexDirection: 'row',

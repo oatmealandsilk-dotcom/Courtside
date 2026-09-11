@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,8 +16,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar, EmptyState } from '@/components/ui';
+import { Tappable, useDoubleTap } from '@/components/Tappable';
 import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
+import type { Message } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /** One conversation. Bubbles, shared-item cards, and a composer bar. */
@@ -26,6 +29,8 @@ export default function Thread() {
   const insets = useSafeAreaInsets();
   const { conversations, messages, users, posts, questions, currentUserId, actions } = useApp();
   const [draft, setDraft] = useState('');
+  const [picking, setPicking] = useState<string | null>(null);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const scrollRef = useRef<ScrollView | null>(null);
   const inputRef = useRef<TextInput>(null);
   const focused = useIsFocused();
@@ -144,14 +149,16 @@ export default function Thread() {
           }
 
           return (
-            <View
+            <Bubble
               key={message.id}
-              style={[styles.bubble, mine ? styles.mine : styles.theirs]}
-            >
-              <Text style={[styles.bubbleText, mine && { color: colors.brandInk }]}>
-                {message.body}
-              </Text>
-            </View>
+              message={message}
+              mine={mine}
+              styles={styles}
+              me={currentUserId}
+              picking={picking === message.id}
+              onPick={(open) => setPicking(open ? message.id : null)}
+              onReact={(emoji) => actions.reactToMessage(message.id, emoji)}
+            />
           );
         })}
         {thread.length > 0 && thread[thread.length - 1].senderId === currentUserId && <Text accessibilityLiveRegion="polite" style={styles.timestamp}>
@@ -160,7 +167,33 @@ export default function Thread() {
         <Text style={styles.timestamp}>{relativeTime(conversation.updatedAt)}</Text>
       </ScrollView>
 
+      {emojiOpen ? (
+        <View style={styles.emojiTray}>
+          {EMOJI.map((emoji) => (
+            <Tappable
+              key={emoji}
+              accessibilityLabel={`Add ${emoji}`}
+              onPress={() => { setDraft((d) => d + emoji); inputRef.current?.focus(); }}
+              style={styles.emojiKey}
+            >
+              <Text style={{ fontSize: 22 }}>{emoji}</Text>
+            </Tappable>
+          ))}
+        </View>
+      ) : null}
+
       <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+        <Tappable
+          accessibilityLabel={emojiOpen ? 'Hide emoji' : 'Add an emoji'}
+          onPress={() => setEmojiOpen((open) => !open)}
+          style={styles.emojiToggle}
+        >
+          <Ionicons
+            name={emojiOpen ? 'happy' : 'happy-outline'}
+            size={23}
+            color={emojiOpen ? colors.brand : colors.textMuted}
+          />
+        </Tappable>
         <TextInput
           ref={inputRef}
           value={draft}
@@ -175,17 +208,110 @@ export default function Thread() {
           returnKeyType="send"
           accessibilityLabel="Message text"
         />
-        <Pressable
+        <Tappable
           onPress={send}
           disabled={!draft.trim()}
-          accessibilityRole="button"
           accessibilityLabel="Send message"
           style={[styles.send, !draft.trim() && { opacity: 0.4 }]}
         >
           <Ionicons name="arrow-up" size={19} color={colors.brandInk} />
-        </Pressable>
+        </Tappable>
       </View>
     </View>
+  );
+}
+
+/**
+ * One text message.
+ *
+ * Double tap leaves your default reaction; a long press opens the picker for a
+ * different one. Reactions sit under the bubble and are tappable to remove.
+ */
+function Bubble({ message, mine, styles, me, picking, onPick, onReact }: {
+  message: Message; mine: boolean; styles: any; me: string | null;
+  picking: boolean; onPick: (open: boolean) => void; onReact: (emoji?: string) => void;
+}) {
+  const tap = useDoubleTap(() => onReact());
+  const reactions = message.reactions ?? {};
+  const mineMark = me ? reactions[me] : undefined;
+
+  // Collapse to one chip per emoji with a count.
+  const tally = Object.values(reactions).reduce<Record<string, number>>((acc, emoji) => {
+    acc[emoji] = (acc[emoji] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <View style={mine ? styles.mineAlign : styles.theirsAlign}>
+      <Pressable
+        onPress={tap}
+        onLongPress={() => onPick(true)}
+        delayLongPress={280}
+        accessibilityRole="button"
+        accessibilityLabel={`Message: ${message.body}. Double tap to react, hold to choose a reaction.`}
+        style={[styles.bubble, mine ? styles.mine : styles.theirs]}
+      >
+        <Text style={[styles.bubbleText, mine && { color: colors.brandInk }]}>{message.body}</Text>
+      </Pressable>
+
+      {picking ? (
+        <View style={styles.pickerRow}>
+          {REACTIONS.map((emoji) => (
+            <Tappable
+              key={emoji}
+              accessibilityLabel={`React with ${emoji}`}
+              onPress={() => { onReact(emoji); onPick(false); }}
+              style={[styles.pickerItem, mineMark === emoji && styles.pickerItemOn]}
+            >
+              <Text style={{ fontSize: 19 }}>{emoji}</Text>
+            </Tappable>
+          ))}
+        </View>
+      ) : null}
+
+      {Object.keys(tally).length ? (
+        <View style={[styles.reactions, mine ? styles.mineAlign : styles.theirsAlign]}>
+          {Object.entries(tally).map(([emoji, count]) => (
+            <ReactionChip
+              key={emoji}
+              emoji={emoji}
+              count={count}
+              mine={mineMark === emoji}
+              onPress={() => onReact(emoji)}
+              style={[styles.chip, mineMark === emoji && styles.chipMine]}
+            />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/** Offered on a long press. Small on purpose — a wall of emoji slows the choice. */
+const REACTIONS = ['❤️', '😂', '🔥', '👏', '😮', '😢', '👍', '🎾'];
+
+/** For the composer. Tennis first, then the ones people actually reach for. */
+const EMOJI = [
+  '🎾', '🔥', '💪', '🏆', '⚡️', '🎯', '👏', '🙌',
+  '❤️', '😂', '😅', '😮', '😭', '🫡', '👍', '👎',
+  '🤝', '😤', '🥵', '🧊', '✅', '❌', '⏱️', '🙏',
+];
+
+/** A reaction that springs in when it lands, then sits still. */
+function ReactionChip({ emoji, count, mine, onPress, style }: {
+  emoji: string; count: number; mine: boolean; onPress: () => void; style: any;
+}) {
+  const scale = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 12 }).start();
+  }, [scale]);
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable onPress={onPress} accessibilityRole="button"
+        accessibilityLabel={`${emoji} ${count}${mine ? ', yours' : ''}`} style={style}>
+        <Text style={{ fontSize: 13 }}>{emoji}{count > 1 ? ` ${count}` : ''}</Text>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -210,6 +336,9 @@ const styleDefinitions = StyleSheet.create({
     maxWidth: 700,
     width: '100%',
     alignSelf: 'center',
+    // A short conversation should rest on the composer, not hang from the top.
+    flexGrow: 1,
+    justifyContent: 'flex-end',
   },
   bubble: {
     maxWidth: '78%',
@@ -220,6 +349,40 @@ const styleDefinitions = StyleSheet.create({
   mine: { alignSelf: 'flex-end', backgroundColor: colors.brand, borderBottomRightRadius: 6 },
   theirs: { alignSelf: 'flex-start', backgroundColor: colors.surfaceAlt, borderBottomLeftRadius: 6 },
   bubbleText: { ...typography.body, color: colors.text, lineHeight: 21 },
+  reactions: { flexDirection: 'row', gap: 4, marginTop: -4 },
+  chip: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  chipMine: { borderColor: colors.brand, backgroundColor: colors.brandDim },
+  pickerRow: {
+    flexDirection: 'row',
+    gap: 2,
+    marginTop: 4,
+    padding: 4,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  pickerItem: { paddingHorizontal: 5, paddingVertical: 3, borderRadius: radius.pill },
+  pickerItemOn: { backgroundColor: colors.brandDim },
+  emojiTray: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 2,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    backgroundColor: colors.bgElevated,
+  },
+  emojiKey: { padding: 6, borderRadius: radius.sm },
+  emojiToggle: { padding: 4 },
   mineAlign: { alignSelf: 'flex-end' },
   theirsAlign: { alignSelf: 'flex-start' },
   sharedCard: {

@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Avatar, EmptyState } from '@/components/ui';
 import { QuestionCard } from '@/components/QuestionCard';
 import { PostCard } from '@/components/PostCard';
+import { Tappable } from '@/components/Tappable';
 import { VerticalPager } from '@/components/VerticalPager';
 import { ReelPlayback } from '@/components/ReelPlayback';
 import { rankFeed, type FeedItem } from '@/features/feed/rankFeed';
@@ -227,8 +228,7 @@ export default function Home() {
                   </View>
 
                   <View style={styles.actions}>
-                    <Pressable
-                      accessibilityRole="button"
+                    <Tappable
                       accessibilityLabel={liked ? 'Unlike reel' : 'Like reel'}
                       onPress={() => actions.toggleLike(post.id)}
                       style={styles.action}
@@ -239,27 +239,24 @@ export default function Home() {
                         color={liked ? '#E17B7B' : 'white'}
                       />
                       <Text style={styles.actionLabel}>{post.likedBy.length}</Text>
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
+                    </Tappable>
+                    <Tappable
                       accessibilityLabel="Reel comments"
                       onPress={() => router.push(`/post/${post.id}`)}
                       style={styles.action}
                     >
                       <Ionicons name="chatbubble-outline" size={29} color="white" />
                       <Text style={styles.actionLabel}>{post.commentIds.length}</Text>
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
+                    </Tappable>
+                    <Tappable
                       accessibilityLabel="Send this reel to someone"
                       onPress={() => share('post', post.id)}
                       style={styles.action}
                     >
                       <Ionicons name="paper-plane-outline" size={28} color="white" />
                       <Text style={styles.actionLabel}>{post.shares ?? 0}</Text>
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
+                    </Tappable>
+                    <Tappable
                       accessibilityLabel={isSaved ? 'Remove from saved' : 'Save this reel'}
                       onPress={() => actions.toggleSavePost(post.id)}
                       style={styles.action}
@@ -270,7 +267,7 @@ export default function Home() {
                         color="white"
                       />
                       <Text style={styles.actionLabel}>{post.savedBy?.length ?? 0}</Text>
-                    </Pressable>
+                    </Tappable>
                   </View>
                 </View>
               );

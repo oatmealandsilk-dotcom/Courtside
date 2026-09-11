@@ -8,6 +8,7 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
+import { Platform } from 'react-native';
 
 import { fetchBootstrap, signIn as apiSignIn, type Bootstrap } from '@/data/api';
 import { markMessagesOpened } from '@/features/messaging/readReceipts';
@@ -100,8 +101,20 @@ function snippet(text: string, max = 80): string {
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
+/** What a double tap leaves, remembered between visits on web. */
+function readDefaultReaction(): string {
+  try {
+    if (Platform.OS !== 'web') return '❤️';
+    return localStorage.getItem('courtside-default-reaction') || '❤️';
+  } catch {
+    return '❤️';
+  }
+}
+
 interface AppState extends Bootstrap {
   ready: boolean;
+  /** What a double tap leaves on a message. */
+  defaultReaction: string;
   currentUserId: ID | null;
   onboardingComplete: boolean;
   error: string | null;
@@ -139,6 +152,10 @@ interface AppActions {
   /* Saved */
   toggleSavePost: (postId: ID) => void;
   toggleSaveQuestion: (questionId: ID) => void;
+
+  /* Reactions */
+  reactToMessage: (messageId: ID, emoji?: string) => void;
+  setDefaultReaction: (emoji: string) => void;
 
   /* Notifications */
   markNotificationsRead: () => void;
@@ -194,6 +211,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     onboardingComplete: false,
     error: null,
     saved: { postIds: [], questionIds: [] },
+    defaultReaction: readDefaultReaction(),
   });
 
   useEffect(() => {
@@ -590,6 +608,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   /* --------------------------------- Saved -------------------------------- */
 
+  /**
+   * Toggles your reaction on a message. Passing no emoji uses the double-tap
+   * default; reacting again with the same emoji takes it back off.
+   */
+  const reactToMessage = useCallback((messageId: ID, emoji?: string) => {
+    setState((prev) => {
+      const me = prev.currentUserId;
+      if (!me) return prev;
+      const mark = emoji ?? prev.defaultReaction;
+      const message = prev.messages.find((m) => m.id === messageId);
+      const existing = message?.reactions?.[me];
+      existing === mark ? haptics.untap() : haptics.tap();
+      return {
+        ...prev,
+        messages: prev.messages.map((m) => {
+          if (m.id !== messageId) return m;
+          const reactions = { ...(m.reactions ?? {}) };
+          if (reactions[me] === mark) delete reactions[me];
+          else reactions[me] = mark;
+          return { ...m, reactions };
+        }),
+      };
+    });
+  }, []);
+
+  const setDefaultReaction = useCallback((emoji: string) => {
+    setState((prev) => ({ ...prev, defaultReaction: emoji }));
+    try {
+      if (Platform.OS === 'web') localStorage.setItem('courtside-default-reaction', emoji);
+    } catch {}
+  }, []);
+
   const markNotificationsRead = useCallback(() => {
     setState((prev) =>
       prev.notifications.some((n) => !n.read)
@@ -865,6 +915,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       submitCoachApplication,
       toggleSavePost,
       toggleSaveQuestion,
+      reactToMessage,
+      setDefaultReaction,
       markNotificationsRead,
       markNotificationRead,
       recordView,
@@ -895,6 +947,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       submitCoachApplication,
       toggleSavePost,
       toggleSaveQuestion,
+      reactToMessage,
+      setDefaultReaction,
       markNotificationsRead,
       markNotificationRead,
       recordView,

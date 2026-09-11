@@ -402,6 +402,8 @@ export interface Message {
   kind: MessageKind;
   /** Set when kind is 'post' or 'question' — the shared item. */
   sharedId?: ID;
+  /** One reaction per person, keyed by who left it. */
+  reactions?: Record<ID, string>;
 }
 
 export interface Conversation {

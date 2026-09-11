@@ -10,6 +10,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 
+import { Tappable } from '@/components/Tappable';
 import { colors, radius, spacing, typography } from '@/theme';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -38,18 +39,17 @@ export function Button({
   const inactive = disabled || loading;
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ disabled: inactive }}
-      onPress={inactive ? () => undefined : onPress}
-      style={({ pressed }) => [
+    <Tappable
+      disabled={inactive}
+      onPress={onPress}
+      // A wide button travelling as far as a small icon looks wobbly.
+      scaleTo={0.97}
+      hoverTo={1.02}
+      accessibilityLabel={label}
+      style={[
         styles.base,
         full && styles.full,
-        {
-          backgroundColor: palette.bg,
-          borderColor: palette.border,
-          opacity: inactive ? 0.5 : pressed ? 0.82 : 1,
-        },
+        { backgroundColor: palette.bg, borderColor: palette.border, opacity: inactive ? 0.5 : 1 },
         style,
       ]}
     >
@@ -57,7 +57,7 @@ export function Button({
         {loading ? <ActivityIndicator size="small" color={palette.fg} /> : null}
         <Text style={[styles.label, { color: palette.fg }]}>{label}</Text>
       </View>
-    </Pressable>
+    </Tappable>
   );
 }
 
