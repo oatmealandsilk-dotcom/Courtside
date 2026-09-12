@@ -6,6 +6,7 @@ import Coaches from './coaches';
 import Profile from './profile';
 import { Redirect, Tabs, router, usePathname, useGlobalSearchParams } from 'expo-router';
 import { SwipeSurface } from '@/components/SwipeSurface';
+import { setPendingTab } from '@/features/navigation/pendingTab';
 import { swipeDestination } from '@/features/navigation/swipeOrder';
 import { useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
@@ -23,7 +24,10 @@ export default function TabsLayout() {
   const { isPhone } = useResponsive();
   if (ready && !currentUserId) return <Redirect href="/sign-in" />;
   return (
-    <SwipeSurface onSwipe={swipe} enabled={pathname !== "/profile"} renderPreview={direction => {
+    <SwipeSurface onSwipe={swipe} onCommit={direction => {
+      const next = swipeDestination(pathname, pathname === "/discuss" ? (direction === 1 ? "players" : "discussions") : params.section, direction);
+      if (next) setPendingTab(next.pathname);
+    }} enabled={pathname !== "/profile"} renderPreview={direction => {
       const next = swipeDestination(pathname, pathname === "/discuss" ? (direction === 1 ? "players" : "discussions") : params.section, direction);
       if (!next) return null;
       if (next.pathname === '/') return <Home/>;

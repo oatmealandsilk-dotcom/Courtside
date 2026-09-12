@@ -1,9 +1,11 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Animated, PanResponder, View } from 'react-native';
+import { Animated, Easing, PanResponder, View } from 'react-native';
 import { useResponsive } from '@/lib/useResponsive';
 
-export function SwipeSurface({ children, onSwipe, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false }: {
+export function SwipeSurface({ children, onSwipe, onCommit, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false }: {
   children: React.ReactNode; onSwipe: (direction: 1 | -1) => void;
+  /** Fires the instant the gesture is known to be going through, before the animation. */
+  onCommit?: (direction: 1 | -1) => void;
   delegateLeft?: boolean; delegateRight?: boolean; enabled?: boolean; fill?: boolean; renderPreview?: (direction: 1 | -1) => React.ReactNode;
 }) {
   const { isPhone } = useResponsive();
@@ -11,8 +13,8 @@ export function SwipeSurface({ children, onSwipe, enabled: requestedEnabled = tr
   const offset = useRef(new Animated.Value(0)).current;
   const width = useRef(1);
   const busy = useRef(false);
-  const props = useRef({ onSwipe, enabled, renderPreview, delegateRight, delegateLeft });
-  props.current = { onSwipe, enabled, renderPreview, delegateRight, delegateLeft };
+  const props = useRef({ onSwipe, onCommit, enabled, renderPreview, delegateRight, delegateLeft });
+  props.current = { onSwipe, onCommit, enabled, renderPreview, delegateRight, delegateLeft };
   const [direction, setDirection] = useState<1 | -1>(1);
   const [dragging, setDragging] = useState(false);
   const pan = useMemo(() => {
@@ -22,14 +24,26 @@ export function SwipeSurface({ children, onSwipe, enabled: requestedEnabled = tr
       const commit = !cancelled && available && (Math.abs(dx) > width.current * 0.36 || (Math.abs(dx) > 35 && Math.abs(velocity) > 0.5 && Math.sign(dx) === Math.sign(velocity)));
       busy.current = true;
       const release = () => { offset.setValue(0); setDragging(false); busy.current = false; };
-      Animated.spring(offset, { toValue: commit ? -next * width.current : 0, stiffness: 220, damping: 28, mass: 1, useNativeDriver: true }).start(() => {
+
+      // Tell the rest of the app now, not when the animation ends. The bottom
+      // bar can follow the gesture instead of snapping once navigation lands.
+      if (commit && props.current.enabled) props.current.onCommit?.(next);
+
+      // A spring's callback fires at true rest, which is noticeably later than
+      // the point it stops looking like it is moving — that gap was the pause
+      // before the page changed. A fixed curve ends when it appears to end.
+      Animated.timing(offset, {
+        toValue: commit ? -next * width.current : 0,
+        duration: commit ? 240 : 180,
+        easing: Easing.bezier(0.22, 0.61, 0.36, 1),
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (!finished) return;
         if (!commit || !props.current.enabled) return release();
         props.current.onSwipe(next);
-        // Navigation has been asked for but the new screen has not painted yet.
-        // Releasing now would drop the outgoing screen back at offset zero for
-        // a frame or two before the destination appears — the flicker you see
-        // after the page lands. Hold the landed frame until React has drawn.
-        requestAnimationFrame(() => requestAnimationFrame(release));
+        // One frame so the destination paints before the offset resets,
+        // otherwise the outgoing screen flashes back at full size.
+        requestAnimationFrame(release);
       });
     };
     return PanResponder.create({
