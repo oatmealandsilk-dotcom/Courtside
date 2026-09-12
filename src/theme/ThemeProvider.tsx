@@ -60,11 +60,11 @@ const wimbledonColors: Palette = {
  * apart from the Australian Open's paler blue.
  */
 const usOpenColors: Palette = {
-  bg: '#18304C', bgElevated: '#203B5C', surface: '#244266', surfaceAlt: '#2E4E76',
-  border: '#385C86', borderStrong: '#6789B3', text: '#EAF1F9', textMuted: '#AFC3D9', textFaint: '#8299B2',
-  brand: '#7FAE6C', brandInk: '#0E1C0B', brandDim: '#223F2C', court: '#6C935C', clay: '#D08A5E',
+  bg: '#14283D', bgElevated: '#1B3350', surface: '#1F3A5A', surfaceAlt: '#2A4A6E',
+  border: '#32557A', borderStrong: '#5C82AC', text: '#E9F0F8', textMuted: '#A7BCD3', textFaint: '#7F97B0',
+  brand: '#7FAE6C', brandInk: '#0E1C0B', brandDim: '#264430', court: '#6C935C', clay: '#D08A5E',
   hard: '#4E87C4', grass: '#7FAE6C', info: '#5C9BD8', success: '#7FAE6C', warning: '#E3B85A', danger: '#E07E72',
-  overlay: 'rgba(3, 10, 19, 0.7)',
+  overlay: 'rgba(4, 12, 22, 0.7)',
 };
 
 export type ThemeName = 'default' | 'night' | 'ao' | 'roland-garros' | 'wimbledon' | 'us-open';

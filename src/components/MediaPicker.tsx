@@ -12,7 +12,18 @@ export interface PickedMedia {
   /** Cover frame. Defaults to the first frame of a video, or the photo itself. */
   thumbnailUrl?: string;
 }
-export interface MediaPickerProps { compact?: boolean; selection?: 'video' | 'photo' | 'all'; label?: string; value: PickedMedia | null; onChange: (next: PickedMedia | null) => void; }
+export interface MediaPickerProps {
+  compact?: boolean;
+  selection?: 'video' | 'photo' | 'all';
+  label?: string;
+  value: PickedMedia | null;
+  onChange: (next: PickedMedia | null) => void;
+  /**
+   * Show the chosen media as one full-width stage with no replace or remove
+   * controls — for a composer that has its own way back to the library.
+   */
+  bare?: boolean;
+}
 /** "clip-final-2 · 0:24" is a filename. "Video · 0:24" is information. */
 function describe(media: PickedMedia): string {
   const duration = media.label.match(/\d+:\d{2}$/)?.[0];
@@ -20,7 +31,7 @@ function describe(media: PickedMedia): string {
   return 'Photo';
 }
 
-export function MediaPicker({ value, onChange, compact, selection = 'all', label }: MediaPickerProps) {
+export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false }: MediaPickerProps) {
   useTheme();
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
@@ -51,6 +62,39 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
       onChange({ ...value, thumbnailUrl: result.assets[0].uri });
     } catch { setError('Unable to open your library. Please try again.'); }
   };
+
+  if (bare && value?.uri) {
+    // The media is the whole box: cover frame (or the photo itself) edge to
+    // edge, a play badge for video, and nothing else to tap except the cover.
+    const poster = value.kind === 'photo' ? value.uri : value.thumbnailUrl;
+    return <View style={{ gap: 12 }}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Open a larger preview" onPress={() => setExpanded(true)}
+        style={{ width: '100%', aspectRatio: 9 / 16, maxHeight: 520, borderRadius: 16, overflow: 'hidden', backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
+        {poster
+          ? <Image source={{ uri: poster }} resizeMode="cover" style={{ width: '100%', height: '100%' }}/>
+          : <Ionicons name="videocam" size={48} color="#6B7A6E"/>}
+        {value.kind === 'video' && (
+          <View style={{ position: 'absolute', width: 60, height: 60, borderRadius: 30, backgroundColor: '#0009', alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name="play" size={26} color="white"/>
+          </View>
+        )}
+        <Text style={{ position: 'absolute', left: 12, bottom: 10, color: 'white', fontSize: 12, fontWeight: '600' }}>{describe(value)}</Text>
+      </Pressable>
+      <Modal visible={expanded} transparent animationType="fade" onRequestClose={() => setExpanded(false)}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close preview" onPress={() => setExpanded(false)}
+          style={{ flex: 1, backgroundColor: 'rgba(6,12,10,0.94)', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          {poster ? <Image source={{ uri: poster }} resizeMode="contain" style={{ width: '100%', height: '80%', borderRadius: 12 }}/> : null}
+          <Text style={{ color: 'white', paddingTop: 14 }}>Tap to close</Text>
+        </Pressable>
+      </Modal>
+      {value.kind === 'video' && <Pressable accessibilityRole="button" accessibilityLabel="Choose a cover image" onPress={chooseCover}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <Ionicons name="image-outline" size={18} color={colors.info}/>
+        <Text style={{ color: colors.info, fontWeight: '600' }}>{value.thumbnailUrl ? 'Change cover' : 'Choose a cover'}</Text>
+      </Pressable>}
+      {!!error && <Text style={{ color: colors.danger }}>{error}</Text>}
+    </View>;
+  }
 
   return <View style={{ gap: 10 }}>
     <Pressable accessibilityRole="button" accessibilityLabel={label ?? 'Choose a photo or video'} onPress={choose}

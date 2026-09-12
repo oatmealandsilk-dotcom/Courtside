@@ -1,14 +1,13 @@
 import { PlayerName } from '@/components/PlayerName';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { Avatar, Field, Screen } from '@/components/ui';
+import { Avatar, Field, Screen, Toggle } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
-import { useTheme, themeList, themes } from '@/theme/ThemeProvider';
-import { Tappable } from '@/components/Tappable';
+import { useTheme, themeList } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography } from '@/theme';
 
 interface Row {
@@ -27,8 +26,8 @@ interface Row {
  */
 export default function Settings() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, saved, defaultReaction, actions } = useApp();
-  const { theme, setTheme } = useTheme();
+  const { currentUser, saved, blockedIds, actions } = useApp();
+  const { theme } = useTheme();
   const [search, setSearch] = useState('');
   const [privateAccount, setPrivateAccount] = useState(false);
   const [activityStatus, setActivityStatus] = useState(true);
@@ -41,7 +40,12 @@ export default function Settings() {
     {
       title: 'Your app and media',
       rows: [
-
+        {
+          icon: 'color-palette-outline',
+          label: 'Theme',
+          detail: themeList.find((t) => t.name === theme)?.label,
+          onPress: () => router.push('/theme'),
+        },
         {
           icon: 'bookmark-outline',
           label: 'Saved',
@@ -49,7 +53,7 @@ export default function Settings() {
           onPress: () => router.push('/saved'),
         },
         { icon: 'archive-outline', label: 'Archive' },
-        { icon: 'time-outline', label: 'Your activity' },
+        { icon: 'time-outline', label: 'Your activity', onPress: () => router.push('/activity') },
         {
           icon: 'notifications-outline',
           label: 'Likes and comments',
@@ -76,8 +80,12 @@ export default function Settings() {
           label: 'Show activity status',
           toggle: { value: activityStatus, onChange: setActivityStatus },
         },
-        { icon: 'close-circle-outline', label: 'Blocked' },
-        { icon: 'eye-off-outline', label: 'Hidden words' },
+        {
+          icon: 'close-circle-outline',
+          label: 'Blocked',
+          detail: blockedIds.length ? String(blockedIds.length) : undefined,
+          onPress: () => router.push('/blocked'),
+        },
       ],
     },
     {
@@ -100,9 +108,9 @@ export default function Settings() {
     {
       title: 'More info and support',
       rows: [
-        { icon: 'help-circle-outline', label: 'Help' },
-        { icon: 'shield-checkmark-outline', label: 'Privacy centre' },
-        { icon: 'information-circle-outline', label: 'About' },
+        { icon: 'help-circle-outline', label: 'Help', onPress: () => router.push('/help') },
+        { icon: 'shield-checkmark-outline', label: 'Privacy centre', onPress: () => router.push('/privacy') },
+        { icon: 'information-circle-outline', label: 'About', onPress: () => router.push('/about') },
       ],
     },
     {
@@ -143,58 +151,6 @@ export default function Settings() {
         </Pressable>
       ) : null}
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Court</Text>
-        <View style={styles.themeGrid}>
-          {themeList.map((option) => {
-            const palette = themes[option.name];
-            const active = theme === option.name;
-            return (
-              <Pressable
-                key={option.name}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: active }}
-                accessibilityLabel={`${option.label} theme`}
-                onPress={() => setTheme(option.name)}
-                style={[styles.themeCard, active && styles.themeCardActive]}
-              >
-                <View style={[styles.swatch, { backgroundColor: palette.bg, borderColor: palette.border }]}>
-                  <View style={[styles.swatchBar, { backgroundColor: palette.brand }]} />
-                  <View style={[styles.swatchDot, { backgroundColor: palette.court }]} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.themeName}>{option.label}</Text>
-                  <Text style={styles.themeBlurb}>{option.blurb}</Text>
-                </View>
-                {active ? <Ionicons name="checkmark-circle" size={19} color={colors.brand} /> : null}
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Double tap</Text>
-        <View style={styles.card}>
-          <View style={styles.reactionRow}>
-            <Text style={styles.reactionHint}>Left on a message when you double tap it.</Text>
-            <View style={styles.reactionKeys}>
-              {['❤️', '😂', '🔥', '👏', '😮', '👍', '🎾'].map((emoji) => (
-                <Tappable
-                  key={emoji}
-                  accessibilityLabel={`Use ${emoji} for double tap`}
-                  accessibilityState={{ selected: defaultReaction === emoji }}
-                  onPress={() => actions.setDefaultReaction(emoji)}
-                  style={[styles.reactionKey, defaultReaction === emoji && styles.reactionKeyOn]}
-                >
-                  <Text style={{ fontSize: 21 }}>{emoji}</Text>
-                </Tappable>
-              ))}
-            </View>
-          </View>
-        </View>
-      </View>
-
       {filtered.map((section) => (
         <View key={section.title} style={styles.section}>
           <Text style={styles.sectionTitle}>{section.title}</Text>
@@ -223,12 +179,7 @@ export default function Settings() {
                 </Text>
                 {row.detail ? <Text style={styles.rowDetail}>{row.detail}</Text> : null}
                 {row.toggle ? (
-                  <Switch
-                    value={row.toggle.value}
-                    onValueChange={row.toggle.onChange}
-                    trackColor={{ true: colors.brand, false: colors.borderStrong }}
-                    thumbColor={colors.bg}
-                  />
+                  <Toggle value={row.toggle.value} onChange={row.toggle.onChange} accessibilityLabel={row.label} />
                 ) : (
                   <Ionicons name="chevron-forward" size={17} color={colors.textFaint} />
                 )}
@@ -245,41 +196,6 @@ export default function Settings() {
 }
 
 const styleDefinitions = StyleSheet.create({
-  reactionRow: { padding: spacing.md, gap: spacing.md },
-  reactionHint: { ...typography.small, color: colors.textMuted },
-  reactionKeys: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  reactionKey: {
-    padding: 7,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: 'transparent',
-    backgroundColor: colors.surfaceAlt,
-  },
-  reactionKeyOn: { borderColor: colors.brand, backgroundColor: colors.brandDim },
-  themeGrid: { gap: 2 },
-  themeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: 'transparent',
-    borderRadius: radius.md,
-  },
-  themeCardActive: { borderColor: colors.brand },
-  swatch: {
-    width: 42,
-    height: 42,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    padding: 6,
-    justifyContent: 'space-between',
-  },
-  swatchBar: { height: 5, borderRadius: 3 },
-  swatchDot: { width: 11, height: 11, borderRadius: 6 },
-  themeName: { ...typography.smallStrong, color: colors.text },
-  themeBlurb: { ...typography.caption, color: colors.textFaint, letterSpacing: 0 },
   searchWrap: { paddingBottom: spacing.lg },
   accountCard: {
     flexDirection: 'row',

@@ -4,16 +4,25 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { Avatar, EmptyState, Field, Screen } from '@/components/ui';
+import { Avatar, EmptyState, Field, Screen, SegmentedControl } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
 
-/** DM inbox — threads newest first, unread dot, search by name. */
+type Section = 'all' | 'coaches' | 'clients';
+
+/**
+ * DM inbox — threads newest first, unread dot, search by name.
+ *
+ * Players get a Coaches section for the people they are paying or asking;
+ * coaches get a Clients section for the players who came to them.
+ */
 export default function Inbox() {
   const styles = useThemedStyles(styleDefinitions);
-  const { conversations, messages, users, currentUserId } = useApp();
+  const { conversations, messages, users, currentUserId, currentUser, blockedIds } = useApp();
   const [search, setSearch] = useState('');
+  const [section, setSection] = useState<Section>('all');
+  const isCoach = Boolean(currentUser?.isCoach);
 
   const threads = useMemo(() => {
     return conversations
@@ -26,12 +35,22 @@ export default function Inbox() {
           .find(Boolean);
         return { conversation, other, last };
       })
-      .filter((t) => Boolean(t.other))
+      .filter((t) => Boolean(t.other) && !blockedIds.includes(t.other!.id))
+      .filter((t) =>
+        section === 'coaches' ? Boolean(t.other?.isCoach)
+        : section === 'clients' ? !t.other?.isCoach
+        : true,
+      )
       .filter((t) =>
         `${t.other?.name} ${t.other?.handle}`.toLowerCase().includes(search.trim().toLowerCase()),
       )
       .sort((a, b) => Date.parse(b.conversation.updatedAt) - Date.parse(a.conversation.updatedAt));
-  }, [conversations, messages, users, currentUserId, search]);
+  }, [conversations, messages, users, currentUserId, search, section, blockedIds]);
+
+  const emptyCopy =
+    section === 'coaches' ? { title: 'No coach conversations', body: 'Message a coach from their page and it will show up here.' }
+    : section === 'clients' ? { title: 'No clients yet', body: 'Players who message you about coaching land here.' }
+    : { title: 'No messages yet', body: 'Find a player in Community and start a conversation.' };
 
   const preview = (kind?: string, body?: string) => {
     if (kind === 'post') return 'Sent a reel';
@@ -58,13 +77,19 @@ export default function Inbox() {
       <View style={styles.searchWrap}>
         <Field value={search} onChangeText={setSearch} placeholder="Search" autoCapitalize="none" />
       </View>
+      <View style={styles.sections}>
+        <SegmentedControl<Section>
+          value={section}
+          onChange={setSection}
+          segments={[
+            { value: 'all', label: 'All' },
+            isCoach ? { value: 'clients', label: 'Clients' } : { value: 'coaches', label: 'Coaches' },
+          ]}
+        />
+      </View>
 
       {threads.length === 0 ? (
-        <EmptyState
-          icon="chatbubble-ellipses-outline"
-          title="No messages yet"
-          body="Find a player in Community and start a conversation."
-        />
+        <EmptyState icon="chatbubble-ellipses-outline" title={emptyCopy.title} body={emptyCopy.body} />
       ) : (
         threads.map(({ conversation, other, last }) => (
           <Pressable
@@ -96,6 +121,7 @@ export default function Inbox() {
 
 const styleDefinitions = StyleSheet.create({
   searchWrap: { paddingBottom: spacing.md },
+  sections: { paddingBottom: spacing.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
   rowBody: { flex: 1, gap: 3 },
   name: { ...typography.body, color: colors.text },

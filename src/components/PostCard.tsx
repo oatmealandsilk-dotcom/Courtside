@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ReelVideo } from '@/components/ReelVideo';
+import { Tappable } from '@/components/Tappable';
 import { Avatar, Card, Chip } from '@/components/ui';
 import { LevelPill } from '@/components/LevelPill';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
@@ -124,43 +125,40 @@ export function PostCard({
       </Pressable>
 
       <View style={styles.actions}>
-        <Pressable onPress={onToggleLike} style={styles.action} accessibilityRole="button">
+        <Tappable onPress={onToggleLike} scaleTo={0.8} style={styles.action} accessibilityLabel={liked ? 'Unlike' : 'Like'}>
           <Ionicons
             name={liked ? 'heart' : 'heart-outline'}
-            size={19}
+            size={23}
             color={liked ? colors.danger : colors.textMuted}
           />
           <Text style={[styles.actionText, liked && { color: colors.danger }]}>
             {compactNumber(post.likedBy.length)}
           </Text>
-        </Pressable>
-        <Pressable onPress={onPress} style={styles.action} accessibilityRole="button">
-          <Ionicons name="chatbubble-outline" size={18} color={colors.textMuted} />
+        </Tappable>
+        <Tappable onPress={onPress} scaleTo={0.8} style={styles.action} accessibilityLabel="Comments">
+          <Ionicons name="chatbubble-outline" size={22} color={colors.textMuted} />
           <Text style={styles.actionText}>{compactNumber(post.commentIds.length)}</Text>
-        </Pressable>
+        </Tappable>
         {onShare ? (
-          <Pressable
-            onPress={onShare}
-            style={styles.action}
-            accessibilityRole="button"
-            accessibilityLabel="Share this post"
-          >
-            <Ionicons name="paper-plane-outline" size={18} color={colors.textMuted} />
-          </Pressable>
+          <Tappable onPress={onShare} scaleTo={0.8} style={styles.action} accessibilityLabel="Share this post">
+            <Ionicons name="paper-plane-outline" size={22} color={colors.textMuted} />
+          </Tappable>
         ) : null}
         {onToggleSave ? (
-          <Pressable
-            onPress={onToggleSave}
-            style={[styles.action, { marginLeft: 'auto' }]}
-            accessibilityRole="button"
-            accessibilityLabel={saved ? 'Remove from saved' : 'Save this post'}
-          >
-            <Ionicons
-              name={saved ? 'bookmark' : 'bookmark-outline'}
-              size={18}
-              color={saved ? colors.brand : colors.textMuted}
-            />
-          </Pressable>
+          <View style={{ marginLeft: 'auto' }}>
+            <Tappable
+              onPress={onToggleSave}
+              scaleTo={0.8}
+              style={styles.action}
+              accessibilityLabel={saved ? 'Remove from saved' : 'Save this post'}
+            >
+              <Ionicons
+                name={saved ? 'bookmark' : 'bookmark-outline'}
+                size={22}
+                color={saved ? colors.brand : colors.textMuted}
+              />
+            </Tappable>
+          </View>
         ) : null}
       </View>
     </Card>
@@ -212,6 +210,6 @@ const styleDefinitions = StyleSheet.create({
     borderTopColor: colors.border,
     paddingTop: spacing.md,
   },
-  action: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  actionText: { ...typography.smallStrong, color: colors.textMuted },
+  action: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2 },
+  actionText: { ...typography.bodyStrong, fontSize: 14, color: colors.textMuted },
 });

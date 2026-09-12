@@ -1,15 +1,20 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
 import { MediaPicker, type PickedMedia } from '@/components/MediaPicker';
 import { TOPIC_META } from '@/components/QuestionCard';
 import { Button, Chip, Field, Screen } from '@/components/ui';
+import { addToBank, getBank } from '@/features/compose/mediaBank';
 import { useApp } from '@/store/AppContext';
 import type { QuestionTopic } from '@/data/types';
-import { colors, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography } from '@/theme';
+
+type Mode = 'reel' | 'post' | 'question';
+/** choose → library → form, with back always stepping one page left. */
+type Stage = 'choose' | 'library' | 'form';
 
 /**
  * Instagram-shaped composer: pick media, write a caption, post.
@@ -18,10 +23,10 @@ import { colors, spacing, typography } from '@/theme';
  */
 export default function Compose() {
   const styles = useThemedStyles(styleDefinitions);
-  const { actions } = useApp();
+  const { actions, posts, currentUserId } = useApp();
 
-  const [choosing, setChoosing] = useState(true);
-  const [mode, setMode] = useState<'reel' | 'post' | 'question'>('post');
+  const [stage, setStage] = useState<Stage>('choose');
+  const [mode, setMode] = useState<Mode>('post');
   const [media, setMedia] = useState<PickedMedia | null>(null);
   const [body, setBody] = useState('');
   const [minutes, setMinutes] = useState('');
@@ -63,17 +68,87 @@ export default function Compose() {
     router.back();
   };
 
-  if (choosing) return <View style={styles.choiceBackdrop}>
+  const pick = (next: PickedMedia | null) => {
+    if (!next) return;
+    addToBank(next);
+    setMedia(next);
+    setStage('form');
+  };
+
+  if (stage === 'choose') return <View style={styles.choiceBackdrop}>
     <Pressable accessibilityRole="button" accessibilityLabel="Close create menu" onPress={() => router.back()} style={StyleSheet.absoluteFill}/>
     <View style={styles.choiceSheet}>
       <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>Create</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => router.back()}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
-      <MediaPicker compact label="Reel" selection="video" value={null} onChange={next => { if (next) { setMedia(next); setMode('reel'); setChoosing(false); } }}/>
-      <MediaPicker compact label="Post" value={null} onChange={next => { if (next) { setMedia(next); setMode('post'); setChoosing(false); } }}/>
-      <Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => { setMode('question'); setChoosing(false); }} style={styles.choiceOption}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Create a reel" onPress={() => { setMode('reel'); setStage('library'); }} style={styles.choiceOption}>
+        <Ionicons name="videocam-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Reel</Text><Text style={styles.note}>Share a video from your device.</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => { setMode('post'); setStage('library'); }} style={styles.choiceOption}>
+        <Ionicons name="images-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Post</Text><Text style={styles.note}>Choose from your photos and videos.</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => { setMode('question'); setStage('form'); }} style={styles.choiceOption}>
         <Ionicons name="chatbubbles-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Thread or question</Text><Text style={styles.note}>Ask the community or start a conversation.</Text>
       </Pressable>
     </View>
   </View>;
+
+  if (stage === 'library') {
+    // Everything picked this session plus anything you have already posted,
+    // so a clip can be reused without another trip through the file dialog.
+    const posted: PickedMedia[] = posts
+      .filter((p) => p.authorId === currentUserId && (p.videoUrl || p.imageUrl))
+      .map((p) => ({
+        uri: p.videoUrl ?? p.imageUrl,
+        label: p.mediaLabel ?? (p.videoUrl ? 'Video' : 'Photo'),
+        kind: p.videoUrl ? 'video' as const : 'photo' as const,
+        thumbnailUrl: p.thumbnailUrl ?? p.imageUrl,
+      }));
+    const seen = new Set<string>();
+    const bank = [...getBank(), ...posted].filter((item) => {
+      if (!item.uri || seen.has(item.uri)) return false;
+      if (mode === 'reel' && item.kind !== 'video') return false;
+      seen.add(item.uri);
+      return true;
+    });
+
+    return (
+      <View style={styles.backdrop}>
+        <View style={styles.sheet}>
+          <Screen
+            title={mode === 'reel' ? 'Your videos' : 'Your library'}
+            compactTitle
+            onBack={() => setStage('choose')}
+          >
+            <MediaPicker compact selection={mode === 'reel' ? 'video' : 'all'} label={mode === 'reel' ? 'New video from your device' : 'New from your device'} value={null} onChange={pick} />
+            <Text style={styles.libraryTitle}>{bank.length ? 'Recent' : 'Nothing here yet'}</Text>
+            {bank.length ? (
+              <ScrollView contentContainerStyle={styles.grid}>
+                {bank.map((item) => (
+                  <Pressable
+                    key={item.uri}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Use ${item.label}`}
+                    onPress={() => pick(item)}
+                    style={styles.tile}
+                  >
+                    {item.thumbnailUrl ? (
+                      <Image accessibilityIgnoresInvertColors source={{ uri: item.thumbnailUrl }} resizeMode="cover" style={StyleSheet.absoluteFill} />
+                    ) : (
+                      <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
+                        <Ionicons name="videocam" size={26} color={colors.textFaint} />
+                      </View>
+                    )}
+                    {item.kind === 'video' ? <Ionicons name="play" size={16} color="white" style={styles.tileBadge} /> : null}
+                  </Pressable>
+                ))}
+              </ScrollView>
+            ) : (
+              <Text style={styles.note}>Videos and photos you pick show up here so you can use them again.</Text>
+            )}
+          </Screen>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.backdrop}>
@@ -81,13 +156,13 @@ export default function Compose() {
         <Screen
           title={mode === 'reel' ? 'New reel' : mode === 'post' ? 'New post' : 'Ask the room'}
           compactTitle
-          onBack={() => router.back()}
+          onBack={() => (mode === 'question' ? router.back() : setStage('library'))}
           right={<Button label="Share" variant="secondary" onPress={submit} disabled={!canSubmit} />}
         >
           <View style={styles.form}>
             {mode !== 'question' ? (
               <>
-                <MediaPicker selection={mode === 'reel' ? 'video' : 'all'} value={media} onChange={setMedia} />
+                <MediaPicker bare selection={mode === 'reel' ? 'video' : 'all'} value={media} onChange={setMedia} />
 
                 <Field
                   label="Caption"
@@ -168,4 +243,8 @@ const styleDefinitions = StyleSheet.create({
   form: { gap: spacing.lg, paddingTop: spacing.sm },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   note: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
+  libraryTitle: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.1, paddingTop: spacing.xl, paddingBottom: spacing.sm },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 3 },
+  tile: { width: '32.5%', aspectRatio: 9 / 12, borderRadius: radius.sm, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
+  tileBadge: { position: 'absolute', right: 6, bottom: 6, textShadowColor: '#0008', textShadowRadius: 3 },
 });

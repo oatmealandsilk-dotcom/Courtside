@@ -38,20 +38,13 @@ export default function Coaching() {
             <Ionicons name="chevron-forward" size={18} color={colors.info} />
           </View>
           <Text style={styles.description}>
-            Personalised coaching based on your playing style, goals, and health data. Build your
-            plan and ask for advice for your next session.
+            A weekly plan built from your game, goals, and body. Ask anything before your next session.
           </Text>
-        </Pressable>
-        <Pressable accessibilityRole="link" onPress={() => router.push('/health')} style={styles.health}>
-          <Ionicons name="bulb-outline" size={20} color={colors.warning} />
-          <Text style={[styles.muted, { flex: 1 }]}>Link your health data for smarter sessions</Text>
-          <Ionicons name="arrow-forward" size={19} color={colors.info} />
         </Pressable>
       </View>
 
       <View style={styles.heading}>
         <Text style={styles.eyebrow}>CERTIFIED COACHES</Text>
-        <Text style={styles.muted}>1-on-1 guidance for your game</Text>
       </View>
 
       {coaches.map((coach) => {
@@ -94,9 +87,6 @@ export default function Coaching() {
       {/* ------------------------------ Ask a coach ----------------------------- */}
       <View style={styles.heading}>
         <Text style={styles.eyebrow}>ASK A COACH</Text>
-        <Text style={styles.muted}>
-          Free and public. Post what you are stuck on and a verified coach answers.
-        </Text>
       </View>
 
       <Pressable
@@ -108,11 +98,9 @@ export default function Coaching() {
         <View style={styles.askIcon}>
           <Ionicons name="help-buoy-outline" size={22} color={colors.brand} />
         </View>
-        <View style={{ flex: 1, gap: 4 }}>
-          <Text style={styles.askTitle}>What are you struggling with?</Text>
-          <Text style={styles.small}>
-            Describe it, add a clip, get an answer — usually within a day.
-          </Text>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={styles.askTitle}>What are you stuck on?</Text>
+          <Text style={styles.small}>Free and public. A verified coach answers, usually within a day.</Text>
         </View>
         <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
       </Pressable>
@@ -168,14 +156,11 @@ export default function Coaching() {
           style={styles.applyBox}
         >
           <Ionicons name="ribbon-outline" size={24} color={colors.brand} />
-          <View style={{ flex: 1, gap: 4 }}>
+          <View style={{ flex: 1, gap: 2 }}>
             <Text style={styles.applyTitle}>Coach on CourtSide</Text>
-            <Text style={styles.small}>
-              Get verified, set your own prices, and keep 80% of what you earn. We check
-              credentials, ratings, and references by hand.
-            </Text>
-            <Text style={styles.applyCta}>Apply to be a coach →</Text>
+            <Text style={styles.small}>Set your prices, keep 80%. Verified by hand.</Text>
           </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
         </Pressable>
       )}
     </Screen>
@@ -184,8 +169,8 @@ export default function Coaching() {
 
 const styleDefinitions = StyleSheet.create({
   ai: {
-    backgroundColor: '#EBEEEA',
-    borderColor: '#CBD5D8',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderWidth: 1,
     borderRadius: 12,
     padding: 16,
@@ -197,7 +182,7 @@ const styleDefinitions = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 30,
-    borderColor: '#C4CED0',
+    borderColor: colors.borderStrong,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -211,15 +196,7 @@ const styleDefinitions = StyleSheet.create({
     paddingLeft: 12,
     color: colors.textMuted,
     fontSize: 14,
-    lineHeight: 23,
-  },
-  health: {
-    borderTopWidth: 1,
-    borderTopColor: '#D3DADB',
-    paddingTop: 15,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    lineHeight: 21,
   },
   heading: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: 24, paddingTop: 18, gap: 8 },
   eyebrow: { letterSpacing: 1.6, fontWeight: '700', fontSize: 11, color: colors.textMuted },
@@ -227,7 +204,7 @@ const styleDefinitions = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 24,
+    paddingVertical: 18,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -271,6 +248,7 @@ const styleDefinitions = StyleSheet.create({
 
   applyBox: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing.md,
     padding: spacing.lg,
     marginTop: spacing.xl,
@@ -281,5 +259,4 @@ const styleDefinitions = StyleSheet.create({
     backgroundColor: colors.bgElevated,
   },
   applyTitle: { ...typography.bodyStrong, color: colors.text },
-  applyCta: { ...typography.smallStrong, color: colors.brand, paddingTop: 4 },
 });

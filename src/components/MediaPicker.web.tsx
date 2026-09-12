@@ -108,7 +108,7 @@ function describe(media: PickedMedia): string {
   return 'Photo';
 }
 
-export function MediaPicker({ value, onChange, compact, selection = 'all', label }: MediaPickerProps) {
+export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false }: MediaPickerProps) {
   const styles = useThemedStyles(styleDefinitions);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
@@ -213,41 +213,74 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
 
   if (value) {
     return (
-      <View style={styles.preview}>
+      <View style={bare ? styles.bare : styles.preview}>
         {hiddenInput}
-{/* Portrait stage, the shape a reel actually posts in, so what you see
-            here is what people will see in the feed. */}
-        <div
-          style={{ display: 'flex', justifyContent: 'center', cursor: 'zoom-in' }}
-          onClick={() => setExpanded(true)}
-          role="button"
-          tabIndex={0}
-          aria-label="Open a larger preview"
-          onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setExpanded(true); }}
-        >
-          {value.kind === 'video' && value.uri ? (
-            <video
-              src={value.uri}
-              controls
-              playsInline
-              style={{
-                width: '100%', maxWidth: 320, aspectRatio: '9 / 16', maxHeight: 460,
-                borderRadius: 14, background: '#000', objectFit: 'contain',
-              }}
-            />
-          ) : value.uri ? (
-            <img
-              src={value.uri}
-              alt={describe(value)}
-              style={{
-                width: '100%', maxWidth: 320, maxHeight: 460,
-                objectFit: 'contain', borderRadius: 14, background: '#000',
-              }}
-            />
-          ) : null}
-        </div>
+        {bare ? (
+          // The media is the whole box: the cover frame edge to edge with a
+          // play badge, the way it will sit in the feed. Tap to watch it.
+          <div
+            style={{ position: 'relative', width: '100%', aspectRatio: '9 / 16', maxHeight: 520, borderRadius: 16, overflow: 'hidden', background: '#000', cursor: 'zoom-in' }}
+            onClick={() => setExpanded(true)}
+            role="button"
+            tabIndex={0}
+            aria-label="Open a larger preview"
+            onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setExpanded(true); }}
+          >
+            {value.kind === 'video' && value.uri ? (
+              value.thumbnailUrl ? (
+                <img src={value.thumbnailUrl} alt={describe(value)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              ) : (
+                <video src={value.uri} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              )
+            ) : value.uri ? (
+              <img src={value.uri} alt={describe(value)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+            ) : null}
+            {value.kind === 'video' ? (
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                <div style={{ width: 60, height: 60, borderRadius: 30, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="play" size={26} color="white" />
+                </div>
+              </div>
+            ) : null}
+            <div style={{ position: 'absolute', left: 12, bottom: 10, color: 'white', fontSize: 12, fontWeight: 600, textShadow: '0 1px 3px rgba(0,0,0,0.6)', pointerEvents: 'none' }}>
+              {describe(value)}
+            </div>
+          </div>
+        ) : (
+          // Portrait stage, the shape a reel actually posts in, so what you see
+          // here is what people will see in the feed.
+          <div
+            style={{ display: 'flex', justifyContent: 'center', cursor: 'zoom-in' }}
+            onClick={() => setExpanded(true)}
+            role="button"
+            tabIndex={0}
+            aria-label="Open a larger preview"
+            onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setExpanded(true); }}
+          >
+            {value.kind === 'video' && value.uri ? (
+              <video
+                src={value.uri}
+                controls
+                playsInline
+                style={{
+                  width: '100%', maxWidth: 320, aspectRatio: '9 / 16', maxHeight: 460,
+                  borderRadius: 14, background: '#000', objectFit: 'contain',
+                }}
+              />
+            ) : value.uri ? (
+              <img
+                src={value.uri}
+                alt={describe(value)}
+                style={{
+                  width: '100%', maxWidth: 320, maxHeight: 460,
+                  objectFit: 'contain', borderRadius: 14, background: '#000',
+                }}
+              />
+            ) : null}
+          </div>
+        )}
 
-        <View style={styles.previewFooter}>
+        {bare ? null : <View style={styles.previewFooter}>
           <Ionicons
             name={value.kind === 'video' ? 'videocam' : 'image'}
             size={16}
@@ -275,7 +308,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
           >
             <Text style={[styles.textButtonLabel, { color: colors.danger }]}>Remove</Text>
           </Pressable>
-        </View>
+        </View>}
 
         {expanded ? (
           // Tap-through to a full-size look, with the cover strip still to hand
@@ -312,7 +345,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
         ) : null}
 
         {value.kind === 'video' ? (
-          <View style={styles.coverBlock}>
+          <View style={[styles.coverBlock, bare && { borderTopWidth: 0, paddingTop: 0 }]}>
             {hiddenCoverInput}
             <Text style={styles.coverTitle}>Cover</Text>
             <Text style={styles.coverHint}>
@@ -396,6 +429,7 @@ const styleDefinitions = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
+  bare: { gap: spacing.md },
   previewFooter: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   previewLabel: { ...typography.small, color: colors.textMuted, flex: 1 },
   coverBlock: {

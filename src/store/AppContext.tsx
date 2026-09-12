@@ -119,9 +119,24 @@ interface AppState extends Bootstrap {
   onboardingComplete: boolean;
   error: string | null;
   saved: SavedItems;
+  /** People you follow. */
+  followingIds: ID[];
+  /** People whose posts you have muted — still followed, just quiet. */
+  mutedIds: ID[];
+  /** People you have blocked. Their posts and messages are hidden. */
+  blockedIds: ID[];
+  /** People whose new posts you have asked to be told about. */
+  alertIds: ID[];
 }
 
 interface AppActions {
+  /* People */
+  toggleFollow: (userId: ID) => void;
+  toggleMute: (userId: ID) => void;
+  toggleBlock: (userId: ID) => void;
+  toggleAlerts: (userId: ID) => void;
+  reportUser: (userId: ID, reason: string) => void;
+
   setReadReceiptsEnabled: (enabled: boolean) => void;
   signIn: (handle: string) => Promise<void>;
   signOut: () => void;
@@ -212,6 +227,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     error: null,
     saved: { postIds: [], questionIds: [] },
     defaultReaction: readDefaultReaction(),
+    followingIds: [],
+    mutedIds: [],
+    blockedIds: [],
+    alertIds: [],
   });
 
   useEffect(() => {
@@ -880,6 +899,80 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  /* -------------------------------- People -------------------------------- */
+
+  const toggleIn = (list: ID[], id: ID) =>
+    list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+
+  const toggleFollow = useCallback((userId: ID) => {
+    setState((prev) => {
+      const me = prev.currentUserId;
+      if (!me || userId === me) return prev;
+      const following = !prev.followingIds.includes(userId);
+      following ? haptics.tap() : haptics.untap();
+      const delta = following ? 1 : -1;
+      let next: AppState = {
+        ...prev,
+        followingIds: toggleIn(prev.followingIds, userId),
+        users: prev.users.map((u) =>
+          u.id === me ? { ...u, following: Math.max(0, u.following + delta) }
+          : u.id === userId ? { ...u, followers: Math.max(0, u.followers + delta) }
+          : u,
+        ),
+      };
+      if (following) {
+        next = withNotification(next, { userId, actorId: me, kind: 'follow', targetId: me, targetKind: 'post' });
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleMute = useCallback((userId: ID) => {
+    setState((prev) => {
+      prev.mutedIds.includes(userId) ? haptics.untap() : haptics.tap();
+      return { ...prev, mutedIds: toggleIn(prev.mutedIds, userId) };
+    });
+  }, []);
+
+  /** Blocking also unfollows, both ways, and drops the conversation. */
+  const toggleBlock = useCallback((userId: ID) => {
+    setState((prev) => {
+      const me = prev.currentUserId;
+      if (!me || userId === me) return prev;
+      const blocking = !prev.blockedIds.includes(userId);
+      blocking ? haptics.commit() : haptics.untap();
+      const wasFollowing = prev.followingIds.includes(userId);
+      return {
+        ...prev,
+        blockedIds: toggleIn(prev.blockedIds, userId),
+        followingIds: blocking ? prev.followingIds.filter((id) => id !== userId) : prev.followingIds,
+        alertIds: blocking ? prev.alertIds.filter((id) => id !== userId) : prev.alertIds,
+        users: blocking && wasFollowing
+          ? prev.users.map((u) =>
+              u.id === me ? { ...u, following: Math.max(0, u.following - 1) }
+              : u.id === userId ? { ...u, followers: Math.max(0, u.followers - 1) }
+              : u,
+            )
+          : prev.users,
+        conversations: blocking
+          ? prev.conversations.filter((c) => !(c.participantIds.includes(userId) && c.participantIds.includes(me)))
+          : prev.conversations,
+      };
+    });
+  }, []);
+
+  const toggleAlerts = useCallback((userId: ID) => {
+    setState((prev) => {
+      prev.alertIds.includes(userId) ? haptics.untap() : haptics.tap();
+      return { ...prev, alertIds: toggleIn(prev.alertIds, userId) };
+    });
+  }, []);
+
+  /** A report goes nowhere in the mock build; the feedback is what matters. */
+  const reportUser = useCallback((_userId: ID, _reason: string) => {
+    haptics.commit();
+  }, []);
+
   const toggleIntegration = useCallback(async (provider: Integration['provider']) => {
     const current = stateRef.current.integrations.find((i) => i.provider === provider);
     if (!current) return;
@@ -894,6 +987,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const actions = useMemo<AppActions>(
     () => ({
+      toggleFollow,
+      toggleMute,
+      toggleBlock,
+      toggleAlerts,
+      reportUser,
       setReadReceiptsEnabled,
       signIn,
       signOut,
@@ -926,6 +1024,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       markConversationRead,
     }),
     [
+      toggleFollow,
+      toggleMute,
+      toggleBlock,
+      toggleAlerts,
+      reportUser,
       setReadReceiptsEnabled,
       signIn,
       signOut,

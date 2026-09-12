@@ -27,7 +27,7 @@ export default function Thread() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-  const { conversations, messages, users, posts, questions, currentUserId, actions } = useApp();
+  const { conversations, messages, users, posts, questions, currentUserId, defaultReaction, actions } = useApp();
   const [draft, setDraft] = useState('');
   const [picking, setPicking] = useState<string | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -117,9 +117,10 @@ export default function Thread() {
                 : (shared as { title: string }).title
               : 'This item was removed';
             return (
-              <Pressable
+              <Tappable
                 key={message.id}
                 accessibilityRole="link"
+                scaleTo={0.97}
                 onPress={() =>
                   shared
                     ? router.push(
@@ -144,7 +145,7 @@ export default function Thread() {
                 <Text numberOfLines={3} style={styles.sharedBody}>
                   {label}
                 </Text>
-              </Pressable>
+              </Tappable>
             );
           }
 
@@ -169,6 +170,20 @@ export default function Thread() {
 
       {emojiOpen ? (
         <View style={styles.emojiTray}>
+          <View style={styles.defaultRow}>
+            <Text style={styles.defaultHint}>Double tap a message to leave</Text>
+            {REACTIONS.map((emoji) => (
+              <Tappable
+                key={emoji}
+                accessibilityLabel={`Use ${emoji} when you double tap a message`}
+                accessibilityState={{ selected: defaultReaction === emoji }}
+                onPress={() => actions.setDefaultReaction(emoji)}
+                style={[styles.defaultKey, defaultReaction === emoji && styles.defaultKeyOn]}
+              >
+                <Text style={{ fontSize: 17 }}>{emoji}</Text>
+              </Tappable>
+            ))}
+          </View>
           {EMOJI.map((emoji) => (
             <Tappable
               key={emoji}
@@ -241,21 +256,44 @@ function Bubble({ message, mine, styles, me, picking, onPick, onReact }: {
     return acc;
   }, {});
 
+  const reacted = Object.keys(tally).length > 0;
+
   return (
     <View style={mine ? styles.mineAlign : styles.theirsAlign}>
-      <Pressable
-        onPress={tap}
-        onLongPress={() => onPick(true)}
-        delayLongPress={280}
-        accessibilityRole="button"
-        accessibilityLabel={`Message: ${message.body}. Double tap to react, hold to choose a reaction.`}
-        style={[styles.bubble, mine ? styles.mine : styles.theirs]}
-      >
-        <Text style={[styles.bubbleText, mine && { color: colors.brandInk }]}>{message.body}</Text>
-      </Pressable>
+      {/* The chip is anchored to the bubble, not the row, so it sits on the
+          bubble's bottom inner corner however wide the message is. */}
+      <View style={[styles.bubbleWrap, mine ? styles.mineAlign : styles.theirsAlign, reacted && styles.bubbleWrapReacted]}>
+        <Pressable
+          onPress={tap}
+          onLongPress={() => onPick(true)}
+          delayLongPress={280}
+          accessibilityRole="button"
+          accessibilityLabel={`Message: ${message.body}. Double tap to react, hold to choose a reaction.`}
+          style={[styles.bubble, mine ? styles.mine : styles.theirs]}
+        >
+          <Text style={[styles.bubbleText, mine && { color: colors.brandInk }]}>{message.body}</Text>
+        </Pressable>
+
+        {reacted ? (
+          // Instagram placement: tucked over the bottom corner that faces the
+          // other person — bottom-left on yours, bottom-right on theirs.
+          <View style={[styles.reactions, mine ? styles.reactionsMine : styles.reactionsTheirs]}>
+            {Object.entries(tally).map(([emoji, count]) => (
+              <ReactionChip
+                key={emoji}
+                emoji={emoji}
+                count={count}
+                mine={mineMark === emoji}
+                onPress={() => onReact(emoji)}
+                style={[styles.chip, mineMark === emoji && styles.chipMine]}
+              />
+            ))}
+          </View>
+        ) : null}
+      </View>
 
       {picking ? (
-        <View style={styles.pickerRow}>
+        <View style={[styles.pickerRow, mine ? styles.theirsAlign : styles.mineAlign]}>
           {REACTIONS.map((emoji) => (
             <Tappable
               key={emoji}
@@ -269,20 +307,6 @@ function Bubble({ message, mine, styles, me, picking, onPick, onReact }: {
         </View>
       ) : null}
 
-      {Object.keys(tally).length ? (
-        <View style={[styles.reactions, mine ? styles.mineAlign : styles.theirsAlign]}>
-          {Object.entries(tally).map(([emoji, count]) => (
-            <ReactionChip
-              key={emoji}
-              emoji={emoji}
-              count={count}
-              mine={mineMark === emoji}
-              onPress={() => onReact(emoji)}
-              style={[styles.chip, mineMark === emoji && styles.chipMine]}
-            />
-          ))}
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -341,7 +365,6 @@ const styleDefinitions = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   bubble: {
-    maxWidth: '78%',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderRadius: radius.xl,
@@ -349,16 +372,22 @@ const styleDefinitions = StyleSheet.create({
   mine: { alignSelf: 'flex-end', backgroundColor: colors.brand, borderBottomRightRadius: 6 },
   theirs: { alignSelf: 'flex-start', backgroundColor: colors.surfaceAlt, borderBottomLeftRadius: 6 },
   bubbleText: { ...typography.body, color: colors.text, lineHeight: 21 },
-  reactions: { flexDirection: 'row', gap: 4, marginTop: -4 },
+  bubbleWrap: { maxWidth: '78%' },
+  // Leaves room for the chip that hangs off the bottom of the bubble.
+  bubbleWrapReacted: { marginBottom: 12 },
+  reactions: { position: 'absolute', bottom: -11, flexDirection: 'row', gap: 3, zIndex: 2 },
+  reactionsMine: { left: 10 },
+  reactionsTheirs: { right: 10 },
   chip: {
-    paddingHorizontal: 7,
+    paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: radius.pill,
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    // Ringed in the page colour so it reads as sitting on top of the bubble.
+    borderWidth: 2,
+    borderColor: colors.bg,
   },
-  chipMine: { borderColor: colors.brand, backgroundColor: colors.brandDim },
+  chipMine: { backgroundColor: colors.brandDim },
   pickerRow: {
     flexDirection: 'row',
     gap: 2,
@@ -382,6 +411,20 @@ const styleDefinitions = StyleSheet.create({
     backgroundColor: colors.bgElevated,
   },
   emojiKey: { padding: 6, borderRadius: radius.sm },
+  defaultRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 2,
+    paddingBottom: spacing.sm,
+    marginBottom: spacing.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  defaultHint: { ...typography.caption, color: colors.textFaint, letterSpacing: 0, marginRight: spacing.xs },
+  defaultKey: { paddingHorizontal: 5, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1, borderColor: 'transparent' },
+  defaultKeyOn: { borderColor: colors.brand, backgroundColor: colors.brandDim },
   emojiToggle: { padding: 4 },
   mineAlign: { alignSelf: 'flex-end' },
   theirsAlign: { alignSelf: 'flex-start' },

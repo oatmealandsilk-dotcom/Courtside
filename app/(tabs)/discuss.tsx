@@ -1,12 +1,13 @@
 import { SwipeSurface } from '@/components/SwipeSurface';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useMemo, useState } from 'react';
-import { ScrollView, TextInput, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Easing, ScrollView, TextInput, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
 import { Ionicons } from '@expo/vector-icons';
 
 import { LevelPill } from '@/components/LevelPill';
+import { NearbyMap } from '@/components/NearbyMap';
 import { QuestionCard } from '@/components/QuestionCard';
 import { Avatar, Chip, EmptyState, Screen } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
@@ -26,13 +27,33 @@ const TOPICS: (QuestionTopic | 'all')[] = [
 
 export default function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
-  const { questions, users, currentUserId, saved, actions } = useApp();
+  const { questions, users, currentUserId, currentUser, blockedIds, saved, actions } = useApp();
   const params = useLocalSearchParams<{ section?: string }>();
   const section = (previewSection ?? params.section) === 'players' ? 'players' : 'discussions';
   const setSection = (value: string) => router.setParams({ section: value });
   const [search, setSearch] = useState('');
-  const players = users.filter(u => u.id !== currentUserId && `${u.name} ${u.handle} ${u.location}`.toLowerCase().includes(search.toLowerCase()));
+  const players = users.filter(u => u.id !== currentUserId && !blockedIds.includes(u.id) && `${u.name} ${u.handle} ${u.location}`.toLowerCase().includes(search.toLowerCase()));
   const [topic, setTopic] = useState<QuestionTopic | 'all'>('all');
+
+  // A tap on a section tab used to cut straight to the new list. Now it slides
+  // in from the side the swipe would have come from, so both ways of moving
+  // feel like the same thing. A real swipe already animated, so it skips this.
+  const slide = useRef(new Animated.Value(0)).current;
+  const fade = useRef(new Animated.Value(1)).current;
+  const lastSection = useRef(section);
+  const viaSwipe = useRef(false);
+  useEffect(() => {
+    if (lastSection.current === section) return;
+    const direction = section === 'players' ? 1 : -1;
+    lastSection.current = section;
+    if (viaSwipe.current) { viaSwipe.current = false; return; }
+    slide.setValue(direction * 28);
+    fade.setValue(0);
+    Animated.parallel([
+      Animated.timing(slide, { toValue: 0, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true }),
+    ]).start();
+  }, [section, slide, fade]);
 
   const visible = useMemo(() => {
     let list = [...questions];
@@ -44,6 +65,7 @@ export default function Discuss({ previewSection }: { previewSection?: string } 
 
   const content = (section:string) => (section === 'players' ? <View style={{ gap: 16 }}>
         <TextInput accessibilityLabel="Search players" placeholder="Search by name, handle, or city" placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} style={styles.search} />
+        {currentUser && !search ? <NearbyMap me={currentUser} players={players} onOpen={id => router.push(`/user/${id}`)} /> : null}
         {players.map(user => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.player}>
           <Avatar name={user.name} seed={user.avatarSeed} size={44} />
           <View style={{ flex: 1, gap: 4 }}><View style={{flexDirection:"row",alignItems:"center",gap:8,flexWrap:"wrap"}}><Text style={styles.playerName}>{user.name}</Text><LevelPill profile={user.profile} small /></View><Text style={styles.playerMeta}>@{user.handle} · {user.location}</Text></View>
@@ -115,9 +137,9 @@ export default function Discuss({ previewSection }: { previewSection?: string } 
       <SwipeSurface fill={false} enabled={!previewSection}
         delegateLeft={section === 'players'}
         delegateRight={section === 'discussions'}
-        onSwipe={direction=>setSection(direction===1 ? 'players' : 'discussions')}
+        onSwipe={direction=>{ viaSwipe.current = true; setSection(direction===1 ? 'players' : 'discussions'); }}
         renderPreview={direction=>direction===1 && section==='discussions' ? content('players') : direction===-1 && section==='players' ? content('discussions') : null}>
-        {content(section)}
+        <Animated.View style={{ opacity: fade, transform: [{ translateX: slide }] }}>{content(section)}</Animated.View>
       </SwipeSurface>
     </Screen>
   );

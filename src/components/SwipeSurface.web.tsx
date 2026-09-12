@@ -53,7 +53,7 @@ export function SwipeSurface({ children, onSwipe, enabled: requestedEnabled = tr
       const nearest = target.closest('[data-swipe-surface="true"]');
       const delegateOnly = nearest !== event.currentTarget;
       if ((delegateOnly && nearest?.getAttribute('data-swipe-delegate-right') !== 'true' && nearest?.getAttribute('data-swipe-delegate-left') !== 'true') ||
-        target.closest('input,textarea,select,video,#topic-filter-strip,[data-swipe-ignore="true"]')) return;
+        target.closest('input,textarea,select,video,#topic-filter-strip,#who-to-follow,[data-swipe-ignore="true"]')) return;
       start.current = { x: event.clientX, y: event.clientY, lastX: event.clientX, time: performance.now(), velocity: 0, horizontal: false, delegateOnly, delegateDirection: nearest?.getAttribute("data-swipe-delegate-right") === "true" ? "right" : "left" };
     }}
     onPointerMoveCapture={event => {

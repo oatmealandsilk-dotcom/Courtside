@@ -1,18 +1,22 @@
 import { ThreadReplies } from '@/components/ThreadReplies';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { Ionicons } from '@expo/vector-icons';
 
-import { Avatar, EmptyState } from '@/components/ui';
+import { Avatar, Button, EmptyState } from '@/components/ui';
+import { LevelPill } from '@/components/LevelPill';
 import { QuestionCard } from '@/components/QuestionCard';
 import { PostCard } from '@/components/PostCard';
 import { Tappable } from '@/components/Tappable';
 import { VerticalPager } from '@/components/VerticalPager';
 import { ReelPlayback } from '@/components/ReelPlayback';
 import { rankFeed, type FeedItem } from '@/features/feed/rankFeed';
+
+/** A feed page: a moment, a thread, or the who-to-follow row. */
+type Page = FeedItem | { type: 'suggest' };
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
@@ -56,7 +60,7 @@ function LikeBurst({ token }: { token: number }) {
 export default function Home() {
   const styles = useThemedStyles(styleDefinitions);
   const app = useApp();
-  const { posts, questions, comments, users, currentUserId, saved, actions, ready } = app;
+  const { posts, questions, comments, users, currentUserId, saved, actions, ready, followingIds, mutedIds, blockedIds, conversations } = app;
   const [active, setActive] = useState(0);
   const [visit, setVisit] = useState(0);
   const focused = useIsFocused();
@@ -84,19 +88,55 @@ export default function Home() {
     }, [ready, currentUserId]),
   );
 
-  const feed = useMemo(
-    () =>
-      order.flatMap<FeedItem>((key) => {
-        const id = key.slice(2);
-        if (key.startsWith('p:')) {
-          const post = posts.find((p) => p.id === id);
-          return post ? [{ type: 'post' as const, post }] : [];
-        }
-        const question = questions.find((q) => q.id === id);
-        return question ? [{ type: 'question' as const, question }] : [];
-      }),
-    [order, posts, questions],
-  );
+  /**
+   * People worth following, best first: anyone who has interacted with you
+   * (liked or commented on your posts, or messaged you), then coaches, then
+   * players from your city. Never anyone you already follow or have blocked.
+   */
+  const suggestions = useMemo(() => {
+    if (!currentUserId) return [];
+    const me = users.find((u) => u.id === currentUserId);
+    const interacted = new Set<string>();
+    for (const post of posts) {
+      if (post.authorId === currentUserId) post.likedBy.forEach((id) => interacted.add(id));
+      else if (post.likedBy.includes(currentUserId)) interacted.add(post.authorId);
+    }
+    for (const comment of comments) {
+      const post = posts.find((p) => p.id === comment.postId);
+      if (post?.authorId === currentUserId) interacted.add(comment.authorId);
+    }
+    for (const conversation of conversations) conversation.participantIds.forEach((id) => interacted.add(id));
+    const city = (location: string) => location.split(',')[0].trim();
+    return users
+      .filter((u) => u.id !== currentUserId && !followingIds.includes(u.id) && !blockedIds.includes(u.id))
+      .map((user) => {
+        const local = !!me && city(user.location) === city(me.location);
+        const reason = interacted.has(user.id) ? 'Interacted with you'
+          : user.isCoach ? 'Coach on CourtSide'
+          : local ? `Plays in ${city(user.location)}`
+          : 'Suggested for you';
+        return { user, reason, score: (interacted.has(user.id) ? 2 : 0) + (local ? 1 : 0) + (user.isCoach ? 0.5 : 0) };
+      })
+      .sort((a, b) => b.score - a.score);
+  }, [users, posts, comments, conversations, currentUserId, followingIds, blockedIds]);
+
+  // Blocked and muted players disappear from the feed entirely; the
+  // who-to-follow row slides in as the third page so it is seen early
+  // without being the first thing on screen.
+  const feed = useMemo<Page[]>(() => {
+    const hidden = new Set([...blockedIds, ...mutedIds]);
+    const pages: Page[] = order.flatMap<FeedItem>((key) => {
+      const id = key.slice(2);
+      if (key.startsWith('p:')) {
+        const post = posts.find((p) => p.id === id);
+        return post && !hidden.has(post.authorId) ? [{ type: 'post' as const, post }] : [];
+      }
+      const question = questions.find((q) => q.id === id);
+      return question && !hidden.has(question.authorId) ? [{ type: 'question' as const, question }] : [];
+    });
+    if (users.length > 1) pages.splice(Math.min(2, pages.length), 0, { type: 'suggest' });
+    return pages;
+  }, [order, posts, questions, blockedIds, mutedIds, users.length]);
 
   const insets = useSafeAreaInsets();
   const [burst, setBurst] = useState({ id: '', n: 0 });
@@ -148,7 +188,7 @@ export default function Home() {
   // Whatever is settled on screen counts as watched, once per session.
   const showing = feed[active];
   useEffect(() => {
-    if (!focused || !showing) return;
+    if (!focused || !showing || showing.type === 'suggest') return;
     actions.recordView(
       showing.type === 'post' ? 'post' : 'question',
       showing.type === 'post' ? showing.post.id : showing.question.id,
@@ -167,12 +207,51 @@ export default function Home() {
           <VerticalPager key={visit} initialIndex={active} onIndex={setActive}>
             {feed.map((item, index) => {
               const distance = Math.abs(index - active);
+              const pageKey = item.type === 'post' ? item.post.id : item.type === 'question' ? item.question.id : 'suggest';
               if (distance > WINDOW) {
                 // A placeholder page: holds its slot, costs nothing to render.
-                return <View key={item.type === 'post' ? item.post.id : item.question.id} />;
+                return <View key={pageKey} />;
               }
               // One page either side keeps its video buffered, ready to play.
               const near = distance <= 1;
+
+              if (item.type === 'suggest') {
+                return (
+                  <View key={pageKey} style={[styles.article, styles.suggestArticle]}>
+                    <Text style={styles.eyebrow}>WHO TO FOLLOW</Text>
+                    <Text style={styles.suggestTitle}>Players you might know</Text>
+                    <Text style={styles.suggestSub}>
+                      From your contacts, mutuals, and people who have interacted with you.
+                    </Text>
+                    {suggestions.length ? (
+                      // Its own sideways bar: nativeID keeps the page swipe off it.
+                      <ScrollView
+                        horizontal
+                        nativeID="who-to-follow"
+                        showsHorizontalScrollIndicator={false}
+                        style={{ flexGrow: 0, marginHorizontal: -20 }}
+                        contentContainerStyle={styles.suggestRow}
+                      >
+                        {suggestions.map(({ user, reason }) => (
+                          <View key={user.id} style={styles.suggestCard}>
+                            <Pressable accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.suggestBody}>
+                              <Avatar name={user.name} seed={user.avatarSeed} size={64} ring={user.isCoach} />
+                              <Text style={styles.suggestName} numberOfLines={1}>{user.name}</Text>
+                              <Text style={styles.suggestHandle} numberOfLines={1}>@{user.handle}</Text>
+                              <LevelPill profile={user.profile} small />
+                              <Text style={styles.suggestReason} numberOfLines={1}>{reason}</Text>
+                            </Pressable>
+                            <Button label="Follow" onPress={() => actions.toggleFollow(user.id)} full />
+                          </View>
+                        ))}
+                      </ScrollView>
+                    ) : (
+                      <Text style={styles.suggestSub}>You already follow everyone we can find near you.</Text>
+                    )}
+                    <Text style={styles.hint}>Swipe up to keep watching</Text>
+                  </View>
+                );
+              }
 
               if (item.type === 'question') {
                 const isSaved = saved.questionIds.includes(item.question.id);
@@ -300,11 +379,12 @@ export default function Home() {
                     <Tappable
                       accessibilityLabel={liked ? 'Unlike reel' : 'Like reel'}
                       onPress={() => actions.toggleLike(post.id)}
+                      scaleTo={0.78}
                       style={styles.action}
                     >
                       <Ionicons
                         name={liked ? 'heart' : 'heart-outline'}
-                        size={31}
+                        size={35}
                         color={liked ? '#E17B7B' : 'white'}
                       />
                       <Text style={styles.actionLabel}>{post.likedBy.length}</Text>
@@ -312,27 +392,30 @@ export default function Home() {
                     <Tappable
                       accessibilityLabel="Reel comments"
                       onPress={() => router.push(`/post/${post.id}`)}
+                      scaleTo={0.78}
                       style={styles.action}
                     >
-                      <Ionicons name="chatbubble-outline" size={29} color="white" />
+                      <Ionicons name="chatbubble-outline" size={33} color="white" />
                       <Text style={styles.actionLabel}>{post.commentIds.length}</Text>
                     </Tappable>
                     <Tappable
                       accessibilityLabel="Send this reel to someone"
                       onPress={() => share('post', post.id)}
+                      scaleTo={0.78}
                       style={styles.action}
                     >
-                      <Ionicons name="paper-plane-outline" size={28} color="white" />
+                      <Ionicons name="paper-plane-outline" size={32} color="white" />
                       <Text style={styles.actionLabel}>{post.shares ?? 0}</Text>
                     </Tappable>
                     <Tappable
                       accessibilityLabel={isSaved ? 'Remove from saved' : 'Save this reel'}
                       onPress={() => actions.toggleSavePost(post.id)}
+                      scaleTo={0.78}
                       style={styles.action}
                     >
                       <Ionicons
                         name={isSaved ? 'bookmark' : 'bookmark-outline'}
-                        size={27}
+                        size={31}
                         color="white"
                       />
                       <Text style={styles.actionLabel}>{post.savedBy?.length ?? 0}</Text>
@@ -421,10 +504,27 @@ const styleDefinitions = StyleSheet.create({
   body: { color: 'white', fontSize: 13, lineHeight: 19 },
   tags: { color: colors.text, fontSize: 11 },
   swipeHint: { color: colors.textMuted, fontSize: 10 },
-  actions: { position: 'absolute', right: 14, bottom: 100, gap: 22 },
-  action: { alignItems: 'center', gap: 5 },
-  actionLabel: { color: 'white', fontSize: 12 },
+  actions: { position: 'absolute', right: 12, bottom: 104, gap: 24 },
+  action: { alignItems: 'center', gap: 5, minWidth: 48 },
+  actionLabel: { color: 'white', fontSize: 13, fontWeight: '600', textShadowColor: '#0006', textShadowRadius: 3 },
   article: { flex: 1, backgroundColor: colors.bg, padding: 20, paddingTop: 64, gap: 20 },
+  suggestArticle: { gap: 12, justifyContent: 'center' },
+  suggestTitle: { fontSize: 24, fontWeight: '800', color: colors.text, letterSpacing: -0.3 },
+  suggestSub: { color: colors.textMuted, fontSize: 13, lineHeight: 19 },
+  suggestRow: { gap: 12, paddingHorizontal: 20, paddingVertical: 10 },
+  suggestCard: {
+    width: 158,
+    padding: 14,
+    gap: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  suggestBody: { alignItems: 'center', gap: 6 },
+  suggestName: { fontSize: 14, fontWeight: '700', color: colors.text, textAlign: 'center' },
+  suggestHandle: { fontSize: 12, color: colors.textFaint },
+  suggestReason: { fontSize: 11, color: colors.textMuted, textAlign: 'center' },
   threadArticle: { gap: 8, paddingBottom: 8 },
   eyebrow: { color: colors.warning, fontWeight: '700', letterSpacing: 1.2, fontSize: 11 },
   hint: { color: colors.textMuted, fontSize: 11, textAlign: 'center', paddingBottom: 10 },
