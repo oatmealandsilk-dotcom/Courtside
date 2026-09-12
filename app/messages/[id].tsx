@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused } from '@/lib/useIsFocused';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 

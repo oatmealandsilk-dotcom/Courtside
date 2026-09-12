@@ -3,7 +3,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused } from '@/lib/useIsFocused';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar, EmptyState } from '@/components/ui';

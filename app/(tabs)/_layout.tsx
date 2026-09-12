@@ -1,6 +1,5 @@
 import { useTheme } from '@/theme/ThemeProvider';
 import React from 'react';
-import { Platform } from 'react-native';
 import Home from './index';
 import Discuss from './discuss';
 import Coaches from './coaches';
@@ -37,7 +36,9 @@ export default function TabsLayout() {
       tabBar={() => null}
       screenOptions={{
         headerShown: false,
-        animation: Platform.OS === 'web' ? 'none' : 'fade',
+        // The swipe is the transition. A fade on top of it plays second and
+        // reads as a hitch once the page has already landed.
+        animation: 'none',
         tabBarPosition: isPhone ? 'bottom' : 'left',
         sceneStyle: { backgroundColor: colors.bg },
       }}

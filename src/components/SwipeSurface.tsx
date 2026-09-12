@@ -21,9 +21,15 @@ export function SwipeSurface({ children, onSwipe, enabled: requestedEnabled = tr
       const available = !props.current.renderPreview || !!props.current.renderPreview(next);
       const commit = !cancelled && available && (Math.abs(dx) > width.current * 0.36 || (Math.abs(dx) > 35 && Math.abs(velocity) > 0.5 && Math.sign(dx) === Math.sign(velocity)));
       busy.current = true;
+      const release = () => { offset.setValue(0); setDragging(false); busy.current = false; };
       Animated.spring(offset, { toValue: commit ? -next * width.current : 0, stiffness: 220, damping: 28, mass: 1, useNativeDriver: true }).start(() => {
-        if (commit && props.current.enabled) props.current.onSwipe(next);
-        offset.setValue(0); setDragging(false); busy.current = false;
+        if (!commit || !props.current.enabled) return release();
+        props.current.onSwipe(next);
+        // Navigation has been asked for but the new screen has not painted yet.
+        // Releasing now would drop the outgoing screen back at offset zero for
+        // a frame or two before the destination appears — the flicker you see
+        // after the page lands. Hold the landed frame until React has drawn.
+        requestAnimationFrame(() => requestAnimationFrame(release));
       });
     };
     return PanResponder.create({
