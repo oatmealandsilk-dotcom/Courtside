@@ -206,20 +206,30 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
     return (
       <View style={styles.preview}>
         {hiddenInput}
-        {value.kind === 'video' && value.uri ? (
-          <video
-            src={value.uri}
-            controls
-            playsInline
-            style={{ width: '100%', maxHeight: 320, borderRadius: 12, background: '#000' }}
-          />
-        ) : value.uri ? (
-          <img
-            src={value.uri}
-            alt={value.label}
-            style={{ width: '100%', maxHeight: 320, objectFit: 'cover', borderRadius: 12 }}
-          />
-        ) : null}
+{/* Portrait stage, the shape a reel actually posts in, so what you see
+            here is what people will see in the feed. */}
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          {value.kind === 'video' && value.uri ? (
+            <video
+              src={value.uri}
+              controls
+              playsInline
+              style={{
+                width: '100%', maxWidth: 320, aspectRatio: '9 / 16', maxHeight: 460,
+                borderRadius: 14, background: '#000', objectFit: 'contain',
+              }}
+            />
+          ) : value.uri ? (
+            <img
+              src={value.uri}
+              alt={value.label}
+              style={{
+                width: '100%', maxWidth: 320, maxHeight: 460,
+                objectFit: 'contain', borderRadius: 14, background: '#000',
+              }}
+            />
+          ) : null}
+        </div>
 
         <View style={styles.previewFooter}>
           <Ionicons

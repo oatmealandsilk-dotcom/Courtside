@@ -301,7 +301,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setState((prev) => {
         const post = prev.posts.find((p) => p.id === postId);
         const liking = !!post && !post.likedBy.includes(me);
-        liking ? haptics.tap() : haptics.untap();
+        liking ? haptics.reward() : haptics.untap();
         const next: AppState = {
           ...prev,
           posts: prev.posts.map((p) =>

@@ -1,11 +1,12 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { shareOutside } from '@/lib/shareOutside';
 import { Avatar, Button, Field } from '@/components/ui';
+import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -13,6 +14,28 @@ import { colors, radius, spacing, typography } from '@/theme';
  * Instagram-style send sheet. Pick people, add a note, send — the item lands
  * in each DM thread. "Share outside CourtSide" falls back to the OS sheet.
  */
+/** Springs a tick over the sheet so a send lands instead of just vanishing. */
+function SentTick() {
+  const scale = useRef(new Animated.Value(0.4)).current;
+  useEffect(() => {
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 14, bounciness: 14 }).start();
+  }, [scale]);
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <Animated.View style={{ transform: [{ scale }] }}>
+          <View style={{
+            width: 86, height: 86, borderRadius: 43, backgroundColor: colors.brand,
+            alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Ionicons name="checkmark" size={46} color={colors.brandInk} />
+          </View>
+        </Animated.View>
+      </View>
+    </View>
+  );
+}
+
 export default function ShareSheet() {
   const styles = useThemedStyles(styleDefinitions);
   const params = useLocalSearchParams<{ kind?: string; id?: string }>();
@@ -55,8 +78,10 @@ export default function ShareSheet() {
   const send = () => {
     if (!selected.length || !item) return;
     actions.shareToUsers(selected, kind, id, note);
+    haptics.reward();
     setSent(true);
-    setTimeout(() => router.back(), 700);
+    // Long enough to read the confirmation, short enough not to wait on it.
+    setTimeout(() => router.back(), 900);
   };
 
   const url = `https://oatmealandsilk-dotcom.github.io/Courtside/${kind === 'profile' ? 'user' : kind}/${id}`;
@@ -74,6 +99,7 @@ export default function ShareSheet() {
         onPress={() => router.back()}
       />
       <View style={styles.sheet}>
+        {sent ? <SentTick /> : null}
         <View style={styles.grabber} />
 
         <View style={styles.headerRow}>

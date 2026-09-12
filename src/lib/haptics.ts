@@ -43,5 +43,11 @@ export const untap = () => buzz(8);
 /** Something left the device: a message sent, a post published. */
 export const commit = () => buzz([0, 14, 40, 22]);
 
+/**
+ * A like landing, or a send going through. Two beats, the first heavier — it
+ * reads as "got it" where a single long buzz reads as an error.
+ */
+export const reward = () => buzz([0, 20, 45, 14]);
+
 /** Something went wrong and the user needs to notice. */
 export const reject = () => buzz([0, 26, 60, 26]);

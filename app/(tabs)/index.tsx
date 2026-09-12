@@ -1,7 +1,7 @@
 import { ThreadReplies } from '@/components/ThreadReplies';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,8 +13,45 @@ import { Tappable } from '@/components/Tappable';
 import { VerticalPager } from '@/components/VerticalPager';
 import { ReelPlayback } from '@/components/ReelPlayback';
 import { rankFeed, type FeedItem } from '@/features/feed/rankFeed';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
+
+/**
+ * The heart that blooms when you double tap a reel.
+ *
+ * Keyed on a counter rather than a boolean so tapping twice in a row replays
+ * it — a boolean would already be true and the second tap would show nothing.
+ */
+function LikeBurst({ token }: { token: number }) {
+  const scale = useRef(new Animated.Value(0)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!token) return;
+    scale.setValue(0.5);
+    opacity.setValue(1);
+    Animated.parallel([
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 16, bounciness: 16 }),
+      Animated.sequence([
+        Animated.delay(340),
+        Animated.timing(opacity, { toValue: 0, duration: 280, useNativeDriver: true }),
+      ]),
+    ]).start();
+  }, [token, scale, opacity]);
+
+  if (!token) return null;
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', opacity }]}
+    >
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <Ionicons name="heart" size={112} color="rgba(255,255,255,0.94)" />
+      </Animated.View>
+    </Animated.View>
+  );
+}
 
 export default function Home() {
   const styles = useThemedStyles(styleDefinitions);
@@ -61,6 +98,27 @@ export default function Home() {
     [order, posts, questions],
   );
 
+  const insets = useSafeAreaInsets();
+  const [burst, setBurst] = useState({ id: '', n: 0 });
+
+  /**
+   * Double tap only ever likes, the way every app that does this behaves —
+   * tapping twice on something you already liked should not take it away.
+   */
+  const likeByTap = (postId: string, alreadyLiked: boolean) => {
+    if (!alreadyLiked) actions.toggleLike(postId);
+    setBurst((b) => ({ id: postId, n: b.n + 1 }));
+  };
+
+  // Pressable has no double tap, so count taps inside a short window.
+  const lastTap = useRef({ id: '', at: 0 });
+  const doubleTapFor = (postId: string, alreadyLiked: boolean) => () => {
+    const now = Date.now();
+    const quick = lastTap.current.id === postId && now - lastTap.current.at < 280;
+    lastTap.current = quick ? { id: '', at: 0 } : { id: postId, at: now };
+    if (quick) likeByTap(postId, alreadyLiked);
+  };
+
   const share = (kind: 'post' | 'question', id: string) =>
     router.push(`/share?kind=${kind}&id=${id}`);
 
@@ -99,7 +157,7 @@ export default function Home() {
 
   return (
     <View style={styles.root}>
-      <View pointerEvents="none" style={styles.wordmarkOverlay}>
+      <View pointerEvents="none" style={[styles.wordmarkOverlay, { top: insets.top + 12 }]}>
         <Text style={[styles.wordmark, feed[active]?.type === 'post' &&
           feed[active].post.kind === 'reel' && styles.wordmarkOnReel]}>courtside</Text>
       </View>
@@ -189,16 +247,29 @@ export default function Home() {
                       poster={post.thumbnailUrl}
                       active={focused && active === index}
                       preload={near}
+                      onDoubleTap={() => likeByTap(post.id, liked)}
                     />
                   ) : post.thumbnailUrl ? (
-                    <Image
-                      accessibilityIgnoresInvertColors
-                      source={{ uri: post.thumbnailUrl }}
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Double tap to like"
+                      onPress={doubleTapFor(post.id, liked)}
                       style={StyleSheet.absoluteFill}
-                      resizeMode="cover"
-                    />
+                    >
+                      <Image
+                        accessibilityIgnoresInvertColors
+                        source={{ uri: post.thumbnailUrl }}
+                        style={StyleSheet.absoluteFill}
+                        resizeMode="cover"
+                      />
+                    </Pressable>
                   ) : (
-                    <View style={styles.preview}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Double tap to like"
+                      onPress={doubleTapFor(post.id, liked)}
+                      style={styles.preview}
+                    >
                       <View style={styles.court}>
                         <View style={styles.net} />
                         <View style={styles.service} />
@@ -208,8 +279,10 @@ export default function Home() {
                       <Text style={styles.previewNote}>
                         Demo preview · add a video link to play your own reel
                       </Text>
-                    </View>
+                    </Pressable>
                   )}
+
+                  {burst.id === post.id ? <LikeBurst token={burst.n} /> : null}
 
                   <View style={styles.caption}>
                     <Pressable
@@ -282,7 +355,9 @@ export default function Home() {
 const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, alignItems: 'center' },
   wordmarkOverlay: {
-    position: 'absolute', top: 16, width: '100%',
+    // top comes from the safe-area inset at render; a fixed value put the
+    // wordmark under the Dynamic Island on a phone.
+    position: 'absolute', width: '100%',
     paddingHorizontal: 20, zIndex: 5,
   },
   wordmark: { color: colors.text, fontSize: 23, fontWeight: '800' },

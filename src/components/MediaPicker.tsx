@@ -47,7 +47,28 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
   return <View style={{ gap: 10 }}>
     <Pressable accessibilityRole="button" accessibilityLabel={label ?? 'Choose a photo or video'} onPress={choose}
       style={{ padding: 20, gap: 8, borderRadius: 18, backgroundColor: colors.surface }}>
-      {value?.kind === 'photo' && value.uri && <Image source={{ uri: value.uri }} style={{ height: 220, borderRadius: 12 }}/>}
+      {value?.uri && (
+        <View style={{ alignItems: 'center' }}>
+          <View style={{ width: 240, aspectRatio: 9 / 16, borderRadius: 14, overflow: 'hidden', backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
+            {/* A photo shows itself; a video shows its cover, because playing
+                one in place needs expo-video, which this project does not carry. */}
+            {(value.kind === 'photo' ? value.uri : value.thumbnailUrl) ? (
+              <Image source={{ uri: value.kind === 'photo' ? value.uri : value.thumbnailUrl }}
+                resizeMode="contain" style={{ width: '100%', height: '100%' }}/>
+            ) : (
+              <Ionicons name="videocam" size={40} color="#6B7A6E"/>
+            )}
+            {value.kind === 'video' && (
+              <View style={{ position: 'absolute', alignItems: 'center', justifyContent: 'center' }}>
+                <View style={{ width: 54, height: 54, borderRadius: 27, backgroundColor: '#0009', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="play" size={24} color="white"/>
+                </View>
+              </View>
+            )}
+          </View>
+          <Text style={{ color: colors.textFaint, fontSize: 12, paddingTop: 8 }}>{value.label}</Text>
+        </View>
+      )}
       <Ionicons name={selection === 'video' ? 'videocam-outline' : 'images-outline'} size={30} color={colors.textMuted}/>
       <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>{value ? value.label : label ?? (compact ? 'Photo or video' : 'Select a photo or video')}</Text>
       <Text style={{ color: colors.textMuted }}>{value ? 'Tap to replace' : 'Choose from your photos and videos.'}</Text>

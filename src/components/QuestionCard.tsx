@@ -10,6 +10,7 @@ import { LevelPill } from '@/components/LevelPill';
 import { Avatar, Card, Chip } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
 import type { Question, QuestionTopic, User } from '@/data/types';
+import { Tappable } from '@/components/Tappable';
 import { colors, spacing, typography } from '@/theme';
 
 export const TOPIC_META: Record<QuestionTopic, { label: string; tint: string; icon: keyof typeof Ionicons.glyphMap }> = {
@@ -57,37 +58,49 @@ export function QuestionCard({
       </View>
       <Text style={styles.title}>{question.title}</Text>
       {showBody && !!question.body && <Text style={styles.preview}>{question.body}</Text>}
+      <View style={styles.metaRow}>
+        <Chip label={meta.label} small />
+        {answered ? (
+          <View style={styles.answered}>
+            <Ionicons name="checkmark-circle" size={14} color={colors.court} />
+            <Text style={styles.answeredText}>Answered</Text>
+          </View>
+        ) : null}
+      </View>
+
       <View style={styles.footer}>
         <VoteControls item={question} userId={currentUserId} onVote={direction => actions.voteQuestion(question.id, direction)} />
-        <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted} style={{ marginLeft: 12 }} /><Text style={styles.footerText}>{question.answerIds.length}</Text>
-        <Chip label={meta.label} small />
-        {answered && <Ionicons name="checkmark-circle" size={16} color={colors.court} />}
+
+        <Tappable
+          accessibilityLabel={`${question.answerIds.length} replies`}
+          onPress={onPress ?? (() => undefined)}
+          style={styles.action}
+        >
+          <Ionicons name="chatbubble-outline" size={20} color={colors.text} />
+          <Text style={styles.actionLabel}>{question.answerIds.length}</Text>
+        </Tappable>
+
+        {onShare ? (
+          <Tappable accessibilityLabel="Share this discussion" onPress={onShare} style={styles.action}>
+            <Ionicons name="paper-plane-outline" size={20} color={colors.text} />
+            <Text style={styles.actionLabel}>{question.shares ?? 0}</Text>
+          </Tappable>
+        ) : null}
 
         <View style={styles.spacer} />
-        {onShare ? (
-          <Pressable
-            onPress={onShare}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Share this discussion"
-          >
-            <Ionicons name="paper-plane-outline" size={17} color={colors.textMuted} />
-          </Pressable>
-        ) : null}
+
         {onToggleSave ? (
-          <Pressable
-            onPress={onToggleSave}
-            hitSlop={8}
-            accessibilityRole="button"
+          <Tappable
             accessibilityLabel={saved ? 'Remove from saved' : 'Save this discussion'}
-            style={{ marginLeft: 14 }}
+            onPress={onToggleSave}
+            style={styles.action}
           >
             <Ionicons
               name={saved ? 'bookmark' : 'bookmark-outline'}
-              size={17}
-              color={saved ? colors.brand : colors.textMuted}
+              size={20}
+              color={saved ? colors.brand : colors.text}
             />
-          </Pressable>
+          </Tappable>
         ) : null}
       </View>
     </Card>
@@ -104,7 +117,13 @@ const styleDefinitions = StyleSheet.create({
   title: { ...typography.heading, color: colors.text, lineHeight: 23 },
   preview: { ...typography.small, color: colors.textMuted, lineHeight: 20 },
   metaRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
-  footer: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
+  footer: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingTop: spacing.xs },
   footerText: { ...typography.small, color: colors.textFaint },
+  // Bigger targets and full-strength ink: these were competing with body text
+  // at 16px and textFaint, which read as decoration rather than buttons.
+  action: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7 },
+  actionLabel: { ...typography.smallStrong, color: colors.text },
+  answered: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  answeredText: { ...typography.caption, color: colors.court },
   spacer: { flex: 1 },
 });
