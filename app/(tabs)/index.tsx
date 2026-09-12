@@ -454,12 +454,10 @@ const styleDefinitions = StyleSheet.create({
   },
   wordmark: {
     color: colors.brand, fontSize: 23, fontWeight: '800', letterSpacing: -0.3,
-    textShadowColor: '#0003', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2,
   },
-  // Over video the brand colour needs more lift to stay readable.
-  wordmarkOnReel: {
-    textShadowColor: '#0008', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5,
-  },
+  // Kept as a hook for anything the wordmark needs over video; the shadow that
+  // used to live here was doing more harm than good.
+  wordmarkOnReel: {},
   viewer: { flex: 1, width: '100%', minHeight: 0 },
   reel: { flex: 1, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   preview: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30, gap: 14 },
