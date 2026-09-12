@@ -1,11 +1,19 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { type ReactNode } from 'react';
+import React, { useRef, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
 import { colors, spacing, typography } from '@/theme';
+
+/**
+ * How far down each route was left, kept outside React so it survives the
+ * screen being unmounted and rebuilt — which is exactly what happens when you
+ * swipe to another tab and back.
+ */
+const scrollMemory = new Map<string, number>();
 
 interface Props {
   children: ReactNode;
@@ -35,6 +43,9 @@ export function Screen({
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
+  const pathname = usePathname();
+  const scroller = useRef<ScrollView | null>(null);
+  const restored = useRef(false);
   const { isPhone, isDesktop } = useResponsive();
 
   const showRail = Boolean(rail) && isDesktop;
@@ -90,10 +101,25 @@ export function Screen({
       {headerWrapper ? headerWrapper(header) : header}
       {scroll ? (
         <ScrollView
+          ref={scroller}
           style={styles.flex}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          scrollEventThrottle={32}
+          // Only a real scroll writes, so a screen rendered as a swipe preview
+          // never overwrites the position of the screen you are actually on.
+          onScroll={(event) => scrollMemory.set(pathname, event.nativeEvent.contentOffset.y)}
+          onContentSizeChange={(_width, height) => {
+            if (restored.current) return;
+            const saved = scrollMemory.get(pathname) ?? 0;
+            // Wait until the content is tall enough to hold that position,
+            // otherwise the scroll is clamped to the bottom of a half-built page.
+            if (saved > 0 && height > saved) {
+              restored.current = true;
+              scroller.current?.scrollTo({ y: saved, animated: false });
+            }
+          }}
         >
           {body}
         </ScrollView>

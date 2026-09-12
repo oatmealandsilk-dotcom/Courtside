@@ -15,7 +15,7 @@ export function MediaPlaceholder({ label, seed, portrait = false }: { label: str
   const isVideo = /·\s*\d+:\d+/.test(label);
 
   return (
-    <View style={[styles.wrap, portrait && { aspectRatio: 9 / 12, maxHeight: 600, backgroundColor: '#203E2A' }, { backgroundColor: `${tint}22`, borderColor: `${tint}55` }]}>
+    <View style={[styles.wrap, portrait && { aspectRatio: 9 / 12, maxHeight: 600, backgroundColor: colors.surfaceAlt }, { backgroundColor: `${tint}22`, borderColor: `${tint}55` }]}>
       <View style={styles.court}>
         <View style={[styles.line, styles.baseline]} />
         <View style={[styles.line, styles.service]} />

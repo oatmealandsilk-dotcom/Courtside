@@ -35,8 +35,8 @@ const aoColors: Palette = {
  * full strength; the court orange carries the buttons.
  */
 const rolandGarrosColors: Palette = {
-  bg: '#FBF1E9', bgElevated: '#F4E1D2', surface: '#F9EADE', surfaceAlt: '#EED5C1',
-  border: '#E1C3A9', borderStrong: '#BC8B66', text: '#3A2018', textMuted: '#7E5743', textFaint: '#A07B63',
+  bg: '#FBECE0', bgElevated: '#F4DAC5', surface: '#F9E4D3', surfaceAlt: '#EECBB0',
+  border: '#E0B894', borderStrong: '#BC8154', text: '#3A2018', textMuted: '#7E5137', textFaint: '#A07557',
   brand: '#CB5223', brandInk: '#FFF6F0', brandDim: '#F3DCCB', court: '#C23B22', clay: '#E3783B',
   hard: '#3E6982', grass: '#1F5F3F', info: '#3E6982', success: '#1F5F3F', warning: '#A8701C', danger: '#B03A22',
   overlay: 'rgba(50, 24, 14, 0.58)',
@@ -47,8 +47,8 @@ const rolandGarrosColors: Palette = {
  * green held back for accents, and the purple kept as the secondary.
  */
 const wimbledonColors: Palette = {
-  bg: '#F7FAF3', bgElevated: '#EAF2E1', surface: '#F2F8EB', surfaceAlt: '#DFEBD3',
-  border: '#CFDFC0', borderStrong: '#96AF86', text: '#1B2E1C', textMuted: '#55684F', textFaint: '#7E9076',
+  bg: '#EFF6E6', bgElevated: '#E0EDD0', surface: '#E9F3DD', surfaceAlt: '#D2E5BE',
+  border: '#BFD6A9', borderStrong: '#8AA873', text: '#1B2E1C', textMuted: '#4F6648', textFaint: '#768D6C',
   brand: '#2E7D46', brandInk: '#FFFFFF', brandDim: '#DCEBDA', court: '#5A9A55', clay: '#A9694A',
   hard: '#4F2683', grass: '#5A9A55', info: '#4F2683', success: '#2E7D46', warning: '#94721C', danger: '#9E3A38',
   overlay: 'rgba(16, 30, 18, 0.55)',
@@ -60,8 +60,8 @@ const wimbledonColors: Palette = {
  * apart from the Australian Open's paler blue.
  */
 const usOpenColors: Palette = {
-  bg: '#14283D', bgElevated: '#1B3350', surface: '#1F3A5A', surfaceAlt: '#2A4A6E',
-  border: '#32557A', borderStrong: '#5C82AC', text: '#E9F0F8', textMuted: '#A7BCD3', textFaint: '#7F97B0',
+  bg: '#1D3757', bgElevated: '#26446A', surface: '#2A4A73', surfaceAlt: '#355887',
+  border: '#3F6796', borderStrong: '#7098C2', text: '#EDF3FA', textMuted: '#B3C6DC', textFaint: '#8BA2BA',
   brand: '#7FAE6C', brandInk: '#0E1C0B', brandDim: '#264430', court: '#6C935C', clay: '#D08A5E',
   hard: '#4E87C4', grass: '#7FAE6C', info: '#5C9BD8', success: '#7FAE6C', warning: '#E3B85A', danger: '#E07E72',
   overlay: 'rgba(4, 12, 22, 0.7)',

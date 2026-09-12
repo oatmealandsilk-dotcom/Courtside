@@ -27,6 +27,10 @@ export default function TabsLayout() {
     <SwipeSurface onSwipe={swipe} onCommit={direction => {
       const next = swipeDestination(pathname, pathname === "/discuss" ? (direction === 1 ? "players" : "discussions") : params.section, direction);
       if (next) setPendingTab(next.pathname);
+    }} onDragTo={direction => {
+      if (direction === null) return setPendingTab(null);
+      const next = swipeDestination(pathname, pathname === "/discuss" ? (direction === 1 ? "players" : "discussions") : params.section, direction);
+      setPendingTab(next ? next.pathname : null);
     }} enabled={pathname !== "/profile"} renderPreview={direction => {
       const next = swipeDestination(pathname, pathname === "/discuss" ? (direction === 1 ? "players" : "discussions") : params.section, direction);
       if (!next) return null;

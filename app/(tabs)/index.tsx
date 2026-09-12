@@ -274,7 +274,7 @@ export default function Home() {
                         <View style={styles.net} />
                         <View style={styles.service} />
                       </View>
-                      <Ionicons name="tennisball-outline" size={54} color="#C4D0BA" />
+                      <Ionicons name="tennisball-outline" size={54} color={colors.court} />
                       <Text style={styles.previewTitle}>{post.mediaLabel}</Text>
                       <Text style={styles.previewNote}>
                         Demo preview · add a video link to play your own reel
@@ -366,7 +366,7 @@ const styleDefinitions = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
   },
   viewer: { flex: 1, width: '100%', minHeight: 0 },
-  reel: { flex: 1, backgroundColor: '#203E2A', overflow: 'hidden' },
+  reel: { flex: 1, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   preview: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30, gap: 14 },
   court: {
     position: 'absolute',
@@ -375,12 +375,12 @@ const styleDefinitions = StyleSheet.create({
     left: '12%',
     right: '12%',
     borderWidth: 1,
-    borderColor: '#6E856B',
+    borderColor: colors.court,
   },
-  net: { position: 'absolute', top: '50%', height: 1, width: '100%', backgroundColor: '#6E856B' },
-  service: { position: 'absolute', top: '20%', bottom: '20%', left: '50%', width: 1, backgroundColor: '#6E856B' },
+  net: { position: 'absolute', top: '50%', height: 1, width: '100%', backgroundColor: colors.court },
+  service: { position: 'absolute', top: '20%', bottom: '20%', left: '50%', width: 1, backgroundColor: colors.court },
   previewTitle: {
-    color: '#E0E7D6',
+    color: colors.text,
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
@@ -388,7 +388,7 @@ const styleDefinitions = StyleSheet.create({
     padding: 8,
   },
   previewNote: {
-    color: '#B7C5AF',
+    color: colors.textMuted,
     fontSize: 11,
     textAlign: 'center',
     maxWidth: 230,
@@ -407,8 +407,8 @@ const styleDefinitions = StyleSheet.create({
   author: { flexDirection: 'row', gap: 9, alignItems: 'center' },
   authorName: { color: 'white', fontSize: 14, fontWeight: '700' },
   body: { color: 'white', fontSize: 13, lineHeight: 19 },
-  tags: { color: '#CBD7C2', fontSize: 11 },
-  swipeHint: { color: '#A8B9A0', fontSize: 10 },
+  tags: { color: colors.text, fontSize: 11 },
+  swipeHint: { color: colors.textMuted, fontSize: 10 },
   actions: { position: 'absolute', right: 14, bottom: 100, gap: 22 },
   action: { alignItems: 'center', gap: 5 },
   actionLabel: { color: 'white', fontSize: 12 },

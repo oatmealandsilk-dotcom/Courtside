@@ -69,7 +69,7 @@ export default function Saved() {
                     <Ionicons
                       name={post.kind === 'reel' ? 'play' : 'document-text-outline'}
                       size={16}
-                      color="#D7DDCB"
+                      color={colors.textMuted}
                     />
                     <Pressable
                       accessibilityRole="button"
@@ -77,7 +77,7 @@ export default function Saved() {
                       onPress={() => actions.toggleSavePost(post.id)}
                       hitSlop={8}
                     >
-                      <Ionicons name="bookmark" size={16} color="#D7DDCB" />
+                      <Ionicons name="bookmark" size={16} color={colors.textMuted} />
                     </Pressable>
                   </View>
                   <Text numberOfLines={4} style={styles.tileText}>
@@ -131,12 +131,12 @@ const styleDefinitions = StyleSheet.create({
     width: '48%',
     aspectRatio: 0.95,
     borderRadius: radius.md,
-    backgroundColor: '#22392A',
+    backgroundColor: colors.surfaceAlt,
     padding: spacing.md,
     justifyContent: 'space-between',
   },
-  tileScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(20, 32, 24, 0.42)' },
+  tileScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.overlay },
   tileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  tileText: { fontSize: 12, lineHeight: 17, color: '#E6E7D9' },
-  tileMeta: { fontSize: 10, color: '#B9C4AE' },
+  tileText: { fontSize: 12, lineHeight: 17, color: colors.text },
+  tileMeta: { fontSize: 10, color: colors.textMuted },
 });
