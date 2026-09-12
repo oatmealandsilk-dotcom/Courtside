@@ -41,6 +41,10 @@ export function NavBar({ state, navigation }: NavBarProps) {
   const unseen = notifications.filter((n) => n.userId === currentUserId && !n.read).length;
   const insets = useSafeAreaInsets();
   const activeRoute = state.routes[state.index]?.name ?? 'index';
+  // Everything waiting for you, in one number. The phone bar has no room for
+  // separate bell and inbox entries the way the sidebar does, so Profile
+  // carries the lot — it is where both of those live.
+  const profileAlerts = unread + unseen;
 
   if (isPhone) {
     return (
@@ -57,11 +61,18 @@ export function NavBar({ state, navigation }: NavBarProps) {
               accessibilityLabel={item.label}
               style={styles.bottomItem}
             >
-              <Ionicons
-                name={active ? item.activeIcon : item.icon}
-                size={23}
-                color={active ? (item.route === 'coaches' ? colors.info : item.route === 'discuss' ? colors.warning : colors.brand) : colors.textFaint}
-              />
+              <View>
+                <Ionicons
+                  name={active ? item.activeIcon : item.icon}
+                  size={23}
+                  color={active ? (item.route === 'coaches' ? colors.info : item.route === 'discuss' ? colors.warning : colors.brand) : colors.textFaint}
+                />
+                {item.route === 'profile' && profileAlerts > 0 ? (
+                  <View style={styles.bottomBadge}>
+                    <Text style={styles.bottomBadgeText}>{profileAlerts > 9 ? '9+' : profileAlerts}</Text>
+                  </View>
+                ) : null}
+              </View>
               <Text style={[styles.bottomLabel, active && { color: item.route === 'coaches' ? colors.info : item.route === 'discuss' ? colors.warning : colors.brand }]}>{item.label}</Text>
             </Pressable>
             </React.Fragment>
@@ -208,6 +219,14 @@ const styleDefinitions = StyleSheet.create({
     paddingTop: spacing.sm,
   },
   bottomItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 48 },
+  bottomBadge: {
+    position: 'absolute', top: -4, right: -8,
+    minWidth: 17, height: 17, borderRadius: 9, paddingHorizontal: 4,
+    backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center',
+    // Ringed in the bar colour so it stays legible over the active icon.
+    borderWidth: 2, borderColor: colors.bgElevated,
+  },
+  bottomBadgeText: { color: 'white', fontSize: 9, fontWeight: '800' },
   bottomLabel: { ...typography.caption, fontSize: 10, color: colors.textFaint, letterSpacing: 0 },
 
   sidebar: {
