@@ -95,7 +95,7 @@ export default function Discuss({ previewSection }: { previewSection?: string } 
       </>);
 
   return (
-    <Screen
+    <Screen memoryKey="discuss"
       title="Community"
       subtitle="Find your people. Talk about your game."
       right={

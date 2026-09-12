@@ -1,6 +1,6 @@
 import { useTheme } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Image, Modal, Pressable, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/theme';
@@ -13,9 +13,17 @@ export interface PickedMedia {
   thumbnailUrl?: string;
 }
 export interface MediaPickerProps { compact?: boolean; selection?: 'video' | 'photo' | 'all'; label?: string; value: PickedMedia | null; onChange: (next: PickedMedia | null) => void; }
+/** "clip-final-2 · 0:24" is a filename. "Video · 0:24" is information. */
+function describe(media: PickedMedia): string {
+  const duration = media.label.match(/\d+:\d{2}$/)?.[0];
+  if (media.kind === 'video') return duration ? `Video · ${duration}` : 'Video';
+  return 'Photo';
+}
+
 export function MediaPicker({ value, onChange, compact, selection = 'all', label }: MediaPickerProps) {
   useTheme();
   const [error, setError] = useState('');
+  const [expanded, setExpanded] = useState(false);
   const choose = async () => {
     try {
       setError('');
@@ -48,7 +56,12 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
     <Pressable accessibilityRole="button" accessibilityLabel={label ?? 'Choose a photo or video'} onPress={choose}
       style={{ padding: 20, gap: 8, borderRadius: 18, backgroundColor: colors.surface }}>
       {value?.uri && (
-        <View style={{ alignItems: 'center' }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open a larger preview"
+          onPress={() => setExpanded(true)}
+          style={{ alignItems: 'center' }}
+        >
           <View style={{ width: 240, aspectRatio: 9 / 16, borderRadius: 14, overflow: 'hidden', backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
             {/* A photo shows itself; a video shows its cover, because playing
                 one in place needs expo-video, which this project does not carry. */}
@@ -66,11 +79,31 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
               </View>
             )}
           </View>
-          <Text style={{ color: colors.textFaint, fontSize: 12, paddingTop: 8 }}>{value.label}</Text>
-        </View>
+          <Text style={{ color: colors.textFaint, fontSize: 12, paddingTop: 8 }}>{describe(value)}</Text>
+        </Pressable>
       )}
+
+      <Modal visible={expanded} transparent animationType="fade" onRequestClose={() => setExpanded(false)}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close preview"
+          onPress={() => setExpanded(false)}
+          style={{ flex: 1, backgroundColor: 'rgba(6,12,10,0.94)', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+        >
+          {value?.uri ? (
+            <Image
+              source={{ uri: value.kind === 'photo' ? value.uri : value.thumbnailUrl ?? value.uri }}
+              resizeMode="contain"
+              style={{ width: '100%', height: '80%', borderRadius: 12 }}
+            />
+          ) : null}
+          <Text style={{ color: 'white', paddingTop: 14 }}>
+            {value?.kind === 'video' ? 'Cover frame · tap to close' : 'Tap to close'}
+          </Text>
+        </Pressable>
+      </Modal>
       <Ionicons name={selection === 'video' ? 'videocam-outline' : 'images-outline'} size={30} color={colors.textMuted}/>
-      <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>{value ? value.label : label ?? (compact ? 'Photo or video' : 'Select a photo or video')}</Text>
+      <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>{value ? describe(value) : label ?? (compact ? 'Photo or video' : 'Select a photo or video')}</Text>
       <Text style={{ color: colors.textMuted }}>{value ? 'Tap to replace' : 'Choose from your photos and videos.'}</Text>
     </Pressable>
     {value?.kind === 'video' && <Pressable accessibilityRole="button" accessibilityLabel="Choose a cover image" onPress={chooseCover}

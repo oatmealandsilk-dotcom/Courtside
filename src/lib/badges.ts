@@ -31,10 +31,30 @@ export function levelBadge(profile: PlayerProfile): LevelBadge {
   return { label: `NTRP ${rating.toFixed(1)}`, ...tintFor(progress), progress };
 }
 
+/**
+ * Picks black or white text for a given background by its perceived
+ * brightness. Fixed inks were the reason UTR and NTRP pills disappeared in
+ * some themes — a dark ink baked in for a dark blue is invisible the moment
+ * another palette makes that same slot pale.
+ */
+export function readableInk(hex: string): string {
+  const value = parseInt(hex.replace('#', '').slice(0, 6), 16);
+  if (Number.isNaN(value)) return colors.text;
+  const channel = (raw: number) => {
+    const unit = raw / 255;
+    return unit <= 0.03928 ? unit / 12.92 : Math.pow((unit + 0.055) / 1.055, 2.4);
+  };
+  const luminance =
+    0.2126 * channel((value >> 16) & 255) +
+    0.7152 * channel((value >> 8) & 255) +
+    0.0722 * channel(value & 255);
+  return luminance > 0.42 ? '#0B1410' : '#FFFFFF';
+}
+
 function tintFor(progress: number): { tint: string; ink: string } {
-  if (progress >= 0.78) return { tint: colors.brand, ink: colors.brandInk };
-  if (progress >= 0.58) return { tint: colors.hard, ink: '#04122E' };
-  if (progress >= 0.38) return { tint: colors.court, ink: '#04170D' };
+  if (progress >= 0.78) return { tint: colors.brand, ink: readableInk(colors.brand) };
+  if (progress >= 0.58) return { tint: colors.hard, ink: readableInk(colors.hard) };
+  if (progress >= 0.38) return { tint: colors.court, ink: readableInk(colors.court) };
   return { tint: colors.surfaceAlt, ink: colors.text };
 }
 

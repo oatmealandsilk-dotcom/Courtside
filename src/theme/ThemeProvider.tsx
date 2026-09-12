@@ -22,11 +22,11 @@ export const darkColors: Palette = {
  * Ground is the surround, not the court; the court blue is the accent.
  */
 const aoColors: Palette = {
-  bg: '#EDF6FC', bgElevated: '#DEECF8', surface: '#E7F2FA', surfaceAlt: '#CFE3F3',
-  border: '#BAD6EC', borderStrong: '#7BA6CA', text: '#14314A', textMuted: '#4B6B85', textFaint: '#7794AA',
-  brand: '#1E8FD5', brandInk: '#FFFFFF', brandDim: '#D3E8F7', court: '#377DB8', clay: '#C2764F',
-  hard: '#1E8FD5', grass: '#5E9B6A', info: '#2F7FC0', success: '#2E8B6B', warning: '#B07F1C', danger: '#C0504A',
-  overlay: 'rgba(9, 30, 48, 0.58)',
+  bg: '#E8F7FF', bgElevated: '#D0EAFA', surface: '#DDF1FD', surfaceAlt: '#BEDFF5',
+  border: '#A3D1EE', borderStrong: '#5896C5', text: '#0D2B43', textMuted: '#3C6480', textFaint: '#6A8EA7',
+  brand: '#1E8FD5', brandInk: '#FFFFFF', brandDim: '#C9E6F8', court: '#377DB8', clay: '#C2764F',
+  hard: '#1E8FD5', grass: '#4E8A57', info: '#2F7FC0', success: '#2A7F60', warning: '#9C7016', danger: '#B8463F',
+  overlay: 'rgba(7, 26, 42, 0.58)',
 };
 
 /**
@@ -35,11 +35,11 @@ const aoColors: Palette = {
  * full strength; the court orange carries the buttons.
  */
 const rolandGarrosColors: Palette = {
-  bg: '#FBECE0', bgElevated: '#F4DAC5', surface: '#F9E4D3', surfaceAlt: '#EECBB0',
-  border: '#E0B894', borderStrong: '#BC8154', text: '#3A2018', textMuted: '#7E5137', textFaint: '#A07557',
-  brand: '#CB5223', brandInk: '#FFF6F0', brandDim: '#F3DCCB', court: '#C23B22', clay: '#E3783B',
-  hard: '#3E6982', grass: '#1F5F3F', info: '#3E6982', success: '#1F5F3F', warning: '#A8701C', danger: '#B03A22',
-  overlay: 'rgba(50, 24, 14, 0.58)',
+  bg: '#FAF0E7', bgElevated: '#F1DDCB', surface: '#F6E6D6', surfaceAlt: '#E9CFB8',
+  border: '#DABA99', borderStrong: '#B4855B', text: '#33201A', textMuted: '#78553F', textFaint: '#9A7A61',
+  brand: '#B8461F', brandInk: '#FFF6F0', brandDim: '#EFD7C4', court: '#A8351C', clay: '#D26B33',
+  hard: '#3E6982', grass: '#1F5F3F', info: '#3E6982', success: '#1F5F3F', warning: '#9A6718', danger: '#A8351C',
+  overlay: 'rgba(46, 22, 12, 0.58)',
 };
 
 /**
@@ -47,11 +47,11 @@ const rolandGarrosColors: Palette = {
  * green held back for accents, and the purple kept as the secondary.
  */
 const wimbledonColors: Palette = {
-  bg: '#EFF6E6', bgElevated: '#E0EDD0', surface: '#E9F3DD', surfaceAlt: '#D2E5BE',
-  border: '#BFD6A9', borderStrong: '#8AA873', text: '#1B2E1C', textMuted: '#4F6648', textFaint: '#768D6C',
-  brand: '#2E7D46', brandInk: '#FFFFFF', brandDim: '#DCEBDA', court: '#5A9A55', clay: '#A9694A',
-  hard: '#4F2683', grass: '#5A9A55', info: '#4F2683', success: '#2E7D46', warning: '#94721C', danger: '#9E3A38',
-  overlay: 'rgba(16, 30, 18, 0.55)',
+  bg: '#F2F6EC', bgElevated: '#E4EDD8', surface: '#ECF2E2', surfaceAlt: '#D7E3C9',
+  border: '#C4D5B3', borderStrong: '#8CA37B', text: '#18291A', textMuted: '#4E6149', textFaint: '#77896F',
+  brand: '#256B3A', brandInk: '#FFFFFF', brandDim: '#D9E6D4', court: '#4E8A4A', clay: '#A9694A',
+  hard: '#4F2683', grass: '#4E8A4A', info: '#4F2683', success: '#256B3A', warning: '#8A6A19', danger: '#943634',
+  overlay: 'rgba(14, 26, 16, 0.55)',
 };
 
 /**
@@ -60,11 +60,11 @@ const wimbledonColors: Palette = {
  * apart from the Australian Open's paler blue.
  */
 const usOpenColors: Palette = {
-  bg: '#1D3757', bgElevated: '#26446A', surface: '#2A4A73', surfaceAlt: '#355887',
-  border: '#3F6796', borderStrong: '#7098C2', text: '#EDF3FA', textMuted: '#B3C6DC', textFaint: '#8BA2BA',
-  brand: '#7FAE6C', brandInk: '#0E1C0B', brandDim: '#264430', court: '#6C935C', clay: '#D08A5E',
+  bg: '#18304C', bgElevated: '#203B5C', surface: '#244266', surfaceAlt: '#2E4E76',
+  border: '#385C86', borderStrong: '#6789B3', text: '#EAF1F9', textMuted: '#AFC3D9', textFaint: '#8299B2',
+  brand: '#7FAE6C', brandInk: '#0E1C0B', brandDim: '#223F2C', court: '#6C935C', clay: '#D08A5E',
   hard: '#4E87C4', grass: '#7FAE6C', info: '#5C9BD8', success: '#7FAE6C', warning: '#E3B85A', danger: '#E07E72',
-  overlay: 'rgba(4, 12, 22, 0.7)',
+  overlay: 'rgba(3, 10, 19, 0.7)',
 };
 
 export type ThemeName = 'default' | 'night' | 'ao' | 'roland-garros' | 'wimbledon' | 'us-open';

@@ -27,6 +27,12 @@ interface Props {
   /** Desktop-only right-hand column, Instagram style. Ignored below the desktop breakpoint. */
   rail?: ReactNode;
   headerWrapper?: (header: ReactNode) => ReactNode;
+  /**
+   * Which screen this is, for remembering scroll position. Needed because a
+   * screen drawn as a swipe preview sees the route you are leaving, not its
+   * own — without this, Coaching's position would be applied to Profile.
+   */
+  memoryKey?: string;
 }
 
 export function Screen({
@@ -40,12 +46,17 @@ export function Screen({
   compactTitle = false,
   rail,
   headerWrapper,
+  memoryKey,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
+  const key = memoryKey ?? pathname;
   const scroller = useRef<ScrollView | null>(null);
-  const restored = useRef(false);
+  // Captured once so the starting offset is set before the first paint rather
+  // than scrolled to afterwards, which is what made it jump into place.
+  const initial = useRef(scrollMemory.get(key) ?? 0);
+  const restored = useRef(initial.current === 0);
   const { isPhone, isDesktop } = useResponsive();
 
   const showRail = Boolean(rail) && isDesktop;
@@ -107,17 +118,17 @@ export function Screen({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={32}
-          // Only a real scroll writes, so a screen rendered as a swipe preview
-          // never overwrites the position of the screen you are actually on.
-          onScroll={(event) => scrollMemory.set(pathname, event.nativeEvent.contentOffset.y)}
+          // Set before the first paint, so there is no visible jump. Web ignores
+          // this, which is what the fallback below is for.
+          contentOffset={{ x: 0, y: initial.current }}
+          onScroll={(event) => scrollMemory.set(key, event.nativeEvent.contentOffset.y)}
           onContentSizeChange={(_width, height) => {
             if (restored.current) return;
-            const saved = scrollMemory.get(pathname) ?? 0;
-            // Wait until the content is tall enough to hold that position,
-            // otherwise the scroll is clamped to the bottom of a half-built page.
-            if (saved > 0 && height > saved) {
+            // Wait until the content is tall enough to hold the position,
+            // otherwise the scroll clamps to the bottom of a half-built page.
+            if (height > initial.current) {
               restored.current = true;
-              scroller.current?.scrollTo({ y: saved, animated: false });
+              scroller.current?.scrollTo({ y: initial.current, animated: false });
             }
           }}
         >

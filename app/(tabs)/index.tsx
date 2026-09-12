@@ -157,10 +157,14 @@ export default function Home() {
 
   return (
     <View style={styles.root}>
+      {/* Only over the first item — once you have started scrolling you know
+          what app you are in, and it is just covering the video. */}
+      {active === 0 ? (
       <View pointerEvents="none" style={[styles.wordmarkOverlay, { top: insets.top + 12 }]}>
         <Text style={[styles.wordmark, feed[active]?.type === 'post' &&
           feed[active].post.kind === 'reel' && styles.wordmarkOnReel]}>courtside</Text>
       </View>
+      ) : null}
       {!ready || !feed.length ? (
         <EmptyState
           title={ready ? 'Your court is quiet' : 'Loading your reels'}
@@ -358,7 +362,7 @@ const styleDefinitions = StyleSheet.create({
     // top comes from the safe-area inset at render; a fixed value put the
     // wordmark under the Dynamic Island on a phone.
     position: 'absolute', width: '100%',
-    paddingHorizontal: 20, zIndex: 5,
+    paddingHorizontal: 20, zIndex: 5, alignItems: 'center',
   },
   wordmark: { color: colors.text, fontSize: 23, fontWeight: '800' },
   wordmarkOnReel: {

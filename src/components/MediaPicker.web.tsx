@@ -100,6 +100,14 @@ async function grabFrames(url: string, count = 6): Promise<CoverFrame[]> {
  * Web media picker: opens the real file dialog, previews the selection
  * inline, and hands back a blob URL the feed can actually play.
  */
+
+/** "beach-rally-final-v2 · 0:24" is a filename. "Video · 0:24" is information. */
+function describe(media: PickedMedia): string {
+  const duration = media.label.match(/\d+:\d{2}$/)?.[0];
+  if (media.kind === 'video') return duration ? `Video · ${duration}` : 'Video';
+  return 'Photo';
+}
+
 export function MediaPicker({ value, onChange, compact, selection = 'all', label }: MediaPickerProps) {
   const styles = useThemedStyles(styleDefinitions);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -108,6 +116,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
   const coverUrl = useRef<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [frames, setFrames] = useState<CoverFrame[]>([]);
+  const [expanded, setExpanded] = useState(false);
 
   // Release the blob URL when the picker unmounts or the choice changes.
   const revoke = useCallback(() => {
@@ -208,7 +217,14 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
         {hiddenInput}
 {/* Portrait stage, the shape a reel actually posts in, so what you see
             here is what people will see in the feed. */}
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <div
+          style={{ display: 'flex', justifyContent: 'center', cursor: 'zoom-in' }}
+          onClick={() => setExpanded(true)}
+          role="button"
+          tabIndex={0}
+          aria-label="Open a larger preview"
+          onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setExpanded(true); }}
+        >
           {value.kind === 'video' && value.uri ? (
             <video
               src={value.uri}
@@ -222,7 +238,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
           ) : value.uri ? (
             <img
               src={value.uri}
-              alt={value.label}
+              alt={describe(value)}
               style={{
                 width: '100%', maxWidth: 320, maxHeight: 460,
                 objectFit: 'contain', borderRadius: 14, background: '#000',
@@ -238,7 +254,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
             color={colors.textMuted}
           />
           <Text style={styles.previewLabel} numberOfLines={1}>
-            {value.label}
+            {describe(value)}
           </Text>
           <Pressable
             onPress={() => inputRef.current?.click()}
@@ -260,6 +276,40 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
             <Text style={[styles.textButtonLabel, { color: colors.danger }]}>Remove</Text>
           </Pressable>
         </View>
+
+        {expanded ? (
+          // Tap-through to a full-size look, with the cover strip still to hand
+          // so the cover can be changed while actually seeing the footage.
+          <div
+            role="dialog"
+            aria-label="Media preview"
+            onClick={() => setExpanded(false)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(6,12,10,0.92)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+              cursor: 'zoom-out',
+            }}
+          >
+            {value.kind === 'video' && value.uri ? (
+              <video
+                src={value.uri}
+                poster={value.thumbnailUrl}
+                controls
+                autoPlay
+                playsInline
+                onClick={(event) => event.stopPropagation()}
+                style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 12, cursor: 'default' }}
+              />
+            ) : value.uri ? (
+              <img
+                src={value.uri}
+                alt={describe(value)}
+                onClick={(event) => event.stopPropagation()}
+                style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 12, cursor: 'default' }}
+              />
+            ) : null}
+          </div>
+        ) : null}
 
         {value.kind === 'video' ? (
           <View style={styles.coverBlock}>

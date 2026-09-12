@@ -2,10 +2,13 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { levelBadge } from '@/lib/badges';
+import { useTheme } from '@/theme/ThemeProvider';
 import type { PlayerProfile } from '@/data/types';
 import { radius, spacing, typography } from '@/theme';
 
 export function LevelPill({ profile, small = false }: { profile: PlayerProfile; small?: boolean }) {
+  // Without this the pill keeps the colours of whichever theme it first drew in.
+  useTheme();
   const badge = levelBadge(profile);
   return (
     <View
