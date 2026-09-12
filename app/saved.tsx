@@ -135,7 +135,7 @@ const styleDefinitions = StyleSheet.create({
     padding: spacing.md,
     justifyContent: 'space-between',
   },
-  tileScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.overlay },
+  tileScrim: { position:'absolute',top:0,left:0,right:0,bottom:0, backgroundColor: colors.overlay },
   tileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   tileText: { fontSize: 12, lineHeight: 17, color: colors.text },
   tileMeta: { fontSize: 10, color: colors.textMuted },

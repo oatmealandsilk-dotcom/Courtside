@@ -22,10 +22,10 @@ export const darkColors: Palette = {
  * Ground is the surround, not the court; the court blue is the accent.
  */
 const aoColors: Palette = {
-  bg: '#E8F7FF', bgElevated: '#D0EAFA', surface: '#DDF1FD', surfaceAlt: '#BEDFF5',
-  border: '#A3D1EE', borderStrong: '#5896C5', text: '#0D2B43', textMuted: '#3C6480', textFaint: '#6A8EA7',
-  brand: '#1E8FD5', brandInk: '#FFFFFF', brandDim: '#C9E6F8', court: '#377DB8', clay: '#C2764F',
-  hard: '#1E8FD5', grass: '#4E8A57', info: '#2F7FC0', success: '#2A7F60', warning: '#9C7016', danger: '#B8463F',
+  bg: '#EBF5FC', bgElevated: '#D7E9F4', surface: '#E1EFF8', surfaceAlt: '#C8DEEE',
+  border: '#AECFE5', borderStrong: '#6394BC', text: '#0D2B43', textMuted: '#3C6480', textFaint: '#6A8EA7',
+  brand: '#2E85BF', brandInk: '#FFFFFF', brandDim: '#CFE4F2', court: '#4179A8', clay: '#B97753',
+  hard: '#2E85BF', grass: '#4E8A57', info: '#3979AF', success: '#2A7F60', warning: '#9C7016', danger: '#B8463F',
   overlay: 'rgba(7, 26, 42, 0.58)',
 };
 
@@ -35,10 +35,10 @@ const aoColors: Palette = {
  * full strength; the court orange carries the buttons.
  */
 const rolandGarrosColors: Palette = {
-  bg: '#FAF0E7', bgElevated: '#F1DDCB', surface: '#F6E6D6', surfaceAlt: '#E9CFB8',
-  border: '#DABA99', borderStrong: '#B4855B', text: '#33201A', textMuted: '#78553F', textFaint: '#9A7A61',
-  brand: '#B8461F', brandInk: '#FFF6F0', brandDim: '#EFD7C4', court: '#A8351C', clay: '#D26B33',
-  hard: '#3E6982', grass: '#1F5F3F', info: '#3E6982', success: '#1F5F3F', warning: '#9A6718', danger: '#A8351C',
+  bg: '#F8F0E9', bgElevated: '#EFDFD1', surface: '#F4E7DB', surfaceAlt: '#E6D2C0',
+  border: '#D6BCA2', borderStrong: '#B08A66', text: '#33201A', textMuted: '#78553F', textFaint: '#9A7A61',
+  brand: '#AD4E2E', brandInk: '#FFF6F0', brandDim: '#ECD9CB', court: '#9E432E', clay: '#C67443',
+  hard: '#3E6982', grass: '#1F5F3F', info: '#3E6982', success: '#1F5F3F', warning: '#9A6718', danger: '#9E432E',
   overlay: 'rgba(46, 22, 12, 0.58)',
 };
 

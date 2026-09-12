@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useRef, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +14,17 @@ import { colors, spacing, typography } from '@/theme';
  * swipe to another tab and back.
  */
 const scrollMemory = new Map<string, number>();
+
+/**
+ * Browsers decide per touch whether a gesture is theirs to scroll with, by
+ * intersecting touch-action from the finger's target up to the nearest
+ * scrolling ancestor — which here is this screen's own ScrollView, not the
+ * page-level swipe surface wrapped around it. Buttons allow horizontal pans,
+ * so a sideways swipe that starts on one (the section tabs, say) is taken by
+ * the browser and cancelled instead of reaching the swipe surface. Declaring
+ * vertical-only here, beneath the scroller, keeps those swipes ours.
+ */
+const verticalOnlyTouch = Platform.OS === 'web' ? ({ touchAction: 'pan-y' } as unknown as ViewStyle) : null;
 
 interface Props {
   children: ReactNode;
@@ -114,7 +125,7 @@ export function Screen({
         <ScrollView
           ref={scroller}
           style={styles.flex}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, verticalOnlyTouch]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={32}

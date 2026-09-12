@@ -157,14 +157,6 @@ export default function Home() {
 
   return (
     <View style={styles.root}>
-      {/* Only over the first item — once you have started scrolling you know
-          what app you are in, and it is just covering the video. */}
-      {active === 0 ? (
-      <View pointerEvents="none" style={[styles.wordmarkOverlay, { top: insets.top + 12 }]}>
-        <Text style={[styles.wordmark, feed[active]?.type === 'post' &&
-          feed[active].post.kind === 'reel' && styles.wordmarkOnReel]}>courtside</Text>
-      </View>
-      ) : null}
       {!ready || !feed.length ? (
         <EmptyState
           title={ready ? 'Your court is quiet' : 'Loading your reels'}
@@ -348,7 +340,20 @@ export default function Home() {
                   </View>
                 </View>
               );
-            })}
+            }).map((page, index) =>
+              // The wordmark lives inside the first page rather than over the
+              // pager, so it leaves with that page as you swipe instead of
+              // hanging in place and then vanishing.
+              index === 0 ? (
+                <React.Fragment key="first">
+                  {page}
+                  <View pointerEvents="none" style={[styles.wordmarkOverlay, { top: insets.top + 12 }]}>
+                    <Text style={[styles.wordmark, feed[0]?.type === 'post' &&
+                      feed[0].post.kind === 'reel' && styles.wordmarkOnReel]}>Courtside</Text>
+                  </View>
+                </React.Fragment>
+              ) : page,
+            )}
           </VerticalPager>
         </View>
       )}
@@ -364,10 +369,13 @@ const styleDefinitions = StyleSheet.create({
     position: 'absolute', width: '100%',
     paddingHorizontal: 20, zIndex: 5, alignItems: 'center',
   },
-  wordmark: { color: colors.text, fontSize: 23, fontWeight: '800' },
+  wordmark: {
+    color: colors.brand, fontSize: 23, fontWeight: '800', letterSpacing: -0.3,
+    textShadowColor: '#0003', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2,
+  },
+  // Over video the brand colour needs more lift to stay readable.
   wordmarkOnReel: {
-    color: 'white', textShadowColor: '#0006',
-    textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
+    textShadowColor: '#0008', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5,
   },
   viewer: { flex: 1, width: '100%', minHeight: 0 },
   reel: { flex: 1, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },

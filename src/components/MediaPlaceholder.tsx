@@ -44,7 +44,7 @@ const styleDefinitions = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  court: { ...StyleSheet.absoluteFillObject, opacity: 0.35 },
+  court: { position:'absolute',top:0,left:0,right:0,bottom:0, opacity: 0.35 },
   line: { position: 'absolute', backgroundColor: colors.text },
   baseline: { left: '12%', right: '12%', top: '22%', height: 1 },
   service: { left: '12%', right: '12%', bottom: '22%', height: 1 },
