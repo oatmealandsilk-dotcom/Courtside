@@ -17,40 +17,54 @@ export const darkColors: Palette = {
   overlay: 'rgba(0, 0, 0, 0.65)',
 };
 
-/** Australian Open — the blue hard court and its paler surround. */
+/**
+ * Australian Open — the blue Plexicushion and its paler surround.
+ * Ground is the surround, not the court; the court blue is the accent.
+ */
 const aoColors: Palette = {
-  bg: '#F2F6FA', bgElevated: '#E6EEF7', surface: '#ECF3F9', surfaceAlt: '#DAE6F3',
-  border: '#C8D9EA', borderStrong: '#95B0CC', text: '#12283D', textMuted: '#4E6B87', textFaint: '#7D93AA',
-  brand: '#0B6FB8', brandInk: '#FFFFFF', brandDim: '#D6E6F4', court: '#1E7FC2', clay: '#C4744C',
-  hard: '#0B6FB8', grass: '#5B9E6B', info: '#0B6FB8', success: '#2E8B6B', warning: '#B8811C', danger: '#C0504A',
-  overlay: 'rgba(10, 28, 45, 0.58)',
+  bg: '#EDF6FC', bgElevated: '#DEECF8', surface: '#E7F2FA', surfaceAlt: '#CFE3F3',
+  border: '#BAD6EC', borderStrong: '#7BA6CA', text: '#14314A', textMuted: '#4B6B85', textFaint: '#7794AA',
+  brand: '#1E8FD5', brandInk: '#FFFFFF', brandDim: '#D3E8F7', court: '#377DB8', clay: '#C2764F',
+  hard: '#1E8FD5', grass: '#5E9B6A', info: '#2F7FC0', success: '#2E8B6B', warning: '#B07F1C', danger: '#C0504A',
+  overlay: 'rgba(9, 30, 48, 0.58)',
 };
 
-/** Roland Garros — crushed brick underfoot, the club's deep green on top. */
+/**
+ * Roland Garros — crushed brick. The ground is the dust that settles on
+ * everything rather than the court itself, which would be relentless at
+ * full strength; the court orange carries the buttons.
+ */
 const rolandGarrosColors: Palette = {
-  bg: '#FBF3ED', bgElevated: '#F4E6DA', surface: '#F8EDE4', surfaceAlt: '#EDD9C8',
-  border: '#DFC5B0', borderStrong: '#BB9074', text: '#34201A', textMuted: '#7A5947', textFaint: '#9C7962',
-  brand: '#1F5F3F', brandInk: '#FFF6EF', brandDim: '#DBE7DE', court: '#C1653A', clay: '#C1653A',
-  hard: '#3E6982', grass: '#1F5F3F', info: '#3E6982', success: '#1F5F3F', warning: '#A8701C', danger: '#A8402F',
-  overlay: 'rgba(48, 26, 18, 0.58)',
+  bg: '#FBF1E9', bgElevated: '#F4E1D2', surface: '#F9EADE', surfaceAlt: '#EED5C1',
+  border: '#E1C3A9', borderStrong: '#BC8B66', text: '#3A2018', textMuted: '#7E5743', textFaint: '#A07B63',
+  brand: '#CB5223', brandInk: '#FFF6F0', brandDim: '#F3DCCB', court: '#C23B22', clay: '#E3783B',
+  hard: '#3E6982', grass: '#1F5F3F', info: '#3E6982', success: '#1F5F3F', warning: '#A8701C', danger: '#B03A22',
+  overlay: 'rgba(50, 24, 14, 0.58)',
 };
 
-/** Wimbledon — grass green and the club purple, on tournament cream. */
+/**
+ * Wimbledon — cut grass and white lines. Light green ground with the club
+ * green held back for accents, and the purple kept as the secondary.
+ */
 const wimbledonColors: Palette = {
-  bg: '#FBFAF7', bgElevated: '#F1F0EA', surface: '#F7F6F1', surfaceAlt: '#E7E6DE',
-  border: '#D7D6CC', borderStrong: '#A5A498', text: '#16261C', textMuted: '#55614F', textFaint: '#7C8676',
-  brand: '#00693E', brandInk: '#FFFFFF', brandDim: '#D8E7DF', court: '#00693E', clay: '#A9694A',
-  hard: '#4F2683', grass: '#00693E', info: '#4F2683', success: '#00693E', warning: '#96721C', danger: '#9E3A38',
-  overlay: 'rgba(12, 26, 18, 0.58)',
+  bg: '#F7FAF3', bgElevated: '#EAF2E1', surface: '#F2F8EB', surfaceAlt: '#DFEBD3',
+  border: '#CFDFC0', borderStrong: '#96AF86', text: '#1B2E1C', textMuted: '#55684F', textFaint: '#7E9076',
+  brand: '#2E7D46', brandInk: '#FFFFFF', brandDim: '#DCEBDA', court: '#5A9A55', clay: '#A9694A',
+  hard: '#4F2683', grass: '#5A9A55', info: '#4F2683', success: '#2E7D46', warning: '#94721C', danger: '#9E3A38',
+  overlay: 'rgba(16, 30, 18, 0.55)',
 };
 
-/** US Open — the night session: navy, floodlight blue, a stripe of yellow. */
+/**
+ * US Open — the one pairing everyone recognises: blue court inside a green
+ * surround. Deepened so it reads as the night session and stays clearly
+ * apart from the Australian Open's paler blue.
+ */
 const usOpenColors: Palette = {
-  bg: '#0B1A2E', bgElevated: '#12243C', surface: '#152941', surfaceAlt: '#1E3550',
-  border: '#27405D', borderStrong: '#48688C', text: '#EAF1FA', textMuted: '#9FB4CD', textFaint: '#7A8FA8',
-  brand: '#3E8EDE', brandInk: '#06121F', brandDim: '#1B3A5C', court: '#3E8EDE', clay: '#D98A5E',
-  hard: '#3E8EDE', grass: '#6FB98A', info: '#6FB1E8', success: '#59C08D', warning: '#F0C24E', danger: '#EE7B72',
-  overlay: 'rgba(3, 10, 20, 0.7)',
+  bg: '#14283D', bgElevated: '#1B3350', surface: '#1F3A5A', surfaceAlt: '#2A4A6E',
+  border: '#32557A', borderStrong: '#5C82AC', text: '#E9F0F8', textMuted: '#A7BCD3', textFaint: '#7F97B0',
+  brand: '#7FAE6C', brandInk: '#0E1C0B', brandDim: '#264430', court: '#6C935C', clay: '#D08A5E',
+  hard: '#4E87C4', grass: '#7FAE6C', info: '#5C9BD8', success: '#7FAE6C', warning: '#E3B85A', danger: '#E07E72',
+  overlay: 'rgba(4, 12, 22, 0.7)',
 };
 
 export type ThemeName = 'default' | 'night' | 'ao' | 'roland-garros' | 'wimbledon' | 'us-open';
