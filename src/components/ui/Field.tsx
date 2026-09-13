@@ -14,6 +14,7 @@ interface Props {
   minHeight?: number;
   autoCapitalize?: 'none' | 'sentences' | 'words';
   keyboardType?: KeyboardTypeOptions;
+  secureTextEntry?: boolean;
   hint?: string;
   /**
    * Called when Enter is pressed on a computer (Shift+Enter still adds a
@@ -39,6 +40,7 @@ export function Field({
   minHeight,
   autoCapitalize = 'sentences',
   keyboardType,
+  secureTextEntry = false,
   hint,
   onSubmitEditing,
 }: Props) {
@@ -57,6 +59,7 @@ export function Field({
         multiline={multiline}
         autoCapitalize={autoCapitalize}
         keyboardType={keyboardType}
+        secureTextEntry={secureTextEntry}
         onSubmitEditing={submits ? onSubmitEditing : undefined}
         blurOnSubmit={submits && multiline ? true : undefined}
         returnKeyType={submits ? 'send' : undefined}

@@ -8,9 +8,12 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
-import { Platform } from 'react-native';
+import { AppState as DeviceState, Platform } from 'react-native';
+import { randomUUID } from 'expo-crypto';
 
 import { fetchBootstrap, fetchCommunityThreads, signIn as apiSignIn, type Bootstrap } from '@/data/api';
+import { auth as remoteAuth, fetchRemote, isLocalMedia, remote, uploadMedia, emptyProfile } from '@/data/remote';
+import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { markMessagesOpened } from '@/features/messaging/readReceipts';
 import { readReceiptPreference, saveReceiptPreference } from '@/features/messaging/preferences';
 import { connectProvider, disconnectProvider } from '@/lib/integrations';
@@ -151,6 +154,8 @@ function readDefaultPayment(): ID {
 
 interface AppState extends Bootstrap {
   ready: boolean;
+  /** The stored session has been checked, so a redirect to sign-in is not premature. */
+  authResolved: boolean;
   /** What a double tap leaves on a message. */
   defaultReaction: string;
   currentUserId: ID | null;
@@ -190,7 +195,10 @@ interface AppActions {
   reportUser: (userId: ID, reason: string) => void;
 
   setReadReceiptsEnabled: (enabled: boolean) => void;
-  signIn: (handle: string) => Promise<void>;
+  /** With Supabase: email and password. Without it: the demo handle. */
+  signIn: (identity: string, password?: string) => Promise<void>;
+  /** Creates the account. Resolves 'confirm' when the project wants the email verified first. */
+  signUp: (email: string, password: string, name: string, handle: string) => Promise<'session' | 'confirm'>;
   signOut: () => void;
   completeOnboarding: (profile: PlayerProfile) => void;
   updateIdentity: (patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string }) => void;
@@ -279,15 +287,22 @@ const emptyBootstrap: Bootstrap = {
 };
 
 let idCounter = 0;
+/** Real rows need real UUIDs; the fixtures keep their readable ids. */
 const nextId = (prefix: string): string => {
+  if (isSupabaseConfigured) return randomUUID();
   idCounter += 1;
   return `${prefix}-${Date.now().toString(36)}-${idCounter}`;
 };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Whether an id names a row in Supabase rather than a fixture. */
+const live = (...ids: (ID | null | undefined)[]) => isSupabaseConfigured && ids.every((id) => !!id && UUID.test(id));
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>({
     ...emptyBootstrap,
     ready: false,
+    authResolved: !isSupabaseConfigured,
     currentUserId: null,
     onboardingComplete: false,
     error: null,
@@ -338,18 +353,97 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  /**
+   * Real data sits on top of the fixtures: profiles, posts, stories and the
+   * edges between them come from Supabase once someone is signed in, and the
+   * fixtures fill in everything that has no table yet.
+   */
+  const loadRemote = useCallback(async (me: ID, email?: string | null) => {
+    try {
+      const data = await fetchRemote(me);
+      setState((prev) => {
+        const remoteUsers = new Set(data.users.map((u) => u.id));
+        const remotePosts = new Set(data.posts.map((p) => p.id));
+        const remoteStories = new Set(data.stories.map((s) => s.id));
+        const remoteComments = new Set(data.comments.map((c) => c.id));
+        let users = [...data.users, ...prev.users.filter((u) => !remoteUsers.has(u.id))];
+        // The profile row is created by a trigger; if it has not landed yet,
+        // stand in for it so the screens have someone to show.
+        if (!remoteUsers.has(me)) {
+          const handle = (email ?? 'player').split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '') || 'player';
+          users = [{
+            id: me, handle, name: handle, bio: '', location: '', joinedAt: new Date().toISOString(), avatarSeed: me,
+            isCoach: false, followers: 0, following: 0, profile: emptyProfile, achievementIds: [],
+            stats: { sessionsLogged: 0, matchesPlayed: 0, matchesWon: 0, hoursOnCourt: 0, currentStreakDays: 0, longestStreakDays: 0 },
+          }, ...users];
+        }
+        const self = users.find((u) => u.id === me);
+        return {
+          ...prev,
+          users,
+          posts: [...data.posts, ...prev.posts.filter((p) => !remotePosts.has(p.id))],
+          comments: [...data.comments, ...prev.comments.filter((c) => !remoteComments.has(c.id))],
+          stories: [...data.stories, ...prev.stories.filter((st) => !remoteStories.has(st.id))],
+          followingIds: data.followingIds,
+          saved: { ...prev.saved, postIds: data.savedPostIds },
+          currentUserId: me,
+          onboardingComplete: (self?.profile.goals.length ?? 0) > 0,
+          authResolved: true,
+          error: null,
+        };
+      });
+    } catch (err) {
+      setState((prev) => ({ ...prev, currentUserId: me, authResolved: true, error: err instanceof Error ? err.message : 'Could not load your account.' }));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) return;
+    let cancelled = false;
+    supabase.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      if (data.session) loadRemote(data.session.user.id, data.session.user.email);
+      else setState((prev) => ({ ...prev, authResolved: true }));
+    }).catch(() => setState((prev) => ({ ...prev, authResolved: true })));
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (cancelled) return;
+      if (event === 'SIGNED_IN' && session) loadRemote(session.user.id, session.user.email);
+      if (event === 'SIGNED_OUT') setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false }));
+    });
+    // Tokens only refresh while the app is in front.
+    const sub = DeviceState.addEventListener('change', (status) => {
+      if (Platform.OS === 'web') return;
+      if (status === 'active') supabase?.auth.startAutoRefresh();
+      else supabase?.auth.stopAutoRefresh();
+    });
+    return () => {
+      cancelled = true;
+      listener.subscription.unsubscribe();
+      sub.remove();
+    };
+  }, [loadRemote]);
+
   const currentUser = useMemo(
     () => state.users.find((u) => u.id === state.currentUserId) ?? null,
     [state.users, state.currentUserId],
   );
+
+  // Keep a ref so async actions read fresh state without re-creating callbacks.
+  const stateRef = React.useRef(state);
+  stateRef.current = state;
 
   const requireUser = useCallback((): ID => {
     if (!state.currentUserId) throw new Error('Not signed in');
     return state.currentUserId;
   }, [state.currentUserId]);
 
-  const signIn = useCallback(async (handle: string) => {
-    const user = await apiSignIn(handle);
+  const signIn = useCallback(async (identity: string, password?: string) => {
+    if (isSupabaseConfigured && password !== undefined) {
+      const session = await remoteAuth.signIn(identity, password);
+      if (session) await loadRemote(session.user.id, session.user.email);
+      return;
+    }
+    const user = await apiSignIn(identity);
     setState((prev) => ({
       ...prev,
       currentUserId: user.id,
@@ -357,9 +451,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       onboardingComplete: user.profile.goals.length > 0,
       error: null,
     }));
-  }, []);
+  }, [loadRemote]);
+
+  const signUp = useCallback(async (email: string, password: string, name: string, handle: string) => {
+    const session = await remoteAuth.signUp(email, password, name, handle);
+    if (!session) return 'confirm' as const;
+    await loadRemote(session.user.id, session.user.email);
+    return 'session' as const;
+  }, [loadRemote]);
 
   const signOut = useCallback(() => {
+    if (isSupabaseConfigured) remoteAuth.signOut();
     setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false }));
   }, []);
 
@@ -377,11 +479,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (profile: PlayerProfile) => {
       patchCurrentUser((u) => ({ ...u, profile }));
       setState((prev) => ({ ...prev, onboardingComplete: true }));
+      const me = stateRef.current.currentUserId;
+      if (live(me)) remote.updateProfile(me!, { profile });
     },
     [patchCurrentUser],
   );
 
-  const updateIdentity = useCallback((patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string }) => { patchCurrentUser(u => ({ ...u, ...patch })); }, [patchCurrentUser]);
+  const updateIdentity = useCallback((patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string }) => {
+    patchCurrentUser(u => ({ ...u, ...patch }));
+    const me = stateRef.current.currentUserId;
+    if (!live(me)) return;
+    (async () => {
+      const avatarUrl = isLocalMedia(patch.avatarUrl) ? await uploadMedia(me!, patch.avatarUrl!, 'photo') : patch.avatarUrl;
+      if (avatarUrl && avatarUrl !== patch.avatarUrl) patchCurrentUser(u => ({ ...u, avatarUrl }));
+      await remote.updateProfile(me!, { ...patch, avatarUrl });
+    })();
+  }, [patchCurrentUser]);
   const setReadReceiptsEnabled = useCallback((enabled: boolean) => {
     const me = requireUser();
     saveReceiptPreference(me, enabled);
@@ -391,17 +504,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updateProfile = useCallback(
     (patch: Partial<PlayerProfile>) => {
       patchCurrentUser((u) => ({ ...u, profile: { ...u.profile, ...patch } }));
+      const me = stateRef.current.currentUserId;
+      const self = stateRef.current.users.find((u) => u.id === me);
+      if (live(me) && self) remote.updateProfile(me!, { profile: { ...self.profile, ...patch } });
     },
     [patchCurrentUser],
   );
 
-  // Keep a ref so async actions read fresh state without re-creating callbacks.
-  const stateRef = React.useRef(state);
-  stateRef.current = state;
-
   const toggleLike = useCallback(
     (postId: ID) => {
       const me = requireUser();
+      if (live(me, postId)) {
+        const post = stateRef.current.posts.find((p) => p.id === postId);
+        if (post) remote.setLike(postId, me, !post.likedBy.includes(me));
+      }
       setState((prev) => {
         const post = prev.posts.find((p) => p.id === postId);
         const liking = !!post && !post.likedBy.includes(me);
@@ -448,6 +564,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...input,
       };
       setState((prev) => ({ ...prev, posts: [post, ...prev.posts] }));
+      if (live(me)) {
+        (async () => {
+          // Media picked on the device goes up first so the row points at the bucket.
+          const imageUrl = isLocalMedia(post.imageUrl) ? await uploadMedia(me, post.imageUrl!, 'photo') : post.imageUrl;
+          const videoUrl = isLocalMedia(post.videoUrl) ? await uploadMedia(me, post.videoUrl!, 'video') : post.videoUrl;
+          const thumbnailUrl = post.thumbnailUrl === post.imageUrl ? imageUrl
+            : isLocalMedia(post.thumbnailUrl) ? await uploadMedia(me, post.thumbnailUrl!, 'photo') : post.thumbnailUrl;
+          const hosted = { ...post, imageUrl, videoUrl, thumbnailUrl };
+          setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === post.id ? { ...p, imageUrl, videoUrl, thumbnailUrl } : p)) }));
+          await remote.insertPost(hosted);
+        })();
+      }
       return post.id;
     },
     [requireUser],
@@ -456,6 +584,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const toggleArchivePost = useCallback((postId: ID) => {
     const me = requireUser();
     haptics.commit();
+    if (live(me, postId)) {
+      const post = stateRef.current.posts.find((p) => p.id === postId);
+      if (post?.authorId === me) remote.setPostArchived(postId, !post.archived);
+    }
     setState((prev) => ({
       ...prev,
       posts: prev.posts.map((p) => (p.id === postId && p.authorId === me ? { ...p, archived: !p.archived } : p)),
@@ -476,6 +608,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...input,
       };
       setState((prev) => ({ ...prev, stories: [story, ...prev.stories] }));
+      if (live(me)) {
+        (async () => {
+          const imageUrl = isLocalMedia(story.imageUrl) ? await uploadMedia(me, story.imageUrl!, 'photo') : story.imageUrl;
+          const videoUrl = isLocalMedia(story.videoUrl) ? await uploadMedia(me, story.videoUrl!, 'video') : story.videoUrl;
+          const thumbnailUrl = story.thumbnailUrl === story.imageUrl ? imageUrl
+            : isLocalMedia(story.thumbnailUrl) ? await uploadMedia(me, story.thumbnailUrl!, 'photo') : story.thumbnailUrl;
+          setState((prev) => ({ ...prev, stories: prev.stories.map((st) => (st.id === story.id ? { ...st, imageUrl, videoUrl, thumbnailUrl } : st)) }));
+          await remote.insertStory({ ...story, imageUrl, videoUrl, thumbnailUrl });
+        })();
+      }
       return story.id;
     },
     [requireUser],
@@ -484,6 +626,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const toggleArchiveStory = useCallback((storyId: ID) => {
     const me = requireUser();
     haptics.commit();
+    if (live(me, storyId)) {
+      const story = stateRef.current.stories.find((st) => st.id === storyId);
+      if (story?.authorId === me) remote.setStoryArchived(storyId, !story.archived);
+    }
     setState((prev) => ({
       ...prev,
       stories: prev.stories.map((s) => (s.id === storyId && s.authorId === me ? { ...s, archived: !s.archived } : s)),
@@ -491,6 +637,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [requireUser]);
 
   const markStoryViewed = useCallback((storyId: ID) => {
+    const me = stateRef.current.currentUserId;
+    const story = stateRef.current.stories.find((st) => st.id === storyId);
+    if (live(me, storyId) && story && !story.viewedBy.includes(me!)) remote.recordStoryView(storyId, me!);
     setState((prev) => {
       const me = prev.currentUserId;
       const story = prev.stories.find((s) => s.id === storyId);
@@ -511,6 +660,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         likedBy: [],
       };
       haptics.commit();
+      if (live(me, postId)) remote.insertComment(comment);
       setState((prev) => {
         const post = prev.posts.find((p) => p.id === postId);
         const next: AppState = {
@@ -816,6 +966,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const key = `${targetKind}:${targetId}`;
     if (seenThisSession.current.has(key)) return;
     seenThisSession.current.add(key);
+    if (targetKind === 'post' && live(stateRef.current.currentUserId, targetId)) remote.bumpViews(targetId);
     setState((prev) =>
       targetKind === 'post'
         ? {
@@ -834,6 +985,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toggleSavePost = useCallback((postId: ID) => {
+    {
+      const me = stateRef.current.currentUserId;
+      if (live(me, postId)) remote.setSaved(postId, me!, !stateRef.current.saved.postIds.includes(postId));
+    }
     setState((prev) => {
       const me = prev.currentUserId;
       const saving = !prev.saved.postIds.includes(postId);
@@ -1164,6 +1319,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
 
   const toggleFollow = useCallback((userId: ID) => {
+    {
+      const me = stateRef.current.currentUserId;
+      if (live(me, userId) && userId !== me) remote.setFollow(me!, userId, !stateRef.current.followingIds.includes(userId));
+    }
     setState((prev) => {
       const me = prev.currentUserId;
       if (!me || userId === me) return prev;
@@ -1259,6 +1418,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       reportUser,
       setReadReceiptsEnabled,
       signIn,
+      signUp,
       signOut,
       completeOnboarding,
       updateProfile,
@@ -1306,6 +1466,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       reportUser,
       setReadReceiptsEnabled,
       signIn,
+      signUp,
       signOut,
       completeOnboarding,
       updateProfile,
@@ -1342,7 +1503,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<AppContextValue>(
-    () => ({ ...state, currentUser, actions }),
+    () => ({ ...state, ready: state.ready && state.authResolved, currentUser, actions }),
     [state, currentUser, actions],
   );
 
