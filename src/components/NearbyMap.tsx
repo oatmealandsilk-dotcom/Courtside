@@ -73,8 +73,8 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false }: {
               onPress={() => onOpen(player.id)}
               style={[styles.pin, { left: `${x * 100}%`, top: `${y * 100}%` }]}
             >
-              <View style={[styles.pinRing, player.isCoach && { borderColor: colors.info }]}>
-                <Avatar name={player.name} seed={player.avatarSeed} size={30} />
+              <View style={styles.pinRing}>
+                <Avatar name={player.name} seed={player.avatarSeed} size={30} ring={player.isCoach} />
               </View>
             </Pressable>
           );
@@ -84,7 +84,7 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false }: {
         </View>
       </Pressable>
       <Text style={styles.hint}>
-        {expanded ? 'Tap a player to open their profile. Blue ring means coach.' : 'Tap the map to open it. Blue ring means coach.'}
+        {expanded ? 'Tap a player to open their profile. The badge means coach.' : 'Tap the map to open it. The badge means coach.'}
       </Text>
     </View>
   );
@@ -112,7 +112,7 @@ const styleDefinitions = StyleSheet.create({
     borderRadius: 75, borderWidth: 1, borderColor: colors.brand, opacity: 0.35,
   },
   pin: { position: 'absolute', marginLeft: -17, marginTop: -17 },
-  pinRing: { padding: 2, borderRadius: radius.pill, borderWidth: 2, borderColor: colors.brand, backgroundColor: colors.bg },
+  pinRing: { padding: 2, borderRadius: radius.pill, backgroundColor: colors.bg },
   mePin: { left: '50%', top: '50%', marginLeft: -9, marginTop: -9 },
   meDot: { width: 18, height: 18, borderRadius: 9, backgroundColor: colors.brand, borderWidth: 3, borderColor: colors.bg },
   hint: { ...typography.caption, color: colors.textFaint, letterSpacing: 0, padding: spacing.md, paddingTop: spacing.sm },
