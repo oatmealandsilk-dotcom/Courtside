@@ -12,7 +12,7 @@ import { Avatar, EmptyState, Field, Screen, SegmentedControl } from '@/component
 import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
 
-type Scope = 'all' | 'reels' | 'posts' | 'threads' | 'players' | 'coaches';
+type Scope = 'all' | 'clips' | 'posts' | 'threads' | 'players' | 'coaches';
 
 /** One search box across discussions, players, and coaches. */
 export default function Search() {
@@ -25,8 +25,8 @@ export default function Search() {
 
   const q = term.trim().toLowerCase();
   const matches=(text:string,tags:string[])=>q.startsWith('#') ? tags.some(t=>t.replace(/^#/,'').toLowerCase()===q.slice(1)) || text.toLowerCase().split(/[^#\p{L}\p{N}_]+/u).includes(q) : `${text} ${tags.join(' ')}`.toLowerCase().includes(q);
-  const matchedPosts = posts.filter(p=>q && matches(p.body,p.tags) && (scope==='reels' ? p.kind==='reel' : scope==='posts' ? p.kind!=='reel' : true));
-  const showPosts=scope==='all'||scope==='posts'||scope==='reels';
+  const matchedPosts = posts.filter(p=>q && !p.archived && matches(p.body,p.tags) && (scope==='clips' ? p.kind==='clip' : scope==='posts' ? p.kind!=='clip' : true));
+  const showPosts=scope==='all'||scope==='posts'||scope==='clips';
 
   const matchedQuestions = useMemo(
     () =>
@@ -83,7 +83,7 @@ export default function Search() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false}><SegmentedControl
           segments={[
             { value: 'all', label: 'All' },
-            {value:'reels',label:'Reels'},
+            {value:'clips',label:'Clips'},
             {value:'posts',label:'Posts'},
             { value: 'threads', label: 'Threads' },
             { value: 'players', label: 'Players' },

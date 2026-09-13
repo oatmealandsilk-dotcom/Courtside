@@ -23,7 +23,7 @@ export default function PrivacyCentre() {
       <View style={styles.card}>
         {[
           ['Your profile', 'Name, handle, city, rating, play style, goals, injury notes.'],
-          ['What you post', 'Reels, posts, discussions, answers, and questions to coaches.'],
+          ['What you post', 'Clips, posts, discussions, answers, and questions to coaches.'],
           ['Health data', 'Only what you connect in Health and nutrition. It feeds the AI coach and never appears on your profile.'],
           ['Messages', 'Kept so both people can read them. Blocking someone removes the conversation for you.'],
         ].map(([title, body], index) => (

@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
-import { StyleSheet, Text, TextInput, View, type KeyboardTypeOptions } from 'react-native';
+import { Platform, StyleSheet, Text, TextInput, View, type KeyboardTypeOptions } from 'react-native';
 
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -15,7 +15,19 @@ interface Props {
   autoCapitalize?: 'none' | 'sentences' | 'words';
   keyboardType?: KeyboardTypeOptions;
   hint?: string;
+  /**
+   * Called when Enter is pressed on a computer (Shift+Enter still adds a
+   * line). Phones keep Enter as a new line in multiline boxes, since the
+   * send button is right there.
+   */
+  onSubmitEditing?: () => void;
 }
+
+/**
+ * The web toolkit only fires onSubmitEditing for a multiline box when it is
+ * told to blur on submit, so that is what "Enter sends" means on the web.
+ */
+const submitOnEnter = Platform.OS === 'web';
 
 export function Field({
   inputRef,
@@ -28,8 +40,10 @@ export function Field({
   autoCapitalize = 'sentences',
   keyboardType,
   hint,
+  onSubmitEditing,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
+  const submits = Boolean(onSubmitEditing) && (submitOnEnter || !multiline);
   return (
     <View style={styles.wrap}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
@@ -43,6 +57,9 @@ export function Field({
         multiline={multiline}
         autoCapitalize={autoCapitalize}
         keyboardType={keyboardType}
+        onSubmitEditing={submits ? onSubmitEditing : undefined}
+        blurOnSubmit={submits && multiline ? true : undefined}
+        returnKeyType={submits ? 'send' : undefined}
         style={[
           styles.input,
           multiline && { minHeight: minHeight ?? 110, textAlignVertical: 'top' },

@@ -53,7 +53,12 @@ export function QuestionCard({
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         {author && <Avatar name={author.name} seed={author.avatarSeed} size={30} />}
         <PlayerName userId={author?.id} style={styles.footerText}>@{author?.handle ?? 'player'}</PlayerName>
-        {author && <LevelPill profile={author.profile} small />}
+        {question.source ? (
+          <View style={styles.sourceBadge}>
+            <Ionicons name={question.source.name === 'reddit' ? 'logo-reddit' : 'globe-outline'} size={12} color={colors.textMuted} />
+            <Text style={styles.sourceText}>{question.source.label}</Text>
+          </View>
+        ) : author ? <LevelPill profile={author.profile} small /> : null}
         <Text style={[styles.footerText, { marginLeft: 'auto' }]}>{relativeTime(question.createdAt)}</Text>
       </View>
       <Text style={styles.title}>{question.title}</Text>
@@ -77,7 +82,7 @@ export function QuestionCard({
           style={styles.action}
         >
           <Ionicons name="chatbubble-outline" size={20} color={colors.text} />
-          <Text style={styles.actionLabel}>{question.answerIds.length}</Text>
+          <Text style={styles.actionLabel}>{question.answerIds.length || question.source?.replies || 0}</Text>
         </Tappable>
 
         {onShare ? (
@@ -123,6 +128,8 @@ const styleDefinitions = StyleSheet.create({
   // at 16px and textFaint, which read as decoration rather than buttons.
   action: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7 },
   actionLabel: { ...typography.smallStrong, color: colors.text },
+  sourceBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: colors.surfaceAlt },
+  sourceText: { ...typography.caption, color: colors.textMuted, letterSpacing: 0 },
   answered: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   answeredText: { ...typography.caption, color: colors.court },
   spacer: { flex: 1 },

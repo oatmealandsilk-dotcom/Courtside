@@ -10,7 +10,7 @@ import { colors, radius, spacing, typography } from '@/theme';
 const TOPICS: { title: string; body: string }[] = [
   {
     title: 'How does the feed decide what I see?',
-    body: 'Newest moments from people you follow come first, then popular reels and unanswered discussions from your level. Muting someone removes their posts without unfollowing.',
+    body: 'Newest moments from people you follow come first, then popular clips and unanswered discussions from your level. Muting someone removes their posts without unfollowing.',
   },
   {
     title: 'What is my NTRP or UTR badge?',

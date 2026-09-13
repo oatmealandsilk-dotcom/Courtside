@@ -4,7 +4,7 @@ import Discuss from '../(tabs)/discuss';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -70,6 +70,20 @@ export default function QuestionDetail() {
             <Chip key={tag} label={`#${tag}`} onPress={() => router.push({pathname:"/search",params:{q:`#${tag}`}})} small />
           ))}
         </View>
+        {question.source ? (
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={`Read the original on ${question.source.label}`}
+            onPress={() => Linking.openURL(question.source!.url)}
+            style={styles.sourceRow}
+          >
+            <Ionicons name={question.source.name === 'reddit' ? 'logo-reddit' : 'globe-outline'} size={16} color={colors.brand} />
+            <Text style={styles.sourceText}>
+              From {question.source.label} · by {question.source.author} · {question.source.replies} replies there
+            </Text>
+            <Ionicons name="open-outline" size={15} color={colors.brand} />
+          </Pressable>
+        ) : null}
         <View style={styles.voteRow}>
           <VoteControls item={question} userId={currentUserId} onVote={direction => actions.voteQuestion(question.id, direction)} />
           <Ionicons name="chatbubble-outline" size={18} color={colors.textMuted}/>
@@ -102,6 +116,7 @@ export default function QuestionDetail() {
             onChangeText={setDraft}
             placeholder="Write a thoughtful reply…"
             multiline
+            onSubmitEditing={submit}
           />
           <Button label="Post reply" onPress={submit} disabled={draft.trim().length === 0} />
         </View>
@@ -118,6 +133,8 @@ const styleDefinitions = StyleSheet.create({
   body: { ...typography.body, color: colors.textMuted, lineHeight: 22 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   voteRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  sourceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.bgElevated },
+  sourceText: { ...typography.small, color: colors.textMuted, flex: 1, lineHeight: 19 },
   voteButton: {
     width: 32,
     height: 32,

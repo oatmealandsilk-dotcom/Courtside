@@ -1,5 +1,5 @@
 import { isoDaysAgo } from '@/lib/format';
-import type { Coach, CoachingRequest } from '../types';
+import type { Coach, CoachingRequest, CoachResult, CoachReview } from '../types';
 import { CURRENT_USER_ID } from './users';
 
 export const coaches: Coach[] = [
@@ -130,4 +130,23 @@ export const coachingRequests: CoachingRequest[] = [
     status: 'in-review',
     createdAt: isoDaysAgo(2),
   },
+];
+
+/* ------------------------- Results and reviews ------------------------- */
+
+export const coachResults: CoachResult[] = [
+  { id: 'res1', coachId: 'co-tomas', clientName: 'Priya', focus: 'Second serves in', before: '41%', after: '63%', weeks: 6, note: 'Fixed the toss drift first; the rest followed.' },
+  { id: 'res2', coachId: 'co-tomas', clientName: 'Marcus', focus: 'First-serve speed', before: '84 mph', after: '97 mph', weeks: 10 },
+  { id: 'res3', coachId: 'co-mira', clientName: 'Elena', focus: 'Forehand unforced errors / set', before: '11', after: '5', weeks: 8, note: 'Contact point moved forward and the grip stopped slipping.' },
+  { id: 'res4', coachId: 'co-mira', clientName: 'Jae', focus: 'UTR', before: '4.8', after: '6.1', weeks: 24 },
+  { id: 'res5', coachId: 'co-nadia', clientName: 'Sam', focus: 'Split-step reaction', before: '0.42 s', after: '0.31 s', weeks: 5 },
+  { id: 'res6', coachId: 'co-nadia', clientName: 'Rosa', focus: 'Third-set win rate', before: '30%', after: '60%', weeks: 12, note: 'Conditioning block plus a hydration plan.' },
+];
+
+export const coachReviews: CoachReview[] = [
+  { id: 'rev1', coachId: 'co-tomas', authorId: 'u-dev', rating: 5, body: 'Watched a 40-second clip and named the exact thing three other coaches had missed. Second serve is a weapon now, not a prayer.', createdAt: isoDaysAgo(9) },
+  { id: 'rev2', coachId: 'co-tomas', authorId: 'u-june', rating: 5, body: 'Direct, specific, no fluff. Sent me one drill and it stuck.', createdAt: isoDaysAgo(23) },
+  { id: 'rev3', coachId: 'co-mira', authorId: 'u-june', rating: 5, body: 'My forehand finally goes where I look. The frame-by-frame breakdown was worth every cent.', createdAt: isoDaysAgo(14) },
+  { id: 'rev4', coachId: 'co-mira', authorId: 'u-dev', rating: 4, body: 'Great eye for technique. Reply took a little longer than the listed turnaround.', createdAt: isoDaysAgo(31) },
+  { id: 'rev5', coachId: 'co-nadia', authorId: 'u-june', rating: 5, body: 'First coach who asked about my sleep before my footwork. The plan fit around a real job.', createdAt: isoDaysAgo(6) },
 ];

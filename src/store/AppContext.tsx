@@ -10,10 +10,12 @@ import React, {
 } from 'react';
 import { Platform } from 'react-native';
 
-import { fetchBootstrap, signIn as apiSignIn, type Bootstrap } from '@/data/api';
+import { fetchBootstrap, fetchCommunityThreads, signIn as apiSignIn, type Bootstrap } from '@/data/api';
 import { markMessagesOpened } from '@/features/messaging/readReceipts';
 import { readReceiptPreference, saveReceiptPreference } from '@/features/messaging/preferences';
 import { connectProvider, disconnectProvider } from '@/lib/integrations';
+import { nearestPlace } from '@/data/locations';
+import { getPosition } from '@/lib/geo';
 import * as haptics from '@/lib/haptics';
 import type {
   Answer,
@@ -22,6 +24,8 @@ import type {
   CoachingRequest,
   CoachQuestion,
   CoachReply,
+  CoachResult,
+  CoachReview,
   CoachSpecialty,
   Comment,
   Conversation,
@@ -31,15 +35,26 @@ import type {
   Message,
   Notification,
   NotificationTarget,
+  PaymentKind,
+  PaymentMethod,
   Post,
   PostKind,
   Question,
   QuestionTopic,
   SavedItems,
   SessionDetail,
+  Story,
   User,
   PlayerProfile,
 } from '@/data/types';
+
+interface NewStoryInput {
+  imageUrl?: string;
+  videoUrl?: string;
+  thumbnailUrl?: string;
+  mediaLabel?: string;
+  caption?: string;
+}
 
 interface NewPostInput {
   kind: PostKind;
@@ -111,6 +126,29 @@ function readDefaultReaction(): string {
   }
 }
 
+/** Demo wallet. A real build gets these from the payment provider. */
+const STARTER_PAYMENTS: PaymentMethod[] = [
+  { id: 'pm-visa', kind: 'card', label: 'Visa', detail: '•••• 4242 · exp 09/28' },
+  { id: 'pm-apple', kind: 'apple-pay', label: 'Apple Pay' },
+];
+
+function readFlag(key: string): boolean {
+  try {
+    return Platform.OS === 'web' && localStorage.getItem(key) === 'on';
+  } catch {
+    return false;
+  }
+}
+
+function readDefaultPayment(): ID {
+  try {
+    if (Platform.OS !== 'web') return 'pm-visa';
+    return localStorage.getItem('courtside-default-payment') || 'pm-visa';
+  } catch {
+    return 'pm-visa';
+  }
+}
+
 interface AppState extends Bootstrap {
   ready: boolean;
   /** What a double tap leaves on a message. */
@@ -127,9 +165,23 @@ interface AppState extends Bootstrap {
   blockedIds: ID[];
   /** People whose new posts you have asked to be told about. */
   alertIds: ID[];
+  /** Ways to pay a coach, and which one is used unless you say otherwise. */
+  paymentMethods: PaymentMethod[];
+  defaultPaymentId: ID | null;
+  /** Whether the app may ask the device where you are, and the city it found. */
+  locationEnabled: boolean;
+  detectedLocation: string | null;
 }
 
 interface AppActions {
+  /* Location */
+  setLocationEnabled: (enabled: boolean) => Promise<string | null>;
+
+  /* Payments */
+  setDefaultPayment: (id: ID) => void;
+  addPaymentMethod: (kind: PaymentKind) => void;
+  removePaymentMethod: (id: ID) => void;
+
   /* People */
   toggleFollow: (userId: ID) => void;
   toggleMute: (userId: ID) => void;
@@ -146,7 +198,14 @@ interface AppActions {
 
   toggleLike: (postId: ID) => void;
   addPost: (input: NewPostInput) => ID;
+  /** Puts one of your posts away, or brings it back. */
+  toggleArchivePost: (postId: ID) => void;
   addComment: (postId: ID, body: string) => void;
+
+  /* Stories */
+  addStory: (input: NewStoryInput) => ID;
+  toggleArchiveStory: (storyId: ID) => void;
+  markStoryViewed: (storyId: ID) => void;
 
   addQuestion: (input: NewQuestionInput) => ID;
   voteQuestion: (questionId: ID, direction: 1 | -1) => void;
@@ -163,6 +222,10 @@ interface AppActions {
 
   /* Become a coach */
   submitCoachApplication: (input: CoachApplicationInput) => ID;
+
+  /* A coach's page */
+  addCoachResult: (input: Omit<CoachResult, 'id' | 'coachId'>) => void;
+  addCoachReview: (coachId: ID, rating: number, body: string) => void;
 
   /* Saved */
   toggleSavePost: (postId: ID) => void;
@@ -196,6 +259,7 @@ const AppContext = createContext<AppContextValue | null>(null);
 const emptyBootstrap: Bootstrap = {
   users: [],
   posts: [],
+  stories: [],
   comments: [],
   questions: [],
   answers: [],
@@ -207,6 +271,8 @@ const emptyBootstrap: Bootstrap = {
   coachQuestions: [],
   coachReplies: [],
   coachApplications: [],
+  coachResults: [],
+  coachReviews: [],
   conversations: [],
   messages: [],
   notifications: [],
@@ -231,6 +297,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     mutedIds: [],
     blockedIds: [],
     alertIds: [],
+    paymentMethods: STARTER_PAYMENTS,
+    defaultPaymentId: readDefaultPayment(),
+    locationEnabled: readFlag('courtside-location'),
+    detectedLocation: null,
   });
 
   useEffect(() => {
@@ -239,6 +309,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .then((data) => {
         if (cancelled) return;
         setState((prev) => ({ ...prev, ...data, users: data.users.map(user => ({...user, readReceiptsEnabled: readReceiptPreference(user.id)})), ready: true }));
+        // Imported threads arrive on their own clock and slot in when ready.
+        fetchCommunityThreads()
+          .then((imported) => {
+            if (cancelled || !imported.questions.length) return;
+            setState((prev) => {
+              const known = new Set(prev.questions.map((q) => q.id));
+              const knownUsers = new Set(prev.users.map((u) => u.id));
+              return {
+                ...prev,
+                users: [...prev.users, ...imported.users.filter((u) => !knownUsers.has(u.id))],
+                questions: [...prev.questions, ...imported.questions.filter((q) => !known.has(q.id))],
+              };
+            });
+          })
+          .catch(() => { /* The board still works without them. */ });
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -367,6 +452,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     [requireUser],
   );
+
+  const toggleArchivePost = useCallback((postId: ID) => {
+    const me = requireUser();
+    haptics.commit();
+    setState((prev) => ({
+      ...prev,
+      posts: prev.posts.map((p) => (p.id === postId && p.authorId === me ? { ...p, archived: !p.archived } : p)),
+    }));
+  }, [requireUser]);
+
+  const addStory = useCallback(
+    (input: NewStoryInput): ID => {
+      const me = requireUser();
+      haptics.commit();
+      const createdAt = new Date().toISOString();
+      const story: Story = {
+        id: nextId('s'),
+        authorId: me,
+        createdAt,
+        expiresAt: new Date(Date.now() + 24 * 3_600_000).toISOString(),
+        viewedBy: [],
+        ...input,
+      };
+      setState((prev) => ({ ...prev, stories: [story, ...prev.stories] }));
+      return story.id;
+    },
+    [requireUser],
+  );
+
+  const toggleArchiveStory = useCallback((storyId: ID) => {
+    const me = requireUser();
+    haptics.commit();
+    setState((prev) => ({
+      ...prev,
+      stories: prev.stories.map((s) => (s.id === storyId && s.authorId === me ? { ...s, archived: !s.archived } : s)),
+    }));
+  }, [requireUser]);
+
+  const markStoryViewed = useCallback((storyId: ID) => {
+    setState((prev) => {
+      const me = prev.currentUserId;
+      const story = prev.stories.find((s) => s.id === storyId);
+      if (!me || !story || story.viewedBy.includes(me)) return prev;
+      return { ...prev, stories: prev.stories.map((s) => (s.id === storyId ? { ...s, viewedBy: [...s.viewedBy, me] } : s)) };
+    });
+  }, []);
 
   const addComment = useCallback(
     (postId: ID, body: string) => {
@@ -677,7 +808,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
-   * Counts a view once per item per session. Without the guard, scrolling a reel
+   * Counts a view once per item per session. Without the guard, scrolling a clip
    * back into sight would inflate the number every time it passed.
    */
   const seenThisSession = useRef<Set<string>>(new Set());
@@ -819,7 +950,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [requireUser, appendMessage],
   );
 
-  /** Share a reel or a thread into one or more DMs, Instagram style. */
+  /** Share a clip or a thread into one or more DMs, Instagram style. */
   const shareToUsers = useCallback(
     (userIds: ID[], kind: 'post' | 'question' | 'profile', sharedId: ID, note?: string) => {
       const me = requireUser();
@@ -896,6 +1027,134 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const messages = markMessagesOpened(prev.messages, conversation, me, user?.readReceiptsEnabled !== false, new Date().toISOString());
       if (messages === prev.messages && conversation.unreadCount === 0) return prev;
       return {...prev, messages, conversations: prev.conversations.map(c => c.id === conversationId ? {...c, unreadCount: 0} : c)};
+    });
+  }, []);
+
+  /* ---------------------------- A coach's page ---------------------------- */
+
+  /** Only the coach who owns the page can add to it; anyone else is ignored. */
+  const addCoachResult = useCallback((input: Omit<CoachResult, 'id' | 'coachId'>) => {
+    setState((prev) => {
+      const coach = prev.coaches.find((c) => c.userId === prev.currentUserId);
+      if (!coach) return prev;
+      haptics.commit();
+      const result: CoachResult = { ...input, id: nextId('res'), coachId: coach.id };
+      return { ...prev, coachResults: [result, ...prev.coachResults] };
+    });
+  }, []);
+
+  /** One review per player per coach; the coach's average moves with it. */
+  const addCoachReview = useCallback((coachId: ID, rating: number, body: string) => {
+    setState((prev) => {
+      const me = prev.currentUserId;
+      const coach = prev.coaches.find((c) => c.id === coachId);
+      if (!me || !coach || coach.userId === me) return prev;
+      if (prev.coachReviews.some((r) => r.coachId === coachId && r.authorId === me)) return prev;
+      haptics.commit();
+      const stars = Math.max(1, Math.min(5, Math.round(rating)));
+      const review: CoachReview = {
+        id: nextId('rev'),
+        coachId,
+        authorId: me,
+        rating: stars,
+        body: body.trim(),
+        createdAt: new Date().toISOString(),
+      };
+      const total = coach.ratingAvg * coach.ratingCount + stars;
+      const count = coach.ratingCount + 1;
+      return {
+        ...prev,
+        coachReviews: [review, ...prev.coachReviews],
+        coaches: prev.coaches.map((c) =>
+          c.id === coachId ? { ...c, ratingCount: count, ratingAvg: Math.round((total / count) * 10) / 10 } : c,
+        ),
+      };
+    });
+  }, []);
+
+  /* ------------------------------- Location ------------------------------- */
+
+  /**
+   * Turning Location on asks the device once, through its own prompt, and
+   * keeps only the nearest city name. Resolves with a message for the screen
+   * to show, or null when everything went fine.
+   */
+  const setLocationEnabled = useCallback(async (enabled: boolean): Promise<string | null> => {
+    const remember = (on: boolean) => {
+      try {
+        if (Platform.OS === 'web') localStorage.setItem('courtside-location', on ? 'on' : 'off');
+      } catch {}
+    };
+    if (!enabled) {
+      remember(false);
+      setState((prev) => ({ ...prev, locationEnabled: false, detectedLocation: null }));
+      return null;
+    }
+    const result = await getPosition();
+    if (!result.ok) {
+      remember(false);
+      setState((prev) => ({ ...prev, locationEnabled: false, detectedLocation: null }));
+      return result.reason === 'denied'
+        ? 'Location was blocked. Allow it for this site in your browser or phone settings, then try again.'
+        : result.reason === 'unavailable'
+          ? 'This device cannot share its location with the app yet.'
+          : 'Could not get a location right now. Try again in a moment.';
+    }
+    const place = nearestPlace(result.lat, result.lng);
+    haptics.tap();
+    remember(true);
+    setState((prev) => ({ ...prev, locationEnabled: true, detectedLocation: place.name }));
+    return null;
+  }, []);
+
+  // Someone who left Location on last time gets the city refreshed quietly.
+  useEffect(() => {
+    if (!state.locationEnabled || state.detectedLocation) return;
+    getPosition().then((result) => {
+      if (result.ok) {
+        const place = nearestPlace(result.lat, result.lng);
+        setState((prev) => ({ ...prev, detectedLocation: place.name }));
+      }
+    });
+  }, [state.locationEnabled, state.detectedLocation]);
+
+  /* ------------------------------- Payments ------------------------------- */
+
+  const setDefaultPayment = useCallback((id: ID) => {
+    haptics.tap();
+    setState((prev) => (prev.paymentMethods.some((m) => m.id === id) ? { ...prev, defaultPaymentId: id } : prev));
+    try {
+      if (Platform.OS === 'web') localStorage.setItem('courtside-default-payment', id);
+    } catch {}
+  }, []);
+
+  /**
+   * Adds a wallet or PayPal. Cards are deliberately not addable here: card
+   * numbers go straight to the payment provider's own form, never through us.
+   */
+  const addPaymentMethod = useCallback((kind: PaymentKind) => {
+    setState((prev) => {
+      if (kind === 'card' || prev.paymentMethods.some((m) => m.kind === kind)) return prev;
+      haptics.commit();
+      const label = kind === 'apple-pay' ? 'Apple Pay' : kind === 'google-pay' ? 'Google Pay' : 'PayPal';
+      const me = prev.users.find((u) => u.id === prev.currentUserId);
+      const method: PaymentMethod = {
+        id: nextId('pm'),
+        kind,
+        label,
+        detail: kind === 'paypal' && me ? `${me.handle}@example.com` : undefined,
+      };
+      return { ...prev, paymentMethods: [...prev.paymentMethods, method] };
+    });
+  }, []);
+
+  const removePaymentMethod = useCallback((id: ID) => {
+    setState((prev) => {
+      const remaining = prev.paymentMethods.filter((m) => m.id !== id);
+      if (remaining.length === prev.paymentMethods.length) return prev;
+      haptics.untap();
+      const defaultPaymentId = prev.defaultPaymentId === id ? remaining[0]?.id ?? null : prev.defaultPaymentId;
+      return { ...prev, paymentMethods: remaining, defaultPaymentId };
     });
   }, []);
 
@@ -987,6 +1246,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const actions = useMemo<AppActions>(
     () => ({
+      addCoachResult,
+      addCoachReview,
+      setLocationEnabled,
+      setDefaultPayment,
+      addPaymentMethod,
+      removePaymentMethod,
       toggleFollow,
       toggleMute,
       toggleBlock,
@@ -1000,6 +1265,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateIdentity,
       toggleLike,
       addPost,
+      toggleArchivePost,
+      addStory,
+      toggleArchiveStory,
+      markStoryViewed,
       addComment,
       addQuestion,
       voteQuestion,
@@ -1024,6 +1293,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       markConversationRead,
     }),
     [
+      addCoachResult,
+      addCoachReview,
+      setLocationEnabled,
+      setDefaultPayment,
+      addPaymentMethod,
+      removePaymentMethod,
       toggleFollow,
       toggleMute,
       toggleBlock,
@@ -1037,6 +1312,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateIdentity,
       toggleLike,
       addPost,
+      toggleArchivePost,
+      addStory,
+      toggleArchiveStory,
+      markStoryViewed,
       addComment,
       addQuestion,
       voteQuestion,

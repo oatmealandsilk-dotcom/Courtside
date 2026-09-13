@@ -10,7 +10,10 @@ module.exports = {
     orientation: 'portrait',
     scheme: 'courtside',
     userInterfaceStyle: 'dark',
-    backgroundColor: '#0B1220',
+    backgroundColor: '#F8F7F2',
+    // Shown by Expo Go and native builds while the JS loads; matches app/index.tsx
+    // so the loader fades straight into the in-app splash.
+    splash: { image: './assets/splash.png', resizeMode: 'contain', backgroundColor: '#F8F7F2' },
     newArchEnabled: true,
     ios: { supportsTablet: true, bundleIdentifier: 'co.courtside.app' },
     android: { package: 'co.courtside.app', edgeToEdgeEnabled: true },

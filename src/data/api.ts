@@ -7,13 +7,15 @@
  */
 
 import { achievements } from './mock/achievements';
-import { coaches, coachingRequests } from './mock/coaching';
+import { coaches, coachingRequests, coachResults, coachReviews } from './mock/coaching';
 import { answers, questions } from './mock/discussions';
 import { coachQuestions, coachReplies } from './mock/coachQuestions';
 import { comments, posts } from './mock/feed';
+import { stories } from './mock/stories';
 import { conversations, messages } from './mock/messages';
 import { healthHistory, integrations } from './mock/health';
 import { users } from './mock/users';
+import { fetchImportedThreads } from '@/features/community/importedThreads';
 import type {
   Achievement,
   Answer,
@@ -22,6 +24,8 @@ import type {
   CoachingRequest,
   CoachQuestion,
   CoachReply,
+  CoachResult,
+  CoachReview,
   Comment,
   Conversation,
   DailyHealth,
@@ -30,6 +34,7 @@ import type {
   Notification,
   Post,
   Question,
+  Story,
   User,
 } from './types';
 
@@ -47,6 +52,7 @@ function clone<T>(value: T): T {
 export interface Bootstrap {
   users: User[];
   posts: Post[];
+  stories: Story[];
   comments: Comment[];
   questions: Question[];
   answers: Answer[];
@@ -58,6 +64,8 @@ export interface Bootstrap {
   coachQuestions: CoachQuestion[];
   coachReplies: CoachReply[];
   coachApplications: CoachApplication[];
+  coachResults: CoachResult[];
+  coachReviews: CoachReview[];
   conversations: Conversation[];
   messages: Message[];
   notifications: Notification[];
@@ -68,6 +76,7 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
     clone({
       users,
       posts,
+      stories,
       comments,
       questions,
       answers,
@@ -75,6 +84,8 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       coachQuestions,
       coachReplies,
       coachApplications: [],
+      coachResults,
+      coachReviews,
       conversations,
       messages,
       notifications: [],
@@ -84,6 +95,16 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       achievements,
     }),
   );
+}
+
+/**
+ * Threads pulled in from Reddit and Talk Tennis so the board is never empty.
+ * Fetched after the bootstrap so a slow feed never delays the app opening.
+ * A real backend does this on a schedule and serves the result from here.
+ */
+export async function fetchCommunityThreads(): Promise<{ users: User[]; questions: Question[] }> {
+  const bundle = await fetchImportedThreads();
+  return { users: bundle.users, questions: bundle.questions };
 }
 
 export async function signIn(handle: string): Promise<User> {

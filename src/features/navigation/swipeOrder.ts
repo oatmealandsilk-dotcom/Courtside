@@ -4,7 +4,7 @@ export const SWIPE_STOPS = [
   { pathname: '/discuss', section: 'players' },
   { pathname: '/coaches', section: '' },
   { pathname: '/profile', section: 'Posts' },
-  { pathname: '/profile', section: 'Reels' },
+  { pathname: '/profile', section: 'Clips' },
   { pathname: '/profile', section: 'Tagged' },
 ] as const;
 export function swipeDestination(pathname: string, section: string | undefined, direction: 1 | -1) {

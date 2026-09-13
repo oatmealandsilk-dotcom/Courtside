@@ -20,6 +20,11 @@ export default function RootLayout() {
             animation: 'slide_from_right',
           }}
         >
+          {/* Splash, sign-in and the feed fade into one another; only pages
+              opened from inside the app slide. */}
+          <Stack.Screen name="index" options={{ animation: 'fade' }} />
+          <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
+          <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
           <Stack.Screen name="compose" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="ask" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           <Stack.Screen
@@ -31,6 +36,7 @@ export default function RootLayout() {
             }}
           />
           <Stack.Screen name="ask-coach" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="story/[id]" options={{ presentation: 'fullScreenModal', animation: 'fade' }} />
         </Stack></AppShell>
       </AppProvider>
     </SafeAreaProvider></ThemeProvider>

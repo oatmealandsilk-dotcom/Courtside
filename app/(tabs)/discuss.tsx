@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { LevelPill } from '@/components/LevelPill';
 import { NearbyMap } from '@/components/NearbyMap';
-import { QuestionCard } from '@/components/QuestionCard';
+import { QuestionCard, TOPIC_META } from '@/components/QuestionCard';
 import { Avatar, Chip, EmptyState, Screen } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import type { QuestionTopic } from '@/data/types';
@@ -28,12 +28,19 @@ const TOPICS: (QuestionTopic | 'all')[] = [
 export default function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
   const { questions, users, currentUserId, currentUser, blockedIds, saved, actions } = useApp();
-  const params = useLocalSearchParams<{ section?: string }>();
+  const params = useLocalSearchParams<{ section?: string; topic?: string }>();
   const section = (previewSection ?? params.section) === 'players' ? 'players' : 'discussions';
   const setSection = (value: string) => router.setParams({ section: value });
   const [search, setSearch] = useState('');
   const players = users.filter(u => u.id !== currentUserId && !blockedIds.includes(u.id) && `${u.name} ${u.handle} ${u.location}`.toLowerCase().includes(search.toLowerCase()));
   const [topic, setTopic] = useState<QuestionTopic | 'all'>('all');
+  // A post's category label lands here with ?topic=gear; honour it, then let
+  // the chips take over as usual.
+  useEffect(() => {
+    if (!params.topic) return;
+    setTopic(params.topic in TOPIC_META ? (params.topic as QuestionTopic) : 'all');
+    router.setParams({ topic: undefined });
+  }, [params.topic]);
 
   // A tap on a section tab used to cut straight to the new list. Now it slides
   // in from the side the swipe would have come from, so both ways of moving
@@ -65,7 +72,7 @@ export default function Discuss({ previewSection }: { previewSection?: string } 
 
   const content = (section:string) => (section === 'players' ? <View style={{ gap: 16 }}>
         <TextInput accessibilityLabel="Search players" placeholder="Search by name, handle, or city" placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} style={styles.search} />
-        {currentUser && !search ? <NearbyMap me={currentUser} players={players} onOpen={id => router.push(`/user/${id}`)} /> : null}
+        {currentUser && !search ? <NearbyMap me={currentUser} players={players} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} /> : null}
         {players.map(user => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.player}>
           <Avatar name={user.name} seed={user.avatarSeed} size={44} />
           <View style={{ flex: 1, gap: 4 }}><View style={{flexDirection:"row",alignItems:"center",gap:8,flexWrap:"wrap"}}><Text style={styles.playerName}>{user.name}</Text><LevelPill profile={user.profile} small /></View><Text style={styles.playerMeta}>@{user.handle} · {user.location}</Text></View>

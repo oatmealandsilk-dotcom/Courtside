@@ -52,6 +52,15 @@ export default function PostDetail() {
         onPressAuthor={() => router.push(`/user/${author.id}`)}
       />
 
+      {post.authorId === currentUserId ? (
+        <View style={styles.ownRow}>
+          <Text style={styles.ownNote}>
+            {post.archived ? 'Archived. Only you can see this.' : 'Yours. Archive it to take it off your profile and the feed.'}
+          </Text>
+          <Button label={post.archived ? 'Unarchive' : 'Archive'} variant="secondary" onPress={() => actions.toggleArchivePost(post.id)} />
+        </View>
+      ) : null}
+
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>
           {thread.length} {thread.length === 1 ? 'comment' : 'comments'}
@@ -77,7 +86,7 @@ export default function PostDetail() {
         })}
 
         <View style={styles.composer}>
-          <Field value={draft} onChangeText={setDraft} placeholder="Add a comment" multiline minHeight={70} />
+          <Field value={draft} onChangeText={setDraft} placeholder="Add a comment" multiline minHeight={70} onSubmitEditing={submit} />
           <Button label="Post comment" onPress={submit} disabled={draft.trim().length === 0} />
         </View>
       </View>
@@ -87,6 +96,8 @@ export default function PostDetail() {
 
 const styleDefinitions = StyleSheet.create({
   section: { gap: spacing.lg, paddingTop: spacing.xl },
+  ownRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingTop: spacing.md },
+  ownNote: { ...typography.small, color: colors.textFaint, flex: 1, lineHeight: 18 },
   sectionTitle: { ...typography.heading, color: colors.text },
   comment: { flexDirection: 'row', gap: spacing.md },
   commentBody: { flex: 1, gap: 3 },

@@ -3,6 +3,13 @@ import { usePathname, useGlobalSearchParams } from 'expo-router';
 
 /** The four tab roots. Moving between them is a swipe, so they only fade. */
 const TABS = new Set(['/', '/discuss', '/coaches', '/profile']);
+/** Splash → sign-in → home: a fade in and out, never a slide. */
+const AUTH = new Set(['/sign-in', '/onboarding']);
+/**
+ * See-through sheets over the current page. The page underneath stays put,
+ * so animating the content here would make it flash behind the sheet.
+ */
+const SHEETS = new Set(['/compose', '/share']);
 
 /**
  * Animate the content without remounting the router or moving navigation.
@@ -28,13 +35,16 @@ export function RouteTransition({ children }: { children: React.ReactNode }) {
     else trailing.push(key);
     if (trailing.length > 30) trailing.shift();
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const tabToTab = TABS.has(pathname) && TABS.has(before.split(':')[0]);
-    const slide = tabToTab ? 0 : wentBack ? -24 : 36;
+    const beforePath = before.split(':')[0];
+    if (SHEETS.has(pathname) || SHEETS.has(beforePath)) return;
+    const tabToTab = TABS.has(pathname) && TABS.has(beforePath);
+    const auth = AUTH.has(pathname) || AUTH.has(beforePath);
+    const slide = tabToTab || auth ? 0 : wentBack ? -24 : 36;
     const animation = content.current?.animate(
       slide
         ? [{ opacity: 0, transform: `translate3d(${slide}px,0,0)` }, { opacity: 1, transform: 'translate3d(0,0,0)' }]
-        : [{ opacity: 0.65 }, { opacity: 1 }],
-      { duration: slide ? 300 : 170, easing: 'cubic-bezier(.2,.7,.2,1)' },
+        : [{ opacity: auth ? 0 : 0.65 }, { opacity: 1 }],
+      { duration: slide ? 300 : auth ? 420 : 170, easing: 'cubic-bezier(.2,.7,.2,1)' },
     );
     return () => animation?.cancel();
   }, [key, pathname]);

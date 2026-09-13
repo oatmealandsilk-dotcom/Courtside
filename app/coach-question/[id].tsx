@@ -6,7 +6,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
-import { ReelVideo } from '@/components/ReelVideo';
+import { ClipVideo } from '@/components/ClipVideo';
 import { Avatar, Button, Chip, EmptyState, Field, Screen } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
@@ -54,7 +54,7 @@ export default function CoachQuestionDetail() {
         <Text style={styles.body}>{question.body}</Text>
 
         {question.videoUrl ? (
-          <ReelVideo uri={question.videoUrl} />
+          <ClipVideo uri={question.videoUrl} />
         ) : question.mediaLabel ? (
           <MediaPlaceholder label={question.mediaLabel} seed={question.id} />
         ) : null}
@@ -149,6 +149,11 @@ export default function CoachQuestionDetail() {
             onChangeText={setDraft}
             placeholder="Be specific. Name the cause, then the fix, then one drill."
             multiline
+            onSubmitEditing={() => {
+              if (draft.trim().length < 20) return;
+              actions.replyToCoachQuestion(question.id, draft.trim());
+              setDraft('');
+            }}
           />
           <Button
             label="Post answer"

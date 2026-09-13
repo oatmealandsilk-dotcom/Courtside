@@ -28,7 +28,7 @@ export function MediaPlaceholder({ label, seed, portrait = false }: { label: str
           color={colors.text}
         />
         <Text style={styles.label}>{label}</Text>
-        {portrait && <Text style={styles.label}>Demo reel preview</Text>}
+        {portrait && <Text style={styles.label}>Demo clip preview</Text>}
       </View>
     </View>
   );

@@ -223,6 +223,7 @@ export default function Train() {
           placeholder="What would you like help with?"
           multiline
           minHeight={80}
+          onSubmitEditing={send}
         />
         <Button label="Send" onPress={send} disabled={thinking || prompt.trim().length === 0} />
       </View>}

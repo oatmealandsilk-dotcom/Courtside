@@ -26,7 +26,14 @@ interface Row {
  */
 export default function Settings() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, saved, blockedIds, actions } = useApp();
+  const { currentUser, saved, blockedIds, paymentMethods, defaultPaymentId, locationEnabled, detectedLocation, actions } = useApp();
+  const defaultPayment = paymentMethods.find((m) => m.id === defaultPaymentId);
+  const [locationNote, setLocationNote] = useState('');
+  const toggleLocation = async (next: boolean) => {
+    setLocationNote(next ? 'Asking your device…' : '');
+    const problem = await actions.setLocationEnabled(next);
+    setLocationNote(problem ?? '');
+  };
   const { theme } = useTheme();
   const [search, setSearch] = useState('');
   const [privateAccount, setPrivateAccount] = useState(false);
@@ -52,7 +59,7 @@ export default function Settings() {
           detail: savedCount ? String(savedCount) : undefined,
           onPress: () => router.push('/saved'),
         },
-        { icon: 'archive-outline', label: 'Archive' },
+        { icon: 'archive-outline', label: 'Archive', onPress: () => router.push('/archive') },
         { icon: 'time-outline', label: 'Your activity', onPress: () => router.push('/activity') },
         {
           icon: 'notifications-outline',
@@ -99,9 +106,26 @@ export default function Settings() {
         },
         { icon: 'flash-outline', label: 'Health and nutrition', onPress: () => router.push('/health') },
         {
+          icon: 'location-outline',
+          label: 'Location',
+          detail: locationEnabled ? detectedLocation ?? 'On' : locationNote || 'Off',
+          toggle: { value: locationEnabled, onChange: (next) => { void toggleLocation(next); } },
+        },
+        {
           icon: 'ribbon-outline',
           label: 'Apply to be a coach',
           onPress: () => router.push('/coach-apply'),
+        },
+      ],
+    },
+    {
+      title: 'Payments',
+      rows: [
+        {
+          icon: 'card-outline',
+          label: 'Payment methods',
+          detail: defaultPayment ? `${defaultPayment.label} · default` : undefined,
+          onPress: () => router.push('/payments'),
         },
       ],
     },

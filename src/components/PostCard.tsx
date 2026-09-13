@@ -4,13 +4,13 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { ReelVideo } from '@/components/ReelVideo';
+import { ClipVideo } from '@/components/ClipVideo';
 import { Tappable } from '@/components/Tappable';
 import { Avatar, Card, Chip } from '@/components/ui';
 import { LevelPill } from '@/components/LevelPill';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { compactNumber, duration, relativeTime } from '@/lib/format';
-import type { Post, User } from '@/data/types';
+import type { Post, QuestionTopic, User } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
 
 interface Props {
@@ -25,8 +25,13 @@ interface Props {
   onShare?: () => void;
 }
 
+/** Which Community topic each kind of post belongs with, for the tappable label. */
+const KIND_TOPIC: Record<Post['kind'], QuestionTopic | 'all'> = {
+  clip: 'technique', match: 'strategy', session: 'fitness', note: 'all', gear: 'gear', milestone: 'mental',
+};
+
 const KIND_META: Record<Post['kind'], { label: string; icon: keyof typeof Ionicons.glyphMap; tint: string }> = {
-  reel: { label: 'Reel', icon: 'videocam-outline', tint: colors.brand },
+  clip: { label: 'Clip', icon: 'videocam-outline', tint: colors.brand },
   match: { label: 'Set play', icon: 'trophy-outline', tint: colors.brand },
   session: { label: 'Session', icon: 'barbell-outline', tint: colors.court },
   note: { label: 'Note', icon: 'chatbubble-ellipses-outline', tint: colors.hard },
@@ -69,12 +74,17 @@ export function PostCard({
       </Pressable>
 
       {post.imageUrl && <Image accessibilityLabel={post.mediaLabel ?? "Post photo"} source={{uri:post.imageUrl}} style={{width:"100%",aspectRatio:1,borderRadius:12}} resizeMode="cover"/>}
-      {post.videoUrl ? <ReelVideo uri={post.videoUrl} poster={post.thumbnailUrl} /> : post.kind === 'reel' ? <MediaPlaceholder label={post.mediaLabel ?? 'Reel'} seed={post.id} portrait /> : null}
+      {post.videoUrl ? <ClipVideo uri={post.videoUrl} poster={post.thumbnailUrl} /> : post.kind === 'clip' ? <MediaPlaceholder label={post.mediaLabel ?? 'Clip'} seed={post.id} portrait /> : null}
       <Pressable onPress={onPress} style={styles.body}>
-        <View style={[styles.kindRow, { borderColor: `${meta.tint}55` }]}>
+        <Tappable
+          accessibilityLabel={`${meta.label}: see discussions about this in Community`}
+          onPress={() => router.navigate({ pathname: '/discuss', params: { section: 'discussions', topic: KIND_TOPIC[post.kind] } })}
+          style={[styles.kindRow, { borderColor: `${meta.tint}55` }]}
+        >
           <Ionicons name={meta.icon} size={13} color={meta.tint} />
           <Text style={[styles.kindLabel, { color: meta.tint }]}>{meta.label.toUpperCase()}</Text>
-        </View>
+          <Ionicons name="chevron-forward" size={11} color={meta.tint} />
+        </Tappable>
 
         <Text style={styles.text}>{post.body}</Text>
 
@@ -113,7 +123,7 @@ export function PostCard({
           </View>
         ) : null}
 
-        {post.mediaLabel && !post.imageUrl && !post.videoUrl && post.kind !== 'reel' ? <MediaPlaceholder label={post.mediaLabel} seed={post.id}  /> : null}
+        {post.mediaLabel && !post.imageUrl && !post.videoUrl && post.kind !== 'clip' ? <MediaPlaceholder label={post.mediaLabel} seed={post.id}  /> : null}
 
         {post.tags.length > 0 ? (
           <View style={styles.tagRow}>

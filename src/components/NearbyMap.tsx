@@ -22,18 +22,38 @@ function place(seed: string): { x: number; y: number } {
  * A schematic map of who is around you. There is no location permission in
  * this build, so players are scattered deterministically around you at the
  * centre — the shape of the real thing, without the tiles or the tracking.
+ *
+ * In the community tab it is a card that opens into its own page; expanded,
+ * it fills the page and shows everyone rather than the nearest handful.
  */
-export function NearbyMap({ me, players, onOpen }: { me: User; players: User[]; onOpen: (id: string) => void }) {
+export function NearbyMap({ me, players, onOpen, onExpand, expanded = false }: {
+  me: User; players: User[]; onOpen: (id: string) => void;
+  /** Tapping the card or the expand button opens the full map. */
+  onExpand?: () => void;
+  expanded?: boolean;
+}) {
   const styles = useThemedStyles(styleDefinitions);
-  const nearby = players.slice(0, 8);
+  const nearby = expanded ? players.slice(0, 24) : players.slice(0, 8);
   return (
     <View style={styles.card}>
       <View style={styles.head}>
         <Ionicons name="location-outline" size={16} color={colors.brand} />
         <Text style={styles.title}>Players near {me.location.split(',')[0]}</Text>
         <Text style={styles.count}>{nearby.length}</Text>
+        {onExpand ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="Open map" onPress={onExpand} hitSlop={8} style={styles.expand}>
+            <Ionicons name="expand-outline" size={16} color={colors.brand} />
+            <Text style={styles.expandText}>Open map</Text>
+          </Pressable>
+        ) : null}
       </View>
-      <View style={styles.map} accessibilityLabel="Map of players near you">
+      <Pressable
+        accessibilityRole={onExpand ? 'button' : undefined}
+        accessibilityLabel="Map of players near you"
+        onPress={onExpand}
+        disabled={!onExpand}
+        style={[styles.map, expanded && styles.mapExpanded]}
+      >
         {[0.25, 0.5, 0.75].map((f) => (
           <React.Fragment key={f}>
             <View style={[styles.gridLine, { top: `${f * 100}%`, left: 0, right: 0, height: 1 }]} />
@@ -62,8 +82,10 @@ export function NearbyMap({ me, players, onOpen }: { me: User; players: User[]; 
         <View style={[styles.pin, styles.mePin]}>
           <View style={styles.meDot} />
         </View>
-      </View>
-      <Text style={styles.hint}>Tap a player to open their profile. Blue ring means coach.</Text>
+      </Pressable>
+      <Text style={styles.hint}>
+        {expanded ? 'Tap a player to open their profile. Blue ring means coach.' : 'Tap the map to open it. Blue ring means coach.'}
+      </Text>
     </View>
   );
 }
@@ -79,7 +101,10 @@ const styleDefinitions = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md },
   title: { ...typography.smallStrong, color: colors.text, flex: 1 },
   count: { ...typography.caption, color: colors.textFaint, letterSpacing: 0 },
+  expand: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: spacing.sm },
+  expandText: { ...typography.caption, color: colors.brand, letterSpacing: 0 },
   map: { height: HEIGHT, backgroundColor: colors.bgElevated, overflow: 'hidden' },
+  mapExpanded: { height: 520 },
   gridLine: { position: 'absolute', backgroundColor: colors.border, opacity: 0.6 },
   road: { position: 'absolute', left: -20, right: -20, height: 6, borderRadius: 3, backgroundColor: colors.surfaceAlt },
   ring: {

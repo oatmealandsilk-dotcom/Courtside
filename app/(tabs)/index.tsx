@@ -12,17 +12,15 @@ import { QuestionCard } from '@/components/QuestionCard';
 import { PostCard } from '@/components/PostCard';
 import { Tappable } from '@/components/Tappable';
 import { VerticalPager } from '@/components/VerticalPager';
-import { ReelPlayback } from '@/components/ReelPlayback';
+import { ClipPlayback } from '@/components/ClipPlayback';
+import { StoriesRail } from '@/components/StoriesRail';
 import { rankFeed, type FeedItem } from '@/features/feed/rankFeed';
-
-/** A feed page: a moment, a thread, or the who-to-follow row. */
-type Page = FeedItem | { type: 'suggest' };
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
 
 /**
- * The heart that blooms when you double tap a reel.
+ * The heart that blooms when you double tap a clip.
  *
  * Keyed on a counter rather than a boolean so tapping twice in a row replays
  * it — a boolean would already be true and the second tap would show nothing.
@@ -79,7 +77,7 @@ export default function Home() {
       rankedFor.current = stamp;
       const data = latest.current;
       setOrder(
-        rankFeed(data.posts, data.questions, data.comments, data.currentUserId).map((i) =>
+        rankFeed(data.posts, data.questions.filter((q) => !q.source), data.comments, data.currentUserId).map((i) =>
           i.type === 'post' ? `p:${i.post.id}` : `q:${i.question.id}`,
         ),
       );
@@ -120,25 +118,62 @@ export default function Home() {
       .sort((a, b) => b.score - a.score);
   }, [users, posts, comments, conversations, currentUserId, followingIds, blockedIds]);
 
-  // Blocked and muted players disappear from the feed entirely; the
-  // who-to-follow row slides in as the third page so it is seen early
-  // without being the first thing on screen.
-  const feed = useMemo<Page[]>(() => {
+  // Blocked and muted players disappear from the feed entirely.
+  const feed = useMemo<FeedItem[]>(() => {
     const hidden = new Set([...blockedIds, ...mutedIds]);
-    const pages: Page[] = order.flatMap<FeedItem>((key) => {
+    return order.flatMap<FeedItem>((key) => {
       const id = key.slice(2);
       if (key.startsWith('p:')) {
         const post = posts.find((p) => p.id === id);
-        return post && !hidden.has(post.authorId) ? [{ type: 'post' as const, post }] : [];
+        return post && !hidden.has(post.authorId) && !post.archived ? [{ type: 'post' as const, post }] : [];
       }
       const question = questions.find((q) => q.id === id);
       return question && !hidden.has(question.authorId) ? [{ type: 'question' as const, question }] : [];
     });
-    if (users.length > 1) pages.splice(Math.min(2, pages.length), 0, { type: 'suggest' });
-    return pages;
-  }, [order, posts, questions, blockedIds, mutedIds, users.length]);
+  }, [order, posts, questions, blockedIds, mutedIds]);
+
+  /**
+   * Which page carries the who-to-follow strip: the first thread or written
+   * post past the opening clip, and only that one. It sits at the top of the
+   * page, under the eyebrow, rather than riding along the bottom.
+   */
+  const suggestHost = useMemo(
+    () => feed.findIndex((item, index) => index >= 1 && (item.type === 'question' || item.post.kind !== 'clip')),
+    [feed],
+  );
+
+  const suggestStrip = suggestions.length ? (
+    <View style={styles.strip}>
+      <View style={styles.stripHead}>
+        <Text style={styles.stripTitle}>Players you might know</Text>
+        <Text style={styles.stripSub}>Contacts, mutuals, interactions</Text>
+      </View>
+      {/* Its own sideways bar: nativeID keeps the page swipe off it. */}
+      <ScrollView
+        horizontal
+        nativeID="who-to-follow"
+        showsHorizontalScrollIndicator={false}
+        style={{ flexGrow: 0, marginHorizontal: -20 }}
+        contentContainerStyle={styles.stripRow}
+      >
+        {suggestions.slice(0, 6).map(({ user, reason }) => (
+          <View key={user.id} style={styles.stripCard}>
+            <Pressable accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.stripBody}>
+              <Avatar name={user.name} seed={user.avatarSeed} size={40} ring={user.isCoach} />
+              <Text style={styles.stripName} numberOfLines={1}>{user.name.split(' ')[0]}</Text>
+              <Text style={styles.stripReason} numberOfLines={1}>{reason}</Text>
+            </Pressable>
+            <Tappable accessibilityLabel={`Follow ${user.name}`} onPress={() => actions.toggleFollow(user.id)} style={styles.stripFollow}>
+              <Text style={styles.stripFollowText}>Follow</Text>
+            </Tappable>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  ) : null;
 
   const insets = useSafeAreaInsets();
+  const item0IsClip = feed[0]?.type === 'post' && feed[0].post.kind === 'clip';
   const [burst, setBurst] = useState({ id: '', n: 0 });
 
   /**
@@ -188,7 +223,7 @@ export default function Home() {
   // Whatever is settled on screen counts as watched, once per session.
   const showing = feed[active];
   useEffect(() => {
-    if (!focused || !showing || showing.type === 'suggest') return;
+    if (!focused || !showing) return;
     actions.recordView(
       showing.type === 'post' ? 'post' : 'question',
       showing.type === 'post' ? showing.post.id : showing.question.id,
@@ -199,7 +234,7 @@ export default function Home() {
     <View style={styles.root}>
       {!ready || !feed.length ? (
         <EmptyState
-          title={ready ? 'Your court is quiet' : 'Loading your reels'}
+          title={ready ? 'Your court is quiet' : 'Loading your clips'}
           body="Use + to share a moment."
         />
       ) : (
@@ -207,57 +242,21 @@ export default function Home() {
           <VerticalPager key={visit} initialIndex={active} onIndex={setActive}>
             {feed.map((item, index) => {
               const distance = Math.abs(index - active);
-              const pageKey = item.type === 'post' ? item.post.id : item.type === 'question' ? item.question.id : 'suggest';
+              const pageKey = item.type === 'post' ? item.post.id : item.question.id;
               if (distance > WINDOW) {
                 // A placeholder page: holds its slot, costs nothing to render.
                 return <View key={pageKey} />;
               }
               // One page either side keeps its video buffered, ready to play.
               const near = distance <= 1;
-
-              if (item.type === 'suggest') {
-                return (
-                  <View key={pageKey} style={[styles.article, styles.suggestArticle]}>
-                    <Text style={styles.eyebrow}>WHO TO FOLLOW</Text>
-                    <Text style={styles.suggestTitle}>Players you might know</Text>
-                    <Text style={styles.suggestSub}>
-                      From your contacts, mutuals, and people who have interacted with you.
-                    </Text>
-                    {suggestions.length ? (
-                      // Its own sideways bar: nativeID keeps the page swipe off it.
-                      <ScrollView
-                        horizontal
-                        nativeID="who-to-follow"
-                        showsHorizontalScrollIndicator={false}
-                        style={{ flexGrow: 0, marginHorizontal: -20 }}
-                        contentContainerStyle={styles.suggestRow}
-                      >
-                        {suggestions.map(({ user, reason }) => (
-                          <View key={user.id} style={styles.suggestCard}>
-                            <Pressable accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.suggestBody}>
-                              <Avatar name={user.name} seed={user.avatarSeed} size={64} ring={user.isCoach} />
-                              <Text style={styles.suggestName} numberOfLines={1}>{user.name}</Text>
-                              <Text style={styles.suggestHandle} numberOfLines={1}>@{user.handle}</Text>
-                              <LevelPill profile={user.profile} small />
-                              <Text style={styles.suggestReason} numberOfLines={1}>{reason}</Text>
-                            </Pressable>
-                            <Button label="Follow" onPress={() => actions.toggleFollow(user.id)} full />
-                          </View>
-                        ))}
-                      </ScrollView>
-                    ) : (
-                      <Text style={styles.suggestSub}>You already follow everyone we can find near you.</Text>
-                    )}
-                    <Text style={styles.hint}>Swipe up to keep watching</Text>
-                  </View>
-                );
-              }
+              const strip = index === suggestHost ? suggestStrip : null;
 
               if (item.type === 'question') {
                 const isSaved = saved.questionIds.includes(item.question.id);
                 return (
                   <View key={item.question.id} style={[styles.article, styles.threadArticle]}>
                     <Text style={styles.eyebrow}>FROM THE COMMUNITY</Text>
+                    {strip}
                     <View style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
                       <QuestionCard
                         showBody
@@ -287,12 +286,13 @@ export default function Home() {
               if (!author) return <View key={post.id} />;
               const isSaved = saved.postIds.includes(post.id);
 
-              if (post.kind !== 'reel') {
+              if (post.kind !== 'clip') {
                 return (
                   <View key={post.id} style={styles.article}>
                     <Text style={styles.eyebrow}>
                       {post.kind === 'match' ? 'SET PLAY' : post.kind.toUpperCase()} · FOR YOU
                     </Text>
+                    {strip}
                     <View style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
                       <PostCard
                         post={post}
@@ -315,9 +315,9 @@ export default function Home() {
 
               const liked = !!currentUserId && post.likedBy.includes(currentUserId);
               return (
-                <View key={post.id} style={styles.reel}>
+                <View key={post.id} style={styles.clip}>
                   {post.videoUrl ? (
-                    <ReelPlayback
+                    <ClipPlayback
                       uri={post.videoUrl}
                       poster={post.thumbnailUrl}
                       active={focused && active === index}
@@ -352,7 +352,7 @@ export default function Home() {
                       <Ionicons name="tennisball-outline" size={54} color={colors.court} />
                       <Text style={styles.previewTitle}>{post.mediaLabel}</Text>
                       <Text style={styles.previewNote}>
-                        Demo preview · add a video link to play your own reel
+                        Demo preview · add a video link to play your own clip
                       </Text>
                     </Pressable>
                   )}
@@ -377,47 +377,39 @@ export default function Home() {
 
                   <View style={styles.actions}>
                     <Tappable
-                      accessibilityLabel={liked ? 'Unlike reel' : 'Like reel'}
+                      accessibilityLabel={liked ? 'Unlike clip' : 'Like clip'}
                       onPress={() => actions.toggleLike(post.id)}
                       scaleTo={0.78}
                       style={styles.action}
                     >
-                      <Ionicons
-                        name={liked ? 'heart' : 'heart-outline'}
-                        size={35}
-                        color={liked ? '#E17B7B' : 'white'}
-                      />
+                      <Ionicons name={liked ? 'heart' : 'heart-outline'} size={36} color={liked ? '#E17B7B' : 'white'} style={styles.actionGlyph} />
                       <Text style={styles.actionLabel}>{post.likedBy.length}</Text>
                     </Tappable>
                     <Tappable
-                      accessibilityLabel="Reel comments"
+                      accessibilityLabel="Clip comments"
                       onPress={() => router.push(`/post/${post.id}`)}
                       scaleTo={0.78}
                       style={styles.action}
                     >
-                      <Ionicons name="chatbubble-outline" size={33} color="white" />
+                      <Ionicons name="chatbubble-outline" size={33} color="white" style={styles.actionGlyph} />
                       <Text style={styles.actionLabel}>{post.commentIds.length}</Text>
                     </Tappable>
                     <Tappable
-                      accessibilityLabel="Send this reel to someone"
+                      accessibilityLabel="Send this clip to someone"
                       onPress={() => share('post', post.id)}
                       scaleTo={0.78}
                       style={styles.action}
                     >
-                      <Ionicons name="paper-plane-outline" size={32} color="white" />
+                      <Ionicons name="paper-plane-outline" size={32} color="white" style={styles.actionGlyph} />
                       <Text style={styles.actionLabel}>{post.shares ?? 0}</Text>
                     </Tappable>
                     <Tappable
-                      accessibilityLabel={isSaved ? 'Remove from saved' : 'Save this reel'}
+                      accessibilityLabel={isSaved ? 'Remove from saved' : 'Save this clip'}
                       onPress={() => actions.toggleSavePost(post.id)}
                       scaleTo={0.78}
                       style={styles.action}
                     >
-                      <Ionicons
-                        name={isSaved ? 'bookmark' : 'bookmark-outline'}
-                        size={31}
-                        color="white"
-                      />
+                      <Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={31} color="white" style={styles.actionGlyph} />
                       <Text style={styles.actionLabel}>{post.savedBy?.length ?? 0}</Text>
                     </Tappable>
                   </View>
@@ -431,8 +423,11 @@ export default function Home() {
                 <React.Fragment key="first">
                   {page}
                   <View pointerEvents="none" style={[styles.wordmarkOverlay, { top: insets.top + 12 }]}>
-                    <Text style={[styles.wordmark, feed[0]?.type === 'post' &&
-                      feed[0].post.kind === 'reel' && styles.wordmarkOnReel]}>Courtside</Text>
+                    <Text style={styles.wordmark}>CourtSide</Text>
+                  </View>
+                  {/* Stories ride the first page too, under the wordmark. */}
+                  <View pointerEvents="box-none" style={[styles.railOverlay, { top: insets.top + 46 }]}>
+                    <StoriesRail onVideo={item0IsClip} />
                   </View>
                 </React.Fragment>
               ) : page,
@@ -455,11 +450,12 @@ const styleDefinitions = StyleSheet.create({
   wordmark: {
     color: colors.brand, fontSize: 23, fontWeight: '800', letterSpacing: -0.3,
   },
+  railOverlay: { position: 'absolute', left: 0, right: 0, zIndex: 5 },
   // Kept as a hook for anything the wordmark needs over video; the shadow that
   // used to live here was doing more harm than good.
-  wordmarkOnReel: {},
+  wordmarkOnClip: {},
   viewer: { flex: 1, width: '100%', minHeight: 0 },
-  reel: { flex: 1, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
+  clip: { flex: 1, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   preview: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30, gap: 14 },
   court: {
     position: 'absolute',
@@ -502,27 +498,32 @@ const styleDefinitions = StyleSheet.create({
   body: { color: 'white', fontSize: 13, lineHeight: 19 },
   tags: { color: colors.text, fontSize: 11 },
   swipeHint: { color: colors.textMuted, fontSize: 10 },
-  actions: { position: 'absolute', right: 12, bottom: 104, gap: 24 },
-  action: { alignItems: 'center', gap: 5, minWidth: 48 },
-  actionLabel: { color: 'white', fontSize: 13, fontWeight: '600', textShadowColor: '#0006', textShadowRadius: 3 },
+  actions: { position: 'absolute', right: 12, bottom: 104, gap: 22 },
+  action: { alignItems: 'center', gap: 4, minWidth: 48 },
+  // Instagram's trick: plain white glyphs made bolder by a soft dark shadow
+  // rather than a heavier icon, so they hold up over bright footage.
+  actionGlyph: { textShadowColor: 'rgba(0, 0, 0, 0.55)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
+  actionLabel: { color: 'white', fontSize: 13, fontWeight: '700', textShadowColor: 'rgba(0, 0, 0, 0.55)', textShadowRadius: 4 },
   article: { flex: 1, backgroundColor: colors.bg, padding: 20, paddingTop: 64, gap: 20 },
-  suggestArticle: { gap: 12, justifyContent: 'center' },
-  suggestTitle: { fontSize: 24, fontWeight: '800', color: colors.text, letterSpacing: -0.3 },
-  suggestSub: { color: colors.textMuted, fontSize: 13, lineHeight: 19 },
-  suggestRow: { gap: 12, paddingHorizontal: 20, paddingVertical: 10 },
-  suggestCard: {
-    width: 158,
-    padding: 14,
-    gap: 12,
-    borderRadius: 16,
+  strip: { gap: 6, paddingBottom: 4 },
+  stripHead: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  stripTitle: { fontSize: 13, fontWeight: '700', color: colors.text },
+  stripSub: { fontSize: 11, color: colors.textFaint },
+  stripRow: { gap: 8, paddingHorizontal: 20, paddingVertical: 4 },
+  stripCard: {
+    width: 104,
+    padding: 8,
+    gap: 6,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
-  suggestBody: { alignItems: 'center', gap: 6 },
-  suggestName: { fontSize: 14, fontWeight: '700', color: colors.text, textAlign: 'center' },
-  suggestHandle: { fontSize: 12, color: colors.textFaint },
-  suggestReason: { fontSize: 11, color: colors.textMuted, textAlign: 'center' },
+  stripBody: { alignItems: 'center', gap: 3 },
+  stripName: { fontSize: 12, fontWeight: '700', color: colors.text },
+  stripReason: { fontSize: 10, color: colors.textMuted },
+  stripFollow: { paddingVertical: 5, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center' },
+  stripFollowText: { color: colors.brandInk, fontSize: 12, fontWeight: '700' },
   threadArticle: { gap: 8, paddingBottom: 8 },
   eyebrow: { color: colors.warning, fontWeight: '700', letterSpacing: 1.2, fontSize: 11 },
   hint: { color: colors.textMuted, fontSize: 11, textAlign: 'center', paddingBottom: 10 },

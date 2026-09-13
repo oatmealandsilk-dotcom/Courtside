@@ -118,7 +118,7 @@ export interface Achievement {
 
 /* ---------------------------------- Feed --------------------------------- */
 
-export type PostKind = 'reel' | 'match' | 'session' | 'note' | 'gear' | 'milestone';
+export type PostKind = 'clip' | 'match' | 'session' | 'note' | 'gear' | 'milestone';
 
 export interface MatchResult {
   opponentName: string;
@@ -145,7 +145,7 @@ export interface Post {
   mediaLabel?: string;
   imageUrl?: string;
   videoUrl?: string;
-  /** Cover image shown before a reel plays and in every grid tile. */
+  /** Cover image shown before a clip plays and in every grid tile. */
   thumbnailUrl?: string;
   taggedUserIds?: ID[];
   match?: MatchResult;
@@ -159,6 +159,28 @@ export interface Post {
   shares?: number;
   /** Everyone who bookmarked it, so the count is global rather than per-device. */
   savedBy?: ID[];
+  /** Put away by its author. Hidden everywhere except their own archive. */
+  archived?: boolean;
+}
+
+/* --------------------------------- Stories ------------------------------- */
+
+/** A moment that lasts a day on the rail, then keeps in the author's archive. */
+export interface Story {
+  id: ID;
+  authorId: ID;
+  createdAt: string;
+  /** Leaves the rail after this, whether or not anyone archived it. */
+  expiresAt: string;
+  imageUrl?: string;
+  videoUrl?: string;
+  thumbnailUrl?: string;
+  /** Placeholder media, same as a post: a tinted court card. */
+  mediaLabel?: string;
+  caption?: string;
+  viewedBy: ID[];
+  /** Taken down early by the author. Stays in their archive. */
+  archived?: boolean;
 }
 
 export interface Comment {
@@ -189,6 +211,22 @@ export interface Question {
   views?: number;
   shares?: number;
   savedBy?: ID[];
+  /**
+   * Set when the thread was pulled in from another community rather than
+   * posted here. Replies stay on the original site; `replies` is their count.
+   */
+  source?: ThreadSource;
+}
+
+export type ThreadSourceName = 'reddit' | 'tennis-warehouse';
+
+export interface ThreadSource {
+  name: ThreadSourceName;
+  /** e.g. "r/10s" or "Talk Tennis" */
+  label: string;
+  url: string;
+  author: string;
+  replies: number;
 }
 
 export interface Answer {
@@ -238,6 +276,30 @@ export interface Coach {
   services: CoachService[];
   verified: boolean;
   responseTimeHours: number;
+}
+
+/** A before-and-after a coach shows on their page. Numbers are whatever the coach measured. */
+export interface CoachResult {
+  id: ID;
+  coachId: ID;
+  /** First name or handle — the client decides how much to show. */
+  clientName: string;
+  /** "Second serve in", "First-serve speed", "Rally tolerance"… */
+  focus: string;
+  before: string;
+  after: string;
+  weeks: number;
+  note?: string;
+}
+
+export interface CoachReview {
+  id: ID;
+  coachId: ID;
+  authorId: ID;
+  /** 1–5 */
+  rating: number;
+  body: string;
+  createdAt: string;
 }
 
 export type CoachingRequestStatus = 'draft' | 'submitted' | 'in-review' | 'answered';
@@ -414,6 +476,19 @@ export interface Conversation {
   updatedAt: string;
   /** Message ids the current user has not opened. */
   unreadCount: number;
+}
+
+/* -------------------------------- Payments ------------------------------- */
+
+export type PaymentKind = 'apple-pay' | 'google-pay' | 'paypal' | 'card';
+
+/** A way to pay a coach. No card numbers live here — only a label. */
+export interface PaymentMethod {
+  id: ID;
+  kind: PaymentKind;
+  label: string;
+  /** "•••• 4242 · exp 09/28" or the account email. */
+  detail?: string;
 }
 
 /* --------------------------------- Saved --------------------------------- */

@@ -4,7 +4,19 @@ import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'r
 
 import { useApp } from '@/store/AppContext';
 import { initials } from '@/lib/format';
-import { colors, radius, surfaceColorFor } from '@/theme';
+import { colors, radius } from '@/theme';
+
+/**
+ * A default picture takes one of the theme's own accents, chosen by the
+ * person's seed so it never changes between visits — but it does change
+ * with the court, so Roland Garros avatars are clay and Wimbledon's are grass.
+ */
+function tintFor(seed: string): string {
+  const palette = [colors.brand, colors.court, colors.hard, colors.clay, colors.grass, colors.borderStrong];
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) % 100000;
+  return palette[hash % palette.length];
+}
 
 interface Props {
   uri?: string;
@@ -15,11 +27,14 @@ interface Props {
   ring?: boolean;
 }
 
+/** Coaches keep a green ring in every theme; the accent colour is not always green. */
+const COACH_RING = '#4C9A5A';
+
 export function Avatar({ uri, name, seed, size = 40, style, ring = false }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const { users } = useApp();
   const photo = uri ?? users.find(user => user.avatarSeed === seed || user.id === seed)?.avatarUrl;
-  const tint = surfaceColorFor(seed);
+  const tint = tintFor(seed);
   return (
     <View
       style={[
@@ -30,7 +45,7 @@ export function Avatar({ uri, name, seed, size = 40, style, ring = false }: Prop
           borderRadius: radius.pill,
           backgroundColor: tint,
           borderWidth: ring ? 2 : 0,
-          borderColor: colors.brand,
+          borderColor: COACH_RING,
         },
         style,
       ]}

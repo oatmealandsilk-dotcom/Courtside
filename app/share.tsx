@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -49,6 +49,19 @@ export default function ShareSheet() {
   const [sent, setSent] = useState(false);
   const [fallbackNote, setFallbackNote] = useState('');
 
+  // The sheet rises in and drops out; the dim behind it fades with it. Both
+  // hang off one value so they always move together.
+  const progress = useRef(new Animated.Value(0)).current;
+  const leaving = useRef(false);
+  useEffect(() => {
+    Animated.timing(progress, { toValue: 1, duration: 280, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [progress]);
+  const dismiss = () => {
+    if (leaving.current) return;
+    leaving.current = true;
+    Animated.timing(progress, { toValue: 0, duration: 240, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => router.back());
+  };
+
   const item = kind === 'profile' ? users.find(u => u.id === id) : kind === 'post' ? posts.find((p) => p.id === id) : questions.find((q) => q.id === id);
   const title = item
     ? kind === 'profile' ? (item as {name:string}).name : kind === 'post'
@@ -81,7 +94,7 @@ export default function ShareSheet() {
     haptics.reward();
     setSent(true);
     // Long enough to read the confirmation, short enough not to wait on it.
-    setTimeout(() => router.back(), 900);
+    setTimeout(dismiss, 900);
   };
 
   const url = `https://oatmealandsilk-dotcom.github.io/Courtside/${kind === 'profile' ? 'user' : kind}/${id}`;
@@ -92,19 +105,20 @@ export default function ShareSheet() {
 
   return (
     <View style={styles.backdrop}>
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay, opacity: progress }]} />
       <Pressable
         style={styles.dismissArea}
         accessibilityRole="button"
         accessibilityLabel="Close share sheet"
-        onPress={() => router.back()}
+        onPress={dismiss}
       />
-      <View style={styles.sheet}>
+      <Animated.View style={[styles.sheet, { transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [640, 0] }) }] }]}>
         {sent ? <SentTick /> : null}
         <View style={styles.grabber} />
 
         <View style={styles.headerRow}>
           <Text style={styles.heading}>Send to</Text>
-          <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Close">
+          <Pressable onPress={dismiss} accessibilityRole="button" accessibilityLabel="Close">
             <Ionicons name="close" size={22} color={colors.textMuted} />
           </Pressable>
         </View>
@@ -165,7 +179,7 @@ export default function ShareSheet() {
           </Pressable>
           {fallbackNote ? <Text selectable style={styles.empty}>{fallbackNote}</Text> : null}
         </View>
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -181,9 +195,17 @@ const styleDefinitions = StyleSheet.create({
     backgroundColor: colors.bg,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: colors.border,
     padding: spacing.lg,
     paddingBottom: spacing.xxl,
     gap: spacing.md,
+    shadowColor: '#000',
+    shadowOpacity: 0.28,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: -10 },
+    elevation: 16,
   },
   grabber: {
     width: 40,

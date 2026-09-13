@@ -14,7 +14,7 @@ import { colors, radius, spacing, typography } from '@/theme';
  * One row per thing that happened to you.
  *
  * Notifications are grouped by what they landed on, the way every social app
- * does it — six people liking one reel is one line, not six. Opening the screen
+ * does it — six people liking one clip is one line, not six. Opening the screen
  * marks everything read, but a row that was unread keeps its tint until you
  * leave, so you can still see what was new.
  */

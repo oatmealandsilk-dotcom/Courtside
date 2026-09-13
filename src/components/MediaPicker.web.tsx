@@ -247,7 +247,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
             </div>
           </div>
         ) : (
-          // Portrait stage, the shape a reel actually posts in, so what you see
+          // Portrait stage, the shape a clip actually posts in, so what you see
           // here is what people will see in the feed.
           <div
             style={{ display: 'flex', justifyContent: 'center', cursor: 'zoom-in' }}

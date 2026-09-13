@@ -66,7 +66,7 @@ export function VerticalPager({ children, onIndex, initialIndex = 0 }: {
     return () => { stop(); el.removeEventListener('wheel', wheel); };
   }, [children.length]);
 
-  return <div ref={pager} tabIndex={0} role="region" aria-label="Reels feed"
+  return <div ref={pager} tabIndex={0} role="region" aria-label="Clips feed"
     onPointerDown={event=>{
       if(event.button!==0 || !event.isPrimary || (event.target as HTMLElement).closest('input,textarea,select')) return;
       stop();

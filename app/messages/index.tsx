@@ -53,7 +53,7 @@ export default function Inbox() {
     : { title: 'No messages yet', body: 'Find a player in Community and start a conversation.' };
 
   const preview = (kind?: string, body?: string) => {
-    if (kind === 'post') return 'Sent a reel';
+    if (kind === 'post') return 'Sent a clip';
     if (kind === 'question') return 'Sent a discussion';
     if (kind === 'profile') return 'Shared a profile';
     return body || 'Say hello';

@@ -2,12 +2,14 @@ import React, { useMemo, useRef, useState } from 'react';
 import { Animated, Easing, PanResponder, View } from 'react-native';
 import { useResponsive } from '@/lib/useResponsive';
 
-export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false }: {
+export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false }: {
   children: React.ReactNode; onSwipe: (direction: 1 | -1) => void;
   /** Fires the instant the gesture is known to be going through, before the animation. */
   onCommit?: (direction: 1 | -1) => void;
   /** Fires while the finger is still down, or with null when the drag is abandoned. */
   onDragTo?: (direction: 1 | -1 | null) => void;
+  /** -1..1, positive toward the next page; fires per move and on settle. */
+  onProgress?: (fraction: number) => void;
   delegateLeft?: boolean; delegateRight?: boolean; enabled?: boolean; fill?: boolean; renderPreview?: (direction: 1 | -1) => React.ReactNode;
 }) {
   const { isPhone } = useResponsive();
@@ -15,8 +17,8 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, enabled: r
   const offset = useRef(new Animated.Value(0)).current;
   const width = useRef(1);
   const busy = useRef(false);
-  const props = useRef({ onSwipe, onCommit, onDragTo, enabled, renderPreview, delegateRight, delegateLeft });
-  props.current = { onSwipe, onCommit, onDragTo, enabled, renderPreview, delegateRight, delegateLeft };
+  const props = useRef({ onSwipe, onCommit, onDragTo, onProgress, enabled, renderPreview, delegateRight, delegateLeft });
+  props.current = { onSwipe, onCommit, onDragTo, onProgress, enabled, renderPreview, delegateRight, delegateLeft };
   const [direction, setDirection] = useState<1 | -1>(1);
   const [dragging, setDragging] = useState(false);
   const pan = useMemo(() => {
@@ -32,6 +34,7 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, enabled: r
       if (commit && props.current.enabled) props.current.onCommit?.(next);
       // A drag that did not go through has to let the bar fall back.
       else props.current.onDragTo?.(null);
+      props.current.onProgress?.(commit ? next : 0);
 
       // A spring's callback fires at true rest, which is noticeably later than
       // the point it stops looking like it is moving — that gap was the pause
@@ -58,7 +61,9 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, enabled: r
         const available = !props.current.renderPreview || !!props.current.renderPreview(next);
         // Tell the bar where this is heading while the finger is still down.
         if (available && props.current.enabled) props.current.onDragTo?.(next);
-        offset.setValue(available ? g.dx : g.dx * 0.16);
+        const dx = available ? g.dx : g.dx * 0.16;
+        props.current.onProgress?.(-dx / width.current);
+        offset.setValue(dx);
       },
       onPanResponderRelease: (_, g) => settle(g.dx, g.vx),
       onPanResponderTerminate: (_, g) => settle(g.dx, g.vx, true),

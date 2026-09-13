@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -51,7 +51,10 @@ export function ThreadReply({ answer, thread, acceptedId, depth = 0, preview = f
           </Pressable>
         </View>}
         {replying && <View style={styles.inlineComposer}>
-          <TextInput autoFocus accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} placeholder="Write a reply…" multiline value={draft} onChangeText={setDraft} style={styles.replyInput}/>
+          <TextInput autoFocus accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} placeholder="Write a reply…" multiline value={draft} onChangeText={setDraft} style={styles.replyInput}
+            // Enter sends on a computer; the web toolkit needs blurOnSubmit to do that in a multiline box.
+            blurOnSubmit={Platform.OS === 'web' ? true : undefined}
+            onSubmitEditing={Platform.OS === 'web' ? () => { if (!draft.trim()) return; actions.addAnswer(answer.questionId, draft.trim(), answer.id); setDraft(''); setReplying(false); } : undefined}/>
           <View style={styles.replyActions}>
             <Button label="Cancel" variant="secondary" onPress={() => { setReplying(false); setDraft(''); }}/>
             <Button label="Reply" disabled={!draft.trim()} onPress={() => {

@@ -1,0 +1,34 @@
+name: Refresh community threads
+
+# Fetches the latest Talk Tennis and Reddit threads into public/community.json.
+# Committing the file to main triggers the normal web deploy, so the live site
+# picks up fresh threads within a few minutes of each run.
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Fetch threads
+        env:
+          REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+          REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
+        run: node scripts/community-feeds.mjs
+      - name: Commit if anything changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/community.json
+          git diff --cached --quiet && echo "No new threads" && exit 0
+          git commit -m "Refresh community threads"
+          git push

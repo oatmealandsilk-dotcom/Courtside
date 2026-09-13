@@ -11,7 +11,7 @@ import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 
-/** Everything the player has bookmarked: reels and posts, plus discussions. */
+/** Everything the player has bookmarked: clips and posts, plus discussions. */
 export default function Saved() {
   const styles = useThemedStyles(styleDefinitions);
   const { saved, posts, questions, users, actions } = useApp();
@@ -67,7 +67,7 @@ export default function Saved() {
                   ) : null}
                   <View style={styles.tileTop}>
                     <Ionicons
-                      name={post.kind === 'reel' ? 'play' : 'document-text-outline'}
+                      name={post.kind === 'clip' ? 'play' : 'document-text-outline'}
                       size={16}
                       color={colors.textMuted}
                     />
@@ -94,7 +94,7 @@ export default function Saved() {
           <EmptyState
             icon="bookmark-outline"
             title="Nothing saved yet"
-            body="Tap the bookmark on any reel or post to keep it here."
+            body="Tap the bookmark on any clip or post to keep it here."
           />
         )
       ) : savedQuestions.length ? (

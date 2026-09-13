@@ -2,9 +2,10 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 
 import { MediaPicker, type PickedMedia } from '@/components/MediaPicker';
+import { SheetBackdrop } from '@/components/SheetBackdrop';
 import { TOPIC_META } from '@/components/QuestionCard';
 import { Button, Chip, Field, Screen } from '@/components/ui';
 import { addToBank, getBank } from '@/features/compose/mediaBank';
@@ -12,7 +13,7 @@ import { useApp } from '@/store/AppContext';
 import type { QuestionTopic } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
 
-type Mode = 'reel' | 'post' | 'question';
+type Mode = 'clip' | 'post' | 'story' | 'question';
 /** choose → library → form, with back always stepping one page left. */
 type Stage = 'choose' | 'library' | 'form';
 
@@ -25,15 +26,17 @@ export default function Compose() {
   const styles = useThemedStyles(styleDefinitions);
   const { actions, posts, currentUserId } = useApp();
 
-  const [stage, setStage] = useState<Stage>('choose');
-  const [mode, setMode] = useState<Mode>('post');
+  // The story rail opens this straight at the library with ?mode=story.
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const [stage, setStage] = useState<Stage>(params.mode === 'story' ? 'library' : 'choose');
+  const [mode, setMode] = useState<Mode>(params.mode === 'story' ? 'story' : 'post');
   const [media, setMedia] = useState<PickedMedia | null>(null);
   const [body, setBody] = useState('');
   const [minutes, setMinutes] = useState('');
   const [questionTitle, setQuestionTitle] = useState('');
   const [topic, setTopic] = useState<QuestionTopic>('gear');
 
-  const canPost = !!media?.uri && (mode !== 'reel' || media.kind === 'video');
+  const canPost = !!media?.uri && (mode !== 'clip' || media.kind === 'video');
   const canAsk = questionTitle.trim().length > 8 && body.trim().length > 20;
   const canSubmit = mode === 'question' ? canAsk : canPost;
 
@@ -51,9 +54,21 @@ export default function Compose() {
       return;
     }
 
+    if (mode === 'story') {
+      actions.addStory({
+        caption: body.trim() || undefined,
+        imageUrl: media?.kind === 'photo' ? media.uri : undefined,
+        videoUrl: media?.kind === 'video' ? media.uri : undefined,
+        mediaLabel: media?.label,
+        thumbnailUrl: media?.thumbnailUrl ?? (media?.kind === 'photo' ? media.uri : undefined),
+      });
+      router.back();
+      return;
+    }
+
     const onCourt = Number(minutes);
     actions.addPost({
-      kind: mode === 'reel' ? 'reel' : 'note',
+      kind: mode === 'clip' ? 'clip' : 'note',
       body: body.trim(),
       tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
       imageUrl: media?.kind === 'photo' ? media.uri : undefined,
@@ -76,14 +91,18 @@ export default function Compose() {
   };
 
   if (stage === 'choose') return <View style={styles.choiceBackdrop}>
+    <SheetBackdrop />
     <Pressable accessibilityRole="button" accessibilityLabel="Close create menu" onPress={() => router.back()} style={StyleSheet.absoluteFill}/>
     <View style={styles.choiceSheet}>
       <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>Create</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => router.back()}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
-      <Pressable accessibilityRole="button" accessibilityLabel="Create a reel" onPress={() => { setMode('reel'); setStage('library'); }} style={styles.choiceOption}>
-        <Ionicons name="videocam-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Reel</Text><Text style={styles.note}>Share a video from your device.</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel="Create a clip" onPress={() => { setMode('clip'); setStage('library'); }} style={styles.choiceOption}>
+        <Ionicons name="videocam-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Clip</Text><Text style={styles.note}>Share a video from your device.</Text>
       </Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => { setMode('post'); setStage('library'); }} style={styles.choiceOption}>
         <Ionicons name="images-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Post</Text><Text style={styles.note}>Choose from your photos and videos.</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel="Add to your story" onPress={() => { setMode('story'); setStage('library'); }} style={styles.choiceOption}>
+        <Ionicons name="time-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Story</Text><Text style={styles.note}>Up for 24 hours, then kept in your archive.</Text>
       </Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => { setMode('question'); setStage('form'); }} style={styles.choiceOption}>
         <Ionicons name="chatbubbles-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Thread or question</Text><Text style={styles.note}>Ask the community or start a conversation.</Text>
@@ -105,20 +124,21 @@ export default function Compose() {
     const seen = new Set<string>();
     const bank = [...getBank(), ...posted].filter((item) => {
       if (!item.uri || seen.has(item.uri)) return false;
-      if (mode === 'reel' && item.kind !== 'video') return false;
+      if (mode === 'clip' && item.kind !== 'video') return false;
       seen.add(item.uri);
       return true;
     });
 
     return (
       <View style={styles.backdrop}>
+        <SheetBackdrop />
         <View style={styles.sheet}>
           <Screen
-            title={mode === 'reel' ? 'Your videos' : 'Your library'}
+            title={mode === 'clip' ? 'Your videos' : 'Your library'}
             compactTitle
-            onBack={() => setStage('choose')}
+            onBack={() => (params.mode === 'story' ? router.back() : setStage('choose'))}
           >
-            <MediaPicker compact selection={mode === 'reel' ? 'video' : 'all'} label={mode === 'reel' ? 'New video from your device' : 'New from your device'} value={null} onChange={pick} />
+            <MediaPicker compact selection={mode === 'clip' ? 'video' : 'all'} label={mode === 'clip' ? 'New video from your device' : 'New from your device'} value={null} onChange={pick} />
             <Text style={styles.libraryTitle}>{bank.length ? 'Recent' : 'Nothing here yet'}</Text>
             {bank.length ? (
               <ScrollView contentContainerStyle={styles.grid}>
@@ -152,34 +172,39 @@ export default function Compose() {
 
   return (
     <View style={styles.backdrop}>
+      <SheetBackdrop />
       <View style={styles.sheet}>
         <Screen
-          title={mode === 'reel' ? 'New reel' : mode === 'post' ? 'New post' : 'Ask the room'}
+          title={mode === 'clip' ? 'New clip' : mode === 'post' ? 'New post' : mode === 'story' ? 'New story' : 'Ask the room'}
           compactTitle
           onBack={() => (mode === 'question' ? router.back() : setStage('library'))}
-          right={<Button label="Share" variant="secondary" onPress={submit} disabled={!canSubmit} />}
+          right={<Button label={mode === 'story' ? 'Add to story' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit} />}
         >
           <View style={styles.form}>
             {mode !== 'question' ? (
               <>
-                <MediaPicker bare selection={mode === 'reel' ? 'video' : 'all'} value={media} onChange={setMedia} />
+                <MediaPicker bare selection={mode === 'clip' ? 'video' : 'all'} value={media} onChange={setMedia} />
 
                 <Field
-                  label="Caption"
+                  label={mode === 'story' ? 'Caption (optional)' : 'Caption'}
                   value={body}
                   onChangeText={setBody}
-                  placeholder="Say what you worked on and what actually changed."
+                  placeholder={mode === 'story' ? 'A line over the top, if you want one.' : 'Say what you worked on and what actually changed.'}
                   multiline
                 />
 
-                <Field
-                  label="Time on court (optional)"
-                  value={minutes}
-                  onChangeText={setMinutes}
-                  placeholder="90"
-                  keyboardType="number-pad"
-                  hint="Minutes. Shows on your post and counts toward your hours."
-                />
+                {mode !== 'story' ? (
+                  <Field
+                    label="Time on court (optional)"
+                    value={minutes}
+                    onChangeText={setMinutes}
+                    placeholder="90"
+                    keyboardType="number-pad"
+                    hint="Minutes. Shows on your post and counts toward your hours."
+                  />
+                ) : (
+                  <Text style={styles.note}>Your story stays up for 24 hours, then moves to your archive. You can archive it earlier from the viewer.</Text>
+                )}
               </>
             ) : (
               <>
@@ -239,6 +264,9 @@ const styleDefinitions = StyleSheet.create({
     borderTopRightRadius: 24,
     overflow: 'hidden',
     backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: colors.border,
   },
   form: { gap: spacing.lg, paddingTop: spacing.sm },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },

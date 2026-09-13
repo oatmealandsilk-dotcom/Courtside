@@ -55,15 +55,15 @@ const wimbledonColors: Palette = {
 };
 
 /**
- * US Open — the one pairing everyone recognises: blue court inside a green
- * surround. Deepened so it reads as the night session and stays clearly
- * apart from the Australian Open's paler blue.
+ * US Open — blue and yellow only: the night-session blue court with the
+ * ball's yellow as the accent, no green anywhere. Deepened so it stays
+ * clearly apart from the Australian Open's paler blue.
  */
 const usOpenColors: Palette = {
   bg: '#14283D', bgElevated: '#1B3350', surface: '#1F3A5A', surfaceAlt: '#2A4A6E',
   border: '#32557A', borderStrong: '#5C82AC', text: '#E9F0F8', textMuted: '#A7BCD3', textFaint: '#7F97B0',
-  brand: '#7FAE6C', brandInk: '#0E1C0B', brandDim: '#264430', court: '#6C935C', clay: '#D08A5E',
-  hard: '#4E87C4', grass: '#7FAE6C', info: '#5C9BD8', success: '#7FAE6C', warning: '#E3B85A', danger: '#E07E72',
+  brand: '#F5D547', brandInk: '#1B1A0A', brandDim: '#4A4A2C', court: '#4E87C4', clay: '#D08A5E',
+  hard: '#4E87C4', grass: '#5C9BD8', info: '#5C9BD8', success: '#FFE066', warning: '#E3B85A', danger: '#E07E72',
   overlay: 'rgba(4, 12, 22, 0.7)',
 };
 

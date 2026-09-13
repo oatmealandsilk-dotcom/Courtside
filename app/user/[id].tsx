@@ -37,7 +37,7 @@ export default function UserProfile() {
   const alerts = alertIds.includes(user.id);
   const coach = coaches.find((c) => c.userId === user.id);
   const theirPosts = posts
-    .filter((p) => p.authorId === user.id)
+    .filter((p) => p.authorId === user.id && !p.archived)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const unlocked = evaluateAchievements(user).filter((a) => a.unlocked);
 

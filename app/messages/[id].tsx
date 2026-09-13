@@ -139,7 +139,7 @@ export default function Thread() {
                     color={colors.brand}
                   />
                   <Text style={styles.sharedKind}>
-                    {message.kind === 'profile' ? 'Profile' : message.kind === 'post' ? 'Reel' : 'Discussion'}
+                    {message.kind === 'profile' ? 'Profile' : message.kind === 'post' ? 'Clip' : 'Discussion'}
                   </Text>
                 </View>
                 <Text numberOfLines={3} style={styles.sharedBody}>
