@@ -1,3 +1,6 @@
+import { Platform } from 'react-native';
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 /**
  * The Supabase side of the API seam.
  *
@@ -133,6 +136,8 @@ export interface RemoteData {
   comments: Comment[];
   stories: Story[];
   followingIds: ID[];
+  /** Every follow between profiles, so any player's lists can be shown. */
+  followEdges: { followerId: ID; followingId: ID }[];
   savedPostIds: ID[];
 }
 
@@ -162,6 +167,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     comments: postRows.flatMap((row) => (row.comments ?? []).map(toComment)),
     stories: ((stories.data ?? []) as StoryRow[]).map(toStory),
     followingIds: edges.filter((e) => e.follower_id === me).map((e) => e.following_id),
+    followEdges: edges.map((e) => ({ followerId: e.follower_id, followingId: e.following_id })),
     savedPostIds: postRows.filter((row) => (row.post_saves ?? []).some((s) => s.user_id === me)).map((row) => row.id),
   };
 }
@@ -319,5 +325,45 @@ export const auth = {
   async signOut() {
     const { error } = await need().auth.signOut();
     if (error) fail('sign out')(error);
+  },
+  /**
+   * Google, through Supabase. On the web the whole page goes to Google and
+   * comes back to the app, where the client picks the session out of the URL
+   * on its own. On a phone the page cannot leave, so an in-app browser opens
+   * instead and the session is read out of the URL it hands back.
+   */
+  async signInWithGoogle() {
+    const client = need();
+    if (Platform.OS === 'web') {
+      const base = (process.env.EXPO_BASE_URL ?? '').replace(/\/$/, '');
+      const { error } = await client.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: `${window.location.origin}${base}/` },
+      });
+      if (error) throw new Error(error.message);
+      return null;
+    }
+    const redirectTo = Linking.createURL('/');
+    const { data, error } = await client.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo, skipBrowserRedirect: true },
+    });
+    if (error) throw new Error(error.message);
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    if (result.type !== 'success') return null;
+    const url = new URL(result.url);
+    const params = new URLSearchParams(url.hash.startsWith('#') ? url.hash.slice(1) : url.search.slice(1));
+    const code = url.searchParams.get('code');
+    if (code) {
+      const exchanged = await client.auth.exchangeCodeForSession(code);
+      if (exchanged.error) throw new Error(exchanged.error.message);
+      return exchanged.data.session;
+    }
+    const access_token = params.get('access_token');
+    const refresh_token = params.get('refresh_token');
+    if (!access_token || !refresh_token) throw new Error(params.get('error_description') ?? 'Google did not return a session.');
+    const set = await client.auth.setSession({ access_token, refresh_token });
+    if (set.error) throw new Error(set.error.message);
+    return set.data.session;
   },
 };

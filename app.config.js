@@ -18,7 +18,12 @@ module.exports = {
     ios: { supportsTablet: true, bundleIdentifier: 'co.courtside.app' },
     android: { package: 'co.courtside.app', edgeToEdgeEnabled: true },
     web: { bundler: 'metro', output: 'single', name: 'CourtSide' },
-    plugins: ['expo-router'],
+    plugins: [
+      'expo-router',
+      ['expo-camera', { cameraPermission: 'CourtSide uses the camera to take your post-session hit.' }],
+      ['expo-image-picker', { photosPermission: 'CourtSide needs your photos to attach clips and pictures to posts.' }],
+      'expo-video',
+    ],
     experiments: { baseUrl },
   },
 };

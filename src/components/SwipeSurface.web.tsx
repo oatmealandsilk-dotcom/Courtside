@@ -40,6 +40,7 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
   const content = useRef<HTMLDivElement>(null);
   const previewEl = useRef<HTMLDivElement>(null);
   const suppressClick = useRef(false);
+  const strip = useRef<HTMLElement | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const settling = useRef(false);
   const [direction, setDirection] = useState<1 | -1>(1);
@@ -107,7 +108,10 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
       const nearest = target.closest('[data-swipe-surface="true"]');
       const delegateOnly = nearest !== event.currentTarget;
       if ((delegateOnly && nearest?.getAttribute('data-swipe-delegate-right') !== 'true' && nearest?.getAttribute('data-swipe-delegate-left') !== 'true') ||
-        target.closest('input,textarea,select,video,#topic-filter-strip,#who-to-follow,#stories-rail,[data-swipe-ignore="true"]')) return;
+        target.closest('input,textarea,select,video,#topic-filter-strip,[data-swipe-ignore="true"]')) return;
+      // A sideways strip keeps the gesture only while it has somewhere to
+      // scroll; at either end the drag falls through to the page.
+      strip.current = (target.closest('#who-to-follow,#stories-rail') as HTMLElement | null) ?? null;
       start.current = { x: event.clientX, y: event.clientY, lastX: event.clientX, time: performance.now(), velocity: 0, horizontal: false, delegateOnly, delegateDirection: nearest?.getAttribute("data-swipe-delegate-right") === "true" ? "right" : "left" };
     }}
     onPointerMoveCapture={event => {
@@ -115,6 +119,11 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
       if (!point) return;
       const dx = event.clientX - point.x;
       const dy = event.clientY - point.y;
+      if (strip.current && !point.horizontal) {
+        const el = strip.current;
+        const canScroll = dx < 0 ? el.scrollLeft + el.clientWidth < el.scrollWidth - 1 : el.scrollLeft > 0;
+        if (canScroll) { start.current = null; return; }
+      }
       if ((delegateRight && dx > 0) || (delegateLeft && dx < 0) || (point.delegateOnly && (point.delegateDirection === "right" ? dx < 0 : dx > 0))) { start.current = null; return; }
       if (!point.horizontal) {
         if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { start.current = null; return; }

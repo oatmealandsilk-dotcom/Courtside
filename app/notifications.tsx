@@ -27,6 +27,7 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap; tin
   helpful: { name: 'ribbon', tint: 'warning' },
   share: { name: 'paper-plane', tint: 'court' },
   follow: { name: 'person-add', tint: 'brand' },
+  posted: { name: 'checkmark', tint: 'success' },
 };
 
 const VERB: Record<NotificationKind, string> = {
@@ -37,6 +38,7 @@ const VERB: Record<NotificationKind, string> = {
   helpful: 'found your reply helpful',
   share: 'shared your post',
   follow: 'started following you',
+  posted: 'is live',
 };
 
 interface Group {
@@ -115,7 +117,9 @@ export default function Notifications() {
             const icon = ICON[group.kind];
             const [first, ...rest] = group.actorIds;
             const who =
-              rest.length === 0
+              group.kind === 'posted'
+                ? group.preview?.startsWith('Hit') ? 'Your hit' : group.targetKind === 'question' ? 'Your question' : 'Your post'
+                : rest.length === 0
                 ? nameOf(first)
                 : rest.length === 1
                   ? `${nameOf(first)} and ${nameOf(rest[0])}`

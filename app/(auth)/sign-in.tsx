@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
 import { BrandMark } from '@/components/BrandMark';
 import { Button, Field } from '@/components/ui';
@@ -32,6 +33,21 @@ export default function SignIn() {
   const ready = isSupabaseConfigured
     ? email.includes('@') && password.length >= 6 && (mode === 'sign-in' || (name.trim().length > 0 && cleanHandle.length >= 2))
     : demoHandle.trim().length > 0;
+
+  const google = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const done = await actions.signInWithGoogle();
+      if (done && Platform.OS !== 'web') router.replace('/');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not sign in with Google.');
+    } finally {
+      if (Platform.OS !== 'web') setBusy(false);
+    }
+  };
 
   const submit = async () => {
     if (!ready || busy) return;
@@ -117,6 +133,25 @@ export default function SignIn() {
             full
           />
           {isSupabaseConfigured ? (
+            <>
+              <View style={styles.divider}>
+                <View style={styles.rule} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.rule} />
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Continue with Google"
+                onPress={google}
+                disabled={busy}
+                style={({ pressed }) => [styles.google, pressed && { backgroundColor: colors.surfaceAlt }, busy && { opacity: 0.6 }]}
+              >
+                <Ionicons name="logo-google" size={19} color={colors.text} />
+                <Text style={styles.googleText}>Continue with Google</Text>
+              </Pressable>
+            </>
+          ) : null}
+          {isSupabaseConfigured ? (
             <Pressable
               accessibilityRole="button"
               onPress={() => { setMode(mode === 'sign-in' ? 'sign-up' : 'sign-in'); setError(null); setNotice(null); }}
@@ -147,6 +182,21 @@ const styleDefinitions = StyleSheet.create({
   form: { gap: spacing.lg },
   error: { ...typography.small, color: colors.danger },
   notice: { ...typography.small, color: colors.success },
+  divider: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  rule: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.borderStrong },
+  dividerText: { ...typography.small, color: colors.textFaint },
+  google: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    minHeight: 50,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+  },
+  googleText: { ...typography.bodyStrong, color: colors.text },
   switch: { alignSelf: 'center', paddingVertical: spacing.sm },
   switchText: { ...typography.small, color: colors.textMuted },
   switchLink: { ...typography.smallStrong, color: colors.brand },

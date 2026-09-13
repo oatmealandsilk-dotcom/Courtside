@@ -1,5 +1,5 @@
 import { ThreadReplies } from '@/components/ThreadReplies';
-import { useThemedStyles } from '@/theme/ThemeProvider';
+import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
@@ -57,6 +57,8 @@ function LikeBurst({ token }: { token: number }) {
 
 export default function Home() {
   const styles = useThemedStyles(styleDefinitions);
+  // The US Open ground is navy; the green wordmark sinks into it, white does not.
+  const { theme } = useTheme();
   const app = useApp();
   const { posts, questions, comments, users, currentUserId, saved, actions, ready, followingIds, mutedIds, blockedIds, conversations } = app;
   const [active, setActive] = useState(0);
@@ -423,7 +425,7 @@ export default function Home() {
                 <React.Fragment key="first">
                   {page}
                   <View pointerEvents="none" style={[styles.wordmarkOverlay, { top: insets.top + 12 }]}>
-                    <Text style={styles.wordmark}>CourtSide</Text>
+                    <Text style={[styles.wordmark, theme === 'us-open' && { color: '#FFFFFF' }]}>CourtSide</Text>
                   </View>
                   {/* Stories ride the first page too, under the wordmark. */}
                   <View pointerEvents="box-none" style={[styles.railOverlay, { top: insets.top + 46 }]}>

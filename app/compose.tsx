@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -28,7 +28,8 @@ export default function Compose() {
 
   // The story rail opens this straight at the library with ?mode=story.
   const params = useLocalSearchParams<{ mode?: string }>();
-  const [stage, setStage] = useState<Stage>(params.mode === 'story' ? 'library' : 'choose');
+  useEffect(() => { if (params.mode === 'story') router.replace('/hit'); }, [params.mode]);
+  const [stage, setStage] = useState<Stage>('choose');
   const [mode, setMode] = useState<Mode>(params.mode === 'story' ? 'story' : 'post');
   const [media, setMedia] = useState<PickedMedia | null>(null);
   const [body, setBody] = useState('');
@@ -101,8 +102,8 @@ export default function Compose() {
       <Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => { setMode('post'); setStage('library'); }} style={styles.choiceOption}>
         <Ionicons name="images-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Post</Text><Text style={styles.note}>Choose from your photos and videos.</Text>
       </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel="Add to your story" onPress={() => { setMode('story'); setStage('library'); }} style={styles.choiceOption}>
-        <Ionicons name="time-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Story</Text><Text style={styles.note}>Up for 24 hours, then kept in your archive.</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel="Take a hit" onPress={() => router.replace('/hit')} style={styles.choiceOption}>
+        <Ionicons name="camera-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Hit</Text><Text style={styles.note}>One photo after a session. Five-second count, no retakes. Up for 24 hours.</Text>
       </Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => { setMode('question'); setStage('form'); }} style={styles.choiceOption}>
         <Ionicons name="chatbubbles-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Thread or question</Text><Text style={styles.note}>Ask the community or start a conversation.</Text>

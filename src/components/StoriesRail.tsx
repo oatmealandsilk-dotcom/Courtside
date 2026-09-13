@@ -10,7 +10,7 @@ import { useApp } from '@/store/AppContext';
 import { colors, radius } from '@/theme';
 
 /**
- * Story tiles across the top of the feed. Your own tile comes first and doubles
+ * Hit tiles across the top of the feed — one photo each, taken after a session. Your own tile comes first and doubles
  * as the way to add one; a ring means there is something you have not watched.
  * Sits over the first clip, so everything is drawn to read against video.
  */
@@ -26,19 +26,19 @@ export function StoriesRail({ onVideo = false }: { onVideo?: boolean }) {
       showsHorizontalScrollIndicator={false}
       style={{ flexGrow: 0 }}
       contentContainerStyle={styles.row}
-      accessibilityLabel="Stories"
+      accessibilityLabel="Hits"
     >
       {entries.map(({ user, stories: list, seen }) => {
         const mine = user.id === currentUserId;
         const empty = !list.length;
-        const open = () => router.push(mine && empty ? { pathname: '/compose', params: { mode: 'story' } } : `/story/${user.id}`);
+        const open = () => router.push(mine && empty ? '/hit' : `/story/${user.id}`);
         return (
           <Pressable
             key={user.id}
             accessibilityRole="button"
-            accessibilityLabel={mine ? (empty ? 'Add to your story' : 'Your story') : `${user.name}'s story${seen ? ', watched' : ''}`}
+            accessibilityLabel={mine ? (empty ? 'Take a hit' : 'Your hit') : `${user.name}'s hit${seen ? ', seen' : ''}`}
             onPress={open}
-            onLongPress={mine ? () => router.push({ pathname: '/compose', params: { mode: 'story' } }) : undefined}
+            onLongPress={mine ? () => router.push('/hit') : undefined}
             style={styles.tile}
           >
             <View style={[styles.ring, empty ? styles.ringEmpty : seen ? styles.ringSeen : null]}>
@@ -50,7 +50,7 @@ export function StoriesRail({ onVideo = false }: { onVideo?: boolean }) {
               ) : null}
             </View>
             <Text numberOfLines={1} style={[styles.name, onVideo && styles.nameOnVideo]}>
-              {mine ? 'Your story' : user.name.split(' ')[0]}
+              {mine ? (empty ? 'Take a hit' : 'Your hit') : user.name.split(' ')[0]}
             </Text>
           </Pressable>
         );

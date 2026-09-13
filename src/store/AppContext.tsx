@@ -20,6 +20,7 @@ import { connectProvider, disconnectProvider } from '@/lib/integrations';
 import { nearestPlace } from '@/data/locations';
 import { getPosition } from '@/lib/geo';
 import * as haptics from '@/lib/haptics';
+import * as toast from '@/lib/toast';
 import type {
   Answer,
   Coach,
@@ -113,6 +114,31 @@ function withNotification(
   return { ...state, notifications: [notification, ...state.notifications] };
 }
 
+/**
+ * The moment something of yours goes live: a heavier buzz, a banner from the
+ * top, and a line in your notifications so the record of it survives the
+ * banner. This is the one notification that is allowed to be from yourself.
+ */
+function celebratePosted(
+  state: AppState,
+  entry: { userId: ID; targetId: ID; targetKind: NotificationTarget; preview: string; title: string; body: string; href: string; icon: string },
+): AppState {
+  haptics.reward();
+  toast.show({ title: entry.title, body: entry.body, href: entry.href, icon: entry.icon });
+  const notification: Notification = {
+    id: nextId('n'),
+    userId: entry.userId,
+    actorId: entry.userId,
+    kind: 'posted',
+    targetId: entry.targetId,
+    targetKind: entry.targetKind,
+    preview: entry.preview,
+    createdAt: new Date().toISOString(),
+    read: false,
+  };
+  return { ...state, notifications: [notification, ...state.notifications] };
+}
+
 /** First line of a body, trimmed to something that fits one row. */
 function snippet(text: string, max = 80): string {
   const flat = text.replace(/\s+/g, ' ').trim();
@@ -164,6 +190,8 @@ interface AppState extends Bootstrap {
   saved: SavedItems;
   /** People you follow. */
   followingIds: ID[];
+  /** Every follow the app knows about, for followers and following lists. */
+  followEdges: { followerId: ID; followingId: ID }[];
   /** People whose posts you have muted — still followed, just quiet. */
   mutedIds: ID[];
   /** People you have blocked. Their posts and messages are hidden. */
@@ -199,6 +227,8 @@ interface AppActions {
   signIn: (identity: string, password?: string) => Promise<void>;
   /** Creates the account. Resolves 'confirm' when the project wants the email verified first. */
   signUp: (email: string, password: string, name: string, handle: string) => Promise<'session' | 'confirm'>;
+  /** Resolves once the account is loaded, or false if the person backed out. */
+  signInWithGoogle: () => Promise<boolean>;
   signOut: () => void;
   completeOnboarding: (profile: PlayerProfile) => void;
   updateIdentity: (patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string }) => void;
@@ -309,6 +339,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     saved: { postIds: [], questionIds: [] },
     defaultReaction: readDefaultReaction(),
     followingIds: [],
+    followEdges: [],
     mutedIds: [],
     blockedIds: [],
     alertIds: [],
@@ -323,7 +354,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     fetchBootstrap()
       .then((data) => {
         if (cancelled) return;
-        setState((prev) => ({ ...prev, ...data, users: data.users.map(user => ({...user, readReceiptsEnabled: readReceiptPreference(user.id)})), ready: true }));
+        // The account may already be in — Supabase answers faster than the
+        // fixtures' artificial delay — so the fixtures slot in underneath
+        // whatever is there rather than replacing it.
+        setState((prev) => {
+          const fixtures = { ...data, users: data.users.map(user => ({...user, readReceiptsEnabled: readReceiptPreference(user.id)})) };
+          const merge = <T extends { id: string }>(existing: T[], incoming: T[]) => {
+            const seen = new Set(existing.map((item) => item.id));
+            return [...existing, ...incoming.filter((item) => !seen.has(item.id))];
+          };
+          return {
+            ...prev,
+            ...fixtures,
+            users: merge(prev.users, fixtures.users),
+            posts: merge(prev.posts, fixtures.posts),
+            comments: merge(prev.comments, fixtures.comments),
+            stories: merge(prev.stories, fixtures.stories),
+            questions: merge(prev.questions, fixtures.questions),
+            notifications: merge(prev.notifications, fixtures.notifications),
+            ready: true,
+          };
+        });
         // Imported threads arrive on their own clock and slot in when ready.
         fetchCommunityThreads()
           .then((imported) => {
@@ -385,6 +436,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           comments: [...data.comments, ...prev.comments.filter((c) => !remoteComments.has(c.id))],
           stories: [...data.stories, ...prev.stories.filter((st) => !remoteStories.has(st.id))],
           followingIds: data.followingIds,
+          followEdges: data.followEdges,
           saved: { ...prev.saved, postIds: data.savedPostIds },
           currentUserId: me,
           onboardingComplete: (self?.profile.goals.length ?? 0) > 0,
@@ -458,6 +510,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!session) return 'confirm' as const;
     await loadRemote(session.user.id, session.user.email);
     return 'session' as const;
+  }, [loadRemote]);
+
+  const signInWithGoogle = useCallback(async () => {
+    const session = await remoteAuth.signInWithGoogle();
+    // On the web the page has left for Google by now; the auth listener
+    // finishes the job when it comes back.
+    if (!session) return Platform.OS === 'web';
+    await loadRemote(session.user.id, session.user.email);
+    return true;
   }, [loadRemote]);
 
   const signOut = useCallback(() => {
@@ -563,7 +624,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         commentIds: [],
         ...input,
       };
-      setState((prev) => ({ ...prev, posts: [post, ...prev.posts] }));
+      setState((prev) => celebratePosted({ ...prev, posts: [post, ...prev.posts] }, {
+        userId: me, targetId: post.id, targetKind: 'post', preview: snippet(post.body || (post.kind === 'clip' ? 'Clip' : 'Post')),
+        title: post.kind === 'clip' ? 'Clip posted' : 'Posted',
+        body: post.kind === 'clip' ? 'It is in the feed and on your profile.' : 'It is live in the feed.',
+        href: `/post/${post.id}`, icon: post.kind === 'clip' ? 'play' : 'checkmark',
+      }));
       if (live(me)) {
         (async () => {
           // Media picked on the device goes up first so the row points at the bucket.
@@ -607,7 +673,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         viewedBy: [],
         ...input,
       };
-      setState((prev) => ({ ...prev, stories: [story, ...prev.stories] }));
+      setState((prev) => celebratePosted({ ...prev, stories: [story, ...prev.stories] }, {
+        userId: me, targetId: story.id, targetKind: 'post', preview: `Hit${story.caption ? ` · ${snippet(story.caption, 60)}` : ''}`,
+        title: 'Hit posted', body: 'Up for 24 hours, then kept in your archive.',
+        href: `/story/${me}`, icon: 'camera',
+      }));
       if (live(me)) {
         (async () => {
           const imageUrl = isLocalMedia(story.imageUrl) ? await uploadMedia(me, story.imageUrl!, 'photo') : story.imageUrl;
@@ -697,7 +767,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         answerIds: [],
         ...input,
       };
-      setState((prev) => ({ ...prev, questions: [question, ...prev.questions] }));
+      setState((prev) => celebratePosted({ ...prev, questions: [question, ...prev.questions] }, {
+        userId: me, targetId: question.id, targetKind: 'question', preview: snippet(question.title),
+        title: 'Question posted', body: 'The community can see it now.',
+        href: `/question/${question.id}`, icon: 'chatbubbles',
+      }));
       return question.id;
     },
     [requireUser],
@@ -1332,6 +1406,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       let next: AppState = {
         ...prev,
         followingIds: toggleIn(prev.followingIds, userId),
+        followEdges: following
+          ? [...prev.followEdges, { followerId: me, followingId: userId }]
+          : prev.followEdges.filter((e) => !(e.followerId === me && e.followingId === userId)),
         users: prev.users.map((u) =>
           u.id === me ? { ...u, following: Math.max(0, u.following + delta) }
           : u.id === userId ? { ...u, followers: Math.max(0, u.followers + delta) }
@@ -1364,6 +1441,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...prev,
         blockedIds: toggleIn(prev.blockedIds, userId),
         followingIds: blocking ? prev.followingIds.filter((id) => id !== userId) : prev.followingIds,
+        followEdges: blocking
+          ? prev.followEdges.filter((e) => !((e.followerId === me && e.followingId === userId) || (e.followerId === userId && e.followingId === me)))
+          : prev.followEdges,
         alertIds: blocking ? prev.alertIds.filter((id) => id !== userId) : prev.alertIds,
         users: blocking && wasFollowing
           ? prev.users.map((u) =>
@@ -1419,6 +1499,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setReadReceiptsEnabled,
       signIn,
       signUp,
+      signInWithGoogle,
       signOut,
       completeOnboarding,
       updateProfile,
@@ -1467,6 +1548,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setReadReceiptsEnabled,
       signIn,
       signUp,
+      signInWithGoogle,
       signOut,
       completeOnboarding,
       updateProfile,

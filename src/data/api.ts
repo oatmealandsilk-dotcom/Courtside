@@ -16,6 +16,7 @@ import { conversations, messages } from './mock/messages';
 import { healthHistory, integrations } from './mock/health';
 import { users } from './mock/users';
 import { fetchImportedThreads } from '@/features/community/importedThreads';
+import { supabase } from '@/lib/supabase';
 import type {
   Achievement,
   Answer,
@@ -116,11 +117,26 @@ export async function signIn(handle: string): Promise<User> {
   return delay(clone(match), 500);
 }
 
-/** Placeholder for the AI coach chat endpoint. */
-export async function askAiCoach(prompt: string, context: string): Promise<string> {
-  await delay(null, 700);
+/**
+ * The AI coach. When Supabase is configured this goes through the `ai-coach`
+ * Edge Function, which holds the model key and calls Claude with the player's
+ * profile as context. Without it, the deterministic reply below stands in.
+ */
+export async function askAiCoach(
+  prompt: string,
+  context: string,
+  history: { role: 'user' | 'coach'; body: string }[] = [],
+): Promise<string> {
   const trimmed = prompt.trim();
   if (!trimmed) return 'Ask me anything about your game and I will work from your profile and this week’s plan.';
+  if (supabase) {
+    const { data, error } = await supabase.functions.invoke<{ reply?: string; error?: string }>('ai-coach', {
+      body: { prompt: trimmed, context, history },
+    });
+    if (!error && data?.reply) return data.reply;
+    // Function not deployed yet, or the key is missing: fall through to the stand-in.
+  }
+  await delay(null, 700);
   return [
     `Here is how I would think about that, given ${context}:`,
     '',

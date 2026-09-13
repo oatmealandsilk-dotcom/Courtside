@@ -55,7 +55,7 @@ export default function QuestionDetail() {
   };
 
   return (
-    <SwipeSurface onSwipe={direction=>{if(direction===-1) router.navigate("/discuss?section=discussions");}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => router.back()}>
+    <SwipeSurface onSwipe={direction=>{if(direction===-1) router.navigate("/discuss?section=discussions");}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => router.back()} right={<Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="paper-plane-outline" size={23} color={colors.text} /></Pressable>}>
       <Card style={styles.questionCard}>
         <View style={styles.topRow}>
           <Chip label={meta.label} selected tint={meta.tint} ink="#0A1120" small />

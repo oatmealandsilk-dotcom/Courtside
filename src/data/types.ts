@@ -507,7 +507,9 @@ export type NotificationKind =
   | 'coach-reply'
   | 'helpful'
   | 'share'
-  | 'follow';
+  | 'follow'
+  /** Your own post, hit, or question went live. Actor is you. */
+  | 'posted';
 
 export type NotificationTarget = 'post' | 'question' | 'coach-question' | 'coach-reply';
 

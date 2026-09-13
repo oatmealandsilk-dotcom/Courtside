@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -26,7 +26,6 @@ export default function Train() {
   const { currentUser, healthHistory, integrations } = useApp();
   const [openDay, setOpenDay] = useState<number | null>(null);
   const [section, setSection] = useState<'ask' | 'plan'>('ask');
-  const [showHealth, setShowHealth] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [thinking, setThinking] = useState(false);
   const [messages, setMessages] = useState<AiMessage[]>([]);
@@ -63,8 +62,20 @@ export default function Train() {
     setMessages((prev) => [...prev, mine]);
     setPrompt('');
     setThinking(true);
-    const context = `${currentUser.profile.skillSystem} ${currentUser.profile.rating}, ${plan.headline.toLowerCase()}`;
-    const reply = await askAiCoach(text, context);
+    const p = currentUser.profile;
+    const context = [
+      `Rating: ${p.skillSystem} ${p.rating}. Style: ${p.playStyle}, ${p.handedness}-handed, ${p.backhand} backhand. Prefers ${p.preferredSurface}. Fitness: ${p.fitnessLevel}. ${p.sessionsPerWeek} sessions a week, ${p.yearsPlaying} years playing.`,
+      `Goals: ${p.goals.map((g) => g.label).join('; ') || 'none set'}.`,
+      `Injury and schedule notes: ${p.constraints.filter((c) => c.active).map((c) => `${c.kind}: ${c.label}`).join('; ') || 'none'}.`,
+      p.tournaments[0] ? `Next tournament: ${p.tournaments[0].name} on ${formatDate(p.tournaments[0].startsAt)}.` : 'No tournament scheduled.',
+      `This week's plan: ${plan.headline}. ${plan.summary} Days: ${plan.days.map((d) => `${d.label} ${d.restDay ? 'rest' : d.blocks.map((b) => b.title).join(' + ')}`).join('; ')}.`,
+      signal.recovery !== undefined ? `Recovery ${signal.recovery}% (3-day avg)${signal.sleepHours !== undefined ? `, sleep ${signal.sleepHours}h` : ''}${signal.hrvMs !== undefined ? `, HRV ${signal.hrvMs}ms` : ''}.` : 'No wearable connected.',
+    ].join('\n');
+    const history = messages.map((m) => ({ role: m.role, body: m.body }));
+    const started = Date.now();
+    const reply = await askAiCoach(text, context, history);
+    // A reply that lands instantly reads as canned, even when it is not.
+    await new Promise((r) => setTimeout(r, Math.max(0, 900 - (Date.now() - started))));
     setMessages((prev) => [
       ...prev,
       { id: `m-${Date.now()}-r`, role: 'coach', body: reply, createdAt: new Date().toISOString() },
@@ -85,12 +96,14 @@ export default function Train() {
         <View style={styles.tileRow}>
           <StatTile label="Sessions" value={String(onCourtDays)} hint="this week" />
           <StatTile label="Volume" value={duration(totalMinutes)} hint="planned" />
-          <StatTile
-            label="Recovery"
-            value={signal.recovery !== undefined ? `${signal.recovery}%` : '—'}
-            hint={signal.recovery !== undefined ? '3-day avg' : 'connect a wearable'}
-            tint={signal.recovery !== undefined && signal.recovery < 65 ? colors.warning : colors.text}
-          />
+          <Pressable accessibilityRole="link" accessibilityLabel="Recovery and health" onPress={() => router.push('/health')} style={{ flex: 1 }}>
+            <StatTile
+              label="Recovery"
+              value={signal.recovery !== undefined ? `${signal.recovery}%` : '—'}
+              hint={signal.recovery !== undefined ? '3-day avg · details' : 'connect a wearable'}
+              tint={signal.recovery !== undefined && signal.recovery < 65 ? colors.warning : colors.text}
+            />
+          </Pressable>
         </View>
         <View style={styles.focusRow}>
           {plan.focusAreas.map((f) => (
@@ -115,85 +128,61 @@ export default function Train() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>This week</Text>
-        {plan.days.map((day) => {
-          const open = openDay === day.dayIndex;
-          const dayMinutes = day.blocks.reduce((sum, b) => sum + b.minutes, 0);
-          return (
-            <Card
-              key={day.id}
-              onPress={() => setOpenDay(open ? null : day.dayIndex)}
-              style={styles.dayCard}
-            >
-              <View style={styles.dayHead}>
-                <View style={[styles.dayBadge, day.restDay && styles.dayBadgeRest]}>
-                  <Text style={[styles.dayBadgeText, day.restDay && { color: colors.textMuted }]}>
-                    {day.label.toUpperCase()}
-                  </Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} nativeID="week-strip" contentContainerStyle={styles.week} style={{ marginHorizontal: -spacing.lg }}>
+          {plan.days.map((day) => {
+            const open = openDay === day.dayIndex;
+            const dayMinutes = day.blocks.reduce((sum, b) => sum + b.minutes, 0);
+            const main = day.restDay ? null : day.blocks.find((b) => b.kind === 'on-court') ?? day.blocks[0];
+            const meta = main ? BLOCK_META[main.kind] : null;
+            return (
+              <Pressable
+                key={day.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected: open }}
+                accessibilityLabel={`${day.label}: ${day.restDay ? 'rest' : main?.title}`}
+                onPress={() => setOpenDay(open ? null : day.dayIndex)}
+                style={[styles.dayCol, open && styles.dayColOpen, day.restDay && styles.dayColRest]}
+              >
+                <Text style={[styles.dayColLabel, open && { color: colors.brand }]}>{day.label.slice(0, 3).toUpperCase()}</Text>
+                <View style={[styles.dayColIcon, meta && { backgroundColor: `${meta.tint}22` }]}>
+                  <Ionicons name={meta ? meta.icon : 'moon-outline'} size={18} color={meta ? meta.tint : colors.textFaint} />
                 </View>
-                <Text style={styles.dayTitle}>
-                  {day.restDay ? 'Recovery' : day.blocks.map((b) => b.title).slice(1, 3).join(' + ')}
-                </Text>
-                <Text style={styles.dayMinutes}>{duration(dayMinutes)}</Text>
-                <Ionicons
-                  name={open ? 'chevron-up' : 'chevron-down'}
-                  size={16}
-                  color={colors.textFaint}
-                />
-              </View>
-
-              {open ? (
-                <View style={styles.blockList}>
-                  {day.blocks.map((block) => {
-                    const meta = BLOCK_META[block.kind];
-                    return (
-                      <View key={block.id} style={styles.block}>
-                        <View style={styles.blockHead}>
-                          <Ionicons name={meta.icon} size={15} color={meta.tint} />
-                          <Text style={styles.blockTitle}>{block.title}</Text>
-                          <Text style={styles.blockMinutes}>{duration(block.minutes)}</Text>
-                        </View>
-                        {block.detail.map((d) => (
-                          <Text key={d} style={styles.blockDetail}>
-                            • {d}
-                          </Text>
-                        ))}
-                        <Text style={styles.rationale}>{block.rationale}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              ) : null}
-            </Card>
-          );
-        })}
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.rowBetween}>
-          <Text style={styles.sectionTitle}>Recovery & health</Text>
-          <Button label={showHealth ? 'Hide' : 'Show details'} variant="ghost" onPress={() => setShowHealth(value => !value)} />
-        </View>
-        {showHealth && <Card style={styles.healthCard}>
-          <View style={styles.tileRow}>
-            <StatTile
-              label="Sleep"
-              value={signal.sleepHours !== undefined ? `${signal.sleepHours}h` : '—'}
-              hint="3-day avg"
-            />
-            <StatTile label="HRV" value={signal.hrvMs !== undefined ? `${signal.hrvMs}ms` : '—'} hint="3-day avg" />
-            <StatTile
-              label="Protein"
-              value={signal.proteinGrams !== undefined ? `${signal.proteinGrams}g` : '—'}
-              hint="per day"
-            />
-          </View>
-          <Text style={styles.healthNote}>
-            {signal.hasWearable && signal.hasNutrition
-              ? 'Recovery and nutrition are both feeding the plan. Intensity moves automatically when these drop.'
-              : 'Connect a wearable and a nutrition app so the plan can react to how you actually recover.'}
-          </Text>
-          <Button label="Manage connections" variant="ghost" onPress={() => router.push('/health')}/>
-        </Card>}
+                <Text numberOfLines={2} style={styles.dayColTitle}>{day.restDay ? 'Rest' : main?.title}</Text>
+                <Text style={styles.dayColMinutes}>{day.restDay ? '—' : duration(dayMinutes)}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+        {plan.days.filter((d) => d.dayIndex === openDay).map((day) => (
+          <Card key={day.id} style={styles.dayCard}>
+            <View style={styles.dayHead}>
+              <Text style={styles.dayTitle}>{day.label}</Text>
+              <Text style={styles.dayMinutes}>{day.restDay ? 'Recovery day' : duration(day.blocks.reduce((sum, b) => sum + b.minutes, 0))}</Text>
+            </View>
+            <View style={styles.blockList}>
+              {day.blocks.map((block) => {
+                const meta = BLOCK_META[block.kind];
+                return (
+                  <View key={block.id} style={styles.block}>
+                    <View style={styles.blockHead}>
+                      <Ionicons name={meta.icon} size={15} color={meta.tint} />
+                      <Text style={styles.blockTitle}>{block.title}</Text>
+                      <Text style={styles.blockMinutes}>{duration(block.minutes)}</Text>
+                    </View>
+                    {block.detail.map((d) => (
+                      <Text key={d} style={styles.blockDetail}>
+                        • {d}
+                      </Text>
+                    ))}
+                    <Text style={styles.rationale}>{block.rationale}</Text>
+                  </View>
+                );
+              })}
+              {day.restDay && !day.blocks.length ? <Text style={styles.blockDetail}>Nothing scheduled. Sleep, eat, walk.</Text> : null}
+            </View>
+          </Card>
+        ))}
+        {openDay === null ? <Text style={styles.healthNote}>Tap a day to see the session.</Text> : null}
       </View>
       </>}
       {section === 'ask' && <View style={styles.section}>
@@ -214,7 +203,7 @@ export default function Train() {
         ))}
         {thinking ? (
           <View style={[styles.message, styles.messageCoach]}>
-            <ActivityIndicator color={colors.brand} size="small" />
+            <ThinkingDots />
           </View>
         ) : null}
         <Field
@@ -231,7 +220,49 @@ export default function Train() {
   );
 }
 
+/** Three dots that rise in turn — the coach reading before answering. */
+function ThinkingDots() {
+  const dots = useRef([0, 1, 2].map(() => new Animated.Value(0))).current;
+  useEffect(() => {
+    const loops = dots.map((v, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 160),
+          Animated.timing(v, { toValue: 1, duration: 260, useNativeDriver: true }),
+          Animated.timing(v, { toValue: 0, duration: 260, useNativeDriver: true }),
+          Animated.delay(480 - i * 160),
+        ]),
+      ),
+    );
+    loops.forEach((l) => l.start());
+    return () => loops.forEach((l) => l.stop());
+  }, [dots]);
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 4 }}>
+      {dots.map((v, i) => (
+        <Animated.View
+          key={i}
+          style={{
+            width: 7, height: 7, borderRadius: 4, backgroundColor: colors.textMuted,
+            opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }),
+            transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [0, -4] }) }],
+          }}
+        />
+      ))}
+      <Text style={{ ...typography.small, color: colors.textFaint, marginLeft: 4 }}>Coach is thinking</Text>
+    </View>
+  );
+}
+
 const styleDefinitions = StyleSheet.create({
+  week: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: 2 },
+  dayCol: { width: 96, gap: 8, padding: spacing.md, borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.surface },
+  dayColOpen: { borderColor: colors.brand },
+  dayColRest: { backgroundColor: colors.bgElevated },
+  dayColLabel: { ...typography.caption, color: colors.textMuted },
+  dayColIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  dayColTitle: { ...typography.smallStrong, color: colors.text, lineHeight: 17, minHeight: 34 },
+  dayColMinutes: { ...typography.caption, color: colors.textFaint, letterSpacing: 0 },
   summaryCard: { gap: spacing.md, marginBottom: spacing.lg },
   summaryHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   summaryTag: { ...typography.caption, color: colors.brand },

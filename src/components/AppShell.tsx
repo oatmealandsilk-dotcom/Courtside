@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useSyncExternalStore } from 'react';
 import { View } from 'react-native';
 import { router, usePathname } from 'expo-router';
 import { NavBar } from './NavBar';
+import { Toast } from './Toast';
 import { RouteTransition } from './RouteTransition';
 import { useResponsive } from '@/lib/useResponsive';
 import { getPendingTab, setPendingTab, subscribePendingTab } from '@/features/navigation/pendingTab';
@@ -35,7 +36,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   } }} />;
   return <View style={{ flex: 1, minHeight: 0, backgroundColor: colors.bg, flexDirection: isPhone ? 'column' : 'row' }}>
     {showNav && !isPhone && nav}
-    <View style={{ flex: 1, minWidth: 0, minHeight: 0 }}><RouteTransition>{children}</RouteTransition></View>
+    <View style={{ flex: 1, minWidth: 0, minHeight: 0 }}><RouteTransition>{children}</RouteTransition><Toast /></View>
     {showNav && isPhone && nav}
   </View>;
 }
