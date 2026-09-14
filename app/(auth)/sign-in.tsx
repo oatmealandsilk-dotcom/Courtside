@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,7 +18,7 @@ type Mode = 'sign-in' | 'sign-up';
  */
 export default function SignIn() {
   const styles = useThemedStyles(styleDefinitions);
-  const { actions } = useApp();
+  const { actions, currentUserId } = useApp();
   const [mode, setMode] = useState<Mode>('sign-in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,6 +28,29 @@ export default function SignIn() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // Coming back from Google, the session can land a moment after this screen
+  // draws; leave as soon as it does instead of sitting on an empty form.
+  useEffect(() => {
+    if (currentUserId) router.replace('/');
+  }, [currentUserId]);
+
+  // Supabase reports a failed Google sign-in in the address bar, as
+  // #error_description=…; the splash then forwards here with the bar
+  // already cleared, so read it from the last address we came from.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    try {
+      const fromHash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const fromQuery = new URLSearchParams(window.location.search);
+      const stored = sessionStorage.getItem('courtside-auth-error');
+      const message = fromHash.get('error_description') || fromQuery.get('error_description') || stored;
+      if (message) {
+        setError(`Google sign-in did not go through: ${message.replace(/\+/g, ' ')}`);
+        sessionStorage.removeItem('courtside-auth-error');
+      }
+    } catch { /* No storage, no message to show. */ }
+  }, []);
 
   const cleanHandle = handle.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
   const ready = isSupabaseConfigured

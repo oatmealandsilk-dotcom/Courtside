@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
 import { Redirect } from 'expo-router';
 
 import { BrandMark } from '@/components/BrandMark';
@@ -21,10 +21,23 @@ export default function Index() {
   const { ready, currentUserId, onboardingComplete } = useApp();
   const [held, setHeld] = useState(false);
   const [gone, setGone] = useState(false);
+  const [settledCode, setSettledCode] = useState(false);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !/[?&]code=/.test(window.location.search)) return;
+    const timer = setTimeout(() => setSettledCode(true), 6000);
+    return () => clearTimeout(timer);
+  }, []);
   const opacity = useRef(new Animated.Value(1)).current;
   const rise = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (Platform.OS === 'web') {
+      try {
+        const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+        const message = hash.get('error_description') || new URLSearchParams(window.location.search).get('error_description');
+        if (message) sessionStorage.setItem('courtside-auth-error', message);
+      } catch { /* Nothing to carry forward. */ }
+    }
     Animated.spring(rise, { toValue: 1, useNativeDriver: true, speed: 6, bounciness: 4 }).start();
     const timer = setTimeout(() => setHeld(true), HOLD_MS);
     return () => clearTimeout(timer);
@@ -38,6 +51,9 @@ export default function Index() {
   }, [ready, held, gone, opacity]);
 
   if (gone) {
+    // A ?code= from Google is still being exchanged for a session; give it a
+    // beat rather than bouncing a successful sign-in to the sign-in form.
+    if (!currentUserId && Platform.OS === 'web' && /[?&]code=/.test(window.location.search) && !settledCode) return null;
     if (!currentUserId) return <Redirect href="/sign-in" />;
     if (!onboardingComplete) return <Redirect href="/onboarding" />;
     return <Redirect href="/(tabs)" />;
