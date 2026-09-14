@@ -44,6 +44,8 @@ interface Props {
    * own — without this, Coaching's position would be applied to Profile.
    */
   memoryKey?: string;
+  /** Hands the caller the scroller, for jumping to a particular child. */
+  scrollRef?: React.MutableRefObject<ScrollView | null>;
 }
 
 export function Screen({
@@ -58,6 +60,7 @@ export function Screen({
   rail,
   headerWrapper,
   memoryKey,
+  scrollRef,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
@@ -123,7 +126,7 @@ export function Screen({
       {headerWrapper ? headerWrapper(header) : header}
       {scroll ? (
         <ScrollView
-          ref={scroller}
+          ref={(node) => { scroller.current = node; if (scrollRef) scrollRef.current = node; }}
           style={styles.flex}
           contentContainerStyle={[styles.scrollContent, verticalOnlyTouch]}
           keyboardShouldPersistTaps="handled"

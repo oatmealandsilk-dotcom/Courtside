@@ -108,6 +108,47 @@ export async function fetchCommunityThreads(): Promise<{ users: User[]; question
   return { users: bundle.users, questions: bundle.questions };
 }
 
+/* ------------------------------- Coach memory ------------------------------ */
+
+export interface CoachMemory {
+  summary: string;
+  exchanges: { role: 'user' | 'coach'; body: string; topic?: string; created_at?: string }[];
+  updatedAt: string | null;
+  /** Messages left today under the daily cap. */
+  remaining: number;
+}
+
+const DAILY_CAP = 20;
+
+/** What the coach has kept about the signed-in player. Empty when not signed in or not configured. */
+export async function fetchCoachMemory(): Promise<CoachMemory> {
+  const blank: CoachMemory = { summary: '', exchanges: [], updatedAt: null, remaining: DAILY_CAP };
+  if (!supabase) return blank;
+  const { data: auth } = await supabase.auth.getUser();
+  const me = auth.user?.id;
+  if (!me) return blank;
+  const today = new Date().toISOString().slice(0, 10);
+  const [memory, usage] = await Promise.all([
+    supabase.from('coach_memory').select('summary, exchanges, updated_at').eq('user_id', me).maybeSingle(),
+    supabase.from('coach_usage').select('messages').eq('user_id', me).eq('day', today).maybeSingle(),
+  ]);
+  return {
+    summary: memory.data?.summary ?? '',
+    exchanges: (memory.data?.exchanges as CoachMemory['exchanges']) ?? [],
+    updatedAt: memory.data?.updated_at ?? null,
+    remaining: Math.max(0, DAILY_CAP - (usage.data?.messages ?? 0)),
+  };
+}
+
+export async function clearCoachMemory(): Promise<void> {
+  if (!supabase) return;
+  const { data: auth } = await supabase.auth.getUser();
+  const me = auth.user?.id;
+  if (!me) return;
+  const { error } = await supabase.from('coach_memory').delete().eq('user_id', me);
+  if (error) throw new Error(error.message);
+}
+
 export async function signIn(handle: string): Promise<User> {
   const match = users.find((u) => u.handle.toLowerCase() === handle.trim().toLowerCase());
   if (!match) {

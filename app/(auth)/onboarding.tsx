@@ -2,7 +2,6 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, Field, SegmentedControl } from '@/components/ui';
@@ -128,7 +127,6 @@ const STEPS = [
 /** Steps the plan can run without. Level and game are required. */
 const SKIPPABLE = new Set([2, 3, 4]);
 
-const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 const round = (n: number, decimals: number) => Number(n.toFixed(decimals));
 
 export default function Onboarding() {
@@ -169,17 +167,23 @@ export default function Onboarding() {
   }, [step, progress, fade]);
 
   const pick = <T,>(setter: (v: T) => void) => (value: T) => { haptics.tap(); setter(value); };
-  const setRatingTo = (value: number) => {
-    const next = round(clamp(value, scale.min, scale.max), scale.decimals);
-    if (next === rating) return;
-    haptics.tap();
-    setRating(next);
+  // The field holds whatever is typed so "6." survives; the number behind it
+  // only moves once the text is a rating that fits the scale.
+  const [ratingText, setRatingText] = useState('3.5');
+  const parsed = Number(ratingText.replace(',', '.'));
+  const ratingValid = ratingText.trim() !== '' && Number.isFinite(parsed) && parsed >= scale.min && parsed <= scale.max;
+  const typeRating = (text: string) => {
+    setRatingText(text);
+    const n = Number(text.replace(',', '.'));
+    if (text.trim() !== '' && Number.isFinite(n) && n >= scale.min && n <= scale.max) setRating(round(n, scale.decimals));
   };
   const changeSystem = (next: SkillSystem) => {
     if (next === skillSystem) return;
     haptics.tap();
     setSkillSystem(next);
-    setRating(next === 'UTR' ? 6.0 : next === 'ITF' ? 2 : 3.5);
+    const fresh = next === 'UTR' ? 6.0 : next === 'ITF' ? 2 : 3.5;
+    setRating(fresh);
+    setRatingText(fresh.toFixed(SCALES[next].decimals));
   };
 
   /* -------------------------------- Profile ------------------------------- */
@@ -219,7 +223,6 @@ export default function Onboarding() {
   };
 
   const last = step === STEPS.length - 1;
-  const fill = ((rating - scale.min) / (scale.max - scale.min)) * 100;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + spacing.sm }]}>
@@ -247,33 +250,14 @@ export default function Onboarding() {
                 <Text style={styles.note}>{scale.note}</Text>
               </Group>
 
-              <Group label="Rating">
-                <View style={styles.panel}>
-                  <View style={styles.dialRow}>
-                    <View>
-                      <Text style={styles.value}>{rating.toFixed(scale.decimals)}</Text>
-                      <Text style={styles.valueUnit}>{skillSystem}</Text>
-                    </View>
-                    <View style={styles.stepper}>
-                      <Stepper icon="remove" label={`Lower by ${scale.step}`} disabled={rating <= scale.min} onPress={() => setRatingTo(rating - scale.step)} />
-                      <View style={styles.stepperRule} />
-                      <Stepper icon="add" label={`Raise by ${scale.step}`} disabled={rating >= scale.max} onPress={() => setRatingTo(rating + scale.step)} />
-                    </View>
-                  </View>
-                  <View style={styles.scaleTrack}>
-                    <View style={[styles.scaleFill, { width: `${fill}%` }]} />
-                    <View style={[styles.scaleMark, { left: `${fill}%` }]} />
-                  </View>
-                  <View style={styles.scaleEnds}>
-                    <Text style={styles.scaleEnd}>{scale.min.toFixed(scale.decimals)}</Text>
-                    <Text style={styles.scaleEnd}>{scale.max.toFixed(scale.decimals)}</Text>
-                  </View>
-                  <View style={styles.band}>
-                    <Text style={styles.bandLabel}>{band.label}</Text>
-                    <Text style={styles.bandDetail}>{band.detail}</Text>
-                  </View>
-                </View>
-              </Group>
+              <Field
+                label={`${skillSystem} rating`}
+                value={ratingText}
+                onChangeText={typeRating}
+                placeholder={skillSystem === 'UTR' ? '6.4' : skillSystem === 'ITF' ? '2' : '3.5'}
+                keyboardType="decimal-pad"
+                hint={ratingValid ? `${scale.min.toFixed(scale.decimals)}–${scale.max.toFixed(scale.decimals)} · ${band.label}: ${band.detail}` : `Enter a number between ${scale.min.toFixed(scale.decimals)} and ${scale.max.toFixed(scale.decimals)}.`}
+              />
 
               <Group label="Years playing">
                 <SegmentedControl<string>
@@ -328,20 +312,12 @@ export default function Onboarding() {
                 </View>
               </Group>
               <Group label="Sessions per week">
-                <View style={styles.panel}>
-                  <View style={styles.dialRow}>
-                    <View>
-                      <Text style={styles.value}>{sessionsPerWeek}</Text>
-                      <Text style={styles.valueUnit}>{sessionsPerWeek === 1 ? 'SESSION' : 'SESSIONS'} / WEEK</Text>
-                    </View>
-                    <View style={styles.stepper}>
-                      <Stepper icon="remove" label="One fewer" disabled={sessionsPerWeek <= 1} onPress={() => pick(setSessionsPerWeek)(sessionsPerWeek - 1)} />
-                      <View style={styles.stepperRule} />
-                      <Stepper icon="add" label="One more" disabled={sessionsPerWeek >= 7} onPress={() => pick(setSessionsPerWeek)(sessionsPerWeek + 1)} />
-                    </View>
-                  </View>
-                  <Text style={styles.note}>Count what you can keep up for a month, not a good week.</Text>
-                </View>
+                <SegmentedControl<string>
+                  value={String(sessionsPerWeek)}
+                  onChange={(v) => pick(setSessionsPerWeek)(Number(v))}
+                  segments={[1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: String(n), label: String(n) }))}
+                />
+                <Text style={styles.note}>Count what you can keep up for a month, not a good week.</Text>
               </Group>
               <Field label="Injuries or limitations" value={injury} onChangeText={setInjury} placeholder="e.g. Right shoulder, tight after serving" hint="Caps volume in generated plans." />
               <Field label="Schedule constraints" value={scheduleNote} onChangeText={setScheduleNote} placeholder="e.g. Courts only before 8am on weekdays" />
@@ -440,7 +416,7 @@ export default function Onboarding() {
               <Text style={styles.skipText}>Skip</Text>
             </Pressable>
           ) : null}
-          <Button label={last ? 'Finish' : 'Continue'} onPress={() => (last ? finish() : setStep((s) => s + 1))} />
+          <Button label={last ? 'Finish' : 'Continue'} disabled={step === 0 && !ratingValid} onPress={() => (last ? finish() : setStep((s) => s + 1))} />
         </View>
       </View>
     </View>
@@ -479,21 +455,6 @@ function Row({ label, detail, selected, first, onPress }: { label: string; detai
   );
 }
 
-function Stepper({ icon, label, disabled, onPress }: { icon: 'add' | 'remove'; label: string; disabled: boolean; onPress: () => void }) {
-  const styles = useThemedStyles(styleDefinitions);
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [styles.stepButton, pressed && { backgroundColor: colors.surfaceAlt }, disabled && { opacity: 0.3 }]}
-    >
-      <Ionicons name={icon} size={20} color={colors.text} />
-    </Pressable>
-  );
-}
-
 const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   head: { paddingHorizontal: spacing.xl, gap: spacing.xs, paddingBottom: spacing.md, maxWidth: 560, width: '100%', alignSelf: 'center' },
@@ -518,21 +479,6 @@ const styleDefinitions = StyleSheet.create({
   radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.brand },
   phaseIndex: { ...typography.smallStrong, color: colors.textFaint, width: 16, fontVariant: ['tabular-nums'] },
 
-  panel: { padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, gap: spacing.sm },
-  dialRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  value: { fontSize: 40, fontWeight: '700', color: colors.text, letterSpacing: -1, lineHeight: 44, fontVariant: ['tabular-nums'] },
-  valueUnit: { ...typography.caption, color: colors.textFaint, letterSpacing: 1 },
-  stepper: { flexDirection: 'row', alignItems: 'center', borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
-  stepperRule: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch', backgroundColor: colors.border },
-  stepButton: { width: 48, height: 40, alignItems: 'center', justifyContent: 'center' },
-  scaleTrack: { height: 2, backgroundColor: colors.surfaceAlt, marginTop: spacing.xs },
-  scaleFill: { height: '100%', backgroundColor: colors.brand },
-  scaleMark: { position: 'absolute', top: -4, width: 10, height: 10, borderRadius: 5, marginLeft: -5, backgroundColor: colors.brand },
-  scaleEnds: { flexDirection: 'row', justifyContent: 'space-between' },
-  scaleEnd: { ...typography.caption, color: colors.textFaint, letterSpacing: 0, fontVariant: ['tabular-nums'] },
-  band: { gap: 2, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  bandLabel: { ...typography.smallStrong, color: colors.text },
-  bandDetail: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
 
   summaryLabel: { ...typography.small, color: colors.textFaint, width: 96 },
   summaryValue: { ...typography.small, color: colors.text, flex: 1 },

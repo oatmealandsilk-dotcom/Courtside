@@ -32,10 +32,24 @@ jobs:
       - name: Align package versions with the installed Expo SDK
         run: npx --yes expo install --fix && npm install --legacy-peer-deps
 
+      - name: Check the public Supabase settings are configured
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_KEY: ${{ vars.EXPO_PUBLIC_SUPABASE_KEY }}
+        run: |
+          if [ -z "$EXPO_PUBLIC_SUPABASE_URL" ] || [ -z "$EXPO_PUBLIC_SUPABASE_KEY" ]; then
+            echo "::error::Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_KEY under Settings → Secrets and variables → Actions → Variables, then re-run this workflow. The live site was left as it was."
+            exit 1
+          fi
+
       - name: Export static web build
         env:
           # Project pages are served from https://<user>.github.io/<repo>/
           EXPO_BASE_URL: /${{ github.event.repository.name }}
+          # Public-safe values, kept out of the repo so .env never needs to be
+          # committed. Set under Settings → Secrets and variables → Variables.
+          EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_KEY: ${{ vars.EXPO_PUBLIC_SUPABASE_KEY }}
         run: npx expo export --platform web --output-dir dist
 
       - name: Add SPA fallback and disable Jekyll

@@ -287,13 +287,17 @@ export const isLocalMedia = (uri?: string) =>
  * folder and returns its public URL. Falls back to the original URI on
  * failure so the local post still shows.
  */
+const ALLOWED_MEDIA = /^(image\/(jpeg|png|webp|heic|heif)|video\/(mp4|quicktime|webm))$/;
+
 export async function uploadMedia(me: ID, uri: string, kind: 'photo' | 'video'): Promise<string> {
   try {
     const db = need();
     const response = await fetch(uri);
     const bytes = await response.arrayBuffer();
-    const contentType = response.headers.get('content-type') || (kind === 'video' ? 'video/mp4' : 'image/jpeg');
-    const ext = contentType.split('/')[1]?.split(';')[0] || (kind === 'video' ? 'mp4' : 'jpg');
+    const contentType = (response.headers.get('content-type') || (kind === 'video' ? 'video/mp4' : 'image/jpeg')).split(';')[0].trim();
+    // The bucket enforces the same list; checking here gives a readable message.
+    if (!ALLOWED_MEDIA.test(contentType)) throw new Error('Only photos and videos can be posted.');
+    const ext = contentType.split('/')[1] || (kind === 'video' ? 'mp4' : 'jpg');
     const path = `${me}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const { error } = await db.storage.from('media').upload(path, bytes, { contentType, upsert: false });
     if (error) throw error;
@@ -365,5 +369,48 @@ export const auth = {
     const set = await client.auth.setSession({ access_token, refresh_token });
     if (set.error) throw new Error(set.error.message);
     return set.data.session;
+  },
+
+  /* ------------------------------------------------------- account centre */
+
+  /** Who is signed in, as the auth system sees them: email, sign-in methods, since when. */
+  async account() {
+    const { data, error } = await need().auth.getUser();
+    if (error || !data.user) throw new Error(error?.message ?? 'Not signed in');
+    const providers = (data.user.identities ?? []).map((i) => i.provider);
+    return {
+      email: data.user.email ?? '',
+      providers,
+      createdAt: data.user.created_at,
+      lastSignInAt: data.user.last_sign_in_at ?? null,
+      emailConfirmed: Boolean(data.user.email_confirmed_at),
+    };
+  },
+  async updatePassword(password: string) {
+    const { error } = await need().auth.updateUser({ password });
+    if (error) throw new Error(error.message);
+  },
+  /** Supabase emails both addresses; the change lands when the new one is confirmed. */
+  async updateEmail(email: string) {
+    const { error } = await need().auth.updateUser({ email: email.trim() });
+    if (error) throw new Error(error.message);
+  },
+  async signOutEverywhere() {
+    const { error } = await need().auth.signOut({ scope: 'global' });
+    if (error) throw new Error(error.message);
+  },
+  /** Adds Google as a second way into an email account. Needs "manual linking" on in Supabase. */
+  async linkGoogle() {
+    const client = need();
+    const base = (process.env.EXPO_BASE_URL ?? '').replace(/\/$/, '');
+    const redirectTo = Platform.OS === 'web' ? `${window.location.origin}${base}/account` : Linking.createURL('/account');
+    const { data, error } = await client.auth.linkIdentity({ provider: 'google', options: { redirectTo, skipBrowserRedirect: Platform.OS !== 'web' } });
+    if (error) throw new Error(error.message);
+    if (Platform.OS !== 'web' && data.url) await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+  },
+  async deleteAccount() {
+    const { data, error } = await need().functions.invoke<{ ok?: boolean; error?: string }>('delete-account', { body: {} });
+    if (error || !data?.ok) throw new Error(data?.error ?? error?.message ?? 'Could not delete the account.');
+    await need().auth.signOut();
   },
 };

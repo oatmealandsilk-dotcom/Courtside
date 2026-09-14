@@ -13,6 +13,11 @@ const key = process.env.EXPO_PUBLIC_SUPABASE_KEY;
  * Token refresh only runs on the web: on native it needs an AppState hook,
  * which src/store/AppContext.tsx wires up.
  */
+if ((!url || !key) && !__DEV__) {
+  // A production build without these silently ships the demo sign-in.
+  console.error('[supabase] EXPO_PUBLIC_SUPABASE_URL / _KEY are not set — running in demo mode.');
+}
+
 export const supabase: SupabaseClient | null =
   url && key
     ? createClient(url, key, {

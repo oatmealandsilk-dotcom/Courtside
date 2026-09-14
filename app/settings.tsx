@@ -45,6 +45,17 @@ export default function Settings() {
 
   const sections: { title: string; rows: Row[] }[] = [
     {
+      title: 'Account',
+      rows: [
+        {
+          icon: 'person-circle-outline',
+          label: 'Account centre',
+          detail: 'Email, password, sign-in, your data',
+          onPress: () => router.push('/account'),
+        },
+      ],
+    },
+    {
       title: 'Your app and media',
       rows: [
         {

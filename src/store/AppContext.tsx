@@ -190,6 +190,8 @@ interface AppState extends Bootstrap {
   saved: SavedItems;
   /** People you follow. */
   followingIds: ID[];
+  /** True once the signed-in account's data has come down from Supabase. */
+  remoteLoaded: boolean;
   /** Every follow the app knows about, for followers and following lists. */
   followEdges: { followerId: ID; followingId: ID }[];
   /** People whose posts you have muted — still followed, just quiet. */
@@ -230,6 +232,15 @@ interface AppActions {
   /** Resolves once the account is loaded, or false if the person backed out. */
   signInWithGoogle: () => Promise<boolean>;
   signOut: () => void;
+  /* Account centre */
+  accountInfo: () => Promise<{ email: string; providers: string[]; createdAt: string; lastSignInAt: string | null; emailConfirmed: boolean } | null>;
+  changePassword: (password: string) => Promise<void>;
+  changeEmail: (email: string) => Promise<void>;
+  signOutEverywhere: () => Promise<void>;
+  linkGoogle: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
+  /** Everything of yours, as one object, for "download your data". */
+  exportData: () => Record<string, unknown>;
   completeOnboarding: (profile: PlayerProfile) => void;
   updateIdentity: (patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string }) => void;
   updateProfile: (patch: Partial<PlayerProfile>) => void;
@@ -340,6 +351,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     defaultReaction: readDefaultReaction(),
     followingIds: [],
     followEdges: [],
+    remoteLoaded: false,
     mutedIds: [],
     blockedIds: [],
     alertIds: [],
@@ -437,6 +449,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           stories: [...data.stories, ...prev.stories.filter((st) => !remoteStories.has(st.id))],
           followingIds: data.followingIds,
           followEdges: data.followEdges,
+          remoteLoaded: true,
           saved: { ...prev.saved, postIds: data.savedPostIds },
           currentUserId: me,
           onboardingComplete: (self?.profile.goals.length ?? 0) > 0,
@@ -445,7 +458,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
         };
       });
     } catch (err) {
-      setState((prev) => ({ ...prev, currentUserId: me, authResolved: true, error: err instanceof Error ? err.message : 'Could not load your account.' }));
+      // The account is signed in even if its data did not come down — usually
+      // a token that expired while the tab slept and had not refreshed yet.
+      // Stand in for the profile so the screens render, and the auth
+      // listener retries the load once the token refreshes.
+      setState((prev) => {
+        const handle = (email ?? 'player').split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '') || 'player';
+        const users = prev.users.some((u) => u.id === me) ? prev.users : [{
+          id: me, handle, name: handle, bio: '', location: '', joinedAt: new Date().toISOString(), avatarSeed: me,
+          isCoach: false, followers: 0, following: 0, profile: emptyProfile, achievementIds: [],
+          stats: { sessionsLogged: 0, matchesPlayed: 0, matchesWon: 0, hoursOnCourt: 0, currentStreakDays: 0, longestStreakDays: 0 },
+        }, ...prev.users];
+        return { ...prev, users, currentUserId: me, authResolved: true, remoteLoaded: false, error: err instanceof Error ? err.message : 'Could not load your account.' };
+      });
     }
   }, []);
 
@@ -460,6 +485,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
       if (event === 'SIGNED_IN' && session) loadRemote(session.user.id, session.user.email);
+      // A refreshed token after a failed first load: try again with the new one.
+      if (event === 'TOKEN_REFRESHED' && session && !stateRef.current.remoteLoaded) loadRemote(session.user.id, session.user.email);
       if (event === 'SIGNED_OUT') setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false }));
     });
     // Tokens only refresh while the app is in front.
@@ -520,6 +547,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await loadRemote(session.user.id, session.user.email);
     return true;
   }, [loadRemote]);
+
+  const accountInfo = useCallback(async () => (isSupabaseConfigured ? remoteAuth.account() : null), []);
+  const changePassword = useCallback((password: string) => remoteAuth.updatePassword(password), []);
+  const changeEmail = useCallback((email: string) => remoteAuth.updateEmail(email), []);
+  const linkGoogle = useCallback(() => remoteAuth.linkGoogle(), []);
+  const signOutEverywhere = useCallback(async () => {
+    if (isSupabaseConfigured) await remoteAuth.signOutEverywhere();
+    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false }));
+  }, []);
+  const deleteAccount = useCallback(async () => {
+    if (isSupabaseConfigured) await remoteAuth.deleteAccount();
+    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false }));
+  }, []);
+  const exportData = useCallback(() => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    return {
+      exportedAt: new Date().toISOString(),
+      profile: s.users.find((u) => u.id === me) ?? null,
+      posts: s.posts.filter((p) => p.authorId === me),
+      comments: s.comments.filter((c) => c.authorId === me),
+      questions: s.questions.filter((q) => q.authorId === me),
+      answers: s.answers.filter((a) => a.authorId === me),
+      hits: s.stories.filter((st) => st.authorId === me),
+      following: s.followingIds,
+      saved: s.saved,
+      messages: s.messages.filter((m) => s.conversations.some((c) => c.id === m.conversationId && me && c.participantIds.includes(me))),
+      coachingRequests: s.coachingRequests.filter((r) => r.userId === me),
+      integrations: s.integrations.filter((i) => i.connected).map((i) => i.provider),
+    };
+  }, []);
 
   const signOut = useCallback(() => {
     if (isSupabaseConfigured) remoteAuth.signOut();
@@ -1501,6 +1559,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       signUp,
       signInWithGoogle,
       signOut,
+      accountInfo,
+      changePassword,
+      changeEmail,
+      signOutEverywhere,
+      linkGoogle,
+      deleteAccount,
+      exportData,
       completeOnboarding,
       updateProfile,
       updateIdentity,
@@ -1550,6 +1615,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       signUp,
       signInWithGoogle,
       signOut,
+      accountInfo,
+      changePassword,
+      changeEmail,
+      signOutEverywhere,
+      linkGoogle,
+      deleteAccount,
+      exportData,
       completeOnboarding,
       updateProfile,
       updateIdentity,

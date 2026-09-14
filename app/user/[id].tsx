@@ -152,7 +152,7 @@ export default function UserProfile() {
                     author={user}
                     liked={Boolean(currentUserId && post.likedBy.includes(currentUserId))}
                     onToggleLike={() => actions.toggleLike(post.id)}
-                    onPress={() => router.push(`/post/${post.id}`)}
+                    onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: post.id, set: 'own' } })}
                   />
                 ))}
               </View>

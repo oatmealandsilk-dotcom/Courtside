@@ -74,7 +74,7 @@ export default function QuestionDetail() {
           <Pressable
             accessibilityRole="link"
             accessibilityLabel={`Read the original on ${question.source.label}`}
-            onPress={() => Linking.openURL(question.source!.url)}
+            onPress={() => { if (/^https?:\/\//i.test(question.source!.url)) Linking.openURL(question.source!.url); }}
             style={styles.sourceRow}
           >
             <Ionicons name={question.source.name === 'reddit' ? 'logo-reddit' : 'globe-outline'} size={16} color={colors.brand} />
