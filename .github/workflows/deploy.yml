@@ -57,6 +57,21 @@ jobs:
           cp dist/index.html dist/404.html
           touch dist/.nojekyll
 
+      # A browser can hold the old index.html for up to ten minutes after a
+      # deploy, and that page points at the old script by name. Keep the
+      # previous build's script alongside the new one so those visitors still
+      # get an app rather than a blank page.
+      - name: Keep the previous build's script alive
+        run: |
+          site="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}"
+          old=$(curl -fsSL "$site/" | grep -o '_expo/static/js/web/entry-[a-f0-9]*\.js' | head -1 || true)
+          if [ -n "$old" ] && [ ! -f "dist/$old" ]; then
+            mkdir -p "$(dirname "dist/$old")"
+            curl -fsSL "$site/$old" -o "dist/$old" && echo "kept $old" || echo "previous script not fetchable; skipping"
+          else
+            echo "nothing to keep"
+          fi
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
