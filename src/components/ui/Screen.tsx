@@ -1,8 +1,9 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useRef, type ReactNode } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import React, { useRef, useSyncExternalStore, type ReactNode } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname } from 'expo-router';
+import { isPageDragging, subscribePageDragging } from '@/features/navigation/swipeLock';
 import { Ionicons } from '@expo/vector-icons';
 
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
@@ -65,6 +66,8 @@ export function Screen({
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
+  // While a sideways page swipe is under way, this scroller stands down.
+  const swiping = useSyncExternalStore(subscribePageDragging, isPageDragging, () => false);
   const key = memoryKey ?? pathname;
   const scroller = useRef<ScrollView | null>(null);
   // Captured once so the starting offset is set before the first paint rather
@@ -105,7 +108,7 @@ export function Screen({
     ) : null;
 
   const main = (
-    <View style={[padded && styles.padded, { paddingBottom: spacing.xxxl, flex: showRail ? 1 : undefined }]}>
+    <View style={[padded && styles.padded, { paddingBottom: scroll ? spacing.xxxl : 0, flex: showRail || !scroll ? 1 : undefined }]}>
       {children}
     </View>
   );
@@ -122,14 +125,24 @@ export function Screen({
   );
 
   return (
-    <View style={[styles.root, { paddingTop: isPhone ? insets.top : spacing.sm }]}>
+    <KeyboardAvoidingView
+      style={[styles.root, { paddingTop: isPhone ? insets.top : spacing.sm }]}
+      // A scrolling page moves the box itself; a fixed page lifts everything.
+      behavior={Platform.OS === 'ios' && !scroll ? 'padding' : undefined}
+      enabled={Platform.OS === 'ios' && !scroll}
+    >
       {headerWrapper ? headerWrapper(header) : header}
       {scroll ? (
         <ScrollView
           ref={(node) => { scroller.current = node; if (scrollRef) scrollRef.current = node; }}
           style={styles.flex}
           contentContainerStyle={[styles.scrollContent, verticalOnlyTouch]}
+          scrollEnabled={!swiping}
+          directionalLockEnabled
           keyboardShouldPersistTaps="handled"
+          // Keeps whatever box you are typing in above the keyboard.
+          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          keyboardDismissMode="interactive"
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={32}
           // Set before the first paint, so there is no visible jump. Web ignores
@@ -151,7 +164,7 @@ export function Screen({
       ) : (
         <View style={styles.flex}>{body}</View>
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

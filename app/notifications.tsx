@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar, EmptyState, Screen } from '@/components/ui';
@@ -25,7 +26,7 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap; tin
   answer: { name: 'chatbubbles', tint: 'info' },
   'coach-reply': { name: 'shield-checkmark', tint: 'brand' },
   helpful: { name: 'ribbon', tint: 'warning' },
-  share: { name: 'paper-plane', tint: 'court' },
+  share: { name: 'arrow-redo', tint: 'court' },
   follow: { name: 'person-add', tint: 'brand' },
   posted: { name: 'checkmark', tint: 'success' },
 };
@@ -54,6 +55,7 @@ interface Group {
 
 function routeFor(group: Group): string {
   if (group.targetKind === 'post') return `/post/${group.targetId}`;
+  if (group.targetKind === 'hit') return `/hits/${group.targetId}`;
   if (group.targetKind === 'question') return `/question/${group.targetId}`;
   return `/coach-question/${group.targetId}`;
 }
@@ -104,7 +106,7 @@ export default function Notifications() {
   const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? 'Someone';
 
   return (
-    <Screen title="Notifications" compactTitle onBack={() => router.back()}>
+    <Screen title="Notifications" compactTitle onBack={() => goBack()}>
       {groups.length === 0 ? (
         <EmptyState
           icon="notifications-outline"

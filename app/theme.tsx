@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Screen } from '@/components/ui';
@@ -14,7 +15,7 @@ export default function ThemePage() {
   const { theme, setTheme } = useTheme();
 
   return (
-    <Screen title="Theme" compactTitle onBack={() => router.back()}>
+    <Screen title="Theme" compactTitle onBack={() => goBack()}>
       <Text style={styles.lead}>Applies everywhere straight away. Pick the court you would rather be on.</Text>
       <View style={styles.list}>
         {themeList.map((option) => {

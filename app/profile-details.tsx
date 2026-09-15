@@ -3,6 +3,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { AchievementGrid } from '@/components/AchievementGrid';
@@ -37,7 +38,7 @@ export default function Profile() {
   return (
     <Screen
       title="Your game"
-      onBack={() => router.back()}
+      onBack={() => goBack()}
       right={<Button label="Sign out" variant="ghost" onPress={actions.signOut} />}
     >
       <Card style={styles.identity}>

@@ -3,11 +3,14 @@ import { PlayerName } from '@/components/PlayerName';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 
 import { PostCard } from '@/components/PostCard';
 import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
+import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
+import { confirmDelete } from '@/lib/confirm';
 import { colors, spacing, typography } from '@/theme';
 
 export default function PostDetail() {
@@ -23,7 +26,7 @@ export default function PostDetail() {
 
   if (!post || !author) {
     return (
-      <Screen title="Post" compactTitle onBack={() => router.back()}>
+      <Screen title="Post" compactTitle onBack={() => goBack()}>
         <EmptyState icon="alert-circle-outline" title="This post is gone" />
       </Screen>
     );
@@ -42,7 +45,7 @@ export default function PostDetail() {
   };
 
   return (
-    <Screen title="Post" compactTitle onBack={() => router.back()}>
+    <Screen title="Post" compactTitle onBack={() => goBack()}>
       <PostCard
         post={post}
         author={author}
@@ -58,6 +61,7 @@ export default function PostDetail() {
             {post.archived ? 'Archived. Only you can see this.' : 'Yours. Archive it to take it off your profile and the feed.'}
           </Text>
           <Button label={post.archived ? 'Unarchive' : 'Archive'} variant="secondary" onPress={() => actions.toggleArchivePost(post.id)} />
+          <Button label="Delete" variant="danger" onPress={() => confirmDelete(() => { actions.deletePost(post.id); router.back(); })} />
         </View>
       ) : null}
 
@@ -79,7 +83,7 @@ export default function PostDetail() {
                 <Text style={styles.commentMeta}>
                   <PlayerName userId={commenter?.id}>{commenter?.name ?? 'Unknown'}</PlayerName> · {relativeTime(comment.createdAt)}
                 </Text>
-                <Text style={styles.commentText}>{comment.body}</Text>
+                <RichText style={styles.commentText}>{comment.body}</RichText>
               </View>
             </View>
           );

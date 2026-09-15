@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -11,6 +11,8 @@ import { LevelPill } from '@/components/LevelPill';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { compactNumber, duration, relativeTime } from '@/lib/format';
 import type { Post, QuestionTopic, User } from '@/data/types';
+import { RichText } from '@/components/RichText';
+import { requestSection } from '@/features/navigation/swipeOrder';
 import { colors, radius, spacing, typography } from '@/theme';
 
 interface Props {
@@ -23,6 +25,9 @@ interface Props {
   saved?: boolean;
   onToggleSave?: () => void;
   onShare?: () => void;
+  /** Shown as ••• on your own posts: archive or delete. */
+  onArchive?: () => void;
+  onDelete?: () => void;
 }
 
 /** Which Community topic each kind of post belongs with, for the tappable label. */
@@ -49,8 +54,11 @@ export function PostCard({
   saved = false,
   onToggleSave,
   onShare,
+  onArchive,
+  onDelete,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
+  const [menuOpen, setMenuOpen] = useState(false);
   const meta = KIND_META[post.kind];
 
   return (
@@ -70,15 +78,42 @@ export function PostCard({
             @{author.handle} · {relativeTime(post.createdAt)}
           </Text>
         </View>
-        <LevelPill profile={author.profile} small />
+        {onDelete || onArchive ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="Post options" hitSlop={10} onPress={() => setMenuOpen(true)} style={styles.more}>
+            <Ionicons name="ellipsis-horizontal" size={20} color={colors.textMuted} />
+          </Pressable>
+        ) : (
+          <LevelPill profile={author.profile} small />
+        )}
       </Pressable>
+      {menuOpen ? (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+          <Pressable accessibilityLabel="Close" onPress={() => setMenuOpen(false)} style={styles.backdrop}>
+            <View style={styles.sheet}>
+              <View style={styles.grabber} />
+              {onArchive ? (
+                <Pressable accessibilityRole="button" onPress={() => { setMenuOpen(false); onArchive(); }} style={styles.menuRow}>
+                  <Ionicons name={post.archived ? 'arrow-undo-outline' : 'archive-outline'} size={21} color={colors.text} />
+                  <Text style={styles.menuLabel}>{post.archived ? 'Unarchive' : 'Archive'}</Text>
+                </Pressable>
+              ) : null}
+              {onDelete ? (
+                <Pressable accessibilityRole="button" onPress={() => { setMenuOpen(false); onDelete(); }} style={[styles.menuRow, styles.menuBorder]}>
+                  <Ionicons name="trash-outline" size={21} color={colors.danger} />
+                  <Text style={[styles.menuLabel, { color: colors.danger }]}>Delete</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </Pressable>
+        </Modal>
+      ) : null}
 
       {post.imageUrl && <Image accessibilityLabel={post.mediaLabel ?? "Post photo"} source={{uri:post.imageUrl}} style={{width:"100%",aspectRatio:1,borderRadius:12}} resizeMode="cover"/>}
       {post.videoUrl ? <ClipVideo uri={post.videoUrl} poster={post.thumbnailUrl} /> : post.kind === 'clip' ? <MediaPlaceholder label={post.mediaLabel ?? 'Clip'} seed={post.id} portrait /> : null}
       <Pressable onPress={onPress} style={styles.body}>
         <Tappable
           accessibilityLabel={`${meta.label}: see discussions about this in Community`}
-          onPress={() => router.navigate({ pathname: '/discuss', params: { section: 'discussions', topic: KIND_TOPIC[post.kind] } })}
+          onPress={() => { requestSection('/discuss', 'discussions'); requestSection('/discuss#topic', KIND_TOPIC[post.kind]); router.push('/discuss'); }}
           style={[styles.kindRow, { borderColor: `${meta.tint}55` }]}
         >
           <Ionicons name={meta.icon} size={13} color={meta.tint} />
@@ -86,7 +121,7 @@ export function PostCard({
           <Ionicons name="chevron-forward" size={11} color={meta.tint} />
         </Tappable>
 
-        <Text style={styles.text}>{post.body}</Text>
+        <RichText style={styles.text}>{post.body}</RichText>
 
         {post.match ? (
           <View style={styles.detailBox}>
@@ -151,7 +186,7 @@ export function PostCard({
         </Tappable>
         {onShare ? (
           <Tappable onPress={onShare} scaleTo={0.8} style={styles.action} accessibilityLabel="Share this post">
-            <Ionicons name="paper-plane-outline" size={22} color={colors.textMuted} />
+            <Ionicons name="arrow-redo-outline" size={22} color={colors.textMuted} />
           </Tappable>
         ) : null}
         {onToggleSave ? (
@@ -178,6 +213,13 @@ export function PostCard({
 const styleDefinitions = StyleSheet.create({
   card: { gap: spacing.md, borderRadius: 0, borderWidth: 0, borderBottomWidth: 1, paddingHorizontal: 0, paddingBottom: spacing.xl, backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  more: { padding: 4 },
+  backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
+  sheet: { backgroundColor: colors.bg, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingBottom: spacing.xxl, paddingTop: spacing.sm, maxWidth: 520, width: '100%', alignSelf: 'center' },
+  grabber: { width: 36, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, alignSelf: 'center', marginBottom: spacing.md },
+  menuRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingHorizontal: spacing.xl, paddingVertical: spacing.lg },
+  menuBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  menuLabel: { ...typography.body, color: colors.text },
   headerText: { flex: 1, gap: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   name: { ...typography.bodyStrong, color: colors.text },

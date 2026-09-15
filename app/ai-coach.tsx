@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Button, Card, Chip, Field, Screen, StatTile, SegmentedControl } from '@/components/ui';
@@ -84,7 +85,7 @@ export default function Train() {
   };
 
   return (
-    <Screen title="AI Coach" subtitle="Your next step on court." onBack={() => router.back()}>
+    <Screen title="AI Coach" subtitle="Your next step on court." onBack={() => goBack()}>
       <SegmentedControl segments={[{value:'ask',label:'Ask coach'},{value:'plan',label:'My plan'}]} value={section} onChange={setSection}/>
       {section === 'plan' && <>
       <Card style={styles.summaryCard}>

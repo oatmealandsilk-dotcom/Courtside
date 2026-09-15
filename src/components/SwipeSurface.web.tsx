@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { withTiming, type SharedValue } from 'react-native-reanimated';
 import { useResponsive } from '@/lib/useResponsive';
 
 export interface SwipeSurfaceProps {
@@ -19,6 +20,10 @@ export interface SwipeSurfaceProps {
   delegateRight?: boolean;
   delegateLeft?: boolean;
   renderPreview?: (direction: 1 | -1) => React.ReactNode;
+  /** Changes once the destination has rendered; the old page is held until then. */
+  settledKey?: string;
+  /** Written as the finger moves: -1..1 toward the next page. */
+  progress?: SharedValue<number>;
 }
 
 const SETTLE_MS = 300;
@@ -32,7 +37,7 @@ const EASE = 'cubic-bezier(.22,.61,.36,1)';
  * preview) and when it ends. Routing every pointer move through state meant
  * re-rendering the whole page per frame, which is what made swipes stutter.
  */
-export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false }: SwipeSurfaceProps) {
+export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false, settledKey, progress }: SwipeSurfaceProps) {
   const { isPhone } = useResponsive();
   const enabled = requestedEnabled && isPhone;
   const start = useRef<{ x: number; y: number; lastX: number; time: number; velocity: number; horizontal: boolean; delegateOnly?: boolean; delegateDirection?: string | null } | null>(null);
@@ -40,7 +45,6 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
   const content = useRef<HTMLDivElement>(null);
   const previewEl = useRef<HTMLDivElement>(null);
   const suppressClick = useRef(false);
-  const strip = useRef<HTMLElement | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const settling = useRef(false);
   const [direction, setDirection] = useState<1 | -1>(1);
@@ -86,16 +90,29 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
     if (commit) latest.current.onCommit?.(next);
     else latest.current.onDragTo?.(null);
     latest.current.onProgress?.(commit ? next : 0);
+    if (progress) progress.value = withTiming(commit ? next : 0, { duration: reduced ? 0 : SETTLE_MS });
     place(commit ? -next * width : 0, !reduced);
     timer.current = setTimeout(() => {
-      if (commit) latest.current.onSwipe(next);
-      settling.current = false;
-      setDragging(false);
-      // One frame so the destination paints before the offset resets,
-      // otherwise the outgoing page flashes back at full size.
-      requestAnimationFrame(() => place(0, false));
+      if (!commit) return release();
+      latest.current.onSwipe(next);
+      // Hold until the destination has rendered (settledKey changes), with a
+      // ceiling so a page that never changes the key still lets go.
+      awaiting.current = setTimeout(() => { awaiting.current = null; release(); }, 700);
     }, reduced ? 0 : SETTLE_MS);
   };
+  const release = () => {
+    settling.current = false;
+    setDragging(false);
+    requestAnimationFrame(() => place(0, false));
+  };
+  const awaiting = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!awaiting.current) return;
+    clearTimeout(awaiting.current);
+    awaiting.current = null;
+    release();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settledKey]);
 
   const preview = dragging ? renderPreview?.(direction) : null;
   return <div ref={surface} data-swipe-delegate-right={delegateRight ? "true" : undefined} data-swipe-delegate-left={delegateLeft ? "true" : undefined} data-swipe-surface={enabled ? 'true' : undefined}
@@ -108,10 +125,9 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
       const nearest = target.closest('[data-swipe-surface="true"]');
       const delegateOnly = nearest !== event.currentTarget;
       if ((delegateOnly && nearest?.getAttribute('data-swipe-delegate-right') !== 'true' && nearest?.getAttribute('data-swipe-delegate-left') !== 'true') ||
-        target.closest('input,textarea,select,video,#topic-filter-strip,[data-swipe-ignore="true"]')) return;
-      // A sideways strip keeps the gesture only while it has somewhere to
-      // scroll; at either end the drag falls through to the page.
-      strip.current = (target.closest('#who-to-follow,#stories-rail') as HTMLElement | null) ?? null;
+        // Sideways strips are their own thing: a drag on them never turns the page,
+        // not even at their ends — that is how people ended up in Community by accident.
+        target.closest('input,textarea,select,video,#topic-filter-strip,#who-to-follow,#stories-rail,[data-swipe-ignore="true"]')) return;
       start.current = { x: event.clientX, y: event.clientY, lastX: event.clientX, time: performance.now(), velocity: 0, horizontal: false, delegateOnly, delegateDirection: nearest?.getAttribute("data-swipe-delegate-right") === "true" ? "right" : "left" };
     }}
     onPointerMoveCapture={event => {
@@ -119,11 +135,6 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
       if (!point) return;
       const dx = event.clientX - point.x;
       const dy = event.clientY - point.y;
-      if (strip.current && !point.horizontal) {
-        const el = strip.current;
-        const canScroll = dx < 0 ? el.scrollLeft + el.clientWidth < el.scrollWidth - 1 : el.scrollLeft > 0;
-        if (canScroll) { start.current = null; return; }
-      }
       if ((delegateRight && dx > 0) || (delegateLeft && dx < 0) || (point.delegateOnly && (point.delegateDirection === "right" ? dx < 0 : dx > 0))) { start.current = null; return; }
       if (!point.horizontal) {
         if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { start.current = null; return; }
@@ -143,6 +154,7 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
       const offset = available ? Math.max(-width, Math.min(width, dx)) : dx * 0.16;
       if (available) latest.current.onDragTo?.(next);
       latest.current.onProgress?.(-offset / width);
+      if (progress) progress.value = -offset / width;
       setDirection(next);
       setDragging(true);
       place(offset, false);
@@ -159,7 +171,7 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
       const width = event.currentTarget.clientWidth;
       const available = !latest.current.renderPreview || !!latest.current.renderPreview(next);
       const velocity = performance.now() - point.time < 100 ? point.velocity : 0;
-      const commit = available && (Math.abs(dx) > width * 0.36 || (Math.abs(dx) > 35 && Math.abs(velocity) > 0.5 && Math.sign(velocity) === Math.sign(dx)));
+      const commit = available && (Math.abs(dx) > width * 0.28 || (Math.abs(dx) > 35 && Math.abs(velocity) > 0.5 && Math.sign(velocity) === Math.sign(dx)));
       settle(commit, next);
     }}
     onPointerCancel={() => { if (start.current?.horizontal) settle(false, direction); start.current = null; }}

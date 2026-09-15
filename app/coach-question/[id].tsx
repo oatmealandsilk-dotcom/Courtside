@@ -3,12 +3,14 @@ import { PlayerName } from '@/components/PlayerName';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { ClipVideo } from '@/components/ClipVideo';
 import { Avatar, Button, Chip, EmptyState, Field, Screen } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
+import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -22,7 +24,7 @@ export default function CoachQuestionDetail() {
   const question = coachQuestions.find((q) => q.id === id);
   if (!question) {
     return (
-      <Screen title="Question" compactTitle onBack={() => router.back()}>
+      <Screen title="Question" compactTitle onBack={() => goBack()}>
         <EmptyState title="Question not found" body="It may have been removed." />
       </Screen>
     );
@@ -37,7 +39,7 @@ export default function CoachQuestionDetail() {
   const iAmCoach = Boolean(currentUser?.isCoach);
 
   return (
-    <Screen title="Ask a coach" compactTitle onBack={() => router.back()}>
+    <Screen title="Ask a coach" compactTitle onBack={() => goBack()}>
       <View style={styles.head}>
         <View style={styles.authorRow}>
           <Avatar name={author?.name ?? '?'} seed={author?.avatarSeed ?? question.id} size={38} />
@@ -51,7 +53,7 @@ export default function CoachQuestionDetail() {
         </View>
 
         <Text style={styles.title}>{question.title}</Text>
-        <Text style={styles.body}>{question.body}</Text>
+        <RichText style={styles.body}>{question.body}</RichText>
 
         {question.videoUrl ? (
           <ClipVideo uri={question.videoUrl} />
@@ -102,7 +104,7 @@ export default function CoachQuestionDetail() {
               </View>
             </Pressable>
 
-            <Text style={styles.body}>{reply.body}</Text>
+            <RichText style={styles.body}>{reply.body}</RichText>
 
             <View style={styles.replyActions}>
               <Pressable

@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Animated, Image, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -29,7 +29,6 @@ export default function Hit() {
   const [ready, setReady] = useState(false);
   const [count, setCount] = useState<number | null>(null);
   const [shot, setShot] = useState<string | null>(null);
-  const [caption, setCaption] = useState('');
   const [failed, setFailed] = useState('');
   const flash = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(1)).current;
@@ -73,11 +72,12 @@ export default function Hit() {
     }
   };
 
-  const post = () => {
+  // The photo is the hit; the caption and the posting happen in the same
+  // composer a clip uses, so the two flows feel like one.
+  useEffect(() => {
     if (!shot) return;
-    actions.addStory({ imageUrl: shot, thumbnailUrl: shot, caption: caption.trim() || undefined, mediaLabel: 'Hit' });
-    router.back();
-  };
+    router.replace({ pathname: '/compose', params: { mode: 'hit', shot } });
+  }, [shot]);
 
   if (!permission) return <View style={styles.root} />;
 
@@ -87,52 +87,21 @@ export default function Hit() {
         <Ionicons name="camera-outline" size={40} color={colors.textMuted} />
         <Text style={styles.title}>Camera needed</Text>
         <Text style={styles.note}>A hit is one live photo after a session. CourtSide needs the camera to take it.</Text>
-        {permission.canAskAgain ? <Button label="Allow camera" onPress={() => requestPermission()} /> : <Text style={styles.note}>Turn on camera access for CourtSide in your phone's Settings.</Text>}
+        {permission.canAskAgain ? <Button label="Allow camera" onPress={() => requestPermission()} /> : <Button label="Open Settings" onPress={() => Linking.openSettings()} />}
+        <Text style={styles.note}>You can change this any time in Settings → Permissions.</Text>
         <Button label="Not now" variant="ghost" onPress={() => router.back()} />
       </View>
     );
   }
 
-  if (shot) {
-    return (
-      <View style={[styles.root, { paddingTop: insets.top }]}>
-        <Image source={{ uri: shot }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-        <View style={styles.scrimTop} />
-        <View style={styles.scrimBottom} />
-        <View style={[styles.topBar, { top: insets.top + spacing.sm }]}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Discard this hit" onPress={() => router.back()} style={styles.iconButton}>
-            <Ionicons name="close" size={24} color="white" />
-          </Pressable>
-          <View style={styles.tag}><Ionicons name="tennisball" size={12} color="white" /><Text style={styles.tagText}>ONE TAKE</Text></View>
-        </View>
-        <View style={[styles.bottom, { paddingBottom: insets.bottom + spacing.lg }]}>
-          <TextInput
-            value={caption}
-            onChangeText={setCaption}
-            placeholder="How did it go? (optional)"
-            placeholderTextColor="rgba(255,255,255,0.6)"
-            style={styles.caption}
-            maxLength={120}
-            accessibilityLabel="Caption"
-          />
-          <View style={styles.actions}>
-            <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.discard}>
-              <Text style={styles.discardText}>Discard</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Post this hit" onPress={post} style={styles.post}>
-              <Text style={styles.postText}>Post hit</Text>
-              <Ionicons name="arrow-forward" size={18} color={colors.brandInk} />
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    );
-  }
+  if (shot) return <View style={styles.root} />;
 
   return (
     <View style={styles.root}>
+      {Platform.OS === 'web' ? <style>{'#hit-camera video { object-fit: contain !important; background: #000; }'}</style> : null}
       <CameraView
         ref={camera}
+        nativeID="hit-camera"
         style={StyleSheet.absoluteFill}
         facing="front"
         mirror
@@ -163,7 +132,12 @@ export default function Hit() {
 }
 
 const styleDefinitions = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#000' },
+  root: {
+    flex: 1,
+    backgroundColor: '#000',
+    // On a computer the shell keeps its sidebar; the camera should own the window.
+    ...(Platform.OS === 'web' ? ({ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 } as unknown as object) : null),
+  },
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl },
   title: { ...typography.title, color: colors.text },
   note: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },

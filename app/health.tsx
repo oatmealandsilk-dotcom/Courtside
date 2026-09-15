@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Button, Card, Screen, StatTile } from '@/components/ui';
@@ -33,7 +34,7 @@ export default function Health() {
   };
 
   return (
-    <Screen title="Health inputs" compactTitle onBack={() => router.back()}>
+    <Screen title="Health inputs" compactTitle onBack={() => goBack()}>
       {latest ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Yesterday</Text>

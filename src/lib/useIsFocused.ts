@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
+import { useTabActive } from '@/features/navigation/tabFocus';
 
 /**
  * Whether this screen is the one on top.
@@ -18,5 +19,6 @@ export function useIsFocused(): boolean {
       return () => setFocused(false);
     }, []),
   );
-  return focused;
+  // Inside the tab row, a tab that has slid off screen is not focused either.
+  return focused && useTabActive();
 }

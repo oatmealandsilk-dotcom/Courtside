@@ -4,6 +4,7 @@ import { PlayerName } from '@/components/PlayerName';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { LevelPill } from '@/components/LevelPill';
@@ -17,7 +18,7 @@ type Scope = 'all' | 'clips' | 'posts' | 'threads' | 'players' | 'coaches';
 /** One search box across discussions, players, and coaches. */
 export default function Search() {
   const styles = useThemedStyles(styleDefinitions);
-  const { posts, questions, users, coaches, currentUserId, saved, actions } = useApp();
+  const { posts, questions, users, coaches, currentUserId, saved, actions, followingIds, followEdges, detectedLocation } = useApp();
   const params=useLocalSearchParams<{q?:string}>();
   const [term, setTerm] = useState(params.q ?? '');
   useEffect(()=>{setTerm(params.q ?? '');setScope('all');},[params.q]);
@@ -38,17 +39,43 @@ export default function Search() {
     [questions, q],
   );
 
-  const matchedPlayers = useMemo(
-    () =>
-      !q
-        ? []
-        : users.filter(
-            (user) =>
-              user.id !== currentUserId &&
-              `${user.name} ${user.handle} ${user.location} ${user.bio}`.toLowerCase().includes(q),
-          ),
-    [users, currentUserId, q],
-  );
+  /**
+   * People, ranked the way Instagram and TikTok do it: the closest name match
+   * first, then anyone near you, then people you share follows with, then by
+   * how many follow them. A search starting with @ is a handle search only.
+   */
+  const matchedPlayers = useMemo(() => {
+    if (!q) return [];
+    const byHandle = q.startsWith('@');
+    const needle = byHandle ? q.slice(1) : q;
+    if (!needle) return [];
+    const me = users.find((u) => u.id === currentUserId);
+    const myCity = (detectedLocation ?? me?.location ?? '').split(',')[0].trim().toLowerCase();
+    const iFollow = new Set(followingIds);
+    const followersOf = (id: string) => followEdges.filter((e) => e.followingId === id).map((e) => e.followerId);
+    return users
+      .filter((user) => user.id !== currentUserId)
+      .map((user) => {
+        const name = user.name.toLowerCase();
+        const handle = user.handle.toLowerCase();
+        let match = 0;
+        if (byHandle) match = handle.startsWith(needle) ? 3 : handle.includes(needle) ? 1 : 0;
+        else if (name.startsWith(needle) || handle.startsWith(needle)) match = 3;
+        else if (name.split(/\s+/).some((part) => part.startsWith(needle))) match = 2.5;
+        else if (name.includes(needle) || handle.includes(needle)) match = 2;
+        else if (`${user.location} ${user.bio}`.toLowerCase().includes(needle)) match = 1;
+        if (!match) return null;
+        const near = !!myCity && user.location.split(',')[0].trim().toLowerCase() === myCity;
+        const theirFollowers = followersOf(user.id);
+        const mutual = theirFollowers.filter((id) => iFollow.has(id)).length;
+        const follows = iFollow.has(user.id);
+        const score = match * 10 + (near ? 4 : 0) + Math.min(mutual, 5) * 1.5 + (follows ? 2 : 0) + Math.log10(1 + user.followers);
+        const reason = follows ? 'Following' : mutual ? `${mutual} mutual` : near ? 'Near you' : user.followers >= 1000 ? 'Popular' : '';
+        return { user, score, reason };
+      })
+      .filter((row): row is { user: (typeof users)[number]; score: number; reason: string } => !!row)
+      .sort((a, b) => b.score - a.score);
+  }, [users, currentUserId, q, followingIds, followEdges, detectedLocation]);
 
   const matchedCoaches = useMemo(
     () =>
@@ -72,12 +99,12 @@ export default function Search() {
     (showCoaches ? matchedCoaches.length : 0);
 
   return (
-    <Screen title="Search" compactTitle onBack={() => router.back()}>
+    <Screen title="Search" compactTitle onBack={() => goBack()}>
       <View style={styles.top}>
         <Field
           value={term}
           onChangeText={setTerm}
-          placeholder="Threads, players, coaches, gear…"
+          placeholder="People, @handles, threads, coaches, gear…"
           autoCapitalize="none"
         />
         <ScrollView horizontal showsHorizontalScrollIndicator={false}><SegmentedControl
@@ -108,7 +135,7 @@ export default function Search() {
           {showPlayers && matchedPlayers.length ? (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>PLAYERS</Text>
-              {matchedPlayers.map((user) => (
+              {matchedPlayers.map(({ user, reason }) => (
                 <Pressable
                   key={user.id}
                   accessibilityRole="link"
@@ -119,7 +146,7 @@ export default function Search() {
                   <View style={{ flex: 1, gap: 3 }}>
                     <Text style={styles.name}>{user.name}</Text>
                     <Text style={styles.meta}>
-                      @{user.handle} · {user.location}
+                      @{user.handle}{reason ? ` · ${reason}` : ''}{user.location ? ` · ${user.location}` : ''}
                     </Text>
                   </View>
                   <LevelPill profile={user.profile} small />

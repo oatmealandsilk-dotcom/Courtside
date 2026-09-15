@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar, EmptyState, Field, Screen, SegmentedControl } from '@/components/ui';
@@ -63,7 +64,7 @@ export default function Inbox() {
     <Screen
       title="Messages"
       compactTitle
-      onBack={() => router.back()}
+      onBack={() => goBack()}
       right={
         <Pressable
           onPress={() => router.push('/messages/new')}

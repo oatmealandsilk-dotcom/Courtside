@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { MediaPicker, type PickedMedia } from '@/components/MediaPicker';
@@ -50,7 +51,7 @@ export default function AskCoach() {
       title="Ask a coach"
       subtitle="Free · answered by verified coaches"
       compactTitle
-      onBack={() => router.back()}
+      onBack={() => goBack()}
     >
       <View style={styles.banner}>
         <Ionicons name="shield-checkmark" size={20} color={colors.brand} />

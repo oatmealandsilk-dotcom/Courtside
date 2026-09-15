@@ -2,10 +2,12 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 
 import { PostCard } from '@/components/PostCard';
 import { EmptyState, Screen } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
+import { confirmDelete } from '@/lib/confirm';
 import { colors, spacing, typography } from '@/theme';
 
 type Set = 'own' | 'clips' | 'tagged';
@@ -32,7 +34,7 @@ export default function PlayerPosts() {
 
   if (!user) {
     return (
-      <Screen title="Posts" compactTitle onBack={() => router.back()}>
+      <Screen title="Posts" compactTitle onBack={() => goBack()}>
         <EmptyState icon="person-outline" title="No such player" />
       </Screen>
     );
@@ -45,7 +47,7 @@ export default function PlayerPosts() {
       title={title}
       subtitle={`@${user.handle}`}
       compactTitle
-      onBack={() => router.back()}
+      onBack={() => goBack()}
       scrollRef={scrollRef}
     >
       {list.length === 0 ? (
@@ -74,6 +76,8 @@ export default function PlayerPosts() {
                   saved={saved.postIds.includes(post.id)}
                   onToggleSave={() => actions.toggleSavePost(post.id)}
                   onShare={() => router.push(`/share?kind=post&id=${post.id}`)}
+                  onArchive={post.authorId === currentUserId ? () => actions.toggleArchivePost(post.id) : undefined}
+                  onDelete={post.authorId === currentUserId ? () => confirmDelete(() => actions.deletePost(post.id)) : undefined}
                 />
               </View>
             );

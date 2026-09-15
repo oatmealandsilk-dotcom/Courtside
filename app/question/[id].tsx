@@ -1,17 +1,20 @@
 import { ThreadReply } from '@/components/ThreadReplies';
 import { SwipeSurface } from '@/components/SwipeSurface';
+import { requestSection } from '@/features/navigation/swipeOrder';
 import Discuss from '../(tabs)/discuss';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useEffect, useRef, useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { VoteControls } from '@/components/VoteControls';
 import { TOPIC_META } from '@/components/QuestionCard';
 import { Avatar, Button, Card, Chip, EmptyState, Field, Screen } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
+import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
 import type { Answer } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -30,7 +33,7 @@ export default function QuestionDetail() {
 
   if (!question) {
     return (
-      <Screen title="Question" compactTitle onBack={() => router.back()}>
+      <Screen title="Question" compactTitle onBack={() => goBack()}>
         <EmptyState icon="alert-circle-outline" title="This thread is gone" />
       </Screen>
     );
@@ -55,7 +58,7 @@ export default function QuestionDetail() {
   };
 
   return (
-    <SwipeSurface onSwipe={direction=>{if(direction===-1) router.navigate("/discuss?section=discussions");}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => router.back()} right={<Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="paper-plane-outline" size={23} color={colors.text} /></Pressable>}>
+    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); router.navigate('/discuss'); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => goBack()} right={<Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable>}>
       <Card style={styles.questionCard}>
         <View style={styles.topRow}>
           <Chip label={meta.label} selected tint={meta.tint} ink="#0A1120" small />
@@ -64,7 +67,7 @@ export default function QuestionDetail() {
           </Text>
         </View>
         <Text style={styles.title}>{question.title}</Text>
-        <Text style={styles.body}>{question.body}</Text>
+        <RichText style={styles.body}>{question.body}</RichText>
         <View style={styles.tagRow}>
           {question.tags.map((tag) => (
             <Chip key={tag} label={`#${tag}`} onPress={() => router.push({pathname:"/search",params:{q:`#${tag}`}})} small />

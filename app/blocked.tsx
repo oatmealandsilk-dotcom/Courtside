@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
@@ -13,7 +14,7 @@ export default function Blocked() {
   const blocked = blockedIds.map((id) => users.find((u) => u.id === id)).filter((u): u is NonNullable<typeof u> => Boolean(u));
 
   return (
-    <Screen title="Blocked" compactTitle onBack={() => router.back()}>
+    <Screen title="Blocked" compactTitle onBack={() => goBack()}>
       <Text style={styles.note}>
         Blocked players cannot see your posts, message you, or find your profile. They are not told.
       </Text>

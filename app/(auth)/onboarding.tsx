@@ -1,10 +1,13 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Button, Field, SegmentedControl } from '@/components/ui';
+import { LocationField } from '@/components/LocationField';
+import { PermissionRows } from '@/components/PermissionRows';
+import { Button, Collapse, Field, SegmentedControl } from '@/components/ui';
+import { writeSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import type {
@@ -23,55 +26,44 @@ import { colors, radius, spacing, typography } from '@/theme';
 interface Scale {
   min: number;
   max: number;
-  /** What one press of the − / + controls moves the number by. */
-  step: number;
   decimals: number;
   note: string;
   /** Sorted low to high: the first band the rating fits under describes it. */
-  bands: { upTo: number; label: string; detail: string }[];
+  bands: { upTo: number; label: string }[];
 }
 
-const SCALES: Record<SkillSystem, Scale> = {
+const SCALES: Record<'NTRP' | 'UTR', Scale> = {
   NTRP: {
-    min: 1.5, max: 7.0, step: 0.5, decimals: 1,
-    note: 'USTA National Tennis Rating Program, 1.5–7.0 in half points.',
+    min: 1.5, max: 7.0, decimals: 1,
+    note: 'USTA scale, 1.5–7.0 in half points.',
     bands: [
-      { upTo: 2.5, label: 'Learning to rally', detail: 'Getting the ball back; basic strokes still forming.' },
-      { upTo: 3.0, label: 'Consistent at medium pace', detail: 'Rallies hold up; direction and depth still vary.' },
-      { upTo: 3.5, label: 'Dependable strokes', detail: 'Directional control on moderate shots; spin developing.' },
-      { upTo: 4.0, label: 'Constructing points', detail: 'Reliable on both wings; beginning to build rallies with intent.' },
-      { upTo: 4.5, label: 'Pace and spin on demand', detail: 'Controls pace, uses spin deliberately, handles power.' },
-      { upTo: 5.0, label: 'A weapon and a plan', detail: 'Anticipates well; has a shot or strategy to build around.' },
-      { upTo: 5.5, label: 'Tournament standard', detail: 'Power and consistency at competitive tournament level.' },
-      { upTo: 7.0, label: 'Sectional and above', detail: 'National or international level of play.' },
+      { upTo: 2.5, label: 'Learning to rally' },
+      { upTo: 3.0, label: 'Consistent at medium pace' },
+      { upTo: 3.5, label: 'Dependable strokes' },
+      { upTo: 4.0, label: 'Constructing points' },
+      { upTo: 4.5, label: 'Pace and spin on demand' },
+      { upTo: 5.0, label: 'A weapon and a plan' },
+      { upTo: 5.5, label: 'Tournament standard' },
+      { upTo: 7.0, label: 'Sectional and above' },
     ],
   },
   UTR: {
-    min: 1.0, max: 16.5, step: 0.1, decimals: 1,
-    note: 'Universal Tennis Rating, 1.00–16.50. Enter it to one decimal as shown on your UTR profile.',
+    min: 1.0, max: 16.5, decimals: 1,
+    note: 'Universal Tennis Rating, to one decimal, as shown on your UTR profile.',
     bands: [
-      { upTo: 2.0, label: 'Starting out', detail: 'First months on court.' },
-      { upTo: 4.0, label: 'Developing', detail: 'Can rally; consistency still arriving.' },
-      { upTo: 6.0, label: 'Club level', detail: 'Holds a rally and plays full sets.' },
-      { upTo: 8.0, label: 'Strong club / varsity', detail: 'Wins at club level; competitive high-school varsity.' },
-      { upTo: 10.0, label: 'Advanced junior / D3', detail: 'Top junior sections; Division III college.' },
-      { upTo: 12.0, label: 'Division I', detail: 'Division I college and top open tournaments.' },
-      { upTo: 14.0, label: 'Professional pathway', detail: 'Futures and Challenger level.' },
-      { upTo: 16.5, label: 'Tour level', detail: 'ATP and WTA main draws.' },
-    ],
-  },
-  ITF: {
-    min: 1, max: 3, step: 1, decimals: 0,
-    note: 'Three tiers. 1 is the strongest.',
-    bands: [
-      { upTo: 1, label: 'Advanced', detail: 'Competes regularly in tournaments.' },
-      { upTo: 2, label: 'Intermediate', detail: 'Plays sets; working on structure and consistency.' },
-      { upTo: 3, label: 'Beginner', detail: 'Learning the game.' },
+      { upTo: 2.0, label: 'Starting out' },
+      { upTo: 4.0, label: 'Developing' },
+      { upTo: 6.0, label: 'Club level' },
+      { upTo: 8.0, label: 'Strong club / varsity' },
+      { upTo: 10.0, label: 'Advanced junior / D3' },
+      { upTo: 12.0, label: 'Division I' },
+      { upTo: 14.0, label: 'Professional pathway' },
+      { upTo: 16.5, label: 'Tour level' },
     ],
   },
 };
 
-const YEARS: { label: string; value: number }[] = [
+const YEARS = [
   { label: '< 1', value: 0 },
   { label: '1–3', value: 2 },
   { label: '4–9', value: 6 },
@@ -79,18 +71,18 @@ const YEARS: { label: string; value: number }[] = [
 ];
 
 const PLAY_STYLES: { value: PlayStyle; label: string; detail: string }[] = [
-  { value: 'aggressive-baseliner', label: 'Aggressive baseliner', detail: 'Dictates from the back with a big forehand' },
-  { value: 'counterpuncher', label: 'Counterpuncher', detail: 'Defends, extends rallies, forces errors' },
-  { value: 'all-court', label: 'All-court', detail: 'Comfortable everywhere; no single weapon' },
-  { value: 'serve-and-volley', label: 'Serve and volley', detail: 'Gets forward at every chance' },
-  { value: 'pusher', label: 'Retriever', detail: 'Consistency over power' },
+  { value: 'aggressive-baseliner', label: 'Aggressive baseliner', detail: 'Big forehand, dictates' },
+  { value: 'counterpuncher', label: 'Counterpuncher', detail: 'Defends, forces errors' },
+  { value: 'all-court', label: 'All-court', detail: 'Comfortable everywhere' },
+  { value: 'serve-and-volley', label: 'Serve and volley', detail: 'Gets forward' },
+  { value: 'pusher', label: 'Retriever', detail: 'Consistency first' },
 ];
 
-const FITNESS: { value: FitnessLevel; label: string; detail: string }[] = [
-  { value: 'beginner', label: 'Building a base', detail: 'New to regular training' },
-  { value: 'recreational', label: 'Recreational', detail: 'Fit for a few sessions a week' },
-  { value: 'competitive', label: 'Competitive', detail: 'Trains off court as well' },
-  { value: 'elite', label: 'Elite', detail: 'Structured conditioning programme' },
+const FITNESS: { value: FitnessLevel; label: string }[] = [
+  { value: 'beginner', label: 'Building' },
+  { value: 'recreational', label: 'Recreational' },
+  { value: 'competitive', label: 'Competitive' },
+  { value: 'elite', label: 'Elite' },
 ];
 
 const SURFACES: { value: SurfacePreference; label: string }[] = [
@@ -100,13 +92,7 @@ const SURFACES: { value: SurfacePreference; label: string }[] = [
   { value: 'indoor', label: 'Indoor' },
 ];
 
-const GOAL_IDEAS = [
-  'Second serve above 55% in matches',
-  'Move up half an NTRP point',
-  '100 hours on court this year',
-  'Win the club ladder',
-  'Enter a first tournament',
-];
+const GOAL_IDEAS = ['Better second serve', 'Move up a rating', '100 hours on court', 'Win the club ladder', 'First tournament'];
 
 const WINDOWS = [
   { label: '2 weeks', value: 14 },
@@ -115,48 +101,58 @@ const WINDOWS = [
   { label: '3 months', value: 90 },
 ];
 
-const STEPS = [
-  { title: 'Level', lead: 'Sets what you see in the feed, the board, and the coach.' },
-  { title: 'Game', lead: 'How you play now, not how you intend to.' },
-  { title: 'Body', lead: 'The plan works around this.' },
-  { title: 'Goals', lead: 'Specific and measurable, if possible.' },
-  { title: 'Calendar', lead: 'A date turns the plan into a build-up.' },
-  { title: 'Review', lead: 'What the coach will work from.' },
+/** Steps, in order. `skip` names the reminder the profile shows if it is skipped. */
+const STEPS: { title: string; lead: string; skip?: SetupStep }[] = [
+  { title: 'About you', lead: 'Name, city, level.' },
+  { title: 'Your game', lead: 'How you play now.' },
+  { title: 'Permissions', lead: 'What CourtSide may use on this phone.', skip: 'permissions' },
+  { title: 'Body and goals', lead: 'Shapes your weekly plan.', skip: 'body' },
+  { title: 'Calendar', lead: 'Optional. Gives the plan a target.', skip: 'calendar' },
+  { title: 'Review', lead: 'What the coach works from.' },
 ];
-
-/** Steps the plan can run without. Level and game are required. */
-const SKIPPABLE = new Set([2, 3, 4]);
 
 const round = (n: number, decimals: number) => Number(n.toFixed(decimals));
 
 export default function Onboarding() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, actions } = useApp();
+  const { currentUser, currentUserId, actions } = useApp();
   const insets = useSafeAreaInsets();
-  const [step, setStep] = useState(0);
+  // The profile's "finish setting up" card lands straight on the step it names.
+  const params = useLocalSearchParams<{ step?: string }>();
+  const startAt = Math.min(STEPS.length - 1, Math.max(0, Number(params.step) || 0));
+  const [step, setStep] = useState(startAt);
+  const skipped = useRef<Set<SetupStep>>(new Set());
 
-  const [skillSystem, setSkillSystem] = useState<SkillSystem>('NTRP');
-  const [rating, setRating] = useState(3.5);
-  const [yearsPlaying, setYearsPlaying] = useState(6);
-  const [playStyle, setPlayStyle] = useState<PlayStyle>('all-court');
-  const [handedness, setHandedness] = useState<Handedness>('right');
-  const [backhand, setBackhand] = useState<Backhand>('two-handed');
-  const [surface, setSurface] = useState<SurfacePreference>('hard');
-  const [fitnessLevel, setFitnessLevel] = useState<FitnessLevel>('recreational');
-  const [sessionsPerWeek, setSessionsPerWeek] = useState(3);
-  const [injury, setInjury] = useState('');
-  const [scheduleNote, setScheduleNote] = useState('');
-  const [goalOne, setGoalOne] = useState('');
-  const [goalTwo, setGoalTwo] = useState('');
-  const [tournamentName, setTournamentName] = useState('');
+  const existing = currentUser?.profile;
+  const [name, setName] = useState(currentUser?.name ?? '');
+  const [location, setLocation] = useState(currentUser?.location ?? '');
+  const [skillSystem, setSkillSystem] = useState<'NTRP' | 'UTR'>(existing?.skillSystem === 'UTR' ? 'UTR' : 'NTRP');
+  const [rating, setRating] = useState(existing?.rating && existing.skillSystem !== 'ITF' ? existing.rating : 3.5);
+  const [ratingText, setRatingText] = useState(String(existing?.rating && existing.skillSystem !== 'ITF' ? existing.rating : '3.5'));
+  const [yearsPlaying, setYearsPlaying] = useState(existing?.yearsPlaying ?? 6);
+  const [playStyle, setPlayStyle] = useState<PlayStyle>(existing?.playStyle ?? 'all-court');
+  const [styleOpen, setStyleOpen] = useState(false);
+  const chevronTurn = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(chevronTurn, { toValue: styleOpen ? 1 : 0, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [styleOpen, chevronTurn]);
+  const [handedness, setHandedness] = useState<Handedness>(existing?.handedness ?? 'right');
+  const [backhand, setBackhand] = useState<Backhand>(existing?.backhand ?? 'two-handed');
+  const [surface, setSurface] = useState<SurfacePreference>(existing?.preferredSurface ?? 'hard');
+  const [fitnessLevel, setFitnessLevel] = useState<FitnessLevel>(existing?.fitnessLevel ?? 'recreational');
+  const [sessionsPerWeek, setSessionsPerWeek] = useState(existing?.sessionsPerWeek ?? 3);
+  const [goalOne, setGoalOne] = useState(existing?.goals[0]?.label ?? '');
+  const [tournamentName, setTournamentName] = useState(existing?.tournaments[0]?.name ?? '');
   const [tournamentDays, setTournamentDays] = useState(30);
 
   const scale = SCALES[skillSystem];
   const band = scale.bands.find((b) => rating <= b.upTo) ?? scale.bands[scale.bands.length - 1];
+  const parsed = Number(ratingText.replace(',', '.'));
+  const ratingValid = ratingText.trim() !== '' && Number.isFinite(parsed) && parsed >= scale.min && parsed <= scale.max;
 
   /* ------------------------------ Animation ------------------------------ */
 
-  const progress = useRef(new Animated.Value(1 / STEPS.length)).current;
+  const progress = useRef(new Animated.Value((startAt + 1) / STEPS.length)).current;
   const fade = useRef(new Animated.Value(1)).current;
   const scrollRef = useRef<ScrollView>(null);
   useEffect(() => {
@@ -167,36 +163,27 @@ export default function Onboarding() {
   }, [step, progress, fade]);
 
   const pick = <T,>(setter: (v: T) => void) => (value: T) => { haptics.tap(); setter(value); };
-  // The field holds whatever is typed so "6." survives; the number behind it
-  // only moves once the text is a rating that fits the scale.
-  const [ratingText, setRatingText] = useState('3.5');
-  const parsed = Number(ratingText.replace(',', '.'));
-  const ratingValid = ratingText.trim() !== '' && Number.isFinite(parsed) && parsed >= scale.min && parsed <= scale.max;
   const typeRating = (text: string) => {
     setRatingText(text);
     const n = Number(text.replace(',', '.'));
     if (text.trim() !== '' && Number.isFinite(n) && n >= scale.min && n <= scale.max) setRating(round(n, scale.decimals));
   };
-  const changeSystem = (next: SkillSystem) => {
+  const changeSystem = (next: 'NTRP' | 'UTR') => {
     if (next === skillSystem) return;
     haptics.tap();
     setSkillSystem(next);
-    const fresh = next === 'UTR' ? 6.0 : next === 'ITF' ? 2 : 3.5;
+    const fresh = next === 'UTR' ? 6.0 : 3.5;
     setRating(fresh);
-    setRatingText(fresh.toFixed(SCALES[next].decimals));
+    setRatingText(fresh.toFixed(1));
   };
 
   /* -------------------------------- Profile ------------------------------- */
 
   const profile = useMemo<PlayerProfile>(() => {
-    const goals = [goalOne, goalTwo]
+    const goals = [goalOne]
       .map((label) => label.trim())
       .filter(Boolean)
       .map((label, i) => ({ id: `g-onboard-${i}`, label, done: false }));
-    const constraints = [
-      injury.trim() ? { id: 'c-onboard-injury', kind: 'injury' as const, label: injury.trim(), active: true } : null,
-      scheduleNote.trim() ? { id: 'c-onboard-schedule', kind: 'schedule' as const, label: scheduleNote.trim(), active: true } : null,
-    ].filter((c): c is NonNullable<typeof c> => c !== null);
     const tournaments = tournamentName.trim()
       ? [{
           id: 't-onboard',
@@ -204,25 +191,43 @@ export default function Onboarding() {
           startsAt: new Date(Date.now() + Math.max(1, tournamentDays) * 86_400_000).toISOString(),
           surface,
           level: `${skillSystem} ${rating}`,
-          location: currentUser?.location ?? '',
+          location: location.trim(),
           registered: true,
         }]
       : [];
     return {
-      skillSystem, rating, playStyle, handedness, backhand, fitnessLevel,
+      skillSystem: skillSystem as SkillSystem, rating, playStyle, handedness, backhand, fitnessLevel,
       preferredSurface: surface, sessionsPerWeek, yearsPlaying,
       goals: goals.length > 0 ? goals : [{ id: 'g-default', label: 'Play more consistently', done: false }],
-      constraints, tournaments,
+      // Injury and schedule notes are added later, from the profile.
+      constraints: existing?.constraints ?? [],
+      tournaments,
     };
-  }, [skillSystem, rating, playStyle, handedness, backhand, fitnessLevel, surface, sessionsPerWeek, yearsPlaying, goalOne, goalTwo, injury, scheduleNote, tournamentName, tournamentDays, currentUser?.location]);
+  }, [skillSystem, rating, playStyle, handedness, backhand, fitnessLevel, surface, sessionsPerWeek, yearsPlaying, goalOne, tournamentName, tournamentDays, location, existing?.constraints]);
 
   const finish = () => {
     haptics.commit();
+    if (currentUser && (name.trim() !== currentUser.name || location.trim() !== currentUser.location)) {
+      actions.updateIdentity({ name: name.trim() || currentUser.name, bio: currentUser.bio, location: location.trim() });
+    }
     actions.completeOnboarding(profile);
+    if (currentUserId) void writeSkipped(currentUserId, [...skipped.current]);
     router.replace('/(tabs)');
   };
 
+  const skipStep = () => {
+    const key = STEPS[step].skip;
+    if (key) skipped.current.add(key);
+    setStep((s) => s + 1);
+  };
+  const next = () => {
+    const key = STEPS[step].skip;
+    if (key) skipped.current.delete(key);
+    setStep((s) => s + 1);
+  };
+
   const last = step === STEPS.length - 1;
+  const canContinue = step === 0 ? name.trim().length > 0 && ratingValid : true;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + spacing.sm }]}>
@@ -241,24 +246,32 @@ export default function Onboarding() {
         <Animated.View style={{ gap: spacing.lg, opacity: fade }}>
           {step === 0 ? (
             <>
-              <Group label="Rating system">
-                <SegmentedControl<SkillSystem>
-                  value={skillSystem}
-                  onChange={changeSystem}
-                  segments={[{ value: 'NTRP', label: 'NTRP' }, { value: 'UTR', label: 'UTR' }, { value: 'ITF', label: 'ITF' }]}
-                />
-                <Text style={styles.note}>{scale.note}</Text>
-              </Group>
-
-              <Field
-                label={`${skillSystem} rating`}
-                value={ratingText}
-                onChangeText={typeRating}
-                placeholder={skillSystem === 'UTR' ? '6.4' : skillSystem === 'ITF' ? '2' : '3.5'}
-                keyboardType="decimal-pad"
-                hint={ratingValid ? `${scale.min.toFixed(scale.decimals)}–${scale.max.toFixed(scale.decimals)} · ${band.label}: ${band.detail}` : `Enter a number between ${scale.min.toFixed(scale.decimals)} and ${scale.max.toFixed(scale.decimals)}.`}
-              />
-
+              <Field label="Name" value={name} onChangeText={setName} placeholder="Your name" autoCapitalize="words" />
+              <View style={styles.group}>
+                <Text style={styles.groupLabel}>WHERE YOU PLAY</Text>
+                <LocationField value={location} onChange={setLocation} />
+              </View>
+              <View style={styles.twoCol}>
+                <View style={{ flex: 1 }}>
+                  <Group label="Rating system">
+                    <SegmentedControl<'NTRP' | 'UTR'>
+                      value={skillSystem}
+                      onChange={changeSystem}
+                      segments={[{ value: 'NTRP', label: 'NTRP' }, { value: 'UTR', label: 'UTR' }]}
+                    />
+                  </Group>
+                </View>
+                <View style={{ width: 120 }}>
+                  <Field
+                    label="Rating"
+                    value={ratingText}
+                    onChangeText={typeRating}
+                    placeholder={skillSystem === 'UTR' ? '6.4' : '3.5'}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+              </View>
+              <Text style={styles.note}>{ratingValid ? band.label : `Enter ${scale.min.toFixed(1)}–${scale.max.toFixed(1)}`}</Text>
               <Group label="Years playing">
                 <SegmentedControl<string>
                   value={String(yearsPlaying)}
@@ -273,43 +286,50 @@ export default function Onboarding() {
             <>
               <Group label="Style of play">
                 <View style={styles.list}>
-                  {PLAY_STYLES.map((s, i) => (
-                    <Row key={s.value} label={s.label} detail={s.detail} selected={playStyle === s.value} first={i === 0} onPress={() => pick(setPlayStyle)(s.value)} />
-                  ))}
+                  <Pressable accessibilityRole="button" accessibilityState={{ expanded: styleOpen }} accessibilityLabel="Style of play" onPress={() => setStyleOpen((o) => !o)} style={styles.dropdown}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.dropdownValue}>{PLAY_STYLES.find((p) => p.value === playStyle)?.label}</Text>
+                      <Text style={styles.rowDetail}>{PLAY_STYLES.find((p) => p.value === playStyle)?.detail}</Text>
+                    </View>
+                    <Animated.Text style={[styles.chevron, { transform: [{ rotate: chevronTurn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }]}>▾</Animated.Text>
+                  </Pressable>
+                  {/* The other styles ease open underneath rather than popping in. */}
+                  <Collapse open={styleOpen}>
+                    {PLAY_STYLES.filter((p) => p.value !== playStyle).map((p) => (
+                      <Row key={p.value} label={p.label} detail={p.detail} selected={false} first={false} onPress={() => { pick(setPlayStyle)(p.value); setStyleOpen(false); }} />
+                    ))}
+                  </Collapse>
                 </View>
               </Group>
-              <Group label="Dominant hand">
-                <SegmentedControl<Handedness>
-                  value={handedness}
-                  onChange={pick(setHandedness)}
-                  segments={[{ value: 'right', label: 'Right' }, { value: 'left', label: 'Left' }]}
-                />
-              </Group>
-              <Group label="Backhand">
-                <SegmentedControl<Backhand>
-                  value={backhand}
-                  onChange={pick(setBackhand)}
-                  segments={[{ value: 'two-handed', label: 'Two-handed' }, { value: 'one-handed', label: 'One-handed' }]}
-                />
-              </Group>
+              <View style={styles.twoCol}>
+                <View style={{ flex: 1 }}>
+                  <Group label="Hand">
+                    <SegmentedControl<Handedness> value={handedness} onChange={pick(setHandedness)} segments={[{ value: 'right', label: 'Right' }, { value: 'left', label: 'Left' }]} />
+                  </Group>
+                </View>
+                <View style={{ flex: 1.3 }}>
+                  <Group label="Backhand">
+                    <SegmentedControl<Backhand> value={backhand} onChange={pick(setBackhand)} segments={[{ value: 'two-handed', label: 'Two' }, { value: 'one-handed', label: 'One' }]} />
+                  </Group>
+                </View>
+              </View>
               <Group label="Preferred surface">
-                <SegmentedControl<SurfacePreference>
-                  value={surface}
-                  onChange={pick(setSurface)}
-                  segments={SURFACES}
-                />
+                <SegmentedControl<SurfacePreference> value={surface} onChange={pick(setSurface)} segments={SURFACES} />
               </Group>
             </>
           ) : null}
 
           {step === 2 ? (
             <>
+              <PermissionRows />
+              <Text style={styles.note}>Say no to any of these and CourtSide still works; you can allow them later from Settings, or when you go to post.</Text>
+            </>
+          ) : null}
+
+          {step === 3 ? (
+            <>
               <Group label="Fitness">
-                <View style={styles.list}>
-                  {FITNESS.map((f, i) => (
-                    <Row key={f.value} label={f.label} detail={f.detail} selected={fitnessLevel === f.value} first={i === 0} onPress={() => pick(setFitnessLevel)(f.value)} />
-                  ))}
-                </View>
+                <SegmentedControl<FitnessLevel> value={fitnessLevel} onChange={pick(setFitnessLevel)} segments={FITNESS} wrap />
               </Group>
               <Group label="Sessions per week">
                 <SegmentedControl<string>
@@ -317,43 +337,24 @@ export default function Onboarding() {
                   onChange={(v) => pick(setSessionsPerWeek)(Number(v))}
                   segments={[1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: String(n), label: String(n) }))}
                 />
-                <Text style={styles.note}>Count what you can keep up for a month, not a good week.</Text>
               </Group>
-              <Field label="Injuries or limitations" value={injury} onChangeText={setInjury} placeholder="e.g. Right shoulder, tight after serving" hint="Caps volume in generated plans." />
-              <Field label="Schedule constraints" value={scheduleNote} onChangeText={setScheduleNote} placeholder="e.g. Courts only before 8am on weekdays" />
-            </>
-          ) : null}
-
-          {step === 3 ? (
-            <>
-              <Field label="Primary goal" value={goalOne} onChangeText={setGoalOne} placeholder="e.g. Second serve above 55% in matches" />
-              <Field label="Secondary goal" value={goalTwo} onChangeText={setGoalTwo} placeholder="Optional" />
-              <Group label="Suggestions">
-                <View style={styles.list}>
-                  {GOAL_IDEAS.map((idea, i) => {
-                    const used = goalOne === idea || goalTwo === idea;
-                    return (
-                      <Row
-                        key={idea}
-                        label={idea}
-                        selected={used}
-                        first={i === 0}
-                        onPress={() => {
-                          haptics.tap();
-                          if (used) { if (goalOne === idea) setGoalOne(''); else setGoalTwo(''); return; }
-                          if (!goalOne.trim()) setGoalOne(idea); else setGoalTwo(idea);
-                        }}
-                      />
-                    );
-                  })}
-                </View>
-              </Group>
+              <Field label="Goal" value={goalOne} onChangeText={setGoalOne} placeholder="What are you working toward?" />
+              <View style={styles.chips}>
+                {GOAL_IDEAS.map((idea) => {
+                  const on = goalOne === idea;
+                  return (
+                    <Pressable key={idea} accessibilityRole="button" accessibilityState={{ selected: on }} onPress={() => { haptics.tap(); setGoalOne(on ? '' : idea); }} style={[styles.chip, on && styles.chipOn]}>
+                      <Text style={[styles.chipText, on && { color: colors.brandInk }]}>{idea}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </>
           ) : null}
 
           {step === 4 ? (
             <>
-              <Field label="Next tournament" value={tournamentName} onChangeText={setTournamentName} placeholder="e.g. LA Metro Open" hint="Optional. Without one the plan runs as steady weekly work." />
+              <Field label="Next tournament" value={tournamentName} onChangeText={setTournamentName} placeholder="e.g. LA Metro Open" />
               <Group label="Starts in">
                 <SegmentedControl<string>
                   value={String(tournamentDays)}
@@ -383,7 +384,9 @@ export default function Onboarding() {
             <>
               <View style={styles.list}>
                 {[
-                  ['Rating', `${skillSystem} ${rating.toFixed(scale.decimals)} · ${band.label}`],
+                  ['Name', name.trim() || currentUser?.name || ''],
+                  ['From', location.trim() || '—'],
+                  ['Rating', `${skillSystem} ${rating.toFixed(1)} · ${band.label}`],
                   ['Experience', `${YEARS.find((y) => y.value === yearsPlaying)?.label ?? yearsPlaying} years`],
                   ['Style', PLAY_STYLES.find((p) => p.value === playStyle)?.label ?? ''],
                   ['Hand', `${handedness === 'left' ? 'Left' : 'Right'} · ${backhand === 'one-handed' ? 'one-handed' : 'two-handed'} backhand`],
@@ -391,9 +394,6 @@ export default function Onboarding() {
                   ['Fitness', FITNESS.find((f) => f.value === fitnessLevel)?.label ?? ''],
                   ['Sessions', `${sessionsPerWeek} per week`],
                   ['Goal', goalOne.trim() || 'Play more consistently'],
-                  goalTwo.trim() ? ['Also', goalTwo.trim()] : null,
-                  injury.trim() ? ['Limitations', injury.trim()] : null,
-                  scheduleNote.trim() ? ['Schedule', scheduleNote.trim()] : null,
                   tournamentName.trim() ? ['Tournament', `${tournamentName.trim()} · ${tournamentDays} days`] : null,
                 ].filter((r): r is [string, string] => r !== null).map(([label, value], i) => (
                   <View key={label} style={[styles.row, i > 0 && styles.rowBorder]}>
@@ -402,7 +402,7 @@ export default function Onboarding() {
                   </View>
                 ))}
               </View>
-              <Text style={styles.note}>Everything here can be changed later from your profile.</Text>
+              <Text style={styles.note}>Injuries and schedule limits can be added from your profile.</Text>
             </>
           ) : null}
         </Animated.View>
@@ -411,12 +411,12 @@ export default function Onboarding() {
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
         {step > 0 ? <Button label="Back" variant="ghost" onPress={() => setStep((s) => s - 1)} /> : <View />}
         <View style={styles.footerRight}>
-          {SKIPPABLE.has(step) ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Skip this step" onPress={() => setStep((s) => s + 1)} style={styles.skip}>
+          {STEPS[step].skip ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Skip this step" onPress={skipStep} style={styles.skip}>
               <Text style={styles.skipText}>Skip</Text>
             </Pressable>
           ) : null}
-          <Button label={last ? 'Finish' : 'Continue'} disabled={step === 0 && !ratingValid} onPress={() => (last ? finish() : setStep((s) => s + 1))} />
+          <Button label={last ? 'Finish' : 'Continue'} disabled={!canContinue} onPress={() => (last ? finish() : next())} />
         </View>
       </View>
     </View>
@@ -457,20 +457,21 @@ function Row({ label, detail, selected, first, onPress }: { label: string; detai
 
 const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  head: { paddingHorizontal: spacing.xl, gap: spacing.xs, paddingBottom: spacing.md, maxWidth: 560, width: '100%', alignSelf: 'center' },
+  head: { paddingHorizontal: spacing.xl, gap: spacing.xs, paddingBottom: spacing.sm, maxWidth: 560, width: '100%', alignSelf: 'center' },
   track: { height: 2, backgroundColor: colors.surfaceAlt, marginBottom: spacing.md },
   fill: { height: '100%', backgroundColor: colors.brand },
   headRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-  title: { ...typography.title, color: colors.text },
+  title: { ...typography.display, color: colors.text },
   stepLabel: { ...typography.small, color: colors.textFaint, fontVariant: ['tabular-nums'] },
   lead: { ...typography.small, color: colors.textMuted },
-  body: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.xl, maxWidth: 560, width: '100%', alignSelf: 'center' },
+  body: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.lg, maxWidth: 560, width: '100%', alignSelf: 'center' },
   group: { gap: spacing.sm },
   groupLabel: { ...typography.caption, color: colors.textFaint, letterSpacing: 1 },
   note: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
+  twoCol: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-end' },
 
   list: { borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: 12, minHeight: 48 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: 13, minHeight: 52 },
   rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   rowLabel: { ...typography.body, color: colors.text },
   rowDetail: { ...typography.small, color: colors.textMuted },
@@ -479,7 +480,13 @@ const styleDefinitions = StyleSheet.create({
   radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.brand },
   phaseIndex: { ...typography.smallStrong, color: colors.textFaint, width: 16, fontVariant: ['tabular-nums'] },
 
-
+  dropdown: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: 13, minHeight: 56 },
+  dropdownValue: { ...typography.bodyStrong, color: colors.text },
+  chevron: { fontSize: 16, color: colors.textMuted },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chip: { paddingHorizontal: spacing.md, paddingVertical: 9, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  chipOn: { backgroundColor: colors.brand, borderColor: colors.brand },
+  chipText: { ...typography.smallStrong, color: colors.textMuted },
   summaryLabel: { ...typography.small, color: colors.textFaint, width: 96 },
   summaryValue: { ...typography.small, color: colors.text, flex: 1 },
 

@@ -54,6 +54,7 @@ interface PostRow {
   image_url: string | null; video_url: string | null; thumbnail_url: string | null;
   match: Post['match'] | null; session: Post['session'] | null; tags: string[]; tagged_user_ids: string[];
   archived: boolean; views: number; shares: number; created_at: string;
+  orientation?: string | null;
   post_likes?: { user_id: string }[]; post_saves?: { user_id: string }[]; comments?: { id: string }[];
 }
 interface CommentRow {
@@ -64,6 +65,8 @@ interface StoryRow {
   id: string; author_id: string; image_url: string | null; video_url: string | null; thumbnail_url: string | null;
   media_label: string | null; caption: string | null; archived: boolean; created_at: string; expires_at: string;
   story_views?: { user_id: string }[];
+  story_likes?: { user_id: string }[];
+  story_comments?: { id: string; story_id: string; author_id: string; body: string; created_at: string }[];
 }
 
 const toUser = (row: ProfileRow, followers: number, following: number): User => ({
@@ -93,6 +96,7 @@ const toPost = (row: PostRow): Post => ({
   imageUrl: row.image_url ?? undefined,
   videoUrl: row.video_url ?? undefined,
   thumbnailUrl: row.thumbnail_url ?? undefined,
+  orientation: (row.orientation as 'portrait' | 'landscape' | null) ?? undefined,
   taggedUserIds: row.tagged_user_ids?.length ? row.tagged_user_ids : undefined,
   match: row.match ?? undefined,
   session: row.session ?? undefined,
@@ -125,7 +129,14 @@ const toStory = (row: StoryRow): Story => ({
   mediaLabel: row.media_label ?? undefined,
   caption: row.caption ?? undefined,
   viewedBy: (row.story_views ?? []).map((v) => v.user_id),
+  likedBy: (row.story_likes ?? []).map((l) => l.user_id),
+  commentIds: (row.story_comments ?? []).map((c) => c.id),
   archived: row.archived || undefined,
+});
+
+/** A comment on a hit, shaped like any other comment with the hit as its "post". */
+const toStoryComment = (row: NonNullable<StoryRow['story_comments']>[number]): Comment => ({
+  id: row.id, postId: row.story_id, authorId: row.author_id, body: row.body, createdAt: row.created_at, likedBy: [],
 });
 
 /* ---------------------------------------------------------------- reads */
@@ -146,8 +157,8 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   const db = need();
   const [profiles, posts, stories, follows] = await Promise.all([
     db.from('profiles').select('*'),
-    db.from('posts').select('*, post_likes(user_id), post_saves(user_id), comments(id, post_id, author_id, body, created_at, comment_likes(user_id))').order('created_at', { ascending: false }).limit(200),
-    db.from('stories').select('*, story_views(user_id)').order('created_at', { ascending: false }).limit(200),
+    db.from('posts').select('*, post_likes(user_id), post_saves(user_id), comments(id, post_id, author_id, body, created_at, comment_likes(user_id))').order('created_at', { ascending: false }).limit(60),
+    db.from('stories').select('*, story_views(user_id), story_likes(user_id), story_comments(id, story_id, author_id, body, created_at)').order('created_at', { ascending: false }).limit(40),
     db.from('follows').select('follower_id, following_id'),
   ]);
   for (const result of [profiles, posts, stories, follows]) if (result.error) throw result.error;
@@ -161,11 +172,15 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   }
 
   const postRows = (posts.data ?? []) as (PostRow & { comments?: CommentRow[] })[];
+  const storyRows = (stories.data ?? []) as StoryRow[];
   return {
     users: ((profiles.data ?? []) as ProfileRow[]).map((row) => toUser(row, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
     posts: postRows.map(toPost),
-    comments: postRows.flatMap((row) => (row.comments ?? []).map(toComment)),
-    stories: ((stories.data ?? []) as StoryRow[]).map(toStory),
+    comments: [
+      ...postRows.flatMap((row) => (row.comments ?? []).map(toComment)),
+      ...storyRows.flatMap((row) => (row.story_comments ?? []).map(toStoryComment)),
+    ],
+    stories: storyRows.map(toStory),
     followingIds: edges.filter((e) => e.follower_id === me).map((e) => e.following_id),
     followEdges: edges.map((e) => ({ followerId: e.follower_id, followingId: e.following_id })),
     savedPostIds: postRows.filter((row) => (row.post_saves ?? []).some((s) => s.user_id === me)).map((row) => row.id),
@@ -190,6 +205,16 @@ export const remote = {
     if (error) fail('profile update')(error);
   },
 
+  /**
+   * Makes sure the account has a profile row. The sign-up trigger normally
+   * creates it; when it has not (seen with a Google sign-up), everything the
+   * app saves about you would fail silently, quiz included.
+   */
+  async ensureProfile(me: ID, handle: string, name: string) {
+    const { error } = await need().from('profiles').upsert({ id: me, handle, name }, { onConflict: 'id', ignoreDuplicates: true });
+    if (error) fail('profile create')(error);
+  },
+
   async insertPost(post: Post) {
     const { error } = await need().from('posts').insert({
       id: post.id,
@@ -200,6 +225,7 @@ export const remote = {
       image_url: post.imageUrl ?? null,
       video_url: post.videoUrl ?? null,
       thumbnail_url: post.thumbnailUrl ?? null,
+      orientation: post.orientation ?? null,
       match: post.match ?? null,
       session: post.session ?? null,
       tags: post.tags,
@@ -209,6 +235,10 @@ export const remote = {
     if (error) fail('post insert')(error);
   },
 
+  async deletePost(postId: ID) {
+    const { error } = await need().from('posts').delete().eq('id', postId);
+    if (error) fail('delete post')(error);
+  },
   async setPostArchived(postId: ID, archived: boolean) {
     const { error } = await need().from('posts').update({ archived }).eq('id', postId);
     if (error) fail('post archive')(error);
@@ -255,6 +285,21 @@ export const remote = {
   async setStoryArchived(storyId: ID, archived: boolean) {
     const { error } = await need().from('stories').update({ archived }).eq('id', storyId);
     if (error) fail('story archive')(error);
+  },
+
+  async setStoryLike(storyId: ID, me: ID, liked: boolean) {
+    const db = need();
+    const { error } = liked
+      ? await db.from('story_likes').upsert({ story_id: storyId, user_id: me })
+      : await db.from('story_likes').delete().match({ story_id: storyId, user_id: me });
+    if (error) fail('hit like')(error);
+  },
+
+  async insertStoryComment(comment: Comment) {
+    const { error } = await need().from('story_comments').insert({
+      id: comment.id, story_id: comment.postId, author_id: comment.authorId, body: comment.body, created_at: comment.createdAt,
+    });
+    if (error) fail('hit comment insert')(error);
   },
 
   async recordStoryView(storyId: ID, me: ID) {
@@ -310,6 +355,18 @@ export async function uploadMedia(me: ID, uri: string, kind: 'photo' | 'video'):
 
 /* ---------------------------------------------------------------- auth */
 
+/**
+ * Where Google sends the phone back to. Supabase refuses any return address
+ * whose host is an IP address other than 127.0.0.1, and Expo Go's own address
+ * is the Mac's Wi-Fi IP — so on iPhone the app's scheme is used instead. The
+ * sign-in sheet catches that address itself, whether or not the phone has an
+ * app registered for it, which is why it works in Expo Go too.
+ */
+function nativeReturnAddress() {
+  if (Platform.OS === 'ios') return 'courtside://auth';
+  return Linking.createURL('/');
+}
+
 export const auth = {
   async signIn(email: string, password: string) {
     const { data, error } = await need().auth.signInWithPassword({ email: email.trim(), password });
@@ -327,8 +384,18 @@ export const auth = {
     return data.session;
   },
   async signOut() {
-    const { error } = await need().auth.signOut();
+    // Local only: the account's other logins, and its saved token on this
+    // device, stay valid so switching back is a tap.
+    const { error } = await need().auth.signOut({ scope: 'local' });
     if (error) fail('sign out')(error);
+  },
+  /** Signs in as a remembered account from its refresh token, replacing whoever is signed in now. */
+  async resumeAccount(refreshToken: string) {
+    const client = need();
+    await client.auth.signOut({ scope: 'local' }).catch(() => undefined);
+    const { data, error } = await client.auth.refreshSession({ refresh_token: refreshToken });
+    if (error || !data.session) throw new Error(error?.message ?? 'That login has expired. Sign in again.');
+    return data.session;
   },
   /**
    * Google, through Supabase. On the web the whole page goes to Google and
@@ -347,7 +414,7 @@ export const auth = {
       if (error) throw new Error(error.message);
       return null;
     }
-    const redirectTo = Linking.createURL('/');
+    const redirectTo = nativeReturnAddress();
     const { data, error } = await client.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo, skipBrowserRedirect: true },
@@ -403,7 +470,7 @@ export const auth = {
   async linkGoogle() {
     const client = need();
     const base = (process.env.EXPO_BASE_URL ?? '').replace(/\/$/, '');
-    const redirectTo = Platform.OS === 'web' ? `${window.location.origin}${base}/account` : Linking.createURL('/account');
+    const redirectTo = Platform.OS === 'web' ? `${window.location.origin}${base}/account` : nativeReturnAddress();
     const { data, error } = await client.auth.linkIdentity({ provider: 'google', options: { redirectTo, skipBrowserRedirect: Platform.OS !== 'web' } });
     if (error) throw new Error(error.message);
     if (Platform.OS !== 'web' && data.url) await WebBrowser.openAuthSessionAsync(data.url, redirectTo);

@@ -3,6 +3,7 @@ import { PlayerName } from '@/components/PlayerName';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar, Button, Card, Chip, EmptyState, Field, Screen } from '@/components/ui';
@@ -46,7 +47,7 @@ export default function CoachDetail() {
 
   if (!coach || !user) {
     return (
-      <Screen title="Coach" compactTitle onBack={() => router.back()}>
+      <Screen title="Coach" compactTitle onBack={() => goBack()}>
         <EmptyState icon="alert-circle-outline" title="Coach not found" />
       </Screen>
     );
@@ -73,7 +74,7 @@ export default function CoachDetail() {
   };
 
   return (
-    <Screen title={user.name} compactTitle onBack={() => router.back()}>
+    <Screen title={user.name} compactTitle onBack={() => goBack()}>
       <Card style={styles.hero}>
         <View style={styles.heroRow}>
           <Avatar name={user.name} seed={user.avatarSeed} size={62} ring />

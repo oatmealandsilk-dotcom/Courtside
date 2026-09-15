@@ -2,6 +2,7 @@ import React from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AppProvider } from '@/store/AppContext';
 import { AppShell } from '@/components/AppShell';
@@ -10,7 +11,7 @@ import { colors } from '@/theme';
 
 export default function RootLayout() {
   return (
-    <ThemeProvider><SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}><ThemeProvider><SafeAreaProvider>
       <AppProvider>
         <ThemedStatusBar/>
         <AppShell><Stack
@@ -40,7 +41,7 @@ export default function RootLayout() {
           <Stack.Screen name="hit" options={{ presentation: 'fullScreenModal', animation: 'fade', contentStyle: { backgroundColor: '#000' } }} />
         </Stack></AppShell>
       </AppProvider>
-    </SafeAreaProvider></ThemeProvider>
+    </SafeAreaProvider></ThemeProvider></GestureHandlerRootView>
   );
 }
 

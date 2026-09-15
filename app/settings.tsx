@@ -3,6 +3,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar, Field, Screen, Toggle } from '@/components/ui';
@@ -50,7 +51,7 @@ export default function Settings() {
         {
           icon: 'person-circle-outline',
           label: 'Account centre',
-          detail: 'Email, password, sign-in, your data',
+          detail: 'Sign-in, password and your data',
           onPress: () => router.push('/account'),
         },
       ],
@@ -116,6 +117,7 @@ export default function Settings() {
           onPress: () => router.push('/profile-details'),
         },
         { icon: 'flash-outline', label: 'Health and nutrition', onPress: () => router.push('/health') },
+        { icon: 'shield-half-outline', label: 'Permissions', detail: 'Camera, photos, microphone', onPress: () => router.push('/permissions') },
         {
           icon: 'location-outline',
           label: 'Location',
@@ -151,8 +153,10 @@ export default function Settings() {
     {
       title: 'Login',
       rows: [
-        { icon: 'swap-horizontal-outline', label: 'Switch account', onPress: actions.signOut },
-        { icon: 'log-out-outline', label: 'Log out', onPress: actions.signOut, danger: true },
+        // Signing out from here also has to leave this page: it sits above the
+        // tabs, so nothing else would send you to the sign-in screen.
+        { icon: 'swap-horizontal-outline', label: 'Switch account', detail: 'Pick another login saved on this phone', onPress: () => router.push('/accounts') },
+        { icon: 'log-out-outline', label: 'Log out', onPress: () => { actions.signOut(); router.replace('/sign-in'); }, danger: true },
       ],
     },
   ];
@@ -166,7 +170,7 @@ export default function Settings() {
     .filter((section) => section.rows.length > 0);
 
   return (
-    <Screen title="Settings" compactTitle onBack={() => router.back()}>
+    <Screen title="Settings" compactTitle onBack={() => goBack()}>
       <View style={styles.searchWrap}>
         <Field value={search} onChangeText={setSearch} placeholder="Search settings" autoCapitalize="none" />
       </View>
@@ -209,10 +213,12 @@ export default function Settings() {
                   size={21}
                   color={row.danger ? colors.danger : colors.text}
                 />
-                <Text style={[styles.rowLabel, row.danger && { color: colors.danger }]}>
-                  {row.label}
-                </Text>
-                {row.detail ? <Text style={styles.rowDetail}>{row.detail}</Text> : null}
+                <View style={styles.rowText}>
+                  <Text style={[styles.rowLabel, row.danger && { color: colors.danger }]}>
+                    {row.label}
+                  </Text>
+                  {row.detail ? <Text style={styles.rowDetail}>{row.detail}</Text> : null}
+                </View>
                 {row.toggle ? (
                   <Toggle value={row.toggle.value} onChange={row.toggle.onChange} accessibilityLabel={row.label} />
                 ) : (
@@ -263,7 +269,8 @@ const styleDefinitions = StyleSheet.create({
     minHeight: 52,
   },
   rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  rowLabel: { ...typography.body, color: colors.text, flex: 1 },
+  rowText: { flex: 1, gap: 2 },
+  rowLabel: { ...typography.body, color: colors.text },
   rowDetail: { ...typography.small, color: colors.textFaint },
   empty: { ...typography.small, color: colors.textFaint, paddingVertical: spacing.lg },
   version: { ...typography.caption, color: colors.textFaint, textAlign: 'center', paddingVertical: spacing.xl },

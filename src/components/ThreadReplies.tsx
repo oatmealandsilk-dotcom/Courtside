@@ -9,6 +9,7 @@ import { VoteControls } from '@/components/VoteControls';
 import { TOPIC_META } from '@/components/QuestionCard';
 import { Avatar, Button, Card, Chip, EmptyState, Field, Screen } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
+import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
 import type { Answer } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -42,7 +43,7 @@ export function ThreadReply({ answer, thread, acceptedId, depth = 0, preview = f
       </Pressable>
       {!collapsed && <>
         {acceptedId === answer.id && <Text style={styles.acceptedText}>Accepted by the asker</Text>}
-        <Text style={styles.replyBody}>{answer.body}</Text>
+        <RichText style={styles.replyBody}>{answer.body}</RichText>
         {!preview && <View style={styles.replyActions}>
           <Pressable accessibilityRole="button" accessibilityLabel={`Collapse reply by ${responder?.name ?? 'player'}`} onPress={()=>setCollapsed(true)} style={styles.collapse}><Ionicons name="remove-circle-outline" size={20} color={colors.textMuted}/></Pressable>
           <VoteControls item={answer} userId={currentUserId} onVote={direction => actions.voteAnswer(answer.id, direction)}/>

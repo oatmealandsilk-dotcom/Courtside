@@ -22,6 +22,8 @@ export function Toast() {
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const slide = useRef(new Animated.Value(-120)).current;
   const tick = useRef(new Animated.Value(0)).current;
+  // The ball: drops in from above the banner and bounces once into the badge.
+  const drop = useRef(new Animated.Value(-70)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -30,6 +32,8 @@ export function Toast() {
     if (timer.current) clearTimeout(timer.current);
     slide.setValue(-120);
     tick.setValue(0);
+    drop.setValue(-70);
+    Animated.sequence([Animated.delay(140), Animated.spring(drop, { toValue: 0, useNativeDriver: true, speed: 14, bounciness: 18 })]).start();
     Animated.sequence([
       Animated.spring(slide, { toValue: 0, useNativeDriver: true, speed: 18, bounciness: 9 }),
       Animated.spring(tick, { toValue: 1, useNativeDriver: true, speed: 24, bounciness: 14 }),
@@ -55,9 +59,11 @@ export function Toast() {
         }}
         style={styles.card}
       >
-        <Animated.View style={[styles.badge, { transform: [{ scale: tick.interpolate({ inputRange: [0, 1], outputRange: [0.2, 1] }) }] }]}>
-          <Ionicons name={(toast.icon ?? 'checkmark') as keyof typeof Ionicons.glyphMap} size={17} color={colors.brandInk} />
-        </Animated.View>
+        <View style={styles.badge}>
+          <Animated.View style={{ transform: [{ translateY: drop }] }}>
+            <Ionicons name="tennisball" size={20} color={colors.brandInk} />
+          </Animated.View>
+        </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.title} numberOfLines={1}>{toast.title}</Text>
           {toast.body ? <Text style={styles.body} numberOfLines={1}>{toast.body}</Text> : null}
@@ -88,7 +94,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 6,
   },
-  badge: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  badge: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   title: { ...typography.bodyStrong, color: colors.text },
   body: { ...typography.small, color: colors.textMuted },
 });

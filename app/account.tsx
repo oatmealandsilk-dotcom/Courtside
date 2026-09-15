@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar, Button, Field, Screen } from '@/components/ui';
@@ -9,6 +10,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { shareOutside } from '@/lib/shareOutside';
 import { formatDate } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
+import * as toast from '@/lib/toast';
 import { colors, radius, spacing, typography } from '@/theme';
 
 type Sheet = 'password' | 'email' | 'delete' | null;
@@ -88,7 +90,7 @@ export default function AccountCentre() {
   );
 
   return (
-    <Screen title="Account centre" compactTitle onBack={() => router.back()}>
+    <Screen title="Account centre" compactTitle onBack={() => goBack()}>
       {currentUser ? (
         <View style={styles.hero}>
           <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={56} />
@@ -115,20 +117,20 @@ export default function AccountCentre() {
         {row('key-outline', 'Change password', hasEmail ? 'Email and password sign-in' : 'Set a password to sign in without Google', isSupabaseConfigured ? () => { setPassword(''); setPassword2(''); setSheet('password'); } : undefined, false, 0)}
         {row('logo-google', hasGoogle ? 'Google' : 'Link Google', hasGoogle ? 'Connected — you can sign in with Google' : 'Sign in with your Google account as well', !hasGoogle && isSupabaseConfigured ? () => run(() => actions.linkGoogle(), 'Follow the Google prompt to finish linking.') : undefined, false, 1)}
         {row('time-outline', 'Last sign-in', info?.lastSignInAt ? formatDate(info.lastSignInAt) : '—', undefined, false, 2)}
-        {row('log-out-outline', 'Log out of all devices', 'Signs you out everywhere, including this one', () => run(async () => { await actions.signOutEverywhere(); router.replace('/'); }, 'Signed out everywhere.'), false, 3)}
+        {row('log-out-outline', 'Log out of all devices', 'Signs you out everywhere, including this one', () => run(async () => { await actions.signOutEverywhere(); router.replace('/sign-in'); }, 'Signed out everywhere.'), false, 3)}
       </View>
 
       <Text style={styles.sectionTitle}>YOUR INFORMATION</Text>
       <View style={styles.card}>
         {row('download-outline', 'Download your data', 'Profile, posts, questions, hits, messages — as one file', () => { void download(); }, false, 0)}
-        {row('sparkles-outline', 'What the coach remembers', 'Notes the AI coach keeps about you', () => router.push('/coach-memory'), false, 1)}
+        {row('sparkles-outline', 'What the coach remembers', 'Notes the AI coach keeps about you', () => toast.show({ title: 'AI coach is coming soon', body: 'A weekly plan and a coach to ask, coming soon', icon: 'sparkles' }), false, 1)}
         {row('shield-checkmark-outline', 'Privacy centre', 'What we store and who can see it', () => router.push('/privacy'), false, 2)}
         {row('card-outline', 'Payment methods', undefined, () => router.push('/payments'), false, 3)}
       </View>
 
       <Text style={styles.sectionTitle}>ACCOUNT</Text>
       <View style={styles.card}>
-        {row('swap-horizontal-outline', 'Switch account', undefined, () => { actions.signOut(); router.replace('/'); }, false, 0)}
+        {row('swap-horizontal-outline', 'Switch account', 'Pick another login saved on this phone', () => router.push('/accounts'), false, 0)}
         {row('trash-outline', 'Delete account', 'Removes your profile, posts and messages. Cannot be undone.', () => { setConfirmWord(''); setSheet('delete'); }, true, 1)}
       </View>
 

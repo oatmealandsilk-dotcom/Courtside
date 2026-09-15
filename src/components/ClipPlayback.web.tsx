@@ -1,12 +1,13 @@
+import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
-export function ClipPlayback({uri,poster,active,preload=false,onDoubleTap}:{uri:string;poster?:string;active:boolean;preload?:boolean;onDoubleTap?:()=>void}) {
+export function ClipPlayback({uri,poster,active,preload=false,onDoubleTap,fit='cover'}:{uri:string;poster?:string;active:boolean;preload?:boolean;onDoubleTap?:()=>void;fit?:'cover'|'contain'}) {
  const video=useRef<HTMLVideoElement>(null);
  const lastTap=useRef(0), pending=useRef<ReturnType<typeof setTimeout>|null>(null);
  const [paused,setPaused]=useState(false),[muted,setMuted]=useState(true),[error,setError]=useState(false);
  useEffect(()=>{const el=video.current;if(!el)return;if(active&&!paused)el.play().catch(()=>setPaused(true));else el.pause();return()=>el.pause();},[active,paused]);
  useEffect(()=>{if(!active)setPaused(false);},[active]);
  return <div style={{position:'absolute',inset:0}}>
-  <video ref={video} src={uri} poster={poster} loop muted={muted} playsInline preload={active||preload?'auto':'none'} onError={()=>setError(true)} style={{width:'100%',height:'100%',objectFit:'cover',pointerEvents:'none'}}/>
+  <video ref={video} src={uri} poster={poster} loop muted={muted} playsInline preload={active||preload?'auto':'none'} onError={()=>setError(true)} style={{width:'100%',height:'100%',objectFit:fit,pointerEvents:'none'}}/>
   <button aria-label={paused?'Play clip':'Pause clip'} onClick={()=>{
     // One tap plays or pauses, two likes. The pause is held back until the
     // double-tap window closes, or every like would also stop the video.
@@ -16,7 +17,7 @@ export function ClipPlayback({uri,poster,active,preload=false,onDoubleTap}:{uri:
     if(pending.current)clearTimeout(pending.current);
     pending.current=setTimeout(()=>{pending.current=null;setPaused(v=>!v);},onDoubleTap?280:0);
   }} style={{position:'absolute',inset:0,width:'100%',background:'transparent',border:0,color:'white',fontSize:40}}>{paused?'▶':''}</button>
-  <button aria-label={muted?'Unmute clip':'Mute clip'} onClick={()=>setMuted(v=>!v)} style={{position:'absolute',top:70,right:18,border:0,borderRadius:20,padding:10,background:'#0008',color:'white'}}>{muted?'Sound off':'Sound on'}</button>
+  <button aria-label={muted?'Unmute clip':'Mute clip'} onClick={()=>setMuted(v=>!v)} style={{position:'absolute',right:12,bottom:12,width:30,height:30,border:0,borderRadius:15,padding:0,background:'rgba(0,0,0,0.55)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><Ionicons name={muted?'volume-mute':'volume-high'} size={16} color="white"/></button>
   {error&&<p role="status" style={{position:'absolute',top:'40%',left:30,right:30,color:'white',textAlign:'center'}}>This video couldn’t load. Swipe up for the next item.</p>}
  </div>;
 }

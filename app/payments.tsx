@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Screen } from '@/components/ui';
@@ -29,7 +30,7 @@ export default function Payments() {
   const missing = ADDABLE.filter((option) => !paymentMethods.some((m) => m.kind === option.kind));
 
   return (
-    <Screen title="Payments" compactTitle onBack={() => router.back()}>
+    <Screen title="Payments" compactTitle onBack={() => goBack()}>
       <Text style={styles.lead}>
         Your default is charged when you book a coach. You can still switch at checkout.
       </Text>

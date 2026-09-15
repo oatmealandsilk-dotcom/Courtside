@@ -1,3 +1,4 @@
+import { asTabRoute } from '@/features/navigation/tabFocus';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React from 'react';
@@ -8,9 +9,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { Avatar, Screen } from '@/components/ui';
 import { money, relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
+import * as toast from '@/lib/toast';
 import { colors, radius, spacing, typography } from '@/theme';
 
-export default function Coaching() {
+function Coaching() {
   const styles = useThemedStyles(styleDefinitions);
   const { coaches, users, coachingRequests, coachQuestions, currentUserId, currentUser } = useApp();
   const recentQuestions = [...coachQuestions]
@@ -21,10 +23,11 @@ export default function Coaching() {
   return (
     <Screen memoryKey="coaches" title="Coaching">
       <View style={styles.ai}>
+        {/* Built and wired, held back until launch: the card says so instead of opening. */}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Open Courtside AI Coach"
-          onPress={() => router.push('/ai-coach')}
+          accessibilityLabel="Courtside AI Coach, coming soon"
+          onPress={() => toast.show({ title: 'AI coach is coming soon', body: 'A weekly plan and a coach to ask, coming soon', icon: 'sparkles' })}
           style={{ gap: 18 }}
         >
           <View style={styles.row}>
@@ -33,12 +36,12 @@ export default function Coaching() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.title}>Courtside AI Coach</Text>
-              <Text style={styles.available}>● Always available · Free</Text>
+              <Text style={styles.available}>Coming soon</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.info} />
+            <View style={styles.soon}><Text style={styles.soonText}>SOON</Text></View>
           </View>
           <Text style={styles.description}>
-            A weekly plan built from your game, goals, and body. Ask anything before your next session.
+            A weekly plan built from your game, goals, and body, and a coach you can ask before your next session.
           </Text>
         </Pressable>
       </View>
@@ -189,7 +192,9 @@ const styleDefinitions = StyleSheet.create({
   },
   aiText: { color: colors.info, fontSize: 18, fontWeight: '700' },
   title: { fontSize: 18, fontWeight: '700', color: colors.text },
-  available: { color: colors.info, marginTop: 5, fontSize: 13 },
+  available: { color: colors.textMuted, marginTop: 5, fontSize: 13 },
+  soon: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: colors.brandDim },
+  soonText: { ...typography.caption, color: colors.brand },
   description: {
     borderLeftWidth: 2,
     borderLeftColor: colors.info,
@@ -260,3 +265,5 @@ const styleDefinitions = StyleSheet.create({
   },
   applyTitle: { ...typography.bodyStrong, color: colors.text },
 });
+
+export default asTabRoute(Coaching);

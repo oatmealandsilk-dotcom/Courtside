@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 
 import { Button, EmptyState, Screen } from '@/components/ui';
 import { fetchCoachMemory, clearCoachMemory, type CoachMemory } from '@/data/api';
@@ -31,7 +32,7 @@ export default function CoachMemoryScreen() {
   const empty = !memory || (!memory.summary && memory.exchanges.length === 0);
 
   return (
-    <Screen title="Coach memory" compactTitle onBack={() => router.back()}>
+    <Screen title="Coach memory" compactTitle onBack={() => goBack()}>
       <Text style={styles.lead}>
         The coach keeps short notes so it does not start from zero each time: what you are working on, what it told you, and whether you said it helped. Only you and the coach can see this.
       </Text>

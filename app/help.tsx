@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Screen } from '@/components/ui';
@@ -43,7 +44,7 @@ export default function Help() {
   const [open, setOpen] = useState<number | null>(null);
 
   return (
-    <Screen title="Help" compactTitle onBack={() => router.back()}>
+    <Screen title="Help" compactTitle onBack={() => goBack()}>
       <Text style={styles.lead}>Quick answers first. If yours is not here, the About page has a way to reach us.</Text>
       <View style={styles.card}>
         {TOPICS.map((topic, index) => {

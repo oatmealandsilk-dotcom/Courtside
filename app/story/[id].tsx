@@ -9,7 +9,7 @@ import { ClipPlayback } from '@/components/ClipPlayback';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { Avatar, Button, EmptyState } from '@/components/ui';
 import { isLive } from '@/features/stories/stories';
-import { relativeTime } from '@/lib/format';
+import { relativeTime, timeLeft } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -80,6 +80,7 @@ export default function StoryViewer() {
   };
 
   const viewers = current.viewedBy.filter((v) => v !== current.authorId).length;
+  const liked = !!currentUserId && current.likedBy.includes(currentUserId);
 
   return (
     <View style={styles.root}>
@@ -115,7 +116,7 @@ export default function StoryViewer() {
           <Pressable accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.who}>
             <Avatar name={user.name} seed={user.avatarSeed} size={34} />
             <Text style={styles.name}>{mine ? 'Your hit' : user.name}</Text>
-            <Text style={styles.time}>{relativeTime(current.createdAt)}</Text>
+            <Text style={styles.time}>{relativeTime(current.createdAt)} · {timeLeft(current.expiresAt)}</Text>
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => router.back()} hitSlop={10}>
             <Ionicons name="close" size={28} color="#FFFFFF" />
@@ -125,6 +126,16 @@ export default function StoryViewer() {
 
       <View pointerEvents="box-none" style={[styles.bottom, { paddingBottom: insets.bottom + 16 }]}>
         {current.caption ? <Text style={styles.caption}>{current.caption}</Text> : null}
+        <View style={styles.reactRow}>
+          <Pressable accessibilityRole="button" accessibilityLabel={liked ? 'Unlike hit' : 'Like hit'} onPress={() => actions.toggleLikeStory(current.id)} style={styles.views}>
+            <Ionicons name={liked ? 'heart' : 'heart-outline'} size={16} color={liked ? '#E17B7B' : '#FFFFFF'} />
+            <Text style={styles.viewsText}>{current.likedBy.length}</Text>
+          </Pressable>
+          <Pressable accessibilityRole="link" accessibilityLabel="Comments on this hit" onPress={() => router.push(`/hits/${current.id}`)} style={styles.views}>
+            <Ionicons name="chatbubble-outline" size={15} color="#FFFFFF" />
+            <Text style={styles.viewsText}>{current.commentIds.length}</Text>
+          </Pressable>
+        </View>
         {mine ? (
           <View style={styles.ownRow}>
             <View style={styles.views}>
@@ -168,6 +179,7 @@ const styleDefinitions = StyleSheet.create({
     textShadowColor: '#000A', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
   },
   ownRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  reactRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   views: {
     flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, paddingVertical: 6,
     borderRadius: radius.pill, backgroundColor: 'rgba(0,0,0,0.45)',

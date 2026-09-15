@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar, EmptyState, Screen, SegmentedControl } from '@/components/ui';
@@ -68,7 +69,7 @@ export default function Activity() {
     : [...savedPosts.map((p) => postRow(p, 'bookmark')), ...savedQuestions.map((q) => questionRow(q, 'bookmark'))];
 
   return (
-    <Screen title="Your activity" compactTitle onBack={() => router.back()}>
+    <Screen title="Your activity" compactTitle onBack={() => goBack()}>
       <View style={{ paddingBottom: spacing.lg }}>
         <SegmentedControl<Section>
           value={section}

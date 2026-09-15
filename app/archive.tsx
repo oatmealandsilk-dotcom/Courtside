@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
@@ -29,7 +30,7 @@ export default function Archive() {
   const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
   return (
-    <Screen title="Archive" compactTitle onBack={() => router.back()}>
+    <Screen title="Archive" compactTitle onBack={() => goBack()}>
       <SegmentedControl
         value={tab}
         onChange={(value) => setTab(value as Tab)}

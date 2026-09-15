@@ -1,14 +1,14 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { BrandMark } from '@/components/BrandMark';
-import { Button, Field } from '@/components/ui';
+import { Avatar, Button, Field } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { useApp } from '@/store/AppContext';
-import { colors, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography } from '@/theme';
 
 type Mode = 'sign-in' | 'sign-up';
 
@@ -18,8 +18,27 @@ type Mode = 'sign-in' | 'sign-up';
  */
 export default function SignIn() {
   const styles = useThemedStyles(styleDefinitions);
-  const { actions, currentUserId } = useApp();
+  const { actions, currentUserId, savedAccounts } = useApp();
   const [mode, setMode] = useState<Mode>('sign-in');
+  // Logins remembered on this device come first, like Instagram's picker;
+  // "Add account" from the accounts page arrives with ?add=1 to skip it.
+  const { add } = useLocalSearchParams<{ add?: string }>();
+  const [useAnother, setUseAnother] = useState(false);
+  const remembered = isSupabaseConfigured && !add && !useAnother && mode === 'sign-in' ? savedAccounts.filter((a) => a.id !== currentUserId) : [];
+  const [switching, setSwitching] = useState<string | null>(null);
+  const pick = async (id: string) => {
+    if (busy || switching) return;
+    setSwitching(id);
+    setError(null);
+    try {
+      await actions.switchAccount(id);
+      router.replace('/');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not switch accounts.');
+    } finally {
+      setSwitching(null);
+    }
+  };
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -109,7 +128,34 @@ export default function SignIn() {
           </Text>
         </View>
 
-        <View style={styles.form}>
+        {remembered.length ? (
+          <View style={styles.accounts}>
+            {remembered.map((account, index) => (
+              <Pressable
+                key={account.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Sign in as ${account.name || account.handle}`}
+                onPress={() => pick(account.id)}
+                disabled={!!switching}
+                style={({ pressed }) => [styles.account, index > 0 && styles.accountBorder, pressed && { backgroundColor: colors.surfaceAlt }]}
+              >
+                <Avatar name={account.name || account.handle || '?'} seed={account.id} uri={account.avatarUrl} size={40} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.accountName}>{account.name || account.handle || account.email || 'Account'}</Text>
+                  <Text style={styles.accountMeta}>{account.handle ? `@${account.handle}` : account.email ?? ''}</Text>
+                </View>
+                {switching === account.id ? <Text style={styles.accountMeta}>Signing in…</Text> : <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />}
+              </Pressable>
+            ))}
+            <Pressable accessibilityRole="button" onPress={() => setUseAnother(true)} style={[styles.account, styles.accountBorder]}>
+              <View style={styles.plus}><Ionicons name="add" size={20} color={colors.brand} /></View>
+              <Text style={[styles.accountName, { flex: 1 }]}>Use another account</Text>
+            </Pressable>
+            {error ? <Text style={[styles.error, { paddingHorizontal: spacing.lg, paddingBottom: spacing.md }]}>{error}</Text> : null}
+          </View>
+        ) : null}
+
+        <View style={[styles.form, remembered.length > 0 && { display: 'none' }]}>
           {isSupabaseConfigured ? (
             <>
               {mode === 'sign-up' ? (
@@ -203,6 +249,12 @@ const styleDefinitions = StyleSheet.create({
   wordmark: { fontSize: 44, fontWeight: '800', color: colors.brand, letterSpacing: -1.4 },
   tagline: { ...typography.body, color: colors.textMuted, lineHeight: 23, maxWidth: 380 },
   form: { gap: spacing.lg },
+  accounts: { borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden', marginBottom: spacing.lg },
+  account: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, minHeight: 60 },
+  accountBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  accountName: { ...typography.bodyStrong, color: colors.text },
+  accountMeta: { ...typography.small, color: colors.textFaint },
+  plus: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   error: { ...typography.small, color: colors.danger },
   notice: { ...typography.small, color: colors.success },
   divider: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },

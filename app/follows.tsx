@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 
 import { LevelPill } from '@/components/LevelPill';
 import { Avatar, Button, EmptyState, Field, Screen, SegmentedControl } from '@/components/ui';
@@ -38,7 +39,7 @@ export default function Follows() {
   };
 
   return (
-    <Screen title={subject ? `@${subject.handle}` : 'Players'} compactTitle onBack={() => router.back()}>
+    <Screen title={subject ? `@${subject.handle}` : 'Players'} compactTitle onBack={() => goBack()}>
       <View style={styles.tabs}>
         <SegmentedControl<Tab>
           value={tab}

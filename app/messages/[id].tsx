@@ -2,6 +2,8 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  KeyboardAvoidingView,
+  Platform,
   Animated,
   Pressable,
   ScrollView,
@@ -18,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar, EmptyState } from '@/components/ui';
 import { Tappable, useDoubleTap } from '@/components/Tappable';
 import { relativeTime } from '@/lib/format';
+import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
 import type { Message } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -78,7 +81,7 @@ export default function Thread() {
   };
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
+    <KeyboardAvoidingView style={[styles.root, { paddingTop: insets.top }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back">
           <Ionicons name="chevron-back" size={24} color={colors.text} />
@@ -232,7 +235,7 @@ export default function Thread() {
           <Ionicons name="arrow-up" size={19} color={colors.brandInk} />
         </Tappable>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -271,7 +274,7 @@ function Bubble({ message, mine, styles, me, picking, onPick, onReact }: {
           accessibilityLabel={`Message: ${message.body}. Double tap to react, hold to choose a reaction.`}
           style={[styles.bubble, mine ? styles.mine : styles.theirs]}
         >
-          <Text style={[styles.bubbleText, mine && { color: colors.brandInk }]}>{message.body}</Text>
+          <RichText style={[styles.bubbleText, mine && { color: colors.brandInk }]} mentionStyle={mine ? { color: colors.brandInk, textDecorationLine: 'underline' } : undefined}>{message.body}</RichText>
         </Pressable>
 
         {reacted ? (

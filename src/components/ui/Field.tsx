@@ -22,6 +22,11 @@ interface Props {
    * send button is right there.
    */
   onSubmitEditing?: () => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
+  autoCorrect?: boolean;
+  /** Square off the bottom corners so a list can hang straight off the box. */
+  flush?: boolean;
 }
 
 /**
@@ -43,6 +48,10 @@ export function Field({
   secureTextEntry = false,
   hint,
   onSubmitEditing,
+  onFocus,
+  onBlur,
+  autoCorrect,
+  flush = false,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const submits = Boolean(onSubmitEditing) && (submitOnEnter || !multiline);
@@ -60,12 +69,16 @@ export function Field({
         autoCapitalize={autoCapitalize}
         keyboardType={keyboardType}
         secureTextEntry={secureTextEntry}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        autoCorrect={autoCorrect}
         onSubmitEditing={submits ? onSubmitEditing : undefined}
         blurOnSubmit={submits && multiline ? true : undefined}
         returnKeyType={submits ? 'send' : undefined}
         style={[
           styles.input,
           multiline && { minHeight: minHeight ?? 110, textAlignVertical: 'top' },
+          flush && { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
         ]}
       />
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}

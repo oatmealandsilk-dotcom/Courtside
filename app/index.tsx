@@ -2,14 +2,15 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
 import { Redirect } from 'expo-router';
+import { isSupabaseConfigured } from '@/lib/supabase';
 
 import { BrandMark } from '@/components/BrandMark';
 import { useApp } from '@/store/AppContext';
 import { colors, spacing } from '@/theme';
 
 /** How long the mark stays up even when the data is instant — a beat, not a wait. */
-const HOLD_MS = 1100;
-const FADE_MS = 380;
+const HOLD_MS = 450;
+const FADE_MS = 260;
 
 /**
  * Splash: the mark and the name, held for a moment, then faded out into
@@ -18,7 +19,10 @@ const FADE_MS = 380;
  */
 export default function Index() {
   const styles = useThemedStyles(styleDefinitions);
-  const { ready, currentUserId, onboardingComplete } = useApp();
+  const { ready, currentUserId, onboardingComplete, remoteLoaded, error } = useApp();
+  // Signed in but the profile has not come down yet: the answer to "has this
+  // person done the quiz" is not known, so hold the splash rather than guess.
+  const settled = ready && (!currentUserId || !isSupabaseConfigured || remoteLoaded || !!error);
   const [held, setHeld] = useState(false);
   const [gone, setGone] = useState(false);
   const [settledCode, setSettledCode] = useState(false);
@@ -44,11 +48,11 @@ export default function Index() {
   }, [rise]);
 
   useEffect(() => {
-    if (!ready || !held || gone) return;
+    if (!settled || !held || gone) return;
     Animated.timing(opacity, { toValue: 0, duration: FADE_MS, useNativeDriver: true }).start(({ finished }) => {
       if (finished) setGone(true);
     });
-  }, [ready, held, gone, opacity]);
+  }, [settled, held, gone, opacity]);
 
   if (gone) {
     // A ?code= from Google is still being exchanged for a session; give it a

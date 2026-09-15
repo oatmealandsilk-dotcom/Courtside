@@ -19,7 +19,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // moves with the gesture. Once the route agrees, the hint is dropped.
   const pending = useSyncExternalStore(subscribePendingTab, getPendingTab, getPendingTab);
   useEffect(() => {
-    if (pending && pending === pathname) setPendingTab(null);
+    if (!pending) return;
+    if (pending === pathname) { setPendingTab(null); return; }
+    // A hint the route never confirms (the swipe was cancelled) must not
+    // leave the bar pointing at the wrong tab.
+    const timer = setTimeout(() => setPendingTab(null), 900);
+    return () => clearTimeout(timer);
   }, [pending, pathname]);
   const shown = pending ?? pathname;
   const { currentUserId } = useApp();

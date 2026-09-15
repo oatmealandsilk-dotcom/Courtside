@@ -6,7 +6,7 @@ const dayAfter = (iso: string) => new Date(Date.parse(iso) + 24 * 3_600_000).toI
 
 const seed = (id: string, authorId: string, hours: number, rest: Partial<Story>): Story => {
   const createdAt = hoursAgo(hours);
-  return { id, authorId, createdAt, expiresAt: dayAfter(createdAt), viewedBy: [], ...rest };
+  return { id, authorId, createdAt, expiresAt: dayAfter(createdAt), viewedBy: [], likedBy: [], commentIds: [], ...rest };
 };
 
 export const stories: Story[] = [

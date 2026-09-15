@@ -1,3 +1,4 @@
+import { asTabRoute } from '@/features/navigation/tabFocus';
 import { ThreadReplies } from '@/components/ThreadReplies';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -12,10 +13,14 @@ import { QuestionCard } from '@/components/QuestionCard';
 import { PostCard } from '@/components/PostCard';
 import { Tappable } from '@/components/Tappable';
 import { VerticalPager } from '@/components/VerticalPager';
+import { MediaPlaceholder } from '@/components/MediaPlaceholder';
+import { isLive } from '@/features/stories/stories';
 import { ClipPlayback } from '@/components/ClipPlayback';
-import { StoriesRail } from '@/components/StoriesRail';
 import { rankFeed, type FeedItem } from '@/features/feed/rankFeed';
+import { lockPageSwipe } from '@/features/navigation/swipeLock';
+import { relativeTime, timeLeft } from '@/lib/format';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
 
@@ -55,12 +60,12 @@ function LikeBurst({ token }: { token: number }) {
   );
 }
 
-export default function Home() {
+function Home() {
   const styles = useThemedStyles(styleDefinitions);
   // The US Open ground is navy; the green wordmark sinks into it, white does not.
   const { theme } = useTheme();
   const app = useApp();
-  const { posts, questions, comments, users, currentUserId, saved, actions, ready, followingIds, mutedIds, blockedIds, conversations } = app;
+  const { posts, questions, comments, stories, users, currentUserId, saved, actions, ready, followingIds, mutedIds, blockedIds, conversations } = app;
   const [active, setActive] = useState(0);
   const [visit, setVisit] = useState(0);
   const focused = useIsFocused();
@@ -79,8 +84,8 @@ export default function Home() {
       rankedFor.current = stamp;
       const data = latest.current;
       setOrder(
-        rankFeed(data.posts, data.questions.filter((q) => !q.source), data.comments, data.currentUserId).map((i) =>
-          i.type === 'post' ? `p:${i.post.id}` : `q:${i.question.id}`,
+        rankFeed(data.posts, data.questions.filter((q) => !q.source), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st))).map((i) =>
+          i.type === 'post' ? `p:${i.post.id}` : i.type === 'question' ? `q:${i.question.id}` : `h:${i.story.id}`,
         ),
       );
       setActive(0);
@@ -120,6 +125,21 @@ export default function Home() {
       .sort((a, b) => b.score - a.score);
   }, [users, posts, comments, conversations, currentUserId, followingIds, blockedIds]);
 
+  // Anything you post after the feed was ranked — a clip, a note, a hit —
+  // goes in near the top straight away instead of waiting for the next visit.
+  useEffect(() => {
+    if (!currentUserId) return;
+    const mine = [
+      ...stories.filter((st) => st.authorId === currentUserId && isLive(st)).map((st) => `h:${st.id}`),
+      ...posts.filter((p) => p.authorId === currentUserId && !p.archived).map((p) => `p:${p.id}`),
+    ];
+    setOrder((prev) => {
+      const fresh = mine.filter((key) => !prev.includes(key));
+      if (!fresh.length) return prev;
+      return prev.length ? [prev[0], ...fresh, ...prev.slice(1)] : fresh;
+    });
+  }, [stories, posts, currentUserId]);
+
   // Blocked and muted players disappear from the feed entirely.
   const feed = useMemo<FeedItem[]>(() => {
     const hidden = new Set([...blockedIds, ...mutedIds]);
@@ -129,10 +149,15 @@ export default function Home() {
         const post = posts.find((p) => p.id === id);
         return post && !hidden.has(post.authorId) && !post.archived ? [{ type: 'post' as const, post }] : [];
       }
+      if (key.startsWith('h:')) {
+        // A hit leaves the feed the moment it expires or is put away.
+        const story = stories.find((st) => st.id === id);
+        return story && !hidden.has(story.authorId) && isLive(story) ? [{ type: 'hit' as const, story }] : [];
+      }
       const question = questions.find((q) => q.id === id);
       return question && !hidden.has(question.authorId) ? [{ type: 'question' as const, question }] : [];
     });
-  }, [order, posts, questions, blockedIds, mutedIds]);
+  }, [order, posts, questions, stories, blockedIds, mutedIds]);
 
   /**
    * Which page carries the who-to-follow strip: the first thread or written
@@ -140,7 +165,7 @@ export default function Home() {
    * page, under the eyebrow, rather than riding along the bottom.
    */
   const suggestHost = useMemo(
-    () => feed.findIndex((item, index) => index >= 1 && (item.type === 'question' || item.post.kind !== 'clip')),
+    () => feed.findIndex((item, index) => index >= 1 && (item.type === 'question' || (item.type === 'post' && item.post.kind !== 'clip'))),
     [feed],
   );
 
@@ -154,6 +179,9 @@ export default function Home() {
       <ScrollView
         horizontal
         nativeID="who-to-follow"
+        onTouchStart={() => lockPageSwipe(true)}
+        onTouchEnd={() => lockPageSwipe(false)}
+        onTouchCancel={() => lockPageSwipe(false)}
         showsHorizontalScrollIndicator={false}
         style={{ flexGrow: 0, marginHorizontal: -20 }}
         contentContainerStyle={styles.stripRow}
@@ -175,7 +203,6 @@ export default function Home() {
   ) : null;
 
   const insets = useSafeAreaInsets();
-  const item0IsClip = feed[0]?.type === 'post' && feed[0].post.kind === 'clip';
   const [burst, setBurst] = useState({ id: '', n: 0 });
 
   /**
@@ -226,6 +253,8 @@ export default function Home() {
   const showing = feed[active];
   useEffect(() => {
     if (!focused || !showing) return;
+    // A hit counts as watched through the story viewer, not here.
+    if (showing.type === 'hit') return;
     actions.recordView(
       showing.type === 'post' ? 'post' : 'question',
       showing.type === 'post' ? showing.post.id : showing.question.id,
@@ -244,7 +273,7 @@ export default function Home() {
           <VerticalPager key={visit} initialIndex={active} onIndex={setActive}>
             {feed.map((item, index) => {
               const distance = Math.abs(index - active);
-              const pageKey = item.type === 'post' ? item.post.id : item.question.id;
+              const pageKey = item.type === 'post' ? item.post.id : item.type === 'question' ? item.question.id : item.story.id;
               if (distance > WINDOW) {
                 // A placeholder page: holds its slot, costs nothing to render.
                 return <View key={pageKey} />;
@@ -252,6 +281,47 @@ export default function Home() {
               // One page either side keeps its video buffered, ready to play.
               const near = distance <= 1;
               const strip = index === suggestHost ? suggestStrip : null;
+
+              if (item.type === 'hit') {
+                const story = item.story;
+                const author = users.find((u) => u.id === story.authorId);
+                if (!author) return <View key={story.id} />;
+                const hitLiked = !!currentUserId && story.likedBy.includes(currentUserId);
+                return (
+                  <View key={story.id} style={styles.clip}>
+                    <Pressable accessibilityRole="link" accessibilityLabel={`Open ${author.name}'s hit`} onPress={() => router.push(`/story/${author.id}`)} style={styles.clipFrame}>
+                      <View style={styles.clipPortrait}>
+                        {story.videoUrl ? (
+                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={focused && active === index} preload={near} />
+                        ) : story.imageUrl ? (
+                          <Image accessibilityIgnoresInvertColors source={{ uri: story.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                        ) : (
+                          <MediaPlaceholder label={story.mediaLabel ?? 'Hit'} seed={story.id} portrait />
+                        )}
+                      </View>
+                    </Pressable>
+                    <View style={styles.caption}>
+                      <Pressable accessibilityRole="link" onPress={() => router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`)} style={styles.author}>
+                        <Avatar name={author.name} seed={author.avatarSeed} size={34} />
+                        <Text style={styles.authorName}>@{author.handle}<Text style={styles.authorTime}> · {relativeTime(story.createdAt)}</Text></Text>
+                      </Pressable>
+                      <HitClock expiresAt={story.expiresAt} />
+                      {story.caption ? <RichText numberOfLines={3} style={styles.body}>{story.caption}</RichText> : null}
+                      <Text style={styles.swipeHint}>↑ Next moment   ·   ← Community</Text>
+                    </View>
+                    <View style={styles.actions}>
+                      <Tappable accessibilityLabel={hitLiked ? 'Unlike hit' : 'Like hit'} onPress={() => actions.toggleLikeStory(story.id)} scaleTo={0.78} style={styles.action}>
+                        <Ionicons name={hitLiked ? 'heart' : 'heart-outline'} size={36} color={hitLiked ? '#E17B7B' : 'white'} style={styles.actionGlyph} />
+                        <Text style={styles.actionLabel}>{story.likedBy.length}</Text>
+                      </Tappable>
+                      <Tappable accessibilityLabel="Hit comments" onPress={() => router.push(`/hits/${story.id}`)} scaleTo={0.78} style={styles.action}>
+                        <Ionicons name="chatbubble-outline" size={33} color="white" style={styles.actionGlyph} />
+                        <Text style={styles.actionLabel}>{story.commentIds.length}</Text>
+                      </Tappable>
+                    </View>
+                  </View>
+                );
+              }
 
               if (item.type === 'question') {
                 const isSaved = saved.questionIds.includes(item.question.id);
@@ -319,13 +389,20 @@ export default function Home() {
               return (
                 <View key={post.id} style={styles.clip}>
                   {post.videoUrl ? (
-                    <ClipPlayback
-                      uri={post.videoUrl}
-                      poster={post.thumbnailUrl}
-                      active={focused && active === index}
-                      preload={near}
-                      onDoubleTap={() => likeByTap(post.id, liked)}
-                    />
+                    // A clip keeps its own shape on every screen: a vertical clip is a
+                    // tall box, a landscape one a wide box, centred, with the theme
+                    // colour around it rather than black bars or a crop.
+                    <View style={styles.clipFrame}>
+                      <View style={post.orientation === 'landscape' ? styles.clipLandscape : styles.clipPortrait}>
+                        <ClipPlayback
+                          uri={post.videoUrl}
+                          poster={post.thumbnailUrl}
+                          active={focused && active === index}
+                          preload={near}
+                          onDoubleTap={() => likeByTap(post.id, liked)}
+                        />
+                      </View>
+                    </View>
                   ) : post.thumbnailUrl ? (
                     <Pressable
                       accessibilityRole="button"
@@ -368,11 +445,11 @@ export default function Home() {
                       style={styles.author}
                     >
                       <Avatar name={author.name} seed={author.avatarSeed} size={34} />
-                      <Text style={styles.authorName}>@{author.handle}</Text>
+                      <Text style={styles.authorName}>@{author.handle}<Text style={styles.authorTime}> · {relativeTime(post.createdAt)}</Text></Text>
                     </Pressable>
-                    <Text numberOfLines={3} style={styles.body}>
+                    <RichText numberOfLines={3} style={styles.body}>
                       {post.body}
-                    </Text>
+                    </RichText>
                     <Text style={styles.tags}>{post.tags.map(t=><Text key={t} accessibilityRole="link" onPress={()=>router.push({pathname:'/search',params:{q:`#${t}`}})}>#{t}{'  '}</Text>)}</Text>
                     <Text style={styles.swipeHint}>↑ Next moment   ·   ← Community</Text>
                   </View>
@@ -402,7 +479,7 @@ export default function Home() {
                       scaleTo={0.78}
                       style={styles.action}
                     >
-                      <Ionicons name="paper-plane-outline" size={32} color="white" style={styles.actionGlyph} />
+                      <Ionicons name="arrow-redo-outline" size={32} color="white" style={styles.actionGlyph} />
                       <Text style={styles.actionLabel}>{post.shares ?? 0}</Text>
                     </Tappable>
                     <Tappable
@@ -427,16 +504,25 @@ export default function Home() {
                   <View pointerEvents="none" style={[styles.wordmarkOverlay, { top: insets.top + 12 }]}>
                     <Text style={[styles.wordmark, theme === 'us-open' && { color: '#FFFFFF' }]}>CourtSide</Text>
                   </View>
-                  {/* Stories ride the first page too, under the wordmark. */}
-                  <View pointerEvents="box-none" style={[styles.railOverlay, { top: insets.top + 46 }]}>
-                    <StoriesRail onVideo={item0IsClip} />
-                  </View>
                 </React.Fragment>
               ) : page,
             )}
           </VerticalPager>
         </View>
       )}
+    </View>
+  );
+}
+
+/** "HIT · 22h left", ticking once a minute so it never reads stale. */
+function HitClock({ expiresAt }: { expiresAt: string }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const [, tick] = useState(0);
+  useEffect(() => { const id = setInterval(() => tick((n) => n + 1), 60_000); return () => clearInterval(id); }, []);
+  return (
+    <View style={styles.hitClock}>
+      <Ionicons name="time-outline" size={13} color="white" />
+      <Text style={styles.hitClockText}>HIT · {timeLeft(expiresAt)}</Text>
     </View>
   );
 }
@@ -452,12 +538,14 @@ const styleDefinitions = StyleSheet.create({
   wordmark: {
     color: colors.brand, fontSize: 23, fontWeight: '800', letterSpacing: -0.3,
   },
-  railOverlay: { position: 'absolute', left: 0, right: 0, zIndex: 5 },
   // Kept as a hook for anything the wordmark needs over video; the shadow that
   // used to live here was doing more harm than good.
   wordmarkOnClip: {},
   viewer: { flex: 1, width: '100%', minHeight: 0 },
-  clip: { flex: 1, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
+  clip: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
+  clipFrame: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
+  clipPortrait: { height: '100%', aspectRatio: 9 / 16, maxWidth: '100%', overflow: 'hidden', backgroundColor: '#000' },
+  clipLandscape: { width: '100%', aspectRatio: 16 / 9, maxHeight: '100%', overflow: 'hidden', backgroundColor: '#000' },
   preview: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30, gap: 14 },
   court: {
     position: 'absolute',
@@ -496,7 +584,10 @@ const styleDefinitions = StyleSheet.create({
     gap: 10,
   },
   author: { flexDirection: 'row', gap: 9, alignItems: 'center' },
+  hitClock: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.45)' },
+  hitClockText: { color: 'white', fontSize: 11, fontWeight: '700', letterSpacing: 0.6 },
   authorName: { color: 'white', fontSize: 14, fontWeight: '700' },
+  authorTime: { color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: '500' },
   body: { color: 'white', fontSize: 13, lineHeight: 19 },
   tags: { color: colors.text, fontSize: 11 },
   swipeHint: { color: colors.textMuted, fontSize: 10 },
@@ -530,3 +621,5 @@ const styleDefinitions = StyleSheet.create({
   eyebrow: { color: colors.warning, fontWeight: '700', letterSpacing: 1.2, fontSize: 11 },
   hint: { color: colors.textMuted, fontSize: 11, textAlign: 'center', paddingBottom: 10 },
 });
+
+export default asTabRoute(Home);

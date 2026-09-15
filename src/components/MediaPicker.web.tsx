@@ -34,6 +34,9 @@ function clock(seconds: number): string {
 
 export interface CoverFrame { time: number; dataUrl: string }
 
+/** Shape of the last video grabFrames read, so the picker can default the stage. */
+let lastShape: 'portrait' | 'landscape' = 'portrait';
+
 /**
  * Pulls evenly spaced frames out of a video by seeking and painting each one
  * onto a canvas. The frame at t=0 comes back first and becomes the default
@@ -59,6 +62,7 @@ async function grabFrames(url: string, count = 6): Promise<CoverFrame[]> {
   });
   if (!ready || !Number.isFinite(video.duration) || video.duration <= 0) return [];
 
+  lastShape = video.videoWidth > video.videoHeight ? 'landscape' : 'portrait';
   const canvas = document.createElement('canvas');
   const ratio = video.videoWidth ? video.videoHeight / video.videoWidth : 16 / 9;
   canvas.width = 240;
@@ -108,7 +112,46 @@ function describe(media: PickedMedia): string {
   return 'Photo';
 }
 
-export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false }: MediaPickerProps) {
+/**
+ * Opens the browser's file dialog straight away. Must be called from a click,
+ * which is why the + menu calls it directly rather than after a hop.
+ */
+export function pickFromDevice(selection: 'video' | 'photo' | 'all'): Promise<PickedMedia | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = selection === 'video' ? 'video/*' : selection === 'photo' ? 'image/*' : 'image/*,video/*';
+    input.style.display = 'none';
+    let settled = false;
+    const finish = (value: PickedMedia | null) => { if (!settled) { settled = true; resolve(value); input.remove(); } };
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return finish(null);
+      const url = URL.createObjectURL(file);
+      const isVideo = file.type.startsWith('video');
+      let label = file.name.replace(/\.[^.]+$/, '');
+      let cover: string | undefined;
+      let shape: 'portrait' | 'landscape' = 'portrait';
+      if (isVideo) {
+        const seconds = await probeDuration(url);
+        if (seconds) label = `${label} · ${clock(seconds)}`;
+        const shots = await grabFrames(url);
+        cover = shots[0]?.dataUrl;
+        shape = lastShape;
+      } else {
+        cover = url;
+        shape = await new Promise((r) => { const img = new Image(); img.onload = () => r(img.naturalWidth > img.naturalHeight ? 'landscape' : 'portrait'); img.onerror = () => r('portrait'); img.src = url; });
+      }
+      finish({ uri: url, label, kind: isVideo ? 'video' : 'photo', thumbnailUrl: cover, orientation: shape });
+    };
+    // Cancelling the dialog fires no change event; a focus return is the cue.
+    window.addEventListener('focus', () => setTimeout(() => finish(null), 800), { once: true });
+    document.body.appendChild(input);
+    input.click();
+  });
+}
+
+export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false, orientation = 'portrait' }: MediaPickerProps) {
   const styles = useThemedStyles(styleDefinitions);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
@@ -149,15 +192,23 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
       let cover: string | undefined;
       let shots: CoverFrame[] = [];
 
+      let shape: 'portrait' | 'landscape' = 'portrait';
       if (isVideo) {
         const seconds = await probeDuration(url);
         if (seconds) label = `${label} · ${clock(seconds)}`;
         // Offer a choice of frames, defaulting to the first one.
         shots = await grabFrames(url);
         cover = shots[0]?.dataUrl;
+        shape = lastShape;
       } else {
         // A photo is its own cover.
         cover = url;
+        shape = await new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => resolve(img.naturalWidth > img.naturalHeight ? 'landscape' : 'portrait');
+          img.onerror = () => resolve('portrait');
+          img.src = url;
+        });
       }
 
       setFrames(shots);
@@ -166,6 +217,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
         label,
         kind: isVideo ? 'video' : 'photo',
         thumbnailUrl: cover,
+        orientation: shape,
       };
       setBusy(false);
       onChange(picked);
@@ -219,7 +271,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
           // The media is the whole box: the cover frame edge to edge with a
           // play badge, the way it will sit in the feed. Tap to watch it.
           <div
-            style={{ position: 'relative', width: '100%', aspectRatio: '9 / 16', maxHeight: 520, borderRadius: 16, overflow: 'hidden', background: '#000', cursor: 'zoom-in' }}
+            style={{ position: 'relative', width: '100%', aspectRatio: orientation === 'landscape' ? '16 / 9' : '9 / 16', maxHeight: '62vh', overflow: 'hidden', background: '#000', cursor: 'zoom-in' }}
             onClick={() => setExpanded(true)}
             role="button"
             tabIndex={0}
@@ -227,21 +279,12 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
             onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setExpanded(true); }}
           >
             {value.kind === 'video' && value.uri ? (
-              value.thumbnailUrl ? (
-                <img src={value.thumbnailUrl} alt={describe(value)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-              ) : (
-                <video src={value.uri} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-              )
+              // Plays the way it will in the feed: looped, muted, edge to edge.
+              <video src={value.uri} poster={value.thumbnailUrl} autoPlay loop muted playsInline preload="auto" style={{ width: '100%', height: '100%', objectFit: orientation === 'landscape' ? 'contain' : 'cover', display: 'block' }} />
             ) : value.uri ? (
               <img src={value.uri} alt={describe(value)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
             ) : null}
-            {value.kind === 'video' ? (
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                <div style={{ width: 60, height: 60, borderRadius: 30, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="play" size={26} color="white" />
-                </div>
-              </div>
-            ) : null}
+
             <div style={{ position: 'absolute', left: 12, bottom: 10, color: 'white', fontSize: 12, fontWeight: 600, textShadow: '0 1px 3px rgba(0,0,0,0.6)', pointerEvents: 'none' }}>
               {describe(value)}
             </div>

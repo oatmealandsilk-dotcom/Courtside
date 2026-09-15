@@ -31,6 +31,9 @@ export function Toggle({ value, onChange, disabled = false, accessibilityLabel }
       trackColor={{ true: colors.brand, false: colors.borderStrong }}
       thumbColor={value ? colors.brandInk : colors.bg}
       ios_backgroundColor={colors.borderStrong}
+      // The stock switch is oversized next to a row of small text; scaled
+      // down a touch, with the thumb along with it.
+      style={{ transform: [{ scale: 0.9 }], marginVertical: -2, marginRight: -2 }}
       {...webOnly}
     />
   );

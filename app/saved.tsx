@@ -3,6 +3,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { QuestionCard } from '@/components/QuestionCard';
@@ -25,7 +26,7 @@ export default function Saved() {
     .filter((q): q is NonNullable<typeof q> => Boolean(q));
 
   return (
-    <Screen title="Saved" compactTitle onBack={() => router.back()}>
+    <Screen title="Saved" compactTitle onBack={() => goBack()}>
       <View style={styles.top}>
         <SegmentedControl
           segments={[

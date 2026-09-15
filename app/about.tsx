@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { BrandMark } from '@/components/BrandMark';
@@ -13,7 +14,7 @@ const VERSION = '0.1.0';
 export default function About() {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <Screen title="About" compactTitle onBack={() => router.back()}>
+    <Screen title="About" compactTitle onBack={() => goBack()}>
       <View style={styles.hero}>
         <BrandMark size={56} />
         <Text style={styles.name}>CourtSide</Text>

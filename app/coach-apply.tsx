@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Button, Chip, Field, Screen } from '@/components/ui';
@@ -79,7 +80,7 @@ export default function CoachApply() {
 
   if (submitted || existing) {
     return (
-      <Screen title="Application" compactTitle onBack={() => router.back()}>
+      <Screen title="Application" compactTitle onBack={() => goBack()}>
         <View style={styles.done}>
           <View style={styles.doneIcon}>
             <Ionicons name="checkmark" size={34} color={colors.brandInk} />
@@ -117,7 +118,7 @@ export default function CoachApply() {
       title="Apply to be a coach"
       subtitle="Verified coaches keep 80% of what they earn"
       compactTitle
-      onBack={() => router.back()}
+      onBack={() => goBack()}
     >
       <View style={styles.intro}>
         <Ionicons name="shield-checkmark" size={20} color={colors.brand} />

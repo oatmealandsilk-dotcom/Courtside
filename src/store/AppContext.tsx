@@ -13,6 +13,7 @@ import { randomUUID } from 'expo-crypto';
 
 import { fetchBootstrap, fetchCommunityThreads, signIn as apiSignIn, type Bootstrap } from '@/data/api';
 import { auth as remoteAuth, fetchRemote, isLocalMedia, remote, uploadMedia, emptyProfile } from '@/data/remote';
+import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { markMessagesOpened } from '@/features/messaging/readReceipts';
 import { readReceiptPreference, saveReceiptPreference } from '@/features/messaging/preferences';
@@ -62,6 +63,7 @@ interface NewStoryInput {
 
 interface NewPostInput {
   kind: PostKind;
+  orientation?: 'portrait' | 'landscape';
   body: string;
   tags: string[];
   match?: MatchResult;
@@ -192,6 +194,8 @@ interface AppState extends Bootstrap {
   followingIds: ID[];
   /** True once the signed-in account's data has come down from Supabase. */
   remoteLoaded: boolean;
+  /** Logins remembered on this device, newest first. */
+  savedAccounts: SavedAccount[];
   /** Every follow the app knows about, for followers and following lists. */
   followEdges: { followerId: ID; followingId: ID }[];
   /** People whose posts you have muted — still followed, just quiet. */
@@ -206,6 +210,8 @@ interface AppState extends Bootstrap {
   /** Whether the app may ask the device where you are, and the city it found. */
   locationEnabled: boolean;
   detectedLocation: string | null;
+  /** The actual fix, for the map; the city name above is for text. */
+  detectedCoords: { lat: number; lng: number } | null;
 }
 
 interface AppActions {
@@ -237,6 +243,9 @@ interface AppActions {
   changePassword: (password: string) => Promise<void>;
   changeEmail: (email: string) => Promise<void>;
   signOutEverywhere: () => Promise<void>;
+  /** Signs in as an account remembered on this device, without a password. */
+  switchAccount: (id: ID) => Promise<void>;
+  forgetSavedAccount: (id: ID) => Promise<void>;
   linkGoogle: () => Promise<void>;
   deleteAccount: () => Promise<void>;
   /** Everything of yours, as one object, for "download your data". */
@@ -249,7 +258,10 @@ interface AppActions {
   addPost: (input: NewPostInput) => ID;
   /** Puts one of your posts away, or brings it back. */
   toggleArchivePost: (postId: ID) => void;
+  deletePost: (postId: ID) => void;
   addComment: (postId: ID, body: string) => void;
+  toggleLikeStory: (storyId: ID) => void;
+  addStoryComment: (storyId: ID, body: string) => void;
 
   /* Stories */
   addStory: (input: NewStoryInput) => ID;
@@ -352,6 +364,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     followingIds: [],
     followEdges: [],
     remoteLoaded: false,
+    savedAccounts: [],
     mutedIds: [],
     blockedIds: [],
     alertIds: [],
@@ -359,6 +372,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     defaultPaymentId: readDefaultPayment(),
     locationEnabled: readFlag('courtside-location'),
     detectedLocation: null,
+    detectedCoords: null,
   });
 
   useEffect(() => {
@@ -434,6 +448,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // stand in for it so the screens have someone to show.
         if (!remoteUsers.has(me)) {
           const handle = (email ?? 'player').split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '') || 'player';
+          // And create the real row, so what you do next actually saves.
+          remote.ensureProfile(me, handle, handle);
           users = [{
             id: me, handle, name: handle, bio: '', location: '', joinedAt: new Date().toISOString(), avatarSeed: me,
             isCoach: false, followers: 0, following: 0, profile: emptyProfile, achievementIds: [],
@@ -452,11 +468,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
           remoteLoaded: true,
           saved: { ...prev.saved, postIds: data.savedPostIds },
           currentUserId: me,
-          onboardingComplete: (self?.profile.goals.length ?? 0) > 0,
+          // Finished the quiz on any device, or (older accounts) set a goal in it.
+          onboardingComplete: prev.onboardingComplete || !!self?.profile.onboardedAt || (self?.profile.goals.length ?? 0) > 0,
           authResolved: true,
           error: null,
         };
       });
+      // Now the profile is known, the saved login gets its name and picture.
+      const who = data.users.find((u) => u.id === me);
+      if (who) rememberAccount({ id: me, handle: who.handle, name: who.name, avatarUrl: who.avatarUrl }).then((savedAccounts) => setState((prev) => ({ ...prev, savedAccounts })));
     } catch (err) {
       // The account is signed in even if its data did not come down — usually
       // a token that expired while the tab slept and had not refreshed yet.
@@ -479,11 +499,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     supabase.auth.getSession().then(({ data }) => {
       if (cancelled) return;
-      if (data.session) loadRemote(data.session.user.id, data.session.user.email);
-      else setState((prev) => ({ ...prev, authResolved: true }));
+      if (data.session) {
+        // Known to be signed in: let the app open now and merge the feed in
+        // when it lands, instead of holding the splash for the whole fetch.
+        const me = data.session.user.id;
+        setState((prev) => ({ ...prev, currentUserId: prev.currentUserId ?? me, authResolved: true }));
+        loadRemote(me, data.session.user.email);
+      } else setState((prev) => ({ ...prev, authResolved: true }));
     }).catch(() => setState((prev) => ({ ...prev, authResolved: true })));
+    listSavedAccounts().then((savedAccounts) => { if (!cancelled) setState((prev) => ({ ...prev, savedAccounts })); });
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
+      // Every fresh session (and every rotated token) is kept, so this login
+      // can be picked again later without a password.
+      if (session?.refresh_token) {
+        rememberAccount({ id: session.user.id, email: session.user.email ?? undefined, refreshToken: session.refresh_token })
+          .then((savedAccounts) => { if (!cancelled) setState((prev) => ({ ...prev, savedAccounts })); });
+      }
       if (event === 'SIGNED_IN' && session) loadRemote(session.user.id, session.user.email);
       // A refreshed token after a failed first load: try again with the new one.
       if (event === 'TOKEN_REFRESHED' && session && !stateRef.current.remoteLoaded) loadRemote(session.user.id, session.user.email);
@@ -527,7 +559,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...prev,
       currentUserId: user.id,
       // The demo account arrives with a filled-in profile; treat that as onboarded.
-      onboardingComplete: user.profile.goals.length > 0,
+      onboardingComplete: !!user.profile.onboardedAt || user.profile.goals.length > 0,
       error: null,
     }));
   }, [loadRemote]);
@@ -553,8 +585,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const changeEmail = useCallback((email: string) => remoteAuth.updateEmail(email), []);
   const linkGoogle = useCallback(() => remoteAuth.linkGoogle(), []);
   const signOutEverywhere = useCallback(async () => {
+    const me = stateRef.current.currentUserId;
     if (isSupabaseConfigured) await remoteAuth.signOutEverywhere();
-    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false }));
+    // Everywhere includes this device: the remembered login is gone too.
+    const savedAccounts = me ? await forgetAccount(me) : stateRef.current.savedAccounts;
+    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, savedAccounts }));
+  }, []);
+
+  const switchAccount = useCallback(async (id: ID) => {
+    const saved = stateRef.current.savedAccounts.find((a) => a.id === id);
+    if (!saved) throw new Error('That account is not saved on this device.');
+    let session;
+    try {
+      session = await remoteAuth.resumeAccount(saved.refreshToken);
+    } catch (err) {
+      const savedAccounts = await forgetAccount(id);
+      setState((prev) => ({ ...prev, savedAccounts }));
+      throw err;
+    }
+    setState((prev) => ({ ...prev, currentUserId: session.user.id, remoteLoaded: false, onboardingComplete: false, error: null }));
+    await loadRemote(session.user.id, session.user.email);
+  }, [loadRemote]);
+
+  const forgetSavedAccount = useCallback(async (id: ID) => {
+    const savedAccounts = await forgetAccount(id);
+    setState((prev) => ({ ...prev, savedAccounts }));
   }, []);
   const deleteAccount = useCallback(async () => {
     if (isSupabaseConfigured) await remoteAuth.deleteAccount();
@@ -595,7 +650,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const completeOnboarding = useCallback(
-    (profile: PlayerProfile) => {
+    (input: PlayerProfile) => {
+      // Stamped and saved with the account, so no device asks again.
+      const profile: PlayerProfile = { ...input, onboardedAt: input.onboardedAt ?? new Date().toISOString() };
       patchCurrentUser((u) => ({ ...u, profile }));
       setState((prev) => ({ ...prev, onboardingComplete: true }));
       const me = stateRef.current.currentUserId;
@@ -705,6 +762,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [requireUser],
   );
 
+  /** Gone for good: the post, its comments, likes and saves. Only the author can. */
+  const deletePost = useCallback((postId: ID) => {
+    const me = requireUser();
+    const post = stateRef.current.posts.find((p) => p.id === postId);
+    if (!post || post.authorId !== me) return;
+    haptics.commit();
+    if (live(me, postId)) remote.deletePost(postId);
+    setState((prev) => ({
+      ...prev,
+      posts: prev.posts.filter((p) => p.id !== postId),
+      comments: prev.comments.filter((c) => c.postId !== postId),
+      saved: { ...prev.saved, postIds: prev.saved.postIds.filter((id) => id !== postId) },
+    }));
+  }, [requireUser]);
+
   const toggleArchivePost = useCallback((postId: ID) => {
     const me = requireUser();
     haptics.commit();
@@ -729,6 +801,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createdAt,
         expiresAt: new Date(Date.now() + 24 * 3_600_000).toISOString(),
         viewedBy: [],
+        likedBy: [],
+        commentIds: [],
         ...input,
       };
       setState((prev) => celebratePosted({ ...prev, stories: [story, ...prev.stories] }, {
@@ -775,6 +849,54 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return { ...prev, stories: prev.stories.map((s) => (s.id === storyId ? { ...s, viewedBy: [...s.viewedBy, me] } : s)) };
     });
   }, []);
+
+  const toggleLikeStory = useCallback(
+    (storyId: ID) => {
+      const me = requireUser();
+      if (live(me, storyId)) {
+        const story = stateRef.current.stories.find((st) => st.id === storyId);
+        if (story) remote.setStoryLike(storyId, me, !story.likedBy.includes(me));
+      }
+      setState((prev) => {
+        const story = prev.stories.find((st) => st.id === storyId);
+        const liking = !!story && !story.likedBy.includes(me);
+        liking ? haptics.reward() : haptics.untap();
+        const next: AppState = {
+          ...prev,
+          stories: prev.stories.map((st) =>
+            st.id === storyId
+              ? { ...st, likedBy: st.likedBy.includes(me) ? st.likedBy.filter((id) => id !== me) : [...st.likedBy, me] }
+              : st,
+          ),
+        };
+        return liking && story && story.authorId !== me
+          ? withNotification(next, { userId: story.authorId, actorId: me, kind: 'like', targetId: story.id, targetKind: 'hit', preview: story.caption ? snippet(story.caption) : 'your hit' })
+          : next;
+      });
+    },
+    [requireUser],
+  );
+
+  const addStoryComment = useCallback(
+    (storyId: ID, body: string) => {
+      const me = requireUser();
+      const comment: Comment = { id: nextId('c'), postId: storyId, authorId: me, body, createdAt: new Date().toISOString(), likedBy: [] };
+      haptics.commit();
+      if (live(me, storyId)) remote.insertStoryComment(comment);
+      setState((prev) => {
+        const story = prev.stories.find((st) => st.id === storyId);
+        const next: AppState = {
+          ...prev,
+          comments: [...prev.comments, comment],
+          stories: prev.stories.map((st) => (st.id === storyId ? { ...st, commentIds: [...st.commentIds, comment.id] } : st)),
+        };
+        return story && story.authorId !== me
+          ? withNotification(next, { userId: story.authorId, actorId: me, kind: 'comment', targetId: story.id, targetKind: 'hit', preview: snippet(body) })
+          : next;
+      });
+    },
+    [requireUser],
+  );
 
   const addComment = useCallback(
     (postId: ID, body: string) => {
@@ -1374,13 +1496,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
     if (!enabled) {
       remember(false);
-      setState((prev) => ({ ...prev, locationEnabled: false, detectedLocation: null }));
+      setState((prev) => ({ ...prev, locationEnabled: false, detectedLocation: null, detectedCoords: null }));
       return null;
     }
     const result = await getPosition();
     if (!result.ok) {
       remember(false);
-      setState((prev) => ({ ...prev, locationEnabled: false, detectedLocation: null }));
+      setState((prev) => ({ ...prev, locationEnabled: false, detectedLocation: null, detectedCoords: null }));
       return result.reason === 'denied'
         ? 'Location was blocked. Allow it for this site in your browser or phone settings, then try again.'
         : result.reason === 'unavailable'
@@ -1390,7 +1512,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const place = nearestPlace(result.lat, result.lng);
     haptics.tap();
     remember(true);
-    setState((prev) => ({ ...prev, locationEnabled: true, detectedLocation: place.name }));
+    setState((prev) => ({ ...prev, locationEnabled: true, detectedLocation: place.name, detectedCoords: { lat: result.lat, lng: result.lng } }));
     return null;
   }, []);
 
@@ -1400,7 +1522,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     getPosition().then((result) => {
       if (result.ok) {
         const place = nearestPlace(result.lat, result.lng);
-        setState((prev) => ({ ...prev, detectedLocation: place.name }));
+        setState((prev) => ({ ...prev, detectedLocation: place.name, detectedCoords: { lat: result.lat, lng: result.lng } }));
       }
     });
   }, [state.locationEnabled, state.detectedLocation]);
@@ -1563,6 +1685,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       changePassword,
       changeEmail,
       signOutEverywhere,
+      switchAccount,
+      forgetSavedAccount,
       linkGoogle,
       deleteAccount,
       exportData,
@@ -1572,10 +1696,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleLike,
       addPost,
       toggleArchivePost,
+      deletePost,
       addStory,
       toggleArchiveStory,
       markStoryViewed,
       addComment,
+      toggleLikeStory,
+      addStoryComment,
       addQuestion,
       voteQuestion,
       addAnswer,
@@ -1619,6 +1746,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       changePassword,
       changeEmail,
       signOutEverywhere,
+      switchAccount,
+      forgetSavedAccount,
       linkGoogle,
       deleteAccount,
       exportData,
@@ -1628,10 +1757,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleLike,
       addPost,
       toggleArchivePost,
+      deletePost,
       addStory,
       toggleArchiveStory,
       markStoryViewed,
       addComment,
+      toggleLikeStory,
+      addStoryComment,
       addQuestion,
       voteQuestion,
       addAnswer,

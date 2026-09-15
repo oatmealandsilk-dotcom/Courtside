@@ -8,8 +8,8 @@ import { ClipVideo } from './ClipVideo';
  * A clip in the feed on a phone: plays itself when it is the page on screen,
  * one tap pauses, two likes, and a small pill toggles the sound.
  */
-export function ClipPlayback({ uri, poster, active, preload = false, onDoubleTap }: {
-  uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void;
+export function ClipPlayback({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover' }: {
+  uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void; fit?: 'cover' | 'contain';
 }) {
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(true);
@@ -37,7 +37,7 @@ export function ClipPlayback({ uri, poster, active, preload = false, onDoubleTap
   if (!active && !preload) return <View style={StyleSheet.absoluteFill} />;
   return (
     <View style={StyleSheet.absoluteFill}>
-      <ClipVideo uri={uri} poster={poster} active={active} muted={muted} paused={paused} />
+      <ClipVideo uri={uri} poster={poster} active={active} muted={muted} paused={paused} fit={fit} />
       <Pressable accessibilityRole="button" accessibilityLabel={paused ? 'Play clip' : 'Pause clip'} onPress={tap} style={StyleSheet.absoluteFill}>
         {paused ? (
           <View style={styles.centre}>
@@ -47,7 +47,6 @@ export function ClipPlayback({ uri, poster, active, preload = false, onDoubleTap
       </Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel={muted ? 'Unmute clip' : 'Mute clip'} onPress={() => setMuted((v) => !v)} style={styles.sound}>
         <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={16} color="white" />
-        <Text style={styles.soundText}>{muted ? 'Sound off' : 'Sound on'}</Text>
       </Pressable>
     </View>
   );
@@ -56,6 +55,6 @@ export function ClipPlayback({ uri, poster, active, preload = false, onDoubleTap
 const styles = StyleSheet.create({
   centre: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   playBadge: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#0008', alignItems: 'center', justifyContent: 'center', paddingLeft: 4 },
-  sound: { position: 'absolute', top: 70, right: 18, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#0008' },
-  soundText: { color: 'white', fontSize: 12, fontWeight: '600' },
+  // Instagram's: a small, quiet disc in the corner, not a button that shouts.
+  sound: { position: 'absolute', right: 12, bottom: 12, width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
 });

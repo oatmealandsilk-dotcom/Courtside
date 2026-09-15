@@ -1,0 +1,32 @@
+{
+  "cli": { "version": ">= 16.0.0", "appVersionSource": "remote" },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": { "simulator": false }
+    },
+    "preview": {
+      "distribution": "internal"
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://cgitvbnvchmofqkhtlml.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_KEY": "__SET_IN_EAS_SECRETS__"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "__YOUR_APPLE_ID_EMAIL__",
+        "ascAppId": "__FROM_APP_STORE_CONNECT__"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./google-play-service-account.json",
+        "track": "internal"
+      }
+    }
+  }
+}

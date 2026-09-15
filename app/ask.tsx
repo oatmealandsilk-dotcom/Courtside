@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 
 import { Button, Chip, Field, Screen } from '@/components/ui';
 import { TOPIC_META } from '@/components/QuestionCard';
@@ -36,7 +37,7 @@ export default function Ask() {
   };
 
   return (
-    <Screen title="Ask the room" compactTitle onBack={() => router.back()}>
+    <Screen title="Ask the room" compactTitle onBack={() => goBack()}>
       <View style={styles.form}>
         <View style={styles.group}>
           <Text style={styles.label}>Topic</Text>

@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Screen, Toggle } from '@/components/ui';
@@ -14,7 +15,7 @@ export default function PrivacyCentre() {
   const receipts = currentUser?.readReceiptsEnabled !== false;
 
   return (
-    <Screen title="Privacy centre" compactTitle onBack={() => router.back()}>
+    <Screen title="Privacy centre" compactTitle onBack={() => goBack()}>
       <Text style={styles.lead}>
         What CourtSide keeps, who can see it, and the switches that change that.
       </Text>

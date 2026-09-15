@@ -39,7 +39,9 @@ import type {
   User,
 } from './types';
 
-const LATENCY_MS = 320;
+// The stand-in delay that makes loading states real in the demo. With a real
+// backend there is real latency already, so it drops to nothing.
+const LATENCY_MS = supabase ? 0 : 320;
 
 function delay<T>(value: T, ms = LATENCY_MS): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), ms));

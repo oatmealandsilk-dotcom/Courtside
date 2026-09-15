@@ -14,6 +14,8 @@ interface Props<T extends string> {
   value: T;
   onChange: (next: T) => void;
   scrollable?: boolean;
+  /** Two pills per row, for four longer labels that would otherwise be cut short. */
+  wrap?: boolean;
 }
 
 export function SegmentedControl<T extends string>({
@@ -21,6 +23,7 @@ export function SegmentedControl<T extends string>({
   value,
   onChange,
   scrollable = false,
+  wrap = false,
 }: Props<T>) {
   const styles = useThemedStyles(styleDefinitions);
   const items = segments.map((segment) => {
@@ -31,7 +34,7 @@ export function SegmentedControl<T extends string>({
         onPress={() => onChange(segment.value)}
         accessibilityRole="tab"
         accessibilityState={{ selected: active }}
-        style={[styles.segment, active && styles.segmentActive]}
+        style={[styles.segment, wrap && styles.segmentWrapped, active && styles.segmentActive]}
       >
         <Text style={[styles.label, active && styles.labelActive]} numberOfLines={1}>
           {segment.label}
@@ -52,7 +55,7 @@ export function SegmentedControl<T extends string>({
     );
   }
 
-  return <View style={styles.track}>{items}</View>;
+  return <View style={[styles.track, wrap && styles.trackWrapped]}>{items}</View>;
 }
 
 const styleDefinitions = StyleSheet.create({
@@ -66,13 +69,16 @@ const styleDefinitions = StyleSheet.create({
     gap: 4,
   },
   scrollTrack: { flexDirection: 'row', gap: spacing.sm, paddingRight: spacing.lg },
+  trackWrapped: { flexWrap: 'wrap', borderRadius: radius.lg },
   segment: {
     flex: 1,
     paddingVertical: 9,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     borderRadius: radius.pill,
     alignItems: 'center',
   },
+  // Half the row each, so two fit per line and none of the words get clipped.
+  segmentWrapped: { flexBasis: '48%', flexGrow: 1 },
   segmentActive: { backgroundColor: colors.brand },
   label: { ...typography.smallStrong, color: colors.textMuted },
   labelActive: { color: colors.brandInk },

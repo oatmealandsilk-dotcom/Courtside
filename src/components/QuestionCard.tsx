@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { VoteControls } from './VoteControls';
+import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
 import { LevelPill } from '@/components/LevelPill';
 import { Avatar, Card, Chip } from '@/components/ui';
@@ -62,7 +63,7 @@ export function QuestionCard({
         <Text style={[styles.footerText, { marginLeft: 'auto' }]}>{relativeTime(question.createdAt)}</Text>
       </View>
       <Text style={styles.title}>{question.title}</Text>
-      {showBody && !!question.body && <Text style={styles.preview}>{question.body}</Text>}
+      {showBody && !!question.body && <RichText style={styles.preview}>{question.body}</RichText>}
       <View style={styles.metaRow}>
         <Chip label={meta.label} small />
         {answered ? (
@@ -87,7 +88,7 @@ export function QuestionCard({
 
         {onShare ? (
           <Tappable accessibilityLabel="Share this discussion" onPress={onShare} style={styles.action}>
-            <Ionicons name="paper-plane-outline" size={20} color={colors.text} />
+            <Ionicons name="arrow-redo-outline" size={20} color={colors.text} />
             <Text style={styles.actionLabel}>{question.shares ?? 0}</Text>
           </Tappable>
         ) : null}

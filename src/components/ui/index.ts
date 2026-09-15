@@ -10,3 +10,4 @@ export { Screen } from './Screen';
 export { SegmentedControl, type Segment } from './SegmentedControl';
 export { StatTile } from './StatTile';
 export { Toggle } from './Toggle';
+export { Collapse } from './Collapse';

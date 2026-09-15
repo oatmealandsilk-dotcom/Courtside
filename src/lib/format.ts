@@ -8,8 +8,10 @@ export function relativeTime(iso: string, now: Date = new Date()): string {
   if (diff < minute) return 'just now';
   if (diff < hour) return `${Math.floor(diff / minute)}m`;
   if (diff < day) return `${Math.floor(diff / hour)}h`;
-  if (diff < 7 * day) return `${Math.floor(diff / day)}d`;
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  // Past a day, the date says more than "3d" does; the year only when it differs.
+  const when = new Date(iso);
+  const sameYear = when.getFullYear() === now.getFullYear();
+  return when.toLocaleDateString(undefined, sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export function compactNumber(value: number): string {
@@ -57,4 +59,12 @@ export function formatDate(iso: string): string {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+/** How long a hit has left on the rail: "23h left", "40m left", or "ending" in its last minute. */
+export function timeLeft(expiresIso: string, now: Date = new Date()): string {
+  const diff = new Date(expiresIso).getTime() - now.getTime();
+  if (diff <= 60_000) return 'ending';
+  if (diff < 3_600_000) return `${Math.ceil(diff / 60_000)}m left`;
+  return `${Math.ceil(diff / 3_600_000)}h left`;
 }

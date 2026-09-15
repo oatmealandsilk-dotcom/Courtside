@@ -4,7 +4,8 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 
-import { MediaPicker, type PickedMedia } from '@/components/MediaPicker';
+import { MediaPicker, pickFromDevice, type PickedMedia } from '@/components/MediaPicker';
+import { PermissionBanner } from '@/components/PermissionRows';
 import { SheetBackdrop } from '@/components/SheetBackdrop';
 import { TOPIC_META } from '@/components/QuestionCard';
 import { Button, Chip, Field, Screen } from '@/components/ui';
@@ -13,7 +14,7 @@ import { useApp } from '@/store/AppContext';
 import type { QuestionTopic } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
 
-type Mode = 'clip' | 'post' | 'story' | 'question';
+type Mode = 'clip' | 'post' | 'story' | 'hit' | 'question';
 /** choose → library → form, with back always stepping one page left. */
 type Stage = 'choose' | 'library' | 'form';
 
@@ -27,18 +28,21 @@ export default function Compose() {
   const { actions, posts, currentUserId } = useApp();
 
   // The story rail opens this straight at the library with ?mode=story.
-  const params = useLocalSearchParams<{ mode?: string }>();
+  const params = useLocalSearchParams<{ mode?: string; shot?: string }>();
   useEffect(() => { if (params.mode === 'story') router.replace('/hit'); }, [params.mode]);
-  const [stage, setStage] = useState<Stage>('choose');
-  const [mode, setMode] = useState<Mode>(params.mode === 'story' ? 'story' : 'post');
-  const [media, setMedia] = useState<PickedMedia | null>(null);
+  // A hit arrives here with its photo already taken: straight to the form.
+  const isHit = params.mode === 'hit' && !!params.shot;
+  const [stage, setStage] = useState<Stage>(isHit ? 'form' : 'choose');
+  const [mode, setMode] = useState<Mode>(isHit ? 'hit' : params.mode === 'story' ? 'story' : 'post');
+  const [media, setMedia] = useState<PickedMedia | null>(isHit ? { uri: params.shot as string, label: 'Hit', kind: 'photo', thumbnailUrl: params.shot as string, orientation: 'portrait' } : null);
+  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
   const [body, setBody] = useState('');
   const [minutes, setMinutes] = useState('');
   const [questionTitle, setQuestionTitle] = useState('');
   const [topic, setTopic] = useState<QuestionTopic>('gear');
 
   const canPost = !!media?.uri && (mode !== 'clip' || media.kind === 'video');
-  const canAsk = questionTitle.trim().length > 8 && body.trim().length > 20;
+  const canAsk = questionTitle.trim().length >= 3;
   const canSubmit = mode === 'question' ? canAsk : canPost;
 
   const submit = () => {
@@ -55,21 +59,23 @@ export default function Compose() {
       return;
     }
 
-    if (mode === 'story') {
+    if (mode === 'story' || mode === 'hit') {
       actions.addStory({
         caption: body.trim() || undefined,
         imageUrl: media?.kind === 'photo' ? media.uri : undefined,
         videoUrl: media?.kind === 'video' ? media.uri : undefined,
-        mediaLabel: media?.label,
+        mediaLabel: mode === 'hit' ? 'Hit' : media?.label,
         thumbnailUrl: media?.thumbnailUrl ?? (media?.kind === 'photo' ? media.uri : undefined),
       });
-      router.back();
+      // A hit came in over the camera page, which has already gone; land on the feed.
+      if (mode === 'hit') router.replace('/'); else router.back();
       return;
     }
 
     const onCourt = Number(minutes);
     actions.addPost({
       kind: mode === 'clip' ? 'clip' : 'note',
+      orientation,
       body: body.trim(),
       tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
       imageUrl: media?.kind === 'photo' ? media.uri : undefined,
@@ -88,7 +94,20 @@ export default function Compose() {
     if (!next) return;
     addToBank(next);
     setMedia(next);
+    setOrientation(next.orientation ?? 'portrait');
     setStage('form');
+  };
+
+  // Straight to the phone's library from the + menu; a cancel leaves the menu up.
+  const [pickError, setPickError] = useState('');
+  const openDevice = async (selection: 'video' | 'all') => {
+    setPickError('');
+    try {
+      const next = await pickFromDevice(selection);
+      if (next) pick(next);
+    } catch (err) {
+      setPickError(err instanceof Error ? err.message : String(err));
+    }
   };
 
   if (stage === 'choose') return <View style={styles.choiceBackdrop}>
@@ -96,12 +115,13 @@ export default function Compose() {
     <Pressable accessibilityRole="button" accessibilityLabel="Close create menu" onPress={() => router.back()} style={StyleSheet.absoluteFill}/>
     <View style={styles.choiceSheet}>
       <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>Create</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => router.back()}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
-      <Pressable accessibilityRole="button" accessibilityLabel="Create a clip" onPress={() => { setMode('clip'); setStage('library'); }} style={styles.choiceOption}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Create a clip" onPress={() => { setMode('clip'); void openDevice('video'); }} style={styles.choiceOption}>
         <Ionicons name="videocam-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Clip</Text><Text style={styles.note}>Share a video from your device.</Text>
       </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => { setMode('post'); setStage('library'); }} style={styles.choiceOption}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => { setMode('post'); void openDevice('all'); }} style={styles.choiceOption}>
         <Ionicons name="images-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Post</Text><Text style={styles.note}>Choose from your photos and videos.</Text>
       </Pressable>
+      {pickError ? <Text style={styles.pickError}>{pickError}</Text> : null}
       <Pressable accessibilityRole="button" accessibilityLabel="Take a hit" onPress={() => router.replace('/hit')} style={styles.choiceOption}>
         <Ionicons name="camera-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Hit</Text><Text style={styles.note}>One photo after a session. Five-second count, no retakes. Up for 24 hours.</Text>
       </Pressable>
@@ -139,6 +159,7 @@ export default function Compose() {
             compactTitle
             onBack={() => (params.mode === 'story' ? router.back() : setStage('choose'))}
           >
+            <PermissionBanner needs={['photos']} />
             <MediaPicker compact selection={mode === 'clip' ? 'video' : 'all'} label={mode === 'clip' ? 'New video from your device' : 'New from your device'} value={null} onChange={pick} />
             <Text style={styles.libraryTitle}>{bank.length ? 'Recent' : 'Nothing here yet'}</Text>
             {bank.length ? (
@@ -172,40 +193,61 @@ export default function Compose() {
   }
 
   return (
-    <View style={styles.backdrop}>
-      <SheetBackdrop />
+    <View style={[styles.backdrop, mode === 'hit' && { backgroundColor: colors.bg }]}>
+      {mode === 'hit' ? null : <SheetBackdrop />}
       <View style={styles.sheet}>
         <Screen
-          title={mode === 'clip' ? 'New clip' : mode === 'post' ? 'New post' : mode === 'story' ? 'New story' : 'Ask the room'}
+          title={mode === 'clip' ? 'New clip' : mode === 'post' ? 'New post' : mode === 'story' ? 'New story' : mode === 'hit' ? 'New hit' : 'Ask the room'}
           compactTitle
-          onBack={() => (mode === 'question' ? router.back() : setStage('library'))}
-          right={<Button label={mode === 'story' ? 'Add to story' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit} />}
+          onBack={() => (mode === 'question' ? router.back() : mode === 'hit' ? router.replace('/hit') : setStage('choose'))}
+          right={<Button label={mode === 'story' ? 'Add to story' : mode === 'hit' ? 'Post hit' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit} />}
         >
           <View style={styles.form}>
             {mode !== 'question' ? (
               <>
-                <MediaPicker bare selection={mode === 'clip' ? 'video' : 'all'} value={media} onChange={setMedia} />
+                <View style={styles.stage}>
+                  <MediaPicker bare orientation={orientation} selection={mode === 'clip' ? 'video' : 'all'} value={media} onChange={setMedia} />
+                  {mode === 'hit' ? (
+                    <View pointerEvents="none" style={styles.hitBadge}>
+                      <Ionicons name="time-outline" size={13} color="white" />
+                      <Text style={styles.hitBadgeText}>HIT · 24h</Text>
+                    </View>
+                  ) : null}
+                </View>
+                {mode === 'hit' ? (
+                  <View style={styles.inlineRow}>
+                    <Ionicons name="tennisball-outline" size={18} color={colors.brand} />
+                    <Text style={styles.inlineLabel}>One take, on the feed for 24 hours, then kept in your archive.</Text>
+                  </View>
+                ) : null}
+                {mode !== 'story' && mode !== 'hit' ? (
+                  <View style={styles.orientRow}>
+                    {(['portrait', 'landscape'] as const).map((o) => (
+                      <Pressable key={o} accessibilityRole="button" accessibilityState={{ selected: orientation === o }} onPress={() => setOrientation(o)} style={[styles.orient, orientation === o && styles.orientOn]}>
+                        <Ionicons name={o === 'portrait' ? 'phone-portrait-outline' : 'phone-landscape-outline'} size={15} color={orientation === o ? colors.brandInk : colors.textMuted} />
+                        <Text style={[styles.orientText, orientation === o && { color: colors.brandInk }]}>{o === 'portrait' ? 'Portrait' : 'Landscape'}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
 
                 <Field
-                  label={mode === 'story' ? 'Caption (optional)' : 'Caption'}
                   value={body}
                   onChangeText={setBody}
-                  placeholder={mode === 'story' ? 'A line over the top, if you want one.' : 'Say what you worked on and what actually changed.'}
+                  placeholder={mode === 'story' ? 'Add a line (optional)' : mode === 'hit' ? 'How did it go? (optional)' : 'Write a caption…'}
                   multiline
+                  minHeight={64}
                 />
 
-                {mode !== 'story' ? (
-                  <Field
-                    label="Time on court (optional)"
-                    value={minutes}
-                    onChangeText={setMinutes}
-                    placeholder="90"
-                    keyboardType="number-pad"
-                    hint="Minutes. Shows on your post and counts toward your hours."
-                  />
-                ) : (
-                  <Text style={styles.note}>Your story stays up for 24 hours, then moves to your archive. You can archive it earlier from the viewer.</Text>
-                )}
+                {mode !== 'story' && mode !== 'hit' ? (
+                  <View style={styles.inlineRow}>
+                    <Ionicons name="time-outline" size={18} color={colors.textMuted} />
+                    <Text style={styles.inlineLabel}>Minutes on court</Text>
+                    <View style={{ width: 96 }}>
+                      <Field value={minutes} onChangeText={setMinutes} placeholder="optional" keyboardType="number-pad" />
+                    </View>
+                  </View>
+                ) : null}
               </>
             ) : (
               <>
@@ -234,11 +276,7 @@ export default function Compose() {
                   multiline
                   minHeight={140}
                 />
-                {!canAsk ? (
-                  <Text style={styles.note}>
-                    Add a question over 8 characters and details over 20.
-                  </Text>
-                ) : null}
+
               </>
             )}
           </View>
@@ -257,21 +295,30 @@ const styleDefinitions = StyleSheet.create({
   choiceLabel: { fontSize: 16, fontWeight: '600', color: colors.text },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' },
   sheet: {
-    height: '88%',
+    height: '100%',
     maxWidth: 700,
     width: '100%',
     alignSelf: 'center',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
     overflow: 'hidden',
     backgroundColor: colors.bg,
     borderWidth: 1,
     borderBottomWidth: 0,
     borderColor: colors.border,
   },
-  form: { gap: spacing.lg, paddingTop: spacing.sm },
+  form: { gap: spacing.md, paddingTop: 0 },
+  // Bleed past the screen's own padding so the media runs edge to edge.
+  stage: { marginHorizontal: -spacing.lg, marginTop: -spacing.sm, backgroundColor: '#000' },
+  orientRow: { flexDirection: 'row', gap: spacing.sm },
+  orient: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  orientOn: { backgroundColor: colors.brand, borderColor: colors.brand },
+  orientText: { ...typography.smallStrong, color: colors.textMuted },
+  inlineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  inlineLabel: { ...typography.small, color: colors.textMuted, flex: 1 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   note: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
+  pickError: { ...typography.small, color: colors.danger, lineHeight: 18 },
+  hitBadge: { position: 'absolute', top: 12, left: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.5)' },
+  hitBadgeText: { color: 'white', fontSize: 11, fontWeight: '700', letterSpacing: 0.6 },
   libraryTitle: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.1, paddingTop: spacing.xl, paddingBottom: spacing.sm },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 3 },
   tile: { width: '32.5%', aspectRatio: 9 / 12, borderRadius: radius.sm, overflow: 'hidden', backgroundColor: colors.surfaceAlt },

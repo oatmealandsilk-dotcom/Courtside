@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { LevelPill } from '@/components/LevelPill';
@@ -24,7 +25,7 @@ export default function UserProfile() {
 
   if (!user) {
     return (
-      <Screen title="Player" compactTitle onBack={() => router.back()}>
+      <Screen title="Player" compactTitle onBack={() => goBack()}>
         <EmptyState icon="person-outline" title="No such player" />
       </Screen>
     );
@@ -60,7 +61,7 @@ export default function UserProfile() {
     <Screen
       title={user.name}
       compactTitle
-      onBack={() => router.back()}
+      onBack={() => goBack()}
       right={
         isMe ? undefined : (
           <Tappable accessibilityLabel="More options" onPress={() => setMenuOpen(true)} hitSlop={10} style={styles.more}>

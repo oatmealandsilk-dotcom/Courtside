@@ -56,6 +56,8 @@ export interface TournamentEntry {
 }
 
 export interface PlayerProfile {
+  /** Set when the intro quiz was finished, so it is never asked twice — even with every optional step skipped. */
+  onboardedAt?: string;
   skillSystem: SkillSystem;
   /** NTRP 1.0–7.0, UTR 1–16, ITF 1–3. Stored as a number for sorting. */
   rating: number;
@@ -147,6 +149,8 @@ export interface Post {
   videoUrl?: string;
   /** Cover image shown before a clip plays and in every grid tile. */
   thumbnailUrl?: string;
+  /** How the clip was shot. Landscape plays letterboxed so nothing is cropped. */
+  orientation?: 'portrait' | 'landscape';
   taggedUserIds?: ID[];
   match?: MatchResult;
   session?: SessionDetail;
@@ -179,6 +183,9 @@ export interface Story {
   mediaLabel?: string;
   caption?: string;
   viewedBy: ID[];
+  likedBy: ID[];
+  /** Comments on a hit live in the same comment list as post comments, keyed by this id. */
+  commentIds: ID[];
   /** Taken down early by the author. Stays in their archive. */
   archived?: boolean;
 }
@@ -511,7 +518,7 @@ export type NotificationKind =
   /** Your own post, hit, or question went live. Actor is you. */
   | 'posted';
 
-export type NotificationTarget = 'post' | 'question' | 'coach-question' | 'coach-reply';
+export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply';
 
 export interface Notification {
   id: ID;
