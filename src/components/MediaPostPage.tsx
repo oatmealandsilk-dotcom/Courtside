@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ZoomableMedia, type HomeRect, type ZoomableMediaHandle } from '@/components/ZoomableMedia';
 import { router } from 'expo-router';
@@ -66,6 +66,9 @@ export function MediaPostPage({ post, author, liked, saved, active, preload = fa
   const frameRef = useRef<View>(null);
   const zoom = useRef<ZoomableMediaHandle>(null);
   const [home, setHome] = useState<HomeRect | undefined>(undefined);
+  const { width: winW, height: winH } = useWindowDimensions();
+  const sideways = winW > winH;
+  useEffect(() => { if (full && sideways) setHome(undefined); }, [full, sideways]);
   const openFull = () => {
     const node = frameRef.current;
     if (!node) { setFull(true); return; }

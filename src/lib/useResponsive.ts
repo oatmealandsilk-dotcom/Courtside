@@ -1,4 +1,4 @@
-import { useWindowDimensions } from 'react-native';
+import { Platform, useWindowDimensions } from 'react-native';
 
 /**
  * Breakpoints. `phone` is the touch layout (bottom tab bar, full-bleed cards);
@@ -34,7 +34,12 @@ export function useResponsive(): Responsive {
   const { width, height } = useWindowDimensions();
   // Medium-width browser panels should use the sidebar before they become
   // wider than their full height. Narrow portrait views retain bottom tabs.
-  const isLandscape = width >= BREAKPOINTS.landscape || width > height;
+  // On a phone or tablet the layout is decided by the device's short side, so
+  // turning it sideways (a full-screen video) never swaps the whole layout
+  // out from under the picture. Browser windows are judged as they are.
+  const isLandscape = Platform.OS === 'web'
+    ? width >= BREAKPOINTS.landscape || width > height
+    : Math.min(width, height) >= BREAKPOINTS.landscape;
   const isDesktop = isLandscape && width >= BREAKPOINTS.desktop;
   const isTablet = isLandscape && !isDesktop;
 

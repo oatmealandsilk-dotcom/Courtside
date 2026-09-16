@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Modal, PanResponder, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Modal, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -51,6 +51,11 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
   const rootRef = useRef<View>(null);
   const zoom = useRef<ZoomableMediaHandle>(null);
   const [home, setHome] = useState<HomeRect | undefined>(undefined);
+  // Turned sideways while full screen, the picture's spot on the page no longer
+  // applies: closing slides away instead of flying to where it was upright.
+  const { width: winW, height: winH } = useWindowDimensions();
+  const sideways = winW > winH;
+  useEffect(() => { if (full && sideways) setHome(undefined); }, [full, sideways]);
   const openFull = () => {
     const node = rootRef.current;
     if (!node) { setFull(true); return; }
