@@ -413,14 +413,22 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
 
   // The last page of the main feed: a small congratulations for getting
   // there this early, a way to post, and a way back to the top.
+  // Kept quiet on purpose: a dark page nobody is told about, found only by
+  // scrolling all the way down.
   const endPage = (
-    <View key="the-end" style={[styles.article, styles.endPage]}>
-      <BrandMark size={48} />
-      <Text style={styles.endTitle}>You made it to the end.</Text>
-      <Text style={styles.endBody}>Congrats — you are one of the very first people on CourtSide. Everything you just scrolled was real. Share a moment of your own, and come back tomorrow for more.</Text>
+    <View key="the-end" style={styles.endPage}>
+      <View style={styles.endCard}>
+        <Text style={styles.endEyebrow}>YOU FOUND IT</Text>
+        <BrandMark size={40} color="#F5D547" />
+        <Text style={styles.endTitle}>The bottom of CourtSide.</Text>
+        <Text style={styles.endBody}>Almost nobody scrolls this far. You are one of the first people ever on here, and everything above was real.</Text>
+        <View style={styles.endDivider} />
+        <Text style={styles.endSecret}>EARLY · №{String(feed.length).padStart(3, '0')}</Text>
+        <Text style={styles.endHint}>Remember this page. It will mean something later.</Text>
+      </View>
       <View style={styles.endActions}>
-        <Button label="Share a moment" onPress={() => router.push('/compose')} full />
-        <Button label="Back to the top" variant="secondary" onPress={() => pager.current?.scrollToTop()} full />
+        <Pressable accessibilityRole="button" onPress={() => router.push('/compose')} style={styles.endButton}><Text style={styles.endButtonText}>Leave something here</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => pager.current?.scrollToTop()} hitSlop={8}><Text style={styles.endBack}>↑ Back to the top</Text></Pressable>
       </View>
     </View>
   );
@@ -891,10 +899,18 @@ const styleDefinitions = StyleSheet.create({
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   threadMark: { marginRight: 6, marginTop: 6 },
   hint: { color: colors.textMuted, fontSize: 11, textAlign: 'center', paddingBottom: 10 },
-  endPage: { alignItems: 'center', justifyContent: 'center', gap: 14, paddingHorizontal: 32 },
-  endTitle: { color: colors.text, fontSize: 24, fontWeight: '800', letterSpacing: -0.3, textAlign: 'center', marginTop: 6 },
-  endBody: { color: colors.textMuted, fontSize: 15, lineHeight: 22, textAlign: 'center' },
-  endActions: { alignSelf: 'stretch', gap: 10, marginTop: 10 },
+  endPage: { flex: 1, backgroundColor: '#0B0F14', alignItems: 'center', justifyContent: 'center', gap: 22, padding: 28 },
+  endCard: { alignSelf: 'stretch', alignItems: 'center', gap: 12, padding: 26, borderRadius: 22, borderWidth: 1, borderColor: 'rgba(245,213,71,0.35)', backgroundColor: '#121820' },
+  endEyebrow: { color: '#F5D547', fontSize: 11, fontWeight: '800', letterSpacing: 3 },
+  endTitle: { color: '#F2F4F8', fontSize: 22, fontWeight: '800', letterSpacing: -0.3, textAlign: 'center' },
+  endBody: { color: '#A7B4C4', fontSize: 14, lineHeight: 21, textAlign: 'center' },
+  endDivider: { alignSelf: 'stretch', height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(245,213,71,0.35)', marginVertical: 4 },
+  endSecret: { color: '#F5D547', fontSize: 13, fontWeight: '700', letterSpacing: 2, fontVariant: ['tabular-nums'] },
+  endHint: { color: '#6F7D8E', fontSize: 12, fontStyle: 'italic', textAlign: 'center' },
+  endActions: { alignSelf: 'stretch', alignItems: 'center', gap: 16 },
+  endButton: { alignSelf: 'stretch', paddingVertical: 14, borderRadius: 999, backgroundColor: '#F5D547', alignItems: 'center' },
+  endButtonText: { color: '#1B1A0A', fontWeight: '800', fontSize: 15 },
+  endBack: { color: '#A7B4C4', fontSize: 13, fontWeight: '600' },
 });
 
 export default asTabRoute<{ previewSection?: string; scope?: FeedScope }>(Home);
