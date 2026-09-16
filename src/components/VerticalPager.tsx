@@ -35,7 +35,6 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   const count = children.length;
   const pageOf = useCallback((y: number) => Math.max(0, Math.min(count - 1, Math.round(y / Math.max(1, height)))), [count, height]);
   const changed = useCallback((index: number) => {
-    console.log('DEBUG-TEMP page', index, 'was', last.current);
     if (index !== last.current) { last.current = index; onIndex(index); }
   }, [onIndex]);
   const settled = useCallback((y: number) => {

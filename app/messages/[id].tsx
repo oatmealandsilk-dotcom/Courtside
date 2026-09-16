@@ -171,7 +171,7 @@ export default function Thread() {
           const inRun = runsOn(prev, message) && !stamp;
           const lastOfRun = !runsOn(message, next);
           // A new message rises out of the composer and settles with a small spring.
-          const arrive = settled.current ? FadeInUp.duration(260).springify().damping(16).stiffness(240) : undefined;
+          const arrive = settled.current ? FadeInUp.duration(220).springify().damping(24).stiffness(220) : undefined;
 
           if (message.kind !== 'text' && message.sharedId) {
             const shared =

@@ -143,6 +143,37 @@ export function MediaEditor({ media, onBack, onDone }: {
     },
     onPanResponderTerminate: () => { scrubbing.current = false; },
   });
+  // Dragging along the frames (the white line follows) skips to wherever the
+  // finger is, within the kept part; letting go plays on from there.
+  const stripRef = useRef<View>(null);
+  const stripLeft = useRef(0);
+  const headScrub = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: (e) => {
+      scrubbing.current = true;
+      player.current?.pause();
+      const pageX = e.nativeEvent.pageX;
+      const seekAt = (x: number) => {
+        const [a, b] = rangeRef.current;
+        const at = Math.max(a, Math.min(b, (x - stripLeft.current) * secondsPerPx));
+        head.value = at;
+        player.current?.seek(at);
+      };
+      stripRef.current?.measureInWindow((x) => { stripLeft.current = x; seekAt(pageX); });
+    },
+    onPanResponderMove: (e) => {
+      const [a, b] = rangeRef.current;
+      const at = Math.max(a, Math.min(b, (e.nativeEvent.pageX - stripLeft.current) * secondsPerPx));
+      head.value = at;
+      player.current?.seek(at);
+    },
+    onPanResponderRelease: () => {
+      player.current?.play();
+      setTimeout(() => { scrubbing.current = false; }, 250);
+    },
+    onPanResponderTerminate: () => { scrubbing.current = false; },
+  }), [duration, stripWidth]); // eslint-disable-line react-hooks/exhaustive-deps
   const startHandle = useMemo(() => makeHandle(0), [duration, stripWidth]); // eslint-disable-line react-hooks/exhaustive-deps
   const endHandle = useMemo(() => makeHandle(1), [duration, stripWidth]); // eslint-disable-line react-hooks/exhaustive-deps
   const px = (s: number) => (duration ? (s / duration) * stripWidth : 0);
@@ -392,8 +423,8 @@ export function MediaEditor({ media, onBack, onDone }: {
                 {crop.scale > 1.01 ? <Pressable accessibilityRole="button" accessibilityLabel="Reset crop" onPress={() => setCrop({ scale: 1, x: 0, y: 0 })} hitSlop={8}><Text style={styles.zoomText}>Reset</Text></Pressable> : null}
               </View>
             ) : tool === 'trim' ? (
-              <View style={[styles.strip, { marginHorizontal: HANDLE }]}>
-                <View style={styles.frames}>
+              <View ref={stripRef} style={[styles.strip, { marginHorizontal: HANDLE }]}>
+                <View style={styles.frames} {...(duration ? headScrub.panHandlers : {})}>
                   {frames.map((f) => <Image key={f.time} accessibilityIgnoresInvertColors source={{ uri: f.uri }} style={styles.frame} resizeMode="cover" />)}
                 </View>
                 {duration ? (

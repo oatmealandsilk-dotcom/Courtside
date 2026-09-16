@@ -23,10 +23,15 @@ export function TagPlayers({ tagged, onChange }: { tagged: string[]; onChange: (
   return (
     <View style={styles.tagBlock}>
       {/* One button: "Tag players" opens the search; the same button says Done while it is open. */}
-      <Pressable accessibilityRole="button" accessibilityLabel={open ? 'Done tagging' : 'Tag players'} onPress={() => { setOpen((o) => !o); setQuery(''); }} style={[styles.button, open && styles.buttonOpen]}>
-        <Ionicons name={open ? 'checkmark' : 'pricetag-outline'} size={18} color={colors.brand} />
-        <Text style={styles.buttonText}>{open ? 'Done' : 'Tag players'}</Text>
-        {!open && tagged.length ? <Text style={styles.count}>{tagged.length}</Text> : null}
+      {/* Open, it is a round check: tap it when the people are picked. */}
+      <Pressable accessibilityRole="button" accessibilityLabel={open ? 'Done tagging' : 'Tag players'} onPress={() => { setOpen((o) => !o); setQuery(''); }} style={open ? styles.check : styles.button}>
+        {open ? <Ionicons name="checkmark" size={20} color={colors.brandInk} /> : (
+          <>
+            <Ionicons name="pricetag-outline" size={18} color={colors.brand} />
+            <Text style={styles.buttonText}>Tag players</Text>
+            {tagged.length ? <Text style={styles.count}>{tagged.length}</Text> : null}
+          </>
+        )}
       </Pressable>
       {tagged.length ? (
         <View style={styles.row}>
@@ -65,7 +70,7 @@ export function TagPlayers({ tagged, onChange }: { tagged: string[]; onChange: (
 
 const styleDefinitions = StyleSheet.create({
   button: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: spacing.sm, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.brand, backgroundColor: colors.brandDim },
-  buttonOpen: { backgroundColor: colors.surface, borderColor: colors.border },
+  check: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brand },
   buttonText: { ...typography.smallStrong, color: colors.brand },
   count: { ...typography.smallStrong, color: colors.brandInk, backgroundColor: colors.brand, minWidth: 20, textAlign: 'center', borderRadius: 10, paddingHorizontal: 6, overflow: 'hidden' },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },

@@ -460,6 +460,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * edges between them come from Supabase once someone is signed in, and the
    * fixtures fill in everything that has no table yet.
    */
+  // Messages from other people arrive as they are sent; a chat that someone
+  // else just started is fetched whole the first time it is heard from.
+  const remoteLoaded = state.remoteLoaded;
+  const currentUserForLive = state.currentUserId;
+  useEffect(() => {
+    if (!isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive)) return;
+    const me = currentUserForLive;
+    let off: (() => void) | undefined;
+    try {
+      off = remote.onNewMessage((message) => {
+        if (stateRef.current.messages.some((m) => m.id === message.id)) return;
+        const known = stateRef.current.conversations.some((c) => c.id === message.conversationId);
+        if (known) {
+          setState((prev) => prev.messages.some((m) => m.id === message.id) ? prev : {
+            ...prev,
+            messages: [...prev.messages, message],
+            conversations: prev.conversations.map((c) => c.id === message.conversationId
+              ? { ...c, messageIds: [...c.messageIds, message.id], updatedAt: message.createdAt, unreadCount: message.senderId === me ? c.unreadCount : c.unreadCount + 1 }
+              : c),
+          });
+          return;
+        }
+        void remote.fetchConversation(me, message.conversationId).then((got) => {
+          if (!got) return;
+          setState((prev) => prev.conversations.some((c) => c.id === got.conversation.id) ? prev : {
+            ...prev,
+            conversations: [got.conversation, ...prev.conversations],
+            messages: [...prev.messages, ...got.messages.filter((m) => !prev.messages.some((p) => p.id === m.id))],
+          });
+        });
+      });
+    } catch { /* live updates are a nicety */ }
+    return () => { off?.(); };
+  }, [remoteLoaded, currentUserForLive]);
+
   const loadRemote = useCallback(async (me: ID, email?: string | null) => {
     try {
       const data = await fetchRemote(me);
@@ -491,6 +526,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           followingIds: data.followingIds,
           followEdges: data.followEdges,
           followRequests: data.followRequests,
+          // Your real conversations replace the demo ones once the messages tables exist.
+          conversations: data.conversations.length || data.messages.length ? data.conversations : prev.conversations.filter((c) => c.participantIds.includes(me)),
+          messages: data.conversations.length || data.messages.length ? data.messages : prev.messages,
           remoteLoaded: true,
           saved: { ...prev.saved, postIds: data.savedPostIds },
           currentUserId: me,
@@ -1331,6 +1369,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const reactions = { ...(m.reactions ?? {}) };
           if (reactions[me] === mark) delete reactions[me];
           else reactions[me] = mark;
+          if (live(me, messageId)) void remote.setMessageReactions(messageId, reactions);
           return { ...m, reactions };
         }),
       };
@@ -1462,29 +1501,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
         unreadCount: 0,
       };
       setState((prev) => ({ ...prev, conversations: [conversation, ...prev.conversations] }));
+      if (live(me, userId)) void remote.openConversation(userId, conversation.id).then((standing) => {
+        if (standing === conversation.id) return;
+        // The database already had one: fold this one into it.
+        setState((prev) => ({
+          ...prev,
+          conversations: prev.conversations.some((c) => c.id === standing)
+            ? prev.conversations.filter((c) => c.id !== conversation.id)
+            : prev.conversations.map((c) => (c.id === conversation.id ? { ...c, id: standing } : c)),
+          messages: prev.messages.map((m) => (m.conversationId === conversation.id ? { ...m, conversationId: standing } : m)),
+        }));
+      });
       return conversation.id;
     },
     [requireUser],
   );
 
+  const makeMessage = useCallback((conversationId: ID, senderId: ID, body: string, kind: Message['kind'] = 'text', sharedId?: ID): Message => ({
+    id: nextId('m'), conversationId, senderId, body, createdAt: new Date().toISOString(), kind, sharedId,
+  }), []);
   const appendMessage = useCallback(
-    (
-      prev: AppState,
-      conversationId: ID,
-      senderId: ID,
-      body: string,
-      kind: Message['kind'] = 'text',
-      sharedId?: ID,
-    ): AppState => {
-      const message: Message = {
-        id: nextId('m'),
-        conversationId,
-        senderId,
-        body,
-        createdAt: new Date().toISOString(),
-        kind,
-        sharedId,
-      };
+    (prev: AppState, message: Message): AppState => {
+      if (prev.messages.some((m) => m.id === message.id)) return prev;
+      const { conversationId, senderId } = message;
       return {
         ...prev,
         messages: [...prev.messages, message],
@@ -1505,34 +1544,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const me = requireUser();
       const trimmed = body.trim();
       if (!trimmed) return;
-      setState((prev) => appendMessage(prev, conversationId, me, trimmed));
+      const message = makeMessage(conversationId, me, trimmed);
+      setState((prev) => appendMessage(prev, message));
+      if (live(me, conversationId)) void remote.insertMessage(message);
     },
-    [requireUser, appendMessage],
+    [requireUser, appendMessage, makeMessage],
   );
 
   /** Share a clip or a thread into one or more DMs, Instagram style. */
   const shareToUsers = useCallback(
     (userIds: ID[], kind: 'post' | 'question' | 'profile', sharedId: ID, note?: string) => {
       const me = requireUser();
-      setState((prev) => {
-        let next = prev;
-        for (const userId of userIds) {
-          let conversation = next.conversations.find(
-            (c) => c.participantIds.length === 2 && c.participantIds.includes(userId) && c.participantIds.includes(me),
-          );
-          if (!conversation) {
-            conversation = {
-              id: nextId('cv'),
-              participantIds: [me, userId],
-              messageIds: [],
-              updatedAt: new Date().toISOString(),
-              unreadCount: 0,
-            };
-            next = { ...next, conversations: [conversation, ...next.conversations] };
-          }
-          next = appendMessage(next, conversation.id, me, '', kind, sharedId);
-          if (note?.trim()) next = appendMessage(next, conversation.id, me, note.trim());
+      const fresh: Conversation[] = [];
+      const outgoing: Message[] = [];
+      for (const userId of userIds) {
+        let conversation = [...fresh, ...stateRef.current.conversations].find(
+          (c) => c.participantIds.length === 2 && c.participantIds.includes(userId) && c.participantIds.includes(me),
+        );
+        if (!conversation) {
+          conversation = { id: nextId('cv'), participantIds: [me, userId], messageIds: [], updatedAt: new Date().toISOString(), unreadCount: 0 };
+          fresh.push(conversation);
         }
+        outgoing.push(makeMessage(conversation.id, me, '', kind, sharedId));
+        if (note?.trim()) outgoing.push(makeMessage(conversation.id, me, note.trim()));
+      }
+      setState((prev) => {
+        let next = fresh.length ? { ...prev, conversations: [...fresh, ...prev.conversations] } : prev;
+        for (const message of outgoing) next = appendMessage(next, message);
 
         // One share tally per send, however many people it went to.
         if (kind === 'post') {
@@ -1574,11 +1612,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         return next;
       });
+      // Saved after they show: a new chat is opened first, then its messages go up.
+      if (isSupabaseConfigured && UUID.test(me)) {
+        void (async () => {
+          for (const c of fresh) { const other = c.participantIds.find((p) => p !== me); if (other && UUID.test(other)) await remote.openConversation(other, c.id); }
+          for (const m of outgoing) if (UUID.test(m.conversationId)) await remote.insertMessage(m);
+        })();
+      }
     },
-    [requireUser, appendMessage],
+    [requireUser, appendMessage, makeMessage],
   );
 
   const markConversationRead = useCallback((conversationId: ID) => {
+    const before = stateRef.current.conversations.find((c) => c.id === conversationId);
+    const me = stateRef.current.currentUserId;
+    const hadUnread = !!before && before.unreadCount > 0 && !!me && before.participantIds.includes(me);
+    if (hadUnread && live(me, conversationId)) void remote.markConversationRead(conversationId, me as ID);
     setState(prev => {
       const conversation = prev.conversations.find(c => c.id === conversationId);
       const me = prev.currentUserId;

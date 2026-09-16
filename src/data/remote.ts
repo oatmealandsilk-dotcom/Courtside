@@ -12,7 +12,7 @@ import * as WebBrowser from 'expo-web-browser';
  */
 
 import { supabase } from '@/lib/supabase';
-import type { Comment, ID, PlayerProfile, PlayerStats, Post, Story, User } from './types';
+import type { Comment, Conversation, ID, Message, PlayerProfile, PlayerStats, Post, Story, User } from './types';
 
 const need = () => {
   if (!supabase) throw new Error('Supabase is not configured');
@@ -165,6 +165,42 @@ export interface RemoteData {
   savedPostIds: ID[];
   /** Pending asks to follow a private account, yours and the ones waiting on you. */
   followRequests: { fromId: ID; toId: ID; createdAt: string }[];
+  /** Your direct messages; empty until the messages tables exist. */
+  conversations: Conversation[];
+  messages: Message[];
+}
+
+interface ConversationRow { id: string; updated_at: string; conversation_members?: { user_id: string; last_read_at: string | null }[] }
+interface MessageRow { id: string; conversation_id: string; sender_id: string; body: string; kind: string; shared_id: string | null; reactions: Record<string, string> | null; created_at: string }
+
+/** Conversations and messages as the app holds them: who has read what comes from each member's last_read_at. */
+export function toConversations(me: ID, convRows: ConversationRow[], messageRows: MessageRow[]): { conversations: Conversation[]; messages: Message[] } {
+  const readAt = new Map<string, Map<string, string>>();
+  for (const c of convRows) readAt.set(c.id, new Map((c.conversation_members ?? []).filter((m) => m.last_read_at).map((m) => [m.user_id, m.last_read_at as string])));
+  const messages: Message[] = messageRows.map((row) => {
+    const readers = readAt.get(row.conversation_id);
+    const readAtBy: Record<string, string> = {};
+    if (readers) for (const [user, at] of readers) if (user !== row.sender_id && at >= row.created_at) readAtBy[user] = at;
+    return {
+      id: row.id, conversationId: row.conversation_id, senderId: row.sender_id, body: row.body, createdAt: row.created_at,
+      kind: (row.kind as Message['kind']) || 'text', sharedId: row.shared_id ?? undefined,
+      reactions: row.reactions && Object.keys(row.reactions).length ? row.reactions : undefined,
+      readAtBy: Object.keys(readAtBy).length ? readAtBy : undefined,
+      openedAtBy: Object.keys(readAtBy).length ? readAtBy : undefined,
+    };
+  });
+  const conversations: Conversation[] = convRows.map((c) => {
+    const mine = messages.filter((m) => m.conversationId === c.id);
+    const myRead = readAt.get(c.id)?.get(me) ?? '';
+    return {
+      id: c.id,
+      participantIds: (c.conversation_members ?? []).map((m) => m.user_id),
+      messageIds: mine.map((m) => m.id),
+      updatedAt: c.updated_at,
+      unreadCount: mine.filter((m) => m.senderId !== me && m.createdAt > myRead).length,
+    };
+  });
+  return { conversations, messages };
 }
 
 /** Everything the signed-in player needs on open, in four queries. */
@@ -176,14 +212,19 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // is what left people re-doing the quiz: their profile never arrived.
   const storiesFull = db.from('stories').select('*, story_views(user_id), story_likes(user_id), story_comments(id, story_id, author_id, body, created_at, story_comment_likes(user_id))').order('created_at', { ascending: false }).limit(40);
   const storiesPlain = () => db.from('stories').select('*, story_views(user_id)').order('created_at', { ascending: false }).limit(40);
-  const [profiles, posts, storiesTry, follows, requests] = await Promise.all([
+  const [profiles, posts, storiesTry, follows, requests, convs, msgs] = await Promise.all([
     db.from('profiles').select('*'),
     db.from('posts').select('*, post_likes(user_id), post_saves(user_id), comments(id, post_id, author_id, body, created_at, comment_likes(user_id))').order('created_at', { ascending: false }).limit(60),
     storiesFull,
     db.from('follows').select('follower_id, following_id'),
     // Only the ones that involve you come back; a database without the table yet just gives none.
     db.from('follow_requests').select('requester_id, target_id, created_at'),
+    // Direct messages; a database without the tables yet just gives none.
+    db.from('conversations').select('id, updated_at, conversation_members(user_id, last_read_at)').order('updated_at', { ascending: false }),
+    db.from('messages').select('*').order('created_at', { ascending: true }).limit(2000),
   ]);
+  if (convs.error || msgs.error) console.warn('[remote] messages tables missing; run the pending migrations', (convs.error ?? msgs.error)?.message);
+  const dm = toConversations(me, (convs.data ?? []) as ConversationRow[], (msgs.data ?? []) as MessageRow[]);
   if (requests.error) console.warn('[remote] follow requests table missing; run the pending migrations', requests.error.message);
   const stories = storiesTry.error ? await storiesPlain() : storiesTry;
   if (storiesTry.error) console.warn('[remote] hit likes/comments tables missing; run the pending migrations', storiesTry.error.message);
@@ -211,6 +252,8 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     followEdges: edges.map((e) => ({ followerId: e.follower_id, followingId: e.following_id })),
     savedPostIds: postRows.filter((row) => (row.post_saves ?? []).some((s) => s.user_id === me)).map((row) => row.id),
     followRequests: ((requests.data ?? []) as { requester_id: string; target_id: string; created_at: string }[]).map((r) => ({ fromId: r.requester_id, toId: r.target_id, createdAt: r.created_at })),
+    conversations: dm.conversations,
+    messages: dm.messages,
   };
 }
 
@@ -221,6 +264,55 @@ const fail = (what: string) => (error: unknown) => {
 };
 
 export const remote = {
+  /* ------------------------------ messages ------------------------------ */
+
+  /** The 1:1 you already have with someone, or a new one under the id the app chose. Returns the id that stands. */
+  async openConversation(other: ID, wanted: ID): Promise<ID> {
+    const { data, error } = await need().rpc('open_conversation', { other, wanted });
+    if (error) { fail('open conversation')(error); return wanted; }
+    return (data as string) || wanted;
+  },
+
+  async insertMessage(message: Message) {
+    const { error } = await need().from('messages').insert({
+      id: message.id, conversation_id: message.conversationId, sender_id: message.senderId, body: message.body,
+      kind: message.kind, shared_id: message.sharedId ?? null, created_at: message.createdAt,
+    });
+    if (error) fail('message send')(error);
+  },
+
+  async markConversationRead(conversationId: ID, me: ID) {
+    const { error } = await need().from('conversation_members').update({ last_read_at: new Date().toISOString() }).eq('conversation_id', conversationId).eq('user_id', me);
+    if (error) fail('mark read')(error);
+  },
+
+  async setMessageReactions(messageId: ID, reactions: Record<string, string>) {
+    const { error } = await need().from('messages').update({ reactions }).eq('id', messageId);
+    if (error) fail('message reaction')(error);
+  },
+
+  /** One conversation with its messages — for one that just started on another phone. */
+  async fetchConversation(me: ID, conversationId: ID): Promise<{ conversation: Conversation; messages: Message[] } | null> {
+    const db = need();
+    const [conv, msgs] = await Promise.all([
+      db.from('conversations').select('id, updated_at, conversation_members(user_id, last_read_at)').eq('id', conversationId).maybeSingle(),
+      db.from('messages').select('*').eq('conversation_id', conversationId).order('created_at', { ascending: true }),
+    ]);
+    if (conv.error || msgs.error || !conv.data) return null;
+    const dm = toConversations(me, [conv.data as ConversationRow], (msgs.data ?? []) as MessageRow[]);
+    return dm.conversations[0] ? { conversation: dm.conversations[0], messages: dm.messages } : null;
+  },
+
+  /** Live arrivals: every new message in a conversation you are in. Returns the unsubscribe. */
+  onNewMessage(handle: (message: Message) => void): () => void {
+    const db = need();
+    const channel = db.channel('messages-live').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+      const row = payload.new as MessageRow;
+      handle(toConversations('', [{ id: row.conversation_id, updated_at: row.created_at }], [row]).messages[0]);
+    }).subscribe();
+    return () => { void db.removeChannel(channel); };
+  },
+
   async updateProfile(me: ID, patch: { name?: string; bio?: string; location?: string; avatarUrl?: string; profile?: PlayerProfile; isPrivate?: boolean }) {
     const row: Record<string, unknown> = {};
     if (patch.isPrivate !== undefined) row.is_private = patch.isPrivate;
