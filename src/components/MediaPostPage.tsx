@@ -125,7 +125,7 @@ export function MediaPostPage({ post, author, liked, saved, active, preload = fa
   // On a computer the post reads left to right: the picture sits at the left
   // at its own size, and the name, buttons and words line up under it, the
   // width of the picture (never cramped narrower than a phone).
-  const lane = desktopWeb && frameSize ? { width: Math.max(frameSize.width, 520), alignSelf: 'flex-start' as const } : null;
+  const lane = desktopWeb && frameSize ? { width: Math.max(frameSize.width, 520), alignSelf: 'flex-start' as const, marginLeft: 56 } : null;
 
   return (
     // Without comments there is nothing to fill the bottom, so the picture and
