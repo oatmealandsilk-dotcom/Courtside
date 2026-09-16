@@ -9,12 +9,15 @@ import { ClipVideo, type ClipVideoHandle } from './ClipVideo';
 import { CourtSpinner } from './CourtSpinner';
 import { ZoomableMedia, type HomeRect, type ZoomableMediaHandle } from './ZoomableMedia';
 import { VideoView } from 'expo-video';
+import { isDesktopBrowser } from '@/lib/browserDevice';
 import { cropLayer } from '@/lib/crop';
 import type { MediaCrop } from '@/data/types';
 import { onSpaceBar } from '@/features/feed/keyboard';
 import { allowTurning, stayUpright } from '@/lib/orientation';
 
 const HIDE_AFTER_MS = 3000;
+// A phone's browser is a phone: no hover, no click-to-play. Only a computer gets those.
+const desktopWeb = Platform.OS === 'web' && isDesktopBrowser();
 const SKIP_S = 5;
 
 function clock(seconds: number) {
@@ -108,7 +111,7 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
     lastTap.current = now;
     if (pending.current) clearTimeout(pending.current);
     // On a computer a click plays or pauses, as on YouTube; the buttons come from hovering.
-    if (Platform.OS === 'web') { pending.current = setTimeout(() => { pending.current = null; togglePause(); }, 280); return; }
+    if (desktopWeb) { pending.current = setTimeout(() => { pending.current = null; togglePause(); }, 280); return; }
     // Waiting with just the play button up: a tap anywhere starts it, and the
     // other buttons show for a moment before fading. Otherwise a tap only
     // shows or hides the buttons.
@@ -181,7 +184,7 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
   const hoverIn = () => { hovering.current = true; if (hideTimer.current) clearTimeout(hideTimer.current); if (!shown) show(true); };
   const hoverOut = () => { hovering.current = false; if (hideTimer.current) clearTimeout(hideTimer.current); hideTimer.current = setTimeout(() => { if (!hovering.current) show(false); }, 40); };
   return (
-    <View ref={rootRef} style={StyleSheet.absoluteFill} onPointerEnter={Platform.OS === 'web' ? hoverIn : undefined} onPointerLeave={Platform.OS === 'web' ? hoverOut : undefined}>
+    <View ref={rootRef} style={StyleSheet.absoluteFill} onPointerEnter={desktopWeb ? hoverIn : undefined} onPointerLeave={desktopWeb ? hoverOut : undefined}>
       <View style={cropLayer(crop)}>
         <ClipVideo ref={player} uri={uri} poster={poster} active={active} muted={muted} paused={paused} fit="cover" trimStart={trimStart} trimEnd={trimEnd}
           onProgress={(fraction, at, length) => setTime({ fraction, at, length })} onReady={(ok) => { setReady(ok); onReady?.(ok); }} onSize={onSize} />

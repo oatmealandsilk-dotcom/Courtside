@@ -33,6 +33,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { isDesktopBrowser } from '@/lib/browserDevice';
 import { colors } from '@/theme';
 
 /**
@@ -111,6 +112,10 @@ function LikeBurst({ token }: { token: number }) {
 
 /** Show one player's things as a feed of their own: their clips, posts, or tagged posts. */
 export interface FeedScope { userId: string; set: 'own' | 'clips' | 'tagged'; start?: string }
+
+// On a phone — the app or a phone's browser — a vertical clip fills the whole
+// page, edge to edge. The tall 9:16 box in the middle is for computer windows.
+const phone = Platform.OS !== 'web' || !isDesktopBrowser();
 
 function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const styles = useThemedStyles(styleDefinitions);
@@ -436,7 +441,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                   <View key={story.id} style={styles.clip}>
                    <PinchZone onPinchOut={() => lock(true)} onPinchIn={() => lock(false)}><Reanimated.View style={[StyleSheet.absoluteFill, pictureStyle]}>
                     <View accessibilityLabel={`${author.name}'s hit`} style={styles.clipFrame}>
-                      <View style={styles.clipPortrait}>
+                      <View style={phone ? StyleSheet.absoluteFill : styles.clipPortrait}>
                         {story.videoUrl ? (
                           <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={focused && active === index && warmed} preload={near} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
                         ) : (
@@ -586,7 +591,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     // tall box, a landscape one a wide box, centred, with the theme
                     // colour around it rather than black bars or a crop.
                     <View style={[styles.clipFrame, post.orientation === 'landscape' && { backgroundColor: '#000' }]}>
-                      <View style={post.orientation === 'landscape' ? StyleSheet.absoluteFill : styles.clipPortrait}>
+                      <View style={post.orientation === 'landscape' || phone ? StyleSheet.absoluteFill : styles.clipPortrait}>
                         <ClipPlayback
                           letterbox={post.orientation === 'landscape'}
                           uri={post.videoUrl}
