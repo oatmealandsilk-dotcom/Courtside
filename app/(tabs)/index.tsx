@@ -559,9 +559,10 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               if (post.kind !== 'clip') {
                 return (
                   <View key={post.id} style={[styles.article, scope && styles.articleScoped]}>
-                    <Text style={styles.eyebrow}>
+                    {/* Inside one person's posts the feed label means nothing, and the back chevron wants the room. */}
+                    {scope ? null : <Text style={styles.eyebrow}>
                       {post.kind === 'match' ? 'SET PLAY' : post.kind.toUpperCase()} · FOR YOU
-                    </Text>
+                    </Text>}
                     {strip}
                     <View style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
                       <PostCard
@@ -849,7 +850,7 @@ const styleDefinitions = StyleSheet.create({
   actionLabel: { color: 'white', fontSize: 13, fontWeight: '700', textShadowColor: 'rgba(0, 0, 0, 0.55)', textShadowRadius: 4 },
   article: { flex: 1, backgroundColor: colors.bg, padding: 20, paddingTop: 64, gap: 20 },
   // In a scoped feed the back chevron has its own line above the words.
-  articleScoped: { paddingTop: 100 },
+  articleScoped: { paddingTop: 116 },
   strip: { gap: 6, paddingBottom: 4 },
   stripHead: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   stripTitle: { fontSize: 13, fontWeight: '700', color: colors.text },
