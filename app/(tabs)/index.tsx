@@ -848,7 +848,9 @@ const styleDefinitions = StyleSheet.create({
   // rather than a heavier icon, so they hold up over bright footage.
   actionGlyph: { textShadowColor: 'rgba(0, 0, 0, 0.55)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
   actionLabel: { color: 'white', fontSize: 13, fontWeight: '700', textShadowColor: 'rgba(0, 0, 0, 0.55)', textShadowRadius: 4 },
-  article: { flex: 1, backgroundColor: colors.bg, padding: 20, paddingTop: 64, gap: 20 },
+  // The feed's pages hold their size while the bar ducks, so the bottom few
+  // points can sit under a full-size bar: written pages keep that much clear.
+  article: { flex: 1, backgroundColor: colors.bg, padding: 20, paddingTop: 64, paddingBottom: 32, gap: 20 },
   // In a scoped feed the back chevron has its own line above the words.
   articleScoped: { paddingTop: 116 },
   strip: { gap: 6, paddingBottom: 4 },
@@ -870,7 +872,7 @@ const styleDefinitions = StyleSheet.create({
   stripReason: { fontSize: 10, color: colors.textMuted },
   stripFollow: { paddingVertical: 5, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center' },
   stripFollowText: { color: colors.brandInk, fontSize: 12, fontWeight: '700' },
-  threadArticle: { gap: 8, paddingBottom: 8 },
+  threadArticle: { gap: 8, paddingBottom: 20 },
   eyebrow: { color: colors.warning, fontWeight: '700', letterSpacing: 1.2, fontSize: 11 },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   threadMark: { marginRight: 6, marginTop: 6 },

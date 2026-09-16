@@ -14,6 +14,19 @@ export function relativeTime(iso: string, now: Date = new Date()): string {
   return when.toLocaleDateString(undefined, sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+/** A time line in a chat: "Today 2:14 PM", "Yesterday 9:03 AM", "Mon 4:20 PM" this week, else the date and time. */
+export function chatStamp(iso: string, now: Date = new Date()): string {
+  const when = new Date(iso);
+  const time = when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((startOf(now) - startOf(when)) / 86_400_000);
+  if (days === 0) return `Today ${time}`;
+  if (days === 1) return `Yesterday ${time}`;
+  if (days < 7) return `${when.toLocaleDateString(undefined, { weekday: 'short' })} ${time}`;
+  const sameYear = when.getFullYear() === now.getFullYear();
+  return `${when.toLocaleDateString(undefined, sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' })}, ${time}`;
+}
+
 export function compactNumber(value: number): string {
   if (value < 1000) return String(value);
   if (value < 1_000_000) return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)}k`;

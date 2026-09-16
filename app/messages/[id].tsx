@@ -19,14 +19,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar, EmptyState } from '@/components/ui';
 import { Tappable, useDoubleTap } from '@/components/Tappable';
-import { relativeTime } from '@/lib/format';
+import { chatStamp } from '@/lib/format';
 import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
 import { MentionSuggestions } from '@/components/MentionSuggestions';
 import { useMentionCandidates } from '@/features/mentions/useMentionCandidates';
 import { activeMention, applyMention } from '@/lib/mentions';
 import type { Message } from '@/data/types';
+import Reanimated, { FadeIn, FadeInUp, FadeOut, LinearTransition, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { colors, radius, spacing, typography } from '@/theme';
+
+/** Two messages from the same person this close together read as one run: tighter, one tail. */
+const GROUP_GAP_MS = 2 * 60_000;
+
+/** Quiet for this long between two messages and the next one gets a time line. */
+const STAMP_GAP_MS = 20 * 60_000;
 
 /** One conversation. Bubbles, shared-item cards, and a composer bar. */
 export default function Thread() {
@@ -38,6 +45,9 @@ export default function Thread() {
   const [picking, setPicking] = useState<string | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const scrollRef = useRef<ScrollView | null>(null);
+  // Only messages that arrive after the first paint rise in; the history just appears.
+  const settled = useRef(false);
+  useEffect(() => { const t = setTimeout(() => { settled.current = true; }, 400); return () => clearTimeout(t); }, []);
   const inputRef = useRef<TextInput>(null);
   const focused = useIsFocused();
 
@@ -119,11 +129,24 @@ export default function Thread() {
         ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
-        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
+        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: settled.current })}
         keyboardShouldPersistTaps="handled"
       >
-        {thread.map((message) => {
+        {thread.map((message, i) => {
           const mine = message.senderId === currentUserId;
+          // A time line above the first message and after any quiet stretch,
+          // as chats on Instagram and TikTok do.
+          const prev = thread[i - 1];
+          const stamp = !prev || Date.parse(message.createdAt) - Date.parse(prev.createdAt) > STAMP_GAP_MS
+            ? <Text style={styles.stamp}>{chatStamp(message.createdAt)}</Text>
+            : null;
+          const next = thread[i + 1];
+          const runsOn = (a?: Message, b?: Message) => !!a && !!b && a.senderId === b.senderId && Date.parse(b.createdAt) - Date.parse(a.createdAt) <= GROUP_GAP_MS;
+          // In a run only the last bubble keeps its tail, and the gap between them closes up.
+          const inRun = runsOn(prev, message) && !stamp;
+          const lastOfRun = !runsOn(message, next);
+          // A new message rises out of the composer and settles with a small spring.
+          const arrive = settled.current ? FadeInUp.duration(260).springify().damping(16).stiffness(240) : undefined;
 
           if (message.kind !== 'text' && message.sharedId) {
             const shared =
@@ -136,8 +159,10 @@ export default function Thread() {
                 : (shared as { title: string }).title
               : 'This item was removed';
             return (
+              <React.Fragment key={message.id}>
+              {stamp}
+              <Reanimated.View entering={arrive} layout={LinearTransition.duration(180)} style={[mine ? styles.mineAlign : styles.theirsAlign, inRun && styles.inRun]}>
               <Tappable
-                key={message.id}
                 accessibilityRole="link"
                 scaleTo={0.97}
                 onPress={() =>
@@ -165,30 +190,36 @@ export default function Thread() {
                   {label}
                 </Text>
               </Tappable>
+              </Reanimated.View>
+              </React.Fragment>
             );
           }
 
           return (
+            <React.Fragment key={message.id}>
+            {stamp}
             <Bubble
-              key={message.id}
               message={message}
               mine={mine}
+              inRun={inRun}
+              tail={lastOfRun}
+              arrive={arrive}
               styles={styles}
               me={currentUserId}
               picking={picking === message.id}
               onPick={(open) => setPicking(open ? message.id : null)}
               onReact={(emoji) => actions.reactToMessage(message.id, emoji)}
             />
+            </React.Fragment>
           );
         })}
         {thread.length > 0 && thread[thread.length - 1].senderId === currentUserId && <Text accessibilityLiveRegion="polite" style={styles.timestamp}>
           {other.readReceiptsEnabled !== false && thread[thread.length - 1].readAtBy?.[other.id] ? 'Read' : 'Sent'}
         </Text>}
-        <Text style={styles.timestamp}>{relativeTime(conversation.updatedAt)}</Text>
       </ScrollView>
 
       {emojiOpen ? (
-        <View style={styles.emojiTray}>
+        <Reanimated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.emojiTray}>
           <View style={styles.defaultRow}>
             <Text style={styles.defaultHint}>Double tap a message to leave</Text>
             {REACTIONS.map((emoji) => (
@@ -213,7 +244,7 @@ export default function Thread() {
               <Text style={{ fontSize: 22 }}>{emoji}</Text>
             </Tappable>
           ))}
-        </View>
+        </Reanimated.View>
       ) : null}
 
       {mention && mentionRows.length ? (
@@ -248,14 +279,7 @@ export default function Thread() {
           returnKeyType="send"
           accessibilityLabel="Message text"
         />
-        <Tappable
-          onPress={send}
-          disabled={!draft.trim()}
-          accessibilityLabel="Send message"
-          style={[styles.send, !draft.trim() && { opacity: 0.4 }]}
-        >
-          <Ionicons name="arrow-up" size={19} color={colors.brandInk} />
-        </Tappable>
+        <SendButton ready={!!draft.trim()} onPress={send} styles={styles} />
       </View>
     </KeyboardAvoidingView>
   );
@@ -267,8 +291,8 @@ export default function Thread() {
  * Double tap leaves your default reaction; a long press opens the picker for a
  * different one. Reactions sit under the bubble and are tappable to remove.
  */
-function Bubble({ message, mine, styles, me, picking, onPick, onReact }: {
-  message: Message; mine: boolean; styles: any; me: string | null;
+function Bubble({ message, mine, inRun, tail, arrive, styles, me, picking, onPick, onReact }: {
+  message: Message; mine: boolean; inRun: boolean; tail: boolean; arrive?: FadeInUp; styles: any; me: string | null;
   picking: boolean; onPick: (open: boolean) => void; onReact: (emoji?: string) => void;
 }) {
   const tap = useDoubleTap(() => onReact());
@@ -284,7 +308,7 @@ function Bubble({ message, mine, styles, me, picking, onPick, onReact }: {
   const reacted = Object.keys(tally).length > 0;
 
   return (
-    <View style={mine ? styles.mineAlign : styles.theirsAlign}>
+    <Reanimated.View entering={arrive} layout={LinearTransition.duration(180)} style={[mine ? styles.mineAlign : styles.theirsAlign, inRun && styles.inRun]}>
       {/* The chip is anchored to the bubble, not the row, so it sits on the
           bubble's bottom inner corner however wide the message is. */}
       <View style={[styles.bubbleWrap, mine ? styles.mineAlign : styles.theirsAlign, reacted && styles.bubbleWrapReacted]}>
@@ -294,7 +318,7 @@ function Bubble({ message, mine, styles, me, picking, onPick, onReact }: {
           delayLongPress={280}
           accessibilityRole="button"
           accessibilityLabel={`Message: ${message.body}. Double tap to react, hold to choose a reaction.`}
-          style={[styles.bubble, mine ? styles.mine : styles.theirs]}
+          style={[styles.bubble, mine ? styles.mine : styles.theirs, !tail && styles.noTail]}
         >
           <RichText style={[styles.bubbleText, mine && { color: colors.brandInk }]} mentionStyle={mine ? { color: colors.brandInk, textDecorationLine: 'underline' } : undefined}>{message.body}</RichText>
         </Pressable>
@@ -331,8 +355,7 @@ function Bubble({ message, mine, styles, me, picking, onPick, onReact }: {
           ))}
         </View>
       ) : null}
-
-    </View>
+    </Reanimated.View>
   );
 }
 
@@ -345,6 +368,20 @@ const EMOJI = [
   '❤️', '😂', '😅', '😮', '😭', '🫡', '👍', '👎',
   '🤝', '😤', '🥵', '🧊', '✅', '❌', '⏱️', '🙏',
 ];
+
+/** The send arrow: dim and small with nothing to send, springing up to full size as you type. */
+function SendButton({ ready, onPress, styles }: { ready: boolean; onPress: () => void; styles: any }) {
+  const on = useSharedValue(ready ? 1 : 0);
+  useEffect(() => { on.value = ready ? withSpring(1, { damping: 14, stiffness: 260 }) : withTiming(0, { duration: 160 }); }, [ready, on]);
+  const style = useAnimatedStyle(() => ({ opacity: 0.4 + 0.6 * on.value, transform: [{ scale: 0.86 + 0.14 * on.value }] }));
+  return (
+    <Reanimated.View style={style}>
+      <Tappable onPress={onPress} disabled={!ready} accessibilityLabel="Send message" style={styles.send}>
+        <Ionicons name="arrow-up" size={19} color={colors.brandInk} />
+      </Tappable>
+    </Reanimated.View>
+  );
+}
 
 /** A reaction that springs in when it lands, then sits still. */
 function ReactionChip({ emoji, count, mine, onPress, style }: {
@@ -452,6 +489,9 @@ const styleDefinitions = StyleSheet.create({
   defaultKeyOn: { borderColor: colors.brand, backgroundColor: colors.brandDim },
   emojiToggle: { padding: 4 },
   mineAlign: { alignSelf: 'flex-end' },
+  // Bubbles in one run sit closer than the list's usual gap.
+  inRun: { marginTop: -4 },
+  noTail: { borderBottomRightRadius: radius.xl, borderBottomLeftRadius: radius.xl },
   theirsAlign: { alignSelf: 'flex-start' },
   sharedCard: {
     maxWidth: '78%',
@@ -466,6 +506,7 @@ const styleDefinitions = StyleSheet.create({
   sharedKind: { ...typography.caption, color: colors.brand },
   sharedBody: { ...typography.small, color: colors.text, lineHeight: 19 },
   timestamp: { ...typography.caption, color: colors.textFaint, textAlign: 'center', paddingTop: spacing.md },
+  stamp: { ...typography.caption, color: colors.textFaint, textAlign: 'center', paddingVertical: spacing.md },
   mentionTray: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
   composer: {
     flexDirection: 'row',
