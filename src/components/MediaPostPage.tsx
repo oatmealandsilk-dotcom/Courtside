@@ -122,14 +122,18 @@ export function MediaPostPage({ post, author, liked, saved, active, preload = fa
     const h = Math.min(room.h * 0.62, room.w / ratio);
     return { width: Math.round(h * ratio), height: Math.round(h) };
   })();
+  // On a computer the post reads left to right: the picture sits at the left
+  // at its own size, and the name, buttons and words line up under it, the
+  // width of the picture (never cramped narrower than a phone).
+  const lane = desktopWeb && frameSize ? { width: Math.max(frameSize.width, 520), alignSelf: 'flex-start' as const } : null;
 
   return (
     // Without comments there is nothing to fill the bottom, so the picture and
     // its words sit in the middle of the page instead of leaving a gap below.
     <View style={[styles.page, { paddingTop: topInset }]}>
-     <View style={[styles.column, desktopWeb && styles.columnDesktop, !thread.length && styles.pageCentred]} onLayout={(e) => { const { width, height } = e.nativeEvent.layout; if (width > 0 && height > 0) setRoom({ w: width, h: height }); }}>
+     <View style={[styles.column, !thread.length && styles.pageCentred]} onLayout={(e) => { const { width, height } = e.nativeEvent.layout; if (width > 0 && height > 0) setRoom({ w: width, h: height }); }}>
       {/* Who and their level, in the space above the picture. */}
-      <View style={styles.whoRow}>
+      <View style={[styles.whoRow, lane]}>
         <Pressable accessibilityRole="link" accessibilityLabel={`View ${author.name}'s profile`} onPress={() => router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`)} style={styles.who}>
           <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={40} />
           <View style={{ flex: 1, gap: 1 }}>
@@ -145,7 +149,7 @@ export function MediaPostPage({ post, author, liked, saved, active, preload = fa
       {/* A finger on the picture belongs to the picture: no sideways page swipe from here. */}
       <View
         ref={frameRef}
-        style={[styles.frame, landscape ? styles.frameWide : styles.frameTall, frameSize ?? (landscape ? { alignSelf: 'stretch', aspectRatio: shape ?? 16 / 9 } : { width: '100%', maxHeight: '62%', aspectRatio: !post.videoUrl && shape ? shape : 4 / 5 })]}
+        style={[styles.frame, landscape ? styles.frameWide : styles.frameTall, lane && { alignSelf: 'flex-start' }, frameSize ?? (landscape ? { alignSelf: 'stretch', aspectRatio: shape ?? 16 / 9 } : { width: '100%', maxHeight: '62%', aspectRatio: !post.videoUrl && shape ? shape : 4 / 5 })]}
         onTouchStart={() => lockPageSwipe(true)}
         onTouchEnd={() => lockPageSwipe(false)}
         onTouchCancel={() => lockPageSwipe(false)}
@@ -172,7 +176,7 @@ export function MediaPostPage({ post, author, liked, saved, active, preload = fa
         </Modal>
       ) : null}
 
-      <View style={styles.details}>
+      <View style={[styles.details, lane]}>
         {/* The clip's buttons, laid across instead of down: same glyphs, same
             sizes, the count under each one. */}
         <View style={styles.actions}>
@@ -228,9 +232,6 @@ export function MediaPostPage({ post, author, liked, saved, active, preload = fa
 const styleDefinitions = StyleSheet.create({
   page: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: spacing.md, paddingBottom: spacing.md, alignItems: 'center' },
   column: { flex: 1, width: '100%', gap: spacing.md },
-  // On a computer the post keeps a phone's width in the middle of the window,
-  // the size it was posted at, rather than stretching across the screen.
-  columnDesktop: { maxWidth: 640 },
   pageCentred: { justifyContent: 'center' },
   frame: { borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000' },
   // Instagram's tall post: 4:5 by default, so the picture is big without taking the page.
