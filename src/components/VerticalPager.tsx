@@ -20,7 +20,11 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   const [height, setHeight] = useState(0);
   const list = useAnimatedRef<Animated.ScrollView>();
   // Scrolling is asked for on the UI thread, where the list lives.
-  const jump = useCallback((y: number, animated: boolean) => { runOnUI(() => { 'worklet'; scrollTo(list, 0, y, animated); })(); }, [list]);
+  const jump = useCallback((y: number, animated: boolean) => {
+    const node = list.current as unknown as { scrollTo?: (o: { x: number; y: number; animated: boolean }) => void } | null;
+    if (node?.scrollTo) { node.scrollTo({ x: 0, y, animated }); return; }
+    runOnUI(() => { 'worklet'; scrollTo(list, 0, y, animated); })();
+  }, [list]);
   useImperativeHandle(ref, () => ({ scrollToTop: () => jump(0, true) }), [jump]);
   const last = useRef(initialIndex);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -31,6 +35,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   const count = children.length;
   const pageOf = useCallback((y: number) => Math.max(0, Math.min(count - 1, Math.round(y / Math.max(1, height)))), [count, height]);
   const changed = useCallback((index: number) => {
+    console.log('DEBUG-TEMP page', index, 'was', last.current);
     if (index !== last.current) { last.current = index; onIndex(index); }
   }, [onIndex]);
   const settled = useCallback((y: number) => {
