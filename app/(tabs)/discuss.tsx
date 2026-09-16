@@ -133,7 +133,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         <Pressable
           accessibilityRole="link"
           accessibilityLabel="Search discussions and players"
-          onPress={() => router.push('/search')}
+          // From Find Players the search opens on players; from Discussions on everything.
+          onPress={() => router.push(section === 'players' ? { pathname: '/search', params: { scope: 'players' } } : '/search')}
           hitSlop={8}
         >
           <Ionicons name="search" size={23} color={colors.text} />

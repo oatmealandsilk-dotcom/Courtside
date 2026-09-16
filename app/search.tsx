@@ -19,10 +19,11 @@ type Scope = 'all' | 'clips' | 'posts' | 'threads' | 'players' | 'coaches';
 export default function Search() {
   const styles = useThemedStyles(styleDefinitions);
   const { posts, questions, users, coaches, currentUserId, saved, actions, followingIds, followEdges, detectedLocation } = useApp();
-  const params=useLocalSearchParams<{q?:string}>();
+  const params=useLocalSearchParams<{q?:string; scope?:string}>();
   const [term, setTerm] = useState(params.q ?? '');
-  useEffect(()=>{setTerm(params.q ?? '');setScope('all');},[params.q]);
-  const [scope, setScope] = useState<Scope>('all');
+  const startScope = (s?: string): Scope => (s === 'players' || s === 'coaches' || s === 'threads' || s === 'posts' || s === 'clips' ? s : 'all');
+  useEffect(()=>{setTerm(params.q ?? '');setScope(startScope(params.scope));},[params.q, params.scope]);
+  const [scope, setScope] = useState<Scope>(startScope(params.scope));
 
   const q = term.trim().toLowerCase();
   const matches=(text:string,tags:string[])=>q.startsWith('#') ? tags.some(t=>t.replace(/^#/,'').toLowerCase()===q.slice(1)) || text.toLowerCase().split(/[^#\p{L}\p{N}_]+/u).includes(q) : `${text} ${tags.join(' ')}`.toLowerCase().includes(q);
