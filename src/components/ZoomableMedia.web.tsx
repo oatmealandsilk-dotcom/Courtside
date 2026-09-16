@@ -1,11 +1,15 @@
-import React, { useRef } from 'react';
+import React, { forwardRef, useImperativeHandle, useRef } from 'react';
+
+export interface HomeRect { x: number; y: number; width: number; height: number; radius?: number }
+export interface ZoomableMediaHandle { close: () => void }
 
 /**
  * The browser twin of ZoomableMedia: two-finger pinch on a touch screen or a
  * trackpad pinch on a computer scales the picture around the fingers, follows
  * them while they are down, and springs back on release.
  */
-export function ZoomableMedia({ children }: { children: React.ReactNode }) {
+export const ZoomableMedia = forwardRef<ZoomableMediaHandle, { children: React.ReactNode; onDismiss?: () => void; home?: HomeRect }>(function ZoomableMedia({ children, onDismiss }, ref) {
+  useImperativeHandle(ref, () => ({ close: () => onDismiss?.() }), [onDismiss]);
   const box = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const start = useRef<{ gap: number; fx: number; fy: number } | null>(null);
@@ -32,7 +36,7 @@ export function ZoomableMedia({ children }: { children: React.ReactNode }) {
   return (
     <div
       ref={box}
-      style={{ position: 'absolute', inset: 0, overflow: 'hidden', touchAction: 'none' }}
+      style={{ position: 'absolute', inset: 0, overflow: 'hidden', touchAction: 'none', backgroundColor: '#000' }}
       // Every touch stops here: the viewer sits over the feed, and a flick
       // that bubbled through would swipe the page out from under it.
       onTouchStart={(e) => {
@@ -55,14 +59,34 @@ export function ZoomableMedia({ children }: { children: React.ReactNode }) {
         if (d && e.touches.length === 1) {
           e.preventDefault();
           const rect = box.current?.getBoundingClientRect();
-          place(1, (rect?.width ?? 0) / 2, (rect?.height ?? 0) / 2, false, e.touches[0].clientX - d.x, e.touches[0].clientY - d.y);
+          const dx = e.touches[0].clientX - d.x;
+          const dy = e.touches[0].clientY - d.y;
+          const sideways = onDismiss && Math.abs(dx) > Math.abs(dy) * 0.7;
+          place(1, (rect?.width ?? 0) / 2, (rect?.height ?? 0) / 2, false, sideways ? dx : dx * 0.35, sideways ? dy * 0.5 : dy * 0.35);
+          if (box.current) { box.current.style.transition = 'none'; box.current.style.backgroundColor = sideways ? `rgba(0,0,0,${1 - Math.min(1, Math.abs(dx) / ((rect?.width ?? 400) * 0.7)) * 0.9})` : '#000'; }
         }
       }}
       onTouchEnd={(e) => {
         e.stopPropagation();
-        const s = start.current; start.current = null; drag.current = null;
+        const s = start.current; start.current = null;
+        const d = drag.current; drag.current = null;
         const rect = box.current?.getBoundingClientRect();
+        const t = e.changedTouches[0];
+        // One finger, swiped sideways (a bit of diagonal is fine) with nothing zoomed: close.
+        if (!s && d && t && onDismiss && Math.abs(t.clientX - d.x) > 90 && Math.abs(t.clientX - d.x) > Math.abs(t.clientY - d.y) * 0.7) {
+          const el = inner.current;
+          const dir = t.clientX - d.x >= 0 ? 1 : -1;
+          if (el && rect) {
+            el.style.transition = 'transform 240ms cubic-bezier(.33,1,.68,1), opacity 220ms ease-out';
+            el.style.transform = `translate(${dir * rect.width * 1.1}px, ${(t.clientY - d.y) * 1.3}px)`;
+            el.style.opacity = '0.35';
+          }
+          if (box.current) { box.current.style.transition = 'background-color 220ms ease-out'; box.current.style.backgroundColor = 'rgba(0,0,0,0)'; }
+          setTimeout(onDismiss, 230);
+          return;
+        }
         if (s) place(1, s.fx, s.fy, true); else place(1, (rect?.width ?? 0) / 2, (rect?.height ?? 0) / 2, true);
+        if (box.current) { box.current.style.transition = 'background-color 300ms ease-out'; box.current.style.backgroundColor = '#000'; }
       }}
       onTouchCancel={(e) => { e.stopPropagation(); start.current = null; drag.current = null; }}
       onPointerDown={(e) => e.stopPropagation()}
@@ -83,4 +107,4 @@ export function ZoomableMedia({ children }: { children: React.ReactNode }) {
       <div ref={inner} style={{ position: 'absolute', inset: 0 }}>{children}</div>
     </div>
   );
-}
+});

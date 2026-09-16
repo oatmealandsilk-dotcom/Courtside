@@ -2,13 +2,15 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ZoomableMedia } from '@/components/ZoomableMedia';
+import { ZoomableMedia, type HomeRect, type ZoomableMediaHandle } from '@/components/ZoomableMedia';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { PostVideo } from '@/components/PostVideo';
 import { CommentRow } from '@/components/CommentRow';
 import { useApp } from '@/store/AppContext';
+import { lockPageSwipe } from '@/features/navigation/swipeLock';
+import { allowTurning, stayUpright } from '@/lib/orientation';
 import { Tappable } from '@/components/Tappable';
 import { Avatar, Chip } from '@/components/ui';
 import { LevelPill } from '@/components/LevelPill';
@@ -56,6 +58,16 @@ export function MediaPostPage({ post, author, liked, saved, active, preload = fa
   // back), two taps like it. The single tap waits out the double-tap window.
   const insets = useSafeAreaInsets();
   const [full, setFull] = useState(false);
+  const frameRef = useRef<View>(null);
+  const zoom = useRef<ZoomableMediaHandle>(null);
+  const [home, setHome] = useState<HomeRect | undefined>(undefined);
+  const openFull = () => {
+    const node = frameRef.current;
+    if (!node) { setFull(true); return; }
+    node.measureInWindow((x, y, w, h) => { setHome(w > 0 && h > 0 ? { x, y, width: w, height: h, radius: landscape ? 14 : radius.lg } : undefined); setFull(true); });
+  };
+  const closeFull = () => { if (zoom.current) zoom.current.close(); else setFull(false); };
+  useEffect(() => { if (!post.videoUrl) { if (full) void allowTurning(); else void stayUpright(); } }, [full, post.videoUrl]);
   const lastTap = useRef(0);
   const pendingTap = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tapPicture = () => {
@@ -68,20 +80,25 @@ export function MediaPostPage({ post, author, liked, saved, active, preload = fa
     }
     lastTap.current = now;
     if (pendingTap.current) clearTimeout(pendingTap.current);
-    pendingTap.current = setTimeout(() => { pendingTap.current = null; setFull(true); }, 280);
+    pendingTap.current = setTimeout(() => { pendingTap.current = null; openFull(); }, 280);
   };
   useEffect(() => () => { if (pendingTap.current) clearTimeout(pendingTap.current); }, []);
   const landscape = post.orientation === 'landscape';
   // A wide video's frame is cut to the video's own shape — the player says
   // what that is the moment it has read the file (the cover picture is only
   // a first guess) — so the picture fills it exactly, no bars at the sides.
+  // The frame takes the picture's own shape (a photo is exactly what its
+  // author cut in the editor, so nothing more or less of it should show).
   const [shape, setShape] = useState<number | null>(null);
   const [sized, setSized] = useState(false);
   useEffect(() => {
-    const cover = post.thumbnailUrl ?? post.imageUrl;
-    if (!landscape || !cover || sized) return;
+    const cover = post.imageUrl ?? post.thumbnailUrl;
+    if (!cover || sized) return;
     let live = true;
-    Image.getSize(cover, (w, h) => { if (live && w > 0 && h > 0) setShape(Math.max(1.2, Math.min(2.6, w / h))); }, () => undefined);
+    Image.getSize(cover, (w, h) => {
+      if (!live || w <= 0 || h <= 0) return;
+      setShape(landscape ? Math.max(1.2, Math.min(2.6, w / h)) : Math.max(0.5, Math.min(1.3, w / h)));
+    }, () => undefined);
     return () => { live = false; };
   }, [landscape, post.thumbnailUrl, post.imageUrl, sized]);
   // The phone can report a recording's stored size before its rotation flag
@@ -106,12 +123,19 @@ export function MediaPostPage({ post, author, liked, saved, active, preload = fa
               <Text style={styles.name} numberOfLines={1}>{author.name}</Text>
               {author.isCoach ? <Ionicons name="shield-checkmark" size={14} color={colors.brand} /> : null}
             </View>
-            <Text style={styles.sub} numberOfLines={1}>@{author.handle} · {relativeTime(post.createdAt)}</Text>
+            <Text style={styles.sub} numberOfLines={1}>@{author.handle} · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}{post.location ? ` · ${post.location}` : ''}</Text>
           </View>
         </Pressable>
         <LevelPill profile={author.profile} small />
       </View>
-      <View style={[styles.frame, landscape ? [styles.frameWide, { aspectRatio: shape ?? 16 / 9 }] : styles.frameTall]}>
+      {/* A finger on the picture belongs to the picture: no sideways page swipe from here. */}
+      <View
+        ref={frameRef}
+        style={[styles.frame, landscape ? [styles.frameWide, { aspectRatio: shape ?? 16 / 9 }] : [styles.frameTall, !post.videoUrl && shape ? { aspectRatio: shape } : null]]}
+        onTouchStart={() => lockPageSwipe(true)}
+        onTouchEnd={() => lockPageSwipe(false)}
+        onTouchCancel={() => lockPageSwipe(false)}
+      >
         {post.videoUrl ? (
           <PostVideo uri={post.videoUrl} poster={post.thumbnailUrl} active={active} preload={preload} onDoubleTap={onDoubleTap} trimStart={post.trimStart} trimEnd={post.trimEnd} crop={post.crop} silent={post.muted} discInk={discInk} onReady={onReady} onSize={landscape ? onSize : undefined} />
         ) : (
@@ -122,12 +146,12 @@ export function MediaPostPage({ post, author, liked, saved, active, preload = fa
         {burst}
       </View>
       {!post.videoUrl ? (
-        <Modal visible={full} animationType="none" statusBarTranslucent onRequestClose={() => setFull(false)}>
+        <Modal visible={full} transparent animationType="none" statusBarTranslucent supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']} onRequestClose={closeFull}>
           <View style={styles.fullRoot}>
-            <ZoomableMedia>
+            <ZoomableMedia ref={zoom} home={home} onDismiss={() => { setFull(false); setHome(undefined); }}>
               <Image accessibilityIgnoresInvertColors source={{ uri: post.imageUrl ?? post.thumbnailUrl }} style={StyleSheet.absoluteFill} resizeMode="contain" />
             </ZoomableMedia>
-            <Pressable accessibilityRole="button" accessibilityLabel="Close full screen" onPress={() => setFull(false)} style={[styles.fullClose, { top: insets.top + 12 }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close full screen" onPress={closeFull} style={[styles.fullClose, { top: insets.top + 12 }]}>
               <Ionicons name="close" size={22} color="white" />
             </Pressable>
           </View>
@@ -196,7 +220,7 @@ const styleDefinitions = StyleSheet.create({
   // Rounded like the wordmark pill, a little in from the edges, the video's own shape.
   frameWide: { alignSelf: 'stretch', borderRadius: 14 },
   details: { gap: spacing.sm, flexShrink: 1, minHeight: 0 },
-  fullRoot: { flex: 1, backgroundColor: '#000' },
+  fullRoot: { flex: 1, backgroundColor: 'transparent' },
   fullClose: { position: 'absolute', right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
   whoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: 2 },
   who: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

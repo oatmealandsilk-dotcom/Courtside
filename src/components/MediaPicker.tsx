@@ -168,9 +168,9 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
         </View>
       </Pressable>
       {/* Full screen, the clip playing with sound. One tap anywhere brings it back. */}
-      <Modal visible={expanded} animationType="none" statusBarTranslucent onRequestClose={() => setExpanded(false)}>
-        <View style={{ flex: 1, backgroundColor: '#000' }}>
-          <ZoomableMedia>
+      <Modal visible={expanded} transparent animationType="none" statusBarTranslucent onRequestClose={() => setExpanded(false)}>
+        <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+          <ZoomableMedia onDismiss={() => setExpanded(false)}>
             {value.kind === 'video' && value.uri
               ? <View style={cropLayer(trim?.crop)}><ClipVideo uri={value.uri} poster={value.thumbnailUrl} active={expanded} muted={!!trim?.muted} fit={orientation === 'landscape' ? 'contain' : 'cover'} trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} /></View>
               : poster ? <Image source={{ uri: poster }} resizeMode="contain" style={{ width: '100%', height: '100%' }}/> : null}

@@ -61,21 +61,23 @@ export function NavBar({ state, navigation }: NavBarProps) {
   useEffect(() => {
     if (warm) entrance.value = withTiming(0, { duration: 480, easing: Easing.out(Easing.cubic) });
   }, [warm, entrance]);
+  // The bar's own height never changes (the feed's pages are sized against
+  // it); ducking moves and shrinks what is on the bar instead.
   const duck = useAnimatedStyle(() => ({
-    paddingTop: interpolate(barCompact.value, [0, 1], [spacing.sm, 2]),
-    paddingBottom: interpolate(barCompact.value, [0, 1], [bottomPad, Math.max(insets.bottom - 4, 4)]),
+    paddingTop: spacing.sm,
+    paddingBottom: bottomPad,
     transform: [{ translateY: entrance.value * 96 }],
   }));
   const shrink = useAnimatedStyle(() => ({
-    transform: [{ scale: interpolate(barCompact.value, [0, 1], [1, 0.86]) }],
+    transform: [{ translateY: interpolate(barCompact.value, [0, 1], [0, 7]) }, { scale: interpolate(barCompact.value, [0, 1], [1, 0.86]) }],
   }));
-  const rowShrink = useAnimatedStyle(() => ({
-    minHeight: interpolate(barCompact.value, [0, 1], [48, 38]),
-  }));
+  const rowShrink = useAnimatedStyle(() => ({ minHeight: 48 }));
+  const lineDrop = useAnimatedStyle(() => ({ transform: [{ translateY: interpolate(barCompact.value, [0, 1], [0, 7]) }] }));
 
   if (isPhone) {
     return (
       <Animated.View style={[styles.bottomBar, duck]}>
+        <Animated.View pointerEvents="none" style={[styles.topLine, lineDrop]} />
         {ITEMS.map((item, index) => {
           const active = item.route === activeRoute;
           return (
@@ -243,10 +245,9 @@ const styleDefinitions = StyleSheet.create({
   bottomBar: {
     flexDirection: 'row',
     backgroundColor: colors.bgElevated,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
     paddingTop: spacing.sm,
   },
+  topLine: { position: 'absolute', top: 0, left: 0, right: 0, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   bottomItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   bottomInner: { alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 48 },
   bottomBadge: {

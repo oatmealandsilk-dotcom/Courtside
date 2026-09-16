@@ -132,6 +132,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     if (on === immersive) return;
     setImmersive(on);
     haptics.tap();
+    if (on) setBarCompact(true);
     // One quick snap: the overlays go, the picture gives a short push and settles — no bounce.
     immersion.value = withTiming(on ? 1 : 0, { duration: 180 });
     punch.value = withSequence(withTiming(on ? 1.03 : 0.97, { duration: 80 }), withTiming(1, { duration: 110 }));
@@ -649,7 +650,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       style={styles.author}
                     >
                       <Avatar name={author.name} seed={author.avatarSeed} size={34} />
-                      <Text style={styles.authorName}>@{author.handle}<Text style={styles.authorTime}> · {relativeTime(post.createdAt)}</Text></Text>
+                      <Text style={styles.authorName}>@{author.handle}<Text style={styles.authorTime}> · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}{post.location ? ` · ${post.location}` : ''}</Text></Text>
                     </Pressable>
                     <RichText numberOfLines={3} style={styles.body}>
                       {post.body}

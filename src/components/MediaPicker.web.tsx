@@ -376,7 +376,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
               // The same player the feed uses: a tap pauses, a pinch zooms and
               // springs back; no browser controls.
               <div onClick={(event) => event.stopPropagation()} style={{ position: 'relative', width: orientation === 'landscape' ? '100%' : 'min(100%, 56vh)', aspectRatio: orientation === 'landscape' ? '16 / 9' : '9 / 16', maxHeight: '100%', borderRadius: 12, overflow: 'hidden', background: '#000', cursor: 'default' }}>
-                <ZoomableMedia>
+                <ZoomableMedia onDismiss={() => setExpanded(false)}>
                   <ClipPlayback uri={value.uri} poster={value.thumbnailUrl} active fit={orientation === 'landscape' ? 'contain' : 'cover'} trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} crop={trim?.crop} silent={trim?.muted} />
                 </ZoomableMedia>
               </div>

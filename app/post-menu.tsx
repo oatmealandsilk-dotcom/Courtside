@@ -69,6 +69,7 @@ export default function PostMenu() {
     );
   } else if (mine && post) {
     rows.push(
+      { key: 'edit', icon: 'create-outline', label: 'Edit', note: 'Caption, who is in it, where it was.', onPress: () => router.replace({ pathname: '/edit-post', params: { id: post.id, kind: 'post' } }) },
       { key: 'pin', icon: 'pin-outline', label: post.pinned ? 'Unpin from profile' : 'Pin to profile', note: post.pinned ? undefined : 'Shown first on your profile.', onPress: () => { actions.togglePinPost(post.id); close(); } },
       { key: 'archive', icon: 'archive-outline', label: post.archived ? 'Unarchive' : 'Archive', note: post.archived ? undefined : 'Hidden from everyone; kept in your archive.', onPress: () => { actions.toggleArchivePost(post.id); close(); } },
       { key: 'delete', icon: 'trash-outline', label: 'Delete', danger: true, confirm: 'Tap again to delete for good', onPress: () => { actions.deletePost(post.id); close(); } },

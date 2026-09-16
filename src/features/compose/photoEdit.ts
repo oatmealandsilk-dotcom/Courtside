@@ -5,6 +5,19 @@ export type Aspect = 'original' | '9:16' | '4:5' | '1:1';
 
 export interface EditedPhoto { uri: string; width: number; height: number }
 
+/**
+ * The photo's size as the cutter sees it. A phone photo is often stored
+ * sideways with a "rotate" flag; asking the cutter itself (a one-off render)
+ * gives the upright size, so a window drawn on the stage cuts what it shows.
+ */
+export async function measureForEdit(uri: string): Promise<{ width: number; height: number }> {
+  try {
+    const image = await ImageManipulator.manipulate(uri).renderAsync();
+    if (image.width > 0 && image.height > 0) return { width: image.width, height: image.height };
+  } catch { /* fall back to the plain measurement */ }
+  return measure(uri);
+}
+
 /** A photo's own size, which a crop needs to know before it can be centred. */
 export function measure(uri: string): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => Image.getSize(uri, (width, height) => resolve({ width, height }), reject));

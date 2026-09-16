@@ -275,6 +275,10 @@ interface AppActions {
   /** Puts one of your posts away, or brings it back. */
   toggleArchivePost: (postId: ID) => void;
   togglePinPost: (postId: ID) => void;
+  /** Change your own post's words, tags, who is in it, and where it was. */
+  editPost: (postId: ID, patch: { body: string; taggedUserIds: ID[]; location?: string }) => void;
+  /** Change your own thread's question and details. */
+  editQuestion: (questionId: ID, patch: { title: string; body: string }) => void;
   /** Pull-to-refresh: fetches everything again from the server. */
   refresh: () => Promise<void>;
   deletePost: (postId: ID) => void;
@@ -878,6 +882,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({
       ...prev,
       posts: prev.posts.map((p) => (p.id === postId && p.authorId === me ? { ...p, pinned: !p.pinned } : p)),
+    }));
+  }, [requireUser]);
+
+  const editPost = useCallback((postId: ID, patch: { body: string; taggedUserIds: ID[]; location?: string }) => {
+    const me = requireUser();
+    const post = stateRef.current.posts.find((p) => p.id === postId);
+    if (!post || post.authorId !== me) return;
+    haptics.commit();
+    const editedAt = new Date().toISOString();
+    const tags = Array.from(new Set((patch.body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map((tag) => tag.slice(1).toLowerCase())));
+    const location = patch.location?.trim() || undefined;
+    if (live(me, postId)) remote.updatePost(postId, { body: patch.body, tags, taggedUserIds: patch.taggedUserIds, location, editedAt });
+    setState((prev) => {
+      const before = prev.posts.find((p) => p.id === postId);
+      const newlyTagged = patch.taggedUserIds.filter((id) => !(before?.taggedUserIds ?? []).includes(id));
+      const next: AppState = {
+        ...prev,
+        posts: prev.posts.map((p) => (p.id === postId ? { ...p, body: patch.body, tags, taggedUserIds: patch.taggedUserIds.length ? patch.taggedUserIds : undefined, location, editedAt } : p)),
+      };
+      return newlyTagged.reduce((acc, id) => withNotification(acc, { userId: id, actorId: me, kind: 'tag', targetId: postId, targetKind: 'post', preview: snippet(patch.body || 'a post') }), next);
+    });
+  }, [requireUser]);
+
+  const editQuestion = useCallback((questionId: ID, patch: { title: string; body: string }) => {
+    const me = requireUser();
+    haptics.commit();
+    const tags = Array.from(new Set((patch.body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map((tag) => tag.slice(1).toLowerCase())));
+    setState((prev) => ({
+      ...prev,
+      questions: prev.questions.map((q) => (q.id === questionId && q.authorId === me ? { ...q, title: patch.title, body: patch.body, tags, editedAt: new Date().toISOString() } : q)),
     }));
   }, [requireUser]);
 
@@ -1870,6 +1904,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addPost,
       toggleArchivePost,
       togglePinPost,
+      editPost,
+      editQuestion,
       refresh,
       deletePost,
       addStory,
@@ -1937,6 +1973,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addPost,
       toggleArchivePost,
       togglePinPost,
+      editPost,
+      editQuestion,
       refresh,
       deletePost,
       addStory,

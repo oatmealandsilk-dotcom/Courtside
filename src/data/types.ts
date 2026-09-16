@@ -179,6 +179,10 @@ export interface Post {
   archived?: boolean;
   /** Pinned by its author: first in their profile grid. */
   pinned?: boolean;
+  /** Where it was, in the author's words. */
+  location?: string;
+  /** When the author last changed it; shown as "Edited". */
+  editedAt?: string;
 }
 
 /* --------------------------------- Stories ------------------------------- */
@@ -232,6 +236,8 @@ export interface Question {
   views?: number;
   shares?: number;
   savedBy?: ID[];
+  /** When the asker last changed it; shown as "Edited". */
+  editedAt?: string;
   /**
    * Set when the thread was pulled in from another community rather than
    * posted here. Replies stay on the original site; `replies` is their count.

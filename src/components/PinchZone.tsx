@@ -40,11 +40,16 @@ export function PinchZone({ children, onPinchOut, onPinchIn }: {
     })
     .onEnd((e) => {
       'worklet';
+      if (e.scale > 1.18) runOnJS(onPinchOut)();
+      else if (e.scale < 0.85) runOnJS(onPinchIn)();
+    })
+    // Finalize runs whether the pinch ended or was cancelled (the page's
+    // scroll can take the touches mid-pinch): the picture always snaps back.
+    .onFinalize(() => {
+      'worklet';
       scale.value = withTiming(1, SNAP);
       driftX.value = withTiming(0, SNAP);
       driftY.value = withTiming(0, SNAP);
-      if (e.scale > 1.18) runOnJS(onPinchOut)();
-      else if (e.scale < 0.85) runOnJS(onPinchIn)();
     }), [onPinchOut, onPinchIn, scale, focalX, focalY, driftX, driftY]);
   const style = useAnimatedStyle(() => {
     const dx = (focalX.value - width.value / 2) * (1 - scale.value) + driftX.value;

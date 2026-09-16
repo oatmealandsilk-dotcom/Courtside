@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { PickedMedia } from '@/components/MediaPicker';
 import { VideoSurface, type VideoSurfaceHandle } from '@/components/VideoSurface';
 import { framesAt, type Frame } from '@/features/compose/frames';
-import { ASPECT_RATIO, editPhotoRect, measure, type Aspect } from '@/features/compose/photoEdit';
+import { ASPECT_RATIO, editPhotoRect, measureForEdit, type Aspect } from '@/features/compose/photoEdit';
 import { clampCrop, cropLayer } from '@/lib/crop';
 import type { MediaCrop } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -224,7 +224,7 @@ export function MediaEditor({ media, onBack, onDone }: {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const [nat, setNat] = useState<{ width: number; height: number } | null>(null);
-  useEffect(() => { if (!isVideo && media.uri) measure(media.uri).then(setNat).catch(() => setNat(null)); }, [isVideo, media.uri]);
+  useEffect(() => { if (!isVideo && media.uri) measureForEdit(media.uri).then(setNat).catch(() => setNat(null)); }, [isVideo, media.uri]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   // The turned picture's size, the window's shape, and how it all lays out on the stage.

@@ -1,6 +1,6 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 
-export interface ClipVideoHandle { seek: (seconds: number) => void }
+export interface ClipVideoHandle { seek: (seconds: number) => void; player: null }
 
 /** A clip in the browser, filling whatever holds it; `active` plays it, muted or not. */
 export const ClipVideo = forwardRef<ClipVideoHandle, {
@@ -11,7 +11,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   onSize?: (width: number, height: number) => void;
 }>(function ClipVideo({ uri, poster, active = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, onProgress, onReady, onSize }, ref) {
   const el = useRef<HTMLVideoElement>(null);
-  useImperativeHandle(ref, () => ({ seek: (seconds) => { if (el.current) el.current.currentTime = seconds; } }), []);
+  useImperativeHandle(ref, () => ({ seek: (seconds) => { if (el.current) el.current.currentTime = seconds; }, player: null }), []);
   useEffect(() => {
     const video = el.current;
     if (!video) return;

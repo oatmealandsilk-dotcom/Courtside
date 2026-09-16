@@ -58,6 +58,7 @@ interface PostRow {
   orientation?: string | null;
   trim_start?: number | string | null; trim_end?: number | string | null; muted?: boolean | null; pinned?: boolean | null;
   crop?: { scale: number; x: number; y: number } | null;
+  location?: string | null; edited_at?: string | null;
   post_likes?: { user_id: string }[]; post_saves?: { user_id: string }[]; comments?: { id: string }[];
 }
 interface CommentRow {
@@ -116,6 +117,8 @@ const toPost = (row: PostRow): Post => ({
   savedBy: (row.post_saves ?? []).map((s) => s.user_id),
   archived: row.archived || undefined,
   pinned: row.pinned || undefined,
+  location: row.location ?? undefined,
+  editedAt: row.edited_at ?? undefined,
 });
 
 const toComment = (row: CommentRow): Comment => ({
@@ -263,12 +266,13 @@ export const remote = {
       ...(post.trimStart !== undefined ? { trim_start: post.trimStart, trim_end: post.trimEnd ?? null } : {}),
       ...(post.muted ? { muted: true } : {}),
       ...(post.crop ? { crop: post.crop } : {}),
+      ...(post.location ? { location: post.location } : {}),
     };
     const { error } = await need().from('posts').insert({ ...row, ...trim });
     if (!error) return;
     // The trim columns arrive with a migration; until it has run, save the
     // post without them rather than losing it. The clip plays untrimmed.
-    if (Object.keys(trim).length && /trim_|muted|crop/.test(error.message)) {
+    if (Object.keys(trim).length && /trim_|muted|crop|location/.test(error.message)) {
       console.warn('[remote] trim columns missing; run the pending migration — saving the post untrimmed');
       const retry = await need().from('posts').insert(row);
       if (retry.error) fail('post insert')(retry.error);
@@ -284,6 +288,19 @@ export const remote = {
   async setPostArchived(postId: ID, archived: boolean) {
     const { error } = await need().from('posts').update({ archived }).eq('id', postId);
     if (error) fail('post archive')(error);
+  },
+  /** The author's edit: words, tags, who is in it, where it was — and when. */
+  async updatePost(postId: ID, patch: { body: string; tags: string[]; taggedUserIds: ID[]; location?: string; editedAt: string }) {
+    const base = { body: patch.body, tags: patch.tags, tagged_user_ids: patch.taggedUserIds };
+    const { error } = await need().from('posts').update({ ...base, location: patch.location ?? null, edited_at: patch.editedAt }).eq('id', postId);
+    if (!error) return;
+    if (/location|edited_at/.test(error.message)) {
+      console.warn('[remote] edit columns missing; run the pending migration — saving the words only');
+      const retry = await need().from('posts').update(base).eq('id', postId);
+      if (retry.error) fail('post edit')(retry.error);
+      return;
+    }
+    fail('post edit')(error);
   },
   async setPostPinned(postId: ID, pinned: boolean) {
     const { error } = await need().from('posts').update({ pinned }).eq('id', postId);

@@ -63,7 +63,7 @@ export function QuestionCard({
             <Text style={styles.sourceText}>{question.source.label}</Text>
           </View>
         ) : author ? <LevelPill profile={author.profile} small /> : null}
-        {brandCorner ? null : <Text style={[styles.footerText, { marginLeft: 'auto' }]}>{relativeTime(question.createdAt)}</Text>}
+        {brandCorner ? null : <Text style={[styles.footerText, { marginLeft: 'auto' }]}>{relativeTime(question.createdAt)}{question.editedAt ? ' · Edited' : ''}</Text>}
       </View>
       <Text style={styles.title}>{question.title}</Text>
       {showBody && !!question.body && <RichText style={styles.preview}>{question.body}</RichText>}

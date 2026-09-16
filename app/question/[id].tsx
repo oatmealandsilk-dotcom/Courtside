@@ -62,7 +62,7 @@ export default function QuestionDetail() {
   };
 
   return (
-    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); router.navigate('/discuss'); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => goBack()} right={<Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable>}>
+    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); router.navigate('/discuss'); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => goBack()} right={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>{question.authorId === currentUserId ? <Pressable accessibilityRole="button" accessibilityLabel="Edit this thread" hitSlop={10} onPress={() => router.push({ pathname: '/edit-post', params: { id: question.id, kind: 'question' } })}><Ionicons name="create-outline" size={23} color={colors.text} /></Pressable> : null}<Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable></View>}>
       <Card style={styles.questionCard}>
         {/* Who asked, up top and at full size — the way a reply shows its author. */}
         <View style={styles.askerRow}>
@@ -70,7 +70,7 @@ export default function QuestionDetail() {
             <Avatar name={asker?.name ?? '?'} seed={asker?.avatarSeed ?? question.authorId} uri={asker?.avatarUrl} size={32} />
             <View style={{ flex: 1 }}>
               <Text style={styles.askerName} numberOfLines={1}>{asker?.name ?? 'Unknown'}</Text>
-              <Text style={styles.time}>{asker ? `@${asker.handle}` : ''} · {relativeTime(question.createdAt)}</Text>
+              <Text style={styles.time}>{asker ? `@${asker.handle}` : ''} · {relativeTime(question.createdAt)}{question.editedAt ? ' · Edited' : ''}</Text>
             </View>
           </Pressable>
           <Chip label={meta.label} selected tint={meta.tint} ink="#0A1120" small />

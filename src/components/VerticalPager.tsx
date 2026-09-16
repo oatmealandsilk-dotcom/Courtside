@@ -22,12 +22,14 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     if (index !== last.current) { last.current = index; onIndex(index); }
   };
   return (
-    <View style={{ flex: 1 }} onLayout={(e) => setHeight(e.nativeEvent.layout.height)}>
+    <View style={{ flex: 1 }} onLayout={(e) => { const h = e.nativeEvent.layout.height; setHeight((prev) => (prev === 0 || Math.abs(prev - h) > 40 ? h : prev)); }}>
       {height > 0 && (
         <ScrollView
           ref={list}
           pagingEnabled
           snapToInterval={height}
+          snapToAlignment="start"
+          disableIntervalMomentum
           contentOffset={{ x: 0, y: startIndex.current * height }}
           decelerationRate="fast"
           showsVerticalScrollIndicator={false}

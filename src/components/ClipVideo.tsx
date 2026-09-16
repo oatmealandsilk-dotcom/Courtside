@@ -1,6 +1,6 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { VideoView, useVideoPlayer } from 'expo-video';
+import { VideoView, useVideoPlayer, type VideoPlayer } from 'expo-video';
 
 /** Swipe away and back within this long and the clip picks up where it was; longer and it starts over. */
 export const RESUME_WINDOW_MS = 3000;
@@ -10,7 +10,7 @@ export const RESUME_WINDOW_MS = 3000;
  * `active` is the only control the page has over it. A trimmed clip loops
  * over the part its author kept.
  */
-export interface ClipVideoHandle { seek: (seconds: number) => void }
+export interface ClipVideoHandle { seek: (seconds: number) => void; /** The native player, for a second view of the same stream (full screen). */ player: VideoPlayer | null }
 
 export const ClipVideo = forwardRef<ClipVideoHandle, {
   uri: string; poster?: string; active?: boolean; muted?: boolean; paused?: boolean; fit?: 'cover' | 'contain';
@@ -36,7 +36,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   // The native player can be freed before a late effect reaches it; a call
   // on a freed player must be a no-op, not a crash in the feed.
   const safely = (work: () => void) => { try { work(); } catch { /* player already released */ } };
-  useImperativeHandle(ref, () => ({ seek: (seconds) => safely(() => { player.currentTime = seconds; }) }), [player]); // eslint-disable-line react-hooks/exhaustive-deps
+  useImperativeHandle(ref, () => ({ seek: (seconds) => safely(() => { player.currentTime = seconds; }), player }), [player]); // eslint-disable-line react-hooks/exhaustive-deps
   const latestProgress = useRef(onProgress);
   latestProgress.current = onProgress;
   const latestReady = useRef(onReady);
