@@ -15,8 +15,11 @@ create table if not exists public.story_comment_likes (
   primary key (comment_id, user_id)
 );
 alter table public.story_comment_likes enable row level security;
+drop policy if exists "hit comment likes are public" on public.story_comment_likes;
 create policy "hit comment likes are public"    on public.story_comment_likes for select using (true);
+drop policy if exists "like hit comments as yourself" on public.story_comment_likes;
 create policy "like hit comments as yourself"   on public.story_comment_likes for insert with check (auth.uid() = user_id);
+drop policy if exists "unlike hit comments as yourself" on public.story_comment_likes;
 create policy "unlike hit comments as yourself" on public.story_comment_likes for delete using (auth.uid() = user_id);
 
 -- ------------------------------------------------------------ private accounts
@@ -32,8 +35,11 @@ create table if not exists public.follow_requests (
   check (requester_id <> target_id)
 );
 alter table public.follow_requests enable row level security;
+drop policy if exists "see requests you are part of" on public.follow_requests;
 create policy "see requests you are part of" on public.follow_requests for select using (auth.uid() = requester_id or auth.uid() = target_id);
+drop policy if exists "ask as yourself" on public.follow_requests;
 create policy "ask as yourself"               on public.follow_requests for insert with check (auth.uid() = requester_id);
+drop policy if exists "withdraw or decline" on public.follow_requests;
 create policy "withdraw or decline"           on public.follow_requests for delete using (auth.uid() = requester_id or auth.uid() = target_id);
 
 -- Accepting: the account being followed adds the follow row (which the
