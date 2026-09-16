@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ZoomableMedia, type HomeRect, type ZoomableMediaHandle } from '@/components/ZoomableMedia';
 import { router } from 'expo-router';
@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { PostVideo } from '@/components/PostVideo';
 import { CommentRow } from '@/components/CommentRow';
 import { useApp } from '@/store/AppContext';
+import { isDesktopBrowser } from '@/lib/browserDevice';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { allowTurning, stayUpright } from '@/lib/orientation';
 import { Tappable } from '@/components/Tappable';
@@ -48,6 +49,8 @@ interface Props {
  * (who, the caption, the tags, like · comment · send · save) sits underneath
  * in the app's own type and colours, rather than painted over the picture.
  */
+const desktopWeb = Platform.OS === 'web' && isDesktopBrowser();
+
 export function MediaPostPage({ post, author, liked, saved, active, preload = false, onDoubleTap, onToggleLike, onToggleSave, onComment, onShare, onMore, topInset, burst, discInk, onReady }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const { comments, currentUser, currentUserId } = useApp();
@@ -109,11 +112,22 @@ export function MediaPostPage({ post, author, liked, saved, active, preload = fa
     setSized(true);
     setShape(Math.max(1.2, Math.min(2.6, Math.max(w, h) / Math.min(w, h))));
   };
+  // The frame is sized in points from the room it has, so it is always the
+  // picture's own shape: never stretched across a wide window and cropped
+  // down to fit its height. A tall picture may take 62% of the page's height.
+  const [room, setRoom] = useState<{ w: number; h: number } | null>(null);
+  const frameSize = (() => {
+    if (!room) return null;
+    const ratio = landscape ? (shape ?? 16 / 9) : (!post.videoUrl && shape ? shape : 4 / 5);
+    const h = Math.min(room.h * 0.62, room.w / ratio);
+    return { width: Math.round(h * ratio), height: Math.round(h) };
+  })();
 
   return (
     // Without comments there is nothing to fill the bottom, so the picture and
     // its words sit in the middle of the page instead of leaving a gap below.
-    <View style={[styles.page, { paddingTop: topInset }, !thread.length && styles.pageCentred]}>
+    <View style={[styles.page, { paddingTop: topInset }]}>
+     <View style={[styles.column, desktopWeb && styles.columnDesktop, !thread.length && styles.pageCentred]} onLayout={(e) => { const { width, height } = e.nativeEvent.layout; if (width > 0 && height > 0) setRoom({ w: width, h: height }); }}>
       {/* Who and their level, in the space above the picture. */}
       <View style={styles.whoRow}>
         <Pressable accessibilityRole="link" accessibilityLabel={`View ${author.name}'s profile`} onPress={() => router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`)} style={styles.who}>
@@ -131,7 +145,7 @@ export function MediaPostPage({ post, author, liked, saved, active, preload = fa
       {/* A finger on the picture belongs to the picture: no sideways page swipe from here. */}
       <View
         ref={frameRef}
-        style={[styles.frame, landscape ? [styles.frameWide, { aspectRatio: shape ?? 16 / 9 }] : [styles.frameTall, !post.videoUrl && shape ? { aspectRatio: shape } : null]]}
+        style={[styles.frame, landscape ? styles.frameWide : styles.frameTall, frameSize ?? (landscape ? { alignSelf: 'stretch', aspectRatio: shape ?? 16 / 9 } : { width: '100%', maxHeight: '62%', aspectRatio: !post.videoUrl && shape ? shape : 4 / 5 })]}
         onTouchStart={() => lockPageSwipe(true)}
         onTouchEnd={() => lockPageSwipe(false)}
         onTouchCancel={() => lockPageSwipe(false)}
@@ -206,19 +220,23 @@ export function MediaPostPage({ post, author, liked, saved, active, preload = fa
           <Text style={styles.addCommentText}>{thread.length ? 'Add a comment…' : 'Be the first to comment…'}</Text>
         </Pressable>
       </View>
+     </View>
     </View>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
-  page: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: spacing.md, gap: spacing.md, paddingBottom: spacing.md },
+  page: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: spacing.md, paddingBottom: spacing.md, alignItems: 'center' },
+  column: { flex: 1, width: '100%', gap: spacing.md },
+  // On a computer the post keeps a phone's width in the middle of the window,
+  // the size it was posted at, rather than stretching across the screen.
+  columnDesktop: { maxWidth: 640 },
   pageCentred: { justifyContent: 'center' },
-  frame: { borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000', alignSelf: 'stretch' },
-  // Instagram's tall post: 4:5, so the picture is big without taking the page.
-  frameTall: { aspectRatio: 4 / 5, maxHeight: '62%', alignSelf: 'center', width: '100%' },
-  // A wide video runs the full width of the screen, no margin, no rounding.
+  frame: { borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000' },
+  // Instagram's tall post: 4:5 by default, so the picture is big without taking the page.
+  frameTall: { alignSelf: 'center' },
   // Rounded like the wordmark pill, a little in from the edges, the video's own shape.
-  frameWide: { alignSelf: 'stretch', borderRadius: 14 },
+  frameWide: { alignSelf: 'center', borderRadius: 14 },
   details: { gap: spacing.sm, flexShrink: 1, minHeight: 0 },
   fullRoot: { flex: 1, backgroundColor: 'transparent' },
   fullClose: { position: 'absolute', right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },

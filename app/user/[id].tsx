@@ -30,7 +30,8 @@ export default function UserProfile() {
   const [notice, setNotice] = useState('');
   const [tab, setTab] = useState<typeof TABS[number]>('Posts');
   const { width: windowWidth } = useWindowDimensions();
-  const tileW = Math.floor((windowWidth - spacing.lg * 2) / 3);
+  const [gridW, setGridW] = useState(0);
+  const tileW = Math.floor((gridW || windowWidth - spacing.lg * 2) / 3);
   const tileH = Math.round((tileW * 4) / 3);
 
   const user = users.find((u) => u.id === id);
@@ -174,7 +175,7 @@ export default function UserProfile() {
               </Pressable>
             ))}
           </View>
-          <View style={styles.grid}>
+          <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>
             {items.map((p) => (
               <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: tab === 'Clips' ? 'clips' : tab === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
                 <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
