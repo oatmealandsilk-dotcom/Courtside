@@ -87,6 +87,8 @@ export interface User {
   avatarSeed: string;
   avatarUrl?: string;
   readReceiptsEnabled?: boolean;
+  /** Only followers see their posts, hits and stats; following needs a request they accept. */
+  isPrivate?: boolean;
   isCoach: boolean;
   followers: number;
   following: number;
@@ -151,6 +153,11 @@ export interface Post {
   thumbnailUrl?: string;
   /** How the clip was shot. Landscape plays letterboxed so nothing is cropped. */
   orientation?: 'portrait' | 'landscape';
+  /** A trim, in seconds, honoured at playback rather than cut into the file. */
+  trimStart?: number;
+  trimEnd?: number;
+  /** Posted without sound. */
+  muted?: boolean;
   taggedUserIds?: ID[];
   match?: MatchResult;
   session?: SessionDetail;
@@ -165,6 +172,8 @@ export interface Post {
   savedBy?: ID[];
   /** Put away by its author. Hidden everywhere except their own archive. */
   archived?: boolean;
+  /** Pinned by its author: first in their profile grid. */
+  pinned?: boolean;
 }
 
 /* --------------------------------- Stories ------------------------------- */
@@ -515,6 +524,10 @@ export type NotificationKind =
   | 'helpful'
   | 'share'
   | 'follow'
+  /** Someone asked to follow your private account. Actor is them; accept or decline on the row. */
+  | 'follow-request'
+  /** A private account said yes to your request. */
+  | 'follow-accepted'
   /** Your own post, hit, or question went live. Actor is you. */
   | 'posted';
 

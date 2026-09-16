@@ -9,7 +9,7 @@ const AUTH = new Set(['/sign-in', '/onboarding']);
  * See-through sheets over the current page. The page underneath stays put,
  * so animating the content here would make it flash behind the sheet.
  */
-const SHEETS = new Set(['/compose', '/share']);
+const SHEETS = new Set(['/compose', '/share', '/ask', '/comments', '/post-menu']);
 
 /**
  * Animate the content without remounting the router or moving navigation.

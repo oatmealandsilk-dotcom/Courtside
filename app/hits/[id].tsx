@@ -9,6 +9,7 @@ import { ClipPlayback } from '@/components/ClipPlayback';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { PlayerName } from '@/components/PlayerName';
 import { RichText } from '@/components/RichText';
+import { CommentRow } from '@/components/CommentRow';
 import { Tappable } from '@/components/Tappable';
 import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
 import { relativeTime, timeLeft } from '@/lib/format';
@@ -77,22 +78,9 @@ export default function HitThread() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{thread.length} {thread.length === 1 ? 'comment' : 'comments'}</Text>
-        {thread.map((comment) => {
-          const commenter = users.find((u) => u.id === comment.authorId);
-          return (
-            <View key={comment.id} style={styles.comment}>
-              <Avatar name={commenter?.name ?? '?'} seed={commenter?.avatarSeed ?? comment.authorId} size={32} />
-              <View style={styles.commentBody}>
-                <Text style={styles.commentMeta}>
-                  <PlayerName userId={commenter?.id}>{commenter?.name ?? 'Unknown'}</PlayerName> · {relativeTime(comment.createdAt)}
-                </Text>
-                <RichText style={styles.commentText}>{comment.body}</RichText>
-              </View>
-            </View>
-          );
-        })}
+        {thread.map((comment) => <CommentRow key={comment.id} comment={comment} />)}
         <View style={styles.composer}>
-          <Field value={draft} onChangeText={setDraft} placeholder="Add a comment" multiline minHeight={70} onSubmitEditing={submit} />
+          <Field value={draft} onChangeText={setDraft} placeholder="Add a comment" multiline minHeight={70} onSubmitEditing={submit} mentions />
           <Button label="Post comment" onPress={submit} disabled={draft.trim().length === 0} />
         </View>
       </View>

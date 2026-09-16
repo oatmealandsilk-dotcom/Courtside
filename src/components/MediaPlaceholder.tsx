@@ -9,13 +9,17 @@ import { colors, radius, spacing, surfaceColorFor, typography } from '@/theme';
  * Stand-in for uploaded photo/video. The mock build ships no binary assets, so
  * media renders as a deterministic tinted court card instead of a broken image.
  */
-export function MediaPlaceholder({ label, seed, portrait = false }: { label: string; seed: string; portrait?: boolean }) {
+export function MediaPlaceholder({ label, seed, portrait = false, fill = false }: {
+  label: string; seed: string; portrait?: boolean;
+  /** Stretch to whatever holds it, no frame or corners — for a full-screen page. */
+  fill?: boolean;
+}) {
   const styles = useThemedStyles(styleDefinitions);
   const tint = surfaceColorFor(seed);
   const isVideo = /·\s*\d+:\d+/.test(label);
 
   return (
-    <View style={[styles.wrap, portrait && { aspectRatio: 9 / 12, maxHeight: 600, backgroundColor: colors.surfaceAlt }, { backgroundColor: `${tint}22`, borderColor: `${tint}55` }]}>
+    <View style={[styles.wrap, portrait && { aspectRatio: 9 / 12, maxHeight: 600, backgroundColor: colors.surfaceAlt }, fill && styles.fill, { backgroundColor: `${tint}22`, borderColor: `${tint}55` }]}>
       <View style={styles.court}>
         <View style={[styles.line, styles.baseline]} />
         <View style={[styles.line, styles.service]} />
@@ -44,6 +48,7 @@ const styleDefinitions = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  fill: { aspectRatio: undefined, maxHeight: undefined, flex: 1, height: '100%', borderRadius: 0, borderWidth: 0 },
   court: { position:'absolute',top:0,left:0,right:0,bottom:0, opacity: 0.35 },
   line: { position: 'absolute', backgroundColor: colors.text },
   baseline: { left: '12%', right: '12%', top: '22%', height: 1 },

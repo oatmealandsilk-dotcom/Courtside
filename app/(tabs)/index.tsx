@@ -2,17 +2,26 @@ import { asTabRoute } from '@/features/navigation/tabFocus';
 import { ThreadReplies } from '@/components/ThreadReplies';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@/lib/useIsFocused';
+import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { PinchZone } from '@/components/PinchZone';
+import Reanimated, { runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming } from 'react-native-reanimated';
+import * as haptics from '@/lib/haptics';
 
 import { Avatar, Button, EmptyState } from '@/components/ui';
 import { LevelPill } from '@/components/LevelPill';
 import { QuestionCard } from '@/components/QuestionCard';
 import { PostCard } from '@/components/PostCard';
+import { BrandMark } from '@/components/BrandMark';
+import { MediaPostPage } from '@/components/MediaPostPage';
 import { Tappable } from '@/components/Tappable';
-import { VerticalPager } from '@/components/VerticalPager';
+import { VerticalPager, type VerticalPagerHandle } from '@/components/VerticalPager';
+import { subscribeScrollToTop } from '@/features/navigation/scrollToTop';
+import { setBarCompact } from '@/features/navigation/barShrink';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { isLive } from '@/features/stories/stories';
 import { ClipPlayback } from '@/components/ClipPlayback';
@@ -30,6 +39,44 @@ import { colors } from '@/theme';
  * Keyed on a counter rather than a boolean so tapping twice in a row replays
  * it — a boolean would already be true and the second tap would show nothing.
  */
+/**
+ * Something that can be tapped away: it shrinks and fades in one short move,
+ * then tells its page it is gone. The page decides how long to remember that.
+ */
+function TapAway({ onHidden, label, children, style }: { onHidden: () => void; label: string; children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+  const gone = useSharedValue(0);
+  const press = useSharedValue(0);
+  const pop = useSharedValue(0);
+  const hover = useSharedValue(0);
+  // Touch down: it gives a hair, like a button. Release: a small lift, then
+  // gone in one short fade-and-shrink — between a plain snap and a bounce.
+  const anim = useAnimatedStyle(() => ({
+    opacity: 1 - gone.value,
+    transform: [{ scale: (1 - 0.04 * press.value + 0.02 * pop.value + 0.04 * hover.value) * (1 - 0.2 * gone.value) }, { translateY: -3 * gone.value }],
+  }));
+  return (
+    <Reanimated.View style={anim}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        hitSlop={6}
+        style={style}
+        onHoverIn={() => { hover.value = withTiming(1, { duration: 120 }); }}
+        onHoverOut={() => { hover.value = withTiming(0, { duration: 120 }); }}
+        onPressIn={() => { haptics.untap(); press.value = withTiming(1, { duration: 50 }); }}
+        onPressOut={() => { press.value = withTiming(0, { duration: 80 }); }}
+        onPress={() => {
+          pop.value = withSequence(withTiming(1, { duration: 60 }), withTiming(0, { duration: 80 }));
+          gone.value = withDelay(50, withTiming(1, { duration: 220 }, (finished) => { if (finished) runOnJS(onHidden)(); }));
+        }}
+      >{children}</Pressable>
+    </Reanimated.View>
+  );
+}
+
+/** The heart's red: bright and warm, the one that gets a reaction. */
+const LIKE_RED = '#FF3B5C';
+
 function LikeBurst({ token }: { token: number }) {
   const scale = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -39,10 +86,10 @@ function LikeBurst({ token }: { token: number }) {
     scale.setValue(0.5);
     opacity.setValue(1);
     Animated.parallel([
-      Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 16, bounciness: 16 }),
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 60, bounciness: 12 }),
       Animated.sequence([
-        Animated.delay(340),
-        Animated.timing(opacity, { toValue: 0, duration: 280, useNativeDriver: true }),
+        Animated.delay(220),
+        Animated.timing(opacity, { toValue: 0, duration: 160, useNativeDriver: true }),
       ]),
     ]).start();
   }, [token, scale, opacity]);
@@ -60,13 +107,40 @@ function LikeBurst({ token }: { token: number }) {
   );
 }
 
-function Home() {
+/** Show one player's things as a feed of their own: their clips, posts, or tagged posts. */
+export interface FeedScope { userId: string; set: 'own' | 'clips' | 'tagged'; start?: string }
+
+function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const styles = useThemedStyles(styleDefinitions);
   // The US Open ground is navy; the green wordmark sinks into it, white does not.
   const { theme } = useTheme();
   const app = useApp();
   const { posts, questions, comments, stories, users, currentUserId, saved, actions, ready, followingIds, mutedIds, blockedIds, conversations } = app;
   const [active, setActive] = useState(0);
+  // Pinch out on a clip or hit and everything but the picture goes away —
+  // caption, buttons, wordmark, sound disc; pinch in brings it all back.
+  const [immersive, setImmersive] = useState(false);
+  const pager = useRef<VerticalPagerHandle>(null);
+  useEffect(() => subscribeScrollToTop((tab) => { if (tab === '/') pager.current?.scrollToTop(); }), []);
+  // Locking in has a feel to it: the picture gives a small push and settles
+  // with a spring while the overlays sink away; locking out is the reverse.
+  const immersion = useSharedValue(0);
+  const punch = useSharedValue(1);
+  const lock = (on: boolean) => {
+    if (on === immersive) return;
+    setImmersive(on);
+    haptics.tap();
+    // One quick snap: the overlays go, the picture gives a short push and settles — no bounce.
+    immersion.value = withTiming(on ? 1 : 0, { duration: 180 });
+    punch.value = withSequence(withTiming(on ? 1.03 : 0.97, { duration: 80 }), withTiming(1, { duration: 110 }));
+  };
+  const overlayStyle = useAnimatedStyle(() => ({ opacity: 1 - immersion.value, transform: [{ translateY: 14 * immersion.value }] }));
+  // The wordmark and the thread logo can be tapped away, page by page: the
+  // one you tapped goes; the next page still has its own.
+  const [hiddenMarks, setHiddenMarks] = useState<Set<string>>(() => new Set());
+  const hideMark = (key: string) => setHiddenMarks((prev) => new Set(prev).add(key));
+  const pictureStyle = useAnimatedStyle(() => ({ transform: [{ scale: punch.value }] }));
+  useEffect(() => { setImmersive(false); immersion.value = 0; punch.value = 1; }, [active, immersion, punch]);
   const [visit, setVisit] = useState(0);
   const focused = useIsFocused();
   const latest = useRef(app);
@@ -79,10 +153,20 @@ function Home() {
   const rankedFor = useRef<string | null>(null);
   useFocusEffect(
     useCallback(() => {
-      const stamp = `${ready}:${currentUserId}`;
+      const stamp = `${ready}:${currentUserId}:${scope?.userId ?? ''}:${scope?.set ?? ''}`;
       if (rankedFor.current === stamp) return;
       rankedFor.current = stamp;
       const data = latest.current;
+      if (scope) {
+        // One person's things, newest first, opened on the one that was tapped.
+        const mine = data.posts
+          .filter((p) => !p.archived && (scope.set === 'tagged' ? p.taggedUserIds?.includes(scope.userId) : p.authorId === scope.userId && (scope.set !== 'clips' || p.kind === 'clip')))
+          .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+        setOrder(mine.map((p) => `p:${p.id}`));
+        setActive(Math.max(0, mine.findIndex((p) => p.id === scope.start)));
+        setVisit((v) => v + 1);
+        return;
+      }
       setOrder(
         rankFeed(data.posts, data.questions.filter((q) => !q.source), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st))).map((i) =>
           i.type === 'post' ? `p:${i.post.id}` : i.type === 'question' ? `q:${i.question.id}` : `h:${i.story.id}`,
@@ -90,7 +174,7 @@ function Home() {
       );
       setActive(0);
       setVisit((v) => v + 1);
-    }, [ready, currentUserId]),
+    }, [ready, currentUserId, scope?.userId, scope?.set, scope?.start]),
   );
 
   /**
@@ -126,23 +210,32 @@ function Home() {
   }, [users, posts, comments, conversations, currentUserId, followingIds, blockedIds]);
 
   // Anything you post after the feed was ranked — a clip, a note, a hit —
-  // goes in near the top straight away instead of waiting for the next visit.
+  // goes right to the very top and the feed jumps there, so posting reads as
+  // "it's up" instead of leaving you to scroll and find it.
   useEffect(() => {
-    if (!currentUserId) return;
+    if (!currentUserId || scope) return;
     const mine = [
       ...stories.filter((st) => st.authorId === currentUserId && isLive(st)).map((st) => `h:${st.id}`),
       ...posts.filter((p) => p.authorId === currentUserId && !p.archived).map((p) => `p:${p.id}`),
     ];
+    let added = false;
     setOrder((prev) => {
       const fresh = mine.filter((key) => !prev.includes(key));
       if (!fresh.length) return prev;
-      return prev.length ? [prev[0], ...fresh, ...prev.slice(1)] : fresh;
+      added = true;
+      return [...fresh, ...prev];
     });
-  }, [stories, posts, currentUserId]);
+    if (added) {
+      setActive(0);
+      setVisit((v) => v + 1);
+    }
+  }, [stories, posts, currentUserId, scope]);
 
   // Blocked and muted players disappear from the feed entirely.
   const feed = useMemo<FeedItem[]>(() => {
     const hidden = new Set([...blockedIds, ...mutedIds]);
+    // A private account is only in your feed once they have let you follow.
+    for (const u of users) if (u.isPrivate && u.id !== currentUserId && !followingIds.includes(u.id)) hidden.add(u.id);
     return order.flatMap<FeedItem>((key) => {
       const id = key.slice(2);
       if (key.startsWith('p:')) {
@@ -157,7 +250,7 @@ function Home() {
       const question = questions.find((q) => q.id === id);
       return question && !hidden.has(question.authorId) ? [{ type: 'question' as const, question }] : [];
     });
-  }, [order, posts, questions, stories, blockedIds, mutedIds]);
+  }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds]);
 
   /**
    * Which page carries the who-to-follow strip: the first thread or written
@@ -165,8 +258,8 @@ function Home() {
    * page, under the eyebrow, rather than riding along the bottom.
    */
   const suggestHost = useMemo(
-    () => feed.findIndex((item, index) => index >= 1 && (item.type === 'question' || (item.type === 'post' && item.post.kind !== 'clip'))),
-    [feed],
+    () => (scope ? -1 : feed.findIndex((item, index) => index >= 1 && (item.type === 'question' || (item.type === 'post' && item.post.kind !== 'clip')))),
+    [feed, scope],
   );
 
   const suggestStrip = suggestions.length ? (
@@ -213,6 +306,11 @@ function Home() {
     if (!alreadyLiked) actions.toggleLike(postId);
     setBurst((b) => ({ id: postId, n: b.n + 1 }));
   };
+  const likeHitByTap = (storyId: string, alreadyLiked: boolean) => {
+    if (!alreadyLiked) actions.toggleLikeStory(storyId);
+    setBurst((b) => ({ id: storyId, n: b.n + 1 }));
+  };
+  const lastHitTap = useRef(0);
 
   // Pressable has no double tap, so count taps inside a short window.
   const lastTap = useRef({ id: '', at: 0 });
@@ -235,6 +333,51 @@ function Home() {
    * page mid-build, even swiping fast.
    */
   const WINDOW = 2;
+  /** How many pages ahead stay mounted and buffering, so the feed is never caught out. */
+  const AHEAD = 7;
+
+  // The warm-up: the first seven pages load (a video's first seconds, a
+  // photo, a thread's words) behind a curtain, which lifts when they are in
+  // — or after six seconds, whichever is first. Only the main feed waits.
+  const [readyIds, setReadyIds] = useState<Set<string>>(() => new Set());
+  const markReady = useCallback((id: string, ok: boolean) => {
+    if (!ok) return;
+    setReadyIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+  }, []);
+  const [warmTimedOut, setWarmTimedOut] = useState(false);
+  useEffect(() => {
+    if (!ready || !feed.length) return;
+    const t = setTimeout(() => setWarmTimedOut(true), 6000);
+    return () => clearTimeout(t);
+  }, [ready, feed.length]);
+  const warmTargets = useMemo(() => feed.slice(0, AHEAD).flatMap((item) => {
+    if (item.type === 'hit') return item.story.videoUrl || item.story.imageUrl ? [item.story.id] : [];
+    if (item.type === 'post') return item.post.videoUrl || item.post.imageUrl || item.post.thumbnailUrl ? [item.post.id] : [];
+    return [];
+  }), [feed]); // eslint-disable-line react-hooks/exhaustive-deps
+  const warmDone = warmTargets.filter((id) => readyIds.has(id)).length;
+  const warmed = !!scope || warmTimedOut || (ready && feed.length > 0 && warmDone >= warmTargets.length);
+  // The curtain is the same screen you saw at sign-in — the mark and the
+  // name — and it fades out once the first pages are in.
+  const [curtainShown, setCurtainShown] = useState(!scope);
+  const curtainFade = useSharedValue(1);
+  const curtainStyle = useAnimatedStyle(() => ({ opacity: curtainFade.value }));
+  useEffect(() => {
+    if (!warmed || !curtainShown) return;
+    curtainFade.value = withTiming(0, { duration: 420 }, (finished) => { if (finished) runOnJS(setCurtainShown)(false); });
+  }, [warmed, curtainShown, curtainFade]);
+  // Photos and clip covers are fetched outright; a page reports itself ready when its picture lands.
+  useEffect(() => {
+    for (const item of feed.slice(0, AHEAD)) {
+      if (item.type === 'post' && !item.post.videoUrl) {
+        const uri = item.post.imageUrl ?? item.post.thumbnailUrl;
+        if (uri) Image.prefetch(uri).then(() => markReady(item.post.id, true)).catch(() => markReady(item.post.id, true));
+      }
+      if (item.type === 'hit' && !item.story.videoUrl && item.story.imageUrl) {
+        Image.prefetch(item.story.imageUrl).then(() => markReady(item.story.id, true)).catch(() => markReady(item.story.id, true));
+      }
+    }
+  }, [feed, markReady]);
 
   // Warm the covers on either side so a swipe never lands on a grey rectangle.
   useEffect(() => {
@@ -265,21 +408,23 @@ function Home() {
     <View style={styles.root}>
       {!ready || !feed.length ? (
         <EmptyState
-          title={ready ? 'Your court is quiet' : 'Loading your clips'}
-          body="Use + to share a moment."
+          title={scope ? 'Nothing here yet' : ready ? 'Your court is quiet' : 'Loading your clips'}
+          body={scope ? undefined : 'Use + to share a moment.'}
         />
       ) : (
         <View style={styles.viewer}>
-          <VerticalPager key={visit} initialIndex={active} onIndex={setActive}>
+          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={(i) => { setBarCompact(i > active && i > 0); setActive(i); }}>
             {feed.map((item, index) => {
               const distance = Math.abs(index - active);
+              const ahead = index - active;
               const pageKey = item.type === 'post' ? item.post.id : item.type === 'question' ? item.question.id : item.story.id;
-              if (distance > WINDOW) {
+              // Two pages behind and seven ahead stay built; the rest hold their slot.
+              if (ahead < -WINDOW || ahead > AHEAD) {
                 // A placeholder page: holds its slot, costs nothing to render.
                 return <View key={pageKey} />;
               }
-              // One page either side keeps its video buffered, ready to play.
-              const near = distance <= 1;
+              // The page behind and the seven ahead keep their video buffered, ready to play.
+              const near = distance <= 1 || (ahead > 0 && ahead <= AHEAD);
               const strip = index === suggestHost ? suggestStrip : null;
 
               if (item.type === 'hit') {
@@ -289,17 +434,26 @@ function Home() {
                 const hitLiked = !!currentUserId && story.likedBy.includes(currentUserId);
                 return (
                   <View key={story.id} style={styles.clip}>
-                    <Pressable accessibilityRole="link" accessibilityLabel={`Open ${author.name}'s hit`} onPress={() => router.push(`/story/${author.id}`)} style={styles.clipFrame}>
+                   <PinchZone onPinchOut={() => lock(true)} onPinchIn={() => lock(false)}><Reanimated.View style={[StyleSheet.absoluteFill, pictureStyle]}>
+                    <View accessibilityLabel={`${author.name}'s hit`} style={styles.clipFrame}>
                       <View style={styles.clipPortrait}>
                         {story.videoUrl ? (
-                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={focused && active === index} preload={near} />
-                        ) : story.imageUrl ? (
-                          <Image accessibilityIgnoresInvertColors source={{ uri: story.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={focused && active === index} preload={near} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
                         ) : (
-                          <MediaPlaceholder label={story.mediaLabel ?? 'Hit'} seed={story.id} portrait />
+                          // Two quick taps like a hit, the way they like a clip.
+                          <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s hit`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
+                            {story.imageUrl ? (
+                              <Image accessibilityIgnoresInvertColors source={{ uri: story.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                            ) : (
+                              <MediaPlaceholder label={story.mediaLabel ?? 'Hit'} seed={story.id} portrait fill />
+                            )}
+                          </Pressable>
                         )}
                       </View>
-                    </Pressable>
+                    </View>
+                    {burst.id === story.id ? <LikeBurst token={burst.n} /> : null}
+                    <Reanimated.View style={[StyleSheet.absoluteFill, overlayStyle]} pointerEvents={immersive ? 'none' : 'box-none'}>
+                    <LinearGradient pointerEvents="none" colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)']} style={styles.bottomFade} />
                     <View style={styles.caption}>
                       <Pressable accessibilityRole="link" onPress={() => router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`)} style={styles.author}>
                         <Avatar name={author.name} seed={author.avatarSeed} size={34} />
@@ -310,15 +464,20 @@ function Home() {
                       <Text style={styles.swipeHint}>↑ Next moment   ·   ← Community</Text>
                     </View>
                     <View style={styles.actions}>
-                      <Tappable accessibilityLabel={hitLiked ? 'Unlike hit' : 'Like hit'} onPress={() => actions.toggleLikeStory(story.id)} scaleTo={0.78} style={styles.action}>
-                        <Ionicons name={hitLiked ? 'heart' : 'heart-outline'} size={36} color={hitLiked ? '#E17B7B' : 'white'} style={styles.actionGlyph} />
+                      <Tappable accessibilityLabel={hitLiked ? 'Unlike hit' : 'Like hit'} onPress={() => actions.toggleLikeStory(story.id)} immediate scaleTo={0.78} style={styles.action}>
+                        <Ionicons name={hitLiked ? 'heart' : 'heart-outline'} size={36} color={hitLiked ? LIKE_RED : 'white'} style={styles.actionGlyph} />
                         <Text style={styles.actionLabel}>{story.likedBy.length}</Text>
                       </Tappable>
-                      <Tappable accessibilityLabel="Hit comments" onPress={() => router.push(`/hits/${story.id}`)} scaleTo={0.78} style={styles.action}>
+                      <Tappable accessibilityLabel="Hit comments" onPress={() => router.push({ pathname: '/comments', params: { kind: 'hit', id: story.id } })} scaleTo={0.78} style={styles.action}>
                         <Ionicons name="chatbubble-outline" size={33} color="white" style={styles.actionGlyph} />
                         <Text style={styles.actionLabel}>{story.commentIds.length}</Text>
                       </Tappable>
+                      <Tappable accessibilityLabel="More options" onPress={() => router.push({ pathname: '/post-menu', params: { id: story.id, kind: 'hit' } })} scaleTo={0.78} style={styles.action}>
+                        <Ionicons name="ellipsis-horizontal" size={30} color="white" style={styles.actionGlyph} />
+                      </Tappable>
                     </View>
+                    </Reanimated.View>
+                   </Reanimated.View></PinchZone>
                   </View>
                 );
               }
@@ -327,11 +486,15 @@ function Home() {
                 const isSaved = saved.questionIds.includes(item.question.id);
                 return (
                   <View key={item.question.id} style={[styles.article, styles.threadArticle]}>
-                    <Text style={styles.eyebrow}>FROM THE COMMUNITY</Text>
+                    <View style={styles.eyebrowRow}>
+                      <Text style={styles.eyebrow}>FROM THE COMMUNITY</Text>
+                      {hiddenMarks.has(item.question.id) ? <View style={{ width: 34, height: 34 }} /> : <TapAway label="Hide the CourtSide logo" onHidden={() => hideMark(item.question.id)} style={styles.threadMark}><BrandMark size={34} /></TapAway>}
+                    </View>
                     {strip}
                     <View style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
                       <QuestionCard
                         showBody
+                        brandCorner
                         question={item.question}
                         author={users.find((u) => u.id === item.question.authorId)}
                         answered={Boolean(item.question.acceptedAnswerId)}
@@ -358,6 +521,34 @@ function Home() {
               if (!author) return <View key={post.id} />;
               const isSaved = saved.postIds.includes(post.id);
 
+              if (post.kind !== 'clip' && (post.imageUrl || post.videoUrl)) {
+                // A photo or video post: the picture up top, the words and
+                // buttons below it in the app's own type, like every other page.
+                const liked = !!currentUserId && post.likedBy.includes(currentUserId);
+                return (
+                  <View key={post.id} style={styles.clip}>
+                    <MediaPostPage
+                      post={post}
+                      author={author}
+                      liked={liked}
+                      saved={isSaved}
+                      active={focused && active === index}
+                      preload={near}
+                      topInset={insets.top + 66}
+                      onDoubleTap={() => likeByTap(post.id, liked)}
+                      onToggleLike={() => actions.toggleLike(post.id)}
+                      onToggleSave={() => actions.toggleSavePost(post.id)}
+                      onComment={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id } })}
+                      onShare={() => share('post', post.id)}
+                      onMore={() => router.push({ pathname: '/post-menu', params: { id: post.id } })}
+                      discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand}
+                      burst={burst.id === post.id ? <LikeBurst token={burst.n} /> : null}
+                      onReady={(ok) => markReady(post.id, ok)}
+                    />
+                  </View>
+                );
+              }
+
               if (post.kind !== 'clip') {
                 return (
                   <View key={post.id} style={styles.article}>
@@ -374,6 +565,7 @@ function Home() {
                         saved={isSaved}
                         onToggleSave={() => actions.toggleSavePost(post.id)}
                         onShare={() => share('post', post.id)}
+                        onComment={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id } })}
                         onPress={() => router.push(`/post/${post.id}`)}
                         onPressAuthor={() => router.push(`/user/${author.id}`)}
                       />
@@ -388,18 +580,27 @@ function Home() {
               const liked = !!currentUserId && post.likedBy.includes(currentUserId);
               return (
                 <View key={post.id} style={styles.clip}>
+                 <PinchZone onPinchOut={() => lock(true)} onPinchIn={() => lock(false)}><Reanimated.View style={[StyleSheet.absoluteFill, pictureStyle]}>
                   {post.videoUrl ? (
                     // A clip keeps its own shape on every screen: a vertical clip is a
                     // tall box, a landscape one a wide box, centred, with the theme
                     // colour around it rather than black bars or a crop.
-                    <View style={styles.clipFrame}>
-                      <View style={post.orientation === 'landscape' ? styles.clipLandscape : styles.clipPortrait}>
+                    <View style={[styles.clipFrame, post.orientation === 'landscape' && { backgroundColor: '#000' }]}>
+                      <View style={post.orientation === 'landscape' ? StyleSheet.absoluteFill : styles.clipPortrait}>
                         <ClipPlayback
+                          letterbox={post.orientation === 'landscape'}
                           uri={post.videoUrl}
                           poster={post.thumbnailUrl}
                           active={focused && active === index}
                           preload={near}
                           onDoubleTap={() => likeByTap(post.id, liked)}
+                          trimStart={post.trimStart}
+                          trimEnd={post.trimEnd}
+                          silent={post.muted}
+                          bare={immersive}
+                          discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand}
+                          discPinned={index === 0 && !scope}
+                          onReady={(ok) => markReady(post.id, ok)}
                         />
                       </View>
                     </View>
@@ -438,6 +639,10 @@ function Home() {
 
                   {burst.id === post.id ? <LikeBurst token={burst.n} /> : null}
 
+                  <Reanimated.View style={[StyleSheet.absoluteFill, overlayStyle]} pointerEvents={immersive ? 'none' : 'box-none'}>
+
+                  <LinearGradient pointerEvents="none" colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)']} style={styles.bottomFade} />
+
                   <View style={styles.caption}>
                     <Pressable
                       accessibilityRole="link"
@@ -458,15 +663,16 @@ function Home() {
                     <Tappable
                       accessibilityLabel={liked ? 'Unlike clip' : 'Like clip'}
                       onPress={() => actions.toggleLike(post.id)}
+                      immediate
                       scaleTo={0.78}
                       style={styles.action}
                     >
-                      <Ionicons name={liked ? 'heart' : 'heart-outline'} size={36} color={liked ? '#E17B7B' : 'white'} style={styles.actionGlyph} />
+                      <Ionicons name={liked ? 'heart' : 'heart-outline'} size={36} color={liked ? LIKE_RED : 'white'} style={styles.actionGlyph} />
                       <Text style={styles.actionLabel}>{post.likedBy.length}</Text>
                     </Tappable>
                     <Tappable
                       accessibilityLabel="Clip comments"
-                      onPress={() => router.push(`/post/${post.id}`)}
+                      onPress={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id } })}
                       scaleTo={0.78}
                       style={styles.action}
                     >
@@ -491,23 +697,61 @@ function Home() {
                       <Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={31} color="white" style={styles.actionGlyph} />
                       <Text style={styles.actionLabel}>{post.savedBy?.length ?? 0}</Text>
                     </Tappable>
+                    <Tappable
+                      accessibilityLabel="More options"
+                      onPress={() => router.push({ pathname: '/post-menu', params: { id: post.id } })}
+                      scaleTo={0.78}
+                      style={styles.action}
+                    >
+                      <Ionicons name="ellipsis-horizontal" size={30} color="white" style={styles.actionGlyph} />
+                    </Tappable>
                   </View>
+                  </Reanimated.View>
+                 </Reanimated.View></PinchZone>
                 </View>
               );
-            }).map((page, index) =>
-              // The wordmark lives inside the first page rather than over the
-              // pager, so it leaves with that page as you swipe instead of
-              // hanging in place and then vanishing.
-              index === 0 ? (
-                <React.Fragment key="first">
+            }).map((page, index) => {
+              // The wordmark rides every full-screen moment — a clip or a hit —
+              // inside its own page, so it leaves with that page as you swipe
+              // instead of hanging in place and then vanishing. Written posts
+              // and threads have their own eyebrow and go without.
+              const item = feed[index];
+              const media = item?.type === 'hit' || (item?.type === 'post' && (item.post.kind === 'clip' || !!item.post.imageUrl || !!item.post.videoUrl));
+              // The fade only belongs on a real picture or video; the demo court cards do without.
+              const picture = item?.type === 'hit'
+                ? !!(item.story.imageUrl || item.story.videoUrl)
+                : item?.type === 'post' && item.post.kind === 'clip' && !!(item.post.videoUrl || item.post.thumbnailUrl || item.post.imageUrl);
+              if (!media && index !== 0) return page;
+              const key = item?.type === 'post' ? item.post.id : item?.type === 'question' ? item.question.id : item?.story.id ?? 'first';
+              return (
+                <React.Fragment key={key}>
                   {page}
-                  <View pointerEvents="none" style={[styles.wordmarkOverlay, { top: insets.top + 12 }]}>
-                    <Text style={[styles.wordmark, theme === 'us-open' && { color: '#FFFFFF' }]}>CourtSide</Text>
-                  </View>
+                  {/* Over a picture the wordmark sits in a small pill of the theme's own
+                      background, so it reads on anything without touching the picture. */}
+                  {scope || hiddenMarks.has(key) || (immersive && index === active) ? null : <View pointerEvents="box-none" style={[styles.wordmarkOverlay, { top: insets.top + 24 }]}>
+                    {/* A tap on the wordmark tucks it away for this page only. */}
+                    <TapAway label="Hide the CourtSide wordmark" onHidden={() => hideMark(key)} style={media && picture ? styles.wordmarkPill : null}>
+                      <Text style={[styles.wordmark, theme === 'us-open' && { color: '#FFFFFF' }]}>CourtSide</Text>
+                    </TapAway>
+                  </View>}
                 </React.Fragment>
-              ) : page,
-            )}
+              );
+            })}
           </VerticalPager>
+          {curtainShown ? (
+            <Reanimated.View pointerEvents={warmed ? 'none' : 'auto'} style={[styles.curtain, curtainStyle]}>
+              <View style={styles.curtainBrand}>
+                <BrandMark size={84} />
+                <Text style={styles.curtainWordmark}>CourtSide</Text>
+              </View>
+              <Text style={styles.curtainTagline}>Play. Talk. Improve.</Text>
+            </Reanimated.View>
+          ) : null}
+          {scope ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => goBack()} style={[styles.scopeBack, { top: insets.top + 14 }]}>
+              <Ionicons name="chevron-back" size={26} color="white" />
+            </Pressable>
+          ) : null}
         </View>
       )}
     </View>
@@ -529,6 +773,7 @@ function HitClock({ expiresAt }: { expiresAt: string }) {
 
 const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, alignItems: 'center' },
+  scopeBack: { position: 'absolute', left: 8, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center', zIndex: 6 },
   wordmarkOverlay: {
     // top comes from the safe-area inset at render; a fixed value put the
     // wordmark under the Dynamic Island on a phone.
@@ -540,8 +785,12 @@ const styleDefinitions = StyleSheet.create({
   },
   // Kept as a hook for anything the wordmark needs over video; the shadow that
   // used to live here was doing more harm than good.
-  wordmarkOnClip: {},
+  wordmarkPill: { paddingHorizontal: 14, paddingVertical: 4, borderRadius: 12, backgroundColor: colors.bg, opacity: 0.88 },
   viewer: { flex: 1, width: '100%', minHeight: 0 },
+  curtain: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', zIndex: 20 },
+  curtainBrand: { alignItems: 'center', gap: 12 },
+  curtainWordmark: { fontSize: 34, fontWeight: '800', color: colors.brand, letterSpacing: -1 },
+  curtainTagline: { position: 'absolute', bottom: 48, fontSize: 12, fontWeight: '600', letterSpacing: 1.4, color: colors.textFaint, textTransform: 'uppercase' },
   clip: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
   clipFrame: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
   clipPortrait: { height: '100%', aspectRatio: 9 / 16, maxWidth: '100%', overflow: 'hidden', backgroundColor: '#000' },
@@ -589,9 +838,10 @@ const styleDefinitions = StyleSheet.create({
   authorName: { color: 'white', fontSize: 14, fontWeight: '700' },
   authorTime: { color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: '500' },
   body: { color: 'white', fontSize: 13, lineHeight: 19 },
-  tags: { color: colors.text, fontSize: 11 },
-  swipeHint: { color: colors.textMuted, fontSize: 10 },
-  actions: { position: 'absolute', right: 12, bottom: 104, gap: 22 },
+  tags: { color: 'rgba(255,255,255,0.85)', fontSize: 11 },
+  swipeHint: { color: 'rgba(255,255,255,0.7)', fontSize: 10 },
+  bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 240 },
+  actions: { position: 'absolute', right: 12, bottom: 90, gap: 22 },
   action: { alignItems: 'center', gap: 4, minWidth: 48 },
   // Instagram's trick: plain white glyphs made bolder by a soft dark shadow
   // rather than a heavier icon, so they hold up over bright footage.
@@ -619,7 +869,9 @@ const styleDefinitions = StyleSheet.create({
   stripFollowText: { color: colors.brandInk, fontSize: 12, fontWeight: '700' },
   threadArticle: { gap: 8, paddingBottom: 8 },
   eyebrow: { color: colors.warning, fontWeight: '700', letterSpacing: 1.2, fontSize: 11 },
+  eyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  threadMark: { marginRight: 6, marginTop: 6 },
   hint: { color: colors.textMuted, fontSize: 11, textAlign: 'center', paddingBottom: 10 },
 });
 
-export default asTabRoute(Home);
+export default asTabRoute<{ previewSection?: string; scope?: FeedScope }>(Home);

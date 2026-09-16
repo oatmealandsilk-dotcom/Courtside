@@ -1,9 +1,10 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import { DragSheet } from '@/components/DragSheet';
 import { shareOutside } from '@/lib/shareOutside';
 import { Avatar, Button, Field } from '@/components/ui';
 import * as haptics from '@/lib/haptics';
@@ -49,18 +50,9 @@ export default function ShareSheet() {
   const [sent, setSent] = useState(false);
   const [fallbackNote, setFallbackNote] = useState('');
 
-  // The sheet rises in and drops out; the dim behind it fades with it. Both
-  // hang off one value so they always move together.
-  const progress = useRef(new Animated.Value(0)).current;
-  const leaving = useRef(false);
-  useEffect(() => {
-    Animated.timing(progress, { toValue: 1, duration: 280, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
-  }, [progress]);
-  const dismiss = () => {
-    if (leaving.current) return;
-    leaving.current = true;
-    Animated.timing(progress, { toValue: 0, duration: 240, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => router.back());
-  };
+  // The card itself (rise, dim, drag handle) is DragSheet's; this only asks it to close.
+  const [closeSignal, setCloseSignal] = useState(0);
+  const dismiss = () => setCloseSignal((n) => n + 1);
 
   const item = kind === 'profile' ? users.find(u => u.id === id) : kind === 'post' ? posts.find((p) => p.id === id) : questions.find((q) => q.id === id);
   const title = item
@@ -104,24 +96,21 @@ export default function ShareSheet() {
   };
 
   return (
-    <View style={styles.backdrop}>
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay, opacity: progress }]} />
-      <Pressable
-        style={styles.dismissArea}
-        accessibilityRole="button"
-        accessibilityLabel="Close share sheet"
-        onPress={dismiss}
-      />
-      <Animated.View style={[styles.sheet, { transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [640, 0] }) }] }]}>
-        {sent ? <SentTick /> : null}
-        <View style={styles.grabber} />
-
+    <DragSheet
+      closeSignal={closeSignal}
+      onDismissed={() => router.back()}
+      peekFraction={0.72}
+      header={
         <View style={styles.headerRow}>
           <Text style={styles.heading}>Send to</Text>
-          <Pressable onPress={dismiss} accessibilityRole="button" accessibilityLabel="Close">
+          <Pressable onPress={dismiss} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10}>
             <Ionicons name="close" size={22} color={colors.textMuted} />
           </Pressable>
         </View>
+      }
+    >
+      <View style={styles.sheet}>
+        {sent ? <SentTick /> : null}
 
         <View style={styles.itemPreview}>
           <Ionicons
@@ -179,43 +168,14 @@ export default function ShareSheet() {
           </Pressable>
           {fallbackNote ? <Text selectable style={styles.empty}>{fallbackNote}</Text> : null}
         </View>
-      </Animated.View>
-    </View>
+      </View>
+    </DragSheet>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' },
-  dismissArea: { flex: 1 },
-  sheet: {
-    maxHeight: '86%',
-    width: '100%',
-    maxWidth: 620,
-    alignSelf: 'center',
-    backgroundColor: colors.bg,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderWidth: 1,
-    borderBottomWidth: 0,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    paddingBottom: spacing.xxl,
-    gap: spacing.md,
-    shadowColor: '#000',
-    shadowOpacity: 0.28,
-    shadowRadius: 28,
-    shadowOffset: { width: 0, height: -10 },
-    elevation: 16,
-  },
-  grabber: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.borderStrong,
-    alignSelf: 'center',
-    marginBottom: spacing.xs,
-  },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sheet: { flex: 1, padding: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xxl, gap: spacing.md },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   heading: { ...typography.title, color: colors.text },
   itemPreview: {
     flexDirection: 'row',

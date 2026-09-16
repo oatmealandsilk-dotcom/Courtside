@@ -10,6 +10,7 @@ import { TOPIC_META } from '@/components/QuestionCard';
 import { Avatar, Button, Card, Chip, EmptyState, Field, Screen } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
 import { RichText } from '@/components/RichText';
+import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useApp } from '@/store/AppContext';
 import type { Answer } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -28,6 +29,8 @@ export function ThreadReply({ answer, thread, acceptedId, depth = 0, preview = f
   const [replying, setReplying] = useState(false);
   const [draft, setDraft] = useState('');
   const [collapsed, setCollapsed] = useState(false);
+  const reveal = useRevealOnFocus();
+  const lineRef = useRef<TextInput>(null);
   const responder = users.find(user => user.id === answer.authorId);
   const children = thread.filter(child => child.parentAnswerId === answer.id)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -52,15 +55,16 @@ export function ThreadReply({ answer, thread, acceptedId, depth = 0, preview = f
           </Pressable>
         </View>}
         {replying && <View style={styles.inlineComposer}>
-          <TextInput autoFocus accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} placeholder="Write a reply…" multiline value={draft} onChangeText={setDraft} style={styles.replyInput}
+          {/* No box: just the line you type on, cursor blinking, like replying on Threads. */}
+          <TextInput ref={lineRef} autoFocus onFocus={() => reveal(lineRef.current)} accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} placeholder={`Reply to ${responder?.name?.split(' ')[0] ?? 'this'}…`} placeholderTextColor={colors.textFaint} multiline value={draft} onChangeText={setDraft} style={styles.replyInput}
             // Enter sends on a computer; the web toolkit needs blurOnSubmit to do that in a multiline box.
             blurOnSubmit={Platform.OS === 'web' ? true : undefined}
             onSubmitEditing={Platform.OS === 'web' ? () => { if (!draft.trim()) return; actions.addAnswer(answer.questionId, draft.trim(), answer.id); setDraft(''); setReplying(false); } : undefined}/>
-          <View style={styles.replyActions}>
-            <Button label="Cancel" variant="secondary" onPress={() => { setReplying(false); setDraft(''); }}/>
-            <Button label="Reply" disabled={!draft.trim()} onPress={() => {
+          <View style={styles.inlineActions}>
+            <Pressable accessibilityRole="button" onPress={() => { setReplying(false); setDraft(''); }} hitSlop={8}><Text style={styles.time}>Cancel</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Post reply" disabled={!draft.trim()} onPress={() => {
               actions.addAnswer(answer.questionId, draft.trim(), answer.id); setDraft(''); setReplying(false);
-            }}/>
+            }} style={[styles.sendPill, !draft.trim() && { opacity: 0.4 }]}><Text style={styles.sendText}>Reply</Text></Pressable>
           </View>
         </View>}
       </>}
@@ -104,8 +108,12 @@ const styleDefinitions = StyleSheet.create({
   avatarRail: {position:'absolute',left:15,top:46,bottom:0,width:1.5,backgroundColor:colors.borderStrong},
   collapse: {position:'absolute',left:5,width:20,height:28,backgroundColor:colors.bg,justifyContent:'center'},
   replyBody: { fontSize: 15, lineHeight: 23, color: colors.text, paddingLeft: 42 },
-  inlineComposer: { gap: 10, padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 16 },
-  replyInput: { minHeight: 80, color: colors.text, fontSize: 15, textAlignVertical: 'top' },
+  inlineComposer: { gap: 8, paddingLeft: 42 },
+  // No browser focus ring either: the cursor is the only sign the line is live.
+  replyInput: { minHeight: 24, paddingVertical: 4, color: colors.text, fontSize: 15, lineHeight: 22, textAlignVertical: 'top', borderBottomWidth: 1, borderBottomColor: colors.border, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
+  inlineActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 16 },
+  sendPill: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.brand },
+  sendText: { ...typography.smallStrong, color: colors.brandInk },
   replyActions: { flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap',paddingLeft:42 },
   replyButton: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36 },
   acceptedRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },

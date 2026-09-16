@@ -8,6 +8,8 @@ interface Props {
   disabled?: boolean;
   /** How far it shrinks while held. Smaller number, bigger dip. */
   scaleTo?: number;
+  /** Fire on touch-down instead of release — for a like, where any wait reads as lag. */
+  immediate?: boolean;
   /** How far it lifts on hover. Pointer devices only; phones never see this. */
   hoverTo?: number;
   style?: StyleProp<ViewStyle>;
@@ -34,6 +36,7 @@ export function Tappable({
   onLongPress,
   disabled = false,
   scaleTo = 0.94,
+  immediate = false,
   hoverTo = 1.04,
   style,
   hitSlop,
@@ -43,24 +46,24 @@ export function Tappable({
 }: Props) {
   const scale = useRef(new Animated.Value(1)).current;
 
+  // Quick: the dip is a short straight run, the release a fast spring, so a
+  // tap reads as instant rather than as an animation you watch.
   const spring = (to: number) =>
-    Animated.spring(scale, {
-      toValue: to,
-      useNativeDriver: true,
-      speed: 40,
-      bounciness: 6,
-    }).start();
+    (to < 1
+      ? Animated.timing(scale, { toValue: to, duration: 60, useNativeDriver: true })
+      : Animated.spring(scale, { toValue: to, useNativeDriver: true, speed: 90, bounciness: 5 })
+    ).start();
 
   return (
     <Pressable
-      onPress={disabled ? undefined : onPress}
+      onPress={disabled || immediate ? undefined : onPress}
       onLongPress={disabled ? undefined : onLongPress}
       disabled={disabled}
       hitSlop={hitSlop}
       accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ ...accessibilityState, disabled }}
-      onPressIn={() => !disabled && spring(scaleTo)}
+      onPressIn={() => { if (disabled) return; spring(scaleTo); if (immediate) onPress?.(); }}
       onPressOut={() => !disabled && spring(1)}
       // react-native-web maps these to mouse enter/leave; native ignores them.
       onHoverIn={() => Platform.OS === 'web' && !disabled && spring(hoverTo)}

@@ -71,7 +71,7 @@ export default function Accounts() {
         </Pressable>
       </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Text style={styles.note}>Removing a login here only forgets it on this device. Logging out of all devices, in the account centre, forgets it everywhere.</Text>
+      <Text style={styles.note}>Removing a login here only forgets it on this device. Logging out of all devices, in the account center, forgets it everywhere.</Text>
     </Screen>
   );
 }

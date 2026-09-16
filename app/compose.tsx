@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 
 import { MediaPicker, pickFromDevice, type PickedMedia } from '@/components/MediaPicker';
+import { MediaEditor, type EditedMedia } from '@/components/MediaEditor';
 import { PermissionBanner } from '@/components/PermissionRows';
 import { SheetBackdrop } from '@/components/SheetBackdrop';
 import { TOPIC_META } from '@/components/QuestionCard';
@@ -16,7 +17,7 @@ import { colors, radius, spacing, typography } from '@/theme';
 
 type Mode = 'clip' | 'post' | 'story' | 'hit' | 'question';
 /** choose → library → form, with back always stepping one page left. */
-type Stage = 'choose' | 'library' | 'form';
+type Stage = 'choose' | 'library' | 'edit' | 'form';
 
 /**
  * Instagram-shaped composer: pick media, write a caption, post.
@@ -36,6 +37,8 @@ export default function Compose() {
   const [mode, setMode] = useState<Mode>(isHit ? 'hit' : params.mode === 'story' ? 'story' : 'post');
   const [media, setMedia] = useState<PickedMedia | null>(isHit ? { uri: params.shot as string, label: 'Hit', kind: 'photo', thumbnailUrl: params.shot as string, orientation: 'portrait' } : null);
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
+  // What the edit step decided: where a clip starts and stops, and whether it has sound.
+  const [edit, setEdit] = useState<Pick<EditedMedia, 'trimStart' | 'trimEnd' | 'muted'>>({});
   const [body, setBody] = useState('');
   const [minutes, setMinutes] = useState('');
   const [questionTitle, setQuestionTitle] = useState('');
@@ -76,6 +79,7 @@ export default function Compose() {
     actions.addPost({
       kind: mode === 'clip' ? 'clip' : 'note',
       orientation,
+      ...edit,
       body: body.trim(),
       tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
       imageUrl: media?.kind === 'photo' ? media.uri : undefined,
@@ -95,7 +99,9 @@ export default function Compose() {
     addToBank(next);
     setMedia(next);
     setOrientation(next.orientation ?? 'portrait');
-    setStage('form');
+    setEdit({});
+    // A clip or photo goes through the edit step first; a hit already has its shot.
+    setStage(mode === 'hit' ? 'form' : 'edit');
   };
 
   // Straight to the phone's library from the + menu; a cancel leaves the menu up.
@@ -115,6 +121,9 @@ export default function Compose() {
     <Pressable accessibilityRole="button" accessibilityLabel="Close create menu" onPress={() => router.back()} style={StyleSheet.absoluteFill}/>
     <View style={styles.choiceSheet}>
       <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>Create</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => router.back()}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
+      {/* Catches a Photos problem before it turns into the cryptic iOS 3164
+          error mid-pick, and links straight to the fix. */}
+      <PermissionBanner needs={['photos']} />
       <Pressable accessibilityRole="button" accessibilityLabel="Create a clip" onPress={() => { setMode('clip'); void openDevice('video'); }} style={styles.choiceOption}>
         <Ionicons name="videocam-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Clip</Text><Text style={styles.note}>Share a video from your device.</Text>
       </Pressable>
@@ -125,11 +134,28 @@ export default function Compose() {
       <Pressable accessibilityRole="button" accessibilityLabel="Take a hit" onPress={() => router.replace('/hit')} style={styles.choiceOption}>
         <Ionicons name="camera-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Hit</Text><Text style={styles.note}>One photo after a session. Five-second count, no retakes. Up for 24 hours.</Text>
       </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => { setMode('question'); setStage('form'); }} style={styles.choiceOption}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={styles.choiceOption}>
         <Ionicons name="chatbubbles-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Thread or question</Text><Text style={styles.note}>Ask the community or start a conversation.</Text>
       </Pressable>
     </View>
   </View>;
+
+  if (stage === 'edit' && media) {
+    return (
+      <View style={[styles.backdrop, { backgroundColor: '#000' }]}>
+        <MediaEditor
+          media={media}
+          onBack={() => setStage('choose')}
+          onDone={(result) => {
+            setMedia(result.media);
+            setOrientation(result.orientation);
+            setEdit({ trimStart: result.trimStart, trimEnd: result.trimEnd, muted: result.muted });
+            setStage('form');
+          }}
+        />
+      </View>
+    );
+  }
 
   if (stage === 'library') {
     // Everything picked this session plus anything you have already posted,
@@ -199,14 +225,14 @@ export default function Compose() {
         <Screen
           title={mode === 'clip' ? 'New clip' : mode === 'post' ? 'New post' : mode === 'story' ? 'New story' : mode === 'hit' ? 'New hit' : 'Ask the room'}
           compactTitle
-          onBack={() => (mode === 'question' ? router.back() : mode === 'hit' ? router.replace('/hit') : setStage('choose'))}
+          onBack={() => (mode === 'question' ? router.back() : mode === 'hit' ? router.replace('/hit') : setStage('edit'))}
           right={<Button label={mode === 'story' ? 'Add to story' : mode === 'hit' ? 'Post hit' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit} />}
         >
           <View style={styles.form}>
             {mode !== 'question' ? (
               <>
                 <View style={styles.stage}>
-                  <MediaPicker bare orientation={orientation} selection={mode === 'clip' ? 'video' : 'all'} value={media} onChange={setMedia} />
+                  <MediaPicker bare orientation={orientation} selection={mode === 'clip' ? 'video' : 'all'} value={media} onChange={setMedia} trim={edit} />
                   {mode === 'hit' ? (
                     <View pointerEvents="none" style={styles.hitBadge}>
                       <Ionicons name="time-outline" size={13} color="white" />
@@ -220,23 +246,13 @@ export default function Compose() {
                     <Text style={styles.inlineLabel}>One take, on the feed for 24 hours, then kept in your archive.</Text>
                   </View>
                 ) : null}
-                {mode !== 'story' && mode !== 'hit' ? (
-                  <View style={styles.orientRow}>
-                    {(['portrait', 'landscape'] as const).map((o) => (
-                      <Pressable key={o} accessibilityRole="button" accessibilityState={{ selected: orientation === o }} onPress={() => setOrientation(o)} style={[styles.orient, orientation === o && styles.orientOn]}>
-                        <Ionicons name={o === 'portrait' ? 'phone-portrait-outline' : 'phone-landscape-outline'} size={15} color={orientation === o ? colors.brandInk : colors.textMuted} />
-                        <Text style={[styles.orientText, orientation === o && { color: colors.brandInk }]}>{o === 'portrait' ? 'Portrait' : 'Landscape'}</Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                ) : null}
-
                 <Field
                   value={body}
                   onChangeText={setBody}
                   placeholder={mode === 'story' ? 'Add a line (optional)' : mode === 'hit' ? 'How did it go? (optional)' : 'Write a caption…'}
                   multiline
                   minHeight={64}
+                  mentions
                 />
 
                 {mode !== 'story' && mode !== 'hit' ? (
@@ -307,11 +323,7 @@ const styleDefinitions = StyleSheet.create({
   },
   form: { gap: spacing.md, paddingTop: 0 },
   // Bleed past the screen's own padding so the media runs edge to edge.
-  stage: { marginHorizontal: -spacing.lg, marginTop: -spacing.sm, backgroundColor: '#000' },
-  orientRow: { flexDirection: 'row', gap: spacing.sm },
-  orient: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  orientOn: { backgroundColor: colors.brand, borderColor: colors.brand },
-  orientText: { ...typography.smallStrong, color: colors.textMuted },
+  stage: { marginTop: -spacing.sm },
   inlineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   inlineLabel: { ...typography.small, color: colors.textMuted, flex: 1 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },

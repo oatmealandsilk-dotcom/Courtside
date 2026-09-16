@@ -1,9 +1,15 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useRef, useSyncExternalStore, type ReactNode } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { Animated, Dimensions, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import * as haptics from '@/lib/haptics';
+import { CourtSpinner } from '@/components/CourtSpinner';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname } from 'expo-router';
 import { isPageDragging, subscribePageDragging } from '@/features/navigation/swipeLock';
+import { KeyboardScrollContext, afterKeyboard, currentKeyboardHeight, type Measurable } from '@/lib/keyboardScroll';
+import { TAB_FOR_KEY, subscribeScrollToTop } from '@/features/navigation/scrollToTop';
+import { barCompact } from '@/features/navigation/barShrink';
+import Reanimated, { runOnJS, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
@@ -47,6 +53,8 @@ interface Props {
   memoryKey?: string;
   /** Hands the caller the scroller, for jumping to a particular child. */
   scrollRef?: React.MutableRefObject<ScrollView | null>;
+  /** Pull down past the top to run this; a small "Updated" note confirms it. */
+  onRefresh?: () => Promise<void> | void;
 }
 
 export function Screen({
@@ -62,6 +70,7 @@ export function Screen({
   headerWrapper,
   memoryKey,
   scrollRef,
+  onRefresh,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
@@ -75,6 +84,100 @@ export function Screen({
   const initial = useRef(scrollMemory.get(key) ?? 0);
   const restored = useRef(initial.current === 0);
   const { isPhone, isDesktop } = useResponsive();
+  // Pull-to-refresh: the spinner while it runs, then a small note that
+  // slides in under the header and fades — enough to know it happened.
+  const [refreshing, setRefreshing] = useState(false);
+  const updated = useRef(new Animated.Value(0)).current;
+  // In a browser there is no pull-to-refresh, so the page listens for the
+  // pull itself: a trackpad or wheel pushed up past the top, or a finger
+  // dragged down from the top, and after a short pull it refreshes.
+  const refreshNowRef = useRef<() => Promise<void>>(async () => undefined);
+  // How far the pull has come, 0..1: the disc rides down with it, the way the
+  // phone's own does, and spins once it has come far enough.
+  const pull = useRef(new Animated.Value(0)).current;
+  const [pulling, setPulling] = useState(false);
+  const webPull = useCallback((node: ScrollView | null) => {
+    if (Platform.OS !== 'web' || !node || !onRefresh) return;
+    const el = ((node as unknown as { getScrollableNode?: () => unknown }).getScrollableNode?.() ?? node) as unknown as HTMLElement;
+    if (!el || typeof el.addEventListener !== 'function' || (el as unknown as { __pullWired?: boolean }).__pullWired) return;
+    (el as unknown as { __pullWired?: boolean }).__pullWired = true;
+    const THRESHOLD = 110;
+    let pulled = 0;
+    let idle: ReturnType<typeof setTimeout> | null = null;
+    let touchStart: number | null = null;
+    const show = (amount: number) => { pulled = amount; setPulling(amount > 0); pull.setValue(Math.min(1, amount / THRESHOLD)); };
+    const letGo = () => { if (pulled > 0 && pulled < THRESHOLD) { Animated.timing(pull, { toValue: 0, duration: 180, useNativeDriver: true }).start(() => setPulling(false)); pulled = 0; } };
+    const fire = () => { pulled = 0; void refreshNowRef.current(); };
+    el.addEventListener('wheel', (e: WheelEvent) => {
+      if (el.scrollTop > 0 || e.deltaY >= 0) { if (pulled) letGo(); return; }
+      show(pulled - e.deltaY);
+      if (idle) clearTimeout(idle);
+      idle = setTimeout(letGo, 260);
+      if (pulled >= THRESHOLD) { if (idle) clearTimeout(idle); fire(); }
+    }, { passive: true });
+    el.addEventListener('touchstart', (e: TouchEvent) => { touchStart = el.scrollTop <= 0 ? e.touches[0].clientY : null; }, { passive: true });
+    el.addEventListener('touchmove', (e: TouchEvent) => {
+      if (touchStart === null) return;
+      const dy = e.touches[0].clientY - touchStart;
+      if (dy <= 0) return;
+      show(dy * 0.8);
+      if (pulled >= THRESHOLD) { touchStart = null; fire(); }
+    }, { passive: true });
+    el.addEventListener('touchend', () => { touchStart = null; letGo(); });
+  }, [onRefresh, pull]);
+
+  // The bottom bar ducks as this page scrolls — worked out here on the
+  // animation thread, frame for frame with the finger, so it never steps.
+  const lastY = useSharedValue(0);
+  const ducked = useSharedValue(0);
+  const remember = useCallback((y: number) => { scrollMemory.set(key, y); }, [key]);
+  const onScrollAnimated = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      const y = event.contentOffset.y;
+      const dy = y - lastY.value;
+      lastY.value = y;
+      if (y < 24) ducked.value = 0;
+      else if (Math.abs(dy) > 0.3) ducked.value = Math.max(0, Math.min(1, ducked.value + dy / 150));
+      barCompact.value = ducked.value;
+      runOnJS(remember)(y);
+    },
+  });
+
+  const refreshNow = useCallback(async () => {
+    if (!onRefresh || refreshing) return;
+    setRefreshing(true);
+    try { await onRefresh(); } finally {
+      setRefreshing(false);
+      Animated.timing(pull, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => setPulling(false));
+      haptics.untap();
+      updated.setValue(0);
+      Animated.sequence([
+        Animated.spring(updated, { toValue: 1, useNativeDriver: true, damping: 14, stiffness: 220 }),
+        Animated.delay(900),
+        Animated.timing(updated, { toValue: 0, duration: 220, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [onRefresh, refreshing, updated, pull]);
+  refreshNowRef.current = refreshNow;
+
+  // A text box asks for this when it gains focus: once the keyboard is up,
+  // measure where the box sits and scroll just enough to clear the keyboard.
+  const reveal = useCallback((node: Measurable | null) => {
+    if (!node?.measureInWindow || !scroller.current) return;
+    afterKeyboard(() => {
+      node.measureInWindow?.((_x, y, _w, h) => {
+        const visibleBottom = Dimensions.get('window').height - currentKeyboardHeight() - 24;
+        const overflow = y + h - visibleBottom;
+        if (overflow <= 0) return;
+        const current = scrollMemory.get(key) ?? 0;
+        scroller.current?.scrollTo({ y: current + overflow, animated: true });
+      });
+    });
+  }, [key]);
+
+  useEffect(() => subscribeScrollToTop((tab) => {
+    if (TAB_FOR_KEY[key] === tab || key === tab) scroller.current?.scrollTo({ y: 0, animated: true });
+  }), [key]);
 
   const showRail = Boolean(rail) && isDesktop;
   // Centred column, like Instagram's 935px container.
@@ -125,6 +228,7 @@ export function Screen({
   );
 
   return (
+    <KeyboardScrollContext.Provider value={scroll ? reveal : null}>
     <KeyboardAvoidingView
       style={[styles.root, { paddingTop: isPhone ? insets.top : spacing.sm }]}
       // A scrolling page moves the box itself; a fixed page lifts everything.
@@ -133,8 +237,8 @@ export function Screen({
     >
       {headerWrapper ? headerWrapper(header) : header}
       {scroll ? (
-        <ScrollView
-          ref={(node) => { scroller.current = node; if (scrollRef) scrollRef.current = node; }}
+        <Reanimated.ScrollView
+          ref={(node: unknown) => { scroller.current = node as unknown as ScrollView | null; if (scrollRef) scrollRef.current = node as unknown as ScrollView | null; webPull(node as unknown as ScrollView | null); }}
           style={styles.flex}
           contentContainerStyle={[styles.scrollContent, verticalOnlyTouch]}
           scrollEnabled={!swiping}
@@ -144,11 +248,12 @@ export function Screen({
           automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
           keyboardDismissMode="interactive"
           showsVerticalScrollIndicator={false}
-          scrollEventThrottle={32}
+          scrollEventThrottle={16}
           // Set before the first paint, so there is no visible jump. Web ignores
           // this, which is what the fallback below is for.
           contentOffset={{ x: 0, y: initial.current }}
-          onScroll={(event) => scrollMemory.set(key, event.nativeEvent.contentOffset.y)}
+          onScroll={onScrollAnimated}
+          refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={() => { void refreshNow(); }} tintColor={colors.brand} colors={[colors.brand]} progressBackgroundColor={colors.surface} /> : undefined}
           onContentSizeChange={(_width, height) => {
             if (restored.current) return;
             // Wait until the content is tall enough to hold the position,
@@ -160,11 +265,23 @@ export function Screen({
           }}
         >
           {body}
-        </ScrollView>
+        </Reanimated.ScrollView>
       ) : (
         <View style={styles.flex}>{body}</View>
       )}
+      {onRefresh && Platform.OS === 'web' && (pulling || refreshing) ? (
+        <Animated.View pointerEvents="none" style={[styles.webRefresh, { opacity: pull, transform: [{ translateY: pull.interpolate({ inputRange: [0, 1], outputRange: [-46, 6] }) }, { rotate: pull.interpolate({ inputRange: [0, 1], outputRange: ['-120deg', '0deg'] }) }] }]}>
+          {refreshing ? <CourtSpinner size={26} /> : <View style={styles.pullArc} />}
+        </Animated.View>
+      ) : null}
+      {onRefresh ? (
+        <Animated.View pointerEvents="none" style={[styles.updated, { opacity: updated, transform: [{ translateY: updated.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) }, { scale: updated.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) }] }]}>
+          <Ionicons name="checkmark-circle" size={14} color={colors.brand} />
+          <Text style={styles.updatedText}>Updated</Text>
+        </Animated.View>
+      ) : null}
     </KeyboardAvoidingView>
+    </KeyboardScrollContext.Provider>
   );
 }
 
@@ -172,6 +289,10 @@ const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
   scrollContent: { flexGrow: 1 },
+  pullArc: { width: 26, height: 26, borderRadius: 13, borderWidth: 2.5, borderColor: colors.brand, borderTopColor: 'transparent', opacity: 0.9 },
+  webRefresh: { position: 'absolute', alignSelf: 'center', top: 6, width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
+  updated: { position: 'absolute', alignSelf: 'center', top: 6, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
+  updatedText: { ...typography.smallStrong, color: colors.text },
   constrain: { width: '100%', alignSelf: 'center' },
   header: {
     flexDirection: 'row',

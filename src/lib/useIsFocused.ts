@@ -20,5 +20,8 @@ export function useIsFocused(): boolean {
     }, []),
   );
   // Inside the tab row, a tab that has slid off screen is not focused either.
-  return focused && useTabActive();
+  // Both are called unconditionally — a hook behind `&&` gets skipped
+  // whenever the left side is false, which shifts every hook after it.
+  const tabActive = useTabActive();
+  return focused && tabActive;
 }

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { router } from 'expo-router';
 
 import Home from '../../app/(tabs)/index';
@@ -16,6 +16,15 @@ import { isPageSwipeLocked, setPageDragging, subscribePageSwipeLock } from '@/fe
 import { useResponsive } from '@/lib/useResponsive';
 
 export const TAB_PATHS = ['/', '/discuss', '/coaches', '/profile'] as const;
+
+/** One tab's slot in the row; it can be lifted next door for a far glide. */
+function TabSlot({ index, width, jumpTab, jumpOffset, children }: { index: number; width: number; jumpTab: SharedValue<number>; jumpOffset: SharedValue<number>; children: React.ReactNode }) {
+  const style = useAnimatedStyle(() => {
+    const lifted = jumpTab.value === index;
+    return { transform: [{ translateX: lifted ? jumpOffset.value : 0 }], zIndex: lifted ? 2 : 0 };
+  });
+  return <Animated.View style={[{ width, flex: 1 }, style]}>{children}</Animated.View>;
+}
 const LAST = TAB_PATHS.length - 1;
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
 
@@ -49,12 +58,29 @@ export function TabsPager({ pathname }: { pathname: string }) {
 
   // A tap on the bottom bar, a link, or a back gesture changes the address;
   // the row glides there.
+  // A far tab (Profile to Home) is lifted out of its slot and set down next
+  // door to the current one for the length of the glide, so the two slide
+  // past each other the way neighbours do — nothing in between is dragged by.
+  const jumpTab = useSharedValue(-1);
+  const jumpOffset = useSharedValue(0);
   useEffect(() => {
     if (target === activeRef.current) return;
+    const from = activeRef.current;
     activeRef.current = target;
     setActive(target);
-    position.value = withTiming(target, { duration: 260, easing: EASE });
-  }, [target, position]);
+    if (Math.abs(target - from) <= 1) { position.value = withTiming(target, { duration: 260, easing: EASE }); return; }
+    const dir = target > from ? 1 : -1;
+    jumpTab.value = target;
+    jumpOffset.value = (from + dir - target) * (width || 1);
+    position.value = from;
+    position.value = withTiming(from + dir, { duration: 280, easing: EASE }, (finished) => {
+      // Landed: put the row at the real slot and the tab back where it lives, in one frame.
+      position.value = target;
+      jumpTab.value = -1;
+      jumpOffset.value = 0;
+      if (!finished) position.value = target;
+    });
+  }, [target, position, width, jumpTab, jumpOffset]);
 
   const heading = (index: number | null) => {
     setPendingTab(index === null ? null : TAB_PATHS[index]);
@@ -176,9 +202,9 @@ export function TabsPager({ pathname }: { pathname: string }) {
       <View style={{ flex: 1, overflow: 'hidden' }}>
         <Animated.View style={[{ flex: 1, flexDirection: 'row', width: width * TAB_PATHS.length }, row]}>
           {panes.map((pane, i) => (
-            <View key={TAB_PATHS[i]} style={{ width, flex: 1 }}>
+            <TabSlot key={TAB_PATHS[i]} index={i} width={width} jumpTab={jumpTab} jumpOffset={jumpOffset}>
               <TabFocus active={active === i}>{pane}</TabFocus>
-            </View>
+            </TabSlot>
           ))}
         </Animated.View>
       </View>

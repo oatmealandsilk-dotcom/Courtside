@@ -68,7 +68,7 @@ export default function Help() {
       <View style={styles.links}>
         <Pressable accessibilityRole="link" onPress={() => router.push('/privacy')} style={styles.link}>
           <Ionicons name="shield-checkmark-outline" size={19} color={colors.text} />
-          <Text style={styles.linkText}>Privacy centre</Text>
+          <Text style={styles.linkText}>Privacy center</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
         </Pressable>
         <Pressable accessibilityRole="link" onPress={() => router.push('/about')} style={styles.link}>

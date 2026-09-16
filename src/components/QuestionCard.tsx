@@ -26,6 +26,8 @@ export const TOPIC_META: Record<QuestionTopic, { label: string; tint: string; ic
 
 interface Props {
   showBody?: boolean;
+  /** The home feed: the page carries the CourtSide mark up by its eyebrow, so no date here. */
+  brandCorner?: boolean;
   question: Question;
   author: User | undefined;
   onPress: () => void;
@@ -44,6 +46,7 @@ export function QuestionCard({
   onToggleSave,
   onShare,
   showBody = false,
+  brandCorner = false,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const meta = TOPIC_META[question.topic];
@@ -60,7 +63,7 @@ export function QuestionCard({
             <Text style={styles.sourceText}>{question.source.label}</Text>
           </View>
         ) : author ? <LevelPill profile={author.profile} small /> : null}
-        <Text style={[styles.footerText, { marginLeft: 'auto' }]}>{relativeTime(question.createdAt)}</Text>
+        {brandCorner ? null : <Text style={[styles.footerText, { marginLeft: 'auto' }]}>{relativeTime(question.createdAt)}</Text>}
       </View>
       <Text style={styles.title}>{question.title}</Text>
       {showBody && !!question.body && <RichText style={styles.preview}>{question.body}</RichText>}

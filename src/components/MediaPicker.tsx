@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Image, Modal, Pressable, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
+import { ZoomableMedia } from './ZoomableMedia';
 import { ClipVideo } from '@/components/ClipVideo';
 import { colors } from '@/theme';
 
@@ -28,6 +29,8 @@ export interface MediaPickerProps {
   bare?: boolean;
   /** Shape of the bare stage. Defaults to portrait. */
   orientation?: 'portrait' | 'landscape';
+  /** What the edit step decided: the previews play only the part kept, and honour the sound choice. */
+  trim?: { trimStart?: number; trimEnd?: number; muted?: boolean };
 }
 /** "clip-final-2 · 0:24" is a filename. "Video · 0:24" is information. */
 function describe(media: PickedMedia): string {
@@ -39,36 +42,49 @@ function describe(media: PickedMedia): string {
 /** Opens the phone's library straight away and resolves with the choice, or null if cancelled. */
 export async function pickFromDevice(selection: 'video' | 'photo' | 'all'): Promise<PickedMedia | null> {
   const kinds: ImagePicker.MediaType[] = selection === 'video' ? ['videos'] : selection === 'photo' ? ['images'] : ['images', 'videos'];
-  const asIs = {
-    preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current,
-    videoExportPreset: ImagePicker.VideoExportPreset.Passthrough,
-  };
   const perm = await ImagePicker.requestMediaLibraryPermissionsAsync().catch(() => null);
-  const full = !!perm?.granted && perm.accessPrivileges !== 'limited';
-  const order = selection !== 'photo' && full ? [true, false] : [false, true];
-  const failures: string[] = [];
-  for (const legacy of order) {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: kinds, quality: 0.85, legacy, ...asIs });
-      if (result.canceled) return null;
-      const asset = result.assets[0];
-      const isVideo = asset.type === 'video';
-      return {
-        uri: asset.uri,
-        label: asset.fileName ?? 'Selected media',
-        kind: isVideo ? 'video' : 'photo',
-        thumbnailUrl: isVideo ? undefined : asset.uri,
-        orientation: asset.width && asset.height && asset.width > asset.height ? 'landscape' : 'portrait',
-      };
-    } catch (err) {
-      failures.push(err instanceof Error ? err.message : String(err));
-    }
-  }
   if (perm && !perm.granted && !perm.canAskAgain) throw new Error('Photo access is off. Turn it on in Settings → Expo Go → Photos.');
-  throw new Error(failures.join(' / '));
+  const full = !!perm?.granted && perm.accessPrivileges !== 'limited';
+  // One picker, once. A failed pick used to open the library a second time
+  // with the other picker, which read as the app losing your choice.
+  try {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: kinds, quality: 0.85, legacy: selection !== 'photo' && full, ...AS_IS });
+    if (result.canceled) return null;
+    const asset = result.assets[0];
+    const isVideo = asset.type === 'video';
+    return {
+      uri: asset.uri,
+      label: asset.fileName ?? 'Selected media',
+      kind: isVideo ? 'video' : 'photo',
+      thumbnailUrl: isVideo ? undefined : asset.uri,
+      orientation: asset.width && asset.height && asset.width > asset.height ? 'landscape' : 'portrait',
+    };
+  } catch (err) {
+    throw new Error(explainPickError(err));
+  }
 }
 
-export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false, orientation = 'portrait' }: MediaPickerProps) {
+/**
+ * Hand the file over as it is, and fetch it from iCloud when the phone has
+ * offloaded it. Passthrough copies the raw file, and in that mode the library
+ * only reaches iCloud with the download flag on — off, an offloaded video
+ * fails with PHPhotosErrorDomain 3164 ("network access required").
+ */
+const AS_IS = {
+  preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current,
+  videoExportPreset: ImagePicker.VideoExportPreset.Passthrough,
+  shouldDownloadFromNetwork: true,
+};
+
+/** iOS's error codes, in words a person can act on. */
+function explainPickError(err: unknown): string {
+  const reason = err instanceof Error ? err.message : String(err);
+  if (/3164/.test(reason)) return 'That video lives in iCloud and could not be fetched. Check the phone has internet, or open the video once in the Photos app so it downloads, then try again.';
+  if (/3072|cancel/i.test(reason)) return 'Nothing was chosen.';
+  return `Could not open your library: ${reason}`;
+}
+
+export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false, orientation = 'portrait', trim }: MediaPickerProps) {
   useTheme();
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
@@ -79,36 +95,12 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
    */
   const open = async (): Promise<ImagePicker.ImagePickerResult> => {
     const kinds: ImagePicker.MediaType[] = selection === 'video' ? ['videos'] : selection === 'photo' ? ['images'] : ['images', 'videos'];
-    // Hand the file over as it is. Letting iOS convert it first is what fails
-    // (PHPhotosErrorDomain 3164) on large or iCloud-stored clips.
-    const asIs = {
-      preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current,
-      videoExportPreset: ImagePicker.VideoExportPreset.Passthrough,
-    };
-    // For video, Apple's older picker copies the file itself and has proved the
-    // reliable one; it needs photo permission, so that is asked first.
-    const wantsVideo = selection !== 'photo';
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync().catch(() => null);
-    const full = !!perm?.granted && perm.accessPrivileges !== 'limited';
-    const attempts: (() => Promise<ImagePicker.ImagePickerResult>)[] = wantsVideo && full
-      ? [
-          () => ImagePicker.launchImageLibraryAsync({ mediaTypes: kinds, quality: 0.85, legacy: true, ...asIs }),
-          () => ImagePicker.launchImageLibraryAsync({ mediaTypes: kinds, quality: 0.85, ...asIs }),
-        ]
-      : [
-          () => ImagePicker.launchImageLibraryAsync({ mediaTypes: kinds, quality: 0.85, ...asIs }),
-          () => ImagePicker.launchImageLibraryAsync({ mediaTypes: kinds, quality: 0.85, legacy: true, ...asIs }),
-        ];
-    const failures: string[] = [];
-    for (const attempt of attempts) {
-      try {
-        return await attempt();
-      } catch (err) {
-        failures.push(err instanceof Error ? err.message : String(err));
-      }
-    }
     if (perm && !perm.granted && !perm.canAskAgain) throw new Error('Photo access is off. Turn it on in Settings → Expo Go → Photos.');
-    throw new Error(failures.join(' / '));
+    const full = !!perm?.granted && perm.accessPrivileges !== 'limited';
+    // Apple's older picker copies the file itself and has proved the reliable
+    // one for video; it needs full photo access, which is why that is checked.
+    return ImagePicker.launchImageLibraryAsync({ mediaTypes: kinds, quality: 0.85, legacy: selection !== 'photo' && full, ...AS_IS });
   };
   const choose = async () => {
     try {
@@ -134,10 +126,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
         setError('Photo access is limited. On your phone: Settings → Expo Go → Photos → All Photos, then try again.');
         return;
       }
-      const reason = err instanceof Error ? err.message : String(err);
-      setError(/3164/.test(reason)
-        ? 'iOS could not hand over that video. Try one recorded on this phone (not only in iCloud), or a photo.'
-        : `Could not open your library: ${reason}`);
+      setError(explainPickError(err));
     }
   };
   const chooseCover = async () => {
@@ -155,27 +144,38 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
     // edge, a play badge for video, and nothing else to tap except the cover.
     const poster = value.kind === 'photo' ? value.uri : value.thumbnailUrl;
     return <View style={{ gap: 12 }}>
+      {/* The box takes the media's own shape — tall for portrait, wide for
+          landscape — with rounded corners on the theme's ground, so there is
+          nothing black around it. The media fills it edge to edge. */}
       <Pressable accessibilityRole="button" accessibilityLabel="Open a larger preview" onPress={() => setExpanded(true)}
-        style={{ width: '100%', aspectRatio: orientation === 'landscape' ? 16 / 9 : 9 / 16, maxHeight: 560, overflow: 'hidden', backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
+        style={orientation === 'landscape'
+          ? { width: '100%', aspectRatio: 16 / 9, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt }
+          : { height: 480, aspectRatio: 9 / 16, alignSelf: 'center', borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt }}>
         {value.kind === 'video' && value.uri
-          ? <View style={{ width: '100%', height: '100%' }}><ClipVideo uri={value.uri} poster={value.thumbnailUrl} active muted fit={orientation === 'landscape' ? 'contain' : 'cover'} /></View>
+          ? <ClipVideo uri={value.uri} poster={value.thumbnailUrl} active muted fit="cover" trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} />
           : poster
             ? <Image source={{ uri: poster }} resizeMode="cover" style={{ width: '100%', height: '100%' }}/>
-            : <Ionicons name="videocam" size={48} color="#6B7A6E"/>}
-        <Text style={{ position: 'absolute', left: 12, bottom: 10, color: 'white', fontSize: 12, fontWeight: '600' }}>{describe(value)}</Text>
+            : <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="videocam" size={48} color={colors.textMuted}/></View>}
+        <View pointerEvents="none" style={{ position: 'absolute', left: 10, bottom: 10, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <Text style={{ color: 'white', fontSize: 11, fontWeight: '700', letterSpacing: 0.4 }}>{describe(value)}</Text>
+        </View>
+        <View pointerEvents="none" style={{ position: 'absolute', right: 10, top: 10, width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name="expand-outline" size={16} color="white" />
+        </View>
       </Pressable>
-      <Modal visible={expanded} transparent animationType="fade" onRequestClose={() => setExpanded(false)}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close preview" onPress={() => setExpanded(false)}
-          style={{ flex: 1, backgroundColor: 'rgba(6,12,10,0.94)', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          {poster ? <Image source={{ uri: poster }} resizeMode="contain" style={{ width: '100%', height: '80%', borderRadius: 12 }}/> : null}
-          <Text style={{ color: 'white', paddingTop: 14 }}>Tap to close</Text>
-        </Pressable>
+      {/* Full screen, the clip playing with sound. One tap anywhere brings it back. */}
+      <Modal visible={expanded} animationType="none" statusBarTranslucent onRequestClose={() => setExpanded(false)}>
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
+          <ZoomableMedia>
+            {value.kind === 'video' && value.uri
+              ? <ClipVideo uri={value.uri} poster={value.thumbnailUrl} active={expanded} muted={!!trim?.muted} fit={orientation === 'landscape' ? 'contain' : 'cover'} trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} />
+              : poster ? <Image source={{ uri: poster }} resizeMode="contain" style={{ width: '100%', height: '100%' }}/> : null}
+          </ZoomableMedia>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close preview" onPress={() => setExpanded(false)} style={{ position: 'absolute', top: 54, right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name="close" size={22} color="white" />
+          </Pressable>
+        </View>
       </Modal>
-      {value.kind === 'video' && <Pressable accessibilityRole="button" accessibilityLabel="Choose a cover image" onPress={chooseCover}
-        style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <Ionicons name="image-outline" size={18} color={colors.info}/>
-        <Text style={{ color: colors.info, fontWeight: '600' }}>{value.thumbnailUrl ? 'Change cover' : 'Choose a cover'}</Text>
-      </Pressable>}
       {!!error && <Text style={{ color: colors.danger }}>{error}</Text>}
     </View>;
   }
@@ -211,7 +211,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
         </Pressable>
       )}
 
-      <Modal visible={expanded} transparent animationType="fade" onRequestClose={() => setExpanded(false)}>
+      <Modal visible={expanded} transparent animationType="none" onRequestClose={() => setExpanded(false)}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Close preview"

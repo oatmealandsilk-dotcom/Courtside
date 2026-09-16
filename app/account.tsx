@@ -90,7 +90,7 @@ export default function AccountCentre() {
   );
 
   return (
-    <Screen title="Account centre" compactTitle onBack={() => goBack()}>
+    <Screen title="Account center" compactTitle onBack={() => goBack()}>
       {currentUser ? (
         <View style={styles.hero}>
           <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={56} />
@@ -124,7 +124,7 @@ export default function AccountCentre() {
       <View style={styles.card}>
         {row('download-outline', 'Download your data', 'Profile, posts, questions, hits, messages — as one file', () => { void download(); }, false, 0)}
         {row('sparkles-outline', 'What the coach remembers', 'Notes the AI coach keeps about you', () => toast.show({ title: 'AI coach is coming soon', body: 'A weekly plan and a coach to ask, coming soon', icon: 'sparkles' }), false, 1)}
-        {row('shield-checkmark-outline', 'Privacy centre', 'What we store and who can see it', () => router.push('/privacy'), false, 2)}
+        {row('shield-checkmark-outline', 'Privacy center', 'What we store and who can see it', () => router.push('/privacy'), false, 2)}
         {row('card-outline', 'Payment methods', undefined, () => router.push('/payments'), false, 3)}
       </View>
 

@@ -22,6 +22,9 @@ import { Tappable, useDoubleTap } from '@/components/Tappable';
 import { relativeTime } from '@/lib/format';
 import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
+import { MentionSuggestions } from '@/components/MentionSuggestions';
+import { useMentionCandidates } from '@/features/mentions/useMentionCandidates';
+import { activeMention, applyMention } from '@/lib/mentions';
 import type { Message } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -69,6 +72,19 @@ export default function Thread() {
       </View>
     );
   }
+
+  // "@" in a message offers people, following first, the same as a comment.
+  const [caret, setCaret] = useState(0);
+  const candidatesFor = useMentionCandidates();
+  const mention = activeMention(draft, caret);
+  const mentionRows = mention ? candidatesFor(mention.query, 5) : [];
+  const pickMention = (handle: string) => {
+    if (!mention) return;
+    const next = applyMention(draft, mention.start, caret, handle);
+    setDraft(next.text);
+    setCaret(next.caret);
+    setTimeout(() => inputRef.current?.setNativeProps?.({ selection: { start: next.caret, end: next.caret } }), 0);
+  };
 
   const send = () => {
     const body = draft.trim();
@@ -200,6 +216,11 @@ export default function Thread() {
         </View>
       ) : null}
 
+      {mention && mentionRows.length ? (
+        <View style={styles.mentionTray}>
+          <MentionSuggestions candidates={mentionRows} onPick={pickMention} />
+        </View>
+      ) : null}
       <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
         <Tappable
           accessibilityLabel={emojiOpen ? 'Hide emoji' : 'Add an emoji'}
@@ -215,7 +236,8 @@ export default function Thread() {
         <TextInput
           ref={inputRef}
           value={draft}
-          onChangeText={setDraft}
+          onChangeText={(text) => { setDraft(text); setCaret((c) => c + (text.length - draft.length)); }}
+          onSelectionChange={(e) => setCaret(e.nativeEvent.selection.end)}
           placeholder="Message…"
           placeholderTextColor={colors.textFaint}
           style={styles.input}
@@ -444,6 +466,7 @@ const styleDefinitions = StyleSheet.create({
   sharedKind: { ...typography.caption, color: colors.brand },
   sharedBody: { ...typography.small, color: colors.text, lineHeight: 19 },
   timestamp: { ...typography.caption, color: colors.textFaint, textAlign: 'center', paddingTop: spacing.md },
+  mentionTray: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
   composer: {
     flexDirection: 'row',
     alignItems: 'center',

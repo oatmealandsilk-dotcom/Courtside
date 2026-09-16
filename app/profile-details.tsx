@@ -2,66 +2,59 @@ import { PlayerName } from '@/components/PlayerName';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { AchievementGrid } from '@/components/AchievementGrid';
 import { LevelPill } from '@/components/LevelPill';
-import { PostCard } from '@/components/PostCard';
-import { Avatar, Button, Card, Chip, Meter, Screen, StatTile } from '@/components/ui';
+import { Avatar, Button, Card, Meter, Screen, StatTile } from '@/components/ui';
 import { evaluateAchievements, fitnessLabel, levelBadge, playStyleLabel, surfaceLabel, winRate } from '@/lib/badges';
-import { compactNumber, formatDate } from '@/lib/format';
+import { formatDate } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 
+/**
+ * The tennis side of a player — yours, or anyone's from their profile: rating
+ * ladder, the numbers, how they play, goals, what the coach works around,
+ * tournaments, achievements. Their posts live on the profile grid, not here.
+ */
 export default function Profile() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, posts, currentUserId, actions } = useApp();
+  const { userId } = useLocalSearchParams<{ userId?: string }>();
+  const { currentUser, users, actions } = useApp();
+  const user = userId ? users.find((u) => u.id === userId) ?? null : currentUser;
+  const isMe = !!user && user.id === currentUser?.id;
 
-  if (!currentUser) {
+  if (!user) {
     return (
-      <Screen title="Your game">
+      <Screen title="Game" compactTitle onBack={() => goBack()}>
         <ActivityIndicator color={colors.brand} />
       </Screen>
     );
   }
 
-  const profile = currentUser.profile;
+  const profile = user.profile;
   const badge = levelBadge(profile);
-  const achievements = evaluateAchievements(currentUser);
+  const achievements = evaluateAchievements(user);
   const unlocked = achievements.filter((a) => a.unlocked);
-  const myPosts = posts
-    .filter((p) => p.authorId === currentUser.id)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const first = user.name.split(' ')[0];
 
   return (
     <Screen
-      title="Your game"
+      title={isMe ? 'Your game' : `${first}'s game`}
+      compactTitle
       onBack={() => goBack()}
-      right={<Button label="Sign out" variant="ghost" onPress={actions.signOut} />}
+      right={isMe ? <Button label="Sign out" variant="ghost" onPress={actions.signOut} /> : undefined}
     >
       <Card style={styles.identity}>
         <View style={styles.identityRow}>
-          <Avatar name={currentUser.name} seed={currentUser.avatarSeed} size={64} ring />
+          <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={56} ring={user.isCoach} />
           <View style={styles.identityText}>
-            <PlayerName userId={currentUser.id} style={styles.name}>{currentUser.name}</PlayerName>
-            <PlayerName userId={currentUser.id} style={styles.handle}>@{currentUser.handle} · {currentUser.location}</PlayerName>
-            <View style={styles.pillRow}>
-              <LevelPill profile={profile} />
-              <Chip label={playStyleLabel[profile.playStyle]} small />
-            </View>
+            <PlayerName userId={user.id} style={styles.name}>{user.name}</PlayerName>
+            <Text style={styles.handle}>@{user.handle}{user.location ? ` · ${user.location}` : ''} · joined {formatDate(user.joinedAt)}</Text>
           </View>
-        </View>
-        <Text style={styles.bio}>{currentUser.bio}</Text>
-        <View style={styles.followRow}>
-          <Text style={styles.followText}>
-            <Text style={styles.followCount}>{compactNumber(currentUser.followers)}</Text> followers
-          </Text>
-          <Text style={styles.followText}>
-            <Text style={styles.followCount}>{compactNumber(currentUser.following)}</Text> following
-          </Text>
-          <Text style={styles.followText}>Joined {formatDate(currentUser.joinedAt)}</Text>
+          <LevelPill profile={profile} />
         </View>
         <Meter
           label="Rating ladder"
@@ -72,22 +65,13 @@ export default function Profile() {
       </Card>
 
       <View style={styles.tileRow}>
-        <StatTile label="Sessions" value={String(currentUser.stats.sessionsLogged)} />
-        <StatTile label="Hours" value={String(currentUser.stats.hoursOnCourt)} hint="on court" />
-        <StatTile
-          label="Win rate"
-          value={`${winRate(currentUser.stats)}%`}
-          hint={`${currentUser.stats.matchesWon}/${currentUser.stats.matchesPlayed}`}
-        />
-        <StatTile
-          label="Streak"
-          value={`${currentUser.stats.currentStreakDays}d`}
-          hint={`best ${currentUser.stats.longestStreakDays}d`}
-          tint={colors.brand}
-        />
+        <View style={styles.tileHalf}><StatTile label="Sessions" value={String(user.stats.sessionsLogged)} /></View>
+        <View style={styles.tileHalf}><StatTile label="Hours" value={String(user.stats.hoursOnCourt)} hint="on court" /></View>
+        <View style={styles.tileHalf}><StatTile label="Win rate" value={`${winRate(user.stats)}%`} hint={`${user.stats.matchesWon}/${user.stats.matchesPlayed}`} /></View>
+        <View style={styles.tileHalf}><StatTile label="Streak" value={`${user.stats.currentStreakDays}d`} hint={`best ${user.stats.longestStreakDays}d`} tint={colors.brand} /></View>
       </View>
 
-      <Section title="Your game">
+      <Section title="HOW THEY PLAY" me={isMe} mine="HOW YOU PLAY">
         <Card style={styles.gameCard}>
           <Detail label="Play style" value={playStyleLabel[profile.playStyle]} />
           <Detail label="Fitness" value={fitnessLabel[profile.fitnessLevel]} />
@@ -101,7 +85,7 @@ export default function Profile() {
         </Card>
       </Section>
 
-      <Section title="Goals">
+      <Section title="GOALS">
         <Card style={styles.listCard}>
           {profile.goals.length === 0 ? (
             <Text style={styles.muted}>No goals set yet.</Text>
@@ -124,7 +108,7 @@ export default function Profile() {
       </Section>
 
       {profile.constraints.length > 0 ? (
-        <Section title="Constraints the coach respects">
+        <Section title="THE COACH WORKS AROUND">
           <Card style={styles.listCard}>
             {profile.constraints.map((c) => (
               <View key={c.id} style={styles.constraintRow}>
@@ -144,7 +128,7 @@ export default function Profile() {
       ) : null}
 
       {profile.tournaments.length > 0 ? (
-        <Section title="Tournament calendar">
+        <Section title="TOURNAMENTS">
           <Card style={styles.listCard}>
             {profile.tournaments.map((t) => (
               <View key={t.id} style={styles.tournamentRow}>
@@ -165,37 +149,18 @@ export default function Profile() {
         </Section>
       ) : null}
 
-      <Section title={`Achievements · ${unlocked.length}/${achievements.length}`}>
+      <Section title={`ACHIEVEMENTS · ${unlocked.length}/${achievements.length}`}>
         <AchievementGrid items={achievements} />
-      </Section>
-
-      <Section title="Your posts">
-        {myPosts.length === 0 ? (
-          <Text style={styles.muted}>Nothing posted yet.</Text>
-        ) : (
-          <View style={styles.postList}>
-            {myPosts.map((post) => (
-              <PostCard
-                key={post.id}
-                post={post}
-                author={currentUser}
-                liked={Boolean(currentUserId && post.likedBy.includes(currentUserId))}
-                onToggleLike={() => actions.toggleLike(post.id)}
-                onPress={() => router.push(`/post/${post.id}`)}
-              />
-            ))}
-          </View>
-        )}
       </Section>
     </Screen>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, mine, me, children }: { title: string; mine?: string; me?: boolean; children: React.ReactNode }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={styles.sectionTitle}>{me && mine ? mine : title}</Text>
       {children}
     </View>
   );
@@ -214,8 +179,8 @@ function Detail({ label, value }: { label: string; value: string }) {
 const styleDefinitions = StyleSheet.create({
   identity: { gap: spacing.md },
   identityRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
-  identityText: { flex: 1, gap: 4 },
-  name: { ...typography.title, color: colors.text },
+  identityText: { flex: 1, gap: 3 },
+  name: { ...typography.heading, color: colors.text },
   handle: { ...typography.small, color: colors.textFaint },
   pillRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', paddingTop: 2 },
   bio: { ...typography.small, color: colors.textMuted, lineHeight: 20 },
@@ -223,11 +188,13 @@ const styleDefinitions = StyleSheet.create({
   followText: { ...typography.small, color: colors.textFaint },
   followCount: { color: colors.text, fontWeight: '700' },
   tileRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingVertical: spacing.lg },
-  section: { gap: spacing.md, paddingBottom: spacing.xl },
-  sectionTitle: { ...typography.heading, color: colors.text },
-  gameCard: { gap: spacing.sm },
-  detailRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
-  detailLabel: { ...typography.small, color: colors.textFaint },
+  tileHalf: { width: '48%', flexGrow: 1 },
+  section: { gap: spacing.sm, paddingBottom: spacing.xl },
+  // Quiet eyebrow titles, the way the profile's own cards are labelled.
+  sectionTitle: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.2, paddingLeft: 2 },
+  gameCard: { gap: 0, paddingVertical: spacing.xs },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  detailLabel: { ...typography.small, color: colors.textMuted },
   detailValue: { ...typography.smallStrong, color: colors.text, flexShrink: 1, textAlign: 'right' },
   listCard: { gap: spacing.md },
   muted: { ...typography.small, color: colors.textFaint },
@@ -244,5 +211,4 @@ const styleDefinitions = StyleSheet.create({
   tournamentMeta: { ...typography.small, color: colors.textFaint },
   regBadge: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 2 },
   regText: { ...typography.caption, color: colors.textFaint },
-  postList: { gap: spacing.lg },
 });

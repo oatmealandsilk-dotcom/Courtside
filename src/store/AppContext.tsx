@@ -22,6 +22,8 @@ import { nearestPlace } from '@/data/locations';
 import { getPosition } from '@/lib/geo';
 import * as haptics from '@/lib/haptics';
 import * as toast from '@/lib/toast';
+import { finishUpload, setUploadProgress, simulateUpload, startUpload } from '@/lib/uploads';
+import { framesAt } from '@/features/compose/frames';
 import type {
   Answer,
   Coach,
@@ -64,6 +66,9 @@ interface NewStoryInput {
 interface NewPostInput {
   kind: PostKind;
   orientation?: 'portrait' | 'landscape';
+  trimStart?: number;
+  trimEnd?: number;
+  muted?: boolean;
   body: string;
   tags: string[];
   match?: MatchResult;
@@ -123,10 +128,11 @@ function withNotification(
  */
 function celebratePosted(
   state: AppState,
-  entry: { userId: ID; targetId: ID; targetKind: NotificationTarget; preview: string; title: string; body: string; href: string; icon: string },
+  entry: { userId: ID; targetId: ID; targetKind: NotificationTarget; preview: string; title: string; body: string; href: string; icon: string; quiet?: boolean },
 ): AppState {
   haptics.reward();
-  toast.show({ title: entry.title, body: entry.body, href: entry.href, icon: entry.icon });
+  // The posting strip has already said it landed; no banner on top of that.
+  if (!entry.quiet) toast.show({ title: entry.title, body: entry.body, href: entry.href, icon: entry.icon });
   const notification: Notification = {
     id: nextId('n'),
     userId: entry.userId,
@@ -198,6 +204,8 @@ interface AppState extends Bootstrap {
   savedAccounts: SavedAccount[];
   /** Every follow the app knows about, for followers and following lists. */
   followEdges: { followerId: ID; followingId: ID }[];
+  /** Pending asks to follow a private account — yours, and the ones waiting on you. */
+  followRequests: { fromId: ID; toId: ID; createdAt: string }[];
   /** People whose posts you have muted — still followed, just quiet. */
   mutedIds: ID[];
   /** People you have blocked. Their posts and messages are hidden. */
@@ -225,6 +233,10 @@ interface AppActions {
 
   /* People */
   toggleFollow: (userId: ID) => void;
+  /** A private account's owner saying yes or no to someone's ask. */
+  acceptFollowRequest: (requesterId: ID) => void;
+  declineFollowRequest: (requesterId: ID) => void;
+  setPrivateAccount: (enabled: boolean) => void;
   toggleMute: (userId: ID) => void;
   toggleBlock: (userId: ID) => void;
   toggleAlerts: (userId: ID) => void;
@@ -258,9 +270,13 @@ interface AppActions {
   addPost: (input: NewPostInput) => ID;
   /** Puts one of your posts away, or brings it back. */
   toggleArchivePost: (postId: ID) => void;
+  togglePinPost: (postId: ID) => void;
+  /** Pull-to-refresh: fetches everything again from the server. */
+  refresh: () => Promise<void>;
   deletePost: (postId: ID) => void;
   addComment: (postId: ID, body: string) => void;
   toggleLikeStory: (storyId: ID) => void;
+  toggleLikeComment: (commentId: ID) => void;
   addStoryComment: (storyId: ID, body: string) => void;
 
   /* Stories */
@@ -363,6 +379,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     defaultReaction: readDefaultReaction(),
     followingIds: [],
     followEdges: [],
+    followRequests: [],
     remoteLoaded: false,
     savedAccounts: [],
     mutedIds: [],
@@ -465,6 +482,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           stories: [...data.stories, ...prev.stories.filter((st) => !remoteStories.has(st.id))],
           followingIds: data.followingIds,
           followEdges: data.followEdges,
+          followRequests: data.followRequests,
           remoteLoaded: true,
           saved: { ...prev.saved, postIds: data.savedPostIds },
           currentUserId: me,
@@ -474,6 +492,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
           error: null,
         };
       });
+      // An ask that arrived while the app was closed gets its notification now.
+      setState((prev) => data.followRequests
+        .filter((r) => r.toId === me && !prev.notifications.some((n) => n.kind === 'follow-request' && n.actorId === r.fromId && n.userId === me))
+        .reduce((acc, r) => withNotification(acc, { userId: me, actorId: r.fromId, kind: 'follow-request', targetId: r.fromId, targetKind: 'post' }), prev));
+      // A post whose cover still points at a file on some phone (an upload
+      // that never finished) gets a fresh cover from its hosted video.
+      for (const post of data.posts) {
+        if (post.authorId !== me || !isLocalMedia(post.thumbnailUrl) || !post.videoUrl || isLocalMedia(post.videoUrl)) continue;
+        (async () => {
+          try {
+            const frame = (await framesAt(post.videoUrl!, [post.trimStart ?? 0]))[0]?.uri;
+            if (!frame) return;
+            const hosted = await uploadMedia(me, frame, 'photo');
+            await remote.updatePostThumbnail(post.id, hosted);
+            setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === post.id ? { ...p, thumbnailUrl: hosted } : p)) }));
+          } catch (error) { console.warn('[remote] cover repair failed', error); }
+        })();
+      }
       // Now the profile is known, the saved login gets its name and picture.
       const who = data.users.find((u) => u.id === me);
       if (who) rememberAccount({ id: me, handle: who.handle, name: who.name, avatarUrl: who.avatarUrl }).then((savedAccounts) => setState((prev) => ({ ...prev, savedAccounts })));
@@ -739,22 +775,55 @@ export function AppProvider({ children }: { children: ReactNode }) {
         commentIds: [],
         ...input,
       };
-      setState((prev) => celebratePosted({ ...prev, posts: [post, ...prev.posts] }, {
-        userId: me, targetId: post.id, targetKind: 'post', preview: snippet(post.body || (post.kind === 'clip' ? 'Clip' : 'Post')),
+      const celebration = {
+        userId: me, targetId: post.id, targetKind: 'post' as const, preview: snippet(post.body || (post.kind === 'clip' ? 'Clip' : 'Post')),
         title: post.kind === 'clip' ? 'Clip posted' : 'Posted',
         body: post.kind === 'clip' ? 'It is in the feed and on your profile.' : 'It is live in the feed.',
-        href: `/post/${post.id}`, icon: post.kind === 'clip' ? 'play' : 'checkmark',
-      }));
+        href: '/', icon: post.kind === 'clip' ? 'play' : 'checkmark',
+      };
+      const uploading = live(me) && (isLocalMedia(post.imageUrl) || isLocalMedia(post.videoUrl) || isLocalMedia(post.thumbnailUrl));
+      const label = post.body ? snippet(post.body, 60) : post.kind === 'clip' ? 'Your clip' : 'Your post';
+      if (uploading) {
+        // The strip across the top counts the upload up; the celebration
+        // waits until it has actually landed.
+        startUpload(post.id, label, post.thumbnailUrl ?? post.imageUrl);
+        setState((prev) => ({ ...prev, posts: [post, ...prev.posts] }));
+      } else {
+        if (post.videoUrl || post.imageUrl) simulateUpload(post.id, label, post.thumbnailUrl ?? post.imageUrl);
+        setState((prev) => celebratePosted({ ...prev, posts: [post, ...prev.posts] }, { ...celebration, quiet: !!(post.videoUrl || post.imageUrl) }));
+      }
       if (live(me)) {
         (async () => {
-          // Media picked on the device goes up first so the row points at the bucket.
-          const imageUrl = isLocalMedia(post.imageUrl) ? await uploadMedia(me, post.imageUrl!, 'photo') : post.imageUrl;
-          const videoUrl = isLocalMedia(post.videoUrl) ? await uploadMedia(me, post.videoUrl!, 'video') : post.videoUrl;
-          const thumbnailUrl = post.thumbnailUrl === post.imageUrl ? imageUrl
-            : isLocalMedia(post.thumbnailUrl) ? await uploadMedia(me, post.thumbnailUrl!, 'photo') : post.thumbnailUrl;
-          const hosted = { ...post, imageUrl, videoUrl, thumbnailUrl };
-          setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === post.id ? { ...p, imageUrl, videoUrl, thumbnailUrl } : p)) }));
-          await remote.insertPost(hosted);
+          try {
+            // Media picked on the device goes up first so the row points at the
+            // bucket. The video is nearly all of the bytes, so it owns nearly
+            // all of the bar; the cover picture gets the last sliver.
+            const local = [isLocalMedia(post.imageUrl), isLocalMedia(post.videoUrl), isLocalMedia(post.thumbnailUrl) && post.thumbnailUrl !== post.imageUrl];
+            const weights = [local[0] ? 0.85 : 0, local[1] ? 0.9 : 0, local[2] ? 0.1 : 0];
+            const total = weights.reduce((a, b) => a + b, 0) || 1;
+            const before = (i: number) => weights.slice(0, i).reduce((a, b) => a + b, 0) / total;
+            const report = (i: number) => (f: number) => setUploadProgress(post.id, before(i) + (weights[i] / total) * f);
+            const imageUrl = local[0] ? await uploadMedia(me, post.imageUrl!, 'photo', report(0)) : post.imageUrl;
+            const videoUrl = local[1] ? await uploadMedia(me, post.videoUrl!, 'video', report(1)) : post.videoUrl;
+            const thumbnailUrl = post.thumbnailUrl === post.imageUrl ? imageUrl
+              : local[2] ? await uploadMedia(me, post.thumbnailUrl!, 'photo', report(2)) : post.thumbnailUrl;
+            const hosted = { ...post, imageUrl, videoUrl, thumbnailUrl };
+            setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === post.id ? { ...p, imageUrl, videoUrl, thumbnailUrl } : p)) }));
+            await remote.insertPost(hosted);
+            if (uploading) {
+              finishUpload(post.id);
+              setState((prev) => celebratePosted(prev, { ...celebration, quiet: true }));
+            }
+          } catch (error) {
+            console.warn('[remote] post did not land', error);
+            const reason = error instanceof Error ? error.message : 'Something went wrong.';
+            if (uploading) finishUpload(post.id, false, reason);
+            else toast.show({ title: 'Could not post', body: reason, icon: 'alert' });
+            // The post never reached the server; leaving it in the feed would
+            // show something nobody else can see.
+            setState((prev) => ({ ...prev, posts: prev.posts.filter((p) => p.id !== post.id) }));
+            haptics.reject();
+          }
         })();
       }
       return post.id;
@@ -790,6 +859,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   }, [requireUser]);
 
+  const togglePinPost = useCallback((postId: ID) => {
+    const me = requireUser();
+    haptics.commit();
+    if (live(me, postId)) {
+      const post = stateRef.current.posts.find((p) => p.id === postId);
+      if (post?.authorId === me) remote.setPostPinned(postId, !post.pinned);
+    }
+    setState((prev) => ({
+      ...prev,
+      posts: prev.posts.map((p) => (p.id === postId && p.authorId === me ? { ...p, pinned: !p.pinned } : p)),
+    }));
+  }, [requireUser]);
+
+  const refresh = useCallback(async () => {
+    const me = stateRef.current.currentUserId;
+    if (me && isSupabaseConfigured && stateRef.current.remoteLoaded) await loadRemote(me);
+    else await new Promise((resolve) => setTimeout(resolve, 500));
+  }, [loadRemote]);
+
   const addStory = useCallback(
     (input: NewStoryInput): ID => {
       const me = requireUser();
@@ -808,7 +896,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setState((prev) => celebratePosted({ ...prev, stories: [story, ...prev.stories] }, {
         userId: me, targetId: story.id, targetKind: 'post', preview: `Hit${story.caption ? ` · ${snippet(story.caption, 60)}` : ''}`,
         title: 'Hit posted', body: 'Up for 24 hours, then kept in your archive.',
-        href: `/story/${me}`, icon: 'camera',
+        href: '/', icon: 'camera',
       }));
       if (live(me)) {
         (async () => {
@@ -873,6 +961,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ? withNotification(next, { userId: story.authorId, actorId: me, kind: 'like', targetId: story.id, targetKind: 'hit', preview: story.caption ? snippet(story.caption) : 'your hit' })
           : next;
       });
+    },
+    [requireUser],
+  );
+
+  const toggleLikeComment = useCallback(
+    (commentId: ID) => {
+      const me = requireUser();
+      const comment = stateRef.current.comments.find((c) => c.id === commentId);
+      if (!comment) return;
+      const liking = !comment.likedBy.includes(me);
+      liking ? haptics.reward() : haptics.untap();
+      if (live(me, commentId)) {
+        const onHit = stateRef.current.stories.some((st) => st.id === comment.postId);
+        remote.setCommentLike(commentId, me, liking, onHit);
+      }
+      setState((prev) => ({
+        ...prev,
+        comments: prev.comments.map((c) => (c.id === commentId ? { ...c, likedBy: liking ? [...c.likedBy, me] : c.likedBy.filter((id) => id !== me) } : c)),
+      }));
     },
     [requireUser],
   );
@@ -950,7 +1057,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setState((prev) => celebratePosted({ ...prev, questions: [question, ...prev.questions] }, {
         userId: me, targetId: question.id, targetKind: 'question', preview: snippet(question.title),
         title: 'Question posted', body: 'The community can see it now.',
-        href: `/question/${question.id}`, icon: 'chatbubbles',
+        href: '/', icon: 'chatbubbles',
       }));
       return question.id;
     },
@@ -1575,7 +1682,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const toggleFollow = useCallback((userId: ID) => {
     {
       const me = stateRef.current.currentUserId;
-      if (live(me, userId) && userId !== me) remote.setFollow(me!, userId, !stateRef.current.followingIds.includes(userId));
+      const target = stateRef.current.users.find((u) => u.id === userId);
+      const following = stateRef.current.followingIds.includes(userId);
+      if (me && userId !== me && target?.isPrivate && !following) {
+        // A private account: this is an ask, not a follow. Asking twice takes it back.
+        const asked = stateRef.current.followRequests.some((r) => r.fromId === me && r.toId === userId);
+        asked ? haptics.untap() : haptics.tap();
+        if (live(me, userId)) asked ? remote.cancelFollowRequest(me, userId) : remote.sendFollowRequest(me, userId);
+        setState((prev) => {
+          const next: AppState = {
+            ...prev,
+            followRequests: asked
+              ? prev.followRequests.filter((r) => !(r.fromId === me && r.toId === userId))
+              : [...prev.followRequests, { fromId: me, toId: userId, createdAt: new Date().toISOString() }],
+            notifications: asked ? prev.notifications.filter((n) => !(n.kind === 'follow-request' && n.actorId === me && n.userId === userId)) : prev.notifications,
+          };
+          return asked ? next : withNotification(next, { userId, actorId: me, kind: 'follow-request', targetId: me, targetKind: 'post' });
+        });
+        return;
+      }
+      if (live(me, userId) && userId !== me) remote.setFollow(me!, userId, !following);
     }
     setState((prev) => {
       const me = prev.currentUserId;
@@ -1601,6 +1727,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return next;
     });
   }, []);
+
+  const acceptFollowRequest = useCallback((requesterId: ID) => {
+    const me = requireUser();
+    haptics.commit();
+    if (live(me, requesterId)) remote.acceptFollowRequest(requesterId);
+    setState((prev) => {
+      const next: AppState = {
+        ...prev,
+        followRequests: prev.followRequests.filter((r) => !(r.fromId === requesterId && r.toId === me)),
+        followEdges: prev.followEdges.some((e) => e.followerId === requesterId && e.followingId === me) ? prev.followEdges : [...prev.followEdges, { followerId: requesterId, followingId: me }],
+        users: prev.users.map((u) => (u.id === me ? { ...u, followers: u.followers + 1 } : u.id === requesterId ? { ...u, following: u.following + 1 } : u)),
+        // The ask on your list becomes "started following you".
+        notifications: prev.notifications.map((n) => (n.kind === 'follow-request' && n.actorId === requesterId && n.userId === me ? { ...n, kind: 'follow' as const, read: true } : n)),
+      };
+      return withNotification(next, { userId: requesterId, actorId: me, kind: 'follow-accepted', targetId: me, targetKind: 'post' });
+    });
+  }, [requireUser]);
+
+  const declineFollowRequest = useCallback((requesterId: ID) => {
+    const me = requireUser();
+    haptics.untap();
+    if (live(me, requesterId)) remote.declineFollowRequest(me, requesterId);
+    setState((prev) => ({
+      ...prev,
+      followRequests: prev.followRequests.filter((r) => !(r.fromId === requesterId && r.toId === me)),
+      notifications: prev.notifications.filter((n) => !(n.kind === 'follow-request' && n.actorId === requesterId && n.userId === me)),
+    }));
+  }, [requireUser]);
+
+  const setPrivateAccount = useCallback((enabled: boolean) => {
+    const me = requireUser();
+    haptics.commit();
+    patchCurrentUser((u) => ({ ...u, isPrivate: enabled || undefined }));
+    if (live(me)) remote.updateProfile(me, { isPrivate: enabled });
+  }, [requireUser, patchCurrentUser]);
 
   const toggleMute = useCallback((userId: ID) => {
     setState((prev) => {
@@ -1672,6 +1833,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addPaymentMethod,
       removePaymentMethod,
       toggleFollow,
+      acceptFollowRequest,
+      declineFollowRequest,
+      setPrivateAccount,
       toggleMute,
       toggleBlock,
       toggleAlerts,
@@ -1696,12 +1860,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleLike,
       addPost,
       toggleArchivePost,
+      togglePinPost,
+      refresh,
       deletePost,
       addStory,
       toggleArchiveStory,
       markStoryViewed,
       addComment,
       toggleLikeStory,
+      toggleLikeComment,
       addStoryComment,
       addQuestion,
       voteQuestion,
@@ -1733,6 +1900,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addPaymentMethod,
       removePaymentMethod,
       toggleFollow,
+      acceptFollowRequest,
+      declineFollowRequest,
+      setPrivateAccount,
       toggleMute,
       toggleBlock,
       toggleAlerts,
@@ -1757,12 +1927,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleLike,
       addPost,
       toggleArchivePost,
+      togglePinPost,
+      refresh,
       deletePost,
       addStory,
       toggleArchiveStory,
       markStoryViewed,
       addComment,
       toggleLikeStory,
+      toggleLikeComment,
       addStoryComment,
       addQuestion,
       voteQuestion,

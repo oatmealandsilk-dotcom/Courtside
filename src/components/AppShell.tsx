@@ -3,10 +3,12 @@ import React, { useEffect, useRef, useSyncExternalStore } from 'react';
 import { View } from 'react-native';
 import { router, usePathname } from 'expo-router';
 import { NavBar } from './NavBar';
+import { UploadBar } from '@/components/UploadBar';
 import { Toast } from './Toast';
 import { RouteTransition } from './RouteTransition';
 import { useResponsive } from '@/lib/useResponsive';
 import { getPendingTab, setPendingTab, subscribePendingTab } from '@/features/navigation/pendingTab';
+import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
 
@@ -37,11 +39,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const showNav = !!currentUserId && !['/sign-in', '/onboarding'].includes(pathname);
   const nav = <NavBar state={{ index: selected.current, routes }} navigation={{ navigate: name => {
     const destination = paths[name as keyof typeof paths];
-    if (destination) router.navigate(destination);
+    if (!destination) return;
+    // Already here: a second tap on the same icon takes the page back to the top.
+    if (destination === pathname) requestScrollToTop(destination);
+    // From a page pushed on top (settings, edit profile…), go back down to the
+    // tab the way the back button would — a pop with its slide, not a jump.
+    else if (!Object.values(paths).includes(pathname as (typeof paths)[keyof typeof paths])) {
+      const r = router as unknown as { dismissTo?: (href: string) => void };
+      if (r.dismissTo) r.dismissTo(destination); else router.navigate(destination);
+    }
+    else router.navigate(destination);
   } }} />;
   return <View style={{ flex: 1, minHeight: 0, backgroundColor: colors.bg, flexDirection: isPhone ? 'column' : 'row' }}>
     {showNav && !isPhone && nav}
-    <View style={{ flex: 1, minWidth: 0, minHeight: 0 }}><RouteTransition>{children}</RouteTransition><Toast /></View>
+    <View style={{ flex: 1, minWidth: 0, minHeight: 0 }}><RouteTransition>{children}</RouteTransition><Toast /><UploadBar /></View>
     {showNav && isPhone && nav}
   </View>;
 }

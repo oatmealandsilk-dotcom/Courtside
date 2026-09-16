@@ -66,7 +66,10 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
 
   const content = (section:string) => (section === 'players' ? <View style={{ gap: 16 }}>
         <TextInput accessibilityLabel="Search players" placeholder="Search by name, handle, or city" placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} style={styles.search} />
-        {currentUser && !search ? <NearbyMap me={currentUser} players={players} at={detectedCoords} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} /> : null}
+        {currentUser && !search ? (section === 'players'
+          ? <NearbyMap me={currentUser} players={players} at={detectedCoords} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} />
+          // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
+          : <View style={styles.mapStandIn} />) : null}
         {players.map(user => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.player}>
           <Avatar name={user.name} seed={user.avatarSeed} size={44} />
           <View style={{ flex: 1, gap: 4 }}><View style={{flexDirection:"row",alignItems:"center",gap:8,flexWrap:"wrap"}}><Text style={styles.playerName}>{user.name}</Text><LevelPill profile={user.profile} small /></View><Text style={styles.playerMeta}>@{user.handle} · {user.location}</Text></View>
@@ -161,6 +164,7 @@ const styleDefinitions = StyleSheet.create({
   section: { flex: 1, alignItems: 'center', paddingVertical: 18 },
   sectionUnderline: { position: 'absolute', left: 0, bottom: -1, height: 3, backgroundColor: colors.warning, borderRadius: 1.5 },
   search: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 14, fontSize: 14, color: colors.text, backgroundColor: colors.surface },
+  mapStandIn: { height: 306, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   player: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 18, borderBottomWidth: 1, borderBottomColor: colors.border },
   playerName: { fontWeight: '600', fontSize: 15, color: colors.text },
   playerMeta: { fontSize: 12, color: colors.textMuted },

@@ -2,6 +2,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -55,7 +56,9 @@ export function Toast() {
         onPress={() => {
           if (!toast.href) return;
           setToast(null);
-          router.push(toast.href);
+          // Home is a tab, not a page to push: go there and put the feed at the top.
+          if (toast.href === '/') { router.navigate('/'); requestScrollToTop('/'); }
+          else router.push(toast.href);
         }}
         style={styles.card}
       >

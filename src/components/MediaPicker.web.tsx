@@ -5,6 +5,9 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { colors, radius, spacing, typography } from '@/theme';
 import type { MediaPickerProps, PickedMedia } from './MediaPicker';
+import { ClipPlayback } from './ClipPlayback';
+import { ClipVideo } from './ClipVideo';
+import { ZoomableMedia } from './ZoomableMedia';
 
 export type { PickedMedia, MediaPickerProps } from './MediaPicker';
 
@@ -151,7 +154,7 @@ export function pickFromDevice(selection: 'video' | 'photo' | 'all'): Promise<Pi
   });
 }
 
-export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false, orientation = 'portrait' }: MediaPickerProps) {
+export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false, orientation = 'portrait', trim }: MediaPickerProps) {
   const styles = useThemedStyles(styleDefinitions);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
@@ -280,7 +283,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
           >
             {value.kind === 'video' && value.uri ? (
               // Plays the way it will in the feed: looped, muted, edge to edge.
-              <video src={value.uri} poster={value.thumbnailUrl} autoPlay loop muted playsInline preload="auto" style={{ width: '100%', height: '100%', objectFit: orientation === 'landscape' ? 'contain' : 'cover', display: 'block' }} />
+              <ClipVideo uri={value.uri} poster={value.thumbnailUrl} active muted fit={orientation === 'landscape' ? 'contain' : 'cover'} trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} />
             ) : value.uri ? (
               <img src={value.uri} alt={describe(value)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
             ) : null}
@@ -303,7 +306,9 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
             {value.kind === 'video' && value.uri ? (
               <video
                 src={value.uri}
-                controls
+                autoPlay
+                loop
+                muted
                 playsInline
                 style={{
                   width: '100%', maxWidth: 320, aspectRatio: '9 / 16', maxHeight: 460,
@@ -367,15 +372,13 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
             }}
           >
             {value.kind === 'video' && value.uri ? (
-              <video
-                src={value.uri}
-                poster={value.thumbnailUrl}
-                controls
-                autoPlay
-                playsInline
-                onClick={(event) => event.stopPropagation()}
-                style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 12, cursor: 'default' }}
-              />
+              // The same player the feed uses: a tap pauses, a pinch zooms and
+              // springs back; no browser controls.
+              <div onClick={(event) => event.stopPropagation()} style={{ position: 'relative', width: orientation === 'landscape' ? '100%' : 'min(100%, 56vh)', aspectRatio: orientation === 'landscape' ? '16 / 9' : '9 / 16', maxHeight: '100%', borderRadius: 12, overflow: 'hidden', background: '#000', cursor: 'default' }}>
+                <ZoomableMedia>
+                  <ClipPlayback uri={value.uri} poster={value.thumbnailUrl} active fit={orientation === 'landscape' ? 'contain' : 'cover'} trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} silent={trim?.muted} />
+                </ZoomableMedia>
+              </div>
             ) : value.uri ? (
               <img
                 src={value.uri}

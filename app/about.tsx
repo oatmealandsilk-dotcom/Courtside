@@ -29,7 +29,7 @@ export default function About() {
       <View style={styles.card}>
         {[
           { icon: 'help-circle-outline', label: 'Help', to: '/help' },
-          { icon: 'shield-checkmark-outline', label: 'Privacy centre', to: '/privacy' },
+          { icon: 'shield-checkmark-outline', label: 'Privacy center', to: '/privacy' },
           { icon: 'ribbon-outline', label: 'Apply to be a coach', to: '/coach-apply' },
         ].map((row, index) => (
           <Pressable key={row.label} accessibilityRole="link" onPress={() => router.push(row.to)} style={[styles.row, index > 0 && styles.rowBorder]}>

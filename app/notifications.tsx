@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,6 +29,8 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap; tin
   helpful: { name: 'ribbon', tint: 'warning' },
   share: { name: 'arrow-redo', tint: 'court' },
   follow: { name: 'person-add', tint: 'brand' },
+  'follow-request': { name: 'lock-closed', tint: 'brand' },
+  'follow-accepted': { name: 'checkmark-done', tint: 'success' },
   posted: { name: 'checkmark', tint: 'success' },
 };
 
@@ -39,6 +42,8 @@ const VERB: Record<NotificationKind, string> = {
   helpful: 'found your reply helpful',
   share: 'shared your post',
   follow: 'started following you',
+  'follow-request': 'asked to follow you',
+  'follow-accepted': 'accepted your follow request',
   posted: 'is live',
 };
 
@@ -54,6 +59,10 @@ interface Group {
 }
 
 function routeFor(group: Group): string {
+  // Your own "it's up" note takes you to the feed, where the new thing sits first.
+  if (group.kind === 'posted') return '/';
+  // A follow of any kind opens the person, not a post.
+  if (group.kind === 'follow' || group.kind === 'follow-request' || group.kind === 'follow-accepted') return `/user/${group.actorIds[0]}`;
   if (group.targetKind === 'post') return `/post/${group.targetId}`;
   if (group.targetKind === 'hit') return `/hits/${group.targetId}`;
   if (group.targetKind === 'question') return `/question/${group.targetId}`;
@@ -62,7 +71,7 @@ function routeFor(group: Group): string {
 
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
-  const { notifications, users, currentUserId, actions } = useApp();
+  const { notifications, users, currentUserId, followRequests, actions } = useApp();
 
   const mine = useMemo(
     () => notifications.filter((n) => n.userId === currentUserId),
@@ -75,7 +84,8 @@ export default function Notifications() {
     for (const n of [...mine].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     )) {
-      const key = `${n.kind}:${n.targetKind}:${n.targetId}`;
+      // Follows are one row per person, never bundled.
+      const key = n.kind === 'follow' || n.kind === 'follow-request' || n.kind === 'follow-accepted' ? `${n.kind}:${n.actorId}` : `${n.kind}:${n.targetKind}:${n.targetId}`;
       const existing = byTarget.get(key);
       if (existing) {
         if (!existing.actorIds.includes(n.actorId)) existing.actorIds.push(n.actorId);
@@ -97,7 +107,7 @@ export default function Notifications() {
     // Deliberately keyed on length only: re-grouping as rows are marked read
     // would wipe the tint mid-view.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mine.length]);
+  }, [mine.length, followRequests.length]);
 
   useEffect(() => {
     actions.markNotificationsRead();
@@ -132,7 +142,7 @@ export default function Notifications() {
                 key={group.key}
                 accessibilityRole="link"
                 accessibilityLabel={`${who} ${VERB[group.kind]}`}
-                onPress={() => router.push(routeFor(group))}
+                onPress={() => { const to = routeFor(group); if (to === '/') { router.navigate('/'); requestScrollToTop('/'); } else router.push(to); }}
                 style={[styles.row, group.unread && styles.rowUnread]}
               >
                 <View>
@@ -153,6 +163,12 @@ export default function Notifications() {
                     </Text>
                   ) : null}
                   <Text style={styles.time}>{relativeTime(group.createdAt)} ago</Text>
+                  {group.kind === 'follow-request' && followRequests.some((r) => r.fromId === first && r.toId === currentUserId) ? (
+                    <View style={styles.askRow}>
+                      <Pressable accessibilityRole="button" accessibilityLabel={`Accept ${nameOf(first)}`} onPress={() => actions.acceptFollowRequest(first)} style={styles.accept}><Text style={styles.acceptText}>Accept</Text></Pressable>
+                      <Pressable accessibilityRole="button" accessibilityLabel={`Decline ${nameOf(first)}`} onPress={() => actions.declineFollowRequest(first)} style={styles.decline}><Text style={styles.declineText}>Decline</Text></Pressable>
+                    </View>
+                  ) : null}
                 </View>
 
                 {group.unread ? <View style={styles.dot} /> : null}
@@ -194,4 +210,9 @@ const styleDefinitions = StyleSheet.create({
   preview: { ...typography.small, color: colors.textMuted },
   time: { ...typography.caption, color: colors.textFaint },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.brand },
+  askRow: { flexDirection: 'row', gap: spacing.sm, paddingTop: spacing.xs },
+  accept: { paddingHorizontal: spacing.lg, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.brand },
+  acceptText: { ...typography.smallStrong, color: colors.brandInk },
+  decline: { paddingHorizontal: spacing.lg, paddingVertical: 7, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border },
+  declineText: { ...typography.smallStrong, color: colors.text },
 });

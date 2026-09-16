@@ -33,7 +33,7 @@ export function Toggle({ value, onChange, disabled = false, accessibilityLabel }
       ios_backgroundColor={colors.borderStrong}
       // The stock switch is oversized next to a row of small text; scaled
       // down a touch, with the thumb along with it.
-      style={{ transform: [{ scale: 0.9 }], marginVertical: -2, marginRight: -2 }}
+      style={{ transform: [{ scale: 0.95 }], marginVertical: -1, marginRight: -1 }}
       {...webOnly}
     />
   );

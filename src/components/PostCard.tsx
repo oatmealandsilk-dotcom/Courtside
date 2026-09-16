@@ -16,6 +16,8 @@ import { requestSection } from '@/features/navigation/swipeOrder';
 import { colors, radius, spacing, typography } from '@/theme';
 
 interface Props {
+  /** Opens the comments; without it the comment button behaves like a tap on the card. */
+  onComment?: () => void;
   post: Post;
   author: User;
   liked: boolean;
@@ -45,6 +47,7 @@ const KIND_META: Record<Post['kind'], { label: string; icon: keyof typeof Ionico
 };
 
 export function PostCard({
+  onComment,
   post,
   author,
   liked,
@@ -180,7 +183,7 @@ export function PostCard({
             {compactNumber(post.likedBy.length)}
           </Text>
         </Tappable>
-        <Tappable onPress={onPress} scaleTo={0.8} style={styles.action} accessibilityLabel="Comments">
+        <Tappable onPress={onComment ?? onPress} scaleTo={0.8} style={styles.action} accessibilityLabel="Comments">
           <Ionicons name="chatbubble-outline" size={22} color={colors.textMuted} />
           <Text style={styles.actionText}>{compactNumber(post.commentIds.length)}</Text>
         </Tappable>

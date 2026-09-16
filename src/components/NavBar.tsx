@@ -2,6 +2,8 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { BrandMark } from './BrandMark';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { interpolate, useAnimatedStyle } from 'react-native-reanimated';
+import { barCompact } from '@/features/navigation/barShrink';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -46,14 +48,28 @@ export function NavBar({ state, navigation }: NavBarProps) {
   // carries the lot — it is where both of those live.
   const profileAlerts = unread + unseen;
 
+  // Scrolling down ducks the bar: a touch shorter, everything on it a touch
+  // smaller. Scrolling up brings it straight back. Never small enough to miss.
+  const bottomPad = Math.max(insets.bottom, spacing.sm);
+  const duck = useAnimatedStyle(() => ({
+    paddingTop: interpolate(barCompact.value, [0, 1], [spacing.sm, 2]),
+    paddingBottom: interpolate(barCompact.value, [0, 1], [bottomPad, Math.max(insets.bottom - 4, 4)]),
+  }));
+  const shrink = useAnimatedStyle(() => ({
+    transform: [{ scale: interpolate(barCompact.value, [0, 1], [1, 0.86]) }],
+  }));
+  const rowShrink = useAnimatedStyle(() => ({
+    minHeight: interpolate(barCompact.value, [0, 1], [48, 38]),
+  }));
+
   if (isPhone) {
     return (
-      <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
+      <Animated.View style={[styles.bottomBar, duck]}>
         {ITEMS.map((item, index) => {
           const active = item.route === activeRoute;
           return (
             <React.Fragment key={item.route}>
-            {index === 2 && <View style={styles.createSlot}><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => router.push('/compose')} style={styles.createButton}><Ionicons name="add" size={30} color={colors.brandInk} /></Pressable></View>}
+            {index === 2 && <View style={styles.createSlot}><Animated.View style={shrink}><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => router.push('/compose')} style={styles.createButton}><Ionicons name="add" size={30} color={colors.brandInk} /></Pressable></Animated.View></View>}
             <Pressable
               onPress={() => navigation.navigate(item.route)}
               accessibilityRole="tab"
@@ -61,6 +77,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
               accessibilityLabel={item.label}
               style={styles.bottomItem}
             >
+              <Animated.View style={[styles.bottomInner, rowShrink, shrink]}>
               <View>
                 <Ionicons
                   name={active ? item.activeIcon : item.icon}
@@ -74,11 +91,12 @@ export function NavBar({ state, navigation }: NavBarProps) {
                 ) : null}
               </View>
               <Text style={[styles.bottomLabel, active && { color: item.route === 'coaches' ? colors.info : item.route === 'discuss' ? colors.warning : colors.brand }]}>{item.label}</Text>
+              </Animated.View>
             </Pressable>
             </React.Fragment>
           );
         })}
-      </View>
+      </Animated.View>
     );
   }
 
@@ -218,7 +236,8 @@ const styleDefinitions = StyleSheet.create({
     borderTopColor: colors.border,
     paddingTop: spacing.sm,
   },
-  bottomItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 48 },
+  bottomItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  bottomInner: { alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 48 },
   bottomBadge: {
     position: 'absolute', top: -4, right: -8,
     minWidth: 17, height: 17, borderRadius: 9, paddingHorizontal: 4,

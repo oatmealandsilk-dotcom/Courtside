@@ -20,7 +20,7 @@ import { colors } from '@/theme';
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
- const { currentUser: user, posts, saved, conversations, notifications, currentUserId } = useApp();
+ const { currentUser: user, posts, saved, conversations, notifications, currentUserId, actions } = useApp();
  // The section lives here, not in the address (see discuss.tsx for why).
  const [localTab, setLocalTab] = useState<'Posts' | 'Clips' | 'Tagged'>('Posts');
  const section = previewSection ?? localTab;
@@ -41,6 +41,12 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const underline = useTabUnderline(tabIndex, TABS.length, tabWidth);
  const own = posts.filter(p => p.authorId === user?.id && !p.archived);
  const shown = (tab === 'Tagged' ? posts.filter(p => !!user && p.taggedUserIds?.includes(user.id) && !p.archived) : own.filter(p => tab !== 'Clips' || p.kind === 'clip')).sort((a,b) => Date.parse(b.createdAt)-Date.parse(a.createdAt));
+ // How many of each, shown beside the section names.
+ const counts: Record<typeof TABS[number], number> = {
+   Posts: own.length,
+   Clips: own.filter(p => p.kind === 'clip').length,
+   Tagged: user ? posts.filter(p => p.taggedUserIds?.includes(user.id) && !p.archived).length : 0,
+ };
  const unread = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
  const unseen = notifications.filter(n => n.userId === currentUserId && !n.read).length;
  const savedCount = saved.postIds.length + saved.questionIds.length;
@@ -52,9 +58,15 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  };
  const content = (selected: string) => {
    if (!user) return null;
-   const items = (selected === 'Tagged' ? posts.filter(p => p.taggedUserIds?.includes(user.id) && !p.archived) : own.filter(p => selected !== 'Clips' || p.kind === 'clip')).sort((a,b) => Date.parse(b.createdAt)-Date.parse(a.createdAt));
+   // Pinned first, then newest.
+   const items = (selected === 'Tagged' ? posts.filter(p => p.taggedUserIds?.includes(user.id) && !p.archived) : own.filter(p => selected !== 'Clips' || p.kind === 'clip')).sort((a,b) => Number(!!b.pinned) - Number(!!a.pinned) || Date.parse(b.createdAt)-Date.parse(a.createdAt));
    return <View style={{ minHeight: 320, backgroundColor: colors.bg }}>
-     <View style={styles.grid}>{items.map(p => <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: selected === 'Clips' ? 'clips' : selected === 'Tagged' ? 'tagged' : 'own' } })} style={styles.tile}>{p.thumbnailUrl ? <><Image accessibilityIgnoresInvertColors source={{uri:p.thumbnailUrl}} style={StyleSheet.absoluteFill} resizeMode="cover"/><View pointerEvents="none" style={styles.tileScrim}/></> : null}<Ionicons name={p.kind==='clip'?'play':'document-text-outline'} size={18} color={p.thumbnailUrl ? '#FFFFFF' : colors.text} style={{alignSelf:'flex-end'}}/><Text numberOfLines={4} style={[styles.tileText, {color: p.thumbnailUrl ? '#FFFFFF' : colors.text}]}>{p.body}</Text><View style={styles.tileFoot}><Text style={[styles.tileLabel, {color: p.thumbnailUrl ? '#FFFFFF' : colors.textMuted}]}>{p.kind==='match'?'SET PLAY':p.kind.toUpperCase()}</Text><View style={styles.tileViews}><Ionicons name={p.kind==='clip'?'play':'stats-chart'} size={p.kind==='clip'?10:9} color={p.thumbnailUrl ? '#FFFFFF' : colors.textMuted}/><Text style={[styles.tileLabel, {color: p.thumbnailUrl ? '#FFFFFF' : colors.textMuted}]}>{compactNumber(p.views ?? 0)}</Text></View></View></Pressable>)}</View>
+     <View style={styles.grid}>{items.map(p => <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: selected === 'Clips' ? 'clips' : selected === 'Tagged' ? 'tagged' : 'own' } })} style={styles.tile}>
+       <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
+       {p.thumbnailUrl ? <Image accessibilityIgnoresInvertColors source={{uri:p.thumbnailUrl}} style={StyleSheet.absoluteFill} resizeMode="cover"/> : null}
+       {p.kind==='clip' && <Ionicons name="play" size={14} color="#FFFFFF" style={styles.tilePlay}/>}
+       {p.pinned && selected !== 'Tagged' && <Ionicons name="pin" size={13} color="#FFFFFF" style={styles.tilePin}/>}
+     </Pressable>)}</View>
      {!items.length && <EmptyState title={selected==='Tagged'?'No tagged posts yet':`No ${selected.toLowerCase()} yet`} body="Your shared moments will appear here."/>}
    </View>;
  };
@@ -73,13 +85,21 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
      <View style={{ flex: 1 }}><Text style={styles.setupTitle}>Finish setting up</Text><Text style={styles.meta}>{[skipped.includes('permissions') && 'camera and photos', skipped.includes('body') && 'fitness and goals', skipped.includes('calendar') && 'your next tournament'].filter(Boolean).join(', ').replace(/^./, (c) => c.toUpperCase())} — about a minute.</Text></View>
      <Ionicons name="chevron-forward" size={16} color={colors.textMuted}/>
    </Pressable>}
+   {/* The picture in the middle, the name under it, and who follows whom in
+       one quiet line — the post counts moved down to the Posts / Clips / Tagged row. */}
    <View style={styles.identity}>
-     <View style={styles.stats}><Avatar name={user.name} seed={user.avatarSeed} size={72} style={{ backgroundColor: colors.brand }}/>{[[own.length,'Posts'],[user.followers,'Followers'],[user.following,'Following']].map(([n,label]) => label === 'Posts'
-       ? <View key={label} style={styles.stat}><Text style={styles.count}>{compactNumber(Number(n))}</Text><Text style={styles.meta}>{label}</Text></View>
-       : <Pressable key={label} accessibilityRole="link" accessibilityLabel={`${n} ${label}`} onPress={() => router.push({ pathname: '/follows', params: { userId: user.id, tab: label === 'Followers' ? 'followers' : 'following' } })} style={styles.stat}><Text style={styles.count}>{compactNumber(Number(n))}</Text><Text style={styles.meta}>{label}</Text></Pressable>)}</View>
+     <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={92} style={{ backgroundColor: colors.brand, alignSelf: 'center' }}/>
      <View style={styles.nameRow}><PlayerName userId={user.id} style={styles.name}>{user.name}</PlayerName><LevelPill profile={profile}/></View>
-     <Text style={styles.bio}>{user.bio}</Text>
+     {!!user.bio && <Text style={styles.bio}>{user.bio}</Text>}
      {profile.constraints.filter(c => c.active && c.kind === 'injury').map(c => <Text key={c.id} style={styles.injury}>⚕ {c.label}</Text>)}
+     <View style={styles.followRow}>
+       {([['followers', user.followers, 'followers'], ['following', user.following, 'following']] as const).map(([tab, n, label], i) => <React.Fragment key={tab}>
+         {i > 0 && <Text style={styles.followDot}>·</Text>}
+         <Pressable accessibilityRole="link" accessibilityLabel={`${n} ${label}`} onPress={() => router.push({ pathname: '/follows', params: { userId: user.id, tab } })} style={styles.follow}>
+           <Text style={styles.followCount}>{compactNumber(Number(n))}</Text><Text style={styles.meta}> {label}</Text>
+         </Pressable>
+       </React.Fragment>)}
+     </View>
      <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit Profile" variant="secondary" onPress={() => router.push('/edit-profile')} full/></View><View style={{ flex: 1 }}><Button label="Share" variant="secondary" onPress={share} full/></View></View>
      {!!shareError && <Text style={styles.meta}>{shareError}</Text>}
    </View>
@@ -89,7 +109,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    </Pressable>
    <Pressable accessibilityRole="link" accessibilityLabel="Saved videos and discussions" onPress={() => router.push('/saved')} style={styles.health}><Ionicons name="bookmark-outline" size={20} color={colors.brand}/><Text style={[styles.meta,{flex:1}]}>Saved{savedCount ? ` · ${savedCount}` : ''}</Text><Ionicons name="chevron-forward" size={16} color={colors.textMuted}/></Pressable>
    <Pressable accessibilityRole="link" onPress={() => router.push('/health')} style={styles.health}><Ionicons name="flash-outline" size={20} color={colors.warning}/><Text style={[styles.meta,{flex:1}]}>Apple Health · Whoop · Cronometer</Text><Ionicons name="chevron-forward" size={16} color={colors.textMuted}/></Pressable>
-   <View style={styles.tabs} onLayout={e => setTabWidth(e.nativeEvent.layout.width / TABS.length)}>{TABS.map(t => <Pressable key={t} accessibilityRole="tab" accessibilityState={{selected:selected===t}} onPress={() => setTab(t)} style={styles.tab}><Text style={{color:selected===t?colors.brand:colors.textMuted,fontWeight:selected===t?'700':'400'}}>{t}</Text></Pressable>)}
+   <View style={styles.tabs} onLayout={e => setTabWidth(e.nativeEvent.layout.width / TABS.length)}>{TABS.map(t => <Pressable key={t} accessibilityRole="tab" accessibilityState={{selected:selected===t}} accessibilityLabel={`${t}, ${counts[t]}`} onPress={() => setTab(t)} style={styles.tab}><Text style={{color:selected===t?colors.brand:colors.textMuted,fontWeight:selected===t?'700':'400'}}>{t}<Text style={[styles.tabCount, selected===t && { color: colors.brand }]}>  {compactNumber(counts[t])}</Text></Text></Pressable>)}
      {tabWidth > 0 && (live
        ? <Reanimated.View pointerEvents="none" style={[styles.tabIndicator, { width: tabWidth }, underline.style]} />
        : <View pointerEvents="none" style={[styles.tabIndicator, { width: tabWidth, left: index * tabWidth }]} />)}
@@ -104,7 +124,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
   // the tab row's (Profile to Coaching). Only the grid below the line changes.
   return body;
  };
- return <Screen memoryKey="profile" title="Profile" subtitle={`@${user.handle}`} right={<View style={styles.headerActions}>
+ return <Screen memoryKey="profile" title="Profile" subtitle={`@${user.handle}`} onRefresh={previewSection === undefined ? actions.refresh : undefined} right={<View style={styles.headerActions}>
    <Tappable accessibilityRole="link" accessibilityLabel={unseen ? `Notifications, ${unseen} new` : 'Notifications'} onPress={() => router.push('/notifications')} hitSlop={10} style={styles.headerButton}>
      <Ionicons name={unseen ? 'notifications' : 'notifications-outline'} size={27} color={colors.text}/>
      {unseen > 0 && <View style={styles.headerBadge}><Text style={styles.headerBadgeText}>{unseen > 9 ? '9+' : unseen}</Text></View>}
@@ -121,7 +141,13 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  </Screen>;
 }
 const styleDefinitions = StyleSheet.create({
- setup:{marginTop:16,marginHorizontal:0,padding:14,borderWidth:1,borderColor:colors.brand,borderRadius:12,backgroundColor:colors.brandDim,flexDirection:'row',alignItems:'center',gap:12},setupTitle:{fontSize:14,fontWeight:'700',color:colors.text},identity:{gap:14,paddingTop:22,paddingBottom:24,paddingHorizontal:12},stats:{flexDirection:'row',alignItems:'center',gap:18,marginBottom:12},stat:{flex:1,alignItems:'center',gap:5},count:{fontSize:20,fontWeight:'700',color:colors.text},meta:{fontSize:12,color:colors.textMuted,lineHeight:19},nameRow:{flexDirection:'row',gap:10,alignItems:'center',flexWrap:'wrap'},name:{fontSize:18,fontWeight:'700',color:colors.text},bio:{fontSize:14,lineHeight:21,color:colors.textMuted},injury:{fontSize:13,color:colors.danger},buttons:{flexDirection:'row',gap:8},settings:{borderWidth:1,borderColor:colors.border,borderRadius:10,padding:10,justifyContent:'center'},tennis:{padding:12,borderWidth:1,borderColor:colors.border,borderRadius:12,backgroundColor:colors.surface,gap:8},eyebrow:{letterSpacing:1.2,fontSize:11,fontWeight:'700',color:colors.textMuted},details:{flexDirection:'row',flexWrap:'wrap',gap:8},detail:{width:'46%',gap:2},value:{fontSize:13,color:colors.text,lineHeight:19},health:{padding:15,marginTop:12,borderWidth:1,borderColor:colors.border,borderRadius:12,flexDirection:'row',alignItems:'center',gap:10},headerActions:{flexDirection:'row',alignItems:'center',gap:14},headerButton:{padding:4},headerBadge:{position:'absolute',top:-1,right:-2,minWidth:18,height:18,borderRadius:9,paddingHorizontal:5,backgroundColor:colors.danger,alignItems:'center',justifyContent:'center',borderWidth:2,borderColor:colors.bg},headerBadgeText:{color:'white',fontSize:10,fontWeight:'800'},tabs:{flexDirection:'row',marginTop:16,borderBottomWidth:2,borderBottomColor:colors.border},tab:{flex:1,alignItems:'center',paddingVertical:18},tabIndicator:{position:'absolute',left:0,bottom:-2,height:2,backgroundColor:colors.brand,borderRadius:1},grid:{flexDirection:'row',flexWrap:'wrap',marginHorizontal:0},tile:{width:'33.333333%',aspectRatio:1,borderWidth:1,borderColor:colors.bg,backgroundColor:colors.surfaceAlt,padding:10,justifyContent:'space-between'},tileScrim:{position:'absolute',top:0,left:0,right:0,bottom:0,backgroundColor:colors.overlay},tileFoot:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:4},tileViews:{flexDirection:'row',alignItems:'center',gap:3},tileText:{fontSize:11,lineHeight:15,color:colors.text},tileLabel:{fontSize:8,color:colors.textMuted,letterSpacing:1},
+ setup:{marginTop:16,marginHorizontal:0,padding:14,borderWidth:1,borderColor:colors.brand,borderRadius:12,backgroundColor:colors.brandDim,flexDirection:'row',alignItems:'center',gap:12},setupTitle:{fontSize:14,fontWeight:'700',color:colors.text},identity:{gap:10,paddingTop:22,paddingBottom:24,paddingHorizontal:12,alignItems:'center'},meta:{fontSize:12,color:colors.textMuted,lineHeight:19},nameRow:{flexDirection:'row',gap:10,alignItems:'center',justifyContent:'center',flexWrap:'wrap',marginTop:4},name:{fontSize:20,fontWeight:'700',color:colors.text},bio:{fontSize:14,lineHeight:21,color:colors.textMuted,textAlign:'center',maxWidth:320},followRow:{flexDirection:'row',alignItems:'center',gap:10},follow:{flexDirection:'row',alignItems:'baseline'},followCount:{fontSize:15,fontWeight:'700',color:colors.text},followDot:{color:colors.textFaint,fontSize:14},tabCount:{fontSize:12,fontWeight:'600',color:colors.textFaint},injury:{fontSize:13,color:colors.danger},buttons:{flexDirection:'row',gap:8,alignSelf:'stretch',marginTop:6},settings:{borderWidth:1,borderColor:colors.border,borderRadius:10,padding:10,justifyContent:'center'},tennis:{padding:12,borderWidth:1,borderColor:colors.border,borderRadius:12,backgroundColor:colors.surface,gap:8},eyebrow:{letterSpacing:1.2,fontSize:11,fontWeight:'700',color:colors.textMuted},details:{flexDirection:'row',flexWrap:'wrap',gap:8},detail:{width:'46%',gap:2},value:{fontSize:13,color:colors.text,lineHeight:19},health:{padding:15,marginTop:12,borderWidth:1,borderColor:colors.border,borderRadius:12,flexDirection:'row',alignItems:'center',gap:10},headerActions:{flexDirection:'row',alignItems:'center',gap:14},headerButton:{padding:4},headerBadge:{position:'absolute',top:-1,right:-2,minWidth:18,height:18,borderRadius:9,paddingHorizontal:5,backgroundColor:colors.danger,alignItems:'center',justifyContent:'center',borderWidth:2,borderColor:colors.bg},headerBadgeText:{color:'white',fontSize:10,fontWeight:'800'},tabs:{flexDirection:'row',marginTop:16,borderBottomWidth:2,borderBottomColor:colors.border},tab:{flex:1,alignItems:'center',paddingVertical:18},tabIndicator:{position:'absolute',left:0,bottom:-2,height:2,backgroundColor:colors.brand,borderRadius:1},grid:{flexDirection:'row',flexWrap:'wrap',marginHorizontal:0},
+ // Instagram's grid: tall tiles, the thumbnail and nothing else on it.
+ tile:{width:'33.333333%',aspectRatio:3/4,borderWidth:1,borderColor:colors.bg,backgroundColor:colors.surfaceAlt,overflow:'hidden'},
+ tileBlank:{padding:10,justifyContent:'center'},
+ tileText:{fontSize:11,lineHeight:15,color:colors.textMuted},
+ tilePlay:{position:'absolute',top:6,right:6,textShadowColor:'rgba(0,0,0,0.6)',textShadowRadius:3},
+ tilePin:{position:'absolute',top:6,left:6,textShadowColor:'rgba(0,0,0,0.6)',textShadowRadius:3},
 });
 
 export default asTabRoute<{ previewSection?: string }>(Profile);

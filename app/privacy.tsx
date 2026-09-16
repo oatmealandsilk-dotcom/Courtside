@@ -15,7 +15,7 @@ export default function PrivacyCentre() {
   const receipts = currentUser?.readReceiptsEnabled !== false;
 
   return (
-    <Screen title="Privacy centre" compactTitle onBack={() => goBack()}>
+    <Screen title="Privacy center" compactTitle onBack={() => goBack()}>
       <Text style={styles.lead}>
         What CourtSide keeps, who can see it, and the switches that change that.
       </Text>
@@ -38,6 +38,14 @@ export default function PrivacyCentre() {
       <Text style={styles.sectionTitle}>YOUR CONTROLS</Text>
       <View style={styles.card}>
         <View style={styles.row}>
+          <Ionicons name="lock-closed-outline" size={20} color={colors.text} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowLabel}>Private account</Text>
+            <Text style={styles.rowDetail}>Only followers see your posts, hits and stats. New followers have to ask, and you say yes or no.</Text>
+          </View>
+          <Toggle value={!!currentUser?.isPrivate} onChange={actions.setPrivateAccount} accessibilityLabel="Private account" />
+        </View>
+        <View style={[styles.row, styles.rowBorder]}>
           <Ionicons name="checkmark-done-outline" size={20} color={colors.text} />
           <View style={{ flex: 1 }}>
             <Text style={styles.rowLabel}>Read receipts</Text>

@@ -48,6 +48,7 @@ const emptyStats: PlayerStats = {
 interface ProfileRow {
   id: string; handle: string; name: string; bio: string; location: string;
   avatar_url: string | null; is_coach: boolean; profile: Partial<PlayerProfile> | null; created_at: string;
+  is_private?: boolean | null;
 }
 interface PostRow {
   id: string; author_id: string; kind: Post['kind']; body: string; media_label: string | null;
@@ -55,6 +56,7 @@ interface PostRow {
   match: Post['match'] | null; session: Post['session'] | null; tags: string[]; tagged_user_ids: string[];
   archived: boolean; views: number; shares: number; created_at: string;
   orientation?: string | null;
+  trim_start?: number | string | null; trim_end?: number | string | null; muted?: boolean | null; pinned?: boolean | null;
   post_likes?: { user_id: string }[]; post_saves?: { user_id: string }[]; comments?: { id: string }[];
 }
 interface CommentRow {
@@ -66,7 +68,7 @@ interface StoryRow {
   media_label: string | null; caption: string | null; archived: boolean; created_at: string; expires_at: string;
   story_views?: { user_id: string }[];
   story_likes?: { user_id: string }[];
-  story_comments?: { id: string; story_id: string; author_id: string; body: string; created_at: string }[];
+  story_comments?: { id: string; story_id: string; author_id: string; body: string; created_at: string; story_comment_likes?: { user_id: string }[] }[];
 }
 
 const toUser = (row: ProfileRow, followers: number, following: number): User => ({
@@ -78,6 +80,7 @@ const toUser = (row: ProfileRow, followers: number, following: number): User => 
   joinedAt: row.created_at,
   avatarSeed: row.id,
   avatarUrl: row.avatar_url ?? undefined,
+  isPrivate: row.is_private || undefined,
   isCoach: row.is_coach,
   followers,
   following,
@@ -97,6 +100,9 @@ const toPost = (row: PostRow): Post => ({
   videoUrl: row.video_url ?? undefined,
   thumbnailUrl: row.thumbnail_url ?? undefined,
   orientation: (row.orientation as 'portrait' | 'landscape' | null) ?? undefined,
+  trimStart: row.trim_start != null ? Number(row.trim_start) : undefined,
+  trimEnd: row.trim_end != null ? Number(row.trim_end) : undefined,
+  muted: row.muted || undefined,
   taggedUserIds: row.tagged_user_ids?.length ? row.tagged_user_ids : undefined,
   match: row.match ?? undefined,
   session: row.session ?? undefined,
@@ -107,6 +113,7 @@ const toPost = (row: PostRow): Post => ({
   shares: row.shares,
   savedBy: (row.post_saves ?? []).map((s) => s.user_id),
   archived: row.archived || undefined,
+  pinned: row.pinned || undefined,
 });
 
 const toComment = (row: CommentRow): Comment => ({
@@ -136,7 +143,8 @@ const toStory = (row: StoryRow): Story => ({
 
 /** A comment on a hit, shaped like any other comment with the hit as its "post". */
 const toStoryComment = (row: NonNullable<StoryRow['story_comments']>[number]): Comment => ({
-  id: row.id, postId: row.story_id, authorId: row.author_id, body: row.body, createdAt: row.created_at, likedBy: [],
+  id: row.id, postId: row.story_id, authorId: row.author_id, body: row.body, createdAt: row.created_at,
+  likedBy: (row.story_comment_likes ?? []).map((l) => l.user_id),
 });
 
 /* ---------------------------------------------------------------- reads */
@@ -150,17 +158,30 @@ export interface RemoteData {
   /** Every follow between profiles, so any player's lists can be shown. */
   followEdges: { followerId: ID; followingId: ID }[];
   savedPostIds: ID[];
+  /** Pending asks to follow a private account, yours and the ones waiting on you. */
+  followRequests: { fromId: ID; toId: ID; createdAt: string }[];
 }
 
 /** Everything the signed-in player needs on open, in four queries. */
 export async function fetchRemote(me: ID): Promise<RemoteData> {
   const db = need();
-  const [profiles, posts, stories, follows] = await Promise.all([
+  // Hits are asked for with their likes and comments; on a database that has
+  // not had those tables added yet the request is refused, so it falls back
+  // to the plain shape rather than taking the whole load down with it — that
+  // is what left people re-doing the quiz: their profile never arrived.
+  const storiesFull = db.from('stories').select('*, story_views(user_id), story_likes(user_id), story_comments(id, story_id, author_id, body, created_at, story_comment_likes(user_id))').order('created_at', { ascending: false }).limit(40);
+  const storiesPlain = () => db.from('stories').select('*, story_views(user_id)').order('created_at', { ascending: false }).limit(40);
+  const [profiles, posts, storiesTry, follows, requests] = await Promise.all([
     db.from('profiles').select('*'),
     db.from('posts').select('*, post_likes(user_id), post_saves(user_id), comments(id, post_id, author_id, body, created_at, comment_likes(user_id))').order('created_at', { ascending: false }).limit(60),
-    db.from('stories').select('*, story_views(user_id), story_likes(user_id), story_comments(id, story_id, author_id, body, created_at)').order('created_at', { ascending: false }).limit(40),
+    storiesFull,
     db.from('follows').select('follower_id, following_id'),
+    // Only the ones that involve you come back; a database without the table yet just gives none.
+    db.from('follow_requests').select('requester_id, target_id, created_at'),
   ]);
+  if (requests.error) console.warn('[remote] follow requests table missing; run the pending migrations', requests.error.message);
+  const stories = storiesTry.error ? await storiesPlain() : storiesTry;
+  if (storiesTry.error) console.warn('[remote] hit likes/comments tables missing; run the pending migrations', storiesTry.error.message);
   for (const result of [profiles, posts, stories, follows]) if (result.error) throw result.error;
 
   const edges = (follows.data ?? []) as { follower_id: string; following_id: string }[];
@@ -184,6 +205,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     followingIds: edges.filter((e) => e.follower_id === me).map((e) => e.following_id),
     followEdges: edges.map((e) => ({ followerId: e.follower_id, followingId: e.following_id })),
     savedPostIds: postRows.filter((row) => (row.post_saves ?? []).some((s) => s.user_id === me)).map((row) => row.id),
+    followRequests: ((requests.data ?? []) as { requester_id: string; target_id: string; created_at: string }[]).map((r) => ({ fromId: r.requester_id, toId: r.target_id, createdAt: r.created_at })),
   };
 }
 
@@ -194,8 +216,9 @@ const fail = (what: string) => (error: unknown) => {
 };
 
 export const remote = {
-  async updateProfile(me: ID, patch: { name?: string; bio?: string; location?: string; avatarUrl?: string; profile?: PlayerProfile }) {
+  async updateProfile(me: ID, patch: { name?: string; bio?: string; location?: string; avatarUrl?: string; profile?: PlayerProfile; isPrivate?: boolean }) {
     const row: Record<string, unknown> = {};
+    if (patch.isPrivate !== undefined) row.is_private = patch.isPrivate;
     if (patch.name !== undefined) row.name = patch.name;
     if (patch.bio !== undefined) row.bio = patch.bio;
     if (patch.location !== undefined) row.location = patch.location;
@@ -216,7 +239,7 @@ export const remote = {
   },
 
   async insertPost(post: Post) {
-    const { error } = await need().from('posts').insert({
+    const row = {
       id: post.id,
       author_id: post.authorId,
       kind: post.kind,
@@ -226,13 +249,29 @@ export const remote = {
       video_url: post.videoUrl ?? null,
       thumbnail_url: post.thumbnailUrl ?? null,
       orientation: post.orientation ?? null,
+      // Only sent when set, so a plain post still saves on a database that
+      // has not had the trim columns added yet.
       match: post.match ?? null,
       session: post.session ?? null,
       tags: post.tags,
       tagged_user_ids: post.taggedUserIds ?? [],
       created_at: post.createdAt,
-    });
-    if (error) fail('post insert')(error);
+    };
+    const trim = {
+      ...(post.trimStart !== undefined ? { trim_start: post.trimStart, trim_end: post.trimEnd ?? null } : {}),
+      ...(post.muted ? { muted: true } : {}),
+    };
+    const { error } = await need().from('posts').insert({ ...row, ...trim });
+    if (!error) return;
+    // The trim columns arrive with a migration; until it has run, save the
+    // post without them rather than losing it. The clip plays untrimmed.
+    if (Object.keys(trim).length && /trim_|muted/.test(error.message)) {
+      console.warn('[remote] trim columns missing; run the pending migration — saving the post untrimmed');
+      const retry = await need().from('posts').insert(row);
+      if (retry.error) fail('post insert')(retry.error);
+      return;
+    }
+    fail('post insert')(error);
   },
 
   async deletePost(postId: ID) {
@@ -242,6 +281,10 @@ export const remote = {
   async setPostArchived(postId: ID, archived: boolean) {
     const { error } = await need().from('posts').update({ archived }).eq('id', postId);
     if (error) fail('post archive')(error);
+  },
+  async setPostPinned(postId: ID, pinned: boolean) {
+    const { error } = await need().from('posts').update({ pinned }).eq('id', postId);
+    if (error) fail('post pin')(error);
   },
 
   async setLike(postId: ID, me: ID, liked: boolean) {
@@ -295,6 +338,16 @@ export const remote = {
     if (error) fail('hit like')(error);
   },
 
+  /** A heart on a comment; `onHit` picks the table, since hit comments live apart. */
+  async setCommentLike(commentId: ID, me: ID, liked: boolean, onHit: boolean) {
+    const db = need();
+    const table = onHit ? 'story_comment_likes' : 'comment_likes';
+    const { error } = liked
+      ? await db.from(table).upsert({ comment_id: commentId, user_id: me })
+      : await db.from(table).delete().match({ comment_id: commentId, user_id: me });
+    if (error) fail('comment like')(error);
+  },
+
   async insertStoryComment(comment: Comment) {
     const { error } = await need().from('story_comments').insert({
       id: comment.id, story_id: comment.postId, author_id: comment.authorId, body: comment.body, created_at: comment.createdAt,
@@ -305,6 +358,29 @@ export const remote = {
   async recordStoryView(storyId: ID, me: ID) {
     const { error } = await need().from('story_views').upsert({ story_id: storyId, user_id: me });
     if (error) fail('story view')(error);
+  },
+
+  /** Asking to follow a private account, and what happens to the ask. */
+  async sendFollowRequest(me: ID, userId: ID) {
+    const { error } = await need().from('follow_requests').upsert({ requester_id: me, target_id: userId });
+    if (error) fail('follow request')(error);
+  },
+  async cancelFollowRequest(me: ID, userId: ID) {
+    const { error } = await need().from('follow_requests').delete().match({ requester_id: me, target_id: userId });
+    if (error) fail('cancel follow request')(error);
+  },
+  /** The server adds the follow and clears the ask in one go, as the account being followed. */
+  async acceptFollowRequest(requesterId: ID) {
+    const { error } = await need().rpc('accept_follow_request', { requester: requesterId });
+    if (error) fail('accept follow request')(error);
+  },
+  async declineFollowRequest(me: ID, requesterId: ID) {
+    const { error } = await need().from('follow_requests').delete().match({ requester_id: requesterId, target_id: me });
+    if (error) fail('decline follow request')(error);
+  },
+  async updatePostThumbnail(postId: ID, thumbnailUrl: string) {
+    const { error } = await need().from('posts').update({ thumbnail_url: thumbnailUrl }).eq('id', postId);
+    if (error) fail('post thumbnail')(error);
   },
 
   async setFollow(me: ID, userId: ID, following: boolean) {
@@ -334,22 +410,88 @@ export const isLocalMedia = (uri?: string) =>
  */
 const ALLOWED_MEDIA = /^(image\/(jpeg|png|webp|heic|heif)|video\/(mp4|quicktime|webm))$/;
 
-export async function uploadMedia(me: ID, uri: string, kind: 'photo' | 'video'): Promise<string> {
+/** The file's type from its name, for a file the phone hands over without one. */
+function guessType(uri: string, kind: 'photo' | 'video'): string {
+  const ext = (uri.split('?')[0].split('.').pop() || '').toLowerCase();
+  const known: Record<string, string> = { mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/mp4', webm: 'video/webm', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif' };
+  return known[ext] ?? (kind === 'video' ? 'video/mp4' : 'image/jpeg');
+}
+
+/**
+ * Sends one file to the bucket with a running report of how much has gone
+ * (the posting strip's percentage). Supabase's own upload call gives no
+ * progress, so this talks to the storage address directly; if that is
+ * refused for any reason, the plain upload runs instead, and the bar simply
+ * jumps to the end.
+ */
+async function uploadWithProgress(path: string, uri: string, contentType: string, onProgress?: (fraction: number) => void): Promise<void> {
+  const db = need();
+  const base = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const apikey = process.env.EXPO_PUBLIC_SUPABASE_KEY;
+  const token = (await db.auth.getSession()).data.session?.access_token;
+  if (!base || !apikey || !token || typeof XMLHttpRequest === 'undefined') throw new Error('no direct upload');
+  const form = new FormData();
+  const name = path.split('/').pop() ?? 'upload';
+  if (Platform.OS === 'web') {
+    const blob = await (await fetch(uri)).blob();
+    form.append('', blob, name);
+  } else {
+    // The phone streams the file from disk itself — no copy into memory.
+    form.append('', { uri, name, type: contentType } as unknown as Blob);
+  }
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${base}/storage/v1/object/media/${path}`);
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.setRequestHeader('apikey', apikey);
+    xhr.setRequestHeader('x-upsert', 'false');
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total); };
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`upload ${xhr.status}: ${xhr.responseText.slice(0, 200)}`)));
+    xhr.onerror = () => reject(new Error('upload failed'));
+    xhr.send(form);
+  });
+}
+
+/** The bucket's limit, which is also the most Supabase's free plan accepts per file. */
+export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+/**
+ * Sends a picked file to the bucket and returns its public address. Throws
+ * with a plain-words message if it cannot — a post must never be saved
+ * pointing at a file that only exists on one phone.
+ */
+export async function uploadMedia(me: ID, uri: string, kind: 'photo' | 'video', onProgress?: (fraction: number) => void): Promise<string> {
   try {
     const db = need();
-    const response = await fetch(uri);
-    const bytes = await response.arrayBuffer();
-    const contentType = (response.headers.get('content-type') || (kind === 'video' ? 'video/mp4' : 'image/jpeg')).split(';')[0].trim();
+    // Too big is the usual reason an upload fails, and it is worth saying
+    // before the bytes go up rather than after.
+    const size = await fetch(uri).then((r) => r.blob()).then((b) => b.size).catch(() => 0);
+    if (size > MAX_UPLOAD_BYTES) {
+      const mb = Math.round(size / 1024 / 1024);
+      throw new Error(`This ${kind} is ${mb} MB; the limit is ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB. Trim it shorter in the editor.`);
+    }
+    const contentType = Platform.OS === 'web'
+      ? ((await fetch(uri, { method: 'HEAD' }).catch(() => null))?.headers.get('content-type') || guessType(uri, kind)).split(';')[0].trim()
+      : guessType(uri, kind);
     // The bucket enforces the same list; checking here gives a readable message.
     if (!ALLOWED_MEDIA.test(contentType)) throw new Error('Only photos and videos can be posted.');
     const ext = contentType.split('/')[1] || (kind === 'video' ? 'mp4' : 'jpg');
     const path = `${me}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const { error } = await db.storage.from('media').upload(path, bytes, { contentType, upsert: false });
-    if (error) throw error;
+    try {
+      await uploadWithProgress(path, uri, contentType, onProgress);
+    } catch (direct) {
+      console.warn('[remote] direct upload fell back', direct);
+      const response = await fetch(uri);
+      const bytes = await response.arrayBuffer();
+      const { error } = await db.storage.from('media').upload(path, bytes, { contentType, upsert: false });
+      if (error) throw error;
+    }
+    onProgress?.(1);
     return db.storage.from('media').getPublicUrl(path).data.publicUrl;
   } catch (error) {
     fail('media upload')(error);
-    return uri;
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(/exceeded the maximum allowed size/i.test(message) ? `This ${kind} is over the ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB limit. Trim it shorter in the editor.` : message);
   }
 }
 

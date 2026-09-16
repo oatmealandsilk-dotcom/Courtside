@@ -5,16 +5,17 @@ import Discuss from '../(tabs)/discuss';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useEffect, useRef, useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { VoteControls } from '@/components/VoteControls';
 import { TOPIC_META } from '@/components/QuestionCard';
-import { Avatar, Button, Card, Chip, EmptyState, Field, Screen } from '@/components/ui';
+import { Avatar, Card, Chip, EmptyState, Screen } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
 import { RichText } from '@/components/RichText';
+import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useApp } from '@/store/AppContext';
 import type { Answer } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -26,7 +27,9 @@ export default function QuestionDetail() {
   const view = actions.recordView;
   useEffect(() => { view('question', String(id)); }, [view, id]);
   const [draft, setDraft] = useState('');
+  const [replying, setReplying] = useState(false);
   const replyInput = useRef<TextInput>(null);
+  const reveal = useRevealOnFocus();
 
   const question = questions.find((q) => q.id === id);
   const asker = users.find((u) => u.id === question?.authorId);
@@ -55,16 +58,22 @@ export default function QuestionDetail() {
     if (!text) return;
     actions.addAnswer(question.id, text);
     setDraft('');
+    setReplying(false);
   };
 
   return (
     <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); router.navigate('/discuss'); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => goBack()} right={<Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable>}>
       <Card style={styles.questionCard}>
-        <View style={styles.topRow}>
+        {/* Who asked, up top and at full size — the way a reply shows its author. */}
+        <View style={styles.askerRow}>
+          <Pressable accessibilityRole="link" accessibilityLabel={asker ? `Open ${asker.name}'s profile` : undefined} onPress={() => asker && router.push(asker.id === currentUserId ? '/profile' : `/user/${asker.id}`)} style={styles.asker}>
+            <Avatar name={asker?.name ?? '?'} seed={asker?.avatarSeed ?? question.authorId} uri={asker?.avatarUrl} size={32} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.askerName} numberOfLines={1}>{asker?.name ?? 'Unknown'}</Text>
+              <Text style={styles.time}>{asker ? `@${asker.handle}` : ''} · {relativeTime(question.createdAt)}</Text>
+            </View>
+          </Pressable>
           <Chip label={meta.label} selected tint={meta.tint} ink="#0A1120" small />
-          <Text style={styles.time}>
-            <PlayerName userId={asker?.id}>{asker ? `@${asker.handle}` : 'unknown'}</PlayerName> · {relativeTime(question.createdAt)}
-          </Text>
         </View>
         <Text style={styles.title}>{question.title}</Text>
         <RichText style={styles.body}>{question.body}</RichText>
@@ -89,9 +98,23 @@ export default function QuestionDetail() {
         ) : null}
         <View style={styles.voteRow}>
           <VoteControls item={question} userId={currentUserId} onVote={direction => actions.voteQuestion(question.id, direction)} />
-          <Ionicons name="chatbubble-outline" size={18} color={colors.textMuted}/>
-          <Text style={styles.time}>{thread.length} {thread.length === 1 ? 'reply' : 'replies'}</Text>
+          {/* The same Reply button a reply has; it opens the line to type on right here. */}
+          <Pressable accessibilityRole="button" accessibilityLabel="Reply to this thread" onPress={() => { setReplying(true); setTimeout(() => replyInput.current?.focus(), 50); }} style={styles.replyButton}>
+            <Ionicons name="chatbubble-outline" size={18} color={colors.textMuted}/>
+            <Text style={styles.time}>Reply{thread.length ? ` · ${thread.length}` : ''}</Text>
+          </Pressable>
         </View>
+        {replying ? (
+          <View style={styles.inlineComposer}>
+            <TextInput ref={replyInput} autoFocus onFocus={() => reveal(replyInput.current)} accessibilityLabel="Reply to this thread" placeholder="Write a reply…" placeholderTextColor={colors.textFaint} multiline value={draft} onChangeText={setDraft} style={styles.replyInput}
+              blurOnSubmit={Platform.OS === 'web' ? true : undefined}
+              onSubmitEditing={Platform.OS === 'web' ? submit : undefined} />
+            <View style={styles.inlineActions}>
+              <Pressable accessibilityRole="button" onPress={() => { setReplying(false); setDraft(''); }} hitSlop={8}><Text style={styles.time}>Cancel</Text></Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Post reply" disabled={!draft.trim()} onPress={submit} style={[styles.sendPill, !draft.trim() && { opacity: 0.4 }]}><Text style={styles.sendText}>Reply</Text></Pressable>
+            </View>
+          </View>
+        ) : null}
       </Card>
 
       <View style={styles.section}>
@@ -111,18 +134,6 @@ export default function QuestionDetail() {
           <ThreadReply key={answer.id} answer={answer} thread={thread} acceptedId={question.acceptedAnswerId} />
         ))}
 
-        <View style={styles.composer}>
-          <Field
-            inputRef={replyInput}
-            label="Join the conversation"
-            value={draft}
-            onChangeText={setDraft}
-            placeholder="Write a thoughtful reply…"
-            multiline
-            onSubmitEditing={submit}
-          />
-          <Button label="Post reply" onPress={submit} disabled={draft.trim().length === 0} />
-        </View>
       </View>
     </Screen></SwipeSurface>
   );
@@ -130,7 +141,16 @@ export default function QuestionDetail() {
 
 const styleDefinitions = StyleSheet.create({
   questionCard: { gap: spacing.md, borderWidth: 0, borderRadius: 0, backgroundColor: colors.bg, paddingHorizontal: 0, paddingBottom: 24, borderBottomWidth: 1, borderBottomColor: colors.border },
-  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  askerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  replyButton: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36 },
+  inlineComposer: { gap: 8, paddingTop: spacing.xs },
+  // No browser focus ring either: the cursor is the only sign the line is live.
+  replyInput: { minHeight: 24, paddingVertical: 4, color: colors.text, fontSize: 15, lineHeight: 22, textAlignVertical: 'top', borderBottomWidth: 1, borderBottomColor: colors.border, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
+  inlineActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 16 },
+  sendPill: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.brand },
+  sendText: { ...typography.smallStrong, color: colors.brandInk },
+  asker: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  askerName: { ...typography.smallStrong, color: colors.text, fontSize: 14 },
   time: { ...typography.small, color: colors.textFaint },
   title: { ...typography.title, color: colors.text, lineHeight: 28 },
   body: { ...typography.body, color: colors.textMuted, lineHeight: 22 },
@@ -153,10 +173,6 @@ const styleDefinitions = StyleSheet.create({
   answerCard: { gap: 12, paddingVertical: 16 },
   nested: { marginLeft: 16, paddingLeft: 12, borderLeftWidth: 1, borderLeftColor: colors.border },
   replyBody: { fontSize: 15, lineHeight: 23, color: colors.text, paddingLeft: 8 },
-  inlineComposer: { gap: 10, padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 16 },
-  replyInput: { minHeight: 80, color: colors.text, fontSize: 15, textAlignVertical: 'top' },
-  replyActions: { flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
-  replyButton: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36 },
   acceptedRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   acceptedText: { ...typography.caption, color: colors.court },
   answerHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
@@ -174,5 +190,4 @@ const styleDefinitions = StyleSheet.create({
   },
   coachTagText: { ...typography.caption, fontSize: 9, color: colors.brandInk },
   answerBody: { ...typography.body, color: colors.text, lineHeight: 24, marginLeft: 16, paddingLeft: 29, borderLeftWidth: 1, borderLeftColor: colors.border },
-  composer: { gap: spacing.md, paddingTop: spacing.lg },
 });

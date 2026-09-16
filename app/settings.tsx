@@ -50,7 +50,7 @@ export default function Settings() {
       rows: [
         {
           icon: 'person-circle-outline',
-          label: 'Account centre',
+          label: 'Account center',
           detail: 'Sign-in, password and your data',
           onPress: () => router.push('/account'),
         },
@@ -146,7 +146,7 @@ export default function Settings() {
       title: 'More info and support',
       rows: [
         { icon: 'help-circle-outline', label: 'Help', onPress: () => router.push('/help') },
-        { icon: 'shield-checkmark-outline', label: 'Privacy centre', onPress: () => router.push('/privacy') },
+        { icon: 'shield-checkmark-outline', label: 'Privacy center', onPress: () => router.push('/privacy') },
         { icon: 'information-circle-outline', label: 'About', onPress: () => router.push('/about') },
       ],
     },

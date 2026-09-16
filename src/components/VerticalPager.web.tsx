@@ -1,14 +1,17 @@
-import React, { useEffect, useRef } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { pagerStep } from '@/lib/pagerGesture';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 
-export function VerticalPager({ children, onIndex, initialIndex = 0 }: {
+export interface VerticalPagerHandle { scrollToTop: () => void }
+
+export const VerticalPager = forwardRef<VerticalPagerHandle, {
   children: React.ReactNode[];
   onIndex: (index: number) => void;
   /** Feed item to open on, so returning from a thread keeps your place. */
   initialIndex?: number;
-}) {
+}>(function VerticalPager({ children, onIndex, initialIndex = 0 }, ref) {
   const pager = useRef<HTMLDivElement>(null);
+  useImperativeHandle(ref, () => ({ scrollToTop: () => { if (pager.current) settle(pager.current, 0); } }), []);
   const drag = useRef<{y:number;x:number;top:number;active:boolean;target:HTMLElement;scroll?:HTMLElement;scrollTop?:number;lastY:number;lastTime:number;velocity:number} | null>(null);
   const suppressClick = useRef(false);
   const animation = useRef(0);
@@ -128,4 +131,4 @@ export function VerticalPager({ children, onIndex, initialIndex = 0 }: {
       height: '100%', width: '100%', scrollSnapAlign: 'start', scrollSnapStop: 'always',
       position: 'relative', overflow: 'hidden' }}>{child}</div>)}
   </div>;
-}
+});
