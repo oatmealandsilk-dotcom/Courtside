@@ -86,9 +86,22 @@ export default function SignIn() {
       if (done && Platform.OS !== 'web') router.replace('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not sign in with Google.');
+      // On the web a success leaves the page; a failure stays, so the form must come back.
+      setBusy(false);
     } finally {
       if (Platform.OS !== 'web') setBusy(false);
     }
+  };
+  const forgot = async () => {
+    if (busy) return;
+    if (!email.includes('@')) { setError('Type your email above first, then tap Forgot password.'); return; }
+    setBusy(true); setError(null); setNotice(null);
+    try {
+      await actions.requestPasswordReset(email);
+      setNotice('Check your email for a link. It signs you in so you can set a new password.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send the reset email.');
+    } finally { setBusy(false); }
   };
 
   const submit = async () => {
@@ -181,6 +194,11 @@ export default function SignIn() {
                 secureTextEntry
                 onSubmitEditing={submit}
               />
+              {mode === 'sign-in' ? (
+                <Pressable accessibilityRole="button" accessibilityLabel="Forgot password" onPress={forgot} hitSlop={8} style={{ alignSelf: 'flex-end' }}>
+                  <Text style={styles.forgot}>Forgot password?</Text>
+                </Pressable>
+              ) : null}
             </>
           ) : (
             <Field
@@ -256,6 +274,7 @@ const styleDefinitions = StyleSheet.create({
   accountMeta: { ...typography.small, color: colors.textFaint },
   plus: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   error: { ...typography.small, color: colors.danger },
+  forgot: { ...typography.small, color: colors.brand, fontWeight: '600' },
   notice: { ...typography.small, color: colors.success },
   divider: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   rule: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.borderStrong },

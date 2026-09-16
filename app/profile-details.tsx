@@ -2,7 +2,7 @@ import { PlayerName } from '@/components/PlayerName';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -45,7 +45,7 @@ export default function Profile() {
       title={isMe ? 'Your game' : `${first}'s game`}
       compactTitle
       onBack={() => goBack()}
-      right={isMe ? <Button label="Sign out" variant="ghost" onPress={actions.signOut} /> : undefined}
+      right={isMe ? <Button label="Sign out" variant="ghost" onPress={() => { actions.signOut(); router.replace('/sign-in'); }} /> : undefined}
     >
       <Card style={styles.identity}>
         <View style={styles.identityRow}>

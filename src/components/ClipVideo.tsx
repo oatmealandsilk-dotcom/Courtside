@@ -80,20 +80,22 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   // Where the clip was when the page left, and when: a quick return resumes,
   // a slow one starts the clip over.
   const left = useRef<{ time: number; at: number } | null>(null);
+  // Each native call stands on its own: a position read that fails must
+  // never take the pause down with it, or the clip plays on after the swipe.
   useEffect(() => {
-    safely(() => {
-      if (active && !paused) {
-        const back = left.current;
-        left.current = null;
-        if (!back || Date.now() - back.at > RESUME_WINDOW_MS) player.currentTime = trimStart;
-        else player.currentTime = back.time;
-        player.play();
-      } else {
-        if (!active) left.current = { time: player.currentTime, at: Date.now() };
-        player.pause();
-      }
-    });
+    if (active && !paused) {
+      const back = left.current;
+      left.current = null;
+      safely(() => { player.currentTime = !back || Date.now() - back.at > RESUME_WINDOW_MS ? trimStart : back.time; });
+      safely(() => player.play());
+    } else {
+      if (!active) safely(() => { left.current = { time: player.currentTime, at: Date.now() }; });
+      safely(() => player.pause());
+    }
   }, [player, active, paused, trimStart]);
+  // Gone from the page (flicked past, feed rebuilt): silent and stopped at once,
+  // rather than left to the native release a beat later.
+  useEffect(() => () => { safely(() => { player.muted = true; player.pause(); }); }, [player]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <View style={StyleSheet.absoluteFill}>
       <VideoView player={player} style={StyleSheet.absoluteFill} contentFit={fit} nativeControls={false} allowsPictureInPicture={false} />

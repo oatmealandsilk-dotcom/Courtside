@@ -1,7 +1,7 @@
 import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useSyncExternalStore } from 'react';
 import { View } from 'react-native';
-import { router, usePathname } from 'expo-router';
+import { Redirect, router, usePathname } from 'expo-router';
 import { NavBar } from './NavBar';
 import { UploadBar } from '@/components/UploadBar';
 import { WarmCurtain } from '@/components/WarmCurtain';
@@ -30,7 +30,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(timer);
   }, [pending, pathname]);
   const shown = pending ?? pathname;
-  const { currentUserId } = useApp();
+  const { currentUserId, ready, authResolved } = useApp();
   const { isPhone } = useResponsive();
   const selected = useRef(0);
   if (shown === '/') selected.current = 0;
@@ -38,6 +38,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   else if (shown === '/coaches' || shown.startsWith('/coach/')) selected.current = 2;
   else if (shown === '/profile' || ['/settings', '/edit-profile', '/profile-details'].includes(shown)) selected.current = 3;
   const showNav = !!currentUserId && !['/sign-in', '/onboarding'].includes(pathname);
+  // A shared link opened while signed out goes to sign-in, not to an empty page.
+  const mustSignIn = ready && authResolved && !currentUserId && !['/', '/index', '/sign-in', '/onboarding'].includes(pathname);
   const nav = <NavBar state={{ index: selected.current, routes }} navigation={{ navigate: name => {
     const destination = paths[name as keyof typeof paths];
     if (!destination) return;
@@ -57,6 +59,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
     else router.navigate(destination);
   } }} />;
+  if (mustSignIn) return <Redirect href="/sign-in" />;
   return <View style={{ flex: 1, minHeight: 0, backgroundColor: colors.bg, flexDirection: isPhone ? 'column' : 'row' }}>
     {showNav && !isPhone && nav}
     <View style={{ flex: 1, minWidth: 0, minHeight: 0 }}><RouteTransition>{children}</RouteTransition><Toast /><UploadBar /></View>

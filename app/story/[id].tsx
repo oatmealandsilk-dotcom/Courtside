@@ -1,5 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useIsFocused } from '@/lib/useIsFocused';
 import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +24,7 @@ const VIDEO_MS = 12000;
  * it shows that one story on its own, live or not.
  */
 export default function StoryViewer() {
+  const focused = useIsFocused();
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const { id, story: only } = useLocalSearchParams<{ id: string; story?: string }>();
@@ -86,7 +88,7 @@ export default function StoryViewer() {
     <View style={styles.root}>
       <View style={styles.media}>
         {current.videoUrl ? (
-          <ClipPlayback uri={current.videoUrl} poster={current.thumbnailUrl} active preload />
+          <ClipPlayback uri={current.videoUrl} poster={current.thumbnailUrl} active={focused} preload />
         ) : current.imageUrl ? (
           <Image accessibilityIgnoresInvertColors source={{ uri: current.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
         ) : (

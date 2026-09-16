@@ -247,6 +247,9 @@ interface AppActions {
   reportUser: (userId: ID, reason: string) => void;
   /** A suggestion from an early user, kept for the team to read. */
   submitTip: (body: string) => Promise<void>;
+  /** Try the account load again after it failed. */
+  retryLoad: () => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<void>;
 
   setReadReceiptsEnabled: (enabled: boolean) => void;
   /** With Supabase: email and password. Without it: the demo handle. */
@@ -499,7 +502,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const loadRemote = useCallback(async (me: ID, email?: string | null) => {
     try {
-      const data = await fetchRemote(me);
+      // The network can miss on a cold open; the load is tried a few times
+      // before giving up, and giving up never means "start the quiz again".
+      let data: Awaited<ReturnType<typeof fetchRemote>> | null = null;
+      for (let attempt = 0; ; attempt += 1) {
+        try { data = await fetchRemote(me); break; } catch (e) {
+          if (attempt >= 3) throw e;
+          await new Promise((r) => setTimeout(r, 700 * 2 ** attempt));
+        }
+      }
       setState((prev) => {
         const remoteUsers = new Set(data.users.map((u) => u.id));
         const remotePosts = new Set(data.posts.map((p) => p.id));
@@ -696,8 +707,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, savedAccounts }));
   }, []);
   const deleteAccount = useCallback(async () => {
+    const me = stateRef.current.currentUserId;
     if (isSupabaseConfigured) await remoteAuth.deleteAccount();
-    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false }));
+    // A deleted account has no business in the remembered-logins list.
+    const savedAccounts = me ? await forgetAccount(me) : stateRef.current.savedAccounts;
+    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, savedAccounts }));
+  }, []);
+  const retryLoad = useCallback(async () => {
+    const me = stateRef.current.currentUserId;
+    if (!me || !isSupabaseConfigured) return;
+    setState((prev) => ({ ...prev, error: null }));
+    const { data } = await supabase!.auth.getSession();
+    await loadRemote(me, data.session?.user.email);
+  }, [loadRemote]);
+  /** Emails a link that signs the person in so they can set a new password. */
+  const requestPasswordReset = useCallback(async (email: string) => {
+    if (!isSupabaseConfigured) return;
+    await remoteAuth.requestPasswordReset(email);
   }, []);
   const exportData = useCallback(() => {
     const s = stateRef.current;
@@ -976,21 +1002,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
         commentIds: [],
         ...input,
       };
-      setState((prev) => celebratePosted({ ...prev, stories: [story, ...prev.stories] }, {
-        userId: me, targetId: story.id, targetKind: 'post', preview: `Hit${story.caption ? ` · ${snippet(story.caption, 60)}` : ''}`,
+      const celebration = {
+        userId: me, targetId: story.id, targetKind: 'post' as const, preview: `Hit${story.caption ? ` · ${snippet(story.caption, 60)}` : ''}`,
         title: 'Hit posted', body: 'Up for 24 hours, then kept in your archive.',
-        href: '/', icon: 'camera',
-      }));
-      if (live(me)) {
-        (async () => {
-          const imageUrl = isLocalMedia(story.imageUrl) ? await uploadMedia(me, story.imageUrl!, 'photo') : story.imageUrl;
-          const videoUrl = isLocalMedia(story.videoUrl) ? await uploadMedia(me, story.videoUrl!, 'video') : story.videoUrl;
-          const thumbnailUrl = story.thumbnailUrl === story.imageUrl ? imageUrl
-            : isLocalMedia(story.thumbnailUrl) ? await uploadMedia(me, story.thumbnailUrl!, 'photo') : story.thumbnailUrl;
-          setState((prev) => ({ ...prev, stories: prev.stories.map((st) => (st.id === story.id ? { ...st, imageUrl, videoUrl, thumbnailUrl } : st)) }));
-          await remote.insertStory({ ...story, imageUrl, videoUrl, thumbnailUrl });
-        })();
+        href: '/', icon: 'camera' as const,
+      };
+      if (!live(me)) {
+        setState((prev) => celebratePosted({ ...prev, stories: [story, ...prev.stories] }, celebration));
+        return story.id;
       }
+      // The hit is not in the feed until it has landed: the strip across the
+      // top counts the upload up, and a failure says so instead of leaving a
+      // hit only this phone can see.
+      startUpload(story.id, 'Posting hit', story.thumbnailUrl ?? story.imageUrl);
+      (async () => {
+        try {
+          const local = [isLocalMedia(story.imageUrl), isLocalMedia(story.videoUrl), isLocalMedia(story.thumbnailUrl) && story.thumbnailUrl !== story.imageUrl];
+          const weights = [local[0] ? 0.85 : 0, local[1] ? 0.9 : 0, local[2] ? 0.1 : 0];
+          const total = weights.reduce((a, b) => a + b, 0) || 1;
+          let done = 0;
+          const report = (i: number) => (fraction: number) => setUploadProgress(story.id, (done + weights[i] * fraction) / total);
+          const imageUrl = local[0] ? await uploadMedia(me, story.imageUrl!, 'photo', report(0)) : story.imageUrl;
+          done += weights[0];
+          const videoUrl = local[1] ? await uploadMedia(me, story.videoUrl!, 'video', report(1)) : story.videoUrl;
+          done += weights[1];
+          const thumbnailUrl = story.thumbnailUrl === story.imageUrl ? imageUrl
+            : local[2] ? await uploadMedia(me, story.thumbnailUrl!, 'photo', report(2)) : story.thumbnailUrl;
+          const hosted = { ...story, imageUrl, videoUrl, thumbnailUrl };
+          await remote.insertStory(hosted);
+          finishUpload(story.id);
+          setState((prev) => celebratePosted({ ...prev, stories: [hosted, ...prev.stories] }, { ...celebration, quiet: true }));
+        } catch (error) {
+          console.warn('[remote] hit did not land', error);
+          finishUpload(story.id, false, error instanceof Error ? error.message : 'Something went wrong.');
+          haptics.reject();
+        }
+      })();
       return story.id;
     },
     [requireUser],
@@ -1942,6 +1989,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleAlerts,
       reportUser,
       submitTip,
+      retryLoad,
+      requestPasswordReset,
       setReadReceiptsEnabled,
       signIn,
       signUp,

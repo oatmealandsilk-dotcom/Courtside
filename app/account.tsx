@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -21,6 +21,7 @@ type Sheet = 'password' | 'email' | 'delete' | null;
  * buttons at the bottom.
  */
 export default function AccountCentre() {
+  const { reset } = useLocalSearchParams<{ reset?: string }>();
   const styles = useThemedStyles(styleDefinitions);
   const { currentUser, actions } = useApp();
   const [info, setInfo] = useState<Awaited<ReturnType<typeof actions.accountInfo>>>(null);
@@ -140,6 +141,7 @@ export default function AccountCentre() {
             {sheet === 'password' ? (
               <>
                 <Text style={styles.sheetTitle}>Change password</Text>
+                {reset ? <Text style={styles.resetNote}>You came from the reset email. Set your new password here.</Text> : null}
                 <Field label="New password" value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" placeholder="At least 6 characters" />
                 <Field label="Again" value={password2} onChangeText={setPassword2} secureTextEntry autoCapitalize="none" placeholder="Same again" />
                 {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -173,6 +175,7 @@ export default function AccountCentre() {
 }
 
 const styleDefinitions = StyleSheet.create({
+  resetNote: { ...typography.small, color: colors.brand, fontWeight: '600' },
   hero: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingBottom: spacing.lg },
   heroName: { ...typography.heading, color: colors.text },
   heroMeta: { ...typography.small, color: colors.textMuted },

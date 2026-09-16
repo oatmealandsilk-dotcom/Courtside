@@ -6,7 +6,8 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 
 import { BrandMark } from '@/components/BrandMark';
 import { useApp } from '@/store/AppContext';
-import { colors, spacing } from '@/theme';
+import { colors, spacing, typography } from '@/theme';
+import { Button } from '@/components/ui';
 
 /** How long the mark stays up even when the data is instant — a beat, not a wait. */
 const HOLD_MS = 450;
@@ -19,7 +20,8 @@ const FADE_MS = 260;
  */
 export default function Index() {
   const styles = useThemedStyles(styleDefinitions);
-  const { ready, currentUserId, onboardingComplete, remoteLoaded, error } = useApp();
+  const { ready, currentUserId, onboardingComplete, remoteLoaded, error, actions } = useApp();
+  const [retrying, setRetrying] = useState(false);
   // Signed in but the profile has not come down yet: the answer to "has this
   // person done the quiz" is not known, so hold the splash rather than guess.
   const settled = ready && (!currentUserId || !isSupabaseConfigured || remoteLoaded || !!error);
@@ -58,6 +60,20 @@ export default function Index() {
     });
   }, [settled, held, gone, opacity, currentUserId, onboardingComplete]);
 
+  // Signed in, but the account never came down even after retries: the app
+  // does not open on a guess (the quiz would overwrite what is saved). It
+  // says so and offers another try.
+  if (gone && currentUserId && isSupabaseConfigured && !remoteLoaded && error) {
+    return (
+      <View style={[styles.splash, { padding: spacing.xl, gap: spacing.md }]}>
+        <BrandMark size={56} />
+        <Text style={styles.failTitle}>Could not load your account</Text>
+        <Text style={styles.failBody}>Check your connection and try again. Nothing you have saved is lost.</Text>
+        <Button label={retrying ? 'Trying…' : 'Try again'} loading={retrying} onPress={async () => { setRetrying(true); try { await actions.retryLoad(); } finally { setRetrying(false); } }} />
+        <Button label="Sign out" variant="ghost" onPress={() => actions.signOut()} />
+      </View>
+    );
+  }
   if (gone) {
     // A ?code= from Google is still being exchanged for a session; give it a
     // beat rather than bouncing a successful sign-in to the sign-in form.
@@ -86,6 +102,8 @@ const styleDefinitions = StyleSheet.create({
     justifyContent: 'center',
   },
   brand: { alignItems: 'center', gap: spacing.md },
+  failTitle: { ...typography.title, color: colors.text, textAlign: 'center' },
+  failBody: { ...typography.body, color: colors.textMuted, textAlign: 'center', maxWidth: 320 },
   wordmark: { fontSize: 34, fontWeight: '800', color: colors.brand, letterSpacing: -1 },
   tagline: {
     position: 'absolute',

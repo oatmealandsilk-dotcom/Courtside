@@ -1,5 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
+import { useIsFocused } from '@/lib/useIsFocused';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
@@ -18,6 +19,7 @@ import { colors, radius, spacing, typography } from '@/theme';
 
 /** One hit with its likes and comments — the same page a post gets. */
 export default function HitThread() {
+  const focused = useIsFocused();
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { stories, users, comments, currentUserId, actions } = useApp();
@@ -49,7 +51,7 @@ export default function HitThread() {
     <Screen title="Hit" compactTitle onBack={() => goBack()}>
       <Pressable accessibilityRole="button" accessibilityLabel="Open this hit full screen" onPress={() => router.push({ pathname: `/story/${author.id}`, params: { story: story.id } })} style={styles.frame}>
         {story.videoUrl ? (
-          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active preload />
+          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={focused} preload />
         ) : story.imageUrl ? (
           <Image accessibilityIgnoresInvertColors source={{ uri: story.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
         ) : (
