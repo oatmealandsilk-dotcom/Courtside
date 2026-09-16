@@ -49,10 +49,14 @@ export default function Index() {
 
   useEffect(() => {
     if (!settled || !held || gone) return;
+    // Into the feed: no fade here. The feed opens behind its own curtain —
+    // the same mark and name — and that curtain does the one fade, once the
+    // first pages are in. Fading here too showed a blank beat in between.
+    if (currentUserId && onboardingComplete) { setGone(true); return; }
     Animated.timing(opacity, { toValue: 0, duration: FADE_MS, useNativeDriver: true }).start(({ finished }) => {
       if (finished) setGone(true);
     });
-  }, [settled, held, gone, opacity]);
+  }, [settled, held, gone, opacity, currentUserId, onboardingComplete]);
 
   if (gone) {
     // A ?code= from Google is still being exchanged for a session; give it a

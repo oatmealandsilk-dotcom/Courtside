@@ -31,6 +31,7 @@ import { relativeTime, timeLeft } from '@/lib/format';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { colors } from '@/theme';
 
 /**
@@ -335,6 +336,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const WINDOW = 2;
   /** How many pages ahead stay mounted and buffering, so the feed is never caught out. */
   const AHEAD = 7;
+  /** How many of those the curtain waits for on opening; the rest load in behind the feed. */
+  const FIRST = 4;
 
   // The warm-up: the first seven pages load (a video's first seconds, a
   // photo, a thread's words) behind a curtain, which lifts when they are in
@@ -346,17 +349,18 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   }, []);
   const [warmTimedOut, setWarmTimedOut] = useState(false);
   useEffect(() => {
-    if (!ready || !feed.length) return;
+    if (!ready || !feed.length || !(!isSupabaseConfigured || app.remoteLoaded)) return;
     const t = setTimeout(() => setWarmTimedOut(true), 6000);
     return () => clearTimeout(t);
-  }, [ready, feed.length]);
-  const warmTargets = useMemo(() => feed.slice(0, AHEAD).flatMap((item) => {
+  }, [ready, feed.length, app.remoteLoaded]);
+  const warmTargets = useMemo(() => feed.slice(0, FIRST).flatMap((item) => {
     if (item.type === 'hit') return item.story.videoUrl || item.story.imageUrl ? [item.story.id] : [];
     if (item.type === 'post') return item.post.videoUrl || item.post.imageUrl || item.post.thumbnailUrl ? [item.post.id] : [];
     return [];
   }), [feed]); // eslint-disable-line react-hooks/exhaustive-deps
   const warmDone = warmTargets.filter((id) => readyIds.has(id)).length;
-  const warmed = !!scope || warmTimedOut || (ready && feed.length > 0 && warmDone >= warmTargets.length);
+  const dataIn = !isSupabaseConfigured || app.remoteLoaded;
+  const warmed = !!scope || warmTimedOut || (ready && dataIn && feed.length > 0 && warmDone >= warmTargets.length);
   // The curtain is the same screen you saw at sign-in — the mark and the
   // name — and it fades out once the first pages are in.
   const [curtainShown, setCurtainShown] = useState(!scope);
@@ -406,6 +410,15 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
 
   return (
     <View style={styles.root}>
+      {curtainShown ? (
+        <Reanimated.View pointerEvents={warmed ? 'none' : 'auto'} style={[styles.curtain, curtainStyle]}>
+          <View style={styles.curtainBrand}>
+            <BrandMark size={84} />
+            <Text style={styles.curtainWordmark}>CourtSide</Text>
+          </View>
+          <Text style={styles.curtainTagline}>Play. Talk. Improve.</Text>
+        </Reanimated.View>
+      ) : null}
       {!ready || !feed.length ? (
         <EmptyState
           title={scope ? 'Nothing here yet' : ready ? 'Your court is quiet' : 'Loading your clips'}
@@ -438,7 +451,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     <View accessibilityLabel={`${author.name}'s hit`} style={styles.clipFrame}>
                       <View style={styles.clipPortrait}>
                         {story.videoUrl ? (
-                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={focused && active === index} preload={near} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
+                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={focused && active === index && warmed} preload={near} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
                         ) : (
                           // Two quick taps like a hit, the way they like a clip.
                           <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s hit`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
@@ -532,7 +545,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       author={author}
                       liked={liked}
                       saved={isSaved}
-                      active={focused && active === index}
+                      active={focused && active === index && warmed}
                       preload={near}
                       topInset={insets.top + 66}
                       onDoubleTap={() => likeByTap(post.id, liked)}
@@ -591,7 +604,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                           letterbox={post.orientation === 'landscape'}
                           uri={post.videoUrl}
                           poster={post.thumbnailUrl}
-                          active={focused && active === index}
+                          active={focused && active === index && warmed}
                           preload={near}
                           onDoubleTap={() => likeByTap(post.id, liked)}
                           trimStart={post.trimStart}
@@ -738,15 +751,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               );
             })}
           </VerticalPager>
-          {curtainShown ? (
-            <Reanimated.View pointerEvents={warmed ? 'none' : 'auto'} style={[styles.curtain, curtainStyle]}>
-              <View style={styles.curtainBrand}>
-                <BrandMark size={84} />
-                <Text style={styles.curtainWordmark}>CourtSide</Text>
-              </View>
-              <Text style={styles.curtainTagline}>Play. Talk. Improve.</Text>
-            </Reanimated.View>
-          ) : null}
+
           {scope ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => goBack()} style={[styles.scopeBack, { top: insets.top + 14 }]}>
               <Ionicons name="chevron-back" size={26} color="white" />
