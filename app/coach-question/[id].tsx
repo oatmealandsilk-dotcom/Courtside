@@ -74,6 +74,11 @@ export default function CoachQuestionDetail() {
                 ? `${replies.length} coach ${replies.length === 1 ? 'reply' : 'replies'}`
                 : 'Waiting on a coach'}
           </Text>
+          {question.authorId === currentUserId && replies.length ? (
+            <Pressable accessibilityRole="button" accessibilityLabel={question.resolved ? 'Reopen the question' : 'This answered it'} onPress={() => actions.resolveCoachQuestion(question.id)} hitSlop={8} style={{ marginLeft: 'auto' }}>
+              <Text style={[styles.meta, { color: colors.brand, fontWeight: '700' }]}>{question.resolved ? 'Reopen' : 'This answered it'}</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
 

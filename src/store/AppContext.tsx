@@ -219,6 +219,8 @@ interface AppState extends Bootstrap {
   /** Ways to pay a coach, and which one is used unless you say otherwise. */
   paymentMethods: PaymentMethod[];
   defaultPaymentId: ID | null;
+  /** Small switches from Settings, kept with the account. */
+  prefs: { showActivity: boolean; pushLikes: boolean; pushCoach: boolean };
   /** Whether the app may ask the device where you are, and the city it found. */
   locationEnabled: boolean;
   detectedLocation: string | null;
@@ -241,6 +243,11 @@ interface AppActions {
   acceptFollowRequest: (requesterId: ID) => void;
   declineFollowRequest: (requesterId: ID) => void;
   setPrivateAccount: (enabled: boolean) => void;
+  setPref: (key: 'showActivity' | 'pushLikes' | 'pushCoach', value: boolean) => void;
+  /** The asker marks the answer that solved it. */
+  acceptAnswer: (questionId: ID, answerId: ID) => void;
+  /** The asker marks their coach question as answered. */
+  resolveCoachQuestion: (questionId: ID) => void;
   toggleMute: (userId: ID) => void;
   toggleBlock: (userId: ID) => void;
   toggleAlerts: (userId: ID) => void;
@@ -400,6 +407,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     alertIds: [],
     paymentMethods: STARTER_PAYMENTS,
     defaultPaymentId: readDefaultPayment(),
+    prefs: { showActivity: true, pushLikes: true, pushCoach: true },
     locationEnabled: readFlag('courtside-location'),
     detectedLocation: null,
     detectedCoords: null,
@@ -500,6 +508,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => { off?.(); };
   }, [remoteLoaded, currentUserForLive]);
 
+  // Notifications are filed inside state updates (withNotification), so the
+  // ones you caused are sent up from here, once each, as they appear.
+  const sentNotes = useRef<Set<string>>(new Set());
+  const notesNow = state.notifications;
+  useEffect(() => {
+    if (!isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive)) return;
+    for (const n of notesNow) {
+      if (n.actorId !== currentUserForLive || !UUID.test(n.id) || !UUID.test(n.userId) || sentNotes.current.has(n.id)) continue;
+      sentNotes.current.add(n.id);
+      void remote.insertNotification(n);
+    }
+  }, [notesNow, remoteLoaded, currentUserForLive]);
+  // Your own settings (mutes, blocks, saved threads, payment methods, switches) follow the account.
+  const settingsNow = JSON.stringify({ m: state.mutedIds, b: state.blockedIds, s: state.saved.questionIds, p: state.paymentMethods, d: state.defaultPaymentId, f: state.prefs });
+  const settingsSeen = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive)) return;
+    if (settingsSeen.current === null) { settingsSeen.current = settingsNow; return; }
+    if (settingsSeen.current === settingsNow) return;
+    settingsSeen.current = settingsNow;
+    const s = stateRef.current;
+    const t = setTimeout(() => {
+      void remote.saveUserState(currentUserForLive, {
+        mutedIds: s.mutedIds, blockedIds: s.blockedIds, savedQuestionIds: s.saved.questionIds, paymentMethods: s.paymentMethods,
+        defaultPaymentId: s.defaultPaymentId, showActivity: s.prefs.showActivity, pushLikes: s.prefs.pushLikes, pushCoach: s.prefs.pushCoach,
+      });
+    }, 400);
+    return () => clearTimeout(t);
+  }, [settingsNow, remoteLoaded, currentUserForLive]);
+
   const loadRemote = useCallback(async (me: ID, email?: string | null) => {
     try {
       // The network can miss on a cold open; the load is tried a few times
@@ -542,8 +580,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
           // Your real conversations replace the demo ones once the messages tables exist.
           conversations: data.conversations.length || data.messages.length ? data.conversations : prev.conversations.filter((c) => c.participantIds.includes(me)),
           messages: data.conversations.length || data.messages.length ? data.messages : prev.messages,
+          // Saved discussions, coaching and notifications take the place of any local copy with the same id.
+          questions: [...data.questions, ...prev.questions.filter((q) => !data.questions.some((r) => r.id === q.id))],
+          answers: [...data.answers, ...prev.answers.filter((a) => !data.answers.some((r) => r.id === a.id))],
+          coachQuestions: [...data.coachQuestions, ...prev.coachQuestions.filter((q) => !data.coachQuestions.some((r) => r.id === q.id))],
+          coachReplies: [...data.coachReplies, ...prev.coachReplies.filter((r) => !data.coachReplies.some((x) => x.id === r.id))],
+          coachingRequests: [...data.coachingRequests, ...prev.coachingRequests.filter((r) => !data.coachingRequests.some((x) => x.id === r.id))],
+          notifications: [...data.notifications, ...prev.notifications.filter((n) => !data.notifications.some((x) => x.id === n.id))],
+          mutedIds: data.userState ? data.userState.mutedIds : prev.mutedIds,
+          blockedIds: data.userState ? data.userState.blockedIds : prev.blockedIds,
+          paymentMethods: data.userState && data.userState.paymentMethods.length ? data.userState.paymentMethods : prev.paymentMethods,
+          defaultPaymentId: data.userState?.defaultPaymentId ?? prev.defaultPaymentId,
+          prefs: data.userState ? { showActivity: data.userState.showActivity, pushLikes: data.userState.pushLikes, pushCoach: data.userState.pushCoach } : prev.prefs,
           remoteLoaded: true,
-          saved: { ...prev.saved, postIds: data.savedPostIds },
+          saved: { ...prev.saved, postIds: data.savedPostIds, questionIds: data.userState ? data.userState.savedQuestionIds : prev.saved.questionIds },
           currentUserId: me,
           // Finished the quiz on any device, or (older accounts) set a goal in it.
           onboardingComplete: prev.onboardingComplete || !!self?.profile.onboardedAt || (self?.profile.goals.length ?? 0) > 0,
@@ -979,6 +1029,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...prev,
       questions: prev.questions.map((q) => (q.id === questionId && q.authorId === me ? { ...q, title: patch.title, body: patch.body, tags, editedAt: new Date().toISOString() } : q)),
     }));
+    const saved = stateRef.current.questions.find((q) => q.id === questionId);
+    if (saved && live(me, questionId)) void remote.upsertQuestion({ ...saved, title: patch.title, body: patch.body, tags, editedAt: new Date().toISOString() });
+  }, [requireUser]);
+  const acceptAnswer = useCallback((questionId: ID, answerId: ID) => {
+    const me = requireUser();
+    const question = stateRef.current.questions.find((q) => q.id === questionId);
+    if (!question || question.authorId !== me) return;
+    const next = question.acceptedAnswerId === answerId ? undefined : answerId;
+    haptics.commit();
+    setState((prev) => ({ ...prev, questions: prev.questions.map((q) => (q.id === questionId ? { ...q, acceptedAnswerId: next } : q)) }));
+    if (live(me, questionId)) void remote.upsertQuestion({ ...question, acceptedAnswerId: next });
   }, [requireUser]);
 
   const refresh = useCallback(async () => {
@@ -1187,8 +1248,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setState((prev) => celebratePosted({ ...prev, questions: [question, ...prev.questions] }, {
         userId: me, targetId: question.id, targetKind: 'question', preview: snippet(question.title),
         title: 'Question posted', body: 'The community can see it now.',
-        href: '/', icon: 'chatbubbles',
+        href: `/question/${question.id}`, icon: 'chatbubbles',
       }));
+      if (live(me, question.id)) void remote.upsertQuestion(question);
       return question.id;
     },
     [requireUser],
@@ -1202,6 +1264,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...prev,
         questions: prev.questions.map((q) => (q.id === questionId ? applyVote(q, me, direction) : q)),
       }));
+      if (live(me, questionId)) void remote.voteQuestion(questionId, direction);
     },
     [requireUser],
   );
@@ -1214,6 +1277,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...prev,
         answers: prev.answers.map((a) => (a.id === answerId ? applyVote(a, me, direction) : a)),
       }));
+      if (live(me, answerId)) void remote.voteAnswer(answerId, direction);
     },
     [requireUser],
   );
@@ -1221,6 +1285,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addAnswer = useCallback(
     (questionId: ID, body: string, parentAnswerId?: ID) => {
       const me = requireUser();
+      let made: Answer | null = null;
       setState((prev) => {
         const author = prev.users.find((u) => u.id === me);
         const answer: Answer = {
@@ -1234,6 +1299,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           votedBy: {},
           fromCoach: Boolean(author?.isCoach),
         };
+        made = answer;
         const question = prev.questions.find((q) => q.id === questionId);
         const parent = prev.answers.find((a) => a.id === answer.parentAnswerId);
         let next: AppState = {
@@ -1266,6 +1332,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         return next;
       });
+      if (made && live(me, questionId)) void remote.upsertAnswer(made);
     },
     [requireUser],
   );
@@ -1284,6 +1351,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createdAt: new Date().toISOString(),
       };
       setState((prev) => ({ ...prev, coachingRequests: [request, ...prev.coachingRequests] }));
+      if (live(me, request.id)) void remote.insertCoachingRequest(request);
       return request.id;
     },
     [requireUser],
@@ -1303,6 +1371,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...input,
       };
       setState((prev) => ({ ...prev, coachQuestions: [question, ...prev.coachQuestions] }));
+      if (live(me, question.id)) void remote.upsertCoachQuestion(question);
       return question.id;
     },
     [requireUser],
@@ -1320,6 +1389,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         helpfulBy: [],
       };
       haptics.commit();
+      if (live(me, questionId)) void remote.insertCoachReply(reply);
       setState((prev) => {
         const question = prev.coachQuestions.find((q) => q.id === questionId);
         const next: AppState = {
@@ -1347,6 +1417,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const toggleReplyHelpful = useCallback(
     (replyId: ID) => {
       const me = requireUser();
+      if (live(me, replyId)) void remote.toggleReplyHelpful(replyId);
       setState((prev) => {
         const reply = prev.coachReplies.find((r) => r.id === replyId);
         const marking = !!reply && !reply.helpfulBy.includes(me);
@@ -1433,6 +1504,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const markNotificationsRead = useCallback(() => {
+    const me = stateRef.current.currentUserId;
+    const unread = stateRef.current.notifications.filter((n) => !n.read && n.userId === me && UUID.test(n.id)).map((n) => n.id);
+    if (me && live(me) && unread.length) void remote.markNotificationsRead(unread);
     setState((prev) =>
       prev.notifications.some((n) => !n.read)
         ? { ...prev, notifications: prev.notifications.map((n) => ({ ...n, read: true })) }
@@ -1441,6 +1515,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const markNotificationRead = useCallback((notificationId: ID) => {
+    const me = stateRef.current.currentUserId;
+    if (me && live(me, notificationId)) void remote.markNotificationsRead([notificationId]);
     setState((prev) => ({
       ...prev,
       notifications: prev.notifications.map((n) =>
@@ -1956,8 +2032,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (me && live(me)) await remote.insertTip(me, body);
   }, []);
 
-  const reportUser = useCallback((_userId: ID, _reason: string) => {
+  const reportUser = useCallback((userId: ID, reason: string) => {
     haptics.commit();
+    const me = stateRef.current.currentUserId;
+    if (me && live(me)) void remote.insertReport(me, UUID.test(userId) ? userId : null, reason, '');
+  }, []);
+  const resolveCoachQuestion = useCallback((questionId: ID) => {
+    const me = requireUser();
+    const question = stateRef.current.coachQuestions.find((q) => q.id === questionId);
+    if (!question || question.authorId !== me) return;
+    haptics.commit();
+    setState((prev) => ({ ...prev, coachQuestions: prev.coachQuestions.map((q) => (q.id === questionId ? { ...q, resolved: !q.resolved } : q)) }));
+    if (live(me, questionId)) void remote.upsertCoachQuestion({ ...question, resolved: !question.resolved });
+  }, [requireUser]);
+  const setPref = useCallback((key: 'showActivity' | 'pushLikes' | 'pushCoach', value: boolean) => {
+    haptics.tap();
+    setState((prev) => ({ ...prev, prefs: { ...prev.prefs, [key]: value } }));
   }, []);
 
   const toggleIntegration = useCallback(async (provider: Integration['provider']) => {
@@ -1988,6 +2078,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleBlock,
       toggleAlerts,
       reportUser,
+      acceptAnswer,
+      resolveCoachQuestion,
+      setPref,
       submitTip,
       retryLoad,
       requestPasswordReset,

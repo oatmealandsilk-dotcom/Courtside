@@ -19,6 +19,7 @@ function Coaching() {
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
     .slice(0, 3);
   const unanswered = coachQuestions.filter((q) => q.replyIds.length === 0).length;
+  const myRequests = coachingRequests.filter((r) => r.userId === currentUserId).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 
   return (
     <Screen memoryKey="coaches" title="Coaching">
@@ -135,11 +136,36 @@ function Coaching() {
         );
       })}
 
+      {/* ------------------------------ Your requests ---------------------------- */}
+      {myRequests.length ? (
+        <View style={{ gap: spacing.sm }}>
+          <Text style={styles.eyebrow}>YOUR REQUESTS</Text>
+          {myRequests.map((r) => {
+            const coach = coaches.find((c) => c.id === r.coachId);
+            const coachUser = users.find((u) => u.id === coach?.userId);
+            const service = coach?.services.find((s) => s.id === r.serviceId);
+            return (
+              <Pressable key={r.id} accessibilityRole="link" onPress={() => coach && router.push(`/coach/${coach.id}`)} style={styles.request}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                  <Avatar name={coachUser?.name ?? '?'} seed={coachUser?.avatarSeed ?? r.coachId} uri={coachUser?.avatarUrl} size={32} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.name}>{service?.title ?? 'Coaching'} · {coachUser?.name ?? 'Coach'}</Text>
+                    <Text style={styles.small}>{r.status === 'answered' ? 'Answered' : r.status === 'in-review' ? 'Being looked at' : 'Sent'} · {relativeTime(r.createdAt)}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+                </View>
+                {r.question ? <Text style={styles.small} numberOfLines={2}>{r.question}</Text> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+
       {/* --------------------------- Apply to be a coach ------------------------ */}
       {currentUser?.isCoach ? (
         <Pressable
           accessibilityRole="link"
-          onPress={() => router.push('/ask-coach')}
+          onPress={() => router.push('/coach-inbox')}
           style={styles.applyBox}
         >
           <Ionicons name="chatbubbles-outline" size={24} color={colors.brand} />

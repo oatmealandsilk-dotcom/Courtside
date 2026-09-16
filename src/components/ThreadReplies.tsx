@@ -16,13 +16,14 @@ import type { Answer } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
 
 export function ThreadReplies({questionId, preview = false}:{questionId:string; preview?:boolean}) {
-  const {questions,answers}=useApp();
+  const {questions,answers,currentUserId,actions}=useApp();
   const question=questions.find(q=>q.id===questionId);
   const thread=answers.filter(a=>a.questionId===questionId).sort((a,b)=>Number(b.id===question?.acceptedAnswerId)-Number(a.id===question?.acceptedAnswerId)||b.votes-a.votes);
-  return <View>{thread.filter(a=>!a.parentAnswerId||!thread.some(p=>p.id===a.parentAnswerId)).map(a=><ThreadReply key={a.id} answer={a} thread={thread} acceptedId={question?.acceptedAnswerId} preview={preview}/>)}</View>;
+  const canAccept = !!question && question.authorId === currentUserId && !preview;
+  return <View>{thread.filter(a=>!a.parentAnswerId||!thread.some(p=>p.id===a.parentAnswerId)).map(a=><ThreadReply key={a.id} answer={a} thread={thread} acceptedId={question?.acceptedAnswerId} preview={preview} onAccept={canAccept ? (id) => actions.acceptAnswer(questionId, id) : undefined}/>)}</View>;
 }
-export function ThreadReply({ answer, thread, acceptedId, depth = 0, preview = false }: {
-  answer: Answer; thread: Answer[]; acceptedId?: string; depth?: number; preview?:boolean;
+export function ThreadReply({ answer, thread, acceptedId, depth = 0, preview = false, onAccept }: {
+  answer: Answer; thread: Answer[]; acceptedId?: string; depth?: number; preview?:boolean; /** The asker's: marks this as the answer that solved it. */ onAccept?: (answerId: string) => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { users, currentUserId, actions } = useApp();
@@ -53,6 +54,9 @@ export function ThreadReply({ answer, thread, acceptedId, depth = 0, preview = f
           <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} onPress={() => setReplying(true)} style={styles.replyButton}>
             <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted}/><Text style={styles.time}>Reply</Text>
           </Pressable>
+          {onAccept ? <Pressable accessibilityRole="button" accessibilityLabel={acceptedId === answer.id ? 'Unmark as the answer' : 'Mark as the answer'} onPress={() => onAccept(answer.id)} style={styles.replyButton}>
+            <Ionicons name={acceptedId === answer.id ? 'checkmark-circle' : 'checkmark-circle-outline'} size={16} color={acceptedId === answer.id ? colors.success : colors.textMuted}/><Text style={styles.time}>{acceptedId === answer.id ? 'Accepted' : 'Accept'}</Text>
+          </Pressable> : null}
         </View>}
         {replying && <View style={styles.inlineComposer}>
           {/* No box: just the line you type on, cursor blinking, like replying on Threads. */}
@@ -75,7 +79,7 @@ export function ThreadReply({ answer, thread, acceptedId, depth = 0, preview = f
             ending at the last child's elbow, never at a grandchild. */}
         <View pointerEvents="none" style={[styles.rail, index === children.length - 1 ? {height:16} : {bottom:0}]} />
         <View pointerEvents="none" style={styles.elbow}/>
-        <ThreadReply answer={child} thread={thread} acceptedId={acceptedId} depth={depth + 1} preview={preview}/>
+        <ThreadReply answer={child} thread={thread} acceptedId={acceptedId} depth={depth + 1} preview={preview} onAccept={onAccept}/>
       </View>
     ))}
   </View>;

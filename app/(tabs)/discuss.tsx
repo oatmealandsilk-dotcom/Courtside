@@ -130,15 +130,20 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       title="Community"
       subtitle="Find your people. Talk about your game."
       right={
-        <Pressable
-          accessibilityRole="link"
-          accessibilityLabel="Search discussions and players"
-          // From Find Players the search opens on players; from Discussions on everything.
-          onPress={() => router.push(section === 'players' ? { pathname: '/search', params: { scope: 'players' } } : '/search')}
-          hitSlop={8}
-        >
-          <Ionicons name="search" size={23} color={colors.text} />
-        </Pressable>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel="Search discussions and players"
+            // From Find Players the search opens on players; from Discussions on everything.
+            onPress={() => router.push(section === 'players' ? { pathname: '/search', params: { scope: 'players' } } : '/search')}
+            hitSlop={8}
+          >
+            <Ionicons name="search" size={23} color={colors.text} />
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Start a discussion" onPress={() => router.push('/ask')} style={styles.fab}>
+            <Ionicons name="add" size={22} color={colors.brandInk} />
+          </Pressable>
+        </View>
       }
     >
       <View style={styles.sections} onLayout={e => setTabWidth(e.nativeEvent.layout.width / 2)}>

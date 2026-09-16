@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 
 import { Button, Chip, Field, Screen } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
@@ -185,7 +186,11 @@ export default function CoachApply() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={resume ? 'Replace résumé' : 'Attach résumé'}
-            onPress={() => setResume(resume ? null : 'resume.pdf · attached')}
+            onPress={async () => {
+              if (resume) { setResume(null); return; }
+              const picked = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'], copyToCacheDirectory: true });
+              if (!picked.canceled && picked.assets[0]) setResume(picked.assets[0].name);
+            }}
             style={styles.upload}
           >
             <Ionicons
@@ -193,7 +198,7 @@ export default function CoachApply() {
               size={22}
               color={resume ? colors.brand : colors.textMuted}
             />
-            <Text style={styles.uploadText}>{resume ?? 'Attach a PDF of your résumé'}</Text>
+            <Text style={styles.uploadText} numberOfLines={1}>{resume ?? 'Attach your résumé (PDF or Word)'}</Text>
             {resume ? <Ionicons name="close" size={18} color={colors.textMuted} /> : null}
           </Pressable>
         </View>

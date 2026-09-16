@@ -59,11 +59,12 @@ export default function PrivacyCentre() {
           <Text style={styles.rowDetail}>{blockedIds.length || 'None'}</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
         </Pressable>
-        <View style={[styles.row, styles.rowBorder]}>
+        <Pressable accessibilityRole="link" onPress={() => router.push('/muted')} style={[styles.row, styles.rowBorder]}>
           <Ionicons name="volume-mute-outline" size={20} color={colors.text} />
           <Text style={styles.rowLabel}>Muted players</Text>
           <Text style={styles.rowDetail}>{mutedIds.length || 'None'}</Text>
-        </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+        </Pressable>
         <Pressable accessibilityRole="link" onPress={() => router.push('/activity')} style={[styles.row, styles.rowBorder]}>
           <Ionicons name="time-outline" size={20} color={colors.text} />
           <Text style={styles.rowLabel}>Your activity</Text>

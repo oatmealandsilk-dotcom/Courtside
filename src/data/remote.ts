@@ -12,7 +12,7 @@ import * as WebBrowser from 'expo-web-browser';
  */
 
 import { supabase } from '@/lib/supabase';
-import type { Comment, Conversation, ID, Message, PlayerProfile, PlayerStats, Post, Story, User } from './types';
+import type { Answer, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, Question, Story, User } from './types';
 
 const need = () => {
   if (!supabase) throw new Error('Supabase is not configured');
@@ -168,7 +168,56 @@ export interface RemoteData {
   /** Your direct messages; empty until the messages tables exist. */
   conversations: Conversation[];
   messages: Message[];
+  /** Discussions, coaching and your own settings; empty until their tables exist. */
+  questions: Question[];
+  answers: Answer[];
+  coachQuestions: CoachQuestion[];
+  coachReplies: CoachReply[];
+  coachingRequests: CoachingRequest[];
+  notifications: Notification[];
+  userState: UserState | null;
 }
+
+export interface UserState {
+  mutedIds: ID[]; blockedIds: ID[]; savedQuestionIds: ID[]; paymentMethods: PaymentMethod[]; defaultPaymentId: ID | null;
+  showActivity: boolean; pushLikes: boolean; pushCoach: boolean;
+}
+
+interface QuestionRow { id: string; author_id: string; title: string; body: string; topic: string; tags: string[]; votes: number; voted_by: Record<string, 1 | -1>; accepted_answer_id: string | null; edited_at: string | null; created_at: string }
+interface AnswerRow { id: string; question_id: string; author_id: string; parent_answer_id: string | null; body: string; votes: number; voted_by: Record<string, 1 | -1>; from_coach: boolean; created_at: string }
+interface CoachQuestionRow { id: string; author_id: string; title: string; body: string; specialty: string; video_url: string | null; media_label: string | null; resolved: boolean; created_at: string }
+interface CoachReplyRow { id: string; question_id: string; coach_user_id: string; body: string; helpful_by: string[]; created_at: string }
+interface CoachingRequestRow { id: string; coach_id: string; user_id: string; service_id: string; question: string; video_label: string | null; status: string; response: string | null; responded_at: string | null; created_at: string }
+interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
+interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean }
+
+const toQuestion = (r: QuestionRow, answers: AnswerRow[]): Question => ({
+  id: r.id, authorId: r.author_id, title: r.title, body: r.body, topic: r.topic as Question['topic'], tags: r.tags ?? [],
+  createdAt: r.created_at, votes: r.votes, votedBy: r.voted_by ?? {}, answerIds: answers.filter((a) => a.question_id === r.id).map((a) => a.id),
+  acceptedAnswerId: r.accepted_answer_id ?? undefined, editedAt: r.edited_at ?? undefined,
+});
+const toAnswer = (r: AnswerRow): Answer => ({
+  id: r.id, questionId: r.question_id, authorId: r.author_id, parentAnswerId: r.parent_answer_id ?? undefined, body: r.body,
+  createdAt: r.created_at, votes: r.votes, votedBy: r.voted_by ?? {}, fromCoach: r.from_coach,
+});
+const toCoachQuestion = (r: CoachQuestionRow, replies: CoachReplyRow[]): CoachQuestion => ({
+  id: r.id, authorId: r.author_id, title: r.title, body: r.body, specialty: r.specialty as CoachQuestion['specialty'], createdAt: r.created_at,
+  videoUrl: r.video_url ?? undefined, mediaLabel: r.media_label ?? undefined, resolved: r.resolved,
+  replyIds: replies.filter((x) => x.question_id === r.id).map((x) => x.id),
+});
+const toCoachReply = (r: CoachReplyRow): CoachReply => ({ id: r.id, questionId: r.question_id, coachUserId: r.coach_user_id, body: r.body, createdAt: r.created_at, helpfulBy: r.helpful_by ?? [] });
+const toCoachingRequest = (r: CoachingRequestRow): CoachingRequest => ({
+  id: r.id, coachId: r.coach_id, userId: r.user_id, serviceId: r.service_id, question: r.question, videoLabel: r.video_label ?? undefined,
+  status: r.status as CoachingRequest['status'], createdAt: r.created_at, response: r.response ?? undefined, respondedAt: r.responded_at ?? undefined,
+});
+const toNotification = (r: NotificationRow): Notification => ({
+  id: r.id, userId: r.user_id, actorId: r.actor_id, kind: r.kind as Notification['kind'], targetId: r.target_id, targetKind: r.target_kind as Notification['targetKind'],
+  createdAt: r.created_at, read: r.read, preview: r.preview ?? undefined,
+});
+const toUserState = (r: UserStateRow): UserState => ({
+  mutedIds: r.muted_ids ?? [], blockedIds: r.blocked_ids ?? [], savedQuestionIds: r.saved_question_ids ?? [], paymentMethods: r.payment_methods ?? [],
+  defaultPaymentId: r.default_payment_id, showActivity: r.show_activity, pushLikes: r.push_likes, pushCoach: r.push_coach,
+});
 
 interface ConversationRow { id: string; updated_at: string; conversation_members?: { user_id: string; last_read_at: string | null }[] }
 interface MessageRow { id: string; conversation_id: string; sender_id: string; body: string; kind: string; shared_id: string | null; reactions: Record<string, string> | null; created_at: string }
@@ -212,7 +261,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // is what left people re-doing the quiz: their profile never arrived.
   const storiesFull = db.from('stories').select('*, story_views(user_id), story_likes(user_id), story_comments(id, story_id, author_id, body, created_at, story_comment_likes(user_id))').order('created_at', { ascending: false }).limit(40);
   const storiesPlain = () => db.from('stories').select('*, story_views(user_id)').order('created_at', { ascending: false }).limit(40);
-  const [profiles, posts, storiesTry, follows, requests, convs, msgs] = await Promise.all([
+  const [profiles, posts, storiesTry, follows, requests, convs, msgs, qs, ans, cqs, crs, creqs, notes, ustate] = await Promise.all([
     db.from('profiles').select('*'),
     db.from('posts').select('*, post_likes(user_id), post_saves(user_id), comments(id, post_id, author_id, body, created_at, comment_likes(user_id))').order('created_at', { ascending: false }).limit(60),
     storiesFull,
@@ -222,7 +271,17 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     // Direct messages; a database without the tables yet just gives none.
     db.from('conversations').select('id, updated_at, conversation_members(user_id, last_read_at)').order('updated_at', { ascending: false }),
     db.from('messages').select('*').order('created_at', { ascending: true }).limit(2000),
+    db.from('questions').select('*').order('created_at', { ascending: false }).limit(300),
+    db.from('answers').select('*').order('created_at', { ascending: true }).limit(3000),
+    db.from('coach_questions').select('*').order('created_at', { ascending: false }).limit(200),
+    db.from('coach_replies').select('*').order('created_at', { ascending: true }).limit(2000),
+    db.from('coaching_requests').select('*').order('created_at', { ascending: false }),
+    db.from('notifications').select('*').order('created_at', { ascending: false }).limit(200),
+    db.from('user_state').select('*').eq('user_id', me).maybeSingle(),
   ]);
+  if (qs.error) console.warn('[remote] community tables missing; run the pending migrations', qs.error.message);
+  const answerRows = (ans.data ?? []) as AnswerRow[];
+  const replyRows = (crs.data ?? []) as CoachReplyRow[];
   if (convs.error || msgs.error) console.warn('[remote] messages tables missing; run the pending migrations', (convs.error ?? msgs.error)?.message);
   const dm = toConversations(me, (convs.data ?? []) as ConversationRow[], (msgs.data ?? []) as MessageRow[]);
   if (requests.error) console.warn('[remote] follow requests table missing; run the pending migrations', requests.error.message);
@@ -254,6 +313,13 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     followRequests: ((requests.data ?? []) as { requester_id: string; target_id: string; created_at: string }[]).map((r) => ({ fromId: r.requester_id, toId: r.target_id, createdAt: r.created_at })),
     conversations: dm.conversations,
     messages: dm.messages,
+    questions: ((qs.data ?? []) as QuestionRow[]).map((r) => toQuestion(r, answerRows)),
+    answers: answerRows.map(toAnswer),
+    coachQuestions: ((cqs.data ?? []) as CoachQuestionRow[]).map((r) => toCoachQuestion(r, replyRows)),
+    coachReplies: replyRows.map(toCoachReply),
+    coachingRequests: ((creqs.data ?? []) as CoachingRequestRow[]).map(toCoachingRequest),
+    notifications: ((notes.data ?? []) as NotificationRow[]).map(toNotification),
+    userState: ustate.data ? toUserState(ustate.data as UserStateRow) : null,
   };
 }
 
@@ -264,6 +330,64 @@ const fail = (what: string) => (error: unknown) => {
 };
 
 export const remote = {
+  /* ------------------------ discussions and coaching ------------------------ */
+
+  /** The words of a thread you wrote; the tally is the server's and is left alone. */
+  async upsertQuestion(q: Question) {
+    const { error } = await need().from('questions').upsert({
+      id: q.id, author_id: q.authorId, title: q.title, body: q.body, topic: q.topic, tags: q.tags, accepted_answer_id: q.acceptedAnswerId ?? null,
+      edited_at: q.editedAt ?? null, created_at: q.createdAt,
+    });
+    if (error) fail('thread save')(error);
+  },
+  async upsertAnswer(a: Answer) {
+    const { error } = await need().from('answers').upsert({
+      id: a.id, question_id: a.questionId, author_id: a.authorId, parent_answer_id: a.parentAnswerId ?? null, body: a.body, from_coach: a.fromCoach, created_at: a.createdAt,
+    });
+    if (error) fail('answer save')(error);
+  },
+  async voteQuestion(questionId: ID, dir: 1 | -1) { const { error } = await need().rpc('vote_question', { q: questionId, dir }); if (error) fail('vote')(error); },
+  async voteAnswer(answerId: ID, dir: 1 | -1) { const { error } = await need().rpc('vote_answer', { a: answerId, dir }); if (error) fail('vote')(error); },
+  async upsertCoachQuestion(q: CoachQuestion) {
+    const { error } = await need().from('coach_questions').upsert({
+      id: q.id, author_id: q.authorId, title: q.title, body: q.body, specialty: q.specialty, video_url: q.videoUrl ?? null, media_label: q.mediaLabel ?? null, resolved: q.resolved, created_at: q.createdAt,
+    });
+    if (error) fail('coach question save')(error);
+  },
+  async insertCoachReply(r: CoachReply) {
+    const { error } = await need().from('coach_replies').upsert({ id: r.id, question_id: r.questionId, coach_user_id: r.coachUserId, body: r.body, created_at: r.createdAt });
+    if (error) fail('coach reply save')(error);
+  },
+  async toggleReplyHelpful(replyId: ID) { const { error } = await need().rpc('toggle_reply_helpful', { r: replyId }); if (error) fail('helpful')(error); },
+  async insertCoachingRequest(r: CoachingRequest) {
+    const { error } = await need().from('coaching_requests').upsert({
+      id: r.id, coach_id: r.coachId, user_id: r.userId, service_id: r.serviceId, question: r.question, video_label: r.videoLabel ?? null, status: r.status, created_at: r.createdAt,
+    });
+    if (error) fail('coaching request save')(error);
+  },
+  async insertNotification(n: Notification) {
+    const { error } = await need().from('notifications').insert({
+      id: n.id, user_id: n.userId, actor_id: n.actorId, kind: n.kind, target_id: n.targetId, target_kind: n.targetKind, preview: n.preview ?? null, read: false, created_at: n.createdAt,
+    });
+    if (error) fail('notification')(error);
+  },
+  async markNotificationsRead(ids: ID[]) {
+    if (!ids.length) return;
+    const { error } = await need().from('notifications').update({ read: true }).in('id', ids);
+    if (error) fail('notification read')(error);
+  },
+  async insertReport(me: ID, targetUserId: ID | null, target: string, reason: string) {
+    const { error } = await need().from('reports').insert({ reporter_id: me, target_user_id: targetUserId, target, reason });
+    if (error) fail('report')(error);
+  },
+  async saveUserState(me: ID, s: UserState) {
+    const { error } = await need().from('user_state').upsert({
+      user_id: me, muted_ids: s.mutedIds, blocked_ids: s.blockedIds, saved_question_ids: s.savedQuestionIds, payment_methods: s.paymentMethods,
+      default_payment_id: s.defaultPaymentId, show_activity: s.showActivity, push_likes: s.pushLikes, push_coach: s.pushCoach, updated_at: new Date().toISOString(),
+    });
+    if (error) fail('settings save')(error);
+  },
+
   /* ------------------------------ messages ------------------------------ */
 
   /** The 1:1 you already have with someone, or a new one under the id the app chose. Returns the id that stands. */

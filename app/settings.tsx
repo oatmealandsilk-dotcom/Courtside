@@ -27,7 +27,7 @@ interface Row {
  */
 export default function Settings() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, saved, blockedIds, paymentMethods, defaultPaymentId, locationEnabled, detectedLocation, actions } = useApp();
+  const { currentUser, saved, blockedIds, paymentMethods, defaultPaymentId, locationEnabled, detectedLocation, actions, prefs } = useApp();
   const defaultPayment = paymentMethods.find((m) => m.id === defaultPaymentId);
   const [locationNote, setLocationNote] = useState('');
   const toggleLocation = async (next: boolean) => {
@@ -37,10 +37,6 @@ export default function Settings() {
   };
   const { theme } = useTheme();
   const [search, setSearch] = useState('');
-  const [privateAccount, setPrivateAccount] = useState(false);
-  const [activityStatus, setActivityStatus] = useState(true);
-  const [pushLikes, setPushLikes] = useState(true);
-  const [pushCoach, setPushCoach] = useState(true);
 
   const savedCount = saved.postIds.length + saved.questionIds.length;
 
@@ -76,12 +72,12 @@ export default function Settings() {
         {
           icon: 'notifications-outline',
           label: 'Likes and comments',
-          toggle: { value: pushLikes, onChange: setPushLikes },
+          toggle: { value: prefs.pushLikes, onChange: (v: boolean) => actions.setPref('pushLikes', v) },
         },
         {
           icon: 'megaphone-outline',
           label: 'Coach replies',
-          toggle: { value: pushCoach, onChange: setPushCoach },
+          toggle: { value: prefs.pushCoach, onChange: (v: boolean) => actions.setPref('pushCoach', v) },
         },
       ],
     },
@@ -92,12 +88,12 @@ export default function Settings() {
         {
           icon: 'lock-closed-outline',
           label: 'Private account',
-          toggle: { value: privateAccount, onChange: setPrivateAccount },
+          toggle: { value: !!currentUser?.isPrivate, onChange: actions.setPrivateAccount },
         },
         {
           icon: 'ellipse-outline',
           label: 'Show activity status',
-          toggle: { value: activityStatus, onChange: setActivityStatus },
+          toggle: { value: prefs.showActivity, onChange: (v: boolean) => actions.setPref('showActivity', v) },
         },
         {
           icon: 'close-circle-outline',

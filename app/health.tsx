@@ -82,18 +82,14 @@ export default function Health() {
                       <ActivityIndicator color={colors.brand} />
                     ) : (
                       <Button
-                        label={integration.connected ? 'Disconnect' : 'Connect'}
+                        label={integration.connected ? 'Disconnect' : 'Not yet'}
                         variant={integration.connected ? 'ghost' : 'secondary'}
+                        disabled={!integration.connected}
                         onPress={() => toggle(integration.provider)}
                       />
                     )}
                   </View>
-                  <View style={styles.todo}>
-                    <Text style={styles.todoLabel}>
-                      {setup.authMethod === 'healthkit' ? 'HEALTHKIT' : setup.authMethod.toUpperCase()}
-                    </Text>
-                    <Text style={styles.todoText}>{setup.todo}</Text>
-                  </View>
+                  <Text style={styles.todoText}>Linking {integration.label} is coming in a later release.</Text>
                 </Card>
               );
             })}
