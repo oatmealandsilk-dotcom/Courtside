@@ -22,27 +22,27 @@ export function TagPlayers({ tagged, onChange }: { tagged: string[]; onChange: (
   const matches = open ? candidates(query, 6).filter(({ user }) => !tagged.includes(user.id)) : [];
   return (
     <View style={styles.tagBlock}>
-      <View style={styles.inlineRow}>
-        <Ionicons name="pricetag-outline" size={18} color={colors.textMuted} />
-        <Text style={styles.inlineLabel}>Tag players</Text>
-      </View>
-      <View style={styles.row}>
-        {tagged.map((id) => {
-          const who = users.find((u) => u.id === id);
-          if (!who) return null;
-          return (
-            <Pressable key={id} accessibilityRole="button" accessibilityLabel={`Remove ${who.name}`} onPress={() => onChange(tagged.filter((t) => t !== id))} style={styles.tagChip}>
-              <Avatar name={who.name} seed={who.avatarSeed} uri={who.avatarUrl} size={22} />
-              <Text style={styles.tagChipText}>{who.name}</Text>
-              <Ionicons name="close" size={14} color={colors.textMuted} />
-            </Pressable>
-          );
-        })}
-        <Pressable accessibilityRole="button" accessibilityLabel={open ? 'Done tagging' : 'Add a player'} onPress={() => { setOpen((o) => !o); setQuery(''); }} style={[styles.tagChip, styles.tagAdd]}>
-          <Ionicons name={open ? 'checkmark' : 'add'} size={16} color={colors.brand} />
-          <Text style={[styles.tagChipText, { color: colors.brand }]}>{open ? 'Done' : tagged.length ? 'Add' : 'Add a player'}</Text>
-        </Pressable>
-      </View>
+      {/* One button: "Tag players" opens the search; the same button says Done while it is open. */}
+      <Pressable accessibilityRole="button" accessibilityLabel={open ? 'Done tagging' : 'Tag players'} onPress={() => { setOpen((o) => !o); setQuery(''); }} style={[styles.button, open && styles.buttonOpen]}>
+        <Ionicons name={open ? 'checkmark' : 'pricetag-outline'} size={18} color={colors.brand} />
+        <Text style={styles.buttonText}>{open ? 'Done' : 'Tag players'}</Text>
+        {!open && tagged.length ? <Text style={styles.count}>{tagged.length}</Text> : null}
+      </Pressable>
+      {tagged.length ? (
+        <View style={styles.row}>
+          {tagged.map((id) => {
+            const who = users.find((u) => u.id === id);
+            if (!who) return null;
+            return (
+              <Pressable key={id} accessibilityRole="button" accessibilityLabel={`Remove ${who.name}`} onPress={() => onChange(tagged.filter((t) => t !== id))} style={styles.tagChip}>
+                <Avatar name={who.name} seed={who.avatarSeed} uri={who.avatarUrl} size={22} />
+                <Text style={styles.tagChipText}>{who.name}</Text>
+                <Ionicons name="close" size={14} color={colors.textMuted} />
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
       {open ? (
         <View style={styles.tagSearch}>
           <Field value={query} onChangeText={setQuery} placeholder="Search by name or @handle" />
@@ -64,12 +64,13 @@ export function TagPlayers({ tagged, onChange }: { tagged: string[]; onChange: (
 }
 
 const styleDefinitions = StyleSheet.create({
-  inlineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  inlineLabel: { ...typography.small, color: colors.textMuted, flex: 1 },
+  button: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: spacing.sm, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.brand, backgroundColor: colors.brandDim },
+  buttonOpen: { backgroundColor: colors.surface, borderColor: colors.border },
+  buttonText: { ...typography.smallStrong, color: colors.brand },
+  count: { ...typography.smallStrong, color: colors.brandInk, backgroundColor: colors.brand, minWidth: 20, textAlign: 'center', borderRadius: 10, paddingHorizontal: 6, overflow: 'hidden' },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   tagBlock: { gap: spacing.sm },
   tagChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 4, paddingRight: 10, paddingVertical: 4, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  tagAdd: { paddingLeft: 8, borderColor: colors.brand, backgroundColor: colors.brandDim },
   tagChipText: { ...typography.smallStrong, color: colors.text },
   tagSearch: { gap: spacing.xs, padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   tagResult: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 8 },
