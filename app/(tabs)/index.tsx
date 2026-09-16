@@ -399,6 +399,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
 
   // Whatever is settled on screen counts as watched, once per session.
   const showing = feed[active];
+  // A clip or a hit fills the page with a picture; a written post or thread does not.
+  const activeOnPicture = showing?.type === 'hit' || (showing?.type === 'post' && (showing.post.kind === 'clip' || !!showing.post.videoUrl || !!showing.post.imageUrl));
   useEffect(() => {
     if (!focused || !showing) return;
     // A hit counts as watched through the story viewer, not here.
@@ -746,8 +748,9 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
           </VerticalPager>
 
           {scope ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => goBack()} style={[styles.scopeBack, { top: insets.top + 14 }]}>
-              <Ionicons name="chevron-back" size={26} color="white" />
+            // The same plain chevron every other page has, white only when it sits over a picture.
+            <Pressable accessibilityRole="button" accessibilityLabel="Go back" hitSlop={10} onPress={() => goBack()} style={[styles.scopeBack, { top: insets.top + 10 }]}>
+              <Ionicons name="chevron-back" size={22} color={activeOnPicture ? '#FFFFFF' : colors.text} />
             </Pressable>
           ) : null}
         </View>
@@ -771,7 +774,7 @@ function HitClock({ expiresAt }: { expiresAt: string }) {
 
 const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, alignItems: 'center' },
-  scopeBack: { position: 'absolute', left: 8, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center', zIndex: 6 },
+  scopeBack: { position: 'absolute', left: 12, padding: 6, zIndex: 6 },
   wordmarkOverlay: {
     // top comes from the safe-area inset at render; a fixed value put the
     // wordmark under the Dynamic Island on a phone.
