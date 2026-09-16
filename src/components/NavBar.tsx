@@ -4,7 +4,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { interpolate, runOnJS, useAnimatedReaction, useAnimatedStyle } from 'react-native-reanimated';
 import { Animated as RNAnimated } from 'react-native';
-import { barCompact } from '@/features/navigation/barShrink';
+import { barCompact, DUCK } from '@/features/navigation/barShrink';
 import { useFeedWarm } from '@/features/feed/warmup';
 import { useCallback, useEffect, useRef } from 'react';
 import { Easing, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -71,7 +71,6 @@ export function NavBar({ state, navigation }: NavBarProps) {
   }, [behindCurtain, entrance]);
   // The bar's own height never changes (the feed's pages are sized against
   // it); ducking moves and shrinks what is on the bar instead.
-  const DUCK = 8;
   // Ducking makes the bar shorter: its top edge drops and the page behind
   // gets the room. The padding is a layout change, which the phone applies
   // reliably only through the plain Animated value below — so the ducking

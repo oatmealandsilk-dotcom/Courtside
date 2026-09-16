@@ -6,6 +6,9 @@ import { Easing, makeMutable, withTiming } from 'react-native-reanimated';
  * the bar just follows on the animation thread.
  */
 export const barCompact = makeMutable(0);
+/** How much shorter the bar is when fully ducked (its top and bottom padding together), in points. */
+export const DUCK = 8;
+export const BAR_DUCK_PX = DUCK * 2.5;
 
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
 let current = false;

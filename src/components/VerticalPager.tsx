@@ -1,7 +1,7 @@
 import React, { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
 import { View } from 'react-native';
 import Animated, { runOnJS, runOnUI, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useSharedValue, withTiming } from 'react-native-reanimated';
-import { barCompact } from '@/features/navigation/barShrink';
+import { BAR_DUCK_PX, barCompact } from '@/features/navigation/barShrink';
 
 /**
  * Full-height pages that snap one at a time. The active page changes the
@@ -73,7 +73,10 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
 
   return (
     <View style={{ flex: 1 }} onLayout={(e) => {
-      const h = e.nativeEvent.layout.height;
+      // Pages are sized for the bar at its full height, whatever the bar is
+      // doing at this moment: the room it frees when ducked shows below the
+      // page instead of the page's bottom ending up under a full-size bar.
+      const h = e.nativeEvent.layout.height - BAR_DUCK_PX * barCompact.value;
       if (h <= 0) return;
       setHeight((prev) => {
         if (prev !== 0 && Math.abs(prev - h) < RESIZE_MIN) return prev;
