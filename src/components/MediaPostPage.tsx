@@ -140,11 +140,11 @@ export function MediaPostPage({ post, author, liked, saved, active, preload = fa
             <View style={styles.nameRow}>
               <Text style={styles.name} numberOfLines={1}>{author.name}</Text>
               {author.isCoach ? <Ionicons name="shield-checkmark" size={14} color={colors.brand} /> : null}
+              <LevelPill profile={author.profile} small />
             </View>
             <Text style={styles.sub} numberOfLines={1}>@{author.handle} · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}{post.location ? ` · ${post.location}` : ''}</Text>
           </View>
         </Pressable>
-        <LevelPill profile={author.profile} small />
       </View>
       {/* A finger on the picture belongs to the picture: no sideways page swipe from here. */}
       <View
