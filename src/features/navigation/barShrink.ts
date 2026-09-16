@@ -11,10 +11,9 @@ const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
 let current = false;
 
 export function setBarCompact(on: boolean) {
-  if (on === current) return;
   current = on;
   progress = on ? 1 : 0;
-  barCompact.value = withTiming(on ? 1 : 0, { duration: 360, easing: EASE });
+  barCompact.value = withTiming(on ? 1 : 0, { duration: 200, easing: EASE });
 }
 
 const lastY = new Map<string, number>();

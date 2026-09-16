@@ -128,18 +128,19 @@ export function Screen({
 
   // The bottom bar ducks as this page scrolls — worked out here on the
   // animation thread, frame for frame with the finger, so it never steps.
-  const lastY = useSharedValue(0);
-  const ducked = useSharedValue(0);
+  const lastY = useSharedValue(-1);
   const remember = useCallback((y: number) => { scrollMemory.set(key, y); }, [key]);
   const onScrollAnimated = useAnimatedScrollHandler({
     onScroll: (event) => {
       const y = event.contentOffset.y;
+      runOnJS(remember)(y);
+      // The first report is just where the page already sat (a tab switch
+      // restoring its place): nothing to react to.
+      if (lastY.value < 0) { lastY.value = y; return; }
       const dy = y - lastY.value;
       lastY.value = y;
-      if (y < 24) ducked.value = 0;
-      else if (Math.abs(dy) > 0.3) ducked.value = Math.max(0, Math.min(1, ducked.value + dy / 150));
-      barCompact.value = ducked.value;
-      runOnJS(remember)(y);
+      // Only a real move counts, in either direction; the bar carries on from wherever it is.
+      if (Math.abs(dy) > 0.3 && y >= 0) barCompact.value = Math.max(0, Math.min(1, barCompact.value + dy / 150));
     },
   });
 

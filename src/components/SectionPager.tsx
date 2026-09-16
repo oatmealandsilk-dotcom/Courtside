@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 
@@ -34,8 +34,14 @@ export function SectionPager({ index, panes, onIndex, progress, depth = 1, deleg
   const { isPhone } = useResponsive();
   const count = panes.length;
   const last = count - 1;
-  const [width, setWidth] = useState(0);
-  const widthValue = useSharedValue(1);
+  // The pane width comes from measuring the row; until that lands (and on a
+  // phone it has been known not to), the screen width stands in, so the
+  // panes are never zero-wide and invisible.
+  const { width: screenWidth } = useWindowDimensions();
+  const [measured, setMeasured] = useState(0);
+  const width = measured > 0 ? measured : screenWidth;
+  const widthValue = useSharedValue(screenWidth || 1);
+  useEffect(() => { widthValue.value = width || 1; }, [width, widthValue]);
   const position = useSharedValue(index);
   const [shown, setShown] = useState(index);
   const shownRef = useRef(index);
@@ -155,13 +161,13 @@ export function SectionPager({ index, panes, onIndex, progress, depth = 1, deleg
 
   return (
     <GestureDetector gesture={pan}>
-      <View onLayout={(e) => { const w = e.nativeEvent.layout.width; setWidth(w); widthValue.value = w || 1; }} style={{ overflow: 'hidden' }}>
-        <Animated.View style={[{ flexDirection: 'row', width: width ? width * count : undefined }, row]}>
+      <View onLayout={(e) => { const w = e.nativeEvent.layout.width; if (w > 0) setMeasured(w); }} style={{ overflow: 'hidden', alignSelf: 'stretch' }}>
+        <Animated.View style={[{ flexDirection: 'row', width: width * count }, row]}>
           {panes.map((pane, i) => (
             // All panes stay in the row at their own height: the strip is as
             // tall as the tallest, and landing never re-lays the page out —
             // which is what made fast back-and-forth swiping hitch.
-            <View key={i} style={{ width: width || undefined }} pointerEvents={i === shown ? 'auto' : 'none'}>
+            <View key={i} style={{ width }} pointerEvents={i === shown ? 'auto' : 'none'}>
               {pane}
             </View>
           ))}

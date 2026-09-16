@@ -3,7 +3,7 @@ import { PlayerName } from '@/components/PlayerName';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { readSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
-import { Image, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, Share, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
@@ -16,11 +16,12 @@ import { LevelPill } from '@/components/LevelPill';
 import { useApp } from '@/store/AppContext';
 import { playStyleLabel, surfaceLabel } from '@/lib/badges';
 import { compactNumber } from '@/lib/format';
-import { colors } from '@/theme';
+import { colors, spacing } from '@/theme';
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
  const { currentUser: user, posts, saved, conversations, notifications, currentUserId, savedAccounts, actions } = useApp();
+ const { width: windowWidth } = useWindowDimensions();
  // The section lives here, not in the address (see discuss.tsx for why).
  const [localTab, setLocalTab] = useState<'Posts' | 'Clips' | 'Tagged'>('Posts');
  const section = previewSection ?? localTab;
@@ -56,12 +57,17 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    if (next.pathname === '/profile') setTab(next.section);
    else { requestSection(next.pathname, next.section); router.navigate(next.pathname); }
  };
+ // Tiles are sized in plain pixels from the screen width — three across the
+ // page's content width — rather than by percentage-plus-aspect-ratio, which
+ // the phone has been seen to lay out as nothing at all.
+ const tileW = Math.floor((windowWidth - spacing.lg * 2) / 3);
+ const tileH = Math.round((tileW * 4) / 3);
  const content = (selected: string) => {
    if (!user) return null;
    // Pinned first, then newest.
    const items = (selected === 'Tagged' ? posts.filter(p => p.taggedUserIds?.includes(user.id) && !p.archived) : own.filter(p => selected !== 'Clips' || p.kind === 'clip')).sort((a,b) => Number(!!b.pinned) - Number(!!a.pinned) || Date.parse(b.createdAt)-Date.parse(a.createdAt));
    return <View style={{ minHeight: 320, backgroundColor: colors.bg }}>
-     <View style={styles.grid}>{items.map(p => <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: selected === 'Clips' ? 'clips' : selected === 'Tagged' ? 'tagged' : 'own' } })} style={styles.tile}>
+     <View style={styles.grid}>{items.map(p => <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: selected === 'Clips' ? 'clips' : selected === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
        <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
        {p.thumbnailUrl ? <Image accessibilityIgnoresInvertColors source={{uri:p.thumbnailUrl}} style={StyleSheet.absoluteFill} resizeMode="cover"/> : null}
        {p.kind==='clip' && <Ionicons name="play" size={14} color="#FFFFFF" style={styles.tilePlay}/>}
@@ -73,7 +79,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  // The three grids are rebuilt only when the posts change, so switching
  // section (which re-renders this page) does not rebuild every tile.
  // eslint-disable-next-line react-hooks/exhaustive-deps
- const grids = useMemo(() => TABS.map((t) => content(t)), [posts, user?.id, styles]);
+ const grids = useMemo(() => TABS.map((t) => content(t)), [posts, user?.id, styles, tileW]);
  if (!user) {
    const remembered = savedAccounts.find((a) => a.id === currentUserId);
    return <Screen memoryKey="profile" title="Profile" subtitle={remembered?.handle ? `@${remembered.handle}` : ' '}><ProfileSkeleton name={remembered?.name} avatarUrl={remembered?.avatarUrl} seed={currentUserId ?? 'you'}/></Screen>;
@@ -178,7 +184,7 @@ function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?:
 const styleDefinitions = StyleSheet.create({
  setup:{marginTop:16,marginHorizontal:0,padding:14,borderWidth:1,borderColor:colors.brand,borderRadius:12,backgroundColor:colors.brandDim,flexDirection:'row',alignItems:'center',gap:12},setupTitle:{fontSize:14,fontWeight:'700',color:colors.text},identity:{gap:10,paddingTop:22,paddingBottom:24,paddingHorizontal:12,alignItems:'center'},meta:{fontSize:12,color:colors.textMuted,lineHeight:19},nameRow:{flexDirection:'row',gap:10,alignItems:'center',justifyContent:'center',flexWrap:'wrap',marginTop:4},name:{fontSize:20,fontWeight:'700',color:colors.text},bio:{fontSize:14,lineHeight:21,color:colors.textMuted,textAlign:'center',maxWidth:320},followRow:{flexDirection:'row',alignItems:'center',gap:10},follow:{flexDirection:'row',alignItems:'baseline'},followCount:{fontSize:15,fontWeight:'700',color:colors.text},followDot:{color:colors.textFaint,fontSize:14},tabCount:{fontSize:12,fontWeight:'600',color:colors.textFaint},injury:{fontSize:13,color:colors.danger},buttons:{flexDirection:'row',gap:8,alignSelf:'stretch',marginTop:6},settings:{borderWidth:1,borderColor:colors.border,borderRadius:10,padding:10,justifyContent:'center'},tennis:{padding:12,borderWidth:1,borderColor:colors.border,borderRadius:12,backgroundColor:colors.surface,gap:8},eyebrow:{letterSpacing:1.2,fontSize:11,fontWeight:'700',color:colors.textMuted},details:{flexDirection:'row',flexWrap:'wrap',gap:8},detail:{width:'46%',gap:2},value:{fontSize:13,color:colors.text,lineHeight:19},health:{padding:15,marginTop:12,borderWidth:1,borderColor:colors.border,borderRadius:12,flexDirection:'row',alignItems:'center',gap:10},headerActions:{flexDirection:'row',alignItems:'center',gap:14},headerButton:{padding:4},headerBadge:{position:'absolute',top:-1,right:-2,minWidth:18,height:18,borderRadius:9,paddingHorizontal:5,backgroundColor:colors.danger,alignItems:'center',justifyContent:'center',borderWidth:2,borderColor:colors.bg},headerBadgeText:{color:'white',fontSize:10,fontWeight:'800'},tabs:{flexDirection:'row',marginTop:16,borderBottomWidth:2,borderBottomColor:colors.border},tab:{flex:1,alignItems:'center',paddingVertical:18},tabIndicator:{position:'absolute',left:0,bottom:-2,height:2,backgroundColor:colors.brand,borderRadius:1},grid:{flexDirection:'row',flexWrap:'wrap',marginHorizontal:0},
  // Instagram's grid: tall tiles, the thumbnail and nothing else on it.
- tile:{width:'33.333333%',aspectRatio:3/4,borderWidth:1,borderColor:colors.bg,backgroundColor:colors.surfaceAlt,overflow:'hidden'},
+ tile:{borderWidth:1,borderColor:colors.bg,backgroundColor:colors.surfaceAlt,overflow:'hidden'},
  tileBlank:{padding:10,justifyContent:'center'},
  tileText:{fontSize:11,lineHeight:15,color:colors.textMuted},
  tilePlay:{position:'absolute',top:6,right:6,textShadowColor:'rgba(0,0,0,0.6)',textShadowRadius:3},

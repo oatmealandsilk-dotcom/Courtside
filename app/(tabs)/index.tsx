@@ -119,6 +119,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const app = useApp();
   const { posts, questions, comments, stories, users, currentUserId, saved, actions, ready, followingIds, mutedIds, blockedIds, conversations } = app;
   const [active, setActive] = useState(0);
+
   // Pinch out on a clip or hit and everything but the picture goes away —
   // caption, buttons, wordmark, sound disc; pinch in brings it all back.
   const [immersive, setImmersive] = useState(false);
@@ -412,7 +413,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         />
       ) : (
         <View style={styles.viewer}>
-          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={(i) => { setBarCompact(i > active && i > 0); setActive(i); }}>
+          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive}>
             {feed.map((item, index) => {
               const distance = Math.abs(index - active);
               const ahead = index - active;

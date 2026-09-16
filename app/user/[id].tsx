@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
-import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,6 +29,9 @@ export default function UserProfile() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const [tab, setTab] = useState<typeof TABS[number]>('Posts');
+  const { width: windowWidth } = useWindowDimensions();
+  const tileW = Math.floor((windowWidth - spacing.lg * 2) / 3);
+  const tileH = Math.round((tileW * 4) / 3);
 
   const user = users.find((u) => u.id === id);
 
@@ -173,7 +176,7 @@ export default function UserProfile() {
           </View>
           <View style={styles.grid}>
             {items.map((p) => (
-              <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: tab === 'Clips' ? 'clips' : tab === 'Tagged' ? 'tagged' : 'own' } })} style={styles.tile}>
+              <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: tab === 'Clips' ? 'clips' : tab === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
                 <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
                 {p.thumbnailUrl ? <Image accessibilityIgnoresInvertColors source={{ uri: p.thumbnailUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
                 {p.kind === 'clip' && <Ionicons name="play" size={14} color="#FFFFFF" style={styles.tilePlay} />}
@@ -246,7 +249,7 @@ const styleDefinitions = StyleSheet.create({
   tabOn: { borderBottomColor: colors.brand },
   tabCount: { fontSize: 12, fontWeight: '600', color: colors.textFaint },
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: 0, minHeight: 120, paddingBottom: spacing.xl },
-  tile: { width: '33.333333%', aspectRatio: 3 / 4, borderWidth: 1, borderColor: colors.bg, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
+  tile: { borderWidth: 1, borderColor: colors.bg, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   tileBlank: { padding: 10, justifyContent: 'center' },
   tileText: { fontSize: 11, lineHeight: 15, color: colors.textMuted },
   tilePlay: { position: 'absolute', top: 6, right: 6, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },

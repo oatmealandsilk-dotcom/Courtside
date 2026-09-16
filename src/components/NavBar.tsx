@@ -2,12 +2,13 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { BrandMark } from './BrandMark';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { interpolate, useAnimatedStyle } from 'react-native-reanimated';
+import Animated, { interpolate, runOnJS, useAnimatedReaction, useAnimatedStyle } from 'react-native-reanimated';
+import { Animated as RNAnimated } from 'react-native';
 import { barCompact } from '@/features/navigation/barShrink';
 import { useFeedWarm } from '@/features/feed/warmup';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Easing, useSharedValue, withTiming } from 'react-native-reanimated';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -56,28 +57,44 @@ export function NavBar({ state, navigation }: NavBarProps) {
   const bottomPad = Math.max(insets.bottom, spacing.sm);
   // On first open the bar is under the curtain; as the curtain lifts it
   // rises into place with the feed rather than already sitting there.
+  // Only while the loading curtain is actually up (a fresh open on the feed)
+  // does the bar wait below the edge; anywhere else it is simply there. And
+  // it never waits more than a few seconds, whatever the feed is doing.
   const warm = useFeedWarm();
-  const entrance = useSharedValue(warm ? 0 : 1);
+  const pathname = usePathname();
+  const behindCurtain = !warm && (pathname === '/' || pathname === '/index');
+  const entrance = useSharedValue(behindCurtain ? 1 : 0);
   useEffect(() => {
-    if (warm) entrance.value = withTiming(0, { duration: 480, easing: Easing.out(Easing.cubic) });
-  }, [warm, entrance]);
+    if (!behindCurtain) { entrance.value = withTiming(0, { duration: 480, easing: Easing.out(Easing.cubic) }); return; }
+    const t = setTimeout(() => { entrance.value = withTiming(0, { duration: 480, easing: Easing.out(Easing.cubic) }); }, 7000);
+    return () => clearTimeout(t);
+  }, [behindCurtain, entrance]);
   // The bar's own height never changes (the feed's pages are sized against
   // it); ducking moves and shrinks what is on the bar instead.
-  const duck = useAnimatedStyle(() => ({
-    paddingTop: spacing.sm,
-    paddingBottom: bottomPad,
-    transform: [{ translateY: entrance.value * 96 }],
-  }));
+  const DUCK = 8;
+  // Ducking makes the bar shorter: its top edge drops and the page behind
+  // gets the room. The padding is a layout change, which the phone applies
+  // reliably only through the plain Animated value below — so the ducking
+  // amount is mirrored into one and the paddings follow it.
+  const padAmount = useRef(new RNAnimated.Value(0)).current;
+  const mirror = useCallback((v: number) => { padAmount.setValue(v); }, [padAmount]);
+  useAnimatedReaction(() => barCompact.value, (v, prev) => { if (v !== prev) runOnJS(mirror)(v); }, [mirror]);
+  const duckPad = {
+    flexDirection: 'row' as const,
+    paddingTop: padAmount.interpolate({ inputRange: [0, 1], outputRange: [spacing.sm + DUCK, spacing.sm + DUCK - DUCK * 1.5] }),
+    paddingBottom: padAmount.interpolate({ inputRange: [0, 1], outputRange: [bottomPad + DUCK, bottomPad] }),
+  };
+  const duck = useAnimatedStyle(() => ({ transform: [{ translateY: entrance.value * 96 }] }));
   const shrink = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(barCompact.value, [0, 1], [0, 7]) }, { scale: interpolate(barCompact.value, [0, 1], [1, 0.86]) }],
+    transform: [{ scale: interpolate(barCompact.value, [0, 1], [1, 0.86]) }],
   }));
   const rowShrink = useAnimatedStyle(() => ({ minHeight: 48 }));
-  const lineDrop = useAnimatedStyle(() => ({ transform: [{ translateY: interpolate(barCompact.value, [0, 1], [0, 7]) }] }));
 
   if (isPhone) {
     return (
       <Animated.View style={[styles.bottomBar, duck]}>
-        <Animated.View pointerEvents="none" style={[styles.topLine, lineDrop]} />
+       <RNAnimated.View style={duckPad}>
+        <View pointerEvents="none" style={styles.topLine} />
         {ITEMS.map((item, index) => {
           const active = item.route === activeRoute;
           return (
@@ -109,6 +126,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
             </React.Fragment>
           );
         })}
+       </RNAnimated.View>
       </Animated.View>
     );
   }
@@ -242,10 +260,10 @@ export function NavBar({ state, navigation }: NavBarProps) {
 const styleDefinitions = StyleSheet.create({
   createSlot: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   createButton: { width: 48, height: 48, borderRadius: 14, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  // No padding of its own: the padded row inside is the whole bar, so the
+  // bar's top edge and its line are the same edge.
   bottomBar: {
-    flexDirection: 'row',
     backgroundColor: colors.bgElevated,
-    paddingTop: spacing.sm,
   },
   topLine: { position: 'absolute', top: 0, left: 0, right: 0, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   bottomItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },

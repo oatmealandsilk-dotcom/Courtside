@@ -1,3 +1,5 @@
+import { barCompact } from '@/features/navigation/barShrink';
+import { withTiming } from 'react-native-reanimated';
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { pagerStep } from '@/lib/pagerGesture';
 import { isDesktopBrowser } from '@/lib/browserDevice';
@@ -7,10 +9,18 @@ export interface VerticalPagerHandle { scrollToTop: () => void }
 export const VerticalPager = forwardRef<VerticalPagerHandle, {
   children: React.ReactNode[];
   onIndex: (index: number) => void;
+  /** The page the scroll came to rest on. */
+  onSettled?: (index: number) => void;
   /** Feed item to open on, so returning from a thread keeps your place. */
   initialIndex?: number;
-}>(function VerticalPager({ children, onIndex, initialIndex = 0 }, ref) {
+}>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0 }, ref) {
   const pager = useRef<HTMLDivElement>(null);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Position as a fraction of a page: the bar ducking changes this box's
+  // height, which shifts the pixel position by itself; fractions stay put,
+  // so that shift never reads as a swipe (which would lift the bar again).
+  const lastFrac = useRef(-1);
+  const lastHeight = useRef(0);
   useImperativeHandle(ref, () => ({ scrollToTop: () => { if (pager.current) settle(pager.current, 0); } }), []);
   const drag = useRef<{y:number;x:number;top:number;active:boolean;target:HTMLElement;scroll?:HTMLElement;scrollTop?:number;lastY:number;lastTime:number;velocity:number} | null>(null);
   const suppressClick = useRef(false);
@@ -121,6 +131,19 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
       const el = e.currentTarget;
       if (!el.clientHeight) return;
       const index = Math.round(el.scrollTop / el.clientHeight);
+      // The bar follows the scroll: down tucks it, up lifts it — as on the other tabs.
+      const frac = el.scrollTop / el.clientHeight;
+      const resized = lastHeight.current !== 0 && lastHeight.current !== el.clientHeight;
+      lastHeight.current = el.clientHeight;
+      if (lastFrac.current >= 0 && !resized) {
+        const dy = (frac - lastFrac.current) * el.clientHeight;
+        if (Math.abs(dy) >= el.clientHeight * 0.6) barCompact.value = withTiming(dy > 0 ? 1 : 0, { duration: 200 });
+        else if (Math.abs(dy) > 0.3) barCompact.value = Math.max(0, Math.min(1, barCompact.value + dy / 150));
+      }
+      lastFrac.current = frac;
+      // Quiet for a beat after the last movement means the page has landed.
+      if (settleTimer.current) clearTimeout(settleTimer.current);
+      settleTimer.current = setTimeout(() => { settleTimer.current = null; onSettled?.(Math.round(el.scrollTop / Math.max(1, el.clientHeight))); }, 160);
       if (index === reported.current) return;
       reported.current = index;
       onIndex(index);

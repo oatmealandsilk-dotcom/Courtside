@@ -151,7 +151,7 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
       center: [home.lng, home.lat],
       zoom: START_ZOOM,
       interactive: expanded,
-      attributionControl: { compact: true },
+      attributionControl: false,
       // Handled below, so a two-finger scroll pans and a pinch zooms.
       scrollZoom: false,
       dragRotate: false,
@@ -228,6 +228,7 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
         </View>}
         <View style={[styles.map, fullscreen ? styles.fill : styles.mapExpanded]}>
           {canvas}
+          <Text style={styles.credit}>© OpenStreetMap</Text>
           <View style={styles.zoomControls}>
             <Pressable accessibilityRole="button" accessibilityLabel="Zoom in" onPress={() => map.current?.zoomIn()} style={styles.zoomButton}>
               <Ionicons name="add" size={18} color={colors.text} />
@@ -267,6 +268,7 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
       </View>
       <View style={styles.map}>
         {canvas}
+        <Text style={styles.credit}>© OpenStreetMap</Text>
         {/* A still card: the tap goes to the full map, not to the tiles. */}
         <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of players near you" onPress={onExpand} disabled={!onExpand} style={StyleSheet.absoluteFill} />
       </View>
@@ -298,4 +300,5 @@ const styleDefinitions = StyleSheet.create({
   useLocation: { position: 'absolute', left: 12, bottom: 12, zIndex: 10, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.pill, backgroundColor: colors.brand },
   useLocationText: { ...typography.smallStrong, color: colors.brandInk },
   hint: { ...typography.caption, color: colors.textFaint, letterSpacing: 0, padding: spacing.md, paddingTop: spacing.sm },
+  credit: { position: 'absolute', right: 6, bottom: 4, fontSize: 9, color: 'rgba(0,0,0,0.45)', backgroundColor: 'rgba(255,255,255,0.6)', paddingHorizontal: 4, borderRadius: 3 },
 });
