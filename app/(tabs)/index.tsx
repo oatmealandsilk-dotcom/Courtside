@@ -492,7 +492,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               if (item.type === 'question') {
                 const isSaved = saved.questionIds.includes(item.question.id);
                 return (
-                  <View key={item.question.id} style={[styles.article, styles.threadArticle]}>
+                  <View key={item.question.id} style={[styles.article, styles.threadArticle, scope && styles.articleScoped]}>
                     <View style={styles.eyebrowRow}>
                       <Text style={styles.eyebrow}>FROM THE COMMUNITY</Text>
                       {hiddenMarks.has(item.question.id) ? <View style={{ width: 34, height: 34 }} /> : <TapAway label="Hide the CourtSide logo" onHidden={() => hideMark(item.question.id)} style={styles.threadMark}><BrandMark size={34} /></TapAway>}
@@ -558,7 +558,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
 
               if (post.kind !== 'clip') {
                 return (
-                  <View key={post.id} style={styles.article}>
+                  <View key={post.id} style={[styles.article, scope && styles.articleScoped]}>
                     <Text style={styles.eyebrow}>
                       {post.kind === 'match' ? 'SET PLAY' : post.kind.toUpperCase()} · FOR YOU
                     </Text>
@@ -848,6 +848,8 @@ const styleDefinitions = StyleSheet.create({
   actionGlyph: { textShadowColor: 'rgba(0, 0, 0, 0.55)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
   actionLabel: { color: 'white', fontSize: 13, fontWeight: '700', textShadowColor: 'rgba(0, 0, 0, 0.55)', textShadowRadius: 4 },
   article: { flex: 1, backgroundColor: colors.bg, padding: 20, paddingTop: 64, gap: 20 },
+  // In a scoped feed the back chevron has its own line above the words.
+  articleScoped: { paddingTop: 100 },
   strip: { gap: 6, paddingBottom: 4 },
   stripHead: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   stripTitle: { fontSize: 13, fontWeight: '700', color: colors.text },
