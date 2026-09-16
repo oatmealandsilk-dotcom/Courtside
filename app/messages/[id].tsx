@@ -82,6 +82,12 @@ export default function Thread() {
     [conversation, messages],
   );
 
+  // "@" in a message offers people, following first, the same as a comment.
+  // (These hooks sit above the early return below: a thread that loads a
+  // moment after the page would otherwise change the hook count and crash.)
+  const [caret, setCaret] = useState(0);
+  const candidatesFor = useMentionCandidates();
+
   if (!conversation || !other) {
     return (
       <View style={styles.root}>
@@ -89,10 +95,6 @@ export default function Thread() {
       </View>
     );
   }
-
-  // "@" in a message offers people, following first, the same as a comment.
-  const [caret, setCaret] = useState(0);
-  const candidatesFor = useMentionCandidates();
   const mention = activeMention(draft, caret);
   const mentionRows = mention ? candidatesFor(mention.query, 5) : [];
   const pickMention = (handle: string) => {

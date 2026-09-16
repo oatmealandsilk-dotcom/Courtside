@@ -1490,7 +1490,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         messages: [...prev.messages, message],
         conversations: prev.conversations.map((c) =>
           c.id === conversationId
-            ? { ...c, messageIds: [...c.messageIds, message.id], updatedAt: message.createdAt }
+            // A message from the other person counts as unread until the thread is opened.
+            ? { ...c, messageIds: [...c.messageIds, message.id], updatedAt: message.createdAt, unreadCount: senderId === prev.currentUserId ? c.unreadCount : (c.unreadCount ?? 0) + 1 }
             : c,
         ),
       };
