@@ -24,6 +24,7 @@ import { subscribeScrollToTop } from '@/features/navigation/scrollToTop';
 import { setFeedWarm } from '@/features/feed/warmup';
 import { setBarCompact } from '@/features/navigation/barShrink';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
+import { TipPage } from '@/components/TipPage';
 import { isLive } from '@/features/stories/stories';
 import { ClipPlayback } from '@/components/ClipPlayback';
 import { rankFeed, type FeedItem } from '@/features/feed/rankFeed';
@@ -177,8 +178,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         return;
       }
       setOrder(
-        rankFeed(data.posts, data.questions.filter((q) => !q.source), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st))).map((i) =>
-          i.type === 'post' ? `p:${i.post.id}` : i.type === 'question' ? `q:${i.question.id}` : `h:${i.story.id}`,
+        rankFeed(data.posts, data.questions.filter((q) => !q.source), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st))).flatMap((i) =>
+          i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : [],
         ),
       );
       setActive(0);
@@ -241,7 +242,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   }, [stories, posts, currentUserId, scope]);
 
   // Blocked and muted players disappear from the feed entirely.
-  const feed = useMemo<FeedItem[]>(() => {
+  const feedItems = useMemo<FeedItem[]>(() => {
     const hidden = new Set([...blockedIds, ...mutedIds]);
     // A private account is only in your feed once they have let you follow.
     for (const u of users) if (u.isPrivate && u.id !== currentUserId && !followingIds.includes(u.id)) hidden.add(u.id);
@@ -260,6 +261,12 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       return question && !hidden.has(question.authorId) ? [{ type: 'question' as const, question }] : [];
     });
   }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds]);
+  // While the app is young, a page a few swipes in asks early users for a tip.
+  const feed = useMemo<FeedItem[]>(() => {
+    if (scope || !feedItems.length) return feedItems;
+    const at = Math.min(3, feedItems.length);
+    return [...feedItems.slice(0, at), { type: 'tip' as const }, ...feedItems.slice(at)];
+  }, [feedItems, scope]);
 
   /**
    * Which page carries the who-to-follow strip: the first thread or written
@@ -404,7 +411,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   useEffect(() => {
     if (!focused || !showing) return;
     // A hit counts as watched through the story viewer, not here.
-    if (showing.type === 'hit') return;
+    if (showing.type === 'hit' || showing.type === 'tip') return;
     actions.recordView(
       showing.type === 'post' ? 'post' : 'question',
       showing.type === 'post' ? showing.post.id : showing.question.id,
@@ -446,7 +453,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
             {[...feed.map((item, index) => {
               const distance = Math.abs(index - active);
               const ahead = index - active;
-              const pageKey = item.type === 'post' ? item.post.id : item.type === 'question' ? item.question.id : item.story.id;
+              const pageKey = item.type === 'post' ? item.post.id : item.type === 'question' ? item.question.id : item.type === 'hit' ? item.story.id : 'tip';
               // Two pages behind and seven ahead stay built; the rest hold their slot.
               if (ahead < -WINDOW || ahead > AHEAD) {
                 // A placeholder page: holds its slot, costs nothing to render.
@@ -455,6 +462,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               // The page behind and the seven ahead keep their video buffered, ready to play.
               const near = distance <= 1 || (ahead > 0 && ahead <= AHEAD);
               const strip = index === suggestHost ? suggestStrip : null;
+
+              if (item.type === 'tip') return <TipPage key="tip" onSubmit={actions.submitTip} />;
 
               if (item.type === 'hit') {
                 const story = item.story;
@@ -753,7 +762,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                 ? !!(item.story.imageUrl || item.story.videoUrl)
                 : item?.type === 'post' && item.post.kind === 'clip' && !!(item.post.videoUrl || item.post.thumbnailUrl || item.post.imageUrl);
               if (!media && index !== 0) return page;
-              const key = item?.type === 'post' ? item.post.id : item?.type === 'question' ? item.question.id : item?.story.id ?? 'first';
+              const key = item?.type === 'post' ? item.post.id : item?.type === 'question' ? item.question.id : item?.type === 'hit' ? item.story.id : 'first';
               return (
                 <React.Fragment key={key}>
                   {page}

@@ -245,6 +245,8 @@ interface AppActions {
   toggleBlock: (userId: ID) => void;
   toggleAlerts: (userId: ID) => void;
   reportUser: (userId: ID, reason: string) => void;
+  /** A suggestion from an early user, kept for the team to read. */
+  submitTip: (body: string) => Promise<void>;
 
   setReadReceiptsEnabled: (enabled: boolean) => void;
   /** With Supabase: email and password. Without it: the demo handle. */
@@ -1901,6 +1903,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /** A report goes nowhere in the mock build; the feedback is what matters. */
+  const submitTip = useCallback(async (body: string) => {
+    const me = stateRef.current.currentUserId;
+    haptics.commit();
+    if (me && live(me)) await remote.insertTip(me, body);
+  }, []);
+
   const reportUser = useCallback((_userId: ID, _reason: string) => {
     haptics.commit();
   }, []);
@@ -1933,6 +1941,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleBlock,
       toggleAlerts,
       reportUser,
+      submitTip,
       setReadReceiptsEnabled,
       signIn,
       signUp,
@@ -2002,6 +2011,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleBlock,
       toggleAlerts,
       reportUser,
+      submitTip,
       setReadReceiptsEnabled,
       signIn,
       signUp,

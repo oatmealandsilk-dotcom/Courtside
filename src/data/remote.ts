@@ -313,6 +313,11 @@ export const remote = {
     return () => { void db.removeChannel(channel); };
   },
 
+  async insertTip(me: ID, body: string) {
+    const { error } = await need().from('tips').insert({ user_id: me, body });
+    if (error) fail('tip')(error);
+  },
+
   async updateProfile(me: ID, patch: { name?: string; bio?: string; location?: string; avatarUrl?: string; profile?: PlayerProfile; isPrivate?: boolean }) {
     const row: Record<string, unknown> = {};
     if (patch.isPrivate !== undefined) row.is_private = patch.isPrivate;

@@ -1,5 +1,5 @@
 import type { Post, Question, Comment, Story } from '@/data/types';
-export type FeedItem = { type: 'post'; post: Post } | { type: 'question'; question: Question } | { type: 'hit'; story: Story };
+export type FeedItem = { type: 'post'; post: Post } | { type: 'question'; question: Question } | { type: 'hit'; story: Story } | { type: 'tip' };
 
 /** Session-local recommendations: likes, authored posts, comments and question votes. */
 export function rankFeed(posts: Post[], questions: Question[], comments: Comment[], userId: string | null, hits: Story[] = []): FeedItem[] {
