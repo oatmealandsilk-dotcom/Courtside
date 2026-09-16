@@ -50,6 +50,8 @@ interface Props {
  * in the app's own type and colours, rather than painted over the picture.
  */
 const desktopWeb = Platform.OS === 'web' && isDesktopBrowser();
+/** How far in from the page edge a post sits on a computer; the wordmark above it lines up with this. */
+export const LANE_INSET = 28;
 
 export function MediaPostPage({ post, author, liked, saved, active, preload = false, onDoubleTap, onToggleLike, onToggleSave, onComment, onShare, onMore, topInset, burst, discInk, onReady }: Props) {
   const styles = useThemedStyles(styleDefinitions);
@@ -125,7 +127,7 @@ export function MediaPostPage({ post, author, liked, saved, active, preload = fa
   // On a computer the post reads left to right: the picture sits at the left
   // at its own size, and the name, buttons and words line up under it, the
   // width of the picture (never cramped narrower than a phone).
-  const lane = desktopWeb && frameSize ? { width: Math.max(frameSize.width, 520), alignSelf: 'flex-start' as const, marginLeft: 56 } : null;
+  const lane = desktopWeb && frameSize ? { width: Math.max(frameSize.width, 520), alignSelf: 'flex-start' as const, marginLeft: LANE_INSET } : null;
 
   return (
     // Without comments there is nothing to fill the bottom, so the picture and
@@ -149,7 +151,7 @@ export function MediaPostPage({ post, author, liked, saved, active, preload = fa
       {/* A finger on the picture belongs to the picture: no sideways page swipe from here. */}
       <View
         ref={frameRef}
-        style={[styles.frame, landscape ? styles.frameWide : styles.frameTall, lane && { alignSelf: 'flex-start' }, frameSize ?? (landscape ? { alignSelf: 'stretch', aspectRatio: shape ?? 16 / 9 } : { width: '100%', maxHeight: '62%', aspectRatio: !post.videoUrl && shape ? shape : 4 / 5 })]}
+        style={[styles.frame, landscape ? styles.frameWide : styles.frameTall, lane && { alignSelf: 'flex-start', marginLeft: LANE_INSET }, frameSize ?? (landscape ? { alignSelf: 'stretch', aspectRatio: shape ?? 16 / 9 } : { width: '100%', maxHeight: '62%', aspectRatio: !post.videoUrl && shape ? shape : 4 / 5 })]}
         onTouchStart={() => lockPageSwipe(true)}
         onTouchEnd={() => lockPageSwipe(false)}
         onTouchCancel={() => lockPageSwipe(false)}

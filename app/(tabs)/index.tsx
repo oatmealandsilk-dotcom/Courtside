@@ -17,7 +17,7 @@ import { LevelPill } from '@/components/LevelPill';
 import { QuestionCard } from '@/components/QuestionCard';
 import { PostCard } from '@/components/PostCard';
 import { BrandMark } from '@/components/BrandMark';
-import { MediaPostPage } from '@/components/MediaPostPage';
+import { LANE_INSET, MediaPostPage } from '@/components/MediaPostPage';
 import { Tappable } from '@/components/Tappable';
 import { VerticalPager, type VerticalPagerHandle } from '@/components/VerticalPager';
 import { subscribeScrollToTop } from '@/features/navigation/scrollToTop';
@@ -734,7 +734,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                   {page}
                   {/* Over a picture the wordmark sits in a small pill of the theme's own
                       background, so it reads on anything without touching the picture. */}
-                  {scope || hiddenMarks.has(key) || (immersive && index === active) ? null : <View pointerEvents="box-none" style={[styles.wordmarkOverlay, { top: insets.top + 24 }]}>
+                  {scope || hiddenMarks.has(key) || (immersive && index === active) ? null : <View pointerEvents="box-none" style={[styles.wordmarkOverlay, { top: insets.top + 24 }, !phone && item?.type === 'post' && item.post.kind !== 'clip' && styles.wordmarkLeft]}>
                     {/* A tap on the wordmark tucks it away for this page only. */}
                     <TapAway label="Hide the CourtSide wordmark" onHidden={() => hideMark(key)} style={media && picture ? styles.wordmarkPill : null}>
                       <Text style={[styles.wordmark, theme === 'us-open' && { color: '#FFFFFF' }]}>CourtSide</Text>
@@ -778,6 +778,9 @@ const styleDefinitions = StyleSheet.create({
     position: 'absolute', width: '100%',
     paddingHorizontal: 20, zIndex: 5, alignItems: 'center',
   },
+  // On a computer a post sits at the left, so its wordmark lines up over it
+  // rather than floating in the middle of the window.
+  wordmarkLeft: { alignItems: 'flex-start', paddingLeft: 12 + LANE_INSET },
   wordmark: {
     color: colors.brand, fontSize: 23, fontWeight: '800', letterSpacing: -0.3,
   },
@@ -787,7 +790,7 @@ const styleDefinitions = StyleSheet.create({
   viewer: { flex: 1, width: '100%', minHeight: 0 },
   clip: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
   clipFrame: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
-  clipPortrait: { height: '100%', aspectRatio: 9 / 16, maxWidth: '100%', overflow: 'hidden', backgroundColor: '#000' },
+  clipPortrait: { height: '100%', aspectRatio: 9 / 16, maxWidth: '100%', overflow: 'hidden', backgroundColor: colors.bg },
   clipLandscape: { width: '100%', aspectRatio: 16 / 9, maxHeight: '100%', overflow: 'hidden', backgroundColor: '#000' },
   preview: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30, gap: 14 },
   court: {
