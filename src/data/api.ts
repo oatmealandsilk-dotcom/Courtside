@@ -78,8 +78,10 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
   return delay(
     clone({
       users,
-      posts,
-      stories,
+      // The demo reels are gone: real clips and hits come from people now.
+      // The demo written posts and threads stay, so the app is never empty.
+      posts: posts.filter((p) => p.kind !== 'clip'),
+      stories: [],
       comments,
       questions,
       answers,
