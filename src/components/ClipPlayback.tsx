@@ -6,6 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { ClipVideo } from './ClipVideo';
 import { CourtSpinner } from './CourtSpinner';
+import { cropLayer } from '@/lib/crop';
+import type { MediaCrop } from '@/data/types';
 import { colors } from '@/theme';
 import { onSpaceBar } from '@/features/feed/keyboard';
 
@@ -14,7 +16,7 @@ import { onSpaceBar } from '@/features/feed/keyboard';
  * one tap pauses, two likes, a small disc top-right toggles the sound, and a
  * hairline along the bottom shows how far through it is.
  */
-export function ClipPlayback({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart, trimEnd, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady }: {
+export function ClipPlayback({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart, trimEnd, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop }: {
   uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void; fit?: 'cover' | 'contain';
   trimStart?: number; trimEnd?: number;
   /** Posted without sound: plays muted and offers no way to unmute. */
@@ -29,6 +31,8 @@ export function ClipPlayback({ uri, poster, active, preload = false, onDoubleTap
   letterbox?: boolean;
   /** True once the first frame is in and it can play; the feed uses this to know a page is warm. */
   onReady?: (ready: boolean) => void;
+  /** A zoom and shift inside the frame, chosen in the editor. */
+  crop?: MediaCrop;
 }) {
   const insets = useSafeAreaInsets();
   const [paused, setPaused] = useState(false);
@@ -91,11 +95,13 @@ export function ClipPlayback({ uri, poster, active, preload = false, onDoubleTap
   return (
     <View style={StyleSheet.absoluteFill}>
       {letterbox ? (
-        <View style={styles.wideFrame}><View style={styles.wideBox}>
-          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent} paused={paused} fit={fit} trimStart={trimStart} trimEnd={trimEnd} onProgress={onProgress} onReady={setReady} />
+        <View style={styles.wideFrame}><View style={cropLayer(crop)}>
+          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent} paused={paused} fit="contain" trimStart={trimStart} trimEnd={trimEnd} onProgress={onProgress} onReady={setReady} />
         </View></View>
       ) : (
-        <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent} paused={paused} fit={fit} trimStart={trimStart} trimEnd={trimEnd} onProgress={onProgress} onReady={setReady} />
+        <View style={cropLayer(crop)}>
+          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent} paused={paused} fit={fit} trimStart={trimStart} trimEnd={trimEnd} onProgress={onProgress} onReady={setReady} />
+        </View>
       )}
       {!ready && active ? <View pointerEvents="none" style={styles.centre}><CourtSpinner ink={discInk ?? 'white'} /></View> : null}
       <Pressable accessibilityRole="button" accessibilityLabel={paused ? 'Play clip' : 'Pause clip'} onPress={tap} style={StyleSheet.absoluteFill}>
@@ -121,8 +127,7 @@ export function ClipPlayback({ uri, poster, active, preload = false, onDoubleTap
 
 const styles = StyleSheet.create({
   centre: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
-  wideFrame: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', backgroundColor: '#000' },
-  wideBox: { width: '100%', aspectRatio: 16 / 9, overflow: 'hidden' },
+  wideFrame: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000' },
   playBadge: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#0008', alignItems: 'center', justifyContent: 'center', paddingLeft: 4 },
   // Top right, level with the wordmark: out of the caption's way and never
   // behind the bottom bar. A quiet disc, not a button that shouts.

@@ -139,6 +139,9 @@ export interface SessionDetail {
   intensity: 1 | 2 | 3 | 4 | 5;
 }
 
+/** scale ≥ 1; x and y are the picture's centre offset as fractions of the frame's width and height. */
+export interface MediaCrop { scale: number; x: number; y: number }
+
 export interface Post {
   id: ID;
   authorId: ID;
@@ -156,6 +159,8 @@ export interface Post {
   /** A trim, in seconds, honoured at playback rather than cut into the file. */
   trimStart?: number;
   trimEnd?: number;
+  /** A zoom and shift applied inside the frame at playback — for cutting black edges out of a recording. */
+  crop?: MediaCrop;
   /** Posted without sound. */
   muted?: boolean;
   taggedUserIds?: ID[];
@@ -524,6 +529,8 @@ export type NotificationKind =
   | 'helpful'
   | 'share'
   | 'follow'
+  /** Someone tagged you in a post. */
+  | 'tag'
   /** Someone asked to follow your private account. Actor is them; accept or decline on the row. */
   | 'follow-request'
   /** A private account said yes to your request. */

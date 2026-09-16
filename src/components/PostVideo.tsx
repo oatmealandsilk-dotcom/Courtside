@@ -7,6 +7,8 @@ import { ClipPlayback } from './ClipPlayback';
 import { ClipVideo, type ClipVideoHandle } from './ClipVideo';
 import { CourtSpinner } from './CourtSpinner';
 import { ZoomableMedia } from './ZoomableMedia';
+import { cropLayer } from '@/lib/crop';
+import type { MediaCrop } from '@/data/types';
 import { onSpaceBar } from '@/features/feed/keyboard';
 
 const HIDE_AFTER_MS = 2600;
@@ -22,10 +24,12 @@ function clock(seconds: number) {
  * middle, a time line with the time along the bottom, sound, and a corner
  * button for full screen. They fade away on their own. Two taps like it.
  */
-export function PostVideo({ uri, poster, active, preload = false, trimStart, trimEnd, silent = false, onDoubleTap, discInk, onReady }: {
+export function PostVideo({ uri, poster, active, preload = false, trimStart, trimEnd, silent = false, onDoubleTap, discInk, onReady, onSize, crop }: {
   uri: string; poster?: string; active: boolean; preload?: boolean; trimStart?: number; trimEnd?: number; silent?: boolean;
   onDoubleTap?: () => void; discInk?: string;
   onReady?: (ready: boolean) => void;
+  onSize?: (width: number, height: number) => void;
+  crop?: MediaCrop;
 }) {
   const insets = useSafeAreaInsets();
   const player = useRef<ClipVideoHandle>(null);
@@ -114,8 +118,10 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
 
   return (
     <View style={StyleSheet.absoluteFill}>
-      <ClipVideo ref={player} uri={uri} poster={poster} active={active && !full} muted={muted} paused={paused} fit="cover" trimStart={trimStart} trimEnd={trimEnd}
-        onProgress={(fraction, at, length) => setTime({ fraction, at, length })} onReady={(ok) => { setReady(ok); onReady?.(ok); }} />
+      <View style={cropLayer(crop)}>
+        <ClipVideo ref={player} uri={uri} poster={poster} active={active && !full} muted={muted} paused={paused} fit="cover" trimStart={trimStart} trimEnd={trimEnd}
+          onProgress={(fraction, at, length) => setTime({ fraction, at, length })} onReady={(ok) => { setReady(ok); onReady?.(ok); }} onSize={onSize} />
+      </View>
       <Pressable accessibilityRole="button" accessibilityLabel="Show video controls" onPress={tap} style={StyleSheet.absoluteFill} />
       {!ready && active ? <View pointerEvents="none" style={styles.centre}><CourtSpinner ink={discInk ?? 'white'} /></View> : null}
       {controls}
@@ -124,7 +130,7 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
       <Modal visible={full} animationType="none" statusBarTranslucent onRequestClose={() => setFull(false)}>
         <View style={styles.fullRoot}>
           <ZoomableMedia>
-            <ClipPlayback uri={uri} poster={poster} active={full} trimStart={trimStart} trimEnd={trimEnd} silent={silent} fit="contain" onDoubleTap={onDoubleTap} discInk={discInk} />
+            <ClipPlayback uri={uri} poster={poster} active={full} trimStart={trimStart} trimEnd={trimEnd} crop={crop} silent={silent} fit="contain" onDoubleTap={onDoubleTap} discInk={discInk} />
           </ZoomableMedia>
           <Pressable accessibilityRole="button" accessibilityLabel="Close full screen" onPress={() => setFull(false)} style={[styles.close, { top: insets.top + 12 }]}>
             <Ionicons name="close" size={22} color="white" />

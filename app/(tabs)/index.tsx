@@ -594,6 +594,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                           onDoubleTap={() => likeByTap(post.id, liked)}
                           trimStart={post.trimStart}
                           trimEnd={post.trimEnd}
+                          crop={post.crop}
                           silent={post.muted}
                           bare={immersive}
                           discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand}

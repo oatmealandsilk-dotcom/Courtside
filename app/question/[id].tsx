@@ -101,8 +101,9 @@ export default function QuestionDetail() {
           {/* The same Reply button a reply has; it opens the line to type on right here. */}
           <Pressable accessibilityRole="button" accessibilityLabel="Reply to this thread" onPress={() => { setReplying(true); setTimeout(() => replyInput.current?.focus(), 50); }} style={styles.replyButton}>
             <Ionicons name="chatbubble-outline" size={18} color={colors.textMuted}/>
-            <Text style={styles.time}>Reply{thread.length ? ` · ${thread.length}` : ''}</Text>
+            <Text style={styles.time}>Reply</Text>
           </Pressable>
+          <Text style={[styles.time, { marginLeft: 'auto' }]}>{thread.length} {thread.length === 1 ? 'reply' : 'replies'}</Text>
         </View>
         {replying ? (
           <View style={styles.inlineComposer}>
@@ -155,7 +156,7 @@ const styleDefinitions = StyleSheet.create({
   title: { ...typography.title, color: colors.text, lineHeight: 28 },
   body: { ...typography.body, color: colors.textMuted, lineHeight: 22 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  voteRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  voteRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   sourceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.bgElevated },
   sourceText: { ...typography.small, color: colors.textMuted, flex: 1, lineHeight: 19 },
   voteButton: {

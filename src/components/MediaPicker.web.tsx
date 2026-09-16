@@ -8,6 +8,7 @@ import type { MediaPickerProps, PickedMedia } from './MediaPicker';
 import { ClipPlayback } from './ClipPlayback';
 import { ClipVideo } from './ClipVideo';
 import { ZoomableMedia } from './ZoomableMedia';
+import { cropCss } from '@/lib/crop';
 
 export type { PickedMedia, MediaPickerProps } from './MediaPicker';
 
@@ -154,7 +155,7 @@ export function pickFromDevice(selection: 'video' | 'photo' | 'all'): Promise<Pi
   });
 }
 
-export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false, orientation = 'portrait', trim }: MediaPickerProps) {
+export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false, orientation = 'portrait', trim, noCover = false }: MediaPickerProps) {
   const styles = useThemedStyles(styleDefinitions);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
@@ -283,7 +284,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
           >
             {value.kind === 'video' && value.uri ? (
               // Plays the way it will in the feed: looped, muted, edge to edge.
-              <ClipVideo uri={value.uri} poster={value.thumbnailUrl} active muted fit={orientation === 'landscape' ? 'contain' : 'cover'} trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} />
+              <div style={cropCss(trim?.crop)}><ClipVideo uri={value.uri} poster={value.thumbnailUrl} active muted fit={orientation === 'landscape' ? 'contain' : 'cover'} trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} /></div>
             ) : value.uri ? (
               <img src={value.uri} alt={describe(value)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
             ) : null}
@@ -376,7 +377,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
               // springs back; no browser controls.
               <div onClick={(event) => event.stopPropagation()} style={{ position: 'relative', width: orientation === 'landscape' ? '100%' : 'min(100%, 56vh)', aspectRatio: orientation === 'landscape' ? '16 / 9' : '9 / 16', maxHeight: '100%', borderRadius: 12, overflow: 'hidden', background: '#000', cursor: 'default' }}>
                 <ZoomableMedia>
-                  <ClipPlayback uri={value.uri} poster={value.thumbnailUrl} active fit={orientation === 'landscape' ? 'contain' : 'cover'} trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} silent={trim?.muted} />
+                  <ClipPlayback uri={value.uri} poster={value.thumbnailUrl} active fit={orientation === 'landscape' ? 'contain' : 'cover'} trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} crop={trim?.crop} silent={trim?.muted} />
                 </ZoomableMedia>
               </div>
             ) : value.uri ? (
@@ -390,7 +391,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
           </div>
         ) : null}
 
-        {value.kind === 'video' ? (
+        {value.kind === 'video' && !noCover ? (
           <View style={[styles.coverBlock, bare && { borderTopWidth: 0, paddingTop: 0 }]}>
             {hiddenCoverInput}
             <Text style={styles.coverTitle}>Cover</Text>

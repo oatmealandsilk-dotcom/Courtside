@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View, type TextInput } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -16,7 +16,22 @@ import { colors, radius, spacing, typography } from '@/theme';
  */
 export default function CommentsSheet() {
   const styles = useThemedStyles(styleDefinitions);
-  const { kind: rawKind, id = '' } = useLocalSearchParams<{ kind?: string; id?: string }>();
+  const { kind: rawKind, id = '', focus, at } = useLocalSearchParams<{ kind?: string; id?: string; focus?: string; at?: string }>();
+  // Opened from "Add a comment": the box is ready to type in as the sheet lands.
+  const input = useRef<TextInput>(null);
+  // Opened from a comment on the page: the list scrolls to that comment as the sheet lands.
+  const list = useRef<ScrollView>(null);
+  const rowY = useRef<Record<string, number>>({});
+  useEffect(() => {
+    if (!at) return;
+    const t = setTimeout(() => { const y = rowY.current[at]; if (y !== undefined) list.current?.scrollTo({ y: Math.max(0, y - 12), animated: true }); }, 420);
+    return () => clearTimeout(t);
+  }, [at]);
+  useEffect(() => {
+    if (!focus) return;
+    const t = setTimeout(() => input.current?.focus(), 380);
+    return () => clearTimeout(t);
+  }, [focus]);
   const kind = rawKind === 'hit' ? 'hit' : 'post';
   const { comments, posts, stories, actions } = useApp();
   const [draft, setDraft] = useState('');
@@ -46,20 +61,20 @@ export default function CommentsSheet() {
         </View>
       }
     >
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
-          {thread.map((c) => <CommentRow key={c.id} comment={c} />)}
+      <View style={{ flex: 1 }}>
+        <ScrollView ref={list} style={{ flex: 1 }} contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
+          {thread.map((c) => <CommentRow key={c.id} comment={c} big onLayout={(y) => { rowY.current[c.id] = y; }} />)}
           {!thread.length ? <Text style={styles.empty}>{exists ? 'No comments yet. Start the conversation.' : 'This is no longer available.'}</Text> : null}
         </ScrollView>
         <View style={styles.composer}>
           <View style={{ flex: 1 }}>
-            <Field value={draft} onChangeText={setDraft} placeholder="Add a comment…" multiline minHeight={44} onSubmitEditing={send} mentions />
+            <Field inputRef={input} value={draft} onChangeText={setDraft} placeholder="Add a comment…" multiline minHeight={44} onSubmitEditing={send} mentions />
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel="Post comment" disabled={!draft.trim() || !exists} onPress={send} style={[styles.send, (!draft.trim() || !exists) && { opacity: 0.4 }]}>
             <Ionicons name="arrow-up" size={19} color={colors.brandInk} />
           </Pressable>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </DragSheet>
   );
 }

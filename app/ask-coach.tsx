@@ -33,6 +33,10 @@ export default function AskCoach() {
   const [media, setMedia] = useState<PickedMedia | null>(null);
 
   const canSubmit = title.trim().length > 10 && body.trim().length > 25;
+  // The length notes only appear once you have left a box with too little in it.
+  const [touched, setTouched] = useState({ title: false, body: false });
+  const titleShort = touched.title && title.trim().length > 0 && title.trim().length <= 10;
+  const bodyShort = touched.body && body.trim().length > 0 && body.trim().length <= 25;
 
   const submit = () => {
     if (!canSubmit) return;
@@ -80,6 +84,8 @@ export default function AskCoach() {
           label="What are you struggling with?"
           value={title}
           onChangeText={setTitle}
+          onBlur={() => setTouched((t) => ({ ...t, title: true }))}
+          hint={titleShort ? 'A few more words — over 10 characters — so a coach knows what this is.' : undefined}
           placeholder="e.g. My second serve falls apart at break point"
         />
 
@@ -88,28 +94,19 @@ export default function AskCoach() {
           value={body}
           onChangeText={setBody}
           placeholder="Your level, what you have already tried, and what actually happens on court. The more specific you are, the more useful the answer."
+          onBlur={() => setTouched((t) => ({ ...t, body: true }))}
+          hint={bodyShort ? 'Give a little more — over 25 characters — so the answer can be specific.' : undefined}
           multiline
           minHeight={150}
         />
 
         <View style={styles.group}>
           <Text style={styles.label}>Add footage (optional)</Text>
-          <MediaPicker value={media} onChange={setMedia} />
-          <Text style={styles.hint}>
-            A ten-second clip gets you a far better answer than a paragraph of description.
-          </Text>
+          <MediaPicker value={media} onChange={setMedia} noCover />
         </View>
 
         <Button label="Post to coaches" onPress={submit} disabled={!canSubmit} full />
-        {!canSubmit ? (
-          <Text style={styles.hint}>
-            Add a title over 10 characters and detail over 25 so a coach can actually answer.
-          </Text>
-        ) : null}
-        <Text style={styles.hint}>
-          Posting here is free and public. For private, in-depth work — video breakdowns and
-          training plans — book a coach directly.
-        </Text>
+        <Text style={styles.hint}>Free and public. For private work, book a coach directly.</Text>
       </View>
     </Screen>
   );

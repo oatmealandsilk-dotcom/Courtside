@@ -16,6 +16,26 @@ const RATIO: Record<Exclude<Aspect, 'original'>, number> = { '9:16': 9 / 16, '4:
  * The baseline edits a photo gets before posting: turn it, or cut it to a
  * shape, always from the original so edits never pile up on each other.
  */
+/**
+ * Turns the photo, then cuts the given window out of it (in the turned
+ * picture's own pixels) — one pass, done once when the editor is finished.
+ */
+export async function editPhotoRect(originalUri: string, turns: number, rect: { originX: number; originY: number; width: number; height: number } | null): Promise<EditedPhoto> {
+  const context = ImageManipulator.manipulate(originalUri);
+  const quarter = ((turns % 4) + 4) % 4;
+  if (quarter) context.rotate(quarter * 90);
+  if (rect) {
+    const originX = Math.max(0, Math.round(rect.originX));
+    const originY = Math.max(0, Math.round(rect.originY));
+    context.crop({ originX, originY, width: Math.max(1, Math.round(rect.width)), height: Math.max(1, Math.round(rect.height)) });
+  }
+  const image = await context.renderAsync();
+  const saved = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.9 });
+  return { uri: saved.uri, width: saved.width, height: saved.height };
+}
+
+export const ASPECT_RATIO: Record<Exclude<Aspect, 'original'>, number> = { '9:16': 9 / 16, '4:5': 4 / 5, '1:1': 1 };
+
 export async function editPhoto(originalUri: string, turns: number, aspect: Aspect): Promise<EditedPhoto> {
   const context = ImageManipulator.manipulate(originalUri);
   const quarter = ((turns % 4) + 4) % 4;

@@ -1,95 +1,26 @@
-import { useThemedStyles } from '@/theme/ThemeProvider';
-import { PlayerName } from '@/components/PlayerName';
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import React from 'react';
+import { Redirect, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 
-import { PostCard } from '@/components/PostCard';
-import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
-import { relativeTime } from '@/lib/format';
-import { RichText } from '@/components/RichText';
-import { CommentRow } from '@/components/CommentRow';
+import { EmptyState, Screen } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
-import { confirmDelete } from '@/lib/confirm';
-import { colors, spacing, typography } from '@/theme';
 
+/**
+ * A post's own address, kept for links, notifications and shares — but there
+ * is no separate page for a post: it opens the way it is seen everywhere
+ * else, as a page of its author's feed, with comments and buttons in place.
+ */
 export default function PostDetail() {
-  const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { posts, comments, users, currentUserId, actions } = useApp();
-  const view = actions.recordView;
-  useEffect(() => { view('post', String(id)); }, [view, id]);
-  const [draft, setDraft] = useState('');
-
+  const { posts, ready } = useApp();
   const post = posts.find((p) => p.id === id);
-  const author = users.find((u) => u.id === post?.authorId);
 
-  if (!post || !author) {
+  if (!post) {
     return (
       <Screen title="Post" compactTitle onBack={() => goBack()}>
-        <EmptyState icon="alert-circle-outline" title="This post is gone" />
+        <EmptyState icon="alert-circle-outline" title={ready ? 'This post is gone' : 'Loading…'} />
       </Screen>
     );
   }
-
-  const thread = post.commentIds
-    .map((cid) => comments.find((c) => c.id === cid))
-    .filter((c): c is NonNullable<typeof c> => Boolean(c))
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-  const submit = () => {
-    const text = draft.trim();
-    if (!text) return;
-    actions.addComment(post.id, text);
-    setDraft('');
-  };
-
-  return (
-    <Screen title="Post" compactTitle onBack={() => goBack()}>
-      <PostCard
-        post={post}
-        author={author}
-        liked={Boolean(currentUserId && post.likedBy.includes(currentUserId))}
-        onToggleLike={() => actions.toggleLike(post.id)}
-        onPress={() => undefined}
-        onPressAuthor={() => router.push(`/user/${author.id}`)}
-      />
-
-      {post.authorId === currentUserId ? (
-        <View style={styles.ownRow}>
-          <Text style={styles.ownNote}>
-            {post.archived ? 'Archived. Only you can see this.' : 'Yours. Archive it to take it off your profile and the feed.'}
-          </Text>
-          <Button label={post.archived ? 'Unarchive' : 'Archive'} variant="secondary" onPress={() => actions.toggleArchivePost(post.id)} />
-          <Button label="Delete" variant="danger" onPress={() => confirmDelete(() => { actions.deletePost(post.id); router.back(); })} />
-        </View>
-      ) : null}
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>
-          {thread.length} {thread.length === 1 ? 'comment' : 'comments'}
-        </Text>
-
-        {thread.map((comment) => <CommentRow key={comment.id} comment={comment} />)}
-
-        <View style={styles.composer}>
-          <Field value={draft} onChangeText={setDraft} placeholder="Add a comment" multiline minHeight={70} onSubmitEditing={submit} mentions />
-          <Button label="Post comment" onPress={submit} disabled={draft.trim().length === 0} />
-        </View>
-      </View>
-    </Screen>
-  );
+  return <Redirect href={{ pathname: '/posts/[userId]', params: { userId: post.authorId, post: post.id, set: 'own' } }} />;
 }
-
-const styleDefinitions = StyleSheet.create({
-  section: { gap: spacing.lg, paddingTop: spacing.xl },
-  ownRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingTop: spacing.md },
-  ownNote: { ...typography.small, color: colors.textFaint, flex: 1, lineHeight: 18 },
-  sectionTitle: { ...typography.heading, color: colors.text },
-  comment: { flexDirection: 'row', gap: spacing.md },
-  commentBody: { flex: 1, gap: 3 },
-  commentMeta: { ...typography.caption, color: colors.textFaint },
-  commentText: { ...typography.small, color: colors.text, lineHeight: 20 },
-  composer: { gap: spacing.md, paddingTop: spacing.md },
-});

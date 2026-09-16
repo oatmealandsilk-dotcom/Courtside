@@ -4,11 +4,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@/theme';
 import { onSpaceBar } from '@/features/feed/keyboard';
 import { CourtSpinner } from './CourtSpinner';
+import { cropCss } from '@/lib/crop';
+import type { MediaCrop } from '@/data/types';
 
 /** Swipe away and back within this long and the clip picks up where it was; longer and it starts over. */
 const RESUME_WINDOW_MS = 3000;
 
-export function ClipPlayback({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady }: {
+export function ClipPlayback({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop }: {
   uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void; fit?: 'cover' | 'contain'; trimStart?: number; trimEnd?: number; silent?: boolean;
   /** Nothing over the picture at all: no sound disc, no length line. */
   bare?: boolean;
@@ -20,6 +22,8 @@ export function ClipPlayback({ uri, poster, active, preload = false, onDoubleTap
   letterbox?: boolean;
   /** True once the first frame is in and it can play; the feed uses this to know a page is warm. */
   onReady?: (ready: boolean) => void;
+  /** A zoom and shift inside the frame, chosen in the editor. */
+  crop?: MediaCrop;
 }) {
   const insets = useSafeAreaInsets();
   const video = useRef<HTMLVideoElement>(null);
@@ -82,7 +86,9 @@ export function ClipPlayback({ uri, poster, active, preload = false, onDoubleTap
   }, [trimStart, trimEnd]);
 
   return <div style={{ position: 'absolute', inset: 0, background: letterbox ? '#000' : undefined, display: 'flex', alignItems: 'center' }}>
-    <video ref={video} src={uri} poster={poster} loop muted={muted || silent} playsInline preload={active || preload ? 'auto' : 'none'} onError={() => setReady(false)} onLoadedData={() => setReady(true)} onCanPlay={() => setReady(true)} onWaiting={() => setReady(false)} onPlaying={() => setReady(true)} style={letterbox ? { width: '100%', aspectRatio: '16 / 9', objectFit: 'cover', pointerEvents: 'none' } : { width: '100%', height: '100%', objectFit: fit, pointerEvents: 'none' }} />
+    <div style={{ ...cropCss(crop), display: 'flex', alignItems: 'center' }}>
+      <video ref={video} src={uri} poster={poster} loop muted={muted || silent} playsInline preload={active || preload ? 'auto' : 'none'} onError={() => setReady(false)} onLoadedData={() => setReady(true)} onCanPlay={() => setReady(true)} onWaiting={() => setReady(false)} onPlaying={() => setReady(true)} style={{ width: '100%', height: '100%', objectFit: letterbox ? 'contain' : fit, pointerEvents: 'none' }} />
+    </div>
     <button aria-label={paused ? 'Play clip' : 'Pause clip'} onClick={() => {
       // One tap plays or pauses, two likes. The pause is held back until the
       // double-tap window closes, or every like would also stop the video.

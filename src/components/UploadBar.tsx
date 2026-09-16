@@ -1,6 +1,7 @@
 import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Image, StyleSheet, Text, View } from 'react-native';
+import Reanimated, { Easing as REasing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -20,14 +21,15 @@ export function UploadBar() {
   // The strip stays mounted for the exit animation after the job is gone.
   const [shown, setShown] = useState<UploadJob | null>(null);
   const slide = useRef(new Animated.Value(-110)).current;
-  const fill = useRef(new Animated.Value(0)).current;
+  const fill = useSharedValue(0);
+  const fillStyle = useAnimatedStyle(() => ({ width: `${fill.value * 100}%` }));
   const pop = useRef(new Animated.Value(0)).current;
 
   const [displayed, setDisplayed] = useState(0);
   const target = useRef(0);
   useEffect(() => {
     if (job) {
-      if (!shown) { fill.setValue(0); pop.setValue(0); setDisplayed(0); Animated.spring(slide, { toValue: 0, useNativeDriver: true, speed: 18, bounciness: 8 }).start(); }
+      if (!shown) { fill.value = 0; pop.setValue(0); setDisplayed(0); Animated.spring(slide, { toValue: 0, useNativeDriver: true, speed: 18, bounciness: 8 }).start(); }
       setShown(job);
       target.current = job.state === 'uploading' ? job.fraction : 1;
       if (job.state !== 'uploading') Animated.spring(pop, { toValue: 1, useNativeDriver: true, speed: 22, bounciness: 14 }).start();
@@ -40,15 +42,19 @@ export function UploadBar() {
   useEffect(() => {
     if (!shown) return;
     const uploading = shown.state === 'uploading';
+    // Thirty times a second: a slow approach toward the latest report plus a
+    // creep that shrinks the higher it gets — quick out of the gate, patient
+    // near the end, never standing still, never past 98% until it truly lands.
     const tick = setInterval(() => {
       setDisplayed((d) => {
         const goal = target.current;
-        const cap = uploading ? Math.min(0.97, goal + 0.04) : 1;
-        const next = Math.min(cap, d + (goal - d) * 0.16 + (uploading ? 0.0012 : 0.02));
-        fill.setValue(next);
+        const cap = uploading ? Math.min(0.985, goal + 0.08) : 1;
+        const creep = uploading ? 0.0035 * Math.pow(1 - d, 2.2) + 0.00015 : 0.03;
+        const next = Math.min(cap, d + Math.max(0, goal - d) * 0.06 + creep);
+        fill.value = withTiming(next, { duration: 60, easing: REasing.linear });
         return next < d ? d : next;
       });
-    }, 50);
+    }, 33);
     return () => clearInterval(tick);
   }, [shown, fill]);
 
@@ -69,7 +75,7 @@ export function UploadBar() {
             : <Animated.View style={{ transform: [{ scale: pop }] }}><Ionicons name={shown.state === 'done' ? 'checkmark-circle' : 'alert-circle'} size={24} color={shown.state === 'done' ? colors.brand : colors.danger} /></Animated.View>}
         </View>
         <View style={styles.track}>
-          <Animated.View style={[styles.fill, shown.state === 'failed' && { backgroundColor: colors.danger }, { width: fill.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />
+          <Reanimated.View style={[styles.fill, shown.state === 'failed' && { backgroundColor: colors.danger }, fillStyle]} />
         </View>
       </View>
     </Animated.View>

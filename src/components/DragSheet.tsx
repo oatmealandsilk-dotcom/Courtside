@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Keyboard, Platform, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Pressable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -78,6 +78,26 @@ export function DragSheet({
     translateY.value = withTiming(origin, { duration: 220, easing: EASE });
     backdropOpacity.value = withTiming(1 - origin / fullHeight, { duration: 220, easing: EASE });
   };
+  // The keyboard: the sheet opens all the way and lifts its bottom edge to
+  // sit on top of the keyboard, so a box at the bottom of it stays in view.
+  const sheetRef = useRef<View>(null);
+  const [keyboardPad, setKeyboardPad] = useState(0);
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvent, (e) => {
+      openFull();
+      const keyboardTop = windowHeight - e.endCoordinates.height;
+      sheetRef.current?.measureInWindow((_x, y, _w, h) => {
+        // The sheet is measured while it may still be rising; its bottom edge does not move, which is all this needs.
+        setKeyboardPad(Math.max(0, y + h - keyboardTop));
+      });
+    });
+    const hide = Keyboard.addListener(hideEvent, () => setKeyboardPad(0));
+    return () => { show.remove(); hide.remove(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windowHeight]);
+
   const closeCount = useRef(closeSignal);
   useEffect(() => {
     if (closeSignal === closeCount.current) return;
@@ -118,14 +138,14 @@ export function DragSheet({
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }, backdropStyle]} />
       <Pressable accessibilityRole="button" accessibilityLabel="Close" style={StyleSheet.absoluteFill} onPress={dismiss} />
-      <Animated.View style={[styles.sheet, sheetStyle]}>
+      <Animated.View ref={sheetRef} style={[styles.sheet, sheetStyle]}>
         <GestureDetector gesture={pan}>
           <View style={styles.handle}>
             <View style={styles.grabber} />
             {header}
           </View>
         </GestureDetector>
-        <View style={styles.body}>{children}</View>
+        <View style={[styles.body, { paddingBottom: keyboardPad }]}>{children}</View>
       </Animated.View>
     </View>
   );

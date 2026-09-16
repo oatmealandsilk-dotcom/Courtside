@@ -57,6 +57,7 @@ interface PostRow {
   archived: boolean; views: number; shares: number; created_at: string;
   orientation?: string | null;
   trim_start?: number | string | null; trim_end?: number | string | null; muted?: boolean | null; pinned?: boolean | null;
+  crop?: { scale: number; x: number; y: number } | null;
   post_likes?: { user_id: string }[]; post_saves?: { user_id: string }[]; comments?: { id: string }[];
 }
 interface CommentRow {
@@ -103,6 +104,7 @@ const toPost = (row: PostRow): Post => ({
   trimStart: row.trim_start != null ? Number(row.trim_start) : undefined,
   trimEnd: row.trim_end != null ? Number(row.trim_end) : undefined,
   muted: row.muted || undefined,
+  crop: row.crop && row.crop.scale > 1 ? row.crop : undefined,
   taggedUserIds: row.tagged_user_ids?.length ? row.tagged_user_ids : undefined,
   match: row.match ?? undefined,
   session: row.session ?? undefined,
@@ -260,12 +262,13 @@ export const remote = {
     const trim = {
       ...(post.trimStart !== undefined ? { trim_start: post.trimStart, trim_end: post.trimEnd ?? null } : {}),
       ...(post.muted ? { muted: true } : {}),
+      ...(post.crop ? { crop: post.crop } : {}),
     };
     const { error } = await need().from('posts').insert({ ...row, ...trim });
     if (!error) return;
     // The trim columns arrive with a migration; until it has run, save the
     // post without them rather than losing it. The clip plays untrimmed.
-    if (Object.keys(trim).length && /trim_|muted/.test(error.message)) {
+    if (Object.keys(trim).length && /trim_|muted|crop/.test(error.message)) {
       console.warn('[remote] trim columns missing; run the pending migration — saving the post untrimmed');
       const retry = await need().from('posts').insert(row);
       if (retry.error) fail('post insert')(retry.error);

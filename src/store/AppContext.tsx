@@ -53,6 +53,7 @@ import type {
   Story,
   User,
   PlayerProfile,
+  MediaCrop,
 } from '@/data/types';
 
 interface NewStoryInput {
@@ -65,9 +66,12 @@ interface NewStoryInput {
 
 interface NewPostInput {
   kind: PostKind;
+  /** People tagged in it; each gets a notification. */
+  taggedUserIds?: ID[];
   orientation?: 'portrait' | 'landscape';
   trimStart?: number;
   trimEnd?: number;
+  crop?: MediaCrop;
   muted?: boolean;
   body: string;
   tags: string[];
@@ -783,14 +787,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       };
       const uploading = live(me) && (isLocalMedia(post.imageUrl) || isLocalMedia(post.videoUrl) || isLocalMedia(post.thumbnailUrl));
       const label = post.body ? snippet(post.body, 60) : post.kind === 'clip' ? 'Your clip' : 'Your post';
+      // Everyone tagged hears about it.
+      const tell = (state: AppState) => (post.taggedUserIds ?? []).reduce(
+        (acc, id) => withNotification(acc, { userId: id, actorId: me, kind: 'tag', targetId: post.id, targetKind: 'post', preview: snippet(post.body || 'a post') }),
+        state,
+      );
       if (uploading) {
         // The strip across the top counts the upload up; the celebration
         // waits until it has actually landed.
         startUpload(post.id, label, post.thumbnailUrl ?? post.imageUrl);
-        setState((prev) => ({ ...prev, posts: [post, ...prev.posts] }));
+        setState((prev) => tell({ ...prev, posts: [post, ...prev.posts] }));
       } else {
         if (post.videoUrl || post.imageUrl) simulateUpload(post.id, label, post.thumbnailUrl ?? post.imageUrl);
-        setState((prev) => celebratePosted({ ...prev, posts: [post, ...prev.posts] }, { ...celebration, quiet: !!(post.videoUrl || post.imageUrl) }));
+        setState((prev) => tell(celebratePosted({ ...prev, posts: [post, ...prev.posts] }, { ...celebration, quiet: !!(post.videoUrl || post.imageUrl) })));
       }
       if (live(me)) {
         (async () => {

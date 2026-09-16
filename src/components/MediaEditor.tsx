@@ -8,7 +8,9 @@ import { Ionicons } from '@expo/vector-icons';
 import type { PickedMedia } from '@/components/MediaPicker';
 import { VideoSurface, type VideoSurfaceHandle } from '@/components/VideoSurface';
 import { framesAt, type Frame } from '@/features/compose/frames';
-import { editPhoto, type Aspect } from '@/features/compose/photoEdit';
+import { ASPECT_RATIO, editPhotoRect, measure, type Aspect } from '@/features/compose/photoEdit';
+import { clampCrop, cropLayer } from '@/lib/crop';
+import type { MediaCrop } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /** What leaves the editor: the media to post and how to play it. */
@@ -19,6 +21,8 @@ export interface EditedMedia {
   trimEnd?: number;
   /** Posted without sound. */
   muted?: boolean;
+  /** A zoom and shift inside the frame — cuts black edges out of a recording. */
+  crop?: MediaCrop;
 }
 
 const HANDLE = 18;
@@ -50,12 +54,13 @@ export function MediaEditor({ media, onBack, onDone }: {
   const [frames, setFrames] = useState<Frame[]>([]);
   const [cover, setCover] = useState<string | undefined>(media.thumbnailUrl);
   const [muted, setMuted] = useState(false);
-  const [tool, setTool] = useState<'trim' | 'cover'>('trim');
+  const [tool, setTool] = useState<'trim' | 'cover' | 'crop'>('trim');
   // Choosing a cover happens on a still: the video holds on whichever frame
   // is picked, and only plays again when you go back to trimming.
   const [frozenAt, setFrozenAt] = useState<number | null>(null);
-  const switchTool = (next: 'trim' | 'cover') => {
+  const switchTool = (next: 'trim' | 'cover' | 'crop') => {
     setTool(next);
+    if (next === 'crop') { holding.current = false; setFrozenAt(null); player.current?.play(); return; }
     if (next === 'cover') {
       holding.current = true;
       player.current?.pause();
@@ -178,29 +183,98 @@ export function MediaEditor({ media, onBack, onDone }: {
     return { transform: [{ translateX: duration ? (at / duration) * stripWidth : 0 }] };
   }, [lo, hi, duration, stripWidth]);
 
+  /* ----------------------------------- crop ----------------------------------- */
+  // Zoom in and slide the picture inside the frame, for cutting black edges
+  // out of a screen recording. The stage shows exactly what the feed will.
+  const [crop, setCrop] = useState<MediaCrop>({ scale: 1, x: 0, y: 0 });
+  const cropRef = useRef(crop);
+  cropRef.current = crop;
+  const [box, setBox] = useState({ w: 1, h: 1 });
+  const boxRef = useRef(box);
+  boxRef.current = box;
+  const dragStart = useRef<MediaCrop>(crop);
+  const cropDrag = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => { dragStart.current = cropRef.current; },
+    onPanResponderMove: (_e, g) => {
+      const s = dragStart.current;
+      setCrop(clampCrop({ scale: s.scale, x: s.x + g.dx / boxRef.current.w, y: s.y + g.dy / boxRef.current.h }));
+    },
+  }), []);
+  const ZOOM_MAX = 2.5;
+  const zoomStripWidth = width - spacing.lg * 2;
+  const zoomTo = (x: number) => {
+    const t = Math.max(0, Math.min(1, x / zoomStripWidth));
+    setCrop((c) => clampCrop({ ...c, scale: 1 + t * (ZOOM_MAX - 1) }));
+  };
+  const zoomDrag = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: (e) => zoomTo(e.nativeEvent.locationX),
+    onPanResponderMove: (e) => zoomTo(e.nativeEvent.locationX),
+  }), [zoomStripWidth]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /* ----------------------------------- photo ---------------------------------- */
+  // Nothing is cut until Next: the stage shows the turn, the shape, the zoom
+  // and where you dragged it, all live, and the photo is cut once at the end.
   const [turns, setTurns] = useState(0);
   const [aspect, setAspect] = useState<Aspect>('original');
-  const [photoUri, setPhotoUri] = useState(media.uri);
-  const [photoShape, setPhotoShape] = useState<'portrait' | 'landscape'>(media.orientation ?? 'portrait');
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const [nat, setNat] = useState<{ width: number; height: number } | null>(null);
+  useEffect(() => { if (!isVideo && media.uri) measure(media.uri).then(setNat).catch(() => setNat(null)); }, [isVideo, media.uri]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // The turned picture's size, the window's shape, and how it all lays out on the stage.
+  const odd = ((turns % 4) + 4) % 4 % 2 === 1;
+  const RW = nat ? (odd ? nat.height : nat.width) : 1;
+  const RH = nat ? (odd ? nat.width : nat.height) : 1;
+  const cropRatio = aspect === 'original' ? RW / RH : ASPECT_RATIO[aspect];
+  const photoShape: 'portrait' | 'landscape' = cropRatio > 1 ? 'landscape' : 'portrait';
+  const win = box.w / box.h > cropRatio ? { w: box.h * cropRatio, h: box.h } : { w: box.w, h: box.w / cropRatio };
+  const k = Math.max(win.w / RW, win.h / RH) * zoom;
+  const shown = { rw: RW * k, rh: RH * k, uw: (nat?.width ?? 1) * k, uh: (nat?.height ?? 1) * k };
+  const clampPan = (p: { x: number; y: number }, z = zoom) => {
+    const kk = Math.max(win.w / RW, win.h / RH) * z;
+    const roomX = Math.max(0, (RW * kk - win.w) / 2);
+    const roomY = Math.max(0, (RH * kk - win.h) / 2);
+    return { x: Math.max(-roomX, Math.min(roomX, p.x)), y: Math.max(-roomY, Math.min(roomY, p.y)) };
+  };
+  const panRef = useRef(pan);
+  panRef.current = pan;
+  const panStart = useRef(pan);
+  const clampRef = useRef(clampPan);
+  clampRef.current = clampPan;
+  const photoDrag = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => { panStart.current = panRef.current; setDragging(true); },
+    onPanResponderMove: (_e, g) => setPan(clampRef.current({ x: panStart.current.x + g.dx, y: panStart.current.y + g.dy })),
+    onPanResponderRelease: () => setDragging(false),
+    onPanResponderTerminate: () => setDragging(false),
+  }), []);
+  const PHOTO_ZOOM_MAX = 3;
+  const photoZoomTo = (x: number) => {
+    const t = Math.max(0, Math.min(1, x / zoomStripWidth));
+    const z = 1 + t * (PHOTO_ZOOM_MAX - 1);
+    setZoom(z);
+    setPan((p) => clampRef.current(p, z));
+  };
+  const photoZoomDrag = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: (e) => photoZoomTo(e.nativeEvent.locationX),
+    onPanResponderMove: (e) => photoZoomTo(e.nativeEvent.locationX),
+  }), [zoomStripWidth]); // eslint-disable-line react-hooks/exhaustive-deps
+  const photoTouched = turns !== 0 || aspect !== 'original' || zoom > 1.001 || pan.x !== 0 || pan.y !== 0;
+  useEffect(() => { setPan((p) => clampRef.current(p)); }, [aspect, turns, box.w, box.h]); // eslint-disable-line react-hooks/exhaustive-deps
   // How the post is framed in the feed. Picked from the picture's own shape
   // and changeable here; a landscape frame shows black either side.
   const [frame, setFrame] = useState<'portrait' | 'landscape'>(media.orientation ?? 'portrait');
   const [frameTouched, setFrameTouched] = useState(false);
-  useEffect(() => { if (!frameTouched) setFrame(isVideo ? media.orientation ?? 'portrait' : photoShape); }, [isVideo, media.orientation, photoShape, frameTouched]);
-  useEffect(() => {
-    if (isVideo || !media.uri) return;
-    if (!turns && aspect === 'original') { setPhotoUri(media.uri); setPhotoShape(media.orientation ?? 'portrait'); return; }
-    let cancelled = false;
-    setBusy(true);
-    editPhoto(media.uri, turns, aspect)
-      .then((out) => { if (!cancelled) { setPhotoUri(out.uri); setPhotoShape(out.width > out.height ? 'landscape' : 'portrait'); } })
-      .catch(() => { if (!cancelled) setError('Could not apply that edit.'); })
-      .finally(() => { if (!cancelled) setBusy(false); });
-    return () => { cancelled = true; };
-  }, [isVideo, media.uri, media.orientation, turns, aspect]);
+  useEffect(() => { if (!frameTouched) setFrame(isVideo ? media.orientation ?? 'portrait' : nat ? photoShape : media.orientation ?? 'portrait'); }, [isVideo, media.orientation, photoShape, frameTouched, nat]);
 
   const done = async () => {
     if (isVideo) {
@@ -213,9 +287,27 @@ export function MediaEditor({ media, onBack, onDone }: {
         trimStart: trimmed ? Number(range[0].toFixed(2)) : undefined,
         trimEnd: trimmed ? Number(range[1].toFixed(2)) : undefined,
         muted: muted || undefined,
+        crop: crop.scale > 1.01 ? { scale: Number(crop.scale.toFixed(3)), x: Number(crop.x.toFixed(4)), y: Number(crop.y.toFixed(4)) } : undefined,
       });
     } else {
-      onDone({ media: { ...media, uri: photoUri, thumbnailUrl: photoUri, orientation: photoShape }, orientation: frame });
+      if (!photoTouched || !nat || !media.uri) {
+        onDone({ media: { ...media, uri: media.uri, thumbnailUrl: media.uri, orientation: media.orientation ?? 'portrait' }, orientation: frame });
+        return;
+      }
+      // The window, in the turned picture's own pixels.
+      const cw = win.w / k;
+      const ch = win.h / k;
+      const cx = RW / 2 - pan.x / k;
+      const cy = RH / 2 - pan.y / k;
+      const rect = { originX: Math.min(RW - cw, Math.max(0, cx - cw / 2)), originY: Math.min(RH - ch, Math.max(0, cy - ch / 2)), width: Math.min(cw, RW), height: Math.min(ch, RH) };
+      setBusy(true);
+      try {
+        const out = await editPhotoRect(media.uri, turns, rect);
+        onDone({ media: { ...media, uri: out.uri, thumbnailUrl: out.uri, orientation: out.width > out.height ? 'landscape' : 'portrait' }, orientation: frame });
+      } catch {
+        setError('Could not cut that photo.');
+        setBusy(false);
+      }
     }
   };
 
@@ -232,11 +324,28 @@ export function MediaEditor({ media, onBack, onDone }: {
 
       <View style={styles.stage}>
         <View style={frame === 'landscape' ? styles.wideFrame : StyleSheet.absoluteFill}>
-          <View style={frame === 'landscape' ? styles.wideBox : StyleSheet.absoluteFill}>
+          <View style={frame === 'landscape' ? styles.wideBox : StyleSheet.absoluteFill} onLayout={(e) => setBox({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) })}>
             {isVideo && media.uri ? (
-              <VideoSurface ref={player} uri={media.uri} muted={muted} fit="cover" from={range[0]} to={duration ? range[1] : undefined} paused={frozenAt !== null} onTime={onTime} onDuration={onDuration} />
-            ) : photoUri ? (
-              <Image accessibilityIgnoresInvertColors source={{ uri: photoUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              <View style={cropLayer(crop)}>
+                <VideoSurface ref={player} uri={media.uri} muted={muted} fit="cover" from={range[0]} to={duration ? range[1] : undefined} paused={frozenAt !== null} onTime={onTime} onDuration={onDuration} />
+              </View>
+            ) : media.uri && nat ? (
+              <View style={styles.photoStage} pointerEvents="box-none">
+                <View {...photoDrag.panHandlers} style={[styles.photoWindow, { width: win.w, height: win.h }]}>
+                  <Image
+                    accessibilityIgnoresInvertColors
+                    source={{ uri: media.uri }}
+                    resizeMode="cover"
+                    style={{ position: 'absolute', width: shown.uw, height: shown.uh, left: (win.w - shown.uw) / 2 + pan.x, top: (win.h - shown.uh) / 2 + pan.y, transform: [{ rotate: `${((turns % 4) + 4) % 4 * 90}deg` }] }}
+                  />
+                  {/* The thirds grid, while the picture is being moved. */}
+                  <View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: dragging ? 1 : 0 }]}>
+                    {[1, 2].map((i) => <View key={`v${i}`} style={[styles.gridLine, { left: `${(i / 3) * 100}%`, top: 0, bottom: 0, width: 1 }]} />)}
+                    {[1, 2].map((i) => <View key={`h${i}`} style={[styles.gridLine, { top: `${(i / 3) * 100}%`, left: 0, right: 0, height: 1 }]} />)}
+                  </View>
+                  <View pointerEvents="none" style={styles.cropEdge} />
+                </View>
+              </View>
             ) : null}
           </View>
         </View>
@@ -246,8 +355,9 @@ export function MediaEditor({ media, onBack, onDone }: {
             <Text style={styles.soundText}>{muted ? 'Sound off' : 'Sound on'}</Text>
           </Pressable>
         ) : null}
+        {isVideo && tool === 'crop' ? <View {...cropDrag.panHandlers} style={StyleSheet.absoluteFill}><View pointerEvents="none" style={styles.cropEdge} /></View> : null}
         {isVideo && duration ? <Text style={styles.time}>{frozenAt !== null ? `Cover · ${clock(frozenAt)}` : `${clock(now)} / ${clock(range[1] - range[0])}`}</Text> : null}
-        {busy ? <View style={styles.busy}><Text style={styles.busyText}>Applying…</Text></View> : null}
+        {busy ? <View style={styles.busy}><Text style={styles.busyText}>Cutting…</Text></View> : null}
       </View>
 
       <View style={[styles.tools, { paddingBottom: insets.bottom + spacing.md }]}>
@@ -262,15 +372,26 @@ export function MediaEditor({ media, onBack, onDone }: {
         {isVideo ? (
           <>
             <View style={styles.tabs}>
-              {(['trim', 'cover'] as const).map((t) => (
+              {(['trim', 'cover', 'crop'] as const).map((t) => (
                 <Pressable key={t} accessibilityRole="tab" accessibilityState={{ selected: tool === t }} onPress={() => switchTool(t)} style={[styles.tab, tool === t && styles.tabOn]}>
-                  <Ionicons name={t === 'trim' ? 'cut-outline' : 'image-outline'} size={15} color={tool === t ? colors.brandInk : 'white'} />
-                  <Text style={[styles.tabText, tool === t && { color: colors.brandInk }]}>{t === 'trim' ? 'Trim' : 'Cover'}</Text>
+                  <Ionicons name={t === 'trim' ? 'cut-outline' : t === 'cover' ? 'image-outline' : 'crop-outline'} size={15} color={tool === t ? colors.brandInk : 'white'} />
+                  <Text style={[styles.tabText, tool === t && { color: colors.brandInk }]}>{t === 'trim' ? 'Trim' : t === 'cover' ? 'Cover' : 'Crop'}</Text>
                 </Pressable>
               ))}
               {duration ? <Text style={styles.rangeText}>{clock(range[0])} – {clock(range[1])}</Text> : null}
             </View>
-            {tool === 'trim' ? (
+            {tool === 'crop' ? (
+              <View style={styles.zoomRow}>
+                <Ionicons name="remove" size={16} color="rgba(255,255,255,0.7)" />
+                <View {...zoomDrag.panHandlers} style={styles.zoomStrip}>
+                  <View style={styles.zoomTrack}><View style={[styles.zoomFill, { width: `${((crop.scale - 1) / (ZOOM_MAX - 1)) * 100}%` }]} /></View>
+                  <View style={[styles.zoomKnob, { left: `${((crop.scale - 1) / (ZOOM_MAX - 1)) * 100}%` }]} />
+                </View>
+                <Ionicons name="add" size={16} color="rgba(255,255,255,0.7)" />
+                <Text style={styles.zoomText}>{crop.scale.toFixed(1)}×</Text>
+                {crop.scale > 1.01 ? <Pressable accessibilityRole="button" accessibilityLabel="Reset crop" onPress={() => setCrop({ scale: 1, x: 0, y: 0 })} hitSlop={8}><Text style={styles.zoomText}>Reset</Text></Pressable> : null}
+              </View>
+            ) : tool === 'trim' ? (
               <View style={[styles.strip, { marginHorizontal: HANDLE }]}>
                 <View style={styles.frames}>
                   {frames.map((f) => <Image key={f.time} accessibilityIgnoresInvertColors source={{ uri: f.uri }} style={styles.frame} resizeMode="cover" />)}
@@ -301,7 +422,7 @@ export function MediaEditor({ media, onBack, onDone }: {
                 {!frames.length ? <View style={styles.reading}><Text style={styles.hint}>Reading frames…</Text></View> : null}
               </View>
             )}
-            <Text style={styles.hint}>{tool === 'trim' ? 'Drag the ends to trim. The clip plays the part you keep.' : 'Drag along the strip to the frame you want as the cover.'}</Text>
+            <Text style={styles.hint}>{tool === 'trim' ? 'Drag the ends to trim. The clip plays the part you keep.' : tool === 'cover' ? 'Drag along the strip to the frame you want as the cover.' : 'Zoom in with the slider, then drag the picture to cut black edges out. What you see is what posts.'}</Text>
           </>
         ) : (
           <>
@@ -314,13 +435,22 @@ export function MediaEditor({ media, onBack, onDone }: {
                   <Text style={[styles.tabText, aspect === a && { color: colors.brandInk }]}>{a === 'original' ? 'Original' : a}</Text>
                 </Pressable>
               ))}
-              {turns || aspect !== 'original' ? (
-                <Pressable accessibilityRole="button" accessibilityLabel="Reset edits" onPress={() => { setTurns(0); setAspect('original'); }} style={styles.tab}>
+              {photoTouched ? (
+                <Pressable accessibilityRole="button" accessibilityLabel="Reset edits" onPress={() => { setTurns(0); setAspect('original'); setZoom(1); setPan({ x: 0, y: 0 }); }} style={styles.tab}>
                   <Text style={styles.tabText}>Reset</Text>
                 </Pressable>
               ) : null}
             </View>
-            <Text style={styles.hint}>Turn the photo, or cut it to a shape. Edits always start from the original.</Text>
+            <View style={styles.zoomRow}>
+              <Ionicons name="remove" size={16} color="rgba(255,255,255,0.7)" />
+              <View {...photoZoomDrag.panHandlers} style={styles.zoomStrip}>
+                <View style={styles.zoomTrack}><View style={[styles.zoomFill, { width: `${((zoom - 1) / (PHOTO_ZOOM_MAX - 1)) * 100}%` }]} /></View>
+                <View style={[styles.zoomKnob, { left: `${((zoom - 1) / (PHOTO_ZOOM_MAX - 1)) * 100}%` }]} />
+              </View>
+              <Ionicons name="add" size={16} color="rgba(255,255,255,0.7)" />
+              <Text style={styles.zoomText}>{zoom.toFixed(1)}×</Text>
+            </View>
+            <Text style={styles.hint}>Pick a shape, drag the photo to place it, slide to zoom. Nothing is cut until Next.</Text>
           </>
         )}
         {error ? <Text style={[styles.hint, { color: colors.danger }]}>{error}</Text> : null}
@@ -350,6 +480,16 @@ const styleDefinitions = StyleSheet.create({
   tabText: { ...typography.smallStrong, color: 'white' },
   rangeText: { ...typography.caption, color: 'rgba(255,255,255,0.7)', marginLeft: 'auto', letterSpacing: 0 },
   strip: { height: 56, borderRadius: radius.sm, overflow: 'visible' },
+  cropEdge: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)' },
+  photoStage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
+  photoWindow: { overflow: 'hidden', backgroundColor: '#000' },
+  gridLine: { position: 'absolute', backgroundColor: 'rgba(255,255,255,0.55)' },
+  zoomRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, height: 56 },
+  zoomStrip: { flex: 1, height: 32, justifyContent: 'center' },
+  zoomTrack: { height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)', overflow: 'hidden' },
+  zoomFill: { height: 4, backgroundColor: colors.brand },
+  zoomKnob: { position: 'absolute', top: 7, marginLeft: -9, width: 18, height: 18, borderRadius: 9, backgroundColor: 'white' },
+  zoomText: { ...typography.smallStrong, color: 'white', minWidth: 36, textAlign: 'right' },
   frames: { flexDirection: 'row', height: 56, borderRadius: radius.sm, overflow: 'hidden', backgroundColor: '#222' },
   frame: { flex: 1, height: 56 },
   dim: { position: 'absolute', top: 0, height: 56, backgroundColor: 'rgba(0,0,0,0.55)' },

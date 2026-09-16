@@ -17,13 +17,16 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   trimStart?: number; trimEnd?: number;
   onProgress?: (fraction: number, seconds: number, length: number) => void;
   onReady?: (ready: boolean) => void;
-}>(function ClipVideo({ uri, active = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, onProgress, onReady }: {
+  onSize?: (width: number, height: number) => void;
+}>(function ClipVideo({ uri, active = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, onProgress, onReady, onSize }: {
   uri: string; poster?: string; active?: boolean; muted?: boolean; paused?: boolean; fit?: 'cover' | 'contain';
   trimStart?: number; trimEnd?: number;
   /** How far through the clip it is, 0..1, a few times a second. */
   onProgress?: (fraction: number, seconds: number, length: number) => void;
   /** True once the clip has its first frame and can play; false while it fetches. */
   onReady?: (ready: boolean) => void;
+  /** The video's own width and height in pixels, once known. */
+  onSize?: (width: number, height: number) => void;
 }, ref) {
   const player = useVideoPlayer(uri, (p) => {
     p.loop = true;
@@ -38,6 +41,18 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   latestProgress.current = onProgress;
   const latestReady = useRef(onReady);
   latestReady.current = onReady;
+  const latestSize = useRef(onSize);
+  latestSize.current = onSize;
+  useEffect(() => {
+    const report = (track: { size?: { width: number; height: number } } | null | undefined) => {
+      const size = track?.size;
+      if (size && size.width > 0 && size.height > 0) latestSize.current?.(size.width, size.height);
+    };
+    safely(() => report((player as unknown as { videoTrack?: { size?: { width: number; height: number } } | null }).videoTrack));
+    const a = player.addListener('sourceLoad', ({ availableVideoTracks }) => report(availableVideoTracks?.[0]));
+    const b = player.addListener('videoTrackChange', ({ videoTrack }) => report(videoTrack));
+    return () => { a.remove(); b.remove(); };
+  }, [player]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     safely(() => latestReady.current?.(player.status === 'readyToPlay'));
     const sub = player.addListener('statusChange', ({ status }) => latestReady.current?.(status === 'readyToPlay'));

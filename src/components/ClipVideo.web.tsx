@@ -8,7 +8,8 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   trimStart?: number; trimEnd?: number;
   onProgress?: (fraction: number, seconds: number, length: number) => void;
   onReady?: (ready: boolean) => void;
-}>(function ClipVideo({ uri, poster, active = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, onProgress, onReady }, ref) {
+  onSize?: (width: number, height: number) => void;
+}>(function ClipVideo({ uri, poster, active = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, onProgress, onReady, onSize }, ref) {
   const el = useRef<HTMLVideoElement>(null);
   useImperativeHandle(ref, () => ({ seek: (seconds) => { if (el.current) el.current.currentTime = seconds; } }), []);
   useEffect(() => {
@@ -16,8 +17,8 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
     if (!video) return;
     if (active && !paused) video.play().catch(() => undefined); else video.pause();
   }, [active, paused]);
-  const latest = useRef({ onProgress, onReady });
-  latest.current = { onProgress, onReady };
+  const latest = useRef({ onProgress, onReady, onSize });
+  latest.current = { onProgress, onReady, onSize };
   useEffect(() => {
     const video = el.current;
     if (!video) return;
@@ -29,12 +30,15 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
       latest.current.onProgress?.(Math.max(0, Math.min(1, (video.currentTime - trimStart) / length)), video.currentTime - trimStart, length);
     };
     const ready = () => latest.current.onReady?.(true);
+    const sized = () => { if (video.videoWidth && video.videoHeight) latest.current.onSize?.(video.videoWidth, video.videoHeight); };
+    video.addEventListener('loadedmetadata', sized);
+    if (video.videoWidth) sized();
     const busy = () => latest.current.onReady?.(false);
     video.addEventListener('timeupdate', tick);
     video.addEventListener('loadeddata', ready);
     video.addEventListener('playing', ready);
     video.addEventListener('waiting', busy);
-    return () => { video.removeEventListener('timeupdate', tick); video.removeEventListener('loadeddata', ready); video.removeEventListener('playing', ready); video.removeEventListener('waiting', busy); };
+    return () => { video.removeEventListener('timeupdate', tick); video.removeEventListener('loadedmetadata', sized); video.removeEventListener('loadeddata', ready); video.removeEventListener('playing', ready); video.removeEventListener('waiting', busy); };
   }, [trimStart, trimEnd]);
   return <video ref={el} src={uri} poster={poster} loop muted={muted} playsInline preload="metadata" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: fit, background: '#000' }} />;
 });

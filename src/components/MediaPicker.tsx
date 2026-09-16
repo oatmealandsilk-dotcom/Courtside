@@ -4,6 +4,8 @@ import { Image, Modal, Pressable, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { ZoomableMedia } from './ZoomableMedia';
+import { cropLayer } from '@/lib/crop';
+import type { MediaCrop } from '@/data/types';
 import { ClipVideo } from '@/components/ClipVideo';
 import { colors } from '@/theme';
 
@@ -30,7 +32,9 @@ export interface MediaPickerProps {
   /** Shape of the bare stage. Defaults to portrait. */
   orientation?: 'portrait' | 'landscape';
   /** What the edit step decided: the previews play only the part kept, and honour the sound choice. */
-  trim?: { trimStart?: number; trimEnd?: number; muted?: boolean };
+  trim?: { trimStart?: number; trimEnd?: number; muted?: boolean; crop?: MediaCrop };
+  /** No cover-picking controls — for places where the video is just evidence, not a post. */
+  noCover?: boolean;
 }
 /** "clip-final-2 · 0:24" is a filename. "Video · 0:24" is information. */
 function describe(media: PickedMedia): string {
@@ -84,7 +88,7 @@ function explainPickError(err: unknown): string {
   return `Could not open your library: ${reason}`;
 }
 
-export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false, orientation = 'portrait', trim }: MediaPickerProps) {
+export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false, orientation = 'portrait', trim, noCover = false }: MediaPickerProps) {
   useTheme();
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
@@ -152,7 +156,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
           ? { width: '100%', aspectRatio: 16 / 9, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt }
           : { height: 480, aspectRatio: 9 / 16, alignSelf: 'center', borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt }}>
         {value.kind === 'video' && value.uri
-          ? <ClipVideo uri={value.uri} poster={value.thumbnailUrl} active muted fit="cover" trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} />
+          ? <View style={cropLayer(trim?.crop)}><ClipVideo uri={value.uri} poster={value.thumbnailUrl} active muted fit="cover" trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} /></View>
           : poster
             ? <Image source={{ uri: poster }} resizeMode="cover" style={{ width: '100%', height: '100%' }}/>
             : <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="videocam" size={48} color={colors.textMuted}/></View>}
@@ -168,7 +172,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
         <View style={{ flex: 1, backgroundColor: '#000' }}>
           <ZoomableMedia>
             {value.kind === 'video' && value.uri
-              ? <ClipVideo uri={value.uri} poster={value.thumbnailUrl} active={expanded} muted={!!trim?.muted} fit={orientation === 'landscape' ? 'contain' : 'cover'} trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} />
+              ? <View style={cropLayer(trim?.crop)}><ClipVideo uri={value.uri} poster={value.thumbnailUrl} active={expanded} muted={!!trim?.muted} fit={orientation === 'landscape' ? 'contain' : 'cover'} trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} /></View>
               : poster ? <Image source={{ uri: poster }} resizeMode="contain" style={{ width: '100%', height: '100%' }}/> : null}
           </ZoomableMedia>
           <Pressable accessibilityRole="button" accessibilityLabel="Close preview" onPress={() => setExpanded(false)} style={{ position: 'absolute', top: 54, right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}>
@@ -234,7 +238,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
       <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>{value ? describe(value) : label ?? (compact ? 'Photo or video' : 'Select a photo or video')}</Text>
       <Text style={{ color: colors.textMuted }}>{value ? 'Tap to replace' : 'Choose from your photos and videos.'}</Text>
     </Pressable>
-    {value?.kind === 'video' && <Pressable accessibilityRole="button" accessibilityLabel="Choose a cover image" onPress={chooseCover}
+    {value?.kind === 'video' && !noCover && <Pressable accessibilityRole="button" accessibilityLabel="Choose a cover image" onPress={chooseCover}
       style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
       {value.thumbnailUrl
         ? <Image source={{ uri: value.thumbnailUrl }} style={{ width: 40, height: 54, borderRadius: 8 }}/>
