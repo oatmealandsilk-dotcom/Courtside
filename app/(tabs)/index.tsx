@@ -21,6 +21,7 @@ import { MediaPostPage } from '@/components/MediaPostPage';
 import { Tappable } from '@/components/Tappable';
 import { VerticalPager, type VerticalPagerHandle } from '@/components/VerticalPager';
 import { subscribeScrollToTop } from '@/features/navigation/scrollToTop';
+import { setFeedWarm } from '@/features/feed/warmup';
 import { setBarCompact } from '@/features/navigation/barShrink';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { isLive } from '@/features/stories/stories';
@@ -361,15 +362,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const warmDone = warmTargets.filter((id) => readyIds.has(id)).length;
   const dataIn = !isSupabaseConfigured || app.remoteLoaded;
   const warmed = !!scope || warmTimedOut || (ready && dataIn && feed.length > 0 && warmDone >= warmTargets.length);
-  // The curtain is the same screen you saw at sign-in — the mark and the
-  // name — and it fades out once the first pages are in.
-  const [curtainShown, setCurtainShown] = useState(!scope);
-  const curtainFade = useSharedValue(1);
-  const curtainStyle = useAnimatedStyle(() => ({ opacity: curtainFade.value }));
-  useEffect(() => {
-    if (!warmed || !curtainShown) return;
-    curtainFade.value = withTiming(0, { duration: 420 }, (finished) => { if (finished) runOnJS(setCurtainShown)(false); });
-  }, [warmed, curtainShown, curtainFade]);
+  // The shell keeps the splash curtain up until this says the first pages are in.
+  useEffect(() => { if (warmed && !scope) setFeedWarm(true); }, [warmed, scope]);
   // Photos and clip covers are fetched outright; a page reports itself ready when its picture lands.
   useEffect(() => {
     for (const item of feed.slice(0, AHEAD)) {
@@ -410,15 +404,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
 
   return (
     <View style={styles.root}>
-      {curtainShown ? (
-        <Reanimated.View pointerEvents={warmed ? 'none' : 'auto'} style={[styles.curtain, curtainStyle]}>
-          <View style={styles.curtainBrand}>
-            <BrandMark size={84} />
-            <Text style={styles.curtainWordmark}>CourtSide</Text>
-          </View>
-          <Text style={styles.curtainTagline}>Play. Talk. Improve.</Text>
-        </Reanimated.View>
-      ) : null}
       {!ready || !feed.length ? (
         <EmptyState
           title={scope ? 'Nothing here yet' : ready ? 'Your court is quiet' : 'Loading your clips'}
@@ -792,10 +777,6 @@ const styleDefinitions = StyleSheet.create({
   // used to live here was doing more harm than good.
   wordmarkPill: { paddingHorizontal: 14, paddingVertical: 4, borderRadius: 12, backgroundColor: colors.bg, opacity: 0.88 },
   viewer: { flex: 1, width: '100%', minHeight: 0 },
-  curtain: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', zIndex: 20 },
-  curtainBrand: { alignItems: 'center', gap: 12 },
-  curtainWordmark: { fontSize: 34, fontWeight: '800', color: colors.brand, letterSpacing: -1 },
-  curtainTagline: { position: 'absolute', bottom: 48, fontSize: 12, fontWeight: '600', letterSpacing: 1.4, color: colors.textFaint, textTransform: 'uppercase' },
   clip: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
   clipFrame: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
   clipPortrait: { height: '100%', aspectRatio: 9 / 16, maxWidth: '100%', overflow: 'hidden', backgroundColor: '#000' },

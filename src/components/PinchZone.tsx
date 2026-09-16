@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
-const SNAP = { duration: 170, easing: Easing.out(Easing.cubic) };
+const SNAP = { duration: 300, easing: Easing.out(Easing.cubic) };
 
 /**
  * A pinch over its children: the picture grows around the fingers and slides

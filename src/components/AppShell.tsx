@@ -4,6 +4,7 @@ import { View } from 'react-native';
 import { router, usePathname } from 'expo-router';
 import { NavBar } from './NavBar';
 import { UploadBar } from '@/components/UploadBar';
+import { WarmCurtain } from '@/components/WarmCurtain';
 import { Toast } from './Toast';
 import { RouteTransition } from './RouteTransition';
 import { useResponsive } from '@/lib/useResponsive';
@@ -60,5 +61,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     {showNav && !isPhone && nav}
     <View style={{ flex: 1, minWidth: 0, minHeight: 0 }}><RouteTransition>{children}</RouteTransition><Toast /><UploadBar /></View>
     {showNav && isPhone && nav}
+    {showNav && (pathname === '/' || pathname === '/index') ? <WarmCurtain /> : null}
   </View>;
 }

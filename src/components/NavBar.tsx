@@ -4,6 +4,9 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { interpolate, useAnimatedStyle } from 'react-native-reanimated';
 import { barCompact } from '@/features/navigation/barShrink';
+import { useFeedWarm } from '@/features/feed/warmup';
+import { useEffect } from 'react';
+import { Easing, useSharedValue, withTiming } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -51,9 +54,17 @@ export function NavBar({ state, navigation }: NavBarProps) {
   // Scrolling down ducks the bar: a touch shorter, everything on it a touch
   // smaller. Scrolling up brings it straight back. Never small enough to miss.
   const bottomPad = Math.max(insets.bottom, spacing.sm);
+  // On first open the bar is under the curtain; as the curtain lifts it
+  // rises into place with the feed rather than already sitting there.
+  const warm = useFeedWarm();
+  const entrance = useSharedValue(warm ? 0 : 1);
+  useEffect(() => {
+    if (warm) entrance.value = withTiming(0, { duration: 480, easing: Easing.out(Easing.cubic) });
+  }, [warm, entrance]);
   const duck = useAnimatedStyle(() => ({
     paddingTop: interpolate(barCompact.value, [0, 1], [spacing.sm, 2]),
     paddingBottom: interpolate(barCompact.value, [0, 1], [bottomPad, Math.max(insets.bottom - 4, 4)]),
+    transform: [{ translateY: entrance.value * 96 }],
   }));
   const shrink = useAnimatedStyle(() => ({
     transform: [{ scale: interpolate(barCompact.value, [0, 1], [1, 0.86]) }],

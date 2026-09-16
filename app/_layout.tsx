@@ -21,11 +21,13 @@ export default function RootLayout() {
             animation: 'slide_from_right',
           }}
         >
-          {/* Splash, sign-in and the feed fade into one another; only pages
-              opened from inside the app slide. */}
+          {/* Splash and sign-in fade; the feed opens behind a curtain that is
+              the splash again, so it cuts straight in — a fade between two
+              identical screens only ever reads as a flicker. Pages opened
+              from inside the app slide. */}
           <Stack.Screen name="index" options={{ animation: 'fade' }} />
           <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
-          <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
+          <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
           <Stack.Screen name="compose" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="ask" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="comments" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />

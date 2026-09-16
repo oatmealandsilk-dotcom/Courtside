@@ -8,7 +8,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
 import { SectionPager } from '@/components/SectionPager';
-import Reanimated from 'react-native-reanimated';
+import Reanimated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { Tappable } from '@/components/Tappable';
 import { reportSection, requestSection, subscribeSectionRequest, swipeDestination } from '@/features/navigation/swipeOrder';
@@ -20,7 +20,7 @@ import { colors } from '@/theme';
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
- const { currentUser: user, posts, saved, conversations, notifications, currentUserId, actions } = useApp();
+ const { currentUser: user, posts, saved, conversations, notifications, currentUserId, savedAccounts, actions } = useApp();
  // The section lives here, not in the address (see discuss.tsx for why).
  const [localTab, setLocalTab] = useState<'Posts' | 'Clips' | 'Tagged'>('Posts');
  const section = previewSection ?? localTab;
@@ -74,7 +74,10 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  // section (which re-renders this page) does not rebuild every tile.
  // eslint-disable-next-line react-hooks/exhaustive-deps
  const grids = useMemo(() => TABS.map((t) => content(t)), [posts, user?.id, styles]);
- if (!user) return <Screen memoryKey="profile" title="Profile"><EmptyState title="Loading your profile"/></Screen>;
+ if (!user) {
+   const remembered = savedAccounts.find((a) => a.id === currentUserId);
+   return <Screen memoryKey="profile" title="Profile" subtitle={remembered?.handle ? `@${remembered.handle}` : ' '}><ProfileSkeleton name={remembered?.name} avatarUrl={remembered?.avatarUrl} seed={currentUserId ?? 'you'}/></Screen>;
+ }
  const profile = user.profile;
  const share = () => router.push(`/share?kind=profile&id=${user.id}`);
  const page = (selected: string, live: boolean) => {
@@ -140,6 +143,38 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    {page(tab, previewSection === undefined)}
  </Screen>;
 }
+/**
+ * The profile page before the account has come down: your picture (kept on
+ * the phone from last time) and name, and every other part of the page in
+ * its place but empty. The real numbers and words then fill in.
+ */
+function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?: string; seed: string }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const breathe = useSharedValue(0);
+  useEffect(() => {
+    breathe.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }), -1, true);
+    return () => cancelAnimation(breathe);
+  }, [breathe]);
+  const pulse = useAnimatedStyle(() => ({ opacity: 0.5 + 0.3 * breathe.value }));
+  const Blank = ({ w, h = 12 }: { w: number; h?: number }) => <Reanimated.View style={[{ width: w, height: h, borderRadius: h / 2, backgroundColor: colors.surfaceAlt }, pulse]} />;
+  return <>
+   <View style={styles.identity}>
+     <Avatar name={name ?? ''} seed={seed} uri={avatarUrl} size={92} style={{ backgroundColor: colors.brand, alignSelf: 'center' }}/>
+     <View style={styles.nameRow}>{name ? <Text style={styles.name}>{name}</Text> : <Blank w={120} h={20} />}</View>
+     <View style={styles.followRow}><Blank w={64} /><Text style={styles.followDot}>·</Text><Blank w={64} /></View>
+     <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit Profile" variant="secondary" disabled onPress={() => undefined} full/></View><View style={{ flex: 1 }}><Button label="Share" variant="secondary" disabled onPress={() => undefined} full/></View></View>
+   </View>
+   <View style={styles.tennis}>
+     <Text style={styles.eyebrow}>TENNIS PROFILE</Text>
+     <View style={styles.details}>{['Style', 'Surface', 'Availability', 'Goal'].map((label) => <View key={label} style={styles.detail}><Text style={styles.meta}>{label}</Text><View style={{ paddingVertical: 3 }}><Blank w={90} /></View></View>)}</View>
+   </View>
+   <View style={styles.health}><Ionicons name="bookmark-outline" size={20} color={colors.brand}/><Text style={[styles.meta,{flex:1}]}>Saved</Text><Ionicons name="chevron-forward" size={16} color={colors.textMuted}/></View>
+   <View style={styles.health}><Ionicons name="flash-outline" size={20} color={colors.warning}/><Text style={[styles.meta,{flex:1}]}>Apple Health · Whoop · Cronometer</Text><Ionicons name="chevron-forward" size={16} color={colors.textMuted}/></View>
+   <View style={styles.tabs}>{['Posts', 'Clips', 'Tagged'].map((t, i) => <View key={t} style={styles.tab}><Text style={{ color: i === 0 ? colors.brand : colors.textMuted, fontWeight: i === 0 ? '700' : '400' }}>{t}</Text></View>)}</View>
+   <View style={styles.grid}>{[0, 1, 2].map((i) => <Reanimated.View key={i} style={[styles.tile, pulse]} />)}</View>
+  </>;
+}
+
 const styleDefinitions = StyleSheet.create({
  setup:{marginTop:16,marginHorizontal:0,padding:14,borderWidth:1,borderColor:colors.brand,borderRadius:12,backgroundColor:colors.brandDim,flexDirection:'row',alignItems:'center',gap:12},setupTitle:{fontSize:14,fontWeight:'700',color:colors.text},identity:{gap:10,paddingTop:22,paddingBottom:24,paddingHorizontal:12,alignItems:'center'},meta:{fontSize:12,color:colors.textMuted,lineHeight:19},nameRow:{flexDirection:'row',gap:10,alignItems:'center',justifyContent:'center',flexWrap:'wrap',marginTop:4},name:{fontSize:20,fontWeight:'700',color:colors.text},bio:{fontSize:14,lineHeight:21,color:colors.textMuted,textAlign:'center',maxWidth:320},followRow:{flexDirection:'row',alignItems:'center',gap:10},follow:{flexDirection:'row',alignItems:'baseline'},followCount:{fontSize:15,fontWeight:'700',color:colors.text},followDot:{color:colors.textFaint,fontSize:14},tabCount:{fontSize:12,fontWeight:'600',color:colors.textFaint},injury:{fontSize:13,color:colors.danger},buttons:{flexDirection:'row',gap:8,alignSelf:'stretch',marginTop:6},settings:{borderWidth:1,borderColor:colors.border,borderRadius:10,padding:10,justifyContent:'center'},tennis:{padding:12,borderWidth:1,borderColor:colors.border,borderRadius:12,backgroundColor:colors.surface,gap:8},eyebrow:{letterSpacing:1.2,fontSize:11,fontWeight:'700',color:colors.textMuted},details:{flexDirection:'row',flexWrap:'wrap',gap:8},detail:{width:'46%',gap:2},value:{fontSize:13,color:colors.text,lineHeight:19},health:{padding:15,marginTop:12,borderWidth:1,borderColor:colors.border,borderRadius:12,flexDirection:'row',alignItems:'center',gap:10},headerActions:{flexDirection:'row',alignItems:'center',gap:14},headerButton:{padding:4},headerBadge:{position:'absolute',top:-1,right:-2,minWidth:18,height:18,borderRadius:9,paddingHorizontal:5,backgroundColor:colors.danger,alignItems:'center',justifyContent:'center',borderWidth:2,borderColor:colors.bg},headerBadgeText:{color:'white',fontSize:10,fontWeight:'800'},tabs:{flexDirection:'row',marginTop:16,borderBottomWidth:2,borderBottomColor:colors.border},tab:{flex:1,alignItems:'center',paddingVertical:18},tabIndicator:{position:'absolute',left:0,bottom:-2,height:2,backgroundColor:colors.brand,borderRadius:1},grid:{flexDirection:'row',flexWrap:'wrap',marginHorizontal:0},
  // Instagram's grid: tall tiles, the thumbnail and nothing else on it.

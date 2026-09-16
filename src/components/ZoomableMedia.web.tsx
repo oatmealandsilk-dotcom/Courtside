@@ -12,13 +12,15 @@ export function ZoomableMedia({ children }: { children: React.ReactNode }) {
   const wheelScale = useRef(1);
   const wheelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const drag = useRef<{ x: number; y: number } | null>(null);
   const place = (scale: number, fx: number, fy: number, animate: boolean, driftX = 0, driftY = 0) => {
     const el = inner.current;
     const rect = box.current?.getBoundingClientRect();
     if (!el || !rect) return;
     const dx = (fx - rect.width / 2) * (1 - scale) + driftX;
     const dy = (fy - rect.height / 2) * (1 - scale) + driftY;
-    el.style.transition = animate ? 'transform 380ms cubic-bezier(.2,.9,.3,1.15)' : 'none';
+    // Snaps back in one quick move — no overshoot.
+    el.style.transition = animate ? 'transform 320ms cubic-bezier(.33,1,.68,1)' : 'none';
     el.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
   };
   const gap = (t: React.TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
@@ -31,17 +33,41 @@ export function ZoomableMedia({ children }: { children: React.ReactNode }) {
     <div
       ref={box}
       style={{ position: 'absolute', inset: 0, overflow: 'hidden', touchAction: 'none' }}
-      onTouchStart={(e) => { if (e.touches.length === 2) { const m = mid(e.touches); start.current = { gap: gap(e.touches), fx: m.x, fy: m.y }; } }}
-      onTouchMove={(e) => {
-        const s = start.current;
-        if (!s || e.touches.length !== 2) return;
-        e.preventDefault();
-        // The picture rides with the fingers: their midpoint's travel since
-        // the pinch began is added on top of the zoom.
-        const m = mid(e.touches);
-        place(Math.max(1, Math.min(4, gap(e.touches) / Math.max(1, s.gap))), s.fx, s.fy, false, m.x - s.fx, m.y - s.fy);
+      // Every touch stops here: the viewer sits over the feed, and a flick
+      // that bubbled through would swipe the page out from under it.
+      onTouchStart={(e) => {
+        e.stopPropagation();
+        if (e.touches.length === 2) { const m = mid(e.touches); start.current = { gap: gap(e.touches), fx: m.x, fy: m.y }; drag.current = null; }
+        else if (e.touches.length === 1) drag.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       }}
-      onTouchEnd={() => { const s = start.current; start.current = null; if (s) place(1, s.fx, s.fy, true); }}
+      onTouchMove={(e) => {
+        e.stopPropagation();
+        const s = start.current;
+        if (s && e.touches.length === 2) {
+          e.preventDefault();
+          // The picture rides with the fingers: their midpoint's travel since
+          // the pinch began is added on top of the zoom.
+          const m = mid(e.touches);
+          place(Math.max(1, Math.min(4, gap(e.touches) / Math.max(1, s.gap))), s.fx, s.fy, false, m.x - s.fx, m.y - s.fy);
+          return;
+        }
+        const d = drag.current;
+        if (d && e.touches.length === 1) {
+          e.preventDefault();
+          const rect = box.current?.getBoundingClientRect();
+          place(1, (rect?.width ?? 0) / 2, (rect?.height ?? 0) / 2, false, e.touches[0].clientX - d.x, e.touches[0].clientY - d.y);
+        }
+      }}
+      onTouchEnd={(e) => {
+        e.stopPropagation();
+        const s = start.current; start.current = null; drag.current = null;
+        const rect = box.current?.getBoundingClientRect();
+        if (s) place(1, s.fx, s.fy, true); else place(1, (rect?.width ?? 0) / 2, (rect?.height ?? 0) / 2, true);
+      }}
+      onTouchCancel={(e) => { e.stopPropagation(); start.current = null; drag.current = null; }}
+      onPointerDown={(e) => e.stopPropagation()}
+      onPointerMove={(e) => e.stopPropagation()}
+      onPointerUp={(e) => e.stopPropagation()}
       onWheel={(e) => {
         if (!e.ctrlKey && !e.metaKey) return;
         e.preventDefault();

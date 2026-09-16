@@ -141,7 +141,8 @@ const styleDefinitions = StyleSheet.create({
   frame: { width: '100%', borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000', alignSelf: 'center' },
   // Instagram's tall post: 4:5, so the picture is big without taking the page.
   frameTall: { aspectRatio: 4 / 5, maxHeight: '62%' },
-  frameWide: { aspectRatio: 16 / 9 },
+  // A wide video runs the full width of the screen, no margin, no rounding.
+  frameWide: { aspectRatio: 16 / 9, marginHorizontal: -spacing.md, width: undefined, alignSelf: 'stretch', borderRadius: 0 },
   details: { gap: spacing.sm, flexShrink: 1, minHeight: 0 },
   who: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },

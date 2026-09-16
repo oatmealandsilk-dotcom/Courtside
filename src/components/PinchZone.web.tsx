@@ -21,7 +21,7 @@ export function PinchZone({ children, onPinchOut, onPinchIn }: {
     if (!el || !rect) return;
     const dx = (origin.current.x - rect.width / 2) * (1 - scale) + driftX;
     const dy = (origin.current.y - rect.height / 2) * (1 - scale) + driftY;
-    el.style.transition = animate ? 'transform 170ms cubic-bezier(.33,1,.68,1)' : 'none';
+    el.style.transition = animate ? 'transform 300ms cubic-bezier(.33,1,.68,1)' : 'none';
     el.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
   };
   const mid = (t: React.TouchList) => {
