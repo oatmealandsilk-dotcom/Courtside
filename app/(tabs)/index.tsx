@@ -411,6 +411,20 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     );
   }, [focused, showing, actions]);
 
+  // The last page of the main feed: a small congratulations for getting
+  // there this early, a way to post, and a way back to the top.
+  const endPage = (
+    <View key="the-end" style={[styles.article, styles.endPage]}>
+      <BrandMark size={48} />
+      <Text style={styles.endTitle}>You made it to the end.</Text>
+      <Text style={styles.endBody}>Congrats — you are one of the very first people on CourtSide. Everything you just scrolled was real. Share a moment of your own, and come back tomorrow for more.</Text>
+      <View style={styles.endActions}>
+        <Button label="Share a moment" onPress={() => router.push('/compose')} full />
+        <Button label="Back to the top" variant="secondary" onPress={() => pager.current?.scrollToTop()} full />
+      </View>
+    </View>
+  );
+
   return (
     <View style={styles.root}>
       {!ready || !feed.length ? (
@@ -421,7 +435,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       ) : (
         <View style={styles.viewer}>
           <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive}>
-            {feed.map((item, index) => {
+            {[...feed.map((item, index) => {
               const distance = Math.abs(index - active);
               const ahead = index - active;
               const pageKey = item.type === 'post' ? item.post.id : item.type === 'question' ? item.question.id : item.story.id;
@@ -745,7 +759,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                   </View>}
                 </React.Fragment>
               );
-            })}
+            }), ...(scope ? [] : [endPage])]}
           </VerticalPager>
 
           {scope ? (
@@ -877,6 +891,10 @@ const styleDefinitions = StyleSheet.create({
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   threadMark: { marginRight: 6, marginTop: 6 },
   hint: { color: colors.textMuted, fontSize: 11, textAlign: 'center', paddingBottom: 10 },
+  endPage: { alignItems: 'center', justifyContent: 'center', gap: 14, paddingHorizontal: 32 },
+  endTitle: { color: colors.text, fontSize: 24, fontWeight: '800', letterSpacing: -0.3, textAlign: 'center', marginTop: 6 },
+  endBody: { color: colors.textMuted, fontSize: 15, lineHeight: 22, textAlign: 'center' },
+  endActions: { alignSelf: 'stretch', gap: 10, marginTop: 10 },
 });
 
 export default asTabRoute<{ previewSection?: string; scope?: FeedScope }>(Home);
