@@ -187,7 +187,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   // and throw you to the top.
   const rankedFor = useRef<string | null>(null);
   // Builds the page order from whatever is loaded; a pull-to-refresh asks for it again.
-  const rerank = useCallback(() => {
+  const rerank = useCallback((remount = true) => {
       const data = latest.current;
       if (scope) {
         // One person's things, newest first, opened on the one that was tapped.
@@ -209,7 +209,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         .map((p) => `p:${p.id}`);
       setOrder([...justMine, ...ranked.filter((k) => !justMine.includes(k))]);
       setActive(0);
-      setVisit((v) => v + 1);
+      if (remount) setVisit((v) => v + 1); else pager.current?.scrollToTop();
   }, [scope?.userId, scope?.set, scope?.start]); // eslint-disable-line react-hooks/exhaustive-deps
   useFocusEffect(
     useCallback(() => {
@@ -222,9 +222,19 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   // A post of yours that just finished uploading: the feed starts over with it on top.
   useEffect(() => subscribeFeedRefresh(() => { if (!scope) rerank(); }), [scope, rerank]);
   // Pulling down on the first page fetches what is new and starts the feed over from the top.
+  const warmWaiters = useRef<(() => void)[]>([]);
   const refreshFeed = useCallback(async () => {
     await actions.refresh();
-    rerank();
+    // Start the warm-up over: the pull stays held until the new first pages are in, or five seconds.
+    setReadyIds(new Set());
+    setWarmTimedOut(false);
+    setWarmEpoch((n) => n + 1);
+    rerank(false);
+    await new Promise<void>((resolve) => {
+      const done = () => { clearTimeout(t); resolve(); };
+      const t = setTimeout(done, 5000);
+      warmWaiters.current.push(done);
+    });
   }, [actions, rerank]);
 
   /**
@@ -403,11 +413,12 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     setReadyIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
   }, []);
   const [warmTimedOut, setWarmTimedOut] = useState(false);
+  const [warmEpoch, setWarmEpoch] = useState(0);
   useEffect(() => {
     if (!ready || !feed.length || !(!isSupabaseConfigured || app.remoteLoaded)) return;
     const t = setTimeout(() => setWarmTimedOut(true), 6000);
     return () => clearTimeout(t);
-  }, [ready, feed.length, app.remoteLoaded]);
+  }, [ready, feed.length, app.remoteLoaded, warmEpoch]);
   const warmTargets = useMemo(() => feed.slice(0, FIRST).flatMap((item) => {
     if (item.type === 'hit') return item.story.videoUrl || item.story.imageUrl ? [item.story.id] : [];
     if (item.type === 'post') return item.post.videoUrl || item.post.imageUrl || item.post.thumbnailUrl ? [item.post.id] : [];
@@ -416,6 +427,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const warmDone = warmTargets.filter((id) => readyIds.has(id)).length;
   const dataIn = !isSupabaseConfigured || app.remoteLoaded;
   const warmed = !!scope || warmTimedOut || (ready && dataIn && feed.length > 0 && warmDone >= warmTargets.length);
+  // Anyone waiting on the warm-up (a pull-to-refresh holding the feed down) is let go once it is.
+  useEffect(() => { if (warmed && warmWaiters.current.length) { const w = warmWaiters.current; warmWaiters.current = []; w.forEach((fn) => fn()); } }, [warmed]);
   // The shell keeps the splash curtain up until this says the first pages are in.
   useEffect(() => { if (warmed && !scope) setFeedWarm(true); }, [warmed, scope]);
   // Photos and clip covers are fetched outright; a page reports itself ready when its picture lands.
@@ -491,7 +504,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         <View style={styles.viewer}>
           <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onRefresh={scope ? undefined : refreshFeed} pullHeader={scope || !currentUser ? undefined : (
             <>
-              <View style={styles.pullLogo}><BrandMark size={27} /></View>
+              <View style={[styles.pullLogo, styles.markPill]}><BrandMark size={30} color={theme === 'us-open' ? '#FFFFFF' : colors.brand} /></View>
               <View style={styles.pullGreeting}>
                 <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={26} />
                 <Text style={styles.pullGreetingText}>{`${currentUser.name.split(' ')[0]}'s homepage`}</Text>
@@ -872,7 +885,8 @@ const styleDefinitions = StyleSheet.create({
   // rather than floating in the middle of the window.
   pullGreeting: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   // The mark sits at the far left of the gap, level with the greeting; the greeting and disc in the middle.
-  pullLogo: { position: 'absolute', left: 18 },
+  // Exactly where the mark sits on a clip, so the pull reveals it in place.
+  pullLogo: { position: 'absolute', left: 28, top: 16 },
   pullGreetingText: { color: colors.text, fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
   wordmarkLeft: { alignItems: 'flex-start', paddingLeft: 12 + LANE_INSET },
   wordmark: {
