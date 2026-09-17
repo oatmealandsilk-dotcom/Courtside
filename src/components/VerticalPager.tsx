@@ -1,5 +1,6 @@
 import React, { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { View } from 'react-native';
+import { CourtSpinner } from '@/components/CourtSpinner';
 import { colors } from '@/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, runOnJS, runOnUI, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -123,7 +124,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       {/* Behind the feed, in the gap it leaves when pulled: the arc as you pull, the spinner while it fetches. */}
       {onRefresh ? (
         <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + 24, left: 0, right: 0, alignItems: 'center' }, gapStyle]}>
-          {refreshing ? <ActivityIndicator size="small" color={colors.textMuted} /> : <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2.5, borderColor: colors.textMuted, borderTopColor: 'transparent', opacity: 0.9 }} />}
+          {refreshing ? <CourtSpinner size={28} /> : <View style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 2.5, borderColor: colors.brand, borderTopColor: 'transparent', opacity: 0.9 }} />}
         </Animated.View>
       ) : null}
       {height > 0 && (

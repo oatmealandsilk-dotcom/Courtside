@@ -3,7 +3,7 @@ import { withTiming } from 'react-native-reanimated';
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { pagerStep } from '@/lib/pagerGesture';
 import { isDesktopBrowser } from '@/lib/browserDevice';
-import { ActivityIndicator } from 'react-native';
+import { CourtSpinner } from '@/components/CourtSpinner';
 import { colors } from '@/theme';
 
 export interface VerticalPagerHandle { scrollToTop: () => void }
@@ -116,7 +116,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   return <div style={{ position: 'relative', height: '100%', width: '100%' }}>
     {onRefresh && (pullAmount > 0 || refreshing) ? (
       <div style={{ position: 'absolute', top: 14, left: '50%', transform: `translateX(-50%) rotate(${-120 + 120 * pullAmount}deg)`, opacity: Math.min(1, pullAmount * 1.5), width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 0, transition: 'opacity 120ms', pointerEvents: 'none' }}>
-        {refreshing ? <ActivityIndicator size="small" color={colors.textMuted} /> : <div style={{ width: 22, height: 22, borderRadius: 11, border: `2.5px solid ${colors.textMuted}`, borderTopColor: 'transparent', opacity: 0.9 }} />}
+        {refreshing ? <CourtSpinner size={28} /> : <div style={{ width: 24, height: 24, borderRadius: 12, border: `2.5px solid ${colors.brand}`, borderTopColor: 'transparent', opacity: 0.9 }} />}
       </div>
     ) : null}
   <div style={{ position: 'absolute', inset: 0, transform: `translateY(${down}px)`, transition: heldDown ? 'transform 180ms ease-out' : pullAmount === 0 ? 'transform 360ms cubic-bezier(0.22, 0.61, 0.36, 1)' : 'none', borderTopLeftRadius: down > 2 ? 22 : 0, borderTopRightRadius: down > 2 ? 22 : 0, overflow: 'hidden', zIndex: 1 }}>

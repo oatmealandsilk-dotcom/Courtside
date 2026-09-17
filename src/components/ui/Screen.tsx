@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { ActivityIndicator, Animated, Dimensions, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { Animated, Dimensions, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import * as haptics from '@/lib/haptics';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -275,11 +275,11 @@ export function Screen({
         <View style={styles.flex}>{body}</View>
       )}
       {onRefresh && Platform.OS !== 'web' && refreshing ? (
-        <View pointerEvents="none" style={styles.plainRefresh}><ActivityIndicator size="small" color={colors.textMuted} /></View>
+        <View pointerEvents="none" style={styles.plainRefresh}><CourtSpinner size={28} /></View>
       ) : null}
       {onRefresh && Platform.OS === 'web' && (pulling || refreshing) ? (
         <Animated.View pointerEvents="none" style={[styles.webRefresh, { opacity: pull, transform: [{ translateY: pull.interpolate({ inputRange: [0, 1], outputRange: [-46, 6] }) }, { rotate: pull.interpolate({ inputRange: [0, 1], outputRange: ['-120deg', '0deg'] }) }] }]}>
-          {refreshing ? <ActivityIndicator size="small" color={colors.textMuted} /> : <View style={styles.pullArc} />}
+          {refreshing ? <CourtSpinner size={28} /> : <View style={styles.pullArc} />}
         </Animated.View>
       ) : null}
       {onRefresh ? (
@@ -297,7 +297,7 @@ const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
   scrollContent: { flexGrow: 1 },
-  pullArc: { width: 22, height: 22, borderRadius: 11, borderWidth: 2.5, borderColor: colors.textMuted, borderTopColor: 'transparent', opacity: 0.9 },
+  pullArc: { width: 24, height: 24, borderRadius: 12, borderWidth: 2.5, borderColor: colors.brand, borderTopColor: 'transparent', opacity: 0.9 },
   plainRefresh: { position: 'absolute', alignSelf: 'center', top: 10, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   webRefresh: { position: 'absolute', alignSelf: 'center', top: 10, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   updated: { position: 'absolute', alignSelf: 'center', top: 6, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
