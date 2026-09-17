@@ -143,6 +143,10 @@ export const useTheme = () => useContext(ThemeContext);
  */
 export function useThemedStyles<T extends object>(definitions: T): T {
   const { theme } = useTheme();
+  // The live colour object is brought in line with the theme every time a
+  // themed screen draws, so a button reading `colors.brand` can never be a
+  // theme behind the page it sits on.
+  if (colors.bg !== themes[theme].bg || colors.brand !== themes[theme].brand) Object.assign(colors, themes[theme]);
   return useMemo(() => {
     const target = themes[theme];
     const keys = Object.keys(lightColors) as (keyof typeof lightColors)[];
