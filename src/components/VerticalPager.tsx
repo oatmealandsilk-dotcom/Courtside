@@ -1,10 +1,10 @@
-import React, { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
-import { Platform, View } from 'react-native';
+import React, { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { View } from 'react-native';
 import { CourtSpinner } from '@/components/CourtSpinner';
-import { colors } from '@/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { runOnJS, runOnUI, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { BAR_DUCK_PX, barCompact } from '@/features/navigation/barShrink';
+import { colors } from '@/theme';
 
 /**
  * Full-height pages that snap one at a time. The active page changes the
@@ -19,50 +19,51 @@ export interface VerticalPagerHandle { scrollToTop: () => void }
 // keyboard) re-sizes the pages.
 const RESIZE_MIN = 40;
 
+// Pull-to-refresh. A blank strip this tall sits above the first page, and
+// the feed normally rests scrolled just past it. Pulling down scrolls the
+// strip into view — an ordinary scroll, nothing bounced or faked — with the
+// disc waiting behind it. Let go past the line and the feed glides to the
+// strip's top and stays there while the fetch runs; when the new pages are
+// in, it glides back. Every move is the scroller's own, so nothing jumps.
+const HOLD = 168;
+const PULL_LINE = 90;
+
 export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.ReactNode[]; onIndex: (index: number) => void; /** The page the scroll came to rest on. */ onSettled?: (index: number) => void; initialIndex?: number; /** Pulling down past the first page fetches what is new. */ onRefresh?: () => Promise<void>; /** Shown in the gap the pull opens, beside the disc. */ pullHeader?: React.ReactNode }>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0, onRefresh, pullHeader }, ref) {
   const [height, setHeight] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [scrollLocked, setScrollLocked] = useState(false);
   const insets = useSafeAreaInsets();
-  // Pull-to-refresh, the way Instagram's feels: the whole feed comes down
-  // with the finger, its top corners rounding, the spinner waiting in the
-  // gap above; past the line it is held there while the fetch runs, then
-  // the feed settles back up with the new pages in place.
-  // The system's own pull does the holding and the settling back (it is what
-  // Instagram and Strava use); its spinner is hidden and our disc waits in
-  // the gap behind the feed instead. The pull distance comes through the
-  // scroll position, which goes below zero while pulled or held.
+  // Where the first page starts: past the pull strip when there is one.
+  const top = onRefresh ? HOLD : 0;
   const list = useAnimatedRef<Animated.ScrollView>();
-  // Scrolling is asked for on the UI thread, where the list lives.
+  // Scrolling is asked for on the UI thread, where the list lives. `y` is
+  // measured from the first page's top.
   const jump = useCallback((y: number, animated: boolean) => {
+    const target = top + y;
     const node = list.current as unknown as { scrollTo?: (o: { x: number; y: number; animated: boolean }) => void } | null;
-    if (node?.scrollTo) { node.scrollTo({ x: 0, y, animated }); return; }
-    runOnUI(() => { 'worklet'; scrollTo(list, 0, y, animated); })();
-  }, [list]);
+    if (node?.scrollTo) { node.scrollTo({ x: 0, y: target, animated }); return; }
+    runOnUI(() => { 'worklet'; scrollTo(list, 0, target, animated); })();
+  }, [list, top]);
   useImperativeHandle(ref, () => ({ scrollToTop: () => jump(0, true) }), [jump]);
-  // Nothing happens until the finger lets go past the line. Then the feed
-  // is held down (an inset at the top, which the phone's own bounce settles
-  // into) while the fetch runs, and slides back up when it is done.
-  const HOLD = 112;
-  const PULL_LINE = 96;
+
   const pullY = useSharedValue(0);
-  const held = useSharedValue(0);
-  const [insetTop, setInsetTop] = useState(0);
   const refreshingRef = useRef(false);
   const refreshNow = useCallback(async () => {
     if (!onRefresh || refreshingRef.current) return;
     refreshingRef.current = true;
     setRefreshing(true);
-    if (Platform.OS === 'ios') setInsetTop(HOLD); else held.value = withTiming(HOLD, { duration: 180 });
+    setScrollLocked(true);
+    // Up to the strip's top, and stay.
+    runOnUI(() => { 'worklet'; scrollTo(list, 0, 0, true); })();
     try { await onRefresh(); } finally {
-      refreshingRef.current = false;
-      setRefreshing(false);
-      if (Platform.OS === 'ios') { runOnUI(() => { 'worklet'; scrollTo(list, 0, 0, true); })(); setTimeout(() => setInsetTop(0), 380); }
-      else held.value = withTiming(0, { duration: 360 });
+      // Back to the first page in one glide; the disc goes once it is there.
+      runOnUI(() => { 'worklet'; scrollTo(list, 0, HOLD, true); })();
+      setTimeout(() => { refreshingRef.current = false; setRefreshing(false); setScrollLocked(false); }, 420);
     }
-  }, [onRefresh, held, list]);
-  const feedStyle = useAnimatedStyle(() => ({ transform: [{ translateY: held.value }] }));
-  const firstPageStyle = useAnimatedStyle(() => { const down = pullY.value + held.value; return { borderTopLeftRadius: down > 2 ? 22 : 0, borderTopRightRadius: down > 2 ? 22 : 0, overflow: 'hidden' as const }; });
-  const gapStyle = useAnimatedStyle(() => { const down = pullY.value + held.value; return { opacity: Math.min(1, down / 40) }; });
+  }, [onRefresh, list]);
+  const firstPageStyle = useAnimatedStyle(() => ({ borderTopLeftRadius: pullY.value > 2 ? 22 : 0, borderTopRightRadius: pullY.value > 2 ? 22 : 0, overflow: 'hidden' as const }));
+  const gapStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, pullY.value / 40) }));
+
   const last = useRef(initialIndex);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The starting page is read once. The page reports its position as you
@@ -70,7 +71,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   // to a page edge mid-swipe — the "lands half and half" bug.
   const startIndex = useRef(initialIndex);
   const count = children.length;
-  const pageOf = useCallback((y: number) => Math.max(0, Math.min(count - 1, Math.round(y / Math.max(1, height)))), [count, height]);
+  const pageOf = useCallback((y: number) => Math.max(0, Math.min(count - 1, Math.round((y - top) / Math.max(1, height)))), [count, height, top]);
   const changed = useCallback((index: number) => {
     if (index !== last.current) { last.current = index; onIndex(index); }
   }, [onIndex]);
@@ -83,6 +84,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     settleTimer.current = setTimeout(() => { settleTimer.current = null; settled(y); }, 140);
   }, [settled]);
   const cancelSettle = useCallback(() => { if (settleTimer.current) { clearTimeout(settleTimer.current); settleTimer.current = null; } }, []);
+  // A pull that stopped short of the line eases back to the first page.
+  const springBack = useCallback(() => jump(0, true), [jump]);
 
   // Everything per frame stays on the UI thread: the bar follows the swipe
   // (moving on tucks it, coming back lifts it), and only a change of page
@@ -93,21 +96,29 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     onScroll: (e) => {
       const y = e.contentOffset.y;
       const h = e.layoutMeasurement.height || 1;
-      pullY.value = y < 0 ? -y : 0;
+      pullY.value = y < top ? top - y : 0;
       if (lastY.value >= 0) {
         const dy = y - lastY.value;
         // A small move follows the finger; a jump of most of a page is a whole page change, which counts fully.
         if (Math.abs(dy) >= h * 0.6) barCompact.value = withTiming(dy > 0 ? 1 : 0, { duration: 200 });
-        else if (Math.abs(dy) > 0.3 && y >= 0) barCompact.value = Math.max(0, Math.min(1, barCompact.value + dy / 150));
+        else if (Math.abs(dy) > 0.3 && y >= top) barCompact.value = Math.max(0, Math.min(1, barCompact.value + dy / 150));
       }
       lastY.value = y;
-      const index = Math.max(0, Math.min(count - 1, Math.round(y / h)));
+      const index = Math.max(0, Math.min(count - 1, Math.round((y - top) / h)));
       if (index !== lastIndex.value) { lastIndex.value = index; runOnJS(changed)(index); }
     },
     onMomentumEnd: (e) => { runOnJS(settled)(e.contentOffset.y); },
-    onEndDrag: (e) => { if (e.contentOffset.y < -PULL_LINE) runOnJS(refreshNow)(); runOnJS(dragEnded)(e.contentOffset.y); },
+    onEndDrag: (e) => {
+      const y = e.contentOffset.y;
+      if (top > 0 && y < top - PULL_LINE) runOnJS(refreshNow)();
+      else if (top > 0 && y < top) runOnJS(springBack)();
+      runOnJS(dragEnded)(y);
+    },
     onMomentumBegin: () => { runOnJS(cancelSettle)(); },
   });
+
+  // The places the scroller may rest: each page's top, measured past the strip.
+  const snapOffsets = useMemo(() => children.map((_, i) => top + i * height), [children, top, height]);
 
   return (
     <View style={{ flex: 1 }} onLayout={(e) => {
@@ -124,9 +135,10 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
         return h;
       });
     }}>
-      {/* Behind the feed, in the gap it leaves when pulled: the arc as you pull, the spinner while it fetches. */}
+      {/* Behind the feed, in the strip the pull reveals (below the status bar, above where the
+          held page starts): the arc as you pull, the disc while it fetches. */}
       {onRefresh ? (
-        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + 8, height: HOLD, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 48 }, gapStyle]}>
+        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top, height: HOLD - insets.top, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 48 }, gapStyle]}>
           {pullHeader}
           {refreshing ? <CourtSpinner size={28} /> : <View style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 2.5, borderColor: colors.brand, borderTopColor: 'transparent', opacity: 0.9 }} />}
         </Animated.View>
@@ -134,19 +146,19 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       {height > 0 && (
         <Animated.ScrollView
           ref={list}
-          style={[{ height }, feedStyle]}
-          pagingEnabled
-          snapToInterval={height}
+          style={{ height }}
+          snapToOffsets={snapOffsets}
           snapToAlignment="start"
           disableIntervalMomentum
-          contentOffset={{ x: 0, y: startIndex.current * height }}
+          contentOffset={{ x: 0, y: top + startIndex.current * height }}
           decelerationRate="fast"
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={16}
           onScroll={onScroll}
+          scrollEnabled={!scrollLocked}
           bounces={!!onRefresh}
-          contentInset={{ top: insetTop }}
         >
+          {top > 0 ? <View pointerEvents="none" style={{ height: HOLD }} /> : null}
           {children.map((child, index) => index === 0 ? <Animated.View key={index} style={[{ height }, firstPageStyle]}>{child}</Animated.View> : <View key={index} style={{ height }}>{child}</View>)}
         </Animated.ScrollView>
       )}

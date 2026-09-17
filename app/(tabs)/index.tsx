@@ -503,13 +503,10 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       ) : (
         <View style={styles.viewer}>
           <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onRefresh={scope ? undefined : refreshFeed} pullHeader={scope || !currentUser ? undefined : (
-            <>
-              <View style={[styles.pullLogo, styles.markPill]}><BrandMark size={30} color={theme === 'us-open' ? '#FFFFFF' : colors.brand} /></View>
-              <View style={styles.pullGreeting}>
-                <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={26} />
-                <Text style={styles.pullGreetingText}>{`${currentUser.name.split(' ')[0]}'s homepage`}</Text>
-              </View>
-            </>
+            <View style={styles.pullGreeting}>
+              <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={28} />
+              <Text style={styles.pullGreetingText}>{`${currentUser.name.split(' ')[0]}'s homepage`}</Text>
+            </View>
           )}>
             {[...feed.map((item, index) => {
               const distance = Math.abs(index - active);
@@ -885,8 +882,6 @@ const styleDefinitions = StyleSheet.create({
   // rather than floating in the middle of the window.
   pullGreeting: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   // The mark sits at the far left of the gap, level with the greeting; the greeting and disc in the middle.
-  // Exactly where the mark sits on a clip, so the pull reveals it in place.
-  pullLogo: { position: 'absolute', left: 34, top: 16 },
   pullGreetingText: { color: colors.text, fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
   wordmarkLeft: { alignItems: 'flex-start', paddingLeft: 12 + LANE_INSET },
   wordmark: {
