@@ -124,11 +124,19 @@ export default function QuestionDetail() {
         </Text>
 
         {thread.length === 0 ? (
-          <EmptyState
-            icon="chatbubble-ellipses-outline"
-            title="No answers yet"
-            body="Know this one? A specific answer beats three vague ones."
-          />
+          question.source ? (
+            <EmptyState
+              icon="chatbubble-ellipses-outline"
+              title={`${question.source.replies} ${question.source.replies === 1 ? 'reply' : 'replies'} on ${question.source.label}`}
+              body="Those stay on the original site. Be the first to answer it here."
+            />
+          ) : (
+            <EmptyState
+              icon="chatbubble-ellipses-outline"
+              title="No answers yet"
+              body="Know this one? A specific answer beats three vague ones."
+            />
+          )
         ) : null}
 
         {thread.filter(answer => !answer.parentAnswerId || !thread.some(parent => parent.id === answer.parentAnswerId)).map(answer => (

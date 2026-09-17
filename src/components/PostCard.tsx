@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -46,7 +46,7 @@ const KIND_META: Record<Post['kind'], { label: string; icon: keyof typeof Ionico
   milestone: { label: 'Milestone', icon: 'flag-outline', tint: colors.warning },
 };
 
-export function PostCard({
+function PostCardInner({
   onComment,
   post,
   author,
@@ -267,4 +267,15 @@ const styleDefinitions = StyleSheet.create({
   },
   action: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2 },
   actionText: { ...typography.bodyStrong, fontSize: 14, color: colors.textMuted },
+});
+
+/** Re-renders only when a shown value changes; the handlers passed in read fresh values through their own props, so a new function alone is no reason to rebuild. */
+export const PostCard = memo(PostCardInner, (a, b) => {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const k of keys) {
+    const x = (a as Record<string, unknown>)[k]; const y = (b as Record<string, unknown>)[k];
+    if (typeof x === 'function' && typeof y === 'function') continue;
+    if (x !== y) return false;
+  }
+  return true;
 });

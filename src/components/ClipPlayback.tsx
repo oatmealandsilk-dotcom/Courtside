@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -16,7 +16,7 @@ import { onSpaceBar } from '@/features/feed/keyboard';
  * one tap pauses, two likes, a small disc top-right toggles the sound, and a
  * hairline along the bottom shows how far through it is.
  */
-export function ClipPlayback({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart, trimEnd, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop }: {
+function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart, trimEnd, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop }: {
   uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void; fit?: 'cover' | 'contain';
   trimStart?: number; trimEnd?: number;
   /** Posted without sound: plays muted and offers no way to unmute. */
@@ -137,4 +137,15 @@ const styles = StyleSheet.create({
   soundThemed: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.bg, opacity: 0.88 },
   track: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
   bar: { height: 2, backgroundColor: 'rgba(255,255,255,0.9)' },
+});
+
+/** Re-renders only when a shown value changes; the handlers passed in read fresh values through their own props, so a new function alone is no reason to rebuild. */
+export const ClipPlayback = memo(ClipPlaybackInner, (a, b) => {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const k of keys) {
+    const x = (a as Record<string, unknown>)[k]; const y = (b as Record<string, unknown>)[k];
+    if (typeof x === 'function' && typeof y === 'function') continue;
+    if (x !== y) return false;
+  }
+  return true;
 });

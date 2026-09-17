@@ -1,4 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { Image as ExpoImage } from 'expo-image';
 import React from 'react';
 import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -56,7 +57,7 @@ export function Avatar({ uri, name, seed, size = 40, style, ring = false }: Prop
       ]}
     >
       <Text style={[styles.label, { fontSize: size * 0.38 }]}>{initials(name)}</Text>
-      {photo && <Image source={{uri:photo}} accessibilityLabel={`${name} profile photo`} style={{position:"absolute",width:size,height:size,borderRadius:size/2}}/>}
+      {photo && <ExpoImage source={{uri:photo}} accessibilityLabel={`${name} profile photo`} contentFit="cover" recyclingKey={photo} style={{position:"absolute",width:size,height:size,borderRadius:size/2}}/>}
       {ring ? (
         <View
           accessibilityLabel="Coach"

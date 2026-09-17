@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
-import React from 'react';
+import React, { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -37,7 +37,7 @@ interface Props {
   onShare?: () => void;
 }
 
-export function QuestionCard({
+function QuestionCardInner({
   question,
   author,
   onPress,
@@ -86,7 +86,7 @@ export function QuestionCard({
           style={styles.action}
         >
           <Ionicons name="chatbubble-outline" size={20} color={colors.text} />
-          <Text style={styles.actionLabel}>{question.answerIds.length || question.source?.replies || 0}</Text>
+          <Text style={styles.actionLabel}>{question.answerIds.length + (question.source?.replies ?? 0)}</Text>
         </Tappable>
 
         {onShare ? (
@@ -137,4 +137,15 @@ const styleDefinitions = StyleSheet.create({
   answered: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   answeredText: { ...typography.caption, color: colors.court },
   spacer: { flex: 1 },
+});
+
+/** Re-renders only when a shown value changes; the handlers passed in read fresh values through their own props, so a new function alone is no reason to rebuild. */
+export const QuestionCard = memo(QuestionCardInner, (a, b) => {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const k of keys) {
+    const x = (a as Record<string, unknown>)[k]; const y = (b as Record<string, unknown>)[k];
+    if (typeof x === 'function' && typeof y === 'function') continue;
+    if (x !== y) return false;
+  }
+  return true;
 });

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Modal, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import Reanimated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -73,6 +74,8 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const show = (on: boolean) => {
+    shownRef.current = on;
+    if (on) setTime({ ...timeRef.current });
     setShown(on);
     Animated.timing(fade, { toValue: on ? 1 : 0, duration: on ? 60 : 110, useNativeDriver: true }).start();
   };
@@ -94,6 +97,11 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
   const width = useRef(1);
   const timeRef = useRef(time);
   timeRef.current = time;
+  // The line and knob follow a shared value, so a playing video does not redraw its buttons five times a second.
+  const progress = useSharedValue(0);
+  const fillStyle = useAnimatedStyle(() => ({ width: `${progress.value * 100}%` }));
+  const knobStyle = useAnimatedStyle(() => ({ left: `${progress.value * 100}%` }));
+  const shownRef = useRef(false);
   const skipBy = (seconds: number, side: 'left' | 'right') => {
     const t = timeRef.current;
     const at = Math.max(0, Math.min(t.length, t.at + seconds));
@@ -175,9 +183,9 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
         </View>
         <View {...scrub.panHandlers} onLayout={(e) => { trackWidth.current = Math.max(1, e.nativeEvent.layout.width); }} style={styles.trackHit}>
           <View style={styles.track}>
-            <View style={[styles.fill, { width: `${time.fraction * 100}%` }]} />
+            <Reanimated.View style={[styles.fill, fillStyle]} />
           </View>
-          <View style={[styles.knob, { left: `${time.fraction * 100}%` }]} />
+          <Reanimated.View style={[styles.knob, knobStyle]} />
         </View>
       </View>
     </Animated.View>
@@ -192,7 +200,7 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
     <View ref={rootRef} style={StyleSheet.absoluteFill} onPointerEnter={desktopWeb ? hoverIn : undefined} onPointerLeave={desktopWeb ? hoverOut : undefined}>
       <View style={cropLayer(crop)}>
         <ClipVideo ref={player} uri={uri} poster={poster} active={active} muted={muted} paused={paused} fit="cover" trimStart={trimStart} trimEnd={trimEnd}
-          onProgress={(fraction, at, length) => setTime({ fraction, at, length })} onReady={(ok) => { setReady(ok); onReady?.(ok); }} onSize={onSize} />
+          onProgress={(fraction, at, length) => { progress.value = fraction; timeRef.current = { fraction, at, length }; if (shownRef.current || !timeRef.current.length || length !== time.length) setTime({ fraction, at, length }); }} onReady={(ok) => { setReady(ok); onReady?.(ok); }} onSize={onSize} />
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel="Show video controls" onPress={(e) => tap(e.nativeEvent.locationX)} onLayout={(e) => { width.current = Math.max(1, e.nativeEvent.layout.width); }} style={StyleSheet.absoluteFill} />
       {!ready && active && !paused ? <View pointerEvents="none" style={styles.centre}><CourtSpinner ink={discInk ?? 'white'} /></View> : null}

@@ -1,4 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { Image as ExpoImage } from 'expo-image';
 import React, { useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -179,7 +180,7 @@ export default function UserProfile() {
             {items.map((p) => (
               <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: tab === 'Clips' ? 'clips' : tab === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
                 <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
-                {p.thumbnailUrl ? <Image accessibilityIgnoresInvertColors source={{ uri: p.thumbnailUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
+                {p.thumbnailUrl ? <ExpoImage accessibilityIgnoresInvertColors source={{ uri: p.thumbnailUrl }} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120} /> : null}
                 {p.kind === 'clip' && <Ionicons name="play" size={14} color="#FFFFFF" style={styles.tilePlay} />}
                 {p.pinned && tab !== 'Tagged' && <Ionicons name="pin" size={13} color="#FFFFFF" style={styles.tilePin} />}
               </Pressable>

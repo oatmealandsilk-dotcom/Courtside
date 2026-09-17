@@ -349,11 +349,11 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
    * growing with the length of the feed. Two is enough that you never catch a
    * page mid-build, even swiping fast.
    */
-  const WINDOW = 2;
+  const WINDOW = 1;
   /** How many pages ahead stay mounted and buffering, so the feed is never caught out. */
-  const AHEAD = 7;
+  const AHEAD = 2;
   /** How many of those the curtain waits for on opening; the rest load in behind the feed. */
-  const FIRST = 4;
+  const FIRST = 3;
 
   // The warm-up: the first seven pages load (a video's first seconds, a
   // photo, a thread's words) behind a curtain, which lifts when they are in

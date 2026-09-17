@@ -1,6 +1,7 @@
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { PlayerName } from '@/components/PlayerName';
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { Image as ExpoImage } from 'expo-image';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { readSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
 import { Image, Pressable, Share, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -72,7 +73,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    return <View style={{ minHeight: 320, backgroundColor: colors.bg }}>
      <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>{items.map(p => <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: selected === 'Clips' ? 'clips' : selected === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
        <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
-       {p.thumbnailUrl ? <Image accessibilityIgnoresInvertColors source={{uri:p.thumbnailUrl}} style={StyleSheet.absoluteFill} resizeMode="cover"/> : null}
+       {p.thumbnailUrl ? <ExpoImage accessibilityIgnoresInvertColors source={{uri:p.thumbnailUrl}} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120}/> : null}
        {p.kind==='clip' && <Ionicons name="play" size={14} color="#FFFFFF" style={styles.tilePlay}/>}
        {p.pinned && selected !== 'Tagged' && <Ionicons name="pin" size={13} color="#FFFFFF" style={styles.tilePin}/>}
      </Pressable>)}</View>

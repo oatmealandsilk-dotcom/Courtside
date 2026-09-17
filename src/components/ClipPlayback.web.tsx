@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, memo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@/theme';
 import { onSpaceBar } from '@/features/feed/keyboard';
@@ -10,7 +10,7 @@ import type { MediaCrop } from '@/data/types';
 /** Swipe away and back within this long and the clip picks up where it was; longer and it starts over. */
 const RESUME_WINDOW_MS = 3000;
 
-export function ClipPlayback({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop }: {
+function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop }: {
   uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void; fit?: 'cover' | 'contain'; trimStart?: number; trimEnd?: number; silent?: boolean;
   /** Nothing over the picture at all: no sound disc, no length line. */
   bare?: boolean;
@@ -108,3 +108,14 @@ export function ClipPlayback({ uri, poster, active, preload = false, onDoubleTap
     {!ready && active ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><CourtSpinner ink={discInk ?? 'white'} /></div> : null}
   </div>;
 }
+
+/** Re-renders only when a shown value changes; the handlers passed in read fresh values through their own props, so a new function alone is no reason to rebuild. */
+export const ClipPlayback = memo(ClipPlaybackInner, (a, b) => {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const k of keys) {
+    const x = (a as Record<string, unknown>)[k]; const y = (b as Record<string, unknown>)[k];
+    if (typeof x === 'function' && typeof y === 'function') continue;
+    if (x !== y) return false;
+  }
+  return true;
+});

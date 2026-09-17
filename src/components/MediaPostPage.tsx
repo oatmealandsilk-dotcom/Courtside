@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, memo } from 'react';
 import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ZoomableMedia, type HomeRect, type ZoomableMediaHandle } from '@/components/ZoomableMedia';
@@ -53,7 +53,7 @@ const desktopWeb = Platform.OS === 'web' && isDesktopBrowser();
 /** How far in from the page edge a post sits on a computer; the wordmark above it lines up with this. */
 export const LANE_INSET = 28;
 
-export function MediaPostPage({ post, author, liked, saved, active, preload = false, onDoubleTap, onToggleLike, onToggleSave, onComment, onShare, onMore, topInset, burst, discInk, onReady }: Props) {
+function MediaPostPageInner({ post, author, liked, saved, active, preload = false, onDoubleTap, onToggleLike, onToggleSave, onComment, onShare, onMore, topInset, burst, discInk, onReady }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const { comments, currentUser, currentUserId } = useApp();
   // Newest first, the way the sheet lists them; they fill the bottom of the page.
@@ -261,4 +261,15 @@ const styleDefinitions = StyleSheet.create({
   caption: { ...typography.body, color: colors.text, lineHeight: 21 },
   captionName: { ...typography.bodyStrong, color: colors.text },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+});
+
+/** Re-renders only when a shown value changes; the handlers passed in read fresh values through their own props, so a new function alone is no reason to rebuild. */
+export const MediaPostPage = memo(MediaPostPageInner, (a, b) => {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const k of keys) {
+    const x = (a as Record<string, unknown>)[k]; const y = (b as Record<string, unknown>)[k];
+    if (typeof x === 'function' && typeof y === 'function') continue;
+    if (x !== y) return false;
+  }
+  return true;
 });

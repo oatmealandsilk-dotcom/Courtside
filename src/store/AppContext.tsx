@@ -1554,7 +1554,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const key = `${targetKind}:${targetId}`;
     if (seenThisSession.current.has(key)) return;
     seenThisSession.current.add(key);
-    if (targetKind === 'post' && live(stateRef.current.currentUserId, targetId)) remote.bumpViews(targetId);
+    if (targetKind === 'post' && live(stateRef.current.currentUserId, targetId)) { remote.bumpViews(targetId); return; }
     setState((prev) =>
       targetKind === 'post'
         ? {
