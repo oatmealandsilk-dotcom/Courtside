@@ -265,7 +265,14 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         </View>
         <View style={[styles.bone, { width: 220, marginTop: 12 }]} />
       </View>
-      <View style={styles.actions}>{[0, 1, 2, 3].map((i) => <View key={i} style={styles.action}><View style={styles.boneButton} /></View>)}</View>
+      <View style={styles.actions}>
+        {/* The real buttons, as they will be, so the page does not change shape when it arrives. */}
+        <View style={styles.action}><Ionicons name="heart-outline" size={36} color={colors.textMuted} /></View>
+        <View style={styles.action}><Ionicons name="chatbubble-outline" size={33} color={colors.textMuted} /></View>
+        <View style={styles.action}><Ionicons name="arrow-redo-outline" size={32} color={colors.textMuted} /></View>
+        <View style={styles.action}><Ionicons name="bookmark-outline" size={31} color={colors.textMuted} /></View>
+        <View style={styles.action}><Ionicons name="ellipsis-horizontal" size={30} color={colors.textMuted} /></View>
+      </View>
     </>
   ), [styles]);
   const warmWaiters = useRef<(() => void)[]>([]);
@@ -957,7 +964,6 @@ const styleDefinitions = StyleSheet.create({
   holdWord: { fontSize: 34, fontWeight: '800', color: colors.brand, letterSpacing: -1 },
   bone: { height: 12, borderRadius: 6, backgroundColor: colors.border },
   boneAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.border },
-  boneButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.border, marginBottom: 4 },
   clipFrame: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
   clipPortrait: { height: '100%', aspectRatio: 9 / 16, maxWidth: '100%', overflow: 'hidden', backgroundColor: colors.bg },
   clipLandscape: { width: '100%', aspectRatio: 16 / 9, maxHeight: '100%', overflow: 'hidden', backgroundColor: '#000' },
