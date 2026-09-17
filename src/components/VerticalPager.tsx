@@ -76,10 +76,12 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
 
   return (
     <View style={{ flex: 1 }} onLayout={(e) => {
-      // Pages are sized for the bar at its full height, whatever the bar is
-      // doing at this moment: the room it frees when ducked shows below the
-      // page instead of the page's bottom ending up under a full-size bar.
-      const h = e.nativeEvent.layout.height - BAR_DUCK_PX * barCompact.value;
+      // Pages are sized for the bar at its smallest, whatever the bar is
+      // doing at this moment. A page is then always at least as tall as the
+      // room, so the next page never peeks in at the bottom; with the bar
+      // at full size the last few points sit under it, and pages keep that
+      // much clear.
+      const h = e.nativeEvent.layout.height + BAR_DUCK_PX * (1 - barCompact.value);
       if (h <= 0) return;
       setHeight((prev) => {
         if (prev !== 0 && Math.abs(prev - h) < RESIZE_MIN) return prev;
