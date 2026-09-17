@@ -48,10 +48,10 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     try { await onRefresh(); } finally {
       refreshingRef.current = false;
       setRefreshing(false);
-      if (Platform.OS === 'ios') { jump(0, true); setTimeout(() => setInsetTop(0), 380); }
+      if (Platform.OS === 'ios') { runOnUI(() => { 'worklet'; scrollTo(list, 0, 0, true); })(); setTimeout(() => setInsetTop(0), 380); }
       else held.value = withTiming(0, { duration: 360 });
     }
-  }, [onRefresh, held, jump]);
+  }, [onRefresh, held, list]);
   const feedStyle = useAnimatedStyle(() => ({ transform: [{ translateY: held.value }] }));
   const firstPageStyle = useAnimatedStyle(() => { const down = pullY.value + held.value; return { borderTopLeftRadius: down > 2 ? 22 : 0, borderTopRightRadius: down > 2 ? 22 : 0, overflow: 'hidden' as const }; });
   const gapStyle = useAnimatedStyle(() => { const down = pullY.value + held.value; return { opacity: Math.min(1, down / 40) }; });
