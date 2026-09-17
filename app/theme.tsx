@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import * as haptics from '@/lib/haptics';
@@ -8,20 +8,23 @@ import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Screen } from '@/components/ui';
-import { useTheme, themeList, themes } from '@/theme/ThemeProvider';
+import { useTheme, themeList, themes, type ThemeName } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /** Every court, with a swatch and a line on what it is, on its own page. */
 export default function ThemePage() {
   const styles = useThemedStyles(styleDefinitions);
   const { theme, setTheme } = useTheme();
+  // The check moves the instant a card is tapped; the recolour follows a frame later.
+  const [chosen, setChosen] = useState<ThemeName | null>(null);
+  useEffect(() => { setChosen(null); }, [theme]);
 
   return (
     <Screen title="Theme" compactTitle onBack={() => goBack()}>
       <Text style={styles.lead}>Applies everywhere straight away. Pick the court you would rather be on.</Text>
       <View style={styles.list}>
         {themeList.map((option) => (
-          <ThemeCard key={option.name} option={option} active={theme === option.name} onPick={() => { haptics.tap(); setTimeout(() => setTheme(option.name), 0); }} styles={styles} />
+          <ThemeCard key={option.name} option={option} active={(chosen ?? theme) === option.name} onPick={() => { haptics.tap(); setChosen(option.name); setTimeout(() => setTheme(option.name), 16); }} styles={styles} />
         ))}
       </View>
     </Screen>
@@ -86,7 +89,7 @@ function ThemeCard({ option, active, onPick, styles }: { option: (typeof themeLi
   const ringStyle = useAnimatedStyle(() => ({ opacity: 1 - on.value }));
   const swatchStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 }] }));
   return (
-    <Pressable accessibilityRole="radio" accessibilityState={{ selected: active }} accessibilityLabel={`${option.label} theme`} onPress={() => { settle(true); onPick(); }}>
+    <Pressable accessibilityRole="radio" accessibilityState={{ selected: active }} accessibilityLabel={`${option.label} theme`} onPress={onPick}>
       <Animated.View style={[styles.card, cardStyle]}>
         <Animated.View style={[styles.swatch, { backgroundColor: palette.bg, borderColor: palette.border }, swatchStyle]}>
           <View style={[styles.swatchBar, { backgroundColor: palette.brand }]} />
