@@ -112,7 +112,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     }}>
       {/* Behind the feed, in the gap it leaves when pulled: the arc as you pull, the spinner while it fetches. */}
       {onRefresh ? (
-        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + 20, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 }, gapStyle]}>
+        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + 20, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 48 }, gapStyle]}>
           {pullHeader}
           {refreshing ? <CourtSpinner size={28} /> : <View style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 2.5, borderColor: colors.brand, borderTopColor: 'transparent', opacity: 0.9 }} />}
         </Animated.View>
