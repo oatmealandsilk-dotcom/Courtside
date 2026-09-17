@@ -239,8 +239,14 @@ export default function Compose() {
             {mode !== 'question' ? (
               <>
                 <View style={styles.stage}>
-                  <MediaPicker bare orientation={orientation} selection={mode === 'clip' ? 'video' : 'all'} value={media} onChange={setMedia} trim={edit} />
-
+                  {mode === 'hit' && media?.uri ? (
+                    // The hit is what the camera took, full stop: shown plainly, nothing to click.
+                    <View style={styles.hitFrame}>
+                      <Image source={{ uri: media.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel="Your hit" />
+                    </View>
+                  ) : (
+                    <MediaPicker bare orientation={orientation} selection={mode === 'clip' ? 'video' : 'all'} value={media} onChange={setMedia} trim={edit} />
+                  )}
                 </View>
                 {mode === 'hit' ? (
                   <View style={styles.hitMeta}>
@@ -333,6 +339,7 @@ const styleDefinitions = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   note: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
   pickError: { ...typography.small, color: colors.danger, lineHeight: 18 },
+  hitFrame: { width: '100%', aspectRatio: 4 / 3, maxHeight: 520, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000', alignSelf: 'center' },
   hitMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   hitPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: colors.brand, backgroundColor: colors.brandDim },
   hitPillText: { color: colors.brand, fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
