@@ -2,7 +2,7 @@ import React, { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, u
 import { View } from 'react-native';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { runOnJS, runOnUI, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { BAR_DUCK_PX, barCompact } from '@/features/navigation/barShrink';
 import * as haptics from '@/lib/haptics';
 import { colors } from '@/theme';
@@ -63,7 +63,12 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       setTimeout(() => { refreshingRef.current = false; setRefreshing(false); setScrollLocked(false); }, 420);
     }
   }, [onRefresh, list]);
-  const firstPageStyle = useAnimatedStyle(() => ({ borderTopLeftRadius: pullY.value > 2 ? 22 : 0, borderTopRightRadius: pullY.value > 2 ? 22 : 0, overflow: 'hidden' as const }));
+  // The first page's corners round only while it is pulled. The rounding
+  // needs the page clipped, and a clipped, animated box around a native video
+  // froze the picture while the sound ran on — so the clip is applied as plain
+  // state, and only for the pull.
+  const [rounded, setRounded] = useState(false);
+  useAnimatedReaction(() => pullY.value > 2, (now, before) => { if (now !== before) runOnJS(setRounded)(now); }, []);
   const gapStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, pullY.value / 40) }));
 
   const last = useRef(initialIndex);
@@ -166,7 +171,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
           bounces={!!onRefresh}
         >
           {top > 0 ? <View pointerEvents="none" style={{ height: HOLD }} /> : null}
-          {children.map((child, index) => index === 0 ? <Animated.View key={index} style={[{ height }, firstPageStyle]}>{child}</Animated.View> : <View key={index} style={{ height }}>{child}</View>)}
+          {children.map((child, index) => index === 0 ? <View key={index} style={[{ height }, rounded && { borderTopLeftRadius: 22, borderTopRightRadius: 22, overflow: 'hidden' }]}>{child}</View> : <View key={index} style={{ height }}>{child}</View>)}
         </Animated.ScrollView>
       )}
     </View>
