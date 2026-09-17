@@ -188,6 +188,16 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
       ) : null}
 
       <View style={[styles.details, lane]}>
+        {post.body ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={captionOpen ? 'Show less' : 'Show the whole caption'} onPress={() => setCaptionOpen((o) => !o)}>
+            <Text numberOfLines={captionOpen ? undefined : 4} style={styles.caption}><Text style={styles.captionName}>{author.handle} </Text><RichText style={styles.caption}>{post.body}</RichText></Text>
+          </Pressable>
+        ) : null}
+        {post.tags.length ? (
+          <View style={styles.tags}>
+            {post.tags.map((tag) => <Chip key={tag} label={`#${tag}`} onPress={() => router.push({ pathname: '/search', params: { q: `#${tag}` } })} small />)}
+          </View>
+        ) : null}
         {/* The clip's buttons, laid across instead of down: same glyphs, same
             sizes, the count under each one. */}
         <View style={styles.actions}>
@@ -213,16 +223,6 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
           </Tappable>
         </View>
 
-        {post.body ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={captionOpen ? 'Show less' : 'Show the whole caption'} onPress={() => setCaptionOpen((o) => !o)}>
-            <Text numberOfLines={captionOpen ? undefined : 4} style={styles.caption}><Text style={styles.captionName}>{author.handle} </Text><RichText style={styles.caption}>{post.body}</RichText></Text>
-          </Pressable>
-        ) : null}
-        {post.tags.length ? (
-          <View style={styles.tags}>
-            {post.tags.map((tag) => <Chip key={tag} label={`#${tag}`} onPress={() => router.push({ pathname: '/search', params: { q: `#${tag}` } })} small />)}
-          </View>
-        ) : null}
         {/* The comments, open on the page and filling whatever is left of it;
             the line at the bottom opens the sheet to write one. */}
         {thread.length ? (

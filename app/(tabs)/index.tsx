@@ -119,6 +119,28 @@ export interface FeedScope { userId: string; set: 'own' | 'clips' | 'tagged'; st
 // page, edge to edge. The tall 9:16 box in the middle is for computer windows.
 const phone = Platform.OS !== 'web' || !isDesktopBrowser();
 
+/**
+ * A hit's photo at its own shape. A tall one fills the page; a wide one (a
+ * computer's camera, say) sits in a wide box across the middle rather than
+ * being cropped down to a strip of it.
+ */
+function HitPicture({ uri }: { uri: string }) {
+  const [wide, setWide] = useState<boolean | null>(null);
+  useEffect(() => {
+    let live = true;
+    Image.getSize(uri, (w, h) => { if (live) setWide(w > h); }, () => { if (live) setWide(false); });
+    return () => { live = false; };
+  }, [uri]);
+  if (wide) {
+    return (
+      <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', backgroundColor: '#000' }]}>
+        <Image accessibilityIgnoresInvertColors source={{ uri }} style={{ width: '100%', aspectRatio: 4 / 3 }} resizeMode="contain" />
+      </View>
+    );
+  }
+  return <Image accessibilityIgnoresInvertColors source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />;
+}
+
 function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const styles = useThemedStyles(styleDefinitions);
   // The US Open ground is navy; the green wordmark sinks into it, white does not.
@@ -491,7 +513,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                           // Two quick taps like a hit, the way they like a clip.
                           <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s hit`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
                             {story.imageUrl ? (
-                              <Image accessibilityIgnoresInvertColors source={{ uri: story.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                              <HitPicture uri={story.imageUrl} />
                             ) : (
                               <MediaPlaceholder label={story.mediaLabel ?? 'Hit'} seed={story.id} portrait fill />
                             )}
