@@ -40,6 +40,8 @@ interface Props {
   topInset: number;
   /** A play burst over the picture, drawn by the feed. */
   burst?: React.ReactNode;
+  /** Counts up on each double tap, so the heart on the button pops with it. */
+  pop?: number;
   discInk?: string;
   /** The picture (or video's first frame) is in. */
   onReady?: (ready: boolean) => void;
@@ -55,7 +57,7 @@ const desktopWeb = Platform.OS === 'web' && isDesktopBrowser();
 /** How far in from the page edge a post sits on a computer; the wordmark above it lines up with this. */
 export const LANE_INSET = 28;
 
-function MediaPostPageInner({ post, author, liked, saved, active, preload = false, onDoubleTap, onToggleLike, onToggleSave, onComment, onShare, onMore, topInset, burst, discInk, onReady }: Props) {
+function MediaPostPageInner({ post, author, liked, saved, active, preload = false, onDoubleTap, onToggleLike, onToggleSave, onComment, onShare, onMore, topInset, burst, pop = 0, discInk, onReady }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const { comments, currentUser, currentUserId } = useApp();
   // Newest first, the way the sheet lists them; they fill the bottom of the page.
@@ -204,7 +206,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
             sizes, the count under each one. */}
         <View style={styles.actions}>
           <Tappable onPress={onToggleLike} immediate scaleTo={0.78} style={styles.action} accessibilityLabel={liked ? 'Unlike' : 'Like'}>
-            <Heart liked={liked} size={32} ink={colors.text} />
+            <Heart liked={liked} pop={pop} size={32} ink={colors.text} />
             <Text style={styles.actionText}>{compactNumber(post.likedBy.length)}</Text>
           </Tappable>
           <Tappable onPress={onComment} scaleTo={0.78} style={styles.action} accessibilityLabel="Comments">

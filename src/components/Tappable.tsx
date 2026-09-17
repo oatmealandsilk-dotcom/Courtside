@@ -51,7 +51,7 @@ export function Tappable({
   const spring = (to: number) =>
     (to < 1
       ? Animated.timing(scale, { toValue: to, duration: 60, useNativeDriver: true })
-      : Animated.spring(scale, { toValue: to, useNativeDriver: true, speed: 90, bounciness: 5 })
+      : Animated.spring(scale, { toValue: to, useNativeDriver: true, speed: 160, bounciness: 4 })
     ).start();
 
   return (

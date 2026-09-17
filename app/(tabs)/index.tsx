@@ -575,7 +575,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     </View>
                     <View style={styles.actions}>
                       <Tappable accessibilityLabel={hitLiked ? 'Unlike hit' : 'Like hit'} onPress={() => actions.toggleLikeStory(story.id)} immediate scaleTo={0.78} style={styles.action}>
-                        <Heart liked={hitLiked} size={36} style={styles.actionGlyph} />
+                        <Heart liked={hitLiked} pop={burst.id === story.id ? burst.n : 0} size={36} style={styles.actionGlyph} />
                         <Text style={styles.actionLabel}>{story.likedBy.length}</Text>
                       </Tappable>
                       <Tappable accessibilityLabel="Hit comments" onPress={() => router.push({ pathname: '/comments', params: { kind: 'hit', id: story.id } })} scaleTo={0.78} style={styles.action}>
@@ -654,6 +654,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       onMore={() => router.push({ pathname: '/post-menu', params: { id: post.id } })}
                       discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand}
                       burst={burst.id === post.id ? <LikeBurst token={burst.n} /> : null}
+                      pop={burst.id === post.id ? burst.n : 0}
                       onReady={(ok) => markReady(post.id, ok)}
                     />
                     {cover(post.id, 'mark')}
@@ -781,7 +782,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       scaleTo={0.78}
                       style={styles.action}
                     >
-                      <Heart liked={liked} size={36} style={styles.actionGlyph} />
+                      <Heart liked={liked} pop={burst.id === post.id ? burst.n : 0} size={36} style={styles.actionGlyph} />
                       <Text style={styles.actionLabel}>{post.likedBy.length}</Text>
                     </Tappable>
                     <Tappable
