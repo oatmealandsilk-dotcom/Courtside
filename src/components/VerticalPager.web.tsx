@@ -23,7 +23,10 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   const [refreshing, setRefreshing] = useState(false);
   const refreshRef = useRef(onRefresh); refreshRef.current = onRefresh;
   const refreshingRef = useRef(false);
-  const fireRefresh = async () => { if (!refreshRef.current || refreshingRef.current) return; refreshingRef.current = true; setRefreshing(true); setPullAmount(1); try { await refreshRef.current(); } finally { refreshingRef.current = false; setRefreshing(false); setPullAmount(0); } };
+  const [heldDown, setHeldDown] = useState(false);
+  const fireRefresh = async () => { if (!refreshRef.current || refreshingRef.current) return; refreshingRef.current = true; setRefreshing(true); setHeldDown(true); setPullAmount(1); try { await refreshRef.current(); } finally { refreshingRef.current = false; setRefreshing(false); setHeldDown(false); setPullAmount(0); } };
+  const HOLD = 64;
+  const down = heldDown ? HOLD : pullAmount * 56;
   const pager = useRef<HTMLDivElement>(null);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Position as a fraction of a page: the bar ducking changes this box's
@@ -112,10 +115,11 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
 
   return <div style={{ position: 'relative', height: '100%', width: '100%' }}>
     {onRefresh && (pullAmount > 0 || refreshing) ? (
-      <div style={{ position: 'absolute', top: 16 + 40 * pullAmount - 40, left: '50%', transform: `translateX(-50%) rotate(${-120 + 120 * pullAmount}deg)`, opacity: pullAmount, width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5, transition: 'top 120ms, opacity 120ms', pointerEvents: 'none' }}>
+      <div style={{ position: 'absolute', top: 14, left: '50%', transform: `translateX(-50%) rotate(${-120 + 120 * pullAmount}deg)`, opacity: Math.min(1, pullAmount * 1.5), width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 0, transition: 'opacity 120ms', pointerEvents: 'none' }}>
         {refreshing ? <ActivityIndicator size="small" color={colors.textMuted} /> : <div style={{ width: 22, height: 22, borderRadius: 11, border: `2.5px solid ${colors.textMuted}`, borderTopColor: 'transparent', opacity: 0.9 }} />}
       </div>
     ) : null}
+  <div style={{ position: 'absolute', inset: 0, transform: `translateY(${down}px)`, transition: heldDown ? 'transform 180ms ease-out' : pullAmount === 0 ? 'transform 360ms cubic-bezier(0.22, 0.61, 0.36, 1)' : 'none', borderTopLeftRadius: down > 2 ? 22 : 0, borderTopRightRadius: down > 2 ? 22 : 0, overflow: 'hidden', zIndex: 1 }}>
   <div ref={pager} tabIndex={0} role="region" aria-label="Clips feed"
     onPointerDown={event=>{
       if(event.button!==0 || !event.isPrimary || (event.target as HTMLElement).closest('input,textarea,select')) return;
@@ -190,6 +194,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
     {children.map((child, index) => <div key={index} style={{ display: 'flex', flexDirection: 'column',
       height: '100%', width: '100%', scrollSnapAlign: 'start', scrollSnapStop: 'always',
       position: 'relative', overflow: 'hidden' }}>{child}</div>)}
+  </div>
   </div>
   </div>;
 });

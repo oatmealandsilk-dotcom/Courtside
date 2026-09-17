@@ -1,8 +1,8 @@
 import React, { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
-import { ActivityIndicator, RefreshControl, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import { colors } from '@/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { runOnJS, runOnUI, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, runOnJS, runOnUI, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { BAR_DUCK_PX, barCompact } from '@/features/navigation/barShrink';
 
 /**
@@ -22,7 +22,35 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   const [height, setHeight] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const insets = useSafeAreaInsets();
-  const refreshNow = useCallback(async () => { if (!onRefresh || refreshing) return; setRefreshing(true); try { await onRefresh(); } finally { setRefreshing(false); } }, [onRefresh, refreshing]);
+  // Pull-to-refresh, the way Instagram's feels: the whole feed comes down
+  // with the finger, its top corners rounding, the spinner waiting in the
+  // gap above; past the line it is held there while the fetch runs, then
+  // the feed settles back up with the new pages in place.
+  const HOLD = 64;
+  const PULL_LINE = 72;
+  const pullY = useSharedValue(0);
+  const held = useSharedValue(0);
+  const refreshingRef = useRef(false);
+  const refreshNow = useCallback(async () => {
+    if (!onRefresh || refreshingRef.current) return;
+    refreshingRef.current = true;
+    setRefreshing(true);
+    held.value = withTiming(HOLD, { duration: 180, easing: Easing.out(Easing.cubic) });
+    try { await onRefresh(); } finally {
+      refreshingRef.current = false;
+      setRefreshing(false);
+      held.value = withTiming(0, { duration: 360, easing: Easing.out(Easing.cubic) });
+    }
+  }, [onRefresh, held]);
+  const feedStyle = useAnimatedStyle(() => ({ transform: [{ translateY: held.value }] }));
+  const firstPageStyle = useAnimatedStyle(() => {
+    const down = pullY.value + held.value;
+    return { borderTopLeftRadius: down > 2 ? 22 : 0, borderTopRightRadius: down > 2 ? 22 : 0, overflow: 'hidden' as const };
+  });
+  const gapStyle = useAnimatedStyle(() => {
+    const down = pullY.value + held.value;
+    return { opacity: Math.min(1, down / 40), transform: [{ translateY: Math.min(HOLD, down) / 2 - 14 }, { rotate: `${Math.min(360, pullY.value * 3)}deg` }] };
+  });
   const list = useAnimatedRef<Animated.ScrollView>();
   // Scrolling is asked for on the UI thread, where the list lives.
   const jump = useCallback((y: number, animated: boolean) => {
@@ -61,6 +89,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     onScroll: (e) => {
       const y = e.contentOffset.y;
       const h = e.layoutMeasurement.height || 1;
+      pullY.value = y < 0 ? -y : 0;
       if (lastY.value >= 0) {
         const dy = y - lastY.value;
         // A small move follows the finger; a jump of most of a page is a whole page change, which counts fully.
@@ -72,7 +101,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       if (index !== lastIndex.value) { lastIndex.value = index; runOnJS(changed)(index); }
     },
     onMomentumEnd: (e) => { runOnJS(settled)(e.contentOffset.y); },
-    onEndDrag: (e) => { runOnJS(dragEnded)(e.contentOffset.y); },
+    onEndDrag: (e) => { if (e.contentOffset.y < -PULL_LINE) runOnJS(refreshNow)(); runOnJS(dragEnded)(e.contentOffset.y); },
     onMomentumBegin: () => { runOnJS(cancelSettle)(); },
   });
 
@@ -91,10 +120,16 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
         return h;
       });
     }}>
+      {/* Behind the feed, in the gap it leaves when pulled: the arc as you pull, the spinner while it fetches. */}
+      {onRefresh ? (
+        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + 24, left: 0, right: 0, alignItems: 'center' }, gapStyle]}>
+          {refreshing ? <ActivityIndicator size="small" color={colors.textMuted} /> : <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2.5, borderColor: colors.textMuted, borderTopColor: 'transparent', opacity: 0.9 }} />}
+        </Animated.View>
+      ) : null}
       {height > 0 && (
         <Animated.ScrollView
           ref={list}
-          style={{ height }}
+          style={[{ height }, feedStyle]}
           pagingEnabled
           snapToInterval={height}
           snapToAlignment="start"
@@ -104,17 +139,11 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={16}
           onScroll={onScroll}
-          refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={() => { void refreshNow(); }} tintColor="transparent" colors={['transparent']} progressBackgroundColor="transparent" /> : undefined}
+          bounces={!!onRefresh}
         >
-          {children.map((child, index) => <View key={index} style={{ height }}>{child}</View>)}
+          {children.map((child, index) => index === 0 ? <Animated.View key={index} style={[{ height }, firstPageStyle]}>{child}</Animated.View> : <View key={index} style={{ height }}>{child}</View>)}
         </Animated.ScrollView>
       )}
-      {/* The refresh disc, the same one Profile shows, sitting in the top of the page like Instagram's. */}
-      {refreshing ? (
-        <View pointerEvents="none" style={{ position: 'absolute', top: insets.top + 72, left: 0, right: 0, alignItems: 'center' }}>
-          <ActivityIndicator size="small" color={colors.textMuted} />
-        </View>
-      ) : null}
     </View>
   );
 });
