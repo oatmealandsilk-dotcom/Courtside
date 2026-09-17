@@ -114,7 +114,7 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
       {silent || bare ? null : (
         <Pressable accessibilityRole="button" accessibilityLabel={muted ? 'Unmute clip' : 'Mute clip'} hitSlop={12} onPress={() => { setMuted((v) => !v); if (!discPinned) showDisc(); }} style={[styles.soundHit, { top: insets.top + (discInk ? 25 : 22) }]}>
           <Animated.View style={[styles.sound, discInk ? styles.soundThemed : null, discStyle]}>
-            <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={17} color={discInk ?? 'white'} />
+            <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={19} color={discInk ?? 'white'} />
           </Animated.View>
         </Pressable>
       )}
@@ -131,10 +131,10 @@ const styles = StyleSheet.create({
   playBadge: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#0008', alignItems: 'center', justifyContent: 'center', paddingLeft: 4 },
   // Top right, level with the wordmark: out of the caption's way and never
   // behind the bottom bar. A quiet disc, not a button that shouts.
-  soundHit: { position: 'absolute', right: 18, width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
+  soundHit: { position: 'absolute', right: 12, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   sound: { width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
   // Level with the wordmark and in the same pill: the page colour, the theme's ink.
-  soundThemed: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.bg, opacity: 0.88 },
+  soundThemed: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.bg, opacity: 0.88 },
   track: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
   bar: { height: 2, backgroundColor: 'rgba(255,255,255,0.9)' },
 });

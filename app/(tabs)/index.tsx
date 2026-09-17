@@ -524,7 +524,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     <View accessibilityLabel={`${author.name}'s hit`} style={styles.clipFrame}>
                       <View style={phone ? StyleSheet.absoluteFill : styles.clipPortrait}>
                         {story.videoUrl ? (
-                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={focused && active === index && warmed} preload={near} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
+                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={focused && active === index && warmed} preload={near} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
                         ) : (
                           // Two quick taps like a hit, the way they like a clip.
                           <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s hit`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
@@ -627,7 +627,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       onComment={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id } })}
                       onShare={() => share('post', post.id)}
                       onMore={() => router.push({ pathname: '/post-menu', params: { id: post.id } })}
-                     
+                      discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand}
                       burst={burst.id === post.id ? <LikeBurst token={burst.n} /> : null}
                       onReady={(ok) => markReady(post.id, ok)}
                     />
@@ -686,7 +686,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                           crop={post.crop}
                           silent={post.muted}
                           bare={immersive}
-                         
+                          discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand}
                           discPinned={index === 0 && !scope}
                           onReady={(ok) => markReady(post.id, ok)}
                         />
