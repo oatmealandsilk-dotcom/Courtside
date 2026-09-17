@@ -1,5 +1,6 @@
-import React, { useRef } from 'react';
-import { Animated, Platform, Pressable, type StyleProp, type ViewStyle } from 'react-native';
+import React from 'react';
+import { Platform, Pressable, type StyleProp, type ViewStyle } from 'react-native';
+import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 
 interface Props {
   children: React.ReactNode;
@@ -19,12 +20,14 @@ interface Props {
   accessibilityState?: { selected?: boolean; disabled?: boolean };
 }
 
+const OUT = Easing.out(Easing.quad);
+
 /**
  * A Pressable that answers back.
  *
- * Presses dip the control slightly and release with a spring; on a mouse it
- * lifts a touch on hover. Both run on the native driver so they stay smooth
- * while the rest of the screen is busy.
+ * Presses dip the control slightly and it comes straight back; on a mouse it
+ * lifts a touch on hover. Every move runs on the animation thread, so a
+ * busy screen (a like re-drawing the feed) never holds the control small.
  *
  * The numbers are deliberately small. The effect should register as the control
  * acknowledging you, not as an animation you sit and watch — anything past a
@@ -44,15 +47,11 @@ export function Tappable({
   accessibilityLabel,
   accessibilityState,
 }: Props) {
-  const scale = useRef(new Animated.Value(1)).current;
-
-  // Quick: the dip is a short straight run, the release a fast spring, so a
-  // tap reads as instant rather than as an animation you watch.
-  const spring = (to: number) =>
-    (to < 1
-      ? Animated.timing(scale, { toValue: to, duration: 60, useNativeDriver: true })
-      : Animated.spring(scale, { toValue: to, useNativeDriver: true, speed: 90, bounciness: 5 })
-    ).start();
+  const scale = useSharedValue(1);
+  const animated = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  // One quick pop: down in a few frames, back up in a few more — the same
+  // pace as the heart growing on a double tap.
+  const pop = () => { scale.value = withSequence(withTiming(scaleTo, { duration: 50, easing: OUT }), withTiming(1, { duration: 120, easing: OUT })); };
 
   return (
     <Pressable
@@ -63,57 +62,14 @@ export function Tappable({
       accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ ...accessibilityState, disabled }}
-      // Immediate: the dip and the return are one quick pop, started before
-      // the work — the return never waits on the finger lifting or on a busy
-      // screen, so the control never sits small.
-      onPressIn={() => {
-        if (disabled) return;
-        if (immediate) {
-          Animated.sequence([
-            Animated.timing(scale, { toValue: scaleTo, duration: 45, useNativeDriver: true }),
-            Animated.timing(scale, { toValue: 1, duration: 110, useNativeDriver: true }),
-          ]).start();
-          onPress?.();
-        } else spring(scaleTo);
-      }}
-      onPressOut={() => !disabled && !immediate && spring(1)}
+      // The pop is started before the work, so it is already under way when
+      // the screen gets busy; an immediate control also fires its action here.
+      onPressIn={() => { if (disabled) return; pop(); if (immediate) onPress?.(); }}
       // react-native-web maps these to mouse enter/leave; native ignores them.
-      onHoverIn={() => Platform.OS === 'web' && !disabled && spring(hoverTo)}
-      onHoverOut={() => Platform.OS === 'web' && !disabled && spring(1)}
+      onHoverIn={() => { if (Platform.OS === 'web' && !disabled) scale.value = withTiming(hoverTo, { duration: 120 }); }}
+      onHoverOut={() => { if (Platform.OS === 'web' && !disabled) scale.value = withTiming(1, { duration: 120 }); }}
     >
-      <Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View>
+      <Reanimated.View style={[style, animated]}>{children}</Reanimated.View>
     </Pressable>
   );
-}
-
-/**
- * Returns a handler that tells a double tap from a single one.
- *
- * Pressable has no double-tap of its own, so this counts taps inside a short
- * window. A single tap is held back until the window closes, which is why
- * `onSingle` is optional — leave it off and the pause costs nothing.
- */
-export function useDoubleTap(onDouble: () => void, onSingle?: () => void, window = 280) {
-  const last = useRef(0);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  return () => {
-    const now = Date.now();
-    if (now - last.current < window) {
-      last.current = 0;
-      if (timer.current) {
-        clearTimeout(timer.current);
-        timer.current = null;
-      }
-      onDouble();
-      return;
-    }
-    last.current = now;
-    if (onSingle) {
-      timer.current = setTimeout(() => {
-        timer.current = null;
-        onSingle();
-      }, window);
-    }
-  };
 }
