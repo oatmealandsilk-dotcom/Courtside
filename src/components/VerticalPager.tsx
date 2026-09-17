@@ -31,6 +31,14 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   // Instagram and Strava use); its spinner is hidden and our disc waits in
   // the gap behind the feed instead. The pull distance comes through the
   // scroll position, which goes below zero while pulled or held.
+  const list = useAnimatedRef<Animated.ScrollView>();
+  // Scrolling is asked for on the UI thread, where the list lives.
+  const jump = useCallback((y: number, animated: boolean) => {
+    const node = list.current as unknown as { scrollTo?: (o: { x: number; y: number; animated: boolean }) => void } | null;
+    if (node?.scrollTo) { node.scrollTo({ x: 0, y, animated }); return; }
+    runOnUI(() => { 'worklet'; scrollTo(list, 0, y, animated); })();
+  }, [list]);
+  useImperativeHandle(ref, () => ({ scrollToTop: () => jump(0, true) }), [jump]);
   // Nothing happens until the finger lets go past the line. Then the feed
   // is held down (an inset at the top, which the phone's own bounce settles
   // into) while the fetch runs, and slides back up when it is done.
@@ -55,14 +63,6 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   const feedStyle = useAnimatedStyle(() => ({ transform: [{ translateY: held.value }] }));
   const firstPageStyle = useAnimatedStyle(() => { const down = pullY.value + held.value; return { borderTopLeftRadius: down > 2 ? 22 : 0, borderTopRightRadius: down > 2 ? 22 : 0, overflow: 'hidden' as const }; });
   const gapStyle = useAnimatedStyle(() => { const down = pullY.value + held.value; return { opacity: Math.min(1, down / 40) }; });
-  const list = useAnimatedRef<Animated.ScrollView>();
-  // Scrolling is asked for on the UI thread, where the list lives.
-  const jump = useCallback((y: number, animated: boolean) => {
-    const node = list.current as unknown as { scrollTo?: (o: { x: number; y: number; animated: boolean }) => void } | null;
-    if (node?.scrollTo) { node.scrollTo({ x: 0, y, animated }); return; }
-    runOnUI(() => { 'worklet'; scrollTo(list, 0, y, animated); })();
-  }, [list]);
-  useImperativeHandle(ref, () => ({ scrollToTop: () => jump(0, true) }), [jump]);
   const last = useRef(initialIndex);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The starting page is read once. The page reports its position as you

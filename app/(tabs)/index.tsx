@@ -816,11 +816,18 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                   {page}
                   {/* Over a picture the wordmark sits in a small pill of the theme's own
                       background, so it reads on anything without touching the picture. */}
-                  {scope || hiddenMarks.has(key) || (immersive && index === active) ? null : <View pointerEvents="box-none" style={[styles.wordmarkOverlay, { top: insets.top + 24 }, !phone && item?.type === 'post' && item.post.kind !== 'clip' && styles.wordmarkLeft]}>
-                    {/* A tap on the wordmark tucks it away for this page only. */}
-                    <TapAway label="Hide the CourtSide wordmark" onHidden={() => hideMark(key)} style={media && picture ? styles.wordmarkPill : null}>
-                      <Text style={[styles.wordmark, theme === 'us-open' && { color: '#FFFFFF' }]}>CourtSide</Text>
-                    </TapAway>
+                  {scope || hiddenMarks.has(key) || (immersive && index === active) ? null : <View pointerEvents="box-none" style={[styles.wordmarkOverlay, { top: insets.top + 24 }, !phone && item?.type === 'post' && item.post.kind !== 'clip' && styles.wordmarkLeft, media && picture && styles.clipMarkOverlay]}>
+                    {/* A tap on the mark tucks it away for this page only. Over a clip or hit it is the
+                        small mark at the top left, part of the picture; on a post, the wordmark. */}
+                    {media && picture ? (
+                      <TapAway label="Hide the CourtSide mark" onHidden={() => hideMark(key)}>
+                        <BrandMark size={30} color="#FFFFFF" />
+                      </TapAway>
+                    ) : (
+                      <TapAway label="Hide the CourtSide wordmark" onHidden={() => hideMark(key)}>
+                        <Text style={[styles.wordmark, theme === 'us-open' && { color: '#FFFFFF' }]}>CourtSide</Text>
+                      </TapAway>
+                    )}
                   </View>}
                 </React.Fragment>
               );
@@ -873,7 +880,8 @@ const styleDefinitions = StyleSheet.create({
   },
   // Kept as a hook for anything the wordmark needs over video; the shadow that
   // used to live here was doing more harm than good.
-  wordmarkPill: { paddingHorizontal: 14, paddingVertical: 4, borderRadius: 12, backgroundColor: colors.bg, opacity: 0.88 },
+  // Over a clip: the mark alone, top left, with the same soft shadow the caption wears.
+  clipMarkOverlay: { alignItems: 'flex-start', paddingLeft: 20, shadowColor: '#000', shadowOpacity: 0.45, shadowRadius: 6, shadowOffset: { width: 0, height: 1 } },
   viewer: { flex: 1, width: '100%', minHeight: 0 },
   clip: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
   clipFrame: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
