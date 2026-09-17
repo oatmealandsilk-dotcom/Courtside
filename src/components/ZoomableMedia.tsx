@@ -141,21 +141,19 @@ export const ZoomableMedia = forwardRef<ZoomableMediaHandle, { children: React.R
     const s = settle.value;
     const radius = home?.radius ?? 14;
     const rounding = Math.max(s, pushing.value);
-    const box = home
-      ? { left: home.x * s, top: home.y * s, width: width.value - (width.value - home.width) * s, height: height.value - (height.value - home.height) * s, borderRadius: radius * rounding }
-      : { left: 0, top: 0, width: width.value, height: height.value, borderRadius: radius * rounding };
+    // Fully open, the box is pinned to the edges rather than given numbers,
+    // so when the phone turns the system's own rotation carries it in one
+    // move instead of waiting for a new measurement.
+    const box = home && s > 0.001
+      ? { left: home.x * s, top: home.y * s, right: undefined, bottom: undefined, width: width.value - (width.value - home.width) * s, height: height.value - (height.value - home.height) * s, borderRadius: radius * rounding }
+      : { left: 0, top: 0, right: 0, bottom: 0, width: undefined, height: undefined, borderRadius: radius * rounding };
     return { ...box, overflow: 'hidden' as const, transform: [{ translateX: dx }, { translateY: dy }, { scale: scale.value }], opacity: home ? 1 : 0.35 + 0.65 * backdrop.value };
   });
   const backdropStyle = useAnimatedStyle(() => ({ opacity: backdrop.value }));
 
   return (
     <GestureDetector gesture={gesture}>
-      <View style={StyleSheet.absoluteFill} onLayout={(e) => {
-        const { width: w, height: h } = e.nativeEvent.layout;
-        // First measure lands at once; a change of room (the phone turning) eases over, in step with the turn.
-        if (width.value <= 1) { width.value = w; height.value = h; }
-        else { width.value = withTiming(w, { duration: 320, easing: Easing.out(Easing.cubic) }); height.value = withTiming(h, { duration: 320, easing: Easing.out(Easing.cubic) }); }
-      }}>
+      <View style={StyleSheet.absoluteFill} onLayout={(e) => { width.value = e.nativeEvent.layout.width; height.value = e.nativeEvent.layout.height; }}>
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }, backdropStyle]} />
         <Animated.View style={[{ position: 'absolute' }, style]}>{children}</Animated.View>
       </View>
