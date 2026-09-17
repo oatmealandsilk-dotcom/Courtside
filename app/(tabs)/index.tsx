@@ -226,8 +226,10 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       // The feed always opens on a clip (unless something of yours just
       // landed): the first clip in the order is brought to the front.
       if (!justMine.length) {
-        const isClip = (k: string) => k.startsWith('p:') && data.posts.find((p) => p.id === k.slice(2))?.kind === 'clip';
-        const first = final.findIndex(isClip);
+        const isClip = (k: string) => (k.startsWith('p:') && data.posts.find((p) => p.id === k.slice(2))?.kind === 'clip') || (k.startsWith('h:') && !!data.stories.find((st) => st.id === k.slice(2))?.videoUrl);
+        // One you have not watched yet, when there is one; the same clip again otherwise.
+        let first = final.findIndex((k) => isClip(k) && !seen.current.has(k));
+        if (first < 0) first = final.findIndex(isClip);
         if (first > 0) final.unshift(...final.splice(first, 1));
       }
       setOrder(final);
@@ -252,6 +254,20 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   // dozens of held pages cost nothing when the feed re-renders on a tap.
   const holdMark = useMemo(() => <BrandMark size={72} />, []);
   const holdWord = useMemo(() => <Text style={styles.holdWord}>CourtSide</Text>, [styles]);
+  // The shape of a page before it is in: a round stand-in where the picture
+  // will be, the name beside it, and the column of buttons down the right.
+  const skeleton = useMemo(() => (
+    <>
+      <View style={[styles.caption, { bottom: BAR_DUCK_PX - 4 + 20 }]}>
+        <View style={styles.author}>
+          <View style={styles.boneAvatar} />
+          <View style={{ gap: 6 }}><View style={[styles.bone, { width: 120 }]} /><View style={[styles.bone, { width: 72 }]} /></View>
+        </View>
+        <View style={[styles.bone, { width: 220, marginTop: 12 }]} />
+      </View>
+      <View style={styles.actions}>{[0, 1, 2, 3].map((i) => <View key={i} style={styles.action}><View style={styles.boneButton} /></View>)}</View>
+    </>
+  ), [styles]);
   const warmWaiters = useRef<(() => void)[]>([]);
   const firstReadyRef = useRef(false);
   const refreshFeed = useCallback(async () => {
@@ -554,7 +570,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                 return <View key={pageKey} style={styles.holdPage}>{item.type === 'post' && item.post.kind !== 'clip' ? holdMark : holdWord}</View>;
               }
               // The same over a built page whose picture has not landed yet.
-              const cover = (id: string, kind: 'mark' | 'word') => readyIds.has(id) ? null : <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.holdPage]}>{kind === 'mark' ? holdMark : holdWord}</View>;
+              const cover = (id: string, kind: 'mark' | 'word') => readyIds.has(id) ? null : <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.holdPage]}>{kind === 'mark' ? holdMark : holdWord}{skeleton}</View>;
               // The page behind and the seven ahead keep their video buffered, ready to play.
               const near = distance <= 1 || (ahead > 0 && ahead <= AHEAD);
               const strip = index === suggestHost ? suggestStrip : null;
@@ -861,8 +877,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               const picture = item?.type === 'hit'
                 ? !!(item.story.imageUrl || item.story.videoUrl)
                 : item?.type === 'post' && item.post.kind === 'clip' && !!(item.post.videoUrl || item.post.thumbnailUrl || item.post.imageUrl);
-              if (!media && index !== 0) return page;
-              const key = item?.type === 'post' ? item.post.id : item?.type === 'question' ? item.question.id : item?.type === 'hit' ? item.story.id : 'first';
+              if (!media && item) return page;
+              const key = item?.type === 'post' ? item.post.id : item?.type === 'hit' ? item.story.id : 'first';
               return (
                 <React.Fragment key={key}>
                   {page}
@@ -939,6 +955,9 @@ const styleDefinitions = StyleSheet.create({
   clip: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
   holdPage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
   holdWord: { fontSize: 34, fontWeight: '800', color: colors.brand, letterSpacing: -1 },
+  bone: { height: 12, borderRadius: 6, backgroundColor: colors.border },
+  boneAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.border },
+  boneButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.border, marginBottom: 4 },
   clipFrame: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
   clipPortrait: { height: '100%', aspectRatio: 9 / 16, maxWidth: '100%', overflow: 'hidden', backgroundColor: colors.bg },
   clipLandscape: { width: '100%', aspectRatio: 16 / 9, maxHeight: '100%', overflow: 'hidden', backgroundColor: '#000' },

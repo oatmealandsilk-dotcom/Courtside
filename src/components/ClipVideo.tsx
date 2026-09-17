@@ -3,7 +3,9 @@ import { StyleSheet, View } from 'react-native';
 import { VideoView, useVideoPlayer, type VideoPlayer } from 'expo-video';
 
 /** Swipe away and back within this long and the clip picks up where it was; longer and it starts over. */
-export const RESUME_WINDOW_MS = 3000;
+export /** How many seconds of a clip are fetched before it counts as loaded and may start. */
+const PRELOAD_SECONDS = 4;
+const RESUME_WINDOW_MS = 3000;
 
 /**
  * A clip on a phone. Plays on its own and loops, the way a feed expects —
@@ -60,21 +62,39 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
     const b = player.addListener('videoTrackChange', ({ videoTrack }) => report(videoTrack));
     return () => { a.remove(); b.remove(); };
   }, [player]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Playing is asked for only once the player is ready: a seek or a play on
-  // an item still loading left the sound running with the picture stuck on
-  // its first frame (the first clip after signing in, or a new first clip
-  // after a refresh). The wish to play is kept, and honoured the moment the
-  // player reports ready.
+  // A clip is "ready" only once its first seconds are actually fetched, not
+  // merely once the player can name it. Clips straight off a phone's camera
+  // are heavy (a 13 Mb/s HDR file was seen), and starting one on a thin
+  // buffer ran the small sound track while the picture stalled on its first
+  // frame. The wish to play is kept, and honoured the moment enough is in.
   const wantPlay = useRef(false);
   const begin = useRef<() => void>(() => undefined);
-  useEffect(() => {
-    safely(() => latestReady.current?.(player.status === 'readyToPlay'));
-    const sub = player.addListener('statusChange', ({ status }) => {
-      latestReady.current?.(status === 'readyToPlay');
-      if (status === 'readyToPlay' && wantPlay.current) begin.current();
+  const isReady = () => {
+    let ready = false;
+    safely(() => {
+      if (player.status !== 'readyToPlay') return;
+      const length = player.duration || 0;
+      const need = Math.min(PRELOAD_SECONDS, Math.max(0.5, length - 0.1));
+      const buffered = player.bufferedPosition;
+      ready = length > 0 && (buffered >= trimStart + need || buffered >= length - 0.1);
     });
-    return () => sub.remove();
-  }, [player]);
+    return ready;
+  };
+  const readyRef = useRef(false);
+  useEffect(() => {
+    readyRef.current = false;
+    // Checked on a short clock until it is in; the player has no event for buffering progress.
+    const check = () => {
+      const ready = isReady();
+      if (ready !== readyRef.current) { readyRef.current = ready; latestReady.current?.(ready); }
+      if (ready && wantPlay.current) begin.current();
+      if (ready) { clearInterval(timer); }
+    };
+    const timer = setInterval(check, 150);
+    check();
+    const sub = player.addListener('statusChange', check);
+    return () => { clearInterval(timer); sub.remove(); };
+  }, [player, trimStart]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     safely(() => { player.muted = muted; });
   }, [player, muted]);
@@ -83,7 +103,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   // videos down. Set once: changing it as a page went live made the player
   // re-buffer, a blip of the loading disc over a clip already playing.
   useEffect(() => {
-    safely(() => { player.bufferOptions = { preferredForwardBufferDuration: 4 }; });
+    safely(() => { player.bufferOptions = { preferredForwardBufferDuration: PRELOAD_SECONDS }; });
   }, [player]);
   // The first play of a clip on a phone has, some of the time, run the
   // sound with the picture stuck on its first frame; a tap to pause and play
@@ -98,13 +118,11 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
           nudged.current = true;
           // A pause and a play in the same breath can cancel out inside the
           // native player; a short gap between them, as a finger leaves, does not.
-          console.warn(`[clip] first play under way at ${currentTime.toFixed(2)}s; status ${player.status}; playing ${player.playing}; track ${JSON.stringify((player as unknown as { videoTrack?: unknown }).videoTrack ?? null)}`);
           player.pause();
           setTimeout(() => safely(() => {
             if (!wantPlay.current) return;
             player.currentTime = trimStart;
             player.play();
-            console.warn(`[clip] nudged: status ${player.status}; playing ${player.playing}`);
           }), 90);
         }
         const end = trimEnd ?? player.duration;
@@ -121,7 +139,6 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   // Each native call stands on its own: a position read that fails must
   // never take the pause down with it, or the clip plays on after the swipe.
   begin.current = () => {
-    safely(() => console.warn(`[clip] play asked: status ${player.status}; at ${player.currentTime.toFixed(2)}s`));
     for (const other of livePlayers) if (other !== player) { try { other.pause(); } catch { /* released */ } }
     const back = left.current;
     left.current = null;
@@ -133,9 +150,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   useEffect(() => {
     if (active && !paused) {
       wantPlay.current = true;
-      let ready = false;
-      safely(() => { ready = player.status === 'readyToPlay'; });
-      if (ready) begin.current();
+      if (readyRef.current) begin.current();
     } else {
       wantPlay.current = false;
       if (!active) safely(() => { left.current = { time: player.currentTime, at: Date.now() }; });
