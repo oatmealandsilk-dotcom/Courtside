@@ -96,9 +96,16 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
       safely(() => {
         if (!nudged.current && wantPlay.current && currentTime > trimStart + 0.2) {
           nudged.current = true;
+          // A pause and a play in the same breath can cancel out inside the
+          // native player; a short gap between them, as a finger leaves, does not.
+          console.warn(`[clip] first play under way at ${currentTime.toFixed(2)}s; status ${player.status}; playing ${player.playing}; track ${JSON.stringify((player as unknown as { videoTrack?: unknown }).videoTrack ?? null)}`);
           player.pause();
-          player.currentTime = currentTime;
-          player.play();
+          setTimeout(() => safely(() => {
+            if (!wantPlay.current) return;
+            player.currentTime = trimStart;
+            player.play();
+            console.warn(`[clip] nudged: status ${player.status}; playing ${player.playing}`);
+          }), 90);
         }
         const end = trimEnd ?? player.duration;
         if ((trimEnd !== undefined && currentTime >= trimEnd) || currentTime < trimStart - 0.5) { player.currentTime = trimStart; return; }
@@ -114,6 +121,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   // Each native call stands on its own: a position read that fails must
   // never take the pause down with it, or the clip plays on after the swipe.
   begin.current = () => {
+    safely(() => console.warn(`[clip] play asked: status ${player.status}; at ${player.currentTime.toFixed(2)}s`));
     for (const other of livePlayers) if (other !== player) { try { other.pause(); } catch { /* released */ } }
     const back = left.current;
     left.current = null;
