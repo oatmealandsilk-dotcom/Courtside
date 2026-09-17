@@ -23,7 +23,7 @@ import { VerticalPager, type VerticalPagerHandle } from '@/components/VerticalPa
 import { subscribeScrollToTop } from '@/features/navigation/scrollToTop';
 import { setFeedWarm } from '@/features/feed/warmup';
 import { subscribeFeedRefresh } from '@/features/feed/feedBus';
-import { setBarCompact } from '@/features/navigation/barShrink';
+import { BAR_DUCK_PX, setBarCompact } from '@/features/navigation/barShrink';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { TipPage } from '@/components/TipPage';
 import { isLive } from '@/features/stories/stories';
@@ -895,7 +895,7 @@ const styleDefinitions = StyleSheet.create({
   },
   caption: {
     position: 'absolute',
-    bottom: 0,
+    bottom: BAR_DUCK_PX,
     left: 0,
     right: 0,
     padding: 18,
@@ -911,8 +911,8 @@ const styleDefinitions = StyleSheet.create({
   body: { color: 'white', fontSize: 13, lineHeight: 19 },
   tags: { color: 'rgba(255,255,255,0.85)', fontSize: 11 },
   swipeHint: { color: 'rgba(255,255,255,0.7)', fontSize: 10 },
-  bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 240 },
-  actions: { position: 'absolute', right: 12, bottom: 90, gap: 22 },
+  bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 240 + BAR_DUCK_PX },
+  actions: { position: 'absolute', right: 12, bottom: 90 + BAR_DUCK_PX, gap: 22 },
   action: { alignItems: 'center', gap: 4, minWidth: 48 },
   // Instagram's trick: plain white glyphs made bolder by a soft dark shadow
   // rather than a heavier icon, so they hold up over bright footage.
