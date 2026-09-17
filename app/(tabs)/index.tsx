@@ -256,8 +256,30 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const holdWord = useMemo(() => <Text style={styles.holdWord}>CourtSide</Text>, [styles]);
   // The shape of a page before it is in: a round stand-in where the picture
   // will be, the name beside it, and the column of buttons down the right.
-  const skeleton = useMemo(() => (
+  const insets = useSafeAreaInsets();
+  // A written or photo post's shape: who at the top, the picture in its frame
+  // with the mark on it, the words, and the row of buttons under them.
+  const skeletonPost = useMemo(() => (
+    <View style={[styles.holdPost, { paddingTop: insets.top + 66 }]}>
+      <View style={[styles.author, { alignSelf: 'stretch', marginBottom: 10 }]}>
+        <View style={[styles.boneAvatar, { width: 40, height: 40, borderRadius: 20 }]} />
+        <View style={{ gap: 6 }}><View style={[styles.bone, { width: 130 }]} /><View style={[styles.bone, { width: 90, height: 10 }]} /></View>
+      </View>
+      <View style={styles.boneFrame}>{holdMark}</View>
+      <View style={{ alignSelf: 'stretch', gap: 8, marginTop: 12 }}><View style={[styles.bone, { width: '80%' }]} /><View style={[styles.bone, { width: '55%' }]} /></View>
+      <View style={styles.boneRow}>
+        <Ionicons name="heart-outline" size={32} color={colors.textMuted} />
+        <Ionicons name="chatbubble-outline" size={29} color={colors.textMuted} />
+        <Ionicons name="arrow-redo-outline" size={29} color={colors.textMuted} />
+        <Ionicons name="bookmark-outline" size={28} color={colors.textMuted} />
+        <Ionicons name="ellipsis-horizontal" size={28} color={colors.textMuted} />
+      </View>
+    </View>
+  ), [styles, holdMark, insets.top]);
+  // A clip's or hit's shape: the name in the middle, who at the bottom left, the buttons down the right.
+  const skeletonClip = useMemo(() => (
     <>
+      {holdWord}
       <View style={[styles.caption, { bottom: BAR_DUCK_PX - 4 + 20 }]}>
         <View style={styles.author}>
           <View style={styles.boneAvatar} />
@@ -274,7 +296,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         <View style={styles.action}><Ionicons name="ellipsis-horizontal" size={30} color={colors.textMuted} /></View>
       </View>
     </>
-  ), [styles]);
+  ), [styles, holdWord]);
   const warmWaiters = useRef<(() => void)[]>([]);
   const firstReadyRef = useRef(false);
   const refreshFeed = useCallback(async () => {
@@ -396,7 +418,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     </View>
   ) : null;
 
-  const insets = useSafeAreaInsets();
   const [burst, setBurst] = useState({ id: '', n: 0 });
 
   /**
@@ -574,10 +595,10 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               if (ahead < -WINDOW || ahead > AHEAD) {
                 // A page not built yet holds its slot with the brand on it, so a
                 // fast scroll lands on the mark (a post) or the name (a clip or thread).
-                return <View key={pageKey} style={styles.holdPage}>{item.type === 'post' && item.post.kind !== 'clip' ? holdMark : holdWord}</View>;
+                return <View key={pageKey} style={styles.holdPage}>{item.type === 'post' && item.post.kind !== 'clip' ? skeletonPost : skeletonClip}</View>;
               }
               // The same over a built page whose picture has not landed yet.
-              const cover = (id: string, kind: 'mark' | 'word') => readyIds.has(id) ? null : <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.holdPage]}>{kind === 'mark' ? holdMark : holdWord}{skeleton}</View>;
+              const cover = (id: string, kind: 'mark' | 'word') => readyIds.has(id) ? null : <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.holdPage]}>{kind === 'mark' ? skeletonPost : skeletonClip}</View>;
               // The page behind and the seven ahead keep their video buffered, ready to play.
               const near = distance <= 1 || (ahead > 0 && ahead <= AHEAD);
               const strip = index === suggestHost ? suggestStrip : null;
@@ -963,6 +984,9 @@ const styleDefinitions = StyleSheet.create({
   holdPage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
   holdWord: { fontSize: 34, fontWeight: '800', color: colors.brand, letterSpacing: -1 },
   bone: { height: 12, borderRadius: 6, backgroundColor: colors.border },
+  holdPost: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingBottom: 16 + BAR_DUCK_PX, alignItems: 'center' },
+  boneFrame: { alignSelf: 'stretch', aspectRatio: 4 / 5, maxHeight: '58%', borderRadius: 16, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  boneRow: { alignSelf: 'stretch', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 12, marginTop: 14 },
   boneAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.border },
   clipFrame: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
   clipPortrait: { height: '100%', aspectRatio: 9 / 16, maxWidth: '100%', overflow: 'hidden', backgroundColor: colors.bg },

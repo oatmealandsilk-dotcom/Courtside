@@ -1,6 +1,6 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { VideoView, useVideoPlayer, type VideoPlayer } from 'expo-video';
+import { VideoView, createVideoPlayer, type VideoPlayer } from 'expo-video';
 
 /** Swipe away and back within this long and the clip picks up where it was; longer and it starts over. */
 export /** How many seconds of a clip are fetched before it counts as loaded and may start. */
@@ -37,11 +37,21 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   /** The video's own width and height in pixels, once known. */
   onSize?: (width: number, height: number) => void;
 }, ref) {
-  const player = useVideoPlayer(uri, (p) => {
+  // The player is made and freed by hand rather than by the toolkit's hook:
+  // the hook freed a still-playing player when a page left the feed, and
+  // its sound could run on after. Here it is silenced and stopped first,
+  // then freed.
+  const player = useMemo(() => {
+    const p = createVideoPlayer(uri);
     p.loop = true;
     p.muted = true;
     p.timeUpdateEventInterval = 0.2;
-  });
+    return p;
+  }, [uri]);
+  useEffect(() => () => {
+    try { player.muted = true; player.pause(); } catch { /* already freed */ }
+    try { player.release(); } catch { /* already freed */ }
+  }, [player]);
   // The native player can be freed before a late effect reaches it; a call
   // on a freed player must be a no-op, not a crash in the feed.
   const safely = (work: () => void) => { try { work(); } catch { /* player already released */ } };
@@ -159,7 +169,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   }, [player, active, paused, trimStart]);
   // Gone from the page (flicked past, feed rebuilt): silent and stopped at once,
   // rather than left to the native release a beat later.
-  useEffect(() => { livePlayers.add(player); return () => { livePlayers.delete(player); safely(() => { player.muted = true; player.pause(); }); }; }, [player]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { livePlayers.add(player); return () => { livePlayers.delete(player); }; }, [player]);
   return (
     <View style={StyleSheet.absoluteFill}>
       <VideoView player={player} style={StyleSheet.absoluteFill} contentFit={fit} nativeControls={false} allowsPictureInPicture={false} />
