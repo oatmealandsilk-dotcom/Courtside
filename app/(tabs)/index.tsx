@@ -222,7 +222,15 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         const shuffled = unseen.map((k, i) => ({ k, at: i + Math.random() * 4 })).sort((a, b) => a.at - b.at).map((x) => x.k);
         rest = [...shuffled, ...old];
       }
-      setOrder([...justMine, ...rest]);
+      const final = [...justMine, ...rest];
+      // The feed always opens on a clip (unless something of yours just
+      // landed): the first clip in the order is brought to the front.
+      if (!justMine.length) {
+        const isClip = (k: string) => k.startsWith('p:') && data.posts.find((p) => p.id === k.slice(2))?.kind === 'clip';
+        const first = final.findIndex(isClip);
+        if (first > 0) final.unshift(...final.splice(first, 1));
+      }
+      setOrder(final);
       setActive(0);
       if (remount) setVisit((v) => v + 1);
   }, [scope?.userId, scope?.set, scope?.start]); // eslint-disable-line react-hooks/exhaustive-deps
