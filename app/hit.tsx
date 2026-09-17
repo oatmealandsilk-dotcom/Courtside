@@ -74,10 +74,9 @@ export default function Hit() {
 
   // The photo is the hit; the caption and the posting happen in the same
   // composer a clip uses, so the two flows feel like one.
-  useEffect(() => {
-    if (!shot) return;
-    router.replace({ pathname: '/compose', params: { mode: 'hit', shot } });
-  }, [shot]);
+  const useShot = () => { if (shot) router.replace({ pathname: '/compose', params: { mode: 'hit', shot } }); };
+  // Another go: the count starts again the moment the camera is back.
+  const retake = () => { setShot(null); setCount(null); };
 
   if (!permission) return <View style={styles.root} />;
 
@@ -94,7 +93,23 @@ export default function Hit() {
     );
   }
 
-  if (shot) return <View style={styles.root} />;
+  if (shot) {
+    return (
+      <View style={styles.root}>
+        <Image source={{ uri: shot }} style={StyleSheet.absoluteFill} resizeMode="contain" accessibilityLabel="Your hit" />
+        <View style={[styles.topBar, { top: insets.top + spacing.sm }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Cancel" onPress={() => router.back()} style={styles.iconButton}>
+            <Ionicons name="close" size={24} color="white" />
+          </Pressable>
+          <View style={styles.tag}><Ionicons name="tennisball" size={12} color="white" /><Text style={styles.tagText}>YOUR HIT</Text></View>
+        </View>
+        <View style={[styles.bottom, { paddingBottom: insets.bottom + spacing.xl }]}>
+          <Button label="Use this hit" onPress={useShot} full />
+          <Button label="Retake" variant="ghost" onPress={retake} full />
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>

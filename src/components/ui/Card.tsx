@@ -35,6 +35,6 @@ const styleDefinitions = StyleSheet.create({
   },
   padded: { padding: spacing.lg },
   pressed: { opacity: 0.72 },
-  // Pointer devices only: a touch of lift, as the round buttons give.
-  hovered: { transform: [{ scale: 1.01 }] },
+  // Pointer devices only: a touch lighter under the mouse. (Not a scale: a card that fills the page would shift its words.)
+  hovered: { opacity: 0.9 },
 });
