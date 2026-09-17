@@ -1,6 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Image, PanResponder, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Image, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { isDesktopBrowser } from '@/lib/browserDevice';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -37,6 +38,9 @@ const clock = (s: number) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toStrin
  * re-encoded; a trim is remembered and honoured at playback, so it is
  * instant and never touches the original.
  */
+// A computer's browser: the stage is wide, so a portrait post gets a phone-shaped box in the middle.
+const desktopWeb = Platform.OS === 'web' && isDesktopBrowser();
+
 export function MediaEditor({ media, onBack, onDone }: {
   media: PickedMedia;
   onBack: () => void;
@@ -44,7 +48,10 @@ export function MediaEditor({ media, onBack, onDone }: {
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
+  // The editor's own width: on a computer it sits in a sheet narrower than the window, and every strip is sized to it.
+  const [ownWidth, setOwnWidth] = useState(0);
+  const width = ownWidth || windowWidth;
   const isVideo = media.kind === 'video';
 
   /* ----------------------------------- video ---------------------------------- */
@@ -346,7 +353,7 @@ export function MediaEditor({ media, onBack, onDone }: {
   // in the feed is the Portrait / Landscape choice on the next step.
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
+    <View style={[styles.root, { paddingTop: insets.top }]} onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w > 0 && w !== ownWidth) setOwnWidth(w); }}>
       <View style={styles.bar}>
         <Pressable accessibilityRole="button" accessibilityLabel="Back" hitSlop={10} onPress={onBack}><Ionicons name="chevron-back" size={26} color="white" /></Pressable>
         <Text style={styles.title}>{isVideo ? 'Edit clip' : 'Edit photo'}</Text>
@@ -354,8 +361,8 @@ export function MediaEditor({ media, onBack, onDone }: {
       </View>
 
       <View style={styles.stage}>
-        <View style={frame === 'landscape' ? styles.wideFrame : StyleSheet.absoluteFill}>
-          <View style={frame === 'landscape' ? styles.wideBox : StyleSheet.absoluteFill} onLayout={(e) => setBox({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) })}>
+        <View style={frame === 'landscape' ? styles.wideFrame : desktopWeb ? styles.tallFrame : StyleSheet.absoluteFill}>
+          <View style={frame === 'landscape' ? styles.wideBox : desktopWeb ? styles.tallBox : StyleSheet.absoluteFill} onLayout={(e) => setBox({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) })}>
             {isVideo && media.uri ? (
               <View style={cropLayer(crop)}>
                 <VideoSurface ref={player} uri={media.uri} muted={muted} fit="cover" from={range[0]} to={duration ? range[1] : undefined} paused={frozenAt !== null} onTime={onTime} onDuration={onDuration} />
@@ -499,6 +506,9 @@ const styleDefinitions = StyleSheet.create({
   stage: { flex: 1, backgroundColor: '#000', overflow: 'hidden' },
   wideFrame: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center' },
   wideBox: { width: '100%', aspectRatio: 16 / 9, overflow: 'hidden' },
+  // A computer's stage is wide and short: a portrait post shows in a phone-shaped box in the middle rather than cropped to the whole stage.
+  tallFrame: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
+  tallBox: { height: '100%', aspectRatio: 9 / 16, maxWidth: '100%', overflow: 'hidden', backgroundColor: '#000' },
   sound: { position: 'absolute', right: 12, top: 12, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: 'rgba(0,0,0,0.55)' },
   soundText: { ...typography.caption, color: 'white', letterSpacing: 0 },
   time: { position: 'absolute', left: 12, bottom: 12, color: 'white', ...typography.caption, letterSpacing: 0, backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.pill },
