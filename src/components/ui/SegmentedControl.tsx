@@ -36,7 +36,7 @@ export function SegmentedControl<T extends string>({
         accessibilityState={{ selected: active }}
         style={[styles.segment, wrap && styles.segmentWrapped, scrollable && styles.segmentLoose, active && styles.segmentActive]}
       >
-        <Text style={[styles.label, active && styles.labelActive]} numberOfLines={1}>
+        <Text style={[styles.label, scrollable && { flexShrink: 0 }, active && styles.labelActive]} numberOfLines={1}>
           {segment.label}
         </Text>
       </Pressable>
@@ -80,7 +80,8 @@ const styleDefinitions = StyleSheet.create({
   // Half the row each, so two fit per line and none of the words get clipped.
   segmentWrapped: { flexBasis: '48%', flexGrow: 1 },
   // Loose in a scrolling row, each chip carries its own edge so it never looks like bare words.
-  segmentLoose: { flex: 0, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  // Explicitly not allowed to shrink: in a sideways scroller the browser would otherwise squeeze the words to nothing.
+  segmentLoose: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', minWidth: 64, paddingHorizontal: spacing.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   segmentActive: { backgroundColor: colors.brand, borderColor: colors.brand },
   label: { ...typography.smallStrong, color: colors.textMuted },
   labelActive: { color: colors.brandInk },
