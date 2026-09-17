@@ -12,6 +12,13 @@ export const RESUME_WINDOW_MS = 3000;
  */
 export interface ClipVideoHandle { seek: (seconds: number) => void; /** The native player, for a second view of the same stream (full screen). */ player: VideoPlayer | null }
 
+/**
+ * Every live player on the phone. Only one clip may make sound at a time,
+ * so the one that starts silences every other one first — whatever state
+ * the others were left in by a fast flick or a feed rebuild.
+ */
+const livePlayers = new Set<VideoPlayer>();
+
 export const ClipVideo = forwardRef<ClipVideoHandle, {
   uri: string; poster?: string; active?: boolean; muted?: boolean; paused?: boolean; fit?: 'cover' | 'contain';
   trimStart?: number; trimEnd?: number;
@@ -84,6 +91,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   // never take the pause down with it, or the clip plays on after the swipe.
   useEffect(() => {
     if (active && !paused) {
+      for (const other of livePlayers) if (other !== player) { try { other.pause(); } catch { /* released */ } }
       const back = left.current;
       left.current = null;
       safely(() => { player.currentTime = !back || Date.now() - back.at > RESUME_WINDOW_MS ? trimStart : back.time; });
@@ -95,7 +103,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   }, [player, active, paused, trimStart]);
   // Gone from the page (flicked past, feed rebuilt): silent and stopped at once,
   // rather than left to the native release a beat later.
-  useEffect(() => () => { safely(() => { player.muted = true; player.pause(); }); }, [player]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { livePlayers.add(player); return () => { livePlayers.delete(player); safely(() => { player.muted = true; player.pause(); }); }; }, [player]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <View style={StyleSheet.absoluteFill}>
       <VideoView player={player} style={StyleSheet.absoluteFill} contentFit={fit} nativeControls={false} allowsPictureInPicture={false} />
