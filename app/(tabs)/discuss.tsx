@@ -73,7 +73,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           ? <NearbyMap me={currentUser} players={players} at={detectedCoords} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} />
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : <View style={styles.mapStandIn} />) : null}
-        {players.map(user => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.player}>
+        {players.map(user => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [styles.player, (pressed || hovered) && { backgroundColor: colors.surfaceAlt }]}>
           <Avatar name={user.name} seed={user.avatarSeed} size={44} />
           <View style={{ flex: 1, gap: 4 }}><View style={{flexDirection:"row",alignItems:"center",gap:8,flexWrap:"wrap"}}><Text style={styles.playerName}>{user.name}</Text><LevelPill profile={user.profile} small /></View><Text style={styles.playerMeta}>@{user.handle} · {user.location}</Text></View>
 

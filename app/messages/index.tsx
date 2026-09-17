@@ -98,7 +98,7 @@ export default function Inbox() {
             accessibilityRole="link"
             accessibilityLabel={`Open conversation with ${other?.name}`}
             onPress={() => router.push(`/messages/${conversation.id}`)}
-            style={styles.row}
+            style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [styles.row, (pressed || hovered) && { backgroundColor: colors.surfaceAlt }]}
           >
             <Avatar name={other?.name ?? '?'} seed={other?.avatarSeed ?? conversation.id} size={54} />
             <View style={styles.rowBody}>

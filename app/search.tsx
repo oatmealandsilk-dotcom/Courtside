@@ -109,7 +109,8 @@ export default function Search() {
           placeholder="People, @handles, threads, coaches, gear…"
           autoCapitalize="none"
         />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}><SegmentedControl
+        <SegmentedControl
+          scrollable
           segments={[
             { value: 'all', label: 'All' },
             {value:'clips',label:'Clips'},
@@ -120,7 +121,7 @@ export default function Search() {
           ]}
           value={scope}
           onChange={setScope}
-        /></ScrollView>
+        />
       </View>
 
       {!q ? (
