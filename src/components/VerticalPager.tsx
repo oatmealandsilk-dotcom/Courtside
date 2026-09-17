@@ -57,10 +57,13 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     setScrollLocked(true);
     // The snap is already carrying the feed to the strip's top; it stays there.
     try { await onRefresh(); } finally {
-      // Back to the first page in one glide; the disc goes once it is there.
+      // Back to the first page in one glide. The finger is free again the
+      // moment the glide starts — a swipe mid-glide just carries on from it —
+      // and the disc goes once the page is home.
       haptics.tap();
+      setScrollLocked(false);
       runOnUI(() => { 'worklet'; scrollTo(list, 0, HOLD, true); })();
-      setTimeout(() => { refreshingRef.current = false; setRefreshing(false); setScrollLocked(false); }, 420);
+      setTimeout(() => { refreshingRef.current = false; setRefreshing(false); }, 420);
     }
   }, [onRefresh, list]);
   // The first page's corners round only while it is pulled. The rounding
