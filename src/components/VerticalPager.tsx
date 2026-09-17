@@ -1,9 +1,9 @@
 import React, { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { RefreshControl, View } from 'react-native';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { colors } from '@/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { Easing, runOnJS, runOnUI, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { runOnJS, runOnUI, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { BAR_DUCK_PX, barCompact } from '@/features/navigation/barShrink';
 
 /**
@@ -27,31 +27,20 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   // with the finger, its top corners rounding, the spinner waiting in the
   // gap above; past the line it is held there while the fetch runs, then
   // the feed settles back up with the new pages in place.
-  const HOLD = 64;
-  const PULL_LINE = 72;
+  // The system's own pull does the holding and the settling back (it is what
+  // Instagram and Strava use); its spinner is hidden and our disc waits in
+  // the gap behind the feed instead. The pull distance comes through the
+  // scroll position, which goes below zero while pulled or held.
   const pullY = useSharedValue(0);
-  const held = useSharedValue(0);
   const refreshingRef = useRef(false);
   const refreshNow = useCallback(async () => {
     if (!onRefresh || refreshingRef.current) return;
     refreshingRef.current = true;
     setRefreshing(true);
-    held.value = withTiming(HOLD, { duration: 180, easing: Easing.out(Easing.cubic) });
-    try { await onRefresh(); } finally {
-      refreshingRef.current = false;
-      setRefreshing(false);
-      held.value = withTiming(0, { duration: 360, easing: Easing.out(Easing.cubic) });
-    }
-  }, [onRefresh, held]);
-  const feedStyle = useAnimatedStyle(() => ({ transform: [{ translateY: held.value }] }));
-  const firstPageStyle = useAnimatedStyle(() => {
-    const down = pullY.value + held.value;
-    return { borderTopLeftRadius: down > 2 ? 22 : 0, borderTopRightRadius: down > 2 ? 22 : 0, overflow: 'hidden' as const };
-  });
-  const gapStyle = useAnimatedStyle(() => {
-    const down = pullY.value + held.value;
-    return { opacity: Math.min(1, down / 40), transform: [{ translateY: Math.min(HOLD, down) / 2 - 14 }] };
-  });
+    try { await onRefresh(); } finally { refreshingRef.current = false; setRefreshing(false); }
+  }, [onRefresh]);
+  const firstPageStyle = useAnimatedStyle(() => ({ borderTopLeftRadius: pullY.value > 2 ? 22 : 0, borderTopRightRadius: pullY.value > 2 ? 22 : 0, overflow: 'hidden' as const }));
+  const gapStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, pullY.value / 36), transform: [{ translateY: Math.min(64, pullY.value) / 2 - 16 }] }));
   const list = useAnimatedRef<Animated.ScrollView>();
   // Scrolling is asked for on the UI thread, where the list lives.
   const jump = useCallback((y: number, animated: boolean) => {
@@ -102,7 +91,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       if (index !== lastIndex.value) { lastIndex.value = index; runOnJS(changed)(index); }
     },
     onMomentumEnd: (e) => { runOnJS(settled)(e.contentOffset.y); },
-    onEndDrag: (e) => { if (e.contentOffset.y < -PULL_LINE) runOnJS(refreshNow)(); runOnJS(dragEnded)(e.contentOffset.y); },
+    onEndDrag: (e) => { runOnJS(dragEnded)(e.contentOffset.y); },
     onMomentumBegin: () => { runOnJS(cancelSettle)(); },
   });
 
@@ -123,7 +112,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     }}>
       {/* Behind the feed, in the gap it leaves when pulled: the arc as you pull, the spinner while it fetches. */}
       {onRefresh ? (
-        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + 24, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 }, gapStyle]}>
+        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + 20, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 }, gapStyle]}>
           {pullHeader}
           {refreshing ? <CourtSpinner size={28} /> : <View style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 2.5, borderColor: colors.brand, borderTopColor: 'transparent', opacity: 0.9 }} />}
         </Animated.View>
@@ -131,7 +120,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       {height > 0 && (
         <Animated.ScrollView
           ref={list}
-          style={[{ height }, feedStyle]}
+          style={{ height }}
           pagingEnabled
           snapToInterval={height}
           snapToAlignment="start"
@@ -142,6 +131,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
           scrollEventThrottle={16}
           onScroll={onScroll}
           bounces={!!onRefresh}
+          refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={() => { void refreshNow(); }} tintColor="transparent" colors={['transparent']} progressBackgroundColor="transparent" /> : undefined}
         >
           {children.map((child, index) => index === 0 ? <Animated.View key={index} style={[{ height }, firstPageStyle]}>{child}</Animated.View> : <View key={index} style={{ height }}>{child}</View>)}
         </Animated.ScrollView>
