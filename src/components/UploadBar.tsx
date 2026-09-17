@@ -1,6 +1,7 @@
 import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Image, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import Reanimated, { Easing as REasing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -62,13 +63,13 @@ export function UploadBar() {
   const pct = Math.round(displayed * 100);
   const title = shown.state === 'done' ? 'Posted' : shown.state === 'failed' ? 'Could not post' : `Posting… ${pct}%`;
   return (
-    <Animated.View pointerEvents="none" style={[styles.wrap, { top: insets.top + spacing.xs, transform: [{ translateY: slide }] }]}>
-      <View style={styles.card}>
+    <Animated.View pointerEvents={shown.state === 'done' ? 'box-none' : 'none'} style={[styles.wrap, { top: insets.top + spacing.xs, transform: [{ translateY: slide }] }]}>
+      <Pressable accessibilityRole={shown.state === 'done' ? 'link' : 'text'} accessibilityLabel={shown.state === 'done' ? 'Open the post' : title} disabled={shown.state !== 'done'} onPress={() => router.push(`/post/${shown.id}`)} style={styles.card}>
         <View style={styles.row}>
           {shown.thumb ? <Image accessibilityIgnoresInvertColors source={{ uri: shown.thumb }} style={styles.thumb} /> : <View style={[styles.thumb, styles.thumbBlank]}><Ionicons name="tennisball" size={18} color={colors.brand} /></View>}
           <View style={{ flex: 1 }}>
             <Text style={styles.title} numberOfLines={1}>{title}</Text>
-            <Text style={styles.body} numberOfLines={2}>{shown.state === 'done' ? 'It is in the feed and on your profile.' : shown.state === 'failed' ? (shown.reason ?? 'Check your connection and try again.') : shown.label}</Text>
+            <Text style={styles.body} numberOfLines={2}>{shown.state === 'done' ? 'Tap to see it.' : shown.state === 'failed' ? (shown.reason ?? 'Check your connection and try again.') : shown.label}</Text>
           </View>
           {shown.state === 'uploading'
             ? <Text style={styles.pct}>{pct}%</Text>
@@ -77,7 +78,7 @@ export function UploadBar() {
         <View style={styles.track}>
           <Reanimated.View style={[styles.fill, shown.state === 'failed' && { backgroundColor: colors.danger }, fillStyle]} />
         </View>
-      </View>
+      </Pressable>
     </Animated.View>
   );
 }

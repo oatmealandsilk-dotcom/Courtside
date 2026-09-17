@@ -23,6 +23,7 @@ import { getPosition } from '@/lib/geo';
 import * as haptics from '@/lib/haptics';
 import * as toast from '@/lib/toast';
 import { finishUpload, setUploadProgress, simulateUpload, startUpload } from '@/lib/uploads';
+import { requestFeedRefresh } from '@/features/feed/feedBus';
 import { framesAt } from '@/features/compose/frames';
 import type {
   Answer,
@@ -930,10 +931,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       );
       const tellAll = (state: AppState) => notifyMentions(tell(state), post.body, me, post.id, 'post');
       if (uploading) {
-        // The strip across the top counts the upload up; the celebration
-        // waits until it has actually landed.
+        // The strip across the top counts the upload up. The post is not in
+        // the feed until it has actually landed; then it appears at the top.
         startUpload(post.id, label, post.thumbnailUrl ?? post.imageUrl);
-        setState((prev) => tellAll({ ...prev, posts: [post, ...prev.posts] }));
       } else {
         if (post.videoUrl || post.imageUrl) simulateUpload(post.id, label, post.thumbnailUrl ?? post.imageUrl);
         setState((prev) => tellAll(celebratePosted({ ...prev, posts: [post, ...prev.posts] }, { ...celebration, quiet: !!(post.videoUrl || post.imageUrl) })));
@@ -954,11 +954,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
             const thumbnailUrl = post.thumbnailUrl === post.imageUrl ? imageUrl
               : local[2] ? await uploadMedia(me, post.thumbnailUrl!, 'photo', report(2)) : post.thumbnailUrl;
             const hosted = { ...post, imageUrl, videoUrl, thumbnailUrl };
-            setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === post.id ? { ...p, imageUrl, videoUrl, thumbnailUrl } : p)) }));
             await remote.insertPost(hosted);
             if (uploading) {
               finishUpload(post.id);
-              setState((prev) => celebratePosted(prev, { ...celebration, quiet: true }));
+              setState((prev) => tellAll(celebratePosted({ ...prev, posts: [hosted, ...prev.posts.filter((p) => p.id !== post.id)] }, { ...celebration, quiet: true })));
+              requestFeedRefresh();
+            } else {
+              setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === post.id ? { ...p, imageUrl, videoUrl, thumbnailUrl } : p)) }));
             }
           } catch (error) {
             console.warn('[remote] post did not land', error);
@@ -1110,6 +1112,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           await remote.insertStory(hosted);
           finishUpload(story.id);
           setState((prev) => celebratePosted({ ...prev, stories: [hosted, ...prev.stories] }, { ...celebration, quiet: true }));
+          requestFeedRefresh();
         } catch (error) {
           console.warn('[remote] hit did not land', error);
           finishUpload(story.id, false, error instanceof Error ? error.message : 'Something went wrong.');

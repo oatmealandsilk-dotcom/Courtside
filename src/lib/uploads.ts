@@ -39,7 +39,7 @@ export function finishUpload(id: string, ok = true, reason?: string) {
   emit();
   const old = timers.get(id);
   if (old) clearTimeout(old);
-  timers.set(id, setTimeout(() => { jobs = jobs.filter((j) => j.id !== id); timers.delete(id); emit(); }, ok ? 1800 : 6000));
+  timers.set(id, setTimeout(() => { jobs = jobs.filter((j) => j.id !== id); timers.delete(id); emit(); }, ok ? 4500 : 6000));
 }
 
 /** The demo build has nowhere to upload to: walk the bar up so the moment still reads. */

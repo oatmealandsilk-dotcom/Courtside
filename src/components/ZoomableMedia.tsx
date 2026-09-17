@@ -150,7 +150,12 @@ export const ZoomableMedia = forwardRef<ZoomableMediaHandle, { children: React.R
 
   return (
     <GestureDetector gesture={gesture}>
-      <View style={StyleSheet.absoluteFill} onLayout={(e) => { width.value = e.nativeEvent.layout.width; height.value = e.nativeEvent.layout.height; }}>
+      <View style={StyleSheet.absoluteFill} onLayout={(e) => {
+        const { width: w, height: h } = e.nativeEvent.layout;
+        // First measure lands at once; a change of room (the phone turning) eases over, in step with the turn.
+        if (width.value <= 1) { width.value = w; height.value = h; }
+        else { width.value = withTiming(w, { duration: 320, easing: Easing.out(Easing.cubic) }); height.value = withTiming(h, { duration: 320, easing: Easing.out(Easing.cubic) }); }
+      }}>
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }, backdropStyle]} />
         <Animated.View style={[{ position: 'absolute' }, style]}>{children}</Animated.View>
       </View>

@@ -22,6 +22,7 @@ import { Tappable } from '@/components/Tappable';
 import { VerticalPager, type VerticalPagerHandle } from '@/components/VerticalPager';
 import { subscribeScrollToTop } from '@/features/navigation/scrollToTop';
 import { setFeedWarm } from '@/features/feed/warmup';
+import { subscribeFeedRefresh } from '@/features/feed/feedBus';
 import { setBarCompact } from '@/features/navigation/barShrink';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { TipPage } from '@/components/TipPage';
@@ -197,11 +198,15 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         setVisit((v) => v + 1);
         return;
       }
-      setOrder(
-        rankFeed(data.posts, data.questions.filter((q) => !q.source), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st))).flatMap((i) =>
-          i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : [],
-        ),
+      const ranked = rankFeed(data.posts, data.questions.filter((q) => !q.source), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st))).flatMap((i) =>
+        i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : [],
       );
+      // Something of yours from the last few minutes goes first, so a fresh post is right there.
+      const justMine = data.posts
+        .filter((p) => p.authorId === data.currentUserId && !p.archived && Date.now() - Date.parse(p.createdAt) < 5 * 60_000)
+        .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+        .map((p) => `p:${p.id}`);
+      setOrder([...justMine, ...ranked.filter((k) => !justMine.includes(k))]);
       setActive(0);
       setVisit((v) => v + 1);
   }, [scope?.userId, scope?.set, scope?.start]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -213,6 +218,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       rerank();
     }, [ready, currentUserId, scope?.userId, scope?.set, rerank]),
   );
+  // A post of yours that just finished uploading: the feed starts over with it on top.
+  useEffect(() => subscribeFeedRefresh(() => { if (!scope) rerank(); }), [scope, rerank]);
   // Pulling down on the first page fetches what is new and starts the feed over from the top.
   const refreshFeed = useCallback(async () => {
     await actions.refresh();

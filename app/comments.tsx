@@ -39,12 +39,17 @@ export default function CommentsSheet() {
   const exists = kind === 'hit' ? stories.some((st) => st.id === id) : posts.some((p) => p.id === id);
   const thread = comments.filter((c) => c.postId === id).sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
 
+  // Sending feels instant: the box clears first, the comment lands, and the
+  // list slides to it the moment it has been drawn.
+  const justSent = useRef(false);
   const send = () => {
     const text = draft.trim();
     if (!text || !exists) return;
+    setDraft('');
+    justSent.current = true;
     if (kind === 'hit') actions.addStoryComment(id, text);
     else actions.addComment(id, text);
-    setDraft('');
+    input.current?.focus();
   };
 
   return (
@@ -62,7 +67,7 @@ export default function CommentsSheet() {
       }
     >
       <View style={{ flex: 1 }}>
-        <ScrollView ref={list} style={{ flex: 1 }} contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={list} style={{ flex: 1 }} contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled" onContentSizeChange={() => { if (justSent.current) { justSent.current = false; list.current?.scrollToEnd({ animated: true }); } }}>
           {thread.map((c) => <CommentRow key={c.id} comment={c} big onLayout={(y) => { rowY.current[c.id] = y; }} />)}
           {!thread.length ? <Text style={styles.empty}>{exists ? 'No comments yet. Start the conversation.' : 'This is no longer available.'}</Text> : null}
         </ScrollView>
