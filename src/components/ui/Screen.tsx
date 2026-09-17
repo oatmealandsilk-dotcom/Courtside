@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { Animated, Dimensions, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { Animated, Dimensions, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import * as haptics from '@/lib/haptics';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,7 +9,7 @@ import { isPageDragging, subscribePageDragging } from '@/features/navigation/swi
 import { KeyboardScrollContext, afterKeyboard, currentKeyboardHeight, type Measurable } from '@/lib/keyboardScroll';
 import { TAB_FOR_KEY, subscribeScrollToTop } from '@/features/navigation/scrollToTop';
 import { barCompact } from '@/features/navigation/barShrink';
-import Reanimated, { runOnJS, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import Reanimated, { runOnJS, useAnimatedScrollHandler, useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
@@ -21,6 +21,13 @@ import { colors, spacing, typography } from '@/theme';
  * swipe to another tab and back.
  */
 const scrollMemory = new Map<string, number>();
+
+// Pull-to-refresh on the phone, the same way the Home feed does it: a blank
+// strip above the content that the page normally rests past. Pulling scrolls
+// it into view with the disc behind; let go past the line and the page glides
+// to the strip's top, holds while the fetch runs, then glides back.
+const HOLD = 150;
+const PULL_LINE = 90;
 
 /**
  * Browsers decide per touch whether a gesture is theirs to scroll with, by
@@ -82,6 +89,9 @@ export function Screen({
   // Captured once so the starting offset is set before the first paint rather
   // than scrolled to afterwards, which is what made it jump into place.
   const initial = useRef(scrollMemory.get(key) ?? 0);
+  // The strip only exists on the phone, and only on pages that can refresh.
+  const strip = Platform.OS !== 'web' && onRefresh ? HOLD : 0;
+  const [scrollLocked, setScrollLocked] = useState(false);
   const restored = useRef(initial.current === 0);
   const { isPhone, isDesktop } = useResponsive();
   // Pull-to-refresh: the spinner while it runs, then a small note that
@@ -133,25 +143,37 @@ export function Screen({
   // The bottom bar ducks as this page scrolls — worked out here on the
   // animation thread, frame for frame with the finger, so it never steps.
   const lastY = useSharedValue(-1);
-  const remember = useCallback((y: number) => { scrollMemory.set(key, y); }, [key]);
+  const pullY = useSharedValue(0);
+  const beginPull = useCallback(() => { void refreshNowRef.current(); }, []);
+  const springBack = useCallback(() => { scroller.current?.scrollTo({ y: strip, animated: true }); }, [strip]);
+  const gapStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, pullY.value / 40) }));
+  const remember = useCallback((y: number) => { scrollMemory.set(key, Math.max(0, y - strip)); }, [key, strip]);
   const onScrollAnimated = useAnimatedScrollHandler({
     onScroll: (event) => {
       const y = event.contentOffset.y;
       runOnJS(remember)(y);
+      pullY.value = y < strip ? strip - y : 0;
       // The first report is just where the page already sat (a tab switch
       // restoring its place): nothing to react to.
       if (lastY.value < 0) { lastY.value = y; return; }
       const dy = y - lastY.value;
       lastY.value = y;
       // Only a real move counts, in either direction; the bar carries on from wherever it is.
-      if (Math.abs(dy) > 0.3 && y >= 0) barCompact.value = Math.max(0, Math.min(1, barCompact.value + dy / 150));
+      if (Math.abs(dy) > 0.3 && y >= strip) barCompact.value = Math.max(0, Math.min(1, barCompact.value + dy / 150));
+    },
+    onEndDrag: (event) => {
+      const y = event.contentOffset.y;
+      if (strip > 0 && y < strip - PULL_LINE) runOnJS(beginPull)();
+      else if (strip > 0 && y < strip) runOnJS(springBack)();
     },
   });
 
   const refreshNow = useCallback(async () => {
     if (!onRefresh || refreshing) return;
     setRefreshing(true);
+    if (strip > 0) { setScrollLocked(true); scroller.current?.scrollTo({ y: 0, animated: true }); }
     try { await onRefresh(); } finally {
+      if (strip > 0) { scroller.current?.scrollTo({ y: strip, animated: true }); setTimeout(() => setScrollLocked(false), 420); }
       setRefreshing(false);
       Animated.timing(pull, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => setPulling(false));
       haptics.untap();
@@ -162,7 +184,7 @@ export function Screen({
         Animated.timing(updated, { toValue: 0, duration: 220, useNativeDriver: true }),
       ]).start();
     }
-  }, [onRefresh, refreshing, updated, pull]);
+  }, [onRefresh, refreshing, updated, pull, strip]);
   refreshNowRef.current = refreshNow;
 
   // A text box asks for this when it gains focus: once the keyboard is up,
@@ -242,11 +264,17 @@ export function Screen({
     >
       {headerWrapper ? headerWrapper(header) : header}
       {scroll ? (
+        <View style={styles.flex}>
+        {strip > 0 ? (
+          <Reanimated.View pointerEvents="none" style={[styles.stripGap, gapStyle]}>
+            {refreshing ? <CourtSpinner size={28} /> : <View style={styles.pullArc} />}
+          </Reanimated.View>
+        ) : null}
         <Reanimated.ScrollView
           ref={(node: unknown) => { scroller.current = node as unknown as ScrollView | null; if (scrollRef) scrollRef.current = node as unknown as ScrollView | null; webPull(node as unknown as ScrollView | null); }}
           style={styles.flex}
           contentContainerStyle={[styles.scrollContent, verticalOnlyTouch]}
-          scrollEnabled={!swiping}
+          scrollEnabled={!swiping && !scrollLocked}
           directionalLockEnabled
           keyboardShouldPersistTaps="handled"
           // Keeps whatever box you are typing in above the keyboard.
@@ -256,27 +284,25 @@ export function Screen({
           scrollEventThrottle={16}
           // Set before the first paint, so there is no visible jump. Web ignores
           // this, which is what the fallback below is for.
-          contentOffset={{ x: 0, y: initial.current }}
+          contentOffset={{ x: 0, y: strip + initial.current }}
           onScroll={onScrollAnimated}
-          refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={() => { void refreshNow(); }} tintColor="transparent" colors={['transparent']} progressBackgroundColor="transparent" /> : undefined}
           onContentSizeChange={(_width, height) => {
             if (restored.current) return;
             // Wait until the content is tall enough to hold the position,
             // otherwise the scroll clamps to the bottom of a half-built page.
             if (height > initial.current) {
               restored.current = true;
-              scroller.current?.scrollTo({ y: initial.current, animated: false });
+              scroller.current?.scrollTo({ y: strip + initial.current, animated: false });
             }
           }}
         >
+          {strip > 0 ? <View pointerEvents="none" style={{ height: strip }} /> : null}
           {body}
         </Reanimated.ScrollView>
+        </View>
       ) : (
         <View style={styles.flex}>{body}</View>
       )}
-      {onRefresh && Platform.OS !== 'web' && refreshing ? (
-        <View pointerEvents="none" style={styles.plainRefresh}><CourtSpinner size={28} /></View>
-      ) : null}
       {onRefresh && Platform.OS === 'web' && (pulling || refreshing) ? (
         <Animated.View pointerEvents="none" style={[styles.webRefresh, { opacity: pull, transform: [{ translateY: pull.interpolate({ inputRange: [0, 1], outputRange: [-46, 6] }) }, { rotate: pull.interpolate({ inputRange: [0, 1], outputRange: ['-120deg', '0deg'] }) }] }]}>
           {refreshing ? <CourtSpinner size={28} /> : <View style={styles.pullArc} />}
@@ -298,7 +324,7 @@ const styleDefinitions = StyleSheet.create({
   flex: { flex: 1 },
   scrollContent: { flexGrow: 1 },
   pullArc: { width: 24, height: 24, borderRadius: 12, borderWidth: 2.5, borderColor: colors.brand, borderTopColor: 'transparent', opacity: 0.9 },
-  plainRefresh: { position: 'absolute', alignSelf: 'center', top: 10, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  stripGap: { position: 'absolute', top: 0, left: 0, right: 0, height: HOLD, alignItems: 'center', justifyContent: 'center' },
   webRefresh: { position: 'absolute', alignSelf: 'center', top: 10, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   updated: { position: 'absolute', alignSelf: 'center', top: 6, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
   updatedText: { ...typography.smallStrong, color: colors.text },

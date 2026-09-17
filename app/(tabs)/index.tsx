@@ -272,24 +272,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   // Anything you post after the feed was ranked — a clip, a note, a hit —
   // goes right to the very top and the feed jumps there, so posting reads as
   // "it's up" instead of leaving you to scroll and find it.
-  useEffect(() => {
-    if (!currentUserId || scope) return;
-    const mine = [
-      ...stories.filter((st) => st.authorId === currentUserId && isLive(st)).map((st) => `h:${st.id}`),
-      ...posts.filter((p) => p.authorId === currentUserId && !p.archived).map((p) => `p:${p.id}`),
-    ];
-    let added = false;
-    setOrder((prev) => {
-      const fresh = mine.filter((key) => !prev.includes(key));
-      if (!fresh.length) return prev;
-      added = true;
-      return [...fresh, ...prev];
-    });
-    if (added) {
-      setActive(0);
-      setVisit((v) => v + 1);
-    }
-  }, [stories, posts, currentUserId, scope]);
 
   // Blocked and muted players disappear from the feed entirely.
   const feedItems = useMemo<FeedItem[]>(() => {
