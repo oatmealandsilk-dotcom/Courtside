@@ -490,11 +490,13 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       ) : (
         <View style={styles.viewer}>
           <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onRefresh={scope ? undefined : refreshFeed} pullHeader={scope || !currentUser ? undefined : (
-            <View style={styles.pullGreeting}>
+            <>
               <View style={styles.pullLogo}><BrandMark size={22} /></View>
-              <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={26} />
-              <Text style={styles.pullGreetingText}>{`${currentUser.name.split(' ')[0]}'s homepage`}</Text>
-            </View>
+              <View style={styles.pullGreeting}>
+                <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={26} />
+                <Text style={styles.pullGreetingText}>{`${currentUser.name.split(' ')[0]}'s homepage`}</Text>
+              </View>
+            </>
           )}>
             {[...feed.map((item, index) => {
               const distance = Math.abs(index - active);
@@ -863,7 +865,7 @@ const styleDefinitions = StyleSheet.create({
   // rather than floating in the middle of the window.
   pullGreeting: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   // The mark sits at the far left of the gap, the greeting and disc in the middle.
-  pullLogo: { position: 'absolute', left: 18, top: 2 },
+  pullLogo: { position: 'absolute', left: 18 },
   pullGreetingText: { color: colors.text, fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
   wordmarkLeft: { alignItems: 'flex-start', paddingLeft: 12 + LANE_INSET },
   wordmark: {
