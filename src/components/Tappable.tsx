@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Platform, Pressable, type StyleProp, type ViewStyle } from 'react-native';
 import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 
@@ -72,4 +72,36 @@ export function Tappable({
       <Reanimated.View style={[style, animated]}>{children}</Reanimated.View>
     </Pressable>
   );
+}
+
+/**
+ * Returns a handler that tells a double tap from a single one.
+ *
+ * Pressable has no double-tap of its own, so this counts taps inside a short
+ * window. A single tap is held back until the window closes, which is why
+ * `onSingle` is optional — leave it off and the pause costs nothing.
+ */
+export function useDoubleTap(onDouble: () => void, onSingle?: () => void, window = 280) {
+  const last = useRef(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  return () => {
+    const now = Date.now();
+    if (now - last.current < window) {
+      last.current = 0;
+      if (timer.current) {
+        clearTimeout(timer.current);
+        timer.current = null;
+      }
+      onDouble();
+      return;
+    }
+    last.current = now;
+    if (onSingle) {
+      timer.current = setTimeout(() => {
+        timer.current = null;
+        onSingle();
+      }, window);
+    }
+  };
 }
