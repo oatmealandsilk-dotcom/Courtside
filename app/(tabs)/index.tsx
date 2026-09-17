@@ -209,7 +209,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         .map((p) => `p:${p.id}`);
       setOrder([...justMine, ...ranked.filter((k) => !justMine.includes(k))]);
       setActive(0);
-      if (remount) setVisit((v) => v + 1); else pager.current?.scrollToTop();
+      if (remount) setVisit((v) => v + 1);
   }, [scope?.userId, scope?.set, scope?.start]); // eslint-disable-line react-hooks/exhaustive-deps
   useFocusEffect(
     useCallback(() => {
@@ -222,19 +222,13 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   // A post of yours that just finished uploading: the feed starts over with it on top.
   useEffect(() => subscribeFeedRefresh(() => { if (!scope) rerank(); }), [scope, rerank]);
   // Pulling down on the first page fetches what is new and starts the feed over from the top.
-  const warmWaiters = useRef<(() => void)[]>([]);
+  // Pull-to-refresh: fetch what is new, rank the pages again in place (the
+  // pager is holding the feed down and brings it back itself), and give the
+  // new first pages a short beat to draw before the feed comes back up.
   const refreshFeed = useCallback(async () => {
     await actions.refresh();
-    // Start the warm-up over: the pull stays held until the new first pages are in, or five seconds.
-    setReadyIds(new Set());
-    setWarmTimedOut(false);
-    setWarmEpoch((n) => n + 1);
     rerank(false);
-    await new Promise<void>((resolve) => {
-      const done = () => { clearTimeout(t); resolve(); };
-      const t = setTimeout(done, 5000);
-      warmWaiters.current.push(done);
-    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 700));
   }, [actions, rerank]);
 
   /**
@@ -395,12 +389,11 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     setReadyIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
   }, []);
   const [warmTimedOut, setWarmTimedOut] = useState(false);
-  const [warmEpoch, setWarmEpoch] = useState(0);
   useEffect(() => {
     if (!ready || !feed.length || !(!isSupabaseConfigured || app.remoteLoaded)) return;
     const t = setTimeout(() => setWarmTimedOut(true), 6000);
     return () => clearTimeout(t);
-  }, [ready, feed.length, app.remoteLoaded, warmEpoch]);
+  }, [ready, feed.length, app.remoteLoaded]);
   const warmTargets = useMemo(() => feed.slice(0, FIRST).flatMap((item) => {
     if (item.type === 'hit') return item.story.videoUrl || item.story.imageUrl ? [item.story.id] : [];
     if (item.type === 'post') return item.post.videoUrl || item.post.imageUrl || item.post.thumbnailUrl ? [item.post.id] : [];
@@ -409,8 +402,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const warmDone = warmTargets.filter((id) => readyIds.has(id)).length;
   const dataIn = !isSupabaseConfigured || app.remoteLoaded;
   const warmed = !!scope || warmTimedOut || (ready && dataIn && feed.length > 0 && warmDone >= warmTargets.length);
-  // Anyone waiting on the warm-up (a pull-to-refresh holding the feed down) is let go once it is.
-  useEffect(() => { if (warmed && warmWaiters.current.length) { const w = warmWaiters.current; warmWaiters.current = []; w.forEach((fn) => fn()); } }, [warmed]);
   // The shell keeps the splash curtain up until this says the first pages are in.
   useEffect(() => { if (warmed && !scope) setFeedWarm(true); }, [warmed, scope]);
   // Sound must never run ahead of the picture: playback waits until the
