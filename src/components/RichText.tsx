@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Text, type StyleProp, type TextProps, type TextStyle } from 'react-native';
 import { router } from 'expo-router';
 
@@ -22,22 +22,26 @@ export function RichText({ children, mentionStyle, ...props }: TextProps & { chi
         if (i % 2 === 0) return part;
         const user = users.find((u) => u.handle.toLowerCase() === part.slice(1).toLowerCase());
         if (!user) return part;
-        return (
-          <Text
-            key={`${i}-${part}`}
-            accessibilityRole="link"
-            accessibilityLabel={`Open ${user.name}'s profile`}
-            style={[{ color: colors.brand, fontWeight: '600' }, mentionStyle]}
-            suppressHighlighting
-            onPress={(event) => {
-              event.stopPropagation();
-              router.push(user.id === currentUserId ? '/profile' : `/user/${user.id}`);
-            }}
-          >
-            {part}
-          </Text>
-        );
+        return <Mention key={`${i}-${part}`} label={part} name={user.name} mentionStyle={mentionStyle} onPress={() => router.push(user.id === currentUserId ? '/profile' : `/user/${user.id}`)} />;
       })}
+    </Text>
+  );
+}
+
+/** One @handle in the text: it dims for a beat when tapped, a small sign the tap took. */
+function Mention({ label, name, mentionStyle, onPress }: { label: string; name: string; mentionStyle?: StyleProp<TextStyle>; onPress: () => void }) {
+  const [down, setDown] = useState(false);
+  return (
+    <Text
+      accessibilityRole="link"
+      accessibilityLabel={`Open ${name}'s profile`}
+      style={[{ color: colors.brand, fontWeight: '600' }, mentionStyle, down && { opacity: 0.5 }]}
+      suppressHighlighting
+      onPressIn={() => setDown(true)}
+      onPressOut={() => setDown(false)}
+      onPress={(event) => { event.stopPropagation(); onPress(); }}
+    >
+      {label}
     </Text>
   );
 }
