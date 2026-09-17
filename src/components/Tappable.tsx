@@ -63,8 +63,20 @@ export function Tappable({
       accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ ...accessibilityState, disabled }}
-      onPressIn={() => { if (disabled) return; spring(scaleTo); if (immediate) onPress?.(); }}
-      onPressOut={() => !disabled && spring(1)}
+      // Immediate: the dip and the return are one quick pop, started before
+      // the work — the return never waits on the finger lifting or on a busy
+      // screen, so the control never sits small.
+      onPressIn={() => {
+        if (disabled) return;
+        if (immediate) {
+          Animated.sequence([
+            Animated.timing(scale, { toValue: scaleTo, duration: 45, useNativeDriver: true }),
+            Animated.timing(scale, { toValue: 1, duration: 110, useNativeDriver: true }),
+          ]).start();
+          onPress?.();
+        } else spring(scaleTo);
+      }}
+      onPressOut={() => !disabled && !immediate && spring(1)}
       // react-native-web maps these to mouse enter/leave; native ignores them.
       onHoverIn={() => Platform.OS === 'web' && !disabled && spring(hoverTo)}
       onHoverOut={() => Platform.OS === 'web' && !disabled && spring(1)}
