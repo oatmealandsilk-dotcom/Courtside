@@ -356,12 +356,21 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
    * Double tap only ever likes, the way every app that does this behaves —
    * tapping twice on something you already liked should not take it away.
    */
-  const likeByTap = (postId: string, alreadyLiked: boolean) => {
-    if (!alreadyLiked) actions.toggleLike(postId);
+  // Whether it is liked is read at the moment of the tap, not from the
+  // handler's closure: the players keep the first handler they were given,
+  // and a second double tap through a stale one took the like away again.
+  const likedNow = useRef({ posts, stories: app.stories, me: currentUserId });
+  likedNow.current = { posts, stories: app.stories, me: currentUserId };
+  const likeByTap = (postId: string, _alreadyLiked?: boolean) => {
+    const { posts: all, me } = likedNow.current;
+    const post = all.find((p) => p.id === postId);
+    if (post && me && !post.likedBy.includes(me)) actions.toggleLike(postId);
     setBurst((b) => ({ id: postId, n: b.n + 1 }));
   };
-  const likeHitByTap = (storyId: string, alreadyLiked: boolean) => {
-    if (!alreadyLiked) actions.toggleLikeStory(storyId);
+  const likeHitByTap = (storyId: string, _alreadyLiked?: boolean) => {
+    const { stories, me } = likedNow.current;
+    const story = stories.find((s) => s.id === storyId);
+    if (story && me && !story.likedBy.includes(me)) actions.toggleLikeStory(storyId);
     setBurst((b) => ({ id: storyId, n: b.n + 1 }));
   };
   const lastHitTap = useRef(0);
