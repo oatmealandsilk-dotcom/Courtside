@@ -1,5 +1,6 @@
 import React, { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { RefreshControl, View } from 'react-native';
+import { colors } from '@/theme';
 import Animated, { runOnJS, runOnUI, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useSharedValue, withTiming } from 'react-native-reanimated';
 import { BAR_DUCK_PX, barCompact } from '@/features/navigation/barShrink';
 
@@ -16,8 +17,10 @@ export interface VerticalPagerHandle { scrollToTop: () => void }
 // keyboard) re-sizes the pages.
 const RESIZE_MIN = 40;
 
-export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.ReactNode[]; onIndex: (index: number) => void; /** The page the scroll came to rest on. */ onSettled?: (index: number) => void; initialIndex?: number }>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0 }, ref) {
+export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.ReactNode[]; onIndex: (index: number) => void; /** The page the scroll came to rest on. */ onSettled?: (index: number) => void; initialIndex?: number; /** Pulling down past the first page fetches what is new. */ onRefresh?: () => Promise<void> }>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0, onRefresh }, ref) {
   const [height, setHeight] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshNow = useCallback(async () => { if (!onRefresh || refreshing) return; setRefreshing(true); try { await onRefresh(); } finally { setRefreshing(false); } }, [onRefresh, refreshing]);
   const list = useAnimatedRef<Animated.ScrollView>();
   // Scrolling is asked for on the UI thread, where the list lives.
   const jump = useCallback((y: number, animated: boolean) => {
@@ -97,6 +100,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={16}
           onScroll={onScroll}
+          refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={() => { void refreshNow(); }} tintColor={colors.brand} colors={[colors.brand]} progressBackgroundColor={colors.surface} /> : undefined}
         >
           {children.map((child, index) => <View key={index} style={{ height }}>{child}</View>)}
         </Animated.ScrollView>

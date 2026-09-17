@@ -1,8 +1,10 @@
 import { barCompact } from '@/features/navigation/barShrink';
 import { withTiming } from 'react-native-reanimated';
-import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { pagerStep } from '@/lib/pagerGesture';
 import { isDesktopBrowser } from '@/lib/browserDevice';
+import { CourtSpinner } from '@/components/CourtSpinner';
+import { colors } from '@/theme';
 
 export interface VerticalPagerHandle { scrollToTop: () => void }
 
@@ -13,7 +15,15 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   onSettled?: (index: number) => void;
   /** Feed item to open on, so returning from a thread keeps your place. */
   initialIndex?: number;
-}>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0 }, ref) {
+  /** Pulling down past the first page fetches what is new. */
+  onRefresh?: () => Promise<void>;
+}>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0, onRefresh }, ref) {
+  // The pull: how far (0..1 of the line), and whether the fetch is running.
+  const [pullAmount, setPullAmount] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshRef = useRef(onRefresh); refreshRef.current = onRefresh;
+  const refreshingRef = useRef(false);
+  const fireRefresh = async () => { if (!refreshRef.current || refreshingRef.current) return; refreshingRef.current = true; setRefreshing(true); setPullAmount(1); try { await refreshRef.current(); } finally { refreshingRef.current = false; setRefreshing(false); setPullAmount(0); } };
   const pager = useRef<HTMLDivElement>(null);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Position as a fraction of a page: the bar ducking changes this box's
@@ -76,10 +86,37 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
       el.style.scrollSnapType = 'y mandatory';
     };
     el.addEventListener('wheel', wheel, { passive: true });
-    return () => { stop(); el.removeEventListener('wheel', wheel); };
+    // Pull-to-refresh on the first page: wheel or finger, the disc grows with the pull and the fetch goes when you let go past the line.
+    const THRESHOLD = 110;
+    let pulled = 0;
+    let idle: ReturnType<typeof setTimeout> | null = null;
+    let touchStart: number | null = null;
+    const show = (amount: number) => { pulled = Math.max(0, amount); setPullAmount(Math.min(1, pulled / THRESHOLD)); };
+    const letGo = () => { if (pulled >= THRESHOLD) { pulled = 0; void fireRefresh(); return; } if (pulled > 0) show(0); };
+    const pullWheel = (e: WheelEvent) => {
+      if (!refreshRef.current || refreshingRef.current) return;
+      if (el.scrollTop > 0 || e.deltaY >= 0) { if (pulled) letGo(); return; }
+      show(pulled + (pulled >= THRESHOLD ? -e.deltaY * 0.25 : -e.deltaY));
+      if (idle) clearTimeout(idle);
+      idle = setTimeout(letGo, 220);
+    };
+    const touchS = (e: TouchEvent) => { touchStart = el.scrollTop <= 0 && refreshRef.current && !refreshingRef.current ? e.touches[0].clientY : null; };
+    const touchM = (e: TouchEvent) => { if (touchStart === null) return; const dy = e.touches[0].clientY - touchStart; if (dy <= 0) { show(0); return; } show(dy * 0.8); };
+    const touchE = () => { touchStart = null; letGo(); };
+    el.addEventListener('wheel', pullWheel, { passive: true });
+    el.addEventListener('touchstart', touchS, { passive: true });
+    el.addEventListener('touchmove', touchM, { passive: true });
+    el.addEventListener('touchend', touchE);
+    return () => { stop(); el.removeEventListener('wheel', wheel); el.removeEventListener('wheel', pullWheel); el.removeEventListener('touchstart', touchS); el.removeEventListener('touchmove', touchM); el.removeEventListener('touchend', touchE); };
   }, [children.length]);
 
-  return <div ref={pager} tabIndex={0} role="region" aria-label="Clips feed"
+  return <div style={{ position: 'relative', height: '100%', width: '100%' }}>
+    {onRefresh && (pullAmount > 0 || refreshing) ? (
+      <div style={{ position: 'absolute', top: 6 + 40 * pullAmount - 40, left: '50%', transform: `translateX(-50%) rotate(${-120 + 120 * pullAmount}deg)`, opacity: pullAmount, width: 40, height: 40, borderRadius: 20, background: colors.surface, border: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', transition: 'top 120ms, opacity 120ms', pointerEvents: 'none' }}>
+        {refreshing ? <CourtSpinner size={26} /> : <div style={{ width: 26, height: 26, borderRadius: 13, border: `2.5px solid ${colors.brand}`, borderTopColor: 'transparent', opacity: 0.9 }} />}
+      </div>
+    ) : null}
+  <div ref={pager} tabIndex={0} role="region" aria-label="Clips feed"
     onPointerDown={event=>{
       if(event.button!==0 || !event.isPrimary || (event.target as HTMLElement).closest('input,textarea,select')) return;
       stop();
@@ -153,5 +190,6 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
     {children.map((child, index) => <div key={index} style={{ display: 'flex', flexDirection: 'column',
       height: '100%', width: '100%', scrollSnapAlign: 'start', scrollSnapStop: 'always',
       position: 'relative', overflow: 'hidden' }}>{child}</div>)}
+  </div>
   </div>;
 });

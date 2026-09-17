@@ -162,11 +162,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   // focus — otherwise stepping into a thread and back would reshuffle the feed
   // and throw you to the top.
   const rankedFor = useRef<string | null>(null);
-  useFocusEffect(
-    useCallback(() => {
-      const stamp = `${ready}:${currentUserId}:${scope?.userId ?? ''}:${scope?.set ?? ''}`;
-      if (rankedFor.current === stamp) return;
-      rankedFor.current = stamp;
+  // Builds the page order from whatever is loaded; a pull-to-refresh asks for it again.
+  const rerank = useCallback(() => {
       const data = latest.current;
       if (scope) {
         // One person's things, newest first, opened on the one that was tapped.
@@ -185,8 +182,20 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       );
       setActive(0);
       setVisit((v) => v + 1);
-    }, [ready, currentUserId, scope?.userId, scope?.set, scope?.start]),
+  }, [scope?.userId, scope?.set, scope?.start]); // eslint-disable-line react-hooks/exhaustive-deps
+  useFocusEffect(
+    useCallback(() => {
+      const stamp = `${ready}:${currentUserId}:${scope?.userId ?? ''}:${scope?.set ?? ''}`;
+      if (rankedFor.current === stamp) return;
+      rankedFor.current = stamp;
+      rerank();
+    }, [ready, currentUserId, scope?.userId, scope?.set, rerank]),
   );
+  // Pulling down on the first page fetches what is new and starts the feed over from the top.
+  const refreshFeed = useCallback(async () => {
+    await actions.refresh();
+    rerank();
+  }, [actions, rerank]);
 
   /**
    * People worth following, best first: anyone who has interacted with you
@@ -450,7 +459,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         />
       ) : (
         <View style={styles.viewer}>
-          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive}>
+          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onRefresh={scope ? undefined : refreshFeed}>
             {[...feed.map((item, index) => {
               const distance = Math.abs(index - active);
               const ahead = index - active;
