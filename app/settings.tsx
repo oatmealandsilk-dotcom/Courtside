@@ -198,10 +198,10 @@ export default function Settings() {
                 accessibilityState={row.toggle ? { checked: row.toggle.value } : undefined}
                 disabled={!row.onPress && !row.toggle}
                 onPress={row.toggle ? () => row.toggle?.onChange(!row.toggle.value) : row.onPress}
-                style={({ pressed }) => [
+                style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
                   styles.row,
                   index > 0 && styles.rowBorder,
-                  pressed && row.onPress ? { backgroundColor: colors.surfaceAlt } : null,
+                  (pressed || hovered) && (row.onPress || row.toggle) ? { backgroundColor: colors.surfaceAlt } : null,
                 ]}
               >
                 <Ionicons

@@ -162,11 +162,11 @@ export function NavBar({ state, navigation }: NavBarProps) {
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
               accessibilityLabel={item.label}
-              style={({ pressed }) => [
+              style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
                 styles.sidebarItem,
                 compact && styles.sidebarItemCompact,
                 active && styles.sidebarItemActive,
-                pressed && { backgroundColor: colors.surfaceAlt },
+                (pressed || hovered) && { backgroundColor: colors.surfaceAlt },
               ]}
             >
               <Ionicons
@@ -187,10 +187,10 @@ export function NavBar({ state, navigation }: NavBarProps) {
           onPress={() => router.push('/search')}
           accessibilityRole="button"
           accessibilityLabel="Search"
-          style={({ pressed }) => [
+          style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
             styles.sidebarItem,
             compact && styles.sidebarItemCompact,
-            pressed && { backgroundColor: colors.surfaceAlt },
+            (pressed || hovered) && { backgroundColor: colors.surfaceAlt },
           ]}
         >
           <Ionicons name="search-outline" size={23} color={colors.textMuted} />
@@ -201,10 +201,10 @@ export function NavBar({ state, navigation }: NavBarProps) {
           onPress={() => router.push('/notifications')}
           accessibilityRole="button"
           accessibilityLabel={unseen ? `Notifications, ${unseen} new` : 'Notifications'}
-          style={({ pressed }) => [
+          style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
             styles.sidebarItem,
             compact && styles.sidebarItemCompact,
-            pressed && { backgroundColor: colors.surfaceAlt },
+            (pressed || hovered) && { backgroundColor: colors.surfaceAlt },
           ]}
         >
           <View>
@@ -222,10 +222,10 @@ export function NavBar({ state, navigation }: NavBarProps) {
           onPress={() => router.push('/messages')}
           accessibilityRole="button"
           accessibilityLabel={unread ? `Messages, ${unread} unread` : 'Messages'}
-          style={({ pressed }) => [
+          style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
             styles.sidebarItem,
             compact && styles.sidebarItemCompact,
-            pressed && { backgroundColor: colors.surfaceAlt },
+            (pressed || hovered) && { backgroundColor: colors.surfaceAlt },
           ]}
         >
           <View>
@@ -243,10 +243,10 @@ export function NavBar({ state, navigation }: NavBarProps) {
           onPress={() => router.push('/compose')}
           accessibilityRole="button"
           accessibilityLabel="Create a post"
-          style={({ pressed }) => [
+          style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
             styles.sidebarItem,
             compact && styles.sidebarItemCompact,
-            pressed && { backgroundColor: colors.surfaceAlt },
+            (pressed || hovered) && { backgroundColor: colors.surfaceAlt },
           ]}
         >
           <Ionicons name="add-circle-outline" size={23} color={colors.textMuted} />

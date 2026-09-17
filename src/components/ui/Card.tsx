@@ -20,7 +20,7 @@ export function Card({ children, onPress, style, padded = true }: Props) {
   if (!onPress) return content;
 
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => (pressed ? styles.pressed : undefined)}>
+    <Pressable onPress={onPress} style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [pressed ? styles.pressed : undefined, hovered && !pressed ? styles.hovered : undefined]}>
       {content}
     </Pressable>
   );
@@ -35,4 +35,6 @@ const styleDefinitions = StyleSheet.create({
   },
   padded: { padding: spacing.lg },
   pressed: { opacity: 0.72 },
+  // Pointer devices only: a touch of lift, as the round buttons give.
+  hovered: { transform: [{ scale: 1.01 }] },
 });
