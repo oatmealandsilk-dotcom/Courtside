@@ -65,6 +65,12 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
   const closeFull = () => { if (zoom.current) zoom.current.close(); else setFull(false); };
   // Full screen may turn with the phone; the rest of the app stays upright.
   useEffect(() => { if (full) void allowTurning(); else void stayUpright(); }, [full]);
+  useEffect(() => {
+    if (!full || Platform.OS !== 'web') return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeFull(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [full]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { void stayUpright(); }, []);
   const [time, setTime] = useState({ at: 0, length: 0, fraction: 0 });
   const [shown, setShown] = useState(false);

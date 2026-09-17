@@ -76,6 +76,12 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
   };
   const closeFull = () => { if (zoom.current) zoom.current.close(); else setFull(false); };
   useEffect(() => { if (!post.videoUrl) { if (full) void allowTurning(); else void stayUpright(); } }, [full, post.videoUrl]);
+  useEffect(() => {
+    if (!full || Platform.OS !== 'web') return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeFull(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [full]); // eslint-disable-line react-hooks/exhaustive-deps
   const lastTap = useRef(0);
   const pendingTap = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tapPicture = () => {

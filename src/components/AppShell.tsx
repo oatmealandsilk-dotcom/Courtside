@@ -1,6 +1,7 @@
 import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useSyncExternalStore } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
+import { goBack } from '@/lib/goBack';
 import { Redirect, router, usePathname } from 'expo-router';
 import { NavBar } from './NavBar';
 import { UploadBar } from '@/components/UploadBar';
@@ -15,6 +16,9 @@ import { colors } from '@/theme';
 
 const paths = { index: '/', discuss: '/discuss', coaches: '/coaches', profile: '/profile' } as const;
 const routes = Object.keys(paths).map(name => ({ key: name, name }));
+/** The pages that slide up over the app; Escape closes them on a computer. */
+const SHEETS = new Set(['/compose', '/share', '/ask', '/comments', '/post-menu', '/edit-post']);
+const TAB_ORDER: string[] = [paths.index, paths.discuss, paths.coaches, paths.profile];
 export function AppShell({ children }: { children: React.ReactNode }) {
   useTheme();
   const pathname = usePathname();
@@ -30,6 +34,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(timer);
   }, [pending, pathname]);
   const shown = pending ?? pathname;
+  // Keyboard on a computer: Escape closes a sheet, the left and right arrows step between the four tabs.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (e.key === 'Escape' && SHEETS.has(pathname)) { e.preventDefault(); goBack('/'); return; }
+      if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && TAB_ORDER.includes(pathname) && !e.metaKey && !e.altKey) {
+        const next = TAB_ORDER[TAB_ORDER.indexOf(pathname) + (e.key === 'ArrowRight' ? 1 : -1)];
+        if (next) { e.preventDefault(); router.navigate(next); }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pathname]);
   const { currentUserId, ready, authResolved } = useApp();
   const { isPhone } = useResponsive();
   const selected = useRef(0);
