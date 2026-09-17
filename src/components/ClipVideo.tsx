@@ -143,7 +143,14 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   const left = useRef<{ time: number; at: number } | null>(null);
   // Each native call stands on its own: a position read that fails must
   // never take the pause down with it, or the clip plays on after the swipe.
+  // Whether the current wish to play has already been honoured: a second
+  // "begin" (the readiness clock and the status event can both fire) must
+  // not seek the clip back to its start — that was a stutter in the sound
+  // right after it began.
+  const started = useRef(false);
   begin.current = () => {
+    if (started.current) return;
+    started.current = true;
     for (const other of livePlayers) if (other !== player) { try { other.pause(); } catch { /* released */ } }
     const back = left.current;
     left.current = null;
@@ -158,6 +165,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
       if (readyRef.current) begin.current();
     } else {
       wantPlay.current = false;
+      started.current = false;
       if (!active) safely(() => { left.current = { time: player.currentTime, at: Date.now() }; });
       safely(() => player.pause());
     }
