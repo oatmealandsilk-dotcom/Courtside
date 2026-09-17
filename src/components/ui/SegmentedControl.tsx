@@ -34,7 +34,7 @@ export function SegmentedControl<T extends string>({
         onPress={() => onChange(segment.value)}
         accessibilityRole="tab"
         accessibilityState={{ selected: active }}
-        style={[styles.segment, wrap && styles.segmentWrapped, active && styles.segmentActive]}
+        style={[styles.segment, wrap && styles.segmentWrapped, scrollable && styles.segmentLoose, active && styles.segmentActive]}
       >
         <Text style={[styles.label, active && styles.labelActive]} numberOfLines={1}>
           {segment.label}
@@ -79,7 +79,9 @@ const styleDefinitions = StyleSheet.create({
   },
   // Half the row each, so two fit per line and none of the words get clipped.
   segmentWrapped: { flexBasis: '48%', flexGrow: 1 },
-  segmentActive: { backgroundColor: colors.brand },
+  // Loose in a scrolling row, each chip carries its own edge so it never looks like bare words.
+  segmentLoose: { flex: 0, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  segmentActive: { backgroundColor: colors.brand, borderColor: colors.brand },
   label: { ...typography.smallStrong, color: colors.textMuted },
   labelActive: { color: colors.brandInk },
 });
