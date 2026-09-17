@@ -1,4 +1,4 @@
-import React, { forwardRef, useEffect, useImperativeHandle } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { VideoView, useVideoPlayer } from 'expo-video';
 
@@ -24,7 +24,9 @@ export const VideoSurface = forwardRef<VideoSurfaceHandle, {
   paused?: boolean;
   onTime?: (seconds: number) => void;
   onDuration?: (seconds: number) => void;
-}>(function VideoSurface({ uri, muted = false, fit = 'contain', from = 0, to, paused = false, onTime, onDuration }, ref) {
+  /** The video's own width and height in pixels, once known. */
+  onSize?: (width: number, height: number) => void;
+}>(function VideoSurface({ uri, muted = false, fit = 'contain', from = 0, to, paused = false, onTime, onDuration, onSize }, ref) {
   const player = useVideoPlayer(uri, (p) => {
     p.loop = true;
     p.muted = muted;
@@ -35,6 +37,18 @@ export const VideoSurface = forwardRef<VideoSurfaceHandle, {
   // this guard so a late pause on a freed player is a no-op, not a crash.
   const safely = (work: () => void) => { try { work(); } catch { /* player already released */ } };
   useEffect(() => { safely(() => { player.muted = muted; }); }, [player, muted]);
+  const latestSize = useRef(onSize);
+  latestSize.current = onSize;
+  useEffect(() => {
+    const report = (track: { size?: { width: number; height: number } } | null | undefined) => {
+      const size = track?.size;
+      if (size && size.width > 0 && size.height > 0) latestSize.current?.(size.width, size.height);
+    };
+    safely(() => report((player as unknown as { videoTrack?: { size?: { width: number; height: number } } | null }).videoTrack));
+    const a = player.addListener('sourceLoad', ({ availableVideoTracks }) => report(availableVideoTracks?.[0]));
+    const b = player.addListener('videoTrackChange', ({ videoTrack }) => report(videoTrack));
+    return () => { a.remove(); b.remove(); };
+  }, [player]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const status = player.addListener('statusChange', ({ status }) => {
       if (status === 'readyToPlay' && player.duration > 0) onDuration?.(player.duration);

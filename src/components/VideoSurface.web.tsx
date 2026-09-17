@@ -17,12 +17,13 @@ export const VideoSurface = forwardRef<VideoSurfaceHandle, {
   paused?: boolean;
   onTime?: (seconds: number) => void;
   onDuration?: (seconds: number) => void;
-}>(function VideoSurface({ uri, muted = true, fit = 'contain', from = 0, to, paused = false, onTime, onDuration }, ref) {
+  onSize?: (width: number, height: number) => void;
+}>(function VideoSurface({ uri, muted = true, fit = 'contain', from = 0, to, paused = false, onTime, onDuration, onSize }, ref) {
   const el = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     const video = el.current;
     if (!video) return;
-    const onMeta = () => { if (Number.isFinite(video.duration)) onDuration?.(video.duration); };
+    const onMeta = () => { if (Number.isFinite(video.duration)) onDuration?.(video.duration); if (video.videoWidth && video.videoHeight) onSize?.(video.videoWidth, video.videoHeight); };
     const onTick = () => {
       onTime?.(video.currentTime);
       if (paused) return;
@@ -36,7 +37,7 @@ export const VideoSurface = forwardRef<VideoSurfaceHandle, {
     // the sound button lifts that.
     if (paused) video.pause(); else video.play().catch(() => undefined);
     return () => { video.removeEventListener('loadedmetadata', onMeta); video.removeEventListener('timeupdate', onTick); video.pause(); };
-  }, [from, to, paused, onTime, onDuration]);
+  }, [from, to, paused, onTime, onDuration, onSize]);
   useImperativeHandle(ref, () => ({
     seek: (seconds) => { if (el.current) el.current.currentTime = seconds; },
     play: () => { el.current?.play().catch(() => undefined); },
