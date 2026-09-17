@@ -115,26 +115,9 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   useEffect(() => {
     safely(() => { player.bufferOptions = { preferredForwardBufferDuration: PRELOAD_SECONDS }; });
   }, [player]);
-  // The first play of a clip on a phone has, some of the time, run the
-  // sound with the picture stuck on its first frame; a tap to pause and play
-  // again always set it going. So once the first play is confirmed under way
-  // (the clock has moved), the clip is paused and played again in the same
-  // breath, where it is — the same nudge, too quick to notice — once.
-  const nudged = useRef(false);
   useEffect(() => {
     const sub = player.addListener('timeUpdate', ({ currentTime }) => {
       safely(() => {
-        if (!nudged.current && wantPlay.current && currentTime > trimStart + 0.2) {
-          nudged.current = true;
-          // A pause and a play in the same breath can cancel out inside the
-          // native player; a short gap between them, as a finger leaves, does not.
-          player.pause();
-          setTimeout(() => safely(() => {
-            if (!wantPlay.current) return;
-            player.currentTime = trimStart;
-            player.play();
-          }), 90);
-        }
         const end = trimEnd ?? player.duration;
         if ((trimEnd !== undefined && currentTime >= trimEnd) || currentTime < trimStart - 0.5) { player.currentTime = trimStart; return; }
         const length = Math.max(0.01, end - trimStart);
