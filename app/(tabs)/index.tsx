@@ -225,10 +225,19 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   // Pull-to-refresh: fetch what is new, rank the pages again in place (the
   // pager is holding the feed down and brings it back itself), and give the
   // new first pages a short beat to draw before the feed comes back up.
+  const warmWaiters = useRef<(() => void)[]>([]);
+  const firstReadyRef = useRef(false);
   const refreshFeed = useCallback(async () => {
     await actions.refresh();
     rerank(false);
-    await new Promise<void>((resolve) => setTimeout(resolve, 700));
+    // Hold until the new first pages have their pictures in (six seconds at
+    // most). Pages already loaded count straight away; nothing is unloaded.
+    await new Promise<void>((resolve) => {
+      const done = () => { clearTimeout(t); resolve(); };
+      const t = setTimeout(done, 6000);
+      setTimeout(() => { if (firstReadyRef.current) done(); else warmWaiters.current.push(done); }, 80);
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 240));
   }, [actions, rerank]);
 
   /**
@@ -400,6 +409,10 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     return [];
   }), [feed]); // eslint-disable-line react-hooks/exhaustive-deps
   const warmDone = warmTargets.filter((id) => readyIds.has(id)).length;
+  const firstReady = warmDone >= warmTargets.length;
+  firstReadyRef.current = firstReady;
+  // A pull-to-refresh holding the feed down is let go once the new first pages are in.
+  useEffect(() => { if (firstReady && warmWaiters.current.length) { const w = warmWaiters.current; warmWaiters.current = []; w.forEach((fn) => fn()); } }, [firstReady]);
   const dataIn = !isSupabaseConfigured || app.remoteLoaded;
   const warmed = !!scope || warmTimedOut || (ready && dataIn && feed.length > 0 && warmDone >= warmTargets.length);
   // The shell keeps the splash curtain up until this says the first pages are in.
@@ -559,7 +572,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     </View>
                     </Reanimated.View>
                    </Reanimated.View></PinchZone>
-                    {cover(story.id, 'word')}
+                    {story.videoUrl ? cover(story.id, 'word') : null}
                   </View>
                 );
               }
@@ -793,7 +806,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                   </View>
                   </Reanimated.View>
                  </Reanimated.View></PinchZone>
-                  {cover(post.id, 'word')}
+                  {post.videoUrl ? cover(post.id, 'word') : null}
                 </View>
               );
             }).map((page, index) => {

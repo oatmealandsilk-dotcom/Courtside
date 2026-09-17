@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Avatar } from '@/components/ui';
 import type { User } from '@/data/types';
 import { homeFor, positionFor, type LatLng } from '@/features/players/positions';
+import { useWeather } from '@/features/players/useWeather';
 import { colors, radius, spacing, typography } from '@/theme';
 
 const HEIGHT = 220;
@@ -21,7 +22,7 @@ const CITY = { latitudeDelta: 0.16, longitudeDelta: 0.16 };
  * In the community tab it is a still card that opens into its own page;
  * expanded, every drag and pinch moves the map itself.
  */
-export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, fullscreen = false, at, onLocate }: {
+export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, fullscreen = false, at, onLocate, locationOn, onToggleLocation }: {
   me: User; players: User[]; onOpen: (id: string) => void;
   /** Tapping the card or the expand button opens the full map. */
   onExpand?: () => void;
@@ -32,11 +33,15 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
   at?: LatLng | null;
   /** Asks the device for a fix; shown as a button when there is none yet. */
   onLocate?: () => void;
+  /** Whether the app is using the device's location; the switch on the map flips it. */
+  locationOn?: boolean;
+  onToggleLocation?: () => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { night } = useTheme();
   const nearby = expanded ? players.slice(0, 40) : players.slice(0, 12);
   const home = useMemo(() => homeFor(me, at), [me, at]);
+  const weather = useWeather(home);
   const start: Region = { latitude: home.lat, longitude: home.lng, ...CITY };
   const map = useRef<MapView | null>(null);
   const [region, setRegion] = useState<Region>(start);
@@ -108,9 +113,17 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
           <Ionicons name="location-outline" size={16} color={colors.brand} />
           <Text style={styles.title}>Players near {me.location.trim() ? me.location.split(',')[0] : 'you'}</Text>
           <Text style={styles.count}>{nearby.length}</Text>
+          <View style={{ flex: 1 }} />
+          {onToggleLocation ? (
+            <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? 'Turn location off' : 'Turn location on'} onPress={onToggleLocation} hitSlop={8} style={[styles.locPill, locationOn && styles.locPillOn]}>
+              <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={12} color={locationOn ? colors.brandInk : colors.textMuted} />
+              <Text style={[styles.locPillText, locationOn && { color: colors.brandInk }]}>{locationOn ? 'Location on' : 'Location off'}</Text>
+            </Pressable>
+          ) : null}
         </View>}
         <View style={[styles.map, fullscreen ? styles.fill : styles.mapExpanded]}>
           {canvas(true)}
+          {weather ? <View pointerEvents="none" style={styles.weather}><Ionicons name={weather.icon as keyof typeof Ionicons.glyphMap} size={14} color={colors.text} /><Text style={styles.weatherText}>{weather.tempF}° · {weather.label}</Text></View> : null}
           <View style={styles.zoomControls}>
             <Pressable accessibilityRole="button" accessibilityLabel="Zoom in" onPress={() => zoomBy(0.5)} style={styles.zoomButton}>
               <Ionicons name="add" size={18} color={colors.text} />
@@ -123,7 +136,12 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
           <Pressable accessibilityRole="button" accessibilityLabel="Back to me" onPress={recentre} style={styles.locate}>
             <Ionicons name="locate-outline" size={18} color={colors.brand} />
           </Pressable>
-          {!at && onLocate ? (
+          {onToggleLocation ? (
+            <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? 'Turn location off' : 'Turn location on'} onPress={onToggleLocation} style={[styles.useLocation, !locationOn && styles.useLocationOff]}>
+              <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={15} color={locationOn ? colors.brandInk : colors.text} />
+              <Text style={[styles.useLocationText, !locationOn && { color: colors.text }]}>{locationOn ? 'Location on' : 'Location off'}</Text>
+            </Pressable>
+          ) : !at && onLocate ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Use my location" onPress={onLocate} style={styles.useLocation}>
               <Ionicons name="navigate" size={15} color={colors.brandInk} />
               <Text style={styles.useLocationText}>Use my location</Text>
@@ -141,6 +159,13 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
         <Ionicons name="location-outline" size={16} color={colors.brand} />
         <Text style={styles.title}>Players near {me.location.trim() ? me.location.split(',')[0] : 'you'}</Text>
         <Text style={styles.count}>{nearby.length}</Text>
+        <View style={{ flex: 1 }} />
+        {onToggleLocation ? (
+          <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? 'Turn location off' : 'Turn location on'} onPress={onToggleLocation} hitSlop={8} style={[styles.locPill, locationOn && styles.locPillOn]}>
+            <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={12} color={locationOn ? colors.brandInk : colors.textMuted} />
+            <Text style={[styles.locPillText, locationOn && { color: colors.brandInk }]}>{locationOn ? 'Location on' : 'Location off'}</Text>
+          </Pressable>
+        ) : null}
         {onExpand ? (
           <Pressable accessibilityRole="button" accessibilityLabel="Open map" onPress={onExpand} hitSlop={8} style={styles.expand}>
             <Ionicons name="expand-outline" size={16} color={colors.brand} />
@@ -156,6 +181,7 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
         style={styles.map}
       >
         {canvas(false)}
+        {weather ? <View pointerEvents="none" style={styles.weather}><Ionicons name={weather.icon as keyof typeof Ionicons.glyphMap} size={14} color={colors.text} /><Text style={styles.weatherText}>{weather.tempF}° · {weather.label}</Text></View> : null}
       </Pressable>
       <Text style={styles.hint}>Tap the map to open it. The badge means coach.</Text>
     </View>
@@ -171,8 +197,15 @@ const styleDefinitions = StyleSheet.create({
     overflow: 'hidden',
   },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md },
-  title: { ...typography.smallStrong, color: colors.text, flex: 1 },
-  count: { ...typography.caption, color: colors.textFaint, letterSpacing: 0 },
+  title: { ...typography.smallStrong, color: colors.text },
+  // The count sits right by the words, in the theme colour, so it reads as part of them.
+  count: { ...typography.smallStrong, fontSize: 15, color: colors.brand, marginLeft: -2 },
+  locPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bg },
+  locPillOn: { backgroundColor: colors.brand, borderColor: colors.brand },
+  locPillText: { ...typography.caption, color: colors.textMuted, letterSpacing: 0 },
+  useLocationOff: { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
+  weather: { position: 'absolute', left: 10, top: 10, zIndex: 10, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
+  weatherText: { ...typography.caption, color: colors.text, letterSpacing: 0 },
   expand: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: spacing.sm },
   expandText: { ...typography.caption, color: colors.brand, letterSpacing: 0 },
   map: { height: HEIGHT, backgroundColor: colors.bgElevated, overflow: 'hidden' },

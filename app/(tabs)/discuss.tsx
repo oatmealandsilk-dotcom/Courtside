@@ -32,7 +32,7 @@ const TOPICS: (QuestionTopic | 'all')[] = [
 
 function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
-  const { questions, users, currentUserId, currentUser, blockedIds, saved, actions, detectedCoords } = useApp();
+  const { questions, users, currentUserId, currentUser, blockedIds, saved, actions, detectedCoords, locationEnabled } = useApp();
   // The section lives here, not in the address: listening to the address made
   // this whole tab re-render on every route change anywhere in the app.
   // Other pages ask for a section through requestSection before navigating.
@@ -70,7 +70,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const content = (section:string) => (section === 'players' ? <View style={{ gap: 16 }}>
         <TextInput accessibilityLabel="Search players" placeholder="Search by name, handle, or city" placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} style={styles.search} />
         {currentUser && !search ? (section === 'players'
-          ? <NearbyMap me={currentUser} players={players} at={detectedCoords} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} />
+          ? <NearbyMap me={currentUser} players={players} at={detectedCoords} locationOn={locationEnabled} onToggleLocation={() => { void actions.setLocationEnabled(!locationEnabled); }} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} />
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : <View style={styles.mapStandIn} />) : null}
         {players.map(user => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && { backgroundColor: colors.surfaceAlt }]}>

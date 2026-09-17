@@ -5,7 +5,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { BAR_DUCK_PX, barCompact } from '@/features/navigation/barShrink';
 import * as haptics from '@/lib/haptics';
-import { colors } from '@/theme';
 
 /**
  * Full-height pages that snap one at a time. The active page changes the
@@ -155,7 +154,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       {onRefresh ? (
         <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top, height: HOLD - insets.top, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 48, paddingBottom: 6 }, gapStyle]}>
           {pullHeader}
-          {refreshing ? <CourtSpinner size={28} /> : <View style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 2.5, borderColor: colors.brand, borderTopColor: 'transparent', opacity: 0.9 }} />}
+          {rounded || refreshing ? <CourtSpinner size={28} /> : null}
         </Animated.View>
       ) : null}
       {height > 0 && (

@@ -23,7 +23,7 @@ export default function MapScreen() {
     <Screen title="Players near you" compactTitle scroll={false} padded={false} onBack={() => goBack('/discuss?section=players')}>
       {currentUser ? (
         <View style={{ flex: 1 }}>
-          <NearbyMap expanded fullscreen me={currentUser} players={players} at={detectedCoords} onLocate={() => { void actions.setLocationEnabled(true); }} onOpen={(id) => router.push(`/user/${id}`)} />
+          <NearbyMap expanded fullscreen me={currentUser} players={players} at={detectedCoords} locationOn={locationEnabled} onToggleLocation={() => { void actions.setLocationEnabled(!locationEnabled); }} onOpen={(id) => router.push(`/user/${id}`)} />
         </View>
       ) : (
         <EmptyState title="Sign in to see who is around" />

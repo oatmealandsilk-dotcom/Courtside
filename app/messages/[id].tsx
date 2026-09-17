@@ -27,7 +27,7 @@ import { useMentionCandidates } from '@/features/mentions/useMentionCandidates';
 import { activeMention, applyMention } from '@/lib/mentions';
 import type { Message } from '@/data/types';
 import { CHAT_THEMES, loadChatTheme, saveChatTheme, type ChatTheme } from '@/features/messaging/chatTheme';
-import Reanimated, { FadeIn, FadeInUp, FadeOut, LinearTransition, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Reanimated, { Easing, FadeIn, FadeInUp, FadeOut, LinearTransition, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /** Two messages from the same person this close together read as one run: tighter, one tail. */
@@ -180,7 +180,7 @@ export default function Thread() {
           const inRun = runsOn(prev, message) && !stamp;
           const lastOfRun = !runsOn(message, next);
           // A new message rises out of the composer and settles with a small spring.
-          const arrive = settled.current ? FadeInUp.duration(220).springify().damping(24).stiffness(220) : undefined;
+          const arrive = settled.current ? FadeInUp.duration(150).easing(Easing.out(Easing.cubic)) : undefined;
 
           if (message.kind !== 'text' && message.sharedId) {
             const shared =
@@ -195,7 +195,7 @@ export default function Thread() {
             return (
               <React.Fragment key={message.id}>
               {stamp}
-              <Reanimated.View entering={arrive} layout={LinearTransition.duration(180)} style={[mine ? styles.mineAlign : styles.theirsAlign, inRun && styles.inRun]}>
+              <Reanimated.View entering={arrive} layout={LinearTransition.duration(120)} style={[mine ? styles.mineAlign : styles.theirsAlign, inRun && styles.inRun]}>
               <Tappable
                 accessibilityRole="link"
                 scaleTo={0.97}
@@ -343,7 +343,7 @@ function Bubble({ message, mine, inRun, tail, arrive, tint, styles, me, picking,
   const reacted = Object.keys(tally).length > 0;
 
   return (
-    <Reanimated.View entering={arrive} layout={LinearTransition.duration(180)} style={[mine ? styles.mineAlign : styles.theirsAlign, inRun && styles.inRun]}>
+    <Reanimated.View entering={arrive} layout={LinearTransition.duration(120)} style={[mine ? styles.mineAlign : styles.theirsAlign, inRun && styles.inRun]}>
       {/* The chip is anchored to the bubble, not the row, so it sits on the
           bubble's bottom inner corner however wide the message is. */}
       <View style={[styles.bubbleWrap, mine ? styles.mineAlign : styles.theirsAlign, reacted && styles.bubbleWrapReacted]}>
@@ -411,7 +411,7 @@ function SendButton({ ready, onPress, styles, tint }: { ready: boolean; onPress:
   const style = useAnimatedStyle(() => ({ opacity: 0.4 + 0.6 * on.value, transform: [{ scale: 0.86 + 0.14 * on.value }] }));
   return (
     <Reanimated.View style={style}>
-      <Tappable onPress={onPress} disabled={!ready} accessibilityLabel="Send message" style={[styles.send, tint && { backgroundColor: tint.mine }]}>
+      <Tappable immediate onPress={onPress} disabled={!ready} accessibilityLabel="Send message" style={[styles.send, tint && { backgroundColor: tint.mine }]}>
         <Ionicons name="arrow-up" size={19} color={tint?.ink ?? colors.brandInk} />
       </Tappable>
     </Reanimated.View>

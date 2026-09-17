@@ -9,7 +9,7 @@ import { isPageDragging, subscribePageDragging } from '@/features/navigation/swi
 import { KeyboardScrollContext, afterKeyboard, currentKeyboardHeight, type Measurable } from '@/lib/keyboardScroll';
 import { TAB_FOR_KEY, subscribeScrollToTop } from '@/features/navigation/scrollToTop';
 import { barCompact } from '@/features/navigation/barShrink';
-import Reanimated, { runOnJS, useAnimatedScrollHandler, useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
+import Reanimated, { runOnJS, useAnimatedReaction, useAnimatedScrollHandler, useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
@@ -149,6 +149,9 @@ export function Screen({
   const tick = useCallback(() => haptics.tap(), []);
   const springBack = useCallback(() => { scroller.current?.scrollTo({ y: strip, animated: true }); }, [strip]);
   const gapStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, pullY.value / 40) }));
+  // The disc spins from the first pull, not only once the fetch runs.
+  const [pulled, setPulled] = useState(false);
+  useAnimatedReaction(() => pullY.value > 2, (now, before) => { if (now !== before) runOnJS(setPulled)(now); }, []);
   const remember = useCallback((y: number) => { scrollMemory.set(key, Math.max(0, y - strip)); }, [key, strip]);
   const onScrollAnimated = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -274,7 +277,7 @@ export function Screen({
         <View style={styles.flex}>
         {strip > 0 ? (
           <Reanimated.View pointerEvents="none" style={[styles.stripGap, gapStyle]}>
-            {refreshing ? <CourtSpinner size={28} /> : <View style={styles.pullArc} />}
+            {pulled || refreshing ? <CourtSpinner size={28} /> : null}
           </Reanimated.View>
         ) : null}
         <Reanimated.ScrollView
@@ -312,7 +315,7 @@ export function Screen({
       )}
       {onRefresh && Platform.OS === 'web' && (pulling || refreshing) ? (
         <Animated.View pointerEvents="none" style={[styles.webRefresh, { opacity: pull, transform: [{ translateY: pull.interpolate({ inputRange: [0, 1], outputRange: [-46, 6] }) }, { rotate: pull.interpolate({ inputRange: [0, 1], outputRange: ['-120deg', '0deg'] }) }] }]}>
-          {refreshing ? <CourtSpinner size={28} /> : <View style={styles.pullArc} />}
+          {pulling || refreshing ? <CourtSpinner size={28} /> : null}
         </Animated.View>
       ) : null}
       {onRefresh ? (
