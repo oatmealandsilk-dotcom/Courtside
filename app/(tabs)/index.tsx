@@ -864,8 +864,8 @@ const styleDefinitions = StyleSheet.create({
   // On a computer a post sits at the left, so its wordmark lines up over it
   // rather than floating in the middle of the window.
   pullGreeting: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  // The mark sits at the far right of the gap, a little above the line; the greeting and disc in the middle.
-  pullLogo: { position: 'absolute', right: 18, top: -6 },
+  // The mark sits at the far left of the gap, level with the greeting; the greeting and disc in the middle.
+  pullLogo: { position: 'absolute', left: 18 },
   pullGreetingText: { color: colors.text, fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
   wordmarkLeft: { alignItems: 'flex-start', paddingLeft: 12 + LANE_INSET },
   wordmark: {
