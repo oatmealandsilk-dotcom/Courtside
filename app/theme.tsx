@@ -70,21 +70,22 @@ function ThemeCard({ option, active, onPick, styles }: { option: (typeof themeLi
   const push = useSharedValue(1);
   // The card answers the tap itself, before the rest of the app has recoloured.
   const settle = (next: boolean) => {
-    on.value = withTiming(next ? 1 : 0, { duration: 200, easing: Easing.out(Easing.cubic) });
-    if (next) push.value = withSequence(withTiming(0.99, { duration: 60 }), withSpring(1, { damping: 16, stiffness: 320 }));
+    on.value = withTiming(next ? 1 : 0, { duration: 140, easing: Easing.out(Easing.quad) });
+    if (next) push.value = withSequence(withTiming(0.992, { duration: 50 }), withTiming(1, { duration: 120, easing: Easing.out(Easing.quad) }));
   };
   useEffect(() => { settle(active); }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
   // The edge and the check take this theme's own colour, not the one the app is wearing now.
+  // No coloured outline: the chosen card's edge just goes a shade firmer.
   const cardStyle = useAnimatedStyle(() => ({
-    borderColor: interpolateColor(on.value, [0, 1], [colors.border, palette.brand]),
+    borderColor: interpolateColor(on.value, [0, 1], [colors.border, colors.borderStrong]),
     transform: [{ scale: push.value }],
   }));
   const checkStyle = useAnimatedStyle(() => ({
     opacity: on.value,
-    transform: [{ scale: 0.6 + 0.4 * on.value }, { rotate: `${(1 - on.value) * -30}deg` }],
+    transform: [{ scale: 0.8 + 0.2 * on.value }],
   }));
-  const ringStyle = useAnimatedStyle(() => ({ opacity: 1 - on.value, transform: [{ scale: 1 - 0.15 * on.value }] }));
-  const swatchStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.02 * on.value }] }));
+  const ringStyle = useAnimatedStyle(() => ({ opacity: 1 - on.value }));
+  const swatchStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 }] }));
   return (
     <Pressable accessibilityRole="radio" accessibilityState={{ selected: active }} accessibilityLabel={`${option.label} theme`} onPress={() => { settle(true); onPick(); }}>
       <Animated.View style={[styles.card, cardStyle]}>
