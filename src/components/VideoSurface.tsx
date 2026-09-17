@@ -1,6 +1,6 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { VideoView, useVideoPlayer } from 'expo-video';
+import { VideoView, createVideoPlayer } from 'expo-video';
 
 export interface VideoSurfaceHandle {
   seek: (seconds: number) => void;
@@ -27,15 +27,28 @@ export const VideoSurface = forwardRef<VideoSurfaceHandle, {
   /** The video's own width and height in pixels, once known. */
   onSize?: (width: number, height: number) => void;
 }>(function VideoSurface({ uri, muted = false, fit = 'contain', from = 0, to, paused = false, onTime, onDuration, onSize }, ref) {
-  const player = useVideoPlayer(uri, (p) => {
-    p.loop = true;
+  // Made and freed by hand, the same way the feed's clips are: the toolkit's
+  // hook freed a still-playing player when the editor closed, and on iPhone
+  // its sound could run on and pop up later. Here it is silenced and stopped
+  // first, then freed. Looping is by hand too (the built-in loop froze the
+  // picture on a first pass).
+  const player = useMemo(() => {
+    const p = createVideoPlayer(uri);
+    p.loop = false;
     p.muted = muted;
     p.timeUpdateEventInterval = 0.1;
-  });
-  // expo-video frees the native player the moment this unmounts — sometimes
-  // before React runs the effect clean-ups below. Every call goes through
-  // this guard so a late pause on a freed player is a no-op, not a crash.
+    return p;
+  }, [uri]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Every call goes through this guard so a late call on a freed player is a no-op, not a crash.
   const safely = (work: () => void) => { try { work(); } catch { /* player already released */ } };
+  useEffect(() => () => {
+    safely(() => { player.muted = true; player.pause(); });
+    safely(() => player.release());
+  }, [player]);
+  useEffect(() => {
+    const sub = player.addListener('playToEnd', () => { if (!paused) safely(() => { player.currentTime = from; player.play(); }); });
+    return () => sub.remove();
+  }, [player, from, paused]);
   useEffect(() => { safely(() => { player.muted = muted; }); }, [player, muted]);
   const latestSize = useRef(onSize);
   latestSize.current = onSize;
