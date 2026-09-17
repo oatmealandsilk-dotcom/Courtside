@@ -43,7 +43,11 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   // then freed.
   const player = useMemo(() => {
     const p = createVideoPlayer(uri);
-    p.loop = true;
+    // Looping is done by hand below. The player's own loop (a queue of
+    // copies of the clip under the hood) has run the sound with the picture
+    // frozen for the first pass on iPhone — the toolkit's oldest open bug —
+    // and that is exactly what the first clip in the feed was doing.
+    p.loop = false;
     p.muted = true;
     p.timeUpdateEventInterval = 0.2;
     return p;
@@ -115,6 +119,14 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   useEffect(() => {
     safely(() => { player.bufferOptions = { preferredForwardBufferDuration: PRELOAD_SECONDS }; });
   }, [player]);
+  // The end of the clip starts it over from the trim's start.
+  useEffect(() => {
+    const sub = player.addListener('playToEnd', () => {
+      if (!wantPlay.current) return;
+      safely(() => { player.currentTime = trimStart; player.play(); });
+    });
+    return () => sub.remove();
+  }, [player, trimStart]);
   useEffect(() => {
     const sub = player.addListener('timeUpdate', ({ currentTime }) => {
       safely(() => {
