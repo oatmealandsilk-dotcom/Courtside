@@ -7,6 +7,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/ui';
+import { setPendingShot } from '@/features/compose/pendingShot';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -74,7 +75,7 @@ export default function Hit() {
 
   // The photo is the hit; the caption and the posting happen in the same
   // composer a clip uses, so the two flows feel like one.
-  const useShot = () => { if (shot) router.replace({ pathname: '/compose', params: { mode: 'hit', shot } }); };
+  const useShot = () => { if (!shot) return; setPendingShot(shot); router.replace({ pathname: '/compose', params: { mode: 'hit', shot: 'pending' } }); };
   // Another go: the count starts again the moment the camera is back.
   const retake = () => { setShot(null); setCount(null); };
 

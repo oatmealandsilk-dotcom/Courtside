@@ -44,7 +44,7 @@ export function Button({
       onPress={onPress}
       // A wide button travelling as far as a small icon looks wobbly.
       scaleTo={0.97}
-      hoverTo={1.02}
+      hoverTo={1.04}
       accessibilityLabel={label}
       style={[
         styles.base,

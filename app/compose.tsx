@@ -6,6 +6,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 
 import { MediaPicker, pickFromDevice, type PickedMedia } from '@/components/MediaPicker';
 import { MediaEditor, type EditedMedia } from '@/components/MediaEditor';
+import { takePendingShot } from '@/features/compose/pendingShot';
 import { PermissionBanner } from '@/components/PermissionRows';
 import { SheetBackdrop } from '@/components/SheetBackdrop';
 import { TOPIC_META } from '@/components/QuestionCard';
@@ -33,10 +34,12 @@ export default function Compose() {
   const params = useLocalSearchParams<{ mode?: string; shot?: string }>();
   useEffect(() => { if (params.mode === 'story') router.replace('/hit'); }, [params.mode]);
   // A hit arrives here with its photo already taken: straight to the form.
-  const isHit = params.mode === 'hit' && !!params.shot;
+  // The camera's photo travels in memory; the address only says one is waiting.
+  const shotUri = params.shot === 'pending' ? takePendingShot() : params.shot;
+  const isHit = params.mode === 'hit' && !!shotUri;
   const [stage, setStage] = useState<Stage>(isHit ? 'form' : 'choose');
   const [mode, setMode] = useState<Mode>(isHit ? 'hit' : params.mode === 'story' ? 'story' : 'post');
-  const [media, setMedia] = useState<PickedMedia | null>(isHit ? { uri: params.shot as string, label: 'Hit', kind: 'photo', thumbnailUrl: params.shot as string, orientation: 'portrait' } : null);
+  const [media, setMedia] = useState<PickedMedia | null>(isHit ? { uri: shotUri as string, label: 'Hit', kind: 'photo', thumbnailUrl: shotUri as string, orientation: 'portrait' } : null);
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
   // What the edit step decided: where a clip starts and stops, and whether it has sound.
   const [edit, setEdit] = useState<Pick<EditedMedia, 'trimStart' | 'trimEnd' | 'muted' | 'crop'>>({});
