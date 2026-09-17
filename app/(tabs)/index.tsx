@@ -227,8 +227,12 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       // landed): the first clip in the order is brought to the front.
       if (!justMine.length) {
         const isClip = (k: string) => (k.startsWith('p:') && data.posts.find((p) => p.id === k.slice(2))?.kind === 'clip') || (k.startsWith('h:') && !!data.stories.find((st) => st.id === k.slice(2))?.videoUrl);
-        // One you have not watched yet, when there is one; the same clip again otherwise.
-        let first = final.findIndex((k) => isClip(k) && !seen.current.has(k));
+        // A refresh opens on a different clip from the one just watched: one
+        // not yet watched when there is one, otherwise any other clip; only
+        // with a single clip in the whole feed does the same one lead again.
+        const previous = fresh ? orderRef.current[0] : undefined;
+        let first = final.findIndex((k) => isClip(k) && k !== previous && !seen.current.has(k));
+        if (first < 0) first = final.findIndex((k) => isClip(k) && k !== previous);
         if (first < 0) first = final.findIndex(isClip);
         if (first > 0) final.unshift(...final.splice(first, 1));
       }
