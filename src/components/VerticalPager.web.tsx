@@ -3,7 +3,7 @@ import { withTiming } from 'react-native-reanimated';
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { pagerStep } from '@/lib/pagerGesture';
 import { isDesktopBrowser } from '@/lib/browserDevice';
-import { CourtSpinner } from '@/components/CourtSpinner';
+import { ActivityIndicator } from 'react-native';
 import { colors } from '@/theme';
 
 export interface VerticalPagerHandle { scrollToTop: () => void }
@@ -112,8 +112,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
 
   return <div style={{ position: 'relative', height: '100%', width: '100%' }}>
     {onRefresh && (pullAmount > 0 || refreshing) ? (
-      <div style={{ position: 'absolute', top: 6 + 40 * pullAmount - 40, left: '50%', transform: `translateX(-50%) rotate(${-120 + 120 * pullAmount}deg)`, opacity: pullAmount, width: 40, height: 40, borderRadius: 20, background: colors.surface, border: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', transition: 'top 120ms, opacity 120ms', pointerEvents: 'none' }}>
-        {refreshing ? <CourtSpinner size={26} /> : <div style={{ width: 26, height: 26, borderRadius: 13, border: `2.5px solid ${colors.brand}`, borderTopColor: 'transparent', opacity: 0.9 }} />}
+      <div style={{ position: 'absolute', top: 16 + 40 * pullAmount - 40, left: '50%', transform: `translateX(-50%) rotate(${-120 + 120 * pullAmount}deg)`, opacity: pullAmount, width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5, transition: 'top 120ms, opacity 120ms', pointerEvents: 'none' }}>
+        {refreshing ? <ActivityIndicator size="small" color={colors.textMuted} /> : <div style={{ width: 22, height: 22, borderRadius: 11, border: `2.5px solid ${colors.textMuted}`, borderTopColor: 'transparent', opacity: 0.9 }} />}
       </div>
     ) : null}
   <div ref={pager} tabIndex={0} role="region" aria-label="Clips feed"

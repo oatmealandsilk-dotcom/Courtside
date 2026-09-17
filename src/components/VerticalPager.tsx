@@ -1,7 +1,6 @@
 import React, { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
-import { RefreshControl, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, View } from 'react-native';
 import { colors } from '@/theme';
-import { CourtSpinner } from '@/components/CourtSpinner';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { runOnJS, runOnUI, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useSharedValue, withTiming } from 'react-native-reanimated';
 import { BAR_DUCK_PX, barCompact } from '@/features/navigation/barShrink';
@@ -113,7 +112,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       {/* The refresh disc, the same one Profile shows, sitting in the top of the page like Instagram's. */}
       {refreshing ? (
         <View pointerEvents="none" style={{ position: 'absolute', top: insets.top + 72, left: 0, right: 0, alignItems: 'center' }}>
-          <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }}><CourtSpinner size={26} /></View>
+          <ActivityIndicator size="small" color={colors.textMuted} />
         </View>
       ) : null}
     </View>
