@@ -413,6 +413,15 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   useEffect(() => { if (warmed && warmWaiters.current.length) { const w = warmWaiters.current; warmWaiters.current = []; w.forEach((fn) => fn()); } }, [warmed]);
   // The shell keeps the splash curtain up until this says the first pages are in.
   useEffect(() => { if (warmed && !scope) setFeedWarm(true); }, [warmed, scope]);
+  // Sound must never run ahead of the picture: playback waits until the
+  // curtain has finished lifting, not just until the pages are ready.
+  const [playable, setPlayable] = useState(!!scope);
+  useEffect(() => {
+    if (scope) { setPlayable(true); return; }
+    if (!warmed) { setPlayable(false); return; }
+    const t = setTimeout(() => setPlayable(true), 480);
+    return () => clearTimeout(t);
+  }, [warmed, scope]);
   // Photos and clip covers are fetched outright; a page reports itself ready when its picture lands.
   useEffect(() => {
     for (const item of feed.slice(0, AHEAD)) {
@@ -516,7 +525,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     <View accessibilityLabel={`${author.name}'s hit`} style={styles.clipFrame}>
                       <View style={phone ? StyleSheet.absoluteFill : styles.clipPortrait}>
                         {story.videoUrl ? (
-                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={focused && active === index && warmed} preload={near} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
+                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={focused && active === index && warmed && playable} preload={near} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
                         ) : (
                           // Two quick taps like a hit, the way they like a clip.
                           <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s hit`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
@@ -610,7 +619,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       author={author}
                       liked={liked}
                       saved={isSaved}
-                      active={focused && active === index && warmed}
+                      active={focused && active === index && warmed && playable}
                       preload={near}
                       topInset={insets.top + 66}
                       onDoubleTap={() => likeByTap(post.id, liked)}
@@ -670,7 +679,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                           letterbox={post.orientation === 'landscape'}
                           uri={post.videoUrl}
                           poster={post.thumbnailUrl}
-                          active={focused && active === index && warmed}
+                          active={focused && active === index && warmed && playable}
                           preload={near}
                           onDoubleTap={() => likeByTap(post.id, liked)}
                           trimStart={post.trimStart}

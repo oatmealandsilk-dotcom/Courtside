@@ -27,7 +27,7 @@ const scrollMemory = new Map<string, number>();
 // it into view with the disc behind; let go past the line and the page glides
 // to the strip's top, holds while the fetch runs, then glides back.
 const HOLD = 150;
-const PULL_LINE = 90;
+const PULL_LINE = HOLD / 2;
 
 /**
  * Browsers decide per touch whether a gesture is theirs to scroll with, by
@@ -145,6 +145,8 @@ export function Screen({
   const lastY = useSharedValue(-1);
   const pullY = useSharedValue(0);
   const beginPull = useCallback(() => { void refreshNowRef.current(); }, []);
+  const armed = useSharedValue(false);
+  const tick = useCallback(() => haptics.tap(), []);
   const springBack = useCallback(() => { scroller.current?.scrollTo({ y: strip, animated: true }); }, [strip]);
   const gapStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, pullY.value / 40) }));
   const remember = useCallback((y: number) => { scrollMemory.set(key, Math.max(0, y - strip)); }, [key, strip]);
@@ -153,6 +155,11 @@ export function Screen({
       const y = event.contentOffset.y;
       runOnJS(remember)(y);
       pullY.value = y < strip ? strip - y : 0;
+      if (strip > 0) {
+        const past = pullY.value >= PULL_LINE;
+        if (past && !armed.value) { armed.value = true; runOnJS(tick)(); }
+        else if (!past && armed.value) armed.value = false;
+      }
       // The first report is just where the page already sat (a tab switch
       // restoring its place): nothing to react to.
       if (lastY.value < 0) { lastY.value = y; return; }

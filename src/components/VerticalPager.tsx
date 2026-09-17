@@ -4,6 +4,7 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { runOnJS, runOnUI, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { BAR_DUCK_PX, barCompact } from '@/features/navigation/barShrink';
+import * as haptics from '@/lib/haptics';
 import { colors } from '@/theme';
 
 /**
@@ -26,7 +27,8 @@ const RESIZE_MIN = 40;
 // strip's top and stays there while the fetch runs; when the new pages are
 // in, it glides back. Every move is the scroller's own, so nothing jumps.
 const HOLD = 168;
-const PULL_LINE = 90;
+// Past halfway the scroller's own snap settles at the strip's top; that is the line.
+const PULL_LINE = HOLD / 2;
 
 export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.ReactNode[]; onIndex: (index: number) => void; /** The page the scroll came to rest on. */ onSettled?: (index: number) => void; initialIndex?: number; /** Pulling down past the first page fetches what is new. */ onRefresh?: () => Promise<void>; /** Shown in the gap the pull opens, beside the disc. */ pullHeader?: React.ReactNode }>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0, onRefresh, pullHeader }, ref) {
   const [height, setHeight] = useState(0);
@@ -53,10 +55,10 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     refreshingRef.current = true;
     setRefreshing(true);
     setScrollLocked(true);
-    // Up to the strip's top, and stay.
-    runOnUI(() => { 'worklet'; scrollTo(list, 0, 0, true); })();
+    // The snap is already carrying the feed to the strip's top; it stays there.
     try { await onRefresh(); } finally {
       // Back to the first page in one glide; the disc goes once it is there.
+      haptics.tap();
       runOnUI(() => { 'worklet'; scrollTo(list, 0, HOLD, true); })();
       setTimeout(() => { refreshingRef.current = false; setRefreshing(false); setScrollLocked(false); }, 420);
     }
@@ -84,8 +86,9 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     settleTimer.current = setTimeout(() => { settleTimer.current = null; settled(y); }, 140);
   }, [settled]);
   const cancelSettle = useCallback(() => { if (settleTimer.current) { clearTimeout(settleTimer.current); settleTimer.current = null; } }, []);
-  // A pull that stopped short of the line eases back to the first page.
-  const springBack = useCallback(() => jump(0, true), [jump]);
+  // A small tick the moment the pull crosses the line.
+  const armed = useSharedValue(false);
+  const tick = useCallback(() => haptics.tap(), []);
 
   // Everything per frame stays on the UI thread: the bar follows the swipe
   // (moving on tucks it, coming back lifts it), and only a change of page
@@ -97,6 +100,11 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       const y = e.contentOffset.y;
       const h = e.layoutMeasurement.height || 1;
       pullY.value = y < top ? top - y : 0;
+      if (top > 0) {
+        const past = pullY.value >= PULL_LINE;
+        if (past && !armed.value) { armed.value = true; runOnJS(tick)(); }
+        else if (!past && armed.value) armed.value = false;
+      }
       if (lastY.value >= 0) {
         const dy = y - lastY.value;
         // A small move follows the finger; a jump of most of a page is a whole page change, which counts fully.
@@ -111,14 +119,13 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     onEndDrag: (e) => {
       const y = e.contentOffset.y;
       if (top > 0 && y < top - PULL_LINE) runOnJS(refreshNow)();
-      else if (top > 0 && y < top) runOnJS(springBack)();
       runOnJS(dragEnded)(y);
     },
     onMomentumBegin: () => { runOnJS(cancelSettle)(); },
   });
 
   // The places the scroller may rest: each page's top, measured past the strip.
-  const snapOffsets = useMemo(() => children.map((_, i) => top + i * height), [children, top, height]);
+  const snapOffsets = useMemo(() => [...(top > 0 ? [0] : []), ...children.map((_, i) => top + i * height)], [children, top, height]);
 
   return (
     <View style={{ flex: 1 }} onLayout={(e) => {

@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import * as haptics from '@/lib/haptics';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
@@ -75,9 +75,8 @@ function ThemeCard({ option, active, onPick, styles }: { option: (typeof themeLi
   };
   useEffect(() => { settle(active); }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
   // The edge and the check take this theme's own colour, not the one the app is wearing now.
-  // No coloured outline: the chosen card's edge just goes a shade firmer.
+  // No outline change at all: the check alone says which one is on.
   const cardStyle = useAnimatedStyle(() => ({
-    borderColor: interpolateColor(on.value, [0, 1], [colors.border, colors.borderStrong]),
     transform: [{ scale: push.value }],
   }));
   const checkStyle = useAnimatedStyle(() => ({

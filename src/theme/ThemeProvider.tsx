@@ -12,8 +12,8 @@ type Palette = Record<keyof typeof lightColors, string>;
 export const darkColors: Palette = {
   bg: '#0F1412', bgElevated: '#161D19', surface: '#1A221E', surfaceAlt: '#232C27',
   border: '#2C3832', borderStrong: '#46554D', text: '#EDF1EE', textMuted: '#A6B1AB', textFaint: '#7C8781',
-  brand: '#8FD79B', brandInk: '#0C1710', brandDim: '#26382C', court: '#8FD79B', clay: '#E09A76',
-  hard: '#89C0DE', grass: '#A9CF92', info: '#89C0DE', success: '#8FD79B', warning: '#E8C574', danger: '#F2897B',
+  brand: '#6FB483', brandInk: '#0C1710', brandDim: '#1F2E25', court: '#6FB483', clay: '#C98A6A',
+  hard: '#7FA9C4', grass: '#86B393', info: '#7FA9C4', success: '#6FB483', warning: '#D2B36A', danger: '#D97F73',
   overlay: 'rgba(0, 0, 0, 0.65)',
 };
 
@@ -141,6 +141,13 @@ export const useTheme = () => useContext(ThemeContext);
  * must define every key — a missing slot would leave a stray colour from
  * whichever theme the style was authored in.
  */
+// Every colour any palette uses, and the slot it fills — built once, so a
+// theme change is a lookup per value rather than a scan of every palette.
+const slotOf = new Map<string, keyof typeof lightColors>();
+for (const key of Object.keys(lightColors) as (keyof typeof lightColors)[]) {
+  for (const palette of Object.values(themes)) if (!slotOf.has(palette[key])) slotOf.set(palette[key], key);
+}
+
 export function useThemedStyles<T extends object>(definitions: T): T {
   const { theme } = useTheme();
   // The live colour object is brought in line with the theme every time a
@@ -149,20 +156,14 @@ export function useThemedStyles<T extends object>(definitions: T): T {
   if (colors.bg !== themes[theme].bg || colors.brand !== themes[theme].brand) Object.assign(colors, themes[theme]);
   return useMemo(() => {
     const target = themes[theme];
-    const keys = Object.keys(lightColors) as (keyof typeof lightColors)[];
-    const palettes = Object.values(themes);
-
     const remap = (value: unknown): unknown => {
       if (typeof value === 'string') {
-        for (const key of keys) {
-          for (const palette of palettes) {
-            const source = palette[key];
-            if (value === source) return target[key];
-            // Preserve an eight-digit hex's alpha pair when swapping the colour.
-            if (source.startsWith('#') && value.startsWith(source) && value.length === 9) {
-              return target[key] + value.slice(7);
-            }
-          }
+        const key = slotOf.get(value);
+        if (key) return target[key];
+        // Preserve an eight-digit hex's alpha pair when swapping the colour.
+        if (value.length === 9 && value.startsWith('#')) {
+          const base = slotOf.get(value.slice(0, 7));
+          if (base) return target[base] + value.slice(7);
         }
         return value;
       }
