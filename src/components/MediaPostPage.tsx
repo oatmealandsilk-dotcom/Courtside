@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ZoomableMedia, type HomeRect, type ZoomableMediaHandle } from '@/components/ZoomableMedia';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Heart } from '@/components/Heart';
 
 import { PostVideo } from '@/components/PostVideo';
 import { CommentRow } from '@/components/CommentRow';
@@ -203,7 +204,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
             sizes, the count under each one. */}
         <View style={styles.actions}>
           <Tappable onPress={onToggleLike} immediate scaleTo={0.78} style={styles.action} accessibilityLabel={liked ? 'Unlike' : 'Like'}>
-            <Ionicons name={liked ? 'heart' : 'heart-outline'} size={32} color={liked ? '#FF3B5C' : colors.text} />
+            <Heart liked={liked} size={32} ink={colors.text} />
             <Text style={styles.actionText}>{compactNumber(post.likedBy.length)}</Text>
           </Tappable>
           <Tappable onPress={onComment} scaleTo={0.78} style={styles.action} accessibilityLabel="Comments">

@@ -17,6 +17,7 @@ import { LevelPill } from '@/components/LevelPill';
 import { QuestionCard } from '@/components/QuestionCard';
 import { PostCard } from '@/components/PostCard';
 import { BrandMark } from '@/components/BrandMark';
+import { Heart } from '@/components/Heart';
 import { LANE_INSET, MediaPostPage } from '@/components/MediaPostPage';
 import { Tappable } from '@/components/Tappable';
 import { VerticalPager, type VerticalPagerHandle } from '@/components/VerticalPager';
@@ -80,8 +81,6 @@ function TapAway({ onHidden, label, children, style }: { onHidden: () => void; l
   );
 }
 
-/** The heart's red: bright and warm, the one that gets a reaction. */
-const LIKE_RED = '#FF3B5C';
 
 function LikeBurst({ token }: { token: number }) {
   const scale = useRef(new Animated.Value(0)).current;
@@ -225,6 +224,10 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   // Pull-to-refresh: fetch what is new, rank the pages again in place (the
   // pager is holding the feed down and brings it back itself), and give the
   // new first pages a short beat to draw before the feed comes back up.
+  // The brand on a page that is not built or loaded yet. Built once, so the
+  // dozens of held pages cost nothing when the feed re-renders on a tap.
+  const holdMark = useMemo(() => <BrandMark size={72} />, []);
+  const holdWord = useMemo(() => <Text style={styles.holdWord}>CourtSide</Text>, [styles]);
   const warmWaiters = useRef<(() => void)[]>([]);
   const firstReadyRef = useRef(false);
   const refreshFeed = useCallback(async () => {
@@ -511,10 +514,10 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               if (ahead < -WINDOW || ahead > AHEAD) {
                 // A page not built yet holds its slot with the brand on it, so a
                 // fast scroll lands on the mark (a post) or the name (a clip or thread).
-                return <View key={pageKey} style={styles.holdPage}>{item.type === 'post' && item.post.kind !== 'clip' ? <BrandMark size={72} /> : <Text style={styles.holdWord}>CourtSide</Text>}</View>;
+                return <View key={pageKey} style={styles.holdPage}>{item.type === 'post' && item.post.kind !== 'clip' ? holdMark : holdWord}</View>;
               }
               // The same over a built page whose picture has not landed yet.
-              const cover = (id: string, kind: 'mark' | 'word') => readyIds.has(id) ? null : <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.holdPage]}>{kind === 'mark' ? <BrandMark size={72} /> : <Text style={styles.holdWord}>CourtSide</Text>}</View>;
+              const cover = (id: string, kind: 'mark' | 'word') => readyIds.has(id) ? null : <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.holdPage]}>{kind === 'mark' ? holdMark : holdWord}</View>;
               // The page behind and the seven ahead keep their video buffered, ready to play.
               const near = distance <= 1 || (ahead > 0 && ahead <= AHEAD);
               const strip = index === suggestHost ? suggestStrip : null;
@@ -559,7 +562,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     </View>
                     <View style={styles.actions}>
                       <Tappable accessibilityLabel={hitLiked ? 'Unlike hit' : 'Like hit'} onPress={() => actions.toggleLikeStory(story.id)} immediate scaleTo={0.78} style={styles.action}>
-                        <Ionicons name={hitLiked ? 'heart' : 'heart-outline'} size={36} color={hitLiked ? LIKE_RED : 'white'} style={styles.actionGlyph} />
+                        <Heart liked={hitLiked} size={36} style={styles.actionGlyph} />
                         <Text style={styles.actionLabel}>{story.likedBy.length}</Text>
                       </Tappable>
                       <Tappable accessibilityLabel="Hit comments" onPress={() => router.push({ pathname: '/comments', params: { kind: 'hit', id: story.id } })} scaleTo={0.78} style={styles.action}>
@@ -765,7 +768,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       scaleTo={0.78}
                       style={styles.action}
                     >
-                      <Ionicons name={liked ? 'heart' : 'heart-outline'} size={36} color={liked ? LIKE_RED : 'white'} style={styles.actionGlyph} />
+                      <Heart liked={liked} size={36} style={styles.actionGlyph} />
                       <Text style={styles.actionLabel}>{post.likedBy.length}</Text>
                     </Tappable>
                     <Tappable
