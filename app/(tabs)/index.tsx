@@ -886,7 +886,7 @@ const styleDefinitions = StyleSheet.create({
   pullGreeting: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   // The mark sits at the far left of the gap, level with the greeting; the greeting and disc in the middle.
   // Exactly where the mark sits on a clip, so the pull reveals it in place.
-  pullLogo: { position: 'absolute', left: 28, top: 16 },
+  pullLogo: { position: 'absolute', left: 34, top: 16 },
   pullGreetingText: { color: colors.text, fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
   wordmarkLeft: { alignItems: 'flex-start', paddingLeft: 12 + LANE_INSET },
   wordmark: {
@@ -895,9 +895,9 @@ const styleDefinitions = StyleSheet.create({
   // Kept as a hook for anything the wordmark needs over video; the shadow that
   // used to live here was doing more harm than good.
   // Over a clip: the mark alone, top left, with the same soft shadow the caption wears.
-  clipMarkOverlay: { alignItems: 'flex-start', paddingLeft: 28 },
+  clipMarkOverlay: { alignItems: 'flex-start', paddingLeft: 34 },
   // The mark sits in the same pale pill the wordmark used to, the same one the sound disc wears.
-  markPill: { width: 46, height: 46, borderRadius: 13, backgroundColor: colors.bg, opacity: 0.88, alignItems: 'center', justifyContent: 'center' },
+  markPill: { width: 46, height: 46, borderRadius: 13, backgroundColor: colors.bg, opacity: 0.76, alignItems: 'center', justifyContent: 'center' },
   viewer: { flex: 1, width: '100%', minHeight: 0 },
   clip: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
   clipFrame: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
