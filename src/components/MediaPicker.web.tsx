@@ -22,13 +22,18 @@ function probeDuration(url: string): Promise<number | null> {
       video.onerror = null;
       resolve(value);
     };
-    video.onloadedmetadata = () => done(Number.isFinite(video.duration) ? video.duration : null);
+    video.onloadedmetadata = () => {
+      if (video.videoWidth && video.videoHeight) lastProbedShape = video.videoWidth > video.videoHeight ? 'landscape' : 'portrait';
+      done(Number.isFinite(video.duration) ? video.duration : null);
+    };
     video.onerror = () => done(null);
     video.src = url;
     // Never hang the picker on a file the browser cannot decode.
     setTimeout(() => done(null), 4000);
   });
 }
+/** Shape of the video probeDuration last read: taller or wider than it is high. Reset before every read. */
+let lastProbedShape: 'portrait' | 'landscape' | null = null;
 
 function clock(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -137,11 +142,13 @@ export function pickFromDevice(selection: 'video' | 'photo' | 'all'): Promise<Pi
       let cover: string | undefined;
       let shape: 'portrait' | 'landscape' = 'portrait';
       if (isVideo) {
+        lastProbedShape = null;
         const seconds = await probeDuration(url);
         if (seconds) label = `${label} · ${clock(seconds)}`;
         const shots = await grabFrames(url);
         cover = shots[0]?.dataUrl;
-        shape = lastShape;
+        // The file's own shape, read as its details loaded; the frame grab is a second opinion.
+        shape = lastProbedShape ?? (shots.length ? lastShape : 'portrait');
       } else {
         cover = url;
         shape = await new Promise((r) => { const img = new Image(); img.onload = () => r(img.naturalWidth > img.naturalHeight ? 'landscape' : 'portrait'); img.onerror = () => r('portrait'); img.src = url; });
@@ -149,7 +156,7 @@ export function pickFromDevice(selection: 'video' | 'photo' | 'all'): Promise<Pi
       finish({ uri: url, label, kind: isVideo ? 'video' : 'photo', thumbnailUrl: cover, orientation: shape });
     };
     // Cancelling the dialog fires no change event; a focus return is the cue.
-    window.addEventListener('focus', () => setTimeout(() => finish(null), 800), { once: true });
+    window.addEventListener('focus', () => setTimeout(() => { if (!input.files?.length) finish(null); }, 800), { once: true });
     document.body.appendChild(input);
     input.click();
   });

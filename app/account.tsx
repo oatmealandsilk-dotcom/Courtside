@@ -79,7 +79,7 @@ export default function AccountCentre() {
       accessibilityLabel={label}
       disabled={!onPress}
       onPress={onPress}
-      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [styles.row, index > 0 && styles.rowBorder, (pressed || hovered) && onPress ? { backgroundColor: colors.surfaceAlt } : null]}
+      style={({ pressed }) => [styles.row, index > 0 && styles.rowBorder, pressed && onPress ? { backgroundColor: colors.surfaceAlt } : null]}
     >
       <Ionicons name={icon} size={20} color={danger ? colors.danger : colors.text} />
       <View style={{ flex: 1, gap: 2 }}>

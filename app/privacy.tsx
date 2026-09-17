@@ -54,19 +54,19 @@ export default function PrivacyCentre() {
           </View>
           <Toggle value={receipts} onChange={actions.setReadReceiptsEnabled} accessibilityLabel="Read receipts" />
         </View>
-        <Pressable accessibilityRole="link" onPress={() => router.push('/blocked')} style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [styles.row, styles.rowBorder, (pressed || hovered) && { backgroundColor: colors.surfaceAlt }]}>
+        <Pressable accessibilityRole="link" onPress={() => router.push('/blocked')} style={({ pressed }) => [styles.row, styles.rowBorder, pressed && { backgroundColor: colors.surfaceAlt }]}>
           <Ionicons name="close-circle-outline" size={20} color={colors.text} />
           <Text style={styles.rowLabel}>Blocked players</Text>
           <Text style={styles.rowDetail}>{blockedIds.length || 'None'}</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
         </Pressable>
-        <Pressable accessibilityRole="link" onPress={() => router.push('/muted')} style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [styles.row, styles.rowBorder, (pressed || hovered) && { backgroundColor: colors.surfaceAlt }]}>
+        <Pressable accessibilityRole="link" onPress={() => router.push('/muted')} style={({ pressed }) => [styles.row, styles.rowBorder, pressed && { backgroundColor: colors.surfaceAlt }]}>
           <Ionicons name="volume-mute-outline" size={20} color={colors.text} />
           <Text style={styles.rowLabel}>Muted players</Text>
           <Text style={styles.rowDetail}>{mutedIds.length || 'None'}</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
         </Pressable>
-        <Pressable accessibilityRole="link" onPress={() => router.push('/activity')} style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [styles.row, styles.rowBorder, (pressed || hovered) && { backgroundColor: colors.surfaceAlt }]}>
+        <Pressable accessibilityRole="link" onPress={() => router.push('/activity')} style={({ pressed }) => [styles.row, styles.rowBorder, pressed && { backgroundColor: colors.surfaceAlt }]}>
           <Ionicons name="time-outline" size={20} color={colors.text} />
           <Text style={styles.rowLabel}>Your activity</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
