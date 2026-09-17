@@ -87,6 +87,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   // Where the clip was when the page left, and when: a quick return resumes,
   // a slow one starts the clip over.
   const left = useRef<{ time: number; at: number } | null>(null);
+  const kicked = useRef(false);
   // Each native call stands on its own: a position read that fails must
   // never take the pause down with it, or the clip plays on after the swipe.
   useEffect(() => {
@@ -96,6 +97,14 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
       left.current = null;
       safely(() => { player.currentTime = !back || Date.now() - back.at > RESUME_WINDOW_MS ? trimStart : back.time; });
       safely(() => player.play());
+      // The very first play on a phone has been seen to run the sound with
+      // the picture stuck on its first frame; a pause-and-play a beat later
+      // — what swiping away and back does — sets the picture going. Once.
+      if (!kicked.current) {
+        kicked.current = true;
+        const t = setTimeout(() => safely(() => { if (player.playing) { player.pause(); player.play(); } }), 350);
+        return () => clearTimeout(t);
+      }
     } else {
       if (!active) safely(() => { left.current = { time: player.currentTime, at: Date.now() }; });
       safely(() => player.pause());
