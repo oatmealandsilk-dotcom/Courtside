@@ -65,7 +65,7 @@ export default function PostMenu() {
   ] : [];
   if (mine && story) {
     rows.push(
-      { key: 'archive', icon: 'archive-outline', label: story.archived ? 'Put back up' : 'Take down', note: story.archived ? undefined : 'Off the feed now; kept in your archive.', onPress: () => { actions.toggleArchiveStory(story.id); close(); } },
+      { key: 'archive', icon: 'archive-outline', label: story.archived ? 'Unarchive' : 'Archive', onPress: () => { actions.toggleArchiveStory(story.id); close(); } },
     );
   } else if (mine && post) {
     rows.push(
