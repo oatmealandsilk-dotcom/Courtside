@@ -34,6 +34,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(timer);
   }, [pending, pathname]);
   const shown = pending ?? pathname;
+  // A sideways trackpad swipe is the browser's own back/forward gesture; the
+  // page never lets a swipe run off its edge, so it stays where it is.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    document.documentElement.style.overscrollBehavior = 'none';
+    document.body.style.overscrollBehavior = 'none';
+  }, []);
   // Keyboard on a computer: Escape closes a sheet, the left and right arrows step between the four tabs.
   useEffect(() => {
     if (Platform.OS !== 'web') return;

@@ -18,7 +18,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <meta name="theme-color" content="#F8F0E9" />
         <title>CourtSide</title>
         <ScrollViewStyleReset />
-        <style dangerouslySetInnerHTML={{ __html: 'html, body, #root { height: 100%; } body { overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; }' }} />
+        <style dangerouslySetInnerHTML={{ __html: 'html, body, #root { height: 100%; overscroll-behavior: none; } body { -webkit-tap-highlight-color: transparent; }' }} />
       </head>
       <body>{children}</body>
     </html>
