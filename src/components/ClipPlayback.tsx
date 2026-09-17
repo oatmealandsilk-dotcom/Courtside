@@ -131,10 +131,11 @@ const styles = StyleSheet.create({
   playBadge: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#0008', alignItems: 'center', justifyContent: 'center', paddingLeft: 4 },
   // Top right, level with the wordmark: out of the caption's way and never
   // behind the bottom bar. A quiet disc, not a button that shouts.
-  soundHit: { position: 'absolute', right: 16, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  soundHit: { position: 'absolute', right: 16, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   sound: { width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
   // Level with the wordmark and in the same pill: the page colour, the theme's ink.
-  soundThemed: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.bg, opacity: 0.88 },
+  // The same rounded square as the mark's pill at the other corner.
+  soundThemed: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.bg, opacity: 0.88 },
   track: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
   bar: { height: 2, backgroundColor: 'rgba(255,255,255,0.9)' },
 });

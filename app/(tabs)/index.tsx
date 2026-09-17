@@ -821,7 +821,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                         small mark at the top left, part of the picture; on a post, the wordmark. */}
                     {media && picture ? (
                       <TapAway label="Hide the CourtSide mark" onHidden={() => hideMark(key)} style={styles.markPill}>
-                        <BrandMark size={28} color={theme === 'us-open' ? '#FFFFFF' : colors.brand} />
+                        <BrandMark size={30} color={theme === 'us-open' ? '#FFFFFF' : colors.brand} />
                       </TapAway>
                     ) : (
                       <TapAway label="Hide the CourtSide wordmark" onHidden={() => hideMark(key)}>
@@ -883,7 +883,7 @@ const styleDefinitions = StyleSheet.create({
   // Over a clip: the mark alone, top left, with the same soft shadow the caption wears.
   clipMarkOverlay: { alignItems: 'flex-start', paddingLeft: 28 },
   // The mark sits in the same pale pill the wordmark used to, the same one the sound disc wears.
-  markPill: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.bg, opacity: 0.88, alignItems: 'center', justifyContent: 'center' },
+  markPill: { width: 46, height: 46, borderRadius: 13, backgroundColor: colors.bg, opacity: 0.88, alignItems: 'center', justifyContent: 'center' },
   viewer: { flex: 1, width: '100%', minHeight: 0 },
   clip: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
   clipFrame: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
