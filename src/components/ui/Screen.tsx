@@ -26,7 +26,7 @@ const scrollMemory = new Map<string, number>();
 // strip above the content that the page normally rests past. Pulling scrolls
 // it into view with the disc behind; let go past the line and the page glides
 // to the strip's top, holds while the fetch runs, then glides back.
-const HOLD = 150;
+const HOLD = 96;
 const PULL_LINE = HOLD / 2;
 
 /**
@@ -91,7 +91,6 @@ export function Screen({
   const initial = useRef(scrollMemory.get(key) ?? 0);
   // The strip only exists on the phone, and only on pages that can refresh.
   const strip = Platform.OS !== 'web' && onRefresh ? HOLD : 0;
-  const [scrollLocked, setScrollLocked] = useState(false);
   const restored = useRef(initial.current === 0);
   const { isPhone, isDesktop } = useResponsive();
   // Pull-to-refresh: the spinner while it runs, then a small note that
@@ -178,12 +177,17 @@ export function Screen({
     },
   });
 
+  // One fetch at a time, but the finger is never locked out: a pull during
+  // the glide back simply starts the next one as soon as this one is done.
+  const busy = useRef(false);
   const refreshNow = useCallback(async () => {
-    if (!onRefresh || refreshing) return;
+    if (!onRefresh || busy.current) return;
+    busy.current = true;
     setRefreshing(true);
-    if (strip > 0) { setScrollLocked(true); scroller.current?.scrollTo({ y: 0, animated: true }); }
+    if (strip > 0) scroller.current?.scrollTo({ y: 0, animated: true });
     try { await onRefresh(); } finally {
-      if (strip > 0) { scroller.current?.scrollTo({ y: strip, animated: true }); setTimeout(() => setScrollLocked(false), 420); }
+      busy.current = false;
+      if (strip > 0) scroller.current?.scrollTo({ y: strip, animated: true });
       setRefreshing(false);
       Animated.timing(pull, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => setPulling(false));
       haptics.untap();
@@ -194,7 +198,7 @@ export function Screen({
         Animated.timing(updated, { toValue: 0, duration: 220, useNativeDriver: true }),
       ]).start();
     }
-  }, [onRefresh, refreshing, updated, pull, strip]);
+  }, [onRefresh, updated, pull, strip]);
   refreshNowRef.current = refreshNow;
 
   // A text box asks for this when it gains focus: once the keyboard is up,
@@ -284,7 +288,7 @@ export function Screen({
           ref={(node: unknown) => { scroller.current = node as unknown as ScrollView | null; if (scrollRef) scrollRef.current = node as unknown as ScrollView | null; webPull(node as unknown as ScrollView | null); }}
           style={styles.flex}
           contentContainerStyle={[styles.scrollContent, verticalOnlyTouch]}
-          scrollEnabled={!swiping && !scrollLocked}
+          scrollEnabled={!swiping}
           directionalLockEnabled
           keyboardShouldPersistTaps="handled"
           // Keeps whatever box you are typing in above the keyboard.
