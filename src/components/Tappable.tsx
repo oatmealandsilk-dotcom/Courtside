@@ -1,6 +1,5 @@
 import React, { useRef } from 'react';
-import { Platform, Pressable, type StyleProp, type ViewStyle } from 'react-native';
-import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import { Animated, Platform, Pressable, type StyleProp, type ViewStyle } from 'react-native';
 
 interface Props {
   children: React.ReactNode;
@@ -20,14 +19,12 @@ interface Props {
   accessibilityState?: { selected?: boolean; disabled?: boolean };
 }
 
-const OUT = Easing.out(Easing.quad);
-
 /**
  * A Pressable that answers back.
  *
- * Presses dip the control slightly and it comes straight back; on a mouse it
- * lifts a touch on hover. Every move runs on the animation thread, so a
- * busy screen (a like re-drawing the feed) never holds the control small.
+ * Presses dip the control slightly and release with a spring; on a mouse it
+ * lifts a touch on hover. Both run on the native driver so they stay smooth
+ * while the rest of the screen is busy.
  *
  * The numbers are deliberately small. The effect should register as the control
  * acknowledging you, not as an animation you sit and watch — anything past a
@@ -47,11 +44,15 @@ export function Tappable({
   accessibilityLabel,
   accessibilityState,
 }: Props) {
-  const scale = useSharedValue(1);
-  const animated = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-  // One quick pop: down in a few frames, back up in a few more — the same
-  // pace as the heart growing on a double tap.
-  const pop = () => { scale.value = withSequence(withTiming(scaleTo, { duration: 50, easing: OUT }), withTiming(1, { duration: 120, easing: OUT })); };
+  const scale = useRef(new Animated.Value(1)).current;
+
+  // Quick: the dip is a short straight run, the release a fast spring, so a
+  // tap reads as instant rather than as an animation you watch.
+  const spring = (to: number) =>
+    (to < 1
+      ? Animated.timing(scale, { toValue: to, duration: 60, useNativeDriver: true })
+      : Animated.spring(scale, { toValue: to, useNativeDriver: true, speed: 90, bounciness: 5 })
+    ).start();
 
   return (
     <Pressable
@@ -62,14 +63,13 @@ export function Tappable({
       accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ ...accessibilityState, disabled }}
-      // The pop is started before the work, so it is already under way when
-      // the screen gets busy; an immediate control also fires its action here.
-      onPressIn={() => { if (disabled) return; pop(); if (immediate) onPress?.(); }}
+      onPressIn={() => { if (disabled) return; spring(scaleTo); if (immediate) onPress?.(); }}
+      onPressOut={() => !disabled && spring(1)}
       // react-native-web maps these to mouse enter/leave; native ignores them.
-      onHoverIn={() => { if (Platform.OS === 'web' && !disabled) scale.value = withTiming(hoverTo, { duration: 120 }); }}
-      onHoverOut={() => { if (Platform.OS === 'web' && !disabled) scale.value = withTiming(1, { duration: 120 }); }}
+      onHoverIn={() => Platform.OS === 'web' && !disabled && spring(hoverTo)}
+      onHoverOut={() => Platform.OS === 'web' && !disabled && spring(1)}
     >
-      <Reanimated.View style={[style, animated]}>{children}</Reanimated.View>
+      <Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View>
     </Pressable>
   );
 }
