@@ -106,14 +106,18 @@ export function Screen({
     let idle: ReturnType<typeof setTimeout> | null = null;
     let touchStart: number | null = null;
     const show = (amount: number) => { pulled = amount; setPulling(amount > 0); pull.setValue(Math.min(1, amount / THRESHOLD)); };
-    const letGo = () => { if (pulled > 0 && pulled < THRESHOLD) { Animated.timing(pull, { toValue: 0, duration: 180, useNativeDriver: true }).start(() => setPulling(false)); pulled = 0; } };
     const fire = () => { pulled = 0; void refreshNowRef.current(); };
+    // Letting go past the line refreshes; short of it, the disc springs back — the way a finger does.
+    const letGo = () => {
+      if (pulled >= THRESHOLD) { fire(); return; }
+      if (pulled > 0) { Animated.timing(pull, { toValue: 0, duration: 180, useNativeDriver: true }).start(() => setPulling(false)); pulled = 0; }
+    };
     el.addEventListener('wheel', (e: WheelEvent) => {
       if (el.scrollTop > 0 || e.deltaY >= 0) { if (pulled) letGo(); return; }
-      show(pulled - e.deltaY);
+      // The pull firms up past the line, so it reads as held rather than runaway.
+      show(pulled + (pulled >= THRESHOLD ? -e.deltaY * 0.25 : -e.deltaY));
       if (idle) clearTimeout(idle);
-      idle = setTimeout(letGo, 260);
-      if (pulled >= THRESHOLD) { if (idle) clearTimeout(idle); fire(); }
+      idle = setTimeout(letGo, 220);
     }, { passive: true });
     el.addEventListener('touchstart', (e: TouchEvent) => { touchStart = el.scrollTop <= 0 ? e.touches[0].clientY : null; }, { passive: true });
     el.addEventListener('touchmove', (e: TouchEvent) => {

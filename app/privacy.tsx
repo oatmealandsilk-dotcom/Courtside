@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Screen, Toggle } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { colors, radius, spacing, typography } from '@/theme';
 
 export default function PrivacyCentre() {
@@ -76,7 +77,7 @@ export default function PrivacyCentre() {
       <View style={styles.card}>
         <View style={styles.item}>
           <Text style={styles.itemBody}>
-            This is a demo running on sample data. Nothing you type, post, or connect leaves your device, and it is gone when you close the app.
+            {isSupabaseConfigured ? 'Your posts, follows, messages and settings are saved to your account so they are there on any device. Health links and payments are not live yet, so nothing from those leaves this device.' : 'This is a demo running on sample data. Nothing you type, post, or connect leaves your device, and it is gone when you close the app.'}
           </Text>
         </View>
       </View>

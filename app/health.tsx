@@ -75,7 +75,7 @@ export default function Health() {
                       </View>
                       <Text style={styles.provides}>{integration.provides.join(' · ')}</Text>
                       {integration.lastSyncedAt ? (
-                        <Text style={styles.synced}>Synced {relativeTime(integration.lastSyncedAt)} ago</Text>
+                        <Text style={styles.synced}>Synced {relativeTime(integration.lastSyncedAt)}</Text>
                       ) : null}
                     </View>
                     {loading ? (

@@ -104,6 +104,18 @@ interface NewQuestionInput {
  * Files a notification, unless you caused it yourself — nobody wants to be told
  * they liked their own post. Pure, so it composes inside a setState updater.
  */
+/** Everyone written as @handle in a text is told, once each — never the writer, never someone already told. */
+function notifyMentions(state: AppState, text: string, actorId: ID, targetId: ID, targetKind: NotificationTarget, alreadyTold?: ID): AppState {
+  const handles = new Set((text.match(/@([a-z0-9_]+)/gi) ?? []).map((h) => h.slice(1).toLowerCase()));
+  let next = state;
+  for (const handle of handles) {
+    const who = state.users.find((u) => u.handle.toLowerCase() === handle);
+    if (!who || who.id === actorId || who.id === alreadyTold) continue;
+    next = withNotification(next, { userId: who.id, actorId, kind: 'tag', targetId, targetKind, preview: snippet(text) });
+  }
+  return next;
+}
+
 function withNotification(
   state: AppState,
   entry: {
@@ -1167,10 +1179,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const onHit = stateRef.current.stories.some((st) => st.id === comment.postId);
         remote.setCommentLike(commentId, me, liking, onHit);
       }
-      setState((prev) => ({
-        ...prev,
-        comments: prev.comments.map((c) => (c.id === commentId ? { ...c, likedBy: liking ? [...c.likedBy, me] : c.likedBy.filter((id) => id !== me) } : c)),
-      }));
+      setState((prev) => {
+        const next: AppState = {
+          ...prev,
+          comments: prev.comments.map((c) => (c.id === commentId ? { ...c, likedBy: liking ? [...c.likedBy, me] : c.likedBy.filter((id) => id !== me) } : c)),
+        };
+        if (!liking) return next;
+        const onHit = prev.stories.some((st) => st.id === comment.postId);
+        return withNotification(next, { userId: comment.authorId, actorId: me, kind: 'like', targetId: comment.postId, targetKind: onHit ? 'hit' : 'post', preview: snippet(comment.body) });
+      });
     },
     [requireUser],
   );
@@ -1218,7 +1235,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             p.id === postId ? { ...p, commentIds: [...p.commentIds, comment.id] } : p,
           ),
         };
-        return post
+        const told = post
           ? withNotification(next, {
               userId: post.authorId,
               actorId: me,
@@ -1228,6 +1245,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               preview: snippet(body),
             })
           : next;
+        return notifyMentions(told, body, me, post?.id ?? postId, 'post', post?.authorId);
       });
     },
     [requireUser],

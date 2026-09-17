@@ -44,7 +44,7 @@ export default function CoachMemoryScreen() {
             <View style={styles.card}>
               <Text style={styles.cardTitle}>NOTES</Text>
               <Text style={styles.summary}>{memory.summary}</Text>
-              {memory.updatedAt ? <Text style={styles.meta}>Updated {relativeTime(memory.updatedAt)} ago</Text> : null}
+              {memory.updatedAt ? <Text style={styles.meta}>Updated {relativeTime(memory.updatedAt)}</Text> : null}
             </View>
           ) : null}
           <Text style={styles.cardTitle}>RECENT EXCHANGES</Text>

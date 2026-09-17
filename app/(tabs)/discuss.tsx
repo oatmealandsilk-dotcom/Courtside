@@ -15,6 +15,7 @@ import { QuestionCard, TOPIC_META } from '@/components/QuestionCard';
 import { Avatar, Chip, EmptyState, Screen } from '@/components/ui';
 import { reportSection, subscribeSectionRequest } from '@/features/navigation/swipeOrder';
 import { useApp } from '@/store/AppContext';
+import { sourceUserIds } from '@/features/community/importedThreads';
 import type { QuestionTopic } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -47,7 +48,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const [tabWidth, setTabWidth] = useState(0);
   const underline = useTabUnderline(sectionIndex, 2, tabWidth);
   const [search, setSearch] = useState('');
-  const players = users.filter(u => u.id !== currentUserId && !blockedIds.includes(u.id) && `${u.name} ${u.handle} ${u.location}`.toLowerCase().includes(search.toLowerCase()));
+  // The accounts that threads are pulled in under (Reddit, Talk Tennis) are not players.
+  const players = users.filter(u => u.id !== currentUserId && !blockedIds.includes(u.id) && !sourceUserIds.includes(u.id) && `${u.name} ${u.handle} ${u.location}`.toLowerCase().includes(search.toLowerCase()));
   const [topic, setTopic] = useState<QuestionTopic | 'all'>('all');
   // A post's category label asks for its topic before opening this tab.
   useEffect(() => subscribeSectionRequest('/discuss#topic', (value) => setTopic(value in TOPIC_META ? (value as QuestionTopic) : 'all')), []);
@@ -58,7 +60,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     let list = [...questions];
     if (topic !== 'all') list = list.filter((q) => q.topic === topic);
 
-    list.sort((a, b) => b.votes - a.votes);
+    // Newest first, so a fresh question sits at the top rather than under the old ones.
+    list.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
     return list;
   }, [questions, topic]);
   // A long list is drawn in slices: the first screenfuls at once, the rest on request.

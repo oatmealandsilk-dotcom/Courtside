@@ -17,7 +17,7 @@ export const VideoSurface = forwardRef<VideoSurfaceHandle, {
   paused?: boolean;
   onTime?: (seconds: number) => void;
   onDuration?: (seconds: number) => void;
-}>(function VideoSurface({ uri, muted = false, fit = 'contain', from = 0, to, paused = false, onTime, onDuration }, ref) {
+}>(function VideoSurface({ uri, muted = true, fit = 'contain', from = 0, to, paused = false, onTime, onDuration }, ref) {
   const el = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     const video = el.current;

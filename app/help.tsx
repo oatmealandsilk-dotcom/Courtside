@@ -6,6 +6,7 @@ import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Screen } from '@/components/ui';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { colors, radius, spacing, typography } from '@/theme';
 
 const TOPICS: { title: string; body: string }[] = [
@@ -31,7 +32,7 @@ const TOPICS: { title: string; body: string }[] = [
   },
   {
     title: 'Where do my videos go?',
-    body: 'In this demo build, nothing is uploaded — videos stay on your device and disappear when you close the app. A real build stores them privately and only shares what you post.',
+    body: isSupabaseConfigured ? 'Videos you post are uploaded to your account and shown only where you post them. Anything you delete is removed.' : 'In this demo build, nothing is uploaded — videos stay on your device and disappear when you close the app.',
   },
   {
     title: 'How do I change the look?',

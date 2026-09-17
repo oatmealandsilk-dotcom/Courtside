@@ -227,7 +227,7 @@ export default function Settings() {
       ))}
 
       {!filtered.length ? <Text style={styles.empty}>Nothing matches “{search}”.</Text> : null}
-      <Text style={styles.version}>CourtSide · demo build · mock data only</Text>
+      <Text style={styles.version}>CourtSide · early access</Text>
     </Screen>
   );
 }

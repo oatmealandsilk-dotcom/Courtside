@@ -45,6 +45,15 @@ export default function Thread() {
   const [draft, setDraft] = useState('');
   const [picking, setPicking] = useState<string | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  // A phone browser's keyboard covers the bottom of the page without telling the layout; the visible-area size says how much.
+  const [keyboardInset, setKeyboardInset] = useState(0);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined' || !window.visualViewport) return;
+    const vv = window.visualViewport;
+    const update = () => setKeyboardInset(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)));
+    vv.addEventListener('resize', update); vv.addEventListener('scroll', update);
+    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
+  }, []);
   // The chat's colour: your bubbles and the send button. Picked from the palette button, kept per conversation.
   const [themeId, setThemeId] = useState<string | null>(null);
   const [themeOpen, setThemeOpen] = useState(false);
@@ -278,7 +287,7 @@ export default function Thread() {
           <MentionSuggestions candidates={mentionRows} onPick={pickMention} />
         </View>
       ) : null}
-      <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+      <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, spacing.md) + keyboardInset }]}>
         <Tappable
           accessibilityLabel={emojiOpen ? 'Hide emoji' : 'Add an emoji'}
           onPress={() => setEmojiOpen((open) => !open)}

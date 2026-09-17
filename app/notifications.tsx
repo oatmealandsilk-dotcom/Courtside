@@ -62,7 +62,7 @@ interface Group {
 
 function routeFor(group: Group): string {
   // Your own "it's up" note takes you to the feed, where the new thing sits first.
-  if (group.kind === 'posted') return '/';
+  if (group.kind === 'posted') return group.targetKind === 'question' ? `/question/${group.targetId}` : '/';
   // A follow of any kind opens the person, not a post.
   if (group.kind === 'follow' || group.kind === 'follow-request' || group.kind === 'follow-accepted') return `/user/${group.actorIds[0]}`;
   if (group.targetKind === 'post') return `/post/${group.targetId}`;
@@ -164,7 +164,7 @@ export default function Notifications() {
                       {group.preview}
                     </Text>
                   ) : null}
-                  <Text style={styles.time}>{relativeTime(group.createdAt)} ago</Text>
+                  <Text style={styles.time}>{relativeTime(group.createdAt)}</Text>
                   {group.kind === 'follow-request' && followRequests.some((r) => r.fromId === first && r.toId === currentUserId) ? (
                     <View style={styles.askRow}>
                       <Pressable accessibilityRole="button" accessibilityLabel={`Accept ${nameOf(first)}`} onPress={() => actions.acceptFollowRequest(first)} style={styles.accept}><Text style={styles.acceptText}>Accept</Text></Pressable>

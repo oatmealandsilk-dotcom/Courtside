@@ -56,7 +56,8 @@ export function ClipPlayback({ uri, poster, active, preload = false, onDoubleTap
       left.current = null;
       if (!back || Date.now() - back.at > RESUME_WINDOW_MS) el.currentTime = trimStart;
       else el.currentTime = back.time;
-      el.play().catch(() => setPaused(true));
+      // Browsers refuse a video that starts with sound until the page has been tapped: fall back to silent, and the disc says so.
+      el.play().catch(() => { el.muted = true; setMuted(true); el.play().catch(() => setPaused(true)); });
     } else {
       if (!active) left.current = { time: el.currentTime, at: Date.now() };
       el.pause();

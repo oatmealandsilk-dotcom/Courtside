@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { BrandMark } from '@/components/BrandMark';
 import { Screen } from '@/components/ui';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { colors, radius, spacing, typography } from '@/theme';
 
 const VERSION = '0.1.0';
@@ -45,7 +46,7 @@ export default function About() {
         {[
           'Training, injury, and nutrition content is general information, not medical advice.',
           'Coaches are verified by hand: credentials, ratings, and references.',
-          'This build runs on sample data. Nothing leaves your device.',
+          isSupabaseConfigured ? 'Your account and what you post are saved securely so they follow you between devices.' : 'This build runs on sample data. Nothing leaves your device.',
         ].map((line, index) => (
           <View key={line} style={[styles.item, index > 0 && styles.rowBorder]}>
             <Text style={styles.itemBody}>{line}</Text>

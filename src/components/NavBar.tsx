@@ -250,7 +250,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
       </View>
 
       {compact ? null : (
-        <Text style={styles.sidebarFootnote}>Demo build · mock data only</Text>
+        <Text style={styles.sidebarFootnote}>Early access</Text>
       )}
     </View>
   );

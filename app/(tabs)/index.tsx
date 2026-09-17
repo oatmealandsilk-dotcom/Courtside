@@ -26,6 +26,7 @@ import { setBarCompact } from '@/features/navigation/barShrink';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { TipPage } from '@/components/TipPage';
 import { isLive } from '@/features/stories/stories';
+import { sourceUserIds } from '@/features/community/importedThreads';
 import { ClipPlayback } from '@/components/ClipPlayback';
 import { rankFeed, type FeedItem } from '@/features/feed/rankFeed';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
@@ -207,7 +208,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     for (const conversation of conversations) conversation.participantIds.forEach((id) => interacted.add(id));
     const city = (location: string) => location.split(',')[0].trim();
     return users
-      .filter((u) => u.id !== currentUserId && !followingIds.includes(u.id) && !blockedIds.includes(u.id))
+      .filter((u) => u.id !== currentUserId && !followingIds.includes(u.id) && !blockedIds.includes(u.id) && !sourceUserIds.includes(u.id))
       .map((user) => {
         const local = !!me && city(user.location) === city(me.location);
         const reason = interacted.has(user.id) ? 'Interacted with you'

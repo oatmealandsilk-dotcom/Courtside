@@ -310,7 +310,7 @@ export default function CoachDetail() {
             <Card key={r.id} style={styles.historyCard}>
               <Text style={styles.historyQuestion}>{r.question}</Text>
               <Text style={styles.historyMeta}>
-                {r.status === 'answered' ? 'Answered' : 'Waiting'} · sent {relativeTime(r.createdAt)} ago
+                {r.status === 'answered' ? 'Answered' : 'Waiting'} · sent {relativeTime(r.createdAt)}
               </Text>
               {r.response ? <Text style={styles.historyResponse}>{r.response}</Text> : null}
             </Card>

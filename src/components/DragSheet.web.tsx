@@ -73,7 +73,11 @@ export function DragSheet({
     // One frame so the opening slide is seen rather than starting already open.
     const frame = requestAnimationFrame(() => place(geometry.current.openOffset, OPEN_MS));
     window.addEventListener('resize', measure);
-    return () => { cancelAnimationFrame(frame); window.removeEventListener('resize', measure); };
+    // A phone's keyboard shrinks the visible area without a window resize; the sheet re-measures and keeps its box above it.
+    const vv = window.visualViewport;
+    const onViewport = () => { measure(); place(0, 160); };
+    vv?.addEventListener('resize', onViewport);
+    return () => { cancelAnimationFrame(frame); window.removeEventListener('resize', measure); vv?.removeEventListener('resize', onViewport); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
