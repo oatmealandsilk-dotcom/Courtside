@@ -103,9 +103,17 @@ export default function Hit() {
           </Pressable>
           <View style={styles.tag}><Ionicons name="tennisball" size={12} color="white" /><Text style={styles.tagText}>YOUR HIT</Text></View>
         </View>
-        <View style={[styles.bottom, { paddingBottom: insets.bottom + spacing.xl }]}>
-          <Button label="Use this hit" onPress={useShot} full />
-          <Button label="Retake" variant="ghost" onPress={retake} full />
+        {/* A camera's own review row: retake on the left, the big send in the middle, the way a phone camera does it. */}
+        <View style={[styles.reviewRow, { paddingBottom: insets.bottom + spacing.xl }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Retake" onPress={retake} style={styles.reviewSide}>
+            <View style={styles.reviewSmall}><Ionicons name="refresh" size={22} color="white" /></View>
+            <Text style={styles.reviewLabel}>Retake</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Use this hit" onPress={useShot} style={styles.reviewMain}>
+            <View style={styles.reviewBig}><Ionicons name="arrow-forward" size={30} color={colors.brandInk} /></View>
+            <Text style={styles.reviewLabel}>Use it</Text>
+          </Pressable>
+          <View style={styles.reviewSide} />
         </View>
       </View>
     );
@@ -158,6 +166,12 @@ const styleDefinitions = StyleSheet.create({
   note: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
   topBar: { position: 'absolute', left: spacing.lg, right: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 2 },
   iconButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
+  reviewRow: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', paddingHorizontal: spacing.xl },
+  reviewSide: { width: 72, alignItems: 'center', gap: 6 },
+  reviewMain: { alignItems: 'center', gap: 6 },
+  reviewSmall: { width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.18)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)', alignItems: 'center', justifyContent: 'center' },
+  reviewBig: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.brand, borderWidth: 4, borderColor: 'rgba(255,255,255,0.35)', alignItems: 'center', justifyContent: 'center' },
+  reviewLabel: { ...typography.caption, color: 'white', letterSpacing: 0.5 },
   tag: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: 'rgba(0,0,0,0.45)' },
   tagText: { color: 'white', fontSize: 11, fontWeight: '700', letterSpacing: 1.2 },
   count: { fontSize: 140, fontWeight: '800', color: 'white', textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 18 },

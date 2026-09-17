@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Image, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated as RNAnimated, Image, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -40,6 +40,9 @@ const clock = (s: number) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toStrin
  */
 // A computer's browser: the stage is wide, so a portrait post gets a phone-shaped box in the middle.
 const desktopWeb = Platform.OS === 'web' && isDesktopBrowser();
+
+/** The photo window's shape: the picture's own, a set shape, or whatever the corner handles make it. */
+type EditAspect = Aspect | 'free';
 
 export function MediaEditor({ media, onBack, onDone }: {
   media: PickedMedia;
@@ -257,7 +260,10 @@ export function MediaEditor({ media, onBack, onDone }: {
   // Nothing is cut until Next: the stage shows the turn, the shape, the zoom
   // and where you dragged it, all live, and the photo is cut once at the end.
   const [turns, setTurns] = useState(0);
-  const [aspect, setAspect] = useState<Aspect>('original');
+  // The picture swings to each quarter turn rather than snapping.
+  const spin = useRef(new RNAnimated.Value(0)).current;
+  useEffect(() => { RNAnimated.spring(spin, { toValue: turns * 90, useNativeDriver: true, damping: 16, stiffness: 180 }).start(); }, [turns, spin]);
+  const [aspect, setAspect] = useState<EditAspect>('original');
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
@@ -269,9 +275,31 @@ export function MediaEditor({ media, onBack, onDone }: {
   const odd = ((turns % 4) + 4) % 4 % 2 === 1;
   const RW = nat ? (odd ? nat.height : nat.width) : 1;
   const RH = nat ? (odd ? nat.width : nat.height) : 1;
-  const cropRatio = aspect === 'original' ? RW / RH : ASPECT_RATIO[aspect];
+  // Free: the window is whatever the corner handles have been dragged to, as fractions of the stage.
+  const [freeWin, setFreeWin] = useState({ w: 0.8, h: 0.8 });
+  const cropRatio = aspect === 'original' ? RW / RH : aspect === 'free' ? (freeWin.w * box.w) / Math.max(1, freeWin.h * box.h) : ASPECT_RATIO[aspect as Exclude<Aspect, 'original'>];
   const photoShape: 'portrait' | 'landscape' = cropRatio > 1 ? 'landscape' : 'portrait';
-  const win = box.w / box.h > cropRatio ? { w: box.h * cropRatio, h: box.h } : { w: box.w, h: box.w / cropRatio };
+  const win = aspect === 'free'
+    ? { w: box.w * freeWin.w, h: box.h * freeWin.h }
+    : box.w / box.h > cropRatio ? { w: box.h * cropRatio, h: box.h } : { w: box.w, h: box.w / cropRatio };
+  // Corner handles for the free crop: each one pulls its own corner in or out.
+  const freeStart = useRef(freeWin);
+  const cornerDrag = (sx: number, sy: number) => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => { freeStart.current = freeWin; setDragging(true); },
+    onPanResponderMove: (_e, g) => {
+      const b = boxRef.current;
+      setFreeWin({
+        w: Math.max(0.2, Math.min(1, freeStart.current.w + (sx * g.dx * 2) / Math.max(1, b.w))),
+        h: Math.max(0.2, Math.min(1, freeStart.current.h + (sy * g.dy * 2) / Math.max(1, b.h))),
+      });
+    },
+    onPanResponderRelease: () => setDragging(false),
+    onPanResponderTerminate: () => setDragging(false),
+  });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const corners = useMemo(() => [cornerDrag(-1, -1), cornerDrag(1, -1), cornerDrag(-1, 1), cornerDrag(1, 1)], [freeWin.w, freeWin.h]);
   const k = Math.max(win.w / RW, win.h / RH) * zoom;
   const shown = { rw: RW * k, rh: RH * k, uw: (nat?.width ?? 1) * k, uh: (nat?.height ?? 1) * k };
   const clampPan = (p: { x: number; y: number }, z = zoom) => {
@@ -370,11 +398,11 @@ export function MediaEditor({ media, onBack, onDone }: {
             ) : media.uri && nat ? (
               <View style={styles.photoStage} pointerEvents="box-none">
                 <View {...photoDrag.panHandlers} style={[styles.photoWindow, { width: win.w, height: win.h }]}>
-                  <Image
+                  <RNAnimated.Image
                     accessibilityIgnoresInvertColors
                     source={{ uri: media.uri }}
                     resizeMode="cover"
-                    style={{ position: 'absolute', width: shown.uw, height: shown.uh, left: (win.w - shown.uw) / 2 + pan.x, top: (win.h - shown.uh) / 2 + pan.y, transform: [{ rotate: `${((turns % 4) + 4) % 4 * 90}deg` }] }}
+                    style={{ position: 'absolute', width: shown.uw, height: shown.uh, left: (win.w - shown.uw) / 2 + pan.x, top: (win.h - shown.uh) / 2 + pan.y, transform: [{ rotate: spin.interpolate({ inputRange: [0, 360], outputRange: ['0deg', '360deg'] }) }] }}
                   />
                   {/* The thirds grid, while the picture is being moved. */}
                   <View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: dragging ? 1 : 0 }]}>
@@ -382,6 +410,11 @@ export function MediaEditor({ media, onBack, onDone }: {
                     {[1, 2].map((i) => <View key={`h${i}`} style={[styles.gridLine, { top: `${(i / 3) * 100}%`, left: 0, right: 0, height: 1 }]} />)}
                   </View>
                   <View pointerEvents="none" style={styles.cropEdge} />
+                  {aspect === 'free' ? corners.map((c, i) => (
+                    <View key={i} {...c.panHandlers} style={[styles.corner, i % 2 === 0 ? { left: -6 } : { right: -6 }, i < 2 ? { top: -6 } : { bottom: -6 }]}>
+                      <View style={[styles.cornerMark, i % 2 === 0 ? { borderLeftWidth: 3 } : { borderRightWidth: 3 }, i < 2 ? { borderTopWidth: 3 } : { borderBottomWidth: 3 }]} />
+                    </View>
+                  )) : null}
                 </View>
               </View>
             ) : null}
@@ -468,13 +501,13 @@ export function MediaEditor({ media, onBack, onDone }: {
               <Pressable accessibilityRole="button" accessibilityLabel="Turn" onPress={() => setTurns((t) => t + 1)} style={styles.tab}>
                 <Ionicons name="refresh-outline" size={15} color="white" /><Text style={styles.tabText}>Turn</Text>
               </Pressable>
-              {(['original', '9:16', '4:5', '1:1'] as Aspect[]).map((a) => (
+              {(['original', 'free', '9:16', '4:5', '1:1'] as EditAspect[]).map((a) => (
                 <Pressable key={a} accessibilityRole="button" accessibilityState={{ selected: aspect === a }} onPress={() => setAspect(a)} style={[styles.tab, aspect === a && styles.tabOn]}>
-                  <Text style={[styles.tabText, aspect === a && { color: colors.brandInk }]}>{a === 'original' ? 'Original' : a}</Text>
+                  <Text style={[styles.tabText, aspect === a && { color: colors.brandInk }]}>{a === 'original' ? 'Original' : a === 'free' ? 'Crop' : a}</Text>
                 </Pressable>
               ))}
               {photoTouched ? (
-                <Pressable accessibilityRole="button" accessibilityLabel="Reset edits" onPress={() => { setTurns(0); setAspect('original'); setZoom(1); setPan({ x: 0, y: 0 }); }} style={styles.tab}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Reset edits" onPress={() => { setTurns(0); setAspect('original'); setZoom(1); setPan({ x: 0, y: 0 }); setFreeWin({ w: 0.8, h: 0.8 }); }} style={styles.tab}>
                   <Text style={styles.tabText}>Reset</Text>
                 </Pressable>
               ) : null}
@@ -523,7 +556,9 @@ const styleDefinitions = StyleSheet.create({
   strip: { height: 56, borderRadius: radius.sm, overflow: 'visible' },
   cropEdge: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)' },
   photoStage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
-  photoWindow: { overflow: 'hidden', backgroundColor: '#000' },
+  photoWindow: { overflow: 'visible', backgroundColor: '#000' },
+  corner: { position: 'absolute', width: 36, height: 36, alignItems: 'center', justifyContent: 'center', zIndex: 3 },
+  cornerMark: { width: 22, height: 22, borderColor: 'white' },
   gridLine: { position: 'absolute', backgroundColor: 'rgba(255,255,255,0.55)' },
   zoomRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, height: 56 },
   zoomStrip: { flex: 1, height: 32, justifyContent: 'center' },

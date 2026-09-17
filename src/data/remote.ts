@@ -649,7 +649,7 @@ export const isLocalMedia = (uri?: string) =>
  * folder and returns its public URL. Falls back to the original URI on
  * failure so the local post still shows.
  */
-const ALLOWED_MEDIA = /^(image\/(jpeg|png|webp|heic|heif)|video\/(mp4|quicktime|webm))$/;
+const ALLOWED_MEDIA = /^(image|video)\/[a-z0-9.+-]+$/i;
 
 /** The file's type from its name, for a file the phone hands over without one. */
 function guessType(uri: string, kind: 'photo' | 'video'): string {
