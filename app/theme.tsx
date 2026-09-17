@@ -21,7 +21,7 @@ export default function ThemePage() {
       <Text style={styles.lead}>Applies everywhere straight away. Pick the court you would rather be on.</Text>
       <View style={styles.list}>
         {themeList.map((option) => (
-          <ThemeCard key={option.name} option={option} active={theme === option.name} onPick={() => { haptics.tap(); setTheme(option.name); }} styles={styles} />
+          <ThemeCard key={option.name} option={option} active={theme === option.name} onPick={() => { haptics.tap(); setTimeout(() => setTheme(option.name), 0); }} styles={styles} />
         ))}
       </View>
     </Screen>
@@ -68,22 +68,25 @@ function ThemeCard({ option, active, onPick, styles }: { option: (typeof themeLi
   const palette = themes[option.name];
   const on = useSharedValue(active ? 1 : 0);
   const push = useSharedValue(1);
-  useEffect(() => {
-    on.value = withTiming(active ? 1 : 0, { duration: 260, easing: Easing.out(Easing.cubic) });
-    if (active) push.value = withSequence(withTiming(0.985, { duration: 70 }), withSpring(1, { damping: 12, stiffness: 260 }));
-  }, [active, on, push]);
+  // The card answers the tap itself, before the rest of the app has recoloured.
+  const settle = (next: boolean) => {
+    on.value = withTiming(next ? 1 : 0, { duration: 200, easing: Easing.out(Easing.cubic) });
+    if (next) push.value = withSequence(withTiming(0.99, { duration: 60 }), withSpring(1, { damping: 16, stiffness: 320 }));
+  };
+  useEffect(() => { settle(active); }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The edge and the check take this theme's own colour, not the one the app is wearing now.
   const cardStyle = useAnimatedStyle(() => ({
-    borderColor: interpolateColor(on.value, [0, 1], [colors.border, colors.brand]),
+    borderColor: interpolateColor(on.value, [0, 1], [colors.border, palette.brand]),
     transform: [{ scale: push.value }],
   }));
   const checkStyle = useAnimatedStyle(() => ({
     opacity: on.value,
-    transform: [{ scale: 0.4 + 0.6 * on.value }, { rotate: `${(1 - on.value) * -60}deg` }],
+    transform: [{ scale: 0.6 + 0.4 * on.value }, { rotate: `${(1 - on.value) * -30}deg` }],
   }));
-  const ringStyle = useAnimatedStyle(() => ({ opacity: 1 - on.value, transform: [{ scale: 1 - 0.2 * on.value }] }));
-  const swatchStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.04 * on.value }] }));
+  const ringStyle = useAnimatedStyle(() => ({ opacity: 1 - on.value, transform: [{ scale: 1 - 0.15 * on.value }] }));
+  const swatchStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.02 * on.value }] }));
   return (
-    <Pressable accessibilityRole="radio" accessibilityState={{ selected: active }} accessibilityLabel={`${option.label} theme`} onPress={onPick}>
+    <Pressable accessibilityRole="radio" accessibilityState={{ selected: active }} accessibilityLabel={`${option.label} theme`} onPress={() => { settle(true); onPick(); }}>
       <Animated.View style={[styles.card, cardStyle]}>
         <Animated.View style={[styles.swatch, { backgroundColor: palette.bg, borderColor: palette.border }, swatchStyle]}>
           <View style={[styles.swatchBar, { backgroundColor: palette.brand }]} />
@@ -99,7 +102,7 @@ function ThemeCard({ option, active, onPick, styles }: { option: (typeof themeLi
         </View>
         <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
           <Animated.View style={[{ position: 'absolute' }, ringStyle]}><View style={styles.ring} /></Animated.View>
-          <Animated.View style={[{ position: 'absolute' }, checkStyle]}><Ionicons name="checkmark-circle" size={24} color={colors.brand} /></Animated.View>
+          <Animated.View style={[{ position: 'absolute' }, checkStyle]}><Ionicons name="checkmark-circle" size={24} color={palette.brand} /></Animated.View>
         </View>
       </Animated.View>
     </Pressable>
