@@ -17,7 +17,9 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   initialIndex?: number;
   /** Pulling down past the first page fetches what is new. */
   onRefresh?: () => Promise<void>;
-}>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0, onRefresh }, ref) {
+  /** Shown in the gap the pull opens, beside the disc. */
+  pullHeader?: React.ReactNode;
+}>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0, onRefresh, pullHeader }, ref) {
   // The pull: how far (0..1 of the line), and whether the fetch is running.
   const [pullAmount, setPullAmount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -115,7 +117,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
 
   return <div style={{ position: 'relative', height: '100%', width: '100%' }}>
     {onRefresh && (pullAmount > 0 || refreshing) ? (
-      <div style={{ position: 'absolute', top: 14, left: '50%', transform: `translateX(-50%) rotate(${-120 + 120 * pullAmount}deg)`, opacity: Math.min(1, pullAmount * 1.5), width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 0, transition: 'opacity 120ms', pointerEvents: 'none' }}>
+      <div style={{ position: 'absolute', top: 14, left: 0, right: 0, opacity: Math.min(1, pullAmount * 1.5), height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, zIndex: 0, transition: 'opacity 120ms', pointerEvents: 'none' }}>
+        {pullHeader}
         {refreshing ? <CourtSpinner size={28} /> : <div style={{ width: 24, height: 24, borderRadius: 12, border: `2.5px solid ${colors.brand}`, borderTopColor: 'transparent', opacity: 0.9 }} />}
       </div>
     ) : null}

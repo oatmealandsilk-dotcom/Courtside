@@ -19,7 +19,7 @@ export interface VerticalPagerHandle { scrollToTop: () => void }
 // keyboard) re-sizes the pages.
 const RESIZE_MIN = 40;
 
-export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.ReactNode[]; onIndex: (index: number) => void; /** The page the scroll came to rest on. */ onSettled?: (index: number) => void; initialIndex?: number; /** Pulling down past the first page fetches what is new. */ onRefresh?: () => Promise<void> }>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0, onRefresh }, ref) {
+export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.ReactNode[]; onIndex: (index: number) => void; /** The page the scroll came to rest on. */ onSettled?: (index: number) => void; initialIndex?: number; /** Pulling down past the first page fetches what is new. */ onRefresh?: () => Promise<void>; /** Shown in the gap the pull opens, beside the disc. */ pullHeader?: React.ReactNode }>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0, onRefresh, pullHeader }, ref) {
   const [height, setHeight] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const insets = useSafeAreaInsets();
@@ -50,7 +50,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   });
   const gapStyle = useAnimatedStyle(() => {
     const down = pullY.value + held.value;
-    return { opacity: Math.min(1, down / 40), transform: [{ translateY: Math.min(HOLD, down) / 2 - 14 }, { rotate: `${Math.min(360, pullY.value * 3)}deg` }] };
+    return { opacity: Math.min(1, down / 40), transform: [{ translateY: Math.min(HOLD, down) / 2 - 14 }] };
   });
   const list = useAnimatedRef<Animated.ScrollView>();
   // Scrolling is asked for on the UI thread, where the list lives.
@@ -123,7 +123,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     }}>
       {/* Behind the feed, in the gap it leaves when pulled: the arc as you pull, the spinner while it fetches. */}
       {onRefresh ? (
-        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + 24, left: 0, right: 0, alignItems: 'center' }, gapStyle]}>
+        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + 24, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 }, gapStyle]}>
+          {pullHeader}
           {refreshing ? <CourtSpinner size={28} /> : <View style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 2.5, borderColor: colors.brand, borderTopColor: 'transparent', opacity: 0.9 }} />}
         </Animated.View>
       ) : null}

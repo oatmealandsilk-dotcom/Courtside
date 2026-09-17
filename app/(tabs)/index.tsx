@@ -148,6 +148,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const { theme } = useTheme();
   const app = useApp();
   const { posts, questions, comments, stories, users, currentUserId, saved, actions, ready, followingIds, mutedIds, blockedIds, conversations } = app;
+  const currentUser = users.find((u) => u.id === currentUserId);
   const [active, setActive] = useState(0);
 
   // Pinch out on a clip or hit and everything but the picture goes away —
@@ -488,7 +489,12 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         />
       ) : (
         <View style={styles.viewer}>
-          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onRefresh={scope ? undefined : refreshFeed}>
+          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onRefresh={scope ? undefined : refreshFeed} pullHeader={scope || !currentUser ? undefined : (
+            <View style={styles.pullGreeting}>
+              <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={26} />
+              <Text style={styles.pullGreetingText}>{`${currentUser.name.split(' ')[0]}'s homepage`}</Text>
+            </View>
+          )}>
             {[...feed.map((item, index) => {
               const distance = Math.abs(index - active);
               const ahead = index - active;
@@ -854,6 +860,8 @@ const styleDefinitions = StyleSheet.create({
   },
   // On a computer a post sits at the left, so its wordmark lines up over it
   // rather than floating in the middle of the window.
+  pullGreeting: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pullGreetingText: { color: colors.text, fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
   wordmarkLeft: { alignItems: 'flex-start', paddingLeft: 12 + LANE_INSET },
   wordmark: {
     color: colors.brand, fontSize: 23, fontWeight: '800', letterSpacing: -0.3,
