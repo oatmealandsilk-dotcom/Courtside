@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { BAR_DUCK_PX, barCompact } from '@/features/navigation/barShrink';
 import * as haptics from '@/lib/haptics';
+import { colors } from '@/theme';
 
 /**
  * Full-height pages that snap one at a time. The active page changes the
@@ -65,9 +66,10 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       setTimeout(() => { refreshingRef.current = false; setRefreshing(false); }, 420);
     }
   }, [onRefresh, list]);
-  // Whether the strip is in view. (The first page is never clipped or
-  // rounded around this: a clipped box around a native video froze the
-  // picture while the sound ran on.)
+  // Whether the strip is in view. While it is, the first page's top corners
+  // look rounded — drawn as caps laid over the corners, never by clipping the
+  // page: a clipped box around a native video froze the picture while the
+  // sound ran on.
   const [pulled, setPulled] = useState(false);
   useAnimatedReaction(() => pullY.value > 2, (now, before) => { if (now !== before) runOnJS(setPulled)(now); }, []);
   const gapStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, pullY.value / 40) }));
@@ -172,7 +174,12 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
           bounces={!!onRefresh}
         >
           {top > 0 ? <View pointerEvents="none" style={{ height: HOLD }} /> : null}
-          {children.map((child, index) => <View key={index} style={{ height }}>{child}</View>)}
+          {children.map((child, index) => (
+            <View key={index} style={{ height }}>
+              {child}
+              {index === 0 && pulled ? <View pointerEvents="none" style={{ position: 'absolute', top: -22, left: -22, right: -22, height: 70, borderTopWidth: 22, borderLeftWidth: 22, borderRightWidth: 22, borderColor: colors.bg, borderTopLeftRadius: 44, borderTopRightRadius: 44 }} /> : null}
+            </View>
+          ))}
         </Animated.ScrollView>
       )}
     </View>
