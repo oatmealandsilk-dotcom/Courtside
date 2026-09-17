@@ -895,13 +895,14 @@ const styleDefinitions = StyleSheet.create({
   },
   caption: {
     position: 'absolute',
-    bottom: BAR_DUCK_PX,
+    bottom: BAR_DUCK_PX - 4,
     left: 0,
     right: 0,
     padding: 18,
+    paddingBottom: 10,
     paddingRight: 70,
     backgroundColor: 'transparent',
-    gap: 10,
+    gap: 8,
   },
   author: { flexDirection: 'row', gap: 9, alignItems: 'center' },
   hitClock: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.45)' },
@@ -912,7 +913,7 @@ const styleDefinitions = StyleSheet.create({
   tags: { color: 'rgba(255,255,255,0.85)', fontSize: 11 },
   swipeHint: { color: 'rgba(255,255,255,0.7)', fontSize: 10 },
   bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 240 + BAR_DUCK_PX },
-  actions: { position: 'absolute', right: 12, bottom: 90 + BAR_DUCK_PX, gap: 22 },
+  actions: { position: 'absolute', right: 12, bottom: 82 + BAR_DUCK_PX, gap: 22 },
   action: { alignItems: 'center', gap: 4, minWidth: 48 },
   // Instagram's trick: plain white glyphs made bolder by a soft dark shadow
   // rather than a heavier icon, so they hold up over bright footage.
