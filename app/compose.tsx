@@ -232,7 +232,7 @@ export default function Compose() {
         <Screen
           title={mode === 'clip' ? 'New clip' : mode === 'post' ? 'New post' : mode === 'story' ? 'New story' : mode === 'hit' ? 'New hit' : 'Ask the room'}
           compactTitle
-          onBack={() => (mode === 'question' ? router.back() : mode === 'hit' ? router.replace('/hit') : setStage('edit'))}
+          onBack={() => (mode === 'question' ? router.back() : mode === 'hit' ? router.navigate('/hit') : setStage('edit'))}
           right={<Button label={mode === 'story' ? 'Add to story' : mode === 'hit' ? 'Post hit' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit} />}
         >
           <View style={styles.form}>
@@ -240,17 +240,12 @@ export default function Compose() {
               <>
                 <View style={styles.stage}>
                   <MediaPicker bare orientation={orientation} selection={mode === 'clip' ? 'video' : 'all'} value={media} onChange={setMedia} trim={edit} />
-                  {mode === 'hit' ? (
-                    <View pointerEvents="none" style={styles.hitBadge}>
-                      <Ionicons name="time-outline" size={13} color="white" />
-                      <Text style={styles.hitBadgeText}>HIT · 24h</Text>
-                    </View>
-                  ) : null}
+
                 </View>
                 {mode === 'hit' ? (
-                  <View style={styles.inlineRow}>
-                    <Ionicons name="tennisball-outline" size={18} color={colors.brand} />
-                    <Text style={styles.inlineLabel}>One take, on the feed for 24 hours, then kept in your archive.</Text>
+                  <View style={styles.hitMeta}>
+                    <View style={styles.hitPill}><Ionicons name="time-outline" size={13} color={colors.brand} /><Text style={styles.hitPillText}>24 HOURS</Text></View>
+                    <Text style={styles.hitMetaText}>On the feed for a day, then kept in your archive.</Text>
                   </View>
                 ) : null}
                 <Field
@@ -338,8 +333,10 @@ const styleDefinitions = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   note: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
   pickError: { ...typography.small, color: colors.danger, lineHeight: 18 },
-  hitBadge: { position: 'absolute', top: 12, left: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.5)' },
-  hitBadgeText: { color: 'white', fontSize: 11, fontWeight: '700', letterSpacing: 0.6 },
+  hitMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  hitPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: colors.brand, backgroundColor: colors.brandDim },
+  hitPillText: { color: colors.brand, fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
+  hitMetaText: { ...typography.small, color: colors.textMuted, flex: 1 },
   libraryTitle: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.1, paddingTop: spacing.xl, paddingBottom: spacing.sm },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 3 },
   tile: { width: '32.5%', aspectRatio: 9 / 12, borderRadius: radius.sm, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
