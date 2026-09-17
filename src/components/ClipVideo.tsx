@@ -60,9 +60,19 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
     const b = player.addListener('videoTrackChange', ({ videoTrack }) => report(videoTrack));
     return () => { a.remove(); b.remove(); };
   }, [player]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Playing is asked for only once the player is ready: a seek or a play on
+  // an item still loading left the sound running with the picture stuck on
+  // its first frame (the first clip after signing in, or a new first clip
+  // after a refresh). The wish to play is kept, and honoured the moment the
+  // player reports ready.
+  const wantPlay = useRef(false);
+  const begin = useRef<() => void>(() => undefined);
   useEffect(() => {
     safely(() => latestReady.current?.(player.status === 'readyToPlay'));
-    const sub = player.addListener('statusChange', ({ status }) => latestReady.current?.(status === 'readyToPlay'));
+    const sub = player.addListener('statusChange', ({ status }) => {
+      latestReady.current?.(status === 'readyToPlay');
+      if (status === 'readyToPlay' && wantPlay.current) begin.current();
+    });
     return () => sub.remove();
   }, [player]);
   useEffect(() => {
@@ -87,25 +97,23 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   // Where the clip was when the page left, and when: a quick return resumes,
   // a slow one starts the clip over.
   const left = useRef<{ time: number; at: number } | null>(null);
-  const kicked = useRef(false);
   // Each native call stands on its own: a position read that fails must
   // never take the pause down with it, or the clip plays on after the swipe.
+  begin.current = () => {
+    for (const other of livePlayers) if (other !== player) { try { other.pause(); } catch { /* released */ } }
+    const back = left.current;
+    left.current = null;
+    safely(() => { player.currentTime = !back || Date.now() - back.at > RESUME_WINDOW_MS ? trimStart : back.time; });
+    safely(() => player.play());
+  };
   useEffect(() => {
     if (active && !paused) {
-      for (const other of livePlayers) if (other !== player) { try { other.pause(); } catch { /* released */ } }
-      const back = left.current;
-      left.current = null;
-      safely(() => { player.currentTime = !back || Date.now() - back.at > RESUME_WINDOW_MS ? trimStart : back.time; });
-      safely(() => player.play());
-      // The very first play on a phone has been seen to run the sound with
-      // the picture stuck on its first frame; a pause-and-play a beat later
-      // — what swiping away and back does — sets the picture going. Once.
-      if (!kicked.current) {
-        kicked.current = true;
-        const t = setTimeout(() => safely(() => { if (player.playing) { player.pause(); player.play(); } }), 350);
-        return () => clearTimeout(t);
-      }
+      wantPlay.current = true;
+      let ready = false;
+      safely(() => { ready = player.status === 'readyToPlay'; });
+      if (ready) begin.current();
     } else {
+      wantPlay.current = false;
       if (!active) safely(() => { left.current = { time: player.currentTime, at: Date.now() }; });
       safely(() => player.pause());
     }
