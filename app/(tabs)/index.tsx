@@ -280,20 +280,23 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const skeletonClip = useMemo(() => (
     <>
       {holdWord}
-      <View style={[styles.caption, { bottom: BAR_DUCK_PX - 4 + 20 }]}>
+      {/* The same boxes the live page uses, so every stand-in sits exactly where the real thing lands. */}
+      <View style={styles.caption}>
         <View style={styles.author}>
           <View style={styles.boneAvatar} />
-          <View style={{ gap: 6 }}><View style={[styles.bone, { width: 120 }]} /><View style={[styles.bone, { width: 72 }]} /></View>
+          <View style={[styles.bone, { width: 110, height: 14 }]} />
         </View>
-        <View style={[styles.bone, { width: 220, marginTop: 12 }]} />
+        <View style={{ gap: 6 }}><View style={[styles.bone, { width: '85%' }]} /><View style={[styles.bone, { width: '55%' }]} /></View>
+        <View style={[styles.bone, { width: 90, height: 10 }]} />
+        <Text style={styles.swipeHint}> </Text>
       </View>
       <View style={styles.actions}>
-        {/* The real buttons, as they will be, so the page does not change shape when it arrives. */}
-        <View style={styles.action}><Ionicons name="heart-outline" size={36} color={colors.textMuted} /></View>
-        <View style={styles.action}><Ionicons name="chatbubble-outline" size={33} color={colors.textMuted} /></View>
-        <View style={styles.action}><Ionicons name="arrow-redo-outline" size={32} color={colors.textMuted} /></View>
-        <View style={styles.action}><Ionicons name="bookmark-outline" size={31} color={colors.textMuted} /></View>
-        <View style={styles.action}><Ionicons name="ellipsis-horizontal" size={30} color={colors.textMuted} /></View>
+        {([['heart-outline', 36], ['chatbubble-outline', 33], ['arrow-redo-outline', 32], ['bookmark-outline', 31], ['ellipsis-horizontal', 30]] as const).map(([name, size]) => (
+          <View key={name} style={styles.action}>
+            <Ionicons name={name} size={size} color={colors.textMuted} style={styles.actionGlyph} />
+            <Text style={styles.actionLabel}> </Text>
+          </View>
+        ))}
       </View>
     </>
   ), [styles, holdWord]);
