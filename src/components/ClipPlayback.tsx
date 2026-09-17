@@ -9,6 +9,7 @@ import { CourtSpinner } from './CourtSpinner';
 import { cropLayer } from '@/lib/crop';
 import type { MediaCrop } from '@/data/types';
 import { colors } from '@/theme';
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import { onSpaceBar } from '@/features/feed/keyboard';
 
 /**
@@ -35,6 +36,7 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   crop?: MediaCrop;
 }) {
   const insets = useSafeAreaInsets();
+  const styles = useThemedStyles(styleDefinitions);
   const [paused, setPaused] = useState(false);
   const [ready, setReadyState] = useState(false);
   const setReady = (ok: boolean) => { setReadyState(ok); onReady?.(ok); };
@@ -125,7 +127,7 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   centre: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   wideFrame: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000' },
   playBadge: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#0008', alignItems: 'center', justifyContent: 'center', paddingLeft: 4 },
