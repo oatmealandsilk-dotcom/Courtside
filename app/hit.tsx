@@ -21,6 +21,24 @@ const COUNTDOWN = 5;
  * There is no capture button and no second try — what the camera saw at zero
  * is the hit. The only choice afterwards is whether to post it.
  */
+/** Flips a picture left-to-right in the browser and returns it as a data URL. */
+function mirrorPhoto(uri: string): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { resolve(uri); return; }
+      ctx.translate(canvas.width, 0); ctx.scale(-1, 1);
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/jpeg', 0.9));
+    };
+    img.onerror = () => resolve(uri);
+    img.src = uri;
+  });
+}
+
 export default function Hit() {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
@@ -67,7 +85,10 @@ export default function Hit() {
       haptics.reward();
       const photo = await camera.current?.takePictureAsync({ quality: 0.85, skipProcessing: Platform.OS === 'android' });
       if (!photo?.uri) throw new Error('The camera did not return a photo.');
-      setShot(photo.uri);
+      // What you saw is what you get: the preview is a mirror, so the saved
+      // photo is mirrored the same way. The phone does this itself; the
+      // browser hands back the un-mirrored frame, so it is flipped here.
+      setShot(Platform.OS === 'web' ? await mirrorPhoto(photo.uri) : photo.uri);
     } catch (err) {
       setFailed(err instanceof Error ? err.message : 'Could not take the photo.');
     }
