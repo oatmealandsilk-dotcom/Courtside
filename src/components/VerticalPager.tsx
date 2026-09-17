@@ -71,7 +71,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
         'worklet';
         gliding.value = true;
         glide.value = 0;
-        glide.value = withTiming(HOLD, { duration: 760, easing: Easing.out(Easing.quart) }, () => { gliding.value = false; });
+        glide.value = withTiming(HOLD, { duration: 760, easing: Easing.out(Easing.poly(4)) }, () => { gliding.value = false; });
       })();
       // Nothing re-draws until the glide has landed.
       setTimeout(() => { refreshingRef.current = false; setRefreshing(false); }, 800);
