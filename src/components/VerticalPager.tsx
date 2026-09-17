@@ -2,7 +2,7 @@ import React, { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, u
 import { View } from 'react-native';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { BAR_DUCK_PX, barCompact } from '@/features/navigation/barShrink';
 import * as haptics from '@/lib/haptics';
 import { colors } from '@/theme';
@@ -50,6 +50,11 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
 
   const pullY = useSharedValue(0);
   const refreshingRef = useRef(false);
+  // The glide back after a refresh is driven frame by frame on the animation
+  // thread — one long ease-out, rather than the scroller's own short hop.
+  const glide = useSharedValue(0);
+  const gliding = useSharedValue(false);
+  useAnimatedReaction(() => glide.value, (v, prev) => { if (gliding.value && v !== prev) scrollTo(list, 0, v, false); }, []);
   const refreshNow = useCallback(async () => {
     if (!onRefresh || refreshingRef.current) return;
     refreshingRef.current = true;
@@ -62,8 +67,13 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       // and the disc goes once the page is home.
       haptics.tap();
       setScrollLocked(false);
-      runOnUI(() => { 'worklet'; scrollTo(list, 0, HOLD, true); })();
-      setTimeout(() => { refreshingRef.current = false; setRefreshing(false); }, 420);
+      runOnUI(() => {
+        'worklet';
+        gliding.value = true;
+        glide.value = 0;
+        glide.value = withTiming(HOLD, { duration: 620, easing: Easing.out(Easing.cubic) }, () => { gliding.value = false; });
+      })();
+      setTimeout(() => { refreshingRef.current = false; setRefreshing(false); }, 640);
     }
   }, [onRefresh, list]);
   // Whether the strip is in view. While it is, the first page's top corners

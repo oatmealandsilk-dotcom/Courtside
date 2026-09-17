@@ -306,7 +306,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     // most). Pages already loaded count straight away; nothing is unloaded.
     await new Promise<void>((resolve) => {
       const done = () => { clearTimeout(t); resolve(); };
-      const t = setTimeout(done, 6000);
+      const t = setTimeout(done, 4000);
       setTimeout(() => { if (firstReadyRef.current) done(); else warmWaiters.current.push(done); }, 80);
     });
     await new Promise<void>((resolve) => setTimeout(resolve, 240));
@@ -466,8 +466,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const WINDOW = 1;
   /** How many pages ahead stay mounted and buffering, so the feed is never caught out. */
   const AHEAD = 2;
-  /** How many of those the curtain waits for on opening; the rest load in behind the feed. */
-  const FIRST = 3;
+  /** How many of those the curtain (and a pull-to-refresh) waits for; the rest load in behind the feed. */
+  const FIRST = 1;
 
   // The warm-up: the first seven pages load (a video's first seconds, a
   // photo, a thread's words) behind a curtain, which lifts when they are in

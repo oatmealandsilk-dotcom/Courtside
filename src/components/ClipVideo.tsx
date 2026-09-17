@@ -4,7 +4,7 @@ import { VideoView, createVideoPlayer, type VideoPlayer } from 'expo-video';
 
 /** Swipe away and back within this long and the clip picks up where it was; longer and it starts over. */
 export /** How many seconds of a clip are fetched before it counts as loaded and may start. */
-const PRELOAD_SECONDS = 4;
+const PRELOAD_SECONDS = 3;
 const RESUME_WINDOW_MS = 3000;
 
 /**
