@@ -1,6 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
 
 import { Button, Field } from '@/components/ui';
 import { colors, radius, spacing } from '@/theme';
@@ -18,7 +19,7 @@ export function TipPage({ onSubmit }: { onSubmit: (body: string) => Promise<void
     const text = body.trim();
     if (!text || busy) return;
     setBusy(true);
-    try { await onSubmit(text); setSent((n) => n + 1); setBody(''); } finally { setBusy(false); }
+    try { await onSubmit(text); setSent((n) => n + 1); setBody(''); router.push('/tips'); } finally { setBusy(false); }
   };
   return (
     <View style={styles.page}>
@@ -29,7 +30,8 @@ export function TipPage({ onSubmit }: { onSubmit: (body: string) => Promise<void
         <View style={styles.divider} />
         <Field value={body} onChangeText={setBody} placeholder="What would make CourtSide better?" multiline minHeight={96} />
         <Button label={busy ? 'Sending…' : sent ? 'Send another' : 'Send tip'} onPress={send} disabled={!body.trim() || busy} full />
-        {sent ? <Text style={styles.thanks}>Got it — thank you. We read every one.</Text> : <Text style={styles.hint}>Only early users see this page.</Text>}
+        <Pressable accessibilityRole="link" onPress={() => router.push('/tips')} hitSlop={8}><Text style={styles.link}>See everyone's tips and vote →</Text></Pressable>
+        {sent ? <Text style={styles.thanks}>Sent. It is on the board now.</Text> : null}
       </View>
     </View>
   );
@@ -42,6 +44,7 @@ const styleDefinitions = StyleSheet.create({
   title: { color: colors.text, fontSize: 26, fontWeight: '800', letterSpacing: -0.3, textAlign: 'center' },
   divider: { alignSelf: 'stretch', height: StyleSheet.hairlineWidth, backgroundColor: colors.borderStrong },
   hint: { color: colors.textFaint, fontSize: 12, fontStyle: 'italic', textAlign: 'center' },
+  link: { color: colors.brand, fontSize: 13, fontWeight: '700', textAlign: 'center' },
   body: { color: colors.textMuted, fontSize: 15, lineHeight: 22, textAlign: 'center' },
   thanks: { color: colors.success, fontSize: 13, fontWeight: '600', textAlign: 'center' },
 });

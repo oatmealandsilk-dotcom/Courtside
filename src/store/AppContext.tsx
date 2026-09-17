@@ -53,8 +53,7 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop,
-} from '@/data/types';
+  MediaCrop, Tip } from '@/data/types';
 
 interface NewStoryInput {
   imageUrl?: string;
@@ -231,6 +230,8 @@ interface AppState extends Bootstrap {
   /** Ways to pay a coach, and which one is used unless you say otherwise. */
   paymentMethods: PaymentMethod[];
   defaultPaymentId: ID | null;
+  /** Early users' suggestions, votes and all. */
+  tips: Tip[];
   /** Small switches from Settings, kept with the account. */
   prefs: { showActivity: boolean; pushLikes: boolean; pushCoach: boolean };
   /** Whether the app may ask the device where you are, and the city it found. */
@@ -264,8 +265,9 @@ interface AppActions {
   toggleBlock: (userId: ID) => void;
   toggleAlerts: (userId: ID) => void;
   reportUser: (userId: ID, reason: string) => void;
-  /** A suggestion from an early user, kept for the team to read. */
+  /** A suggestion from an early user, on the board for everyone to vote on. */
   submitTip: (body: string) => Promise<void>;
+  voteTip: (tipId: ID, direction: 1 | -1) => void;
   /** Try the account load again after it failed. */
   retryLoad: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
@@ -420,6 +422,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     paymentMethods: STARTER_PAYMENTS,
     defaultPaymentId: readDefaultPayment(),
     prefs: { showActivity: true, pushLikes: true, pushCoach: true },
+    tips: [],
     locationEnabled: readFlag('courtside-location'),
     detectedLocation: null,
     detectedCoords: null,
@@ -599,6 +602,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           coachReplies: [...data.coachReplies, ...prev.coachReplies.filter((r) => !data.coachReplies.some((x) => x.id === r.id))],
           coachingRequests: [...data.coachingRequests, ...prev.coachingRequests.filter((r) => !data.coachingRequests.some((x) => x.id === r.id))],
           notifications: [...data.notifications, ...prev.notifications.filter((n) => !data.notifications.some((x) => x.id === n.id))],
+          tips: [...data.tips, ...prev.tips.filter((t) => !data.tips.some((x) => x.id === t.id))],
           mutedIds: data.userState ? data.userState.mutedIds : prev.mutedIds,
           blockedIds: data.userState ? data.userState.blockedIds : prev.blockedIds,
           paymentMethods: data.userState && data.userState.paymentMethods.length ? data.userState.paymentMethods : prev.paymentMethods,
@@ -2047,10 +2051,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   /** A report goes nowhere in the mock build; the feedback is what matters. */
   const submitTip = useCallback(async (body: string) => {
-    const me = stateRef.current.currentUserId;
+    const me = requireUser();
     haptics.commit();
-    if (me && live(me)) await remote.insertTip(me, body);
-  }, []);
+    const tip: Tip = { id: nextId('tip'), authorId: me, body, createdAt: new Date().toISOString(), votes: 0, votedBy: {} };
+    setState((prev) => ({ ...prev, tips: [tip, ...prev.tips] }));
+    if (live(me, tip.id)) await remote.insertTip(tip);
+  }, [requireUser]);
+  const voteTip = useCallback((tipId: ID, direction: 1 | -1) => {
+    haptics.tap();
+    const me = requireUser();
+    setState((prev) => ({ ...prev, tips: prev.tips.map((t) => (t.id === tipId ? applyVote(t, me, direction) : t)) }));
+    if (live(me, tipId)) void remote.voteTip(tipId, direction);
+  }, [requireUser]);
 
   const reportUser = useCallback((userId: ID, reason: string) => {
     haptics.commit();
@@ -2102,6 +2114,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       resolveCoachQuestion,
       setPref,
       submitTip,
+      voteTip,
       retryLoad,
       requestPasswordReset,
       setReadReceiptsEnabled,

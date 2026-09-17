@@ -12,7 +12,7 @@ import * as WebBrowser from 'expo-web-browser';
  */
 
 import { supabase } from '@/lib/supabase';
-import type { Answer, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, Question, Story, User } from './types';
+import type { Answer, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, Question, Story, Tip, User } from './types';
 
 const need = () => {
   if (!supabase) throw new Error('Supabase is not configured');
@@ -176,7 +176,11 @@ export interface RemoteData {
   coachingRequests: CoachingRequest[];
   notifications: Notification[];
   userState: UserState | null;
+  tips: Tip[];
 }
+
+interface TipRow { id: string; user_id: string; body: string; created_at: string; votes: number | null; voted_by: Record<string, 1 | -1> | null }
+const toTip = (r: TipRow): Tip => ({ id: r.id, authorId: r.user_id, body: r.body, createdAt: r.created_at, votes: r.votes ?? 0, votedBy: r.voted_by ?? {} });
 
 export interface UserState {
   mutedIds: ID[]; blockedIds: ID[]; savedQuestionIds: ID[]; paymentMethods: PaymentMethod[]; defaultPaymentId: ID | null;
@@ -261,7 +265,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // is what left people re-doing the quiz: their profile never arrived.
   const storiesFull = db.from('stories').select('*, story_views(user_id), story_likes(user_id), story_comments(id, story_id, author_id, body, created_at, story_comment_likes(user_id))').order('created_at', { ascending: false }).limit(40);
   const storiesPlain = () => db.from('stories').select('*, story_views(user_id)').order('created_at', { ascending: false }).limit(40);
-  const [profiles, posts, storiesTry, follows, requests, convs, msgs, qs, ans, cqs, crs, creqs, notes, ustate] = await Promise.all([
+  const [profiles, posts, storiesTry, follows, requests, convs, msgs, qs, ans, cqs, crs, creqs, notes, ustate, tipRows] = await Promise.all([
     db.from('profiles').select('*'),
     db.from('posts').select('*, post_likes(user_id), post_saves(user_id), comments(id, post_id, author_id, body, created_at, comment_likes(user_id))').order('created_at', { ascending: false }).limit(60),
     storiesFull,
@@ -278,6 +282,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     db.from('coaching_requests').select('*').order('created_at', { ascending: false }),
     db.from('notifications').select('*').order('created_at', { ascending: false }).limit(200),
     db.from('user_state').select('*').eq('user_id', me).maybeSingle(),
+    db.from('tips').select('*').order('created_at', { ascending: false }).limit(300),
   ]);
   if (qs.error) console.warn('[remote] community tables missing; run the pending migrations', qs.error.message);
   const answerRows = (ans.data ?? []) as AnswerRow[];
@@ -320,6 +325,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     coachingRequests: ((creqs.data ?? []) as CoachingRequestRow[]).map(toCoachingRequest),
     notifications: ((notes.data ?? []) as NotificationRow[]).map(toNotification),
     userState: ustate.data ? toUserState(ustate.data as UserStateRow) : null,
+    tips: ((tipRows.data ?? []) as TipRow[]).map(toTip),
   };
 }
 
@@ -437,10 +443,11 @@ export const remote = {
     return () => { void db.removeChannel(channel); };
   },
 
-  async insertTip(me: ID, body: string) {
-    const { error } = await need().from('tips').insert({ user_id: me, body });
+  async insertTip(tip: Tip) {
+    const { error } = await need().from('tips').insert({ id: tip.id, user_id: tip.authorId, body: tip.body, created_at: tip.createdAt });
     if (error) fail('tip')(error);
   },
+  async voteTip(tipId: ID, dir: 1 | -1) { const { error } = await need().rpc('vote_tip', { t: tipId, dir }); if (error) fail('tip vote')(error); },
 
   async updateProfile(me: ID, patch: { name?: string; bio?: string; location?: string; avatarUrl?: string; profile?: PlayerProfile; isPrivate?: boolean }) {
     const row: Record<string, unknown> = {};

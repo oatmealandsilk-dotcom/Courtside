@@ -476,6 +476,18 @@ export interface CoachApplication {
   createdAt: string;
 }
 
+/* ---------------------------------- Tips --------------------------------- */
+
+/** A suggestion from an early user; everyone can vote it up or down. */
+export interface Tip {
+  id: ID;
+  authorId: ID;
+  body: string;
+  createdAt: string;
+  votes: number;
+  votedBy: Record<ID, 1 | -1>;
+}
+
 /* -------------------------------- Messaging ------------------------------ */
 
 export type MessageKind = 'text' | 'post' | 'question' | 'profile';
