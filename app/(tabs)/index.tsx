@@ -149,6 +149,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const { posts, questions, comments, stories, users, currentUserId, saved, actions, ready, followingIds, mutedIds, blockedIds, conversations } = app;
   const currentUser = users.find((u) => u.id === currentUserId);
   const [active, setActive] = useState(0);
+  const orderRef = useRef<string[]>([]);
+  useEffect(() => { const k = orderRef.current[active]; if (k) seenNow.current.add(k); }, [active]);
 
   // Pinch out on a clip or hit and everything but the picture goes away —
   // caption, buttons, wordmark, sound disc; pinch in brings it all back.
@@ -180,13 +182,17 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const latest = useRef(app);
   latest.current = app;
   const [order, setOrder] = useState<string[]>([]);
+  orderRef.current = order;
+  // Every page you have rested on this session; a refresh sends these to the back.
+  const seenNow = useRef(new Set<string>());
 
   // Re-rank when the session itself changes, not every time this screen regains
   // focus — otherwise stepping into a thread and back would reshuffle the feed
   // and throw you to the top.
   const rankedFor = useRef<string | null>(null);
   // Builds the page order from whatever is loaded; a pull-to-refresh asks for it again.
-  const rerank = useCallback((remount = true) => {
+  const seen = seenNow;
+  const rerank = useCallback((remount = true, fresh = false) => {
       const data = latest.current;
       if (scope) {
         // One person's things, newest first, opened on the one that was tapped.
@@ -206,7 +212,17 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         .filter((p) => p.authorId === data.currentUserId && !p.archived && Date.now() - Date.parse(p.createdAt) < 5 * 60_000)
         .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
         .map((p) => `p:${p.id}`);
-      setOrder([...justMine, ...ranked.filter((k) => !justMine.includes(k))]);
+      let rest = ranked.filter((k) => !justMine.includes(k));
+      if (fresh) {
+        // A pull-to-refresh is a new feed: what you have already looked at
+        // this session drops to the back, and what is left is dealt out in a
+        // fresh order each time — the top is never the same page again.
+        const unseen = rest.filter((k) => !seen.current.has(k));
+        const old = rest.filter((k) => seen.current.has(k));
+        const shuffled = unseen.map((k, i) => ({ k, at: i + Math.random() * 4 })).sort((a, b) => a.at - b.at).map((x) => x.k);
+        rest = [...shuffled, ...old];
+      }
+      setOrder([...justMine, ...rest]);
       setActive(0);
       if (remount) setVisit((v) => v + 1);
   }, [scope?.userId, scope?.set, scope?.start]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -232,7 +248,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const firstReadyRef = useRef(false);
   const refreshFeed = useCallback(async () => {
     await actions.refresh();
-    rerank(false);
+    rerank(false, true);
     // Hold until the new first pages have their pictures in (six seconds at
     // most). Pages already loaded count straight away; nothing is unloaded.
     await new Promise<void>((resolve) => {
