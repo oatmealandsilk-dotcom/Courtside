@@ -39,7 +39,8 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   const styles = useThemedStyles(styleDefinitions);
   const [paused, setPaused] = useState(false);
   const [ready, setReadyState] = useState(false);
-  const setReady = (ok: boolean) => { setReadyState(ok); onReady?.(ok); };
+  // Once a clip has been ready it counts as ready: a moment of re-buffering mid-play is not a loading disc.
+  const setReady = (ok: boolean) => { setReadyState((was) => was || ok); onReady?.(ok); };
   // Sound on, the way a feed on a phone should be; a tap on the disc mutes it.
   const [muted, setMuted] = useState(silent);
   const lastTap = useRef(0);

@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { BrandMark } from '@/components/BrandMark';
-import { useFeedWarm } from '@/features/feed/warmup';
+import { setCurtainDown, useFeedWarm } from '@/features/feed/warmup';
 import { colors, spacing } from '@/theme';
 
 /**
@@ -20,8 +20,10 @@ export function WarmCurtain() {
   const style = useAnimatedStyle(() => ({ opacity: fade.value }));
   useEffect(() => {
     if (!warm || !shown) return;
-    fade.value = withTiming(0, { duration: 420 }, (finished) => { if (finished) runOnJS(setShown)(false); });
+    fade.value = withTiming(0, { duration: 420 }, (finished) => { if (finished) { runOnJS(setShown)(false); runOnJS(setCurtainDown)(); } });
   }, [warm, shown, fade]);
+  // Not shown at all (the feed was already warm): playback need not wait on it.
+  useEffect(() => { if (!shown) setCurtainDown(); }, [shown]);
   if (!shown) return null;
   return (
     <Animated.View pointerEvents={warm ? 'none' : 'auto'} style={[styles.curtain, style]}>

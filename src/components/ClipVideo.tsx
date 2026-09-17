@@ -78,11 +78,13 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   useEffect(() => {
     safely(() => { player.muted = muted; });
   }, [player, muted]);
-  // A page waiting off screen fetches just its first three seconds — enough
-  // to start the instant it arrives, without pulling whole videos down.
+  // Every clip keeps a few seconds buffered ahead — enough for a page
+  // waiting off screen to start the instant it arrives, without pulling whole
+  // videos down. Set once: changing it as a page went live made the player
+  // re-buffer, a blip of the loading disc over a clip already playing.
   useEffect(() => {
-    safely(() => { player.bufferOptions = { preferredForwardBufferDuration: active ? 0 : 3 }; });
-  }, [player, active]);
+    safely(() => { player.bufferOptions = { preferredForwardBufferDuration: 4 }; });
+  }, [player]);
   useEffect(() => {
     const sub = player.addListener('timeUpdate', ({ currentTime }) => {
       safely(() => {
@@ -103,7 +105,9 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
     for (const other of livePlayers) if (other !== player) { try { other.pause(); } catch { /* released */ } }
     const back = left.current;
     left.current = null;
-    safely(() => { player.currentTime = !back || Date.now() - back.at > RESUME_WINDOW_MS ? trimStart : back.time; });
+    const target = !back || Date.now() - back.at > RESUME_WINDOW_MS ? trimStart : back.time;
+    // Only a real move is a seek; the first play of a clip sitting at its start is a plain play.
+    safely(() => { if (Math.abs(player.currentTime - target) > 0.05) player.currentTime = target; });
     safely(() => player.play());
   };
   useEffect(() => {

@@ -18,3 +18,16 @@ const subscribe = (fn: () => void) => { listeners.add(fn); return () => { listen
 export function useFeedWarm() {
   return useSyncExternalStore(subscribe, () => warm, () => warm);
 }
+
+/** Whether the curtain has finished fading and is off the screen. Playback waits for this. */
+let down = false;
+const downListeners = new Set<() => void>();
+export function setCurtainDown() {
+  if (down) return;
+  down = true;
+  downListeners.forEach((fn) => fn());
+}
+const subscribeDown = (fn: () => void) => { downListeners.add(fn); return () => { downListeners.delete(fn); }; };
+export function useCurtainDown() {
+  return useSyncExternalStore(subscribeDown, () => down, () => down);
+}

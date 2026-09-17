@@ -22,7 +22,7 @@ import { LANE_INSET, MediaPostPage } from '@/components/MediaPostPage';
 import { Tappable } from '@/components/Tappable';
 import { VerticalPager, type VerticalPagerHandle } from '@/components/VerticalPager';
 import { subscribeScrollToTop } from '@/features/navigation/scrollToTop';
-import { setFeedWarm } from '@/features/feed/warmup';
+import { setFeedWarm, useCurtainDown } from '@/features/feed/warmup';
 import { subscribeFeedRefresh } from '@/features/feed/feedBus';
 import { BAR_DUCK_PX, setBarCompact } from '@/features/navigation/barShrink';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
@@ -429,15 +429,19 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const warmed = !!scope || warmTimedOut || (ready && dataIn && feed.length > 0 && warmDone >= warmTargets.length);
   // The shell keeps the splash curtain up until this says the first pages are in.
   useEffect(() => { if (warmed && !scope) setFeedWarm(true); }, [warmed, scope]);
-  // Sound must never run ahead of the picture: playback waits until the
-  // curtain has finished lifting, not just until the pages are ready.
+  // Playback starts only once the splash curtain has actually left the
+  // screen (it says so itself), a beat after — never while it is still
+  // fading over the player.
+  const curtainDown = useCurtainDown();
   const [playable, setPlayable] = useState(!!scope);
   useEffect(() => {
     if (scope) { setPlayable(true); return; }
     if (!warmed) { setPlayable(false); return; }
-    const t = setTimeout(() => setPlayable(true), 480);
+    // The curtain says when it is gone; if it never showed at all (the feed
+    // opened from a link, say), playback starts after a short wait instead.
+    const t = setTimeout(() => setPlayable(true), curtainDown ? 120 : 1500);
     return () => clearTimeout(t);
-  }, [warmed, scope]);
+  }, [warmed, curtainDown, scope]);
   // Photos and clip covers are fetched outright; a page reports itself ready when its picture lands.
   useEffect(() => {
     for (const item of feed.slice(0, AHEAD)) {
