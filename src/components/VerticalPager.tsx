@@ -1,6 +1,8 @@
 import React, { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
 import { RefreshControl, View } from 'react-native';
 import { colors } from '@/theme';
+import { CourtSpinner } from '@/components/CourtSpinner';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { runOnJS, runOnUI, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useSharedValue, withTiming } from 'react-native-reanimated';
 import { BAR_DUCK_PX, barCompact } from '@/features/navigation/barShrink';
 
@@ -20,6 +22,7 @@ const RESIZE_MIN = 40;
 export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.ReactNode[]; onIndex: (index: number) => void; /** The page the scroll came to rest on. */ onSettled?: (index: number) => void; initialIndex?: number; /** Pulling down past the first page fetches what is new. */ onRefresh?: () => Promise<void> }>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0, onRefresh }, ref) {
   const [height, setHeight] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const insets = useSafeAreaInsets();
   const refreshNow = useCallback(async () => { if (!onRefresh || refreshing) return; setRefreshing(true); try { await onRefresh(); } finally { setRefreshing(false); } }, [onRefresh, refreshing]);
   const list = useAnimatedRef<Animated.ScrollView>();
   // Scrolling is asked for on the UI thread, where the list lives.
@@ -102,11 +105,17 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={16}
           onScroll={onScroll}
-          refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={() => { void refreshNow(); }} tintColor={colors.brand} colors={[colors.brand]} progressBackgroundColor={colors.surface} /> : undefined}
+          refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={() => { void refreshNow(); }} tintColor="transparent" colors={['transparent']} progressBackgroundColor="transparent" /> : undefined}
         >
           {children.map((child, index) => <View key={index} style={{ height }}>{child}</View>)}
         </Animated.ScrollView>
       )}
+      {/* The refresh disc, the same one Profile shows, sitting in the top of the page like Instagram's. */}
+      {refreshing ? (
+        <View pointerEvents="none" style={{ position: 'absolute', top: insets.top + 72, left: 0, right: 0, alignItems: 'center' }}>
+          <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }}><CourtSpinner size={26} /></View>
+        </View>
+      ) : null}
     </View>
   );
 });

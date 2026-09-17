@@ -258,7 +258,7 @@ export function Screen({
           // this, which is what the fallback below is for.
           contentOffset={{ x: 0, y: initial.current }}
           onScroll={onScrollAnimated}
-          refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={() => { void refreshNow(); }} tintColor={colors.brand} colors={[colors.brand]} progressBackgroundColor={colors.surface} /> : undefined}
+          refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={() => { void refreshNow(); }} tintColor="transparent" colors={['transparent']} progressBackgroundColor="transparent" /> : undefined}
           onContentSizeChange={(_width, height) => {
             if (restored.current) return;
             // Wait until the content is tall enough to hold the position,
@@ -274,6 +274,9 @@ export function Screen({
       ) : (
         <View style={styles.flex}>{body}</View>
       )}
+      {onRefresh && Platform.OS !== 'web' && refreshing ? (
+        <View pointerEvents="none" style={styles.webRefresh}><CourtSpinner size={26} /></View>
+      ) : null}
       {onRefresh && Platform.OS === 'web' && (pulling || refreshing) ? (
         <Animated.View pointerEvents="none" style={[styles.webRefresh, { opacity: pull, transform: [{ translateY: pull.interpolate({ inputRange: [0, 1], outputRange: [-46, 6] }) }, { rotate: pull.interpolate({ inputRange: [0, 1], outputRange: ['-120deg', '0deg'] }) }] }]}>
           {refreshing ? <CourtSpinner size={26} /> : <View style={styles.pullArc} />}
