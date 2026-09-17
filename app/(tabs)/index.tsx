@@ -300,7 +300,12 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const warmWaiters = useRef<(() => void)[]>([]);
   const firstReadyRef = useRef(false);
   const refreshFeed = useCallback(async () => {
+    const before = latest.current;
     await actions.refresh();
+    // The fetch has landed in the store, but this page sees it only on its
+    // next render; ranking before that ranked the old list and nothing new
+    // ever appeared. Wait for that render (briefly), then rank.
+    for (let i = 0; i < 20 && latest.current === before; i += 1) await new Promise<void>((r) => setTimeout(r, 25));
     rerank(false, true);
     // Hold until the new first pages have their pictures in (six seconds at
     // most). Pages already loaded count straight away; nothing is unloaded.
