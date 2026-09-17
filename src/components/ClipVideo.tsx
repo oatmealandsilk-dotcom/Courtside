@@ -85,17 +85,20 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   useEffect(() => {
     safely(() => { player.bufferOptions = { preferredForwardBufferDuration: 4 }; });
   }, [player]);
-  // The first play of a clip on a phone has run the sound with the picture
-  // stuck on its first frame, and a tap to pause and play (a seek, then play)
-  // set it going. So once the first play is a quarter second in, the clip is
-  // seeked to where it already is — the same nudge, too small to see — once.
+  // The first play of a clip on a phone has, some of the time, run the
+  // sound with the picture stuck on its first frame; a tap to pause and play
+  // again always set it going. So once the first play is confirmed under way
+  // (the clock has moved), the clip is paused and played again in the same
+  // breath, where it is — the same nudge, too quick to notice — once.
   const nudged = useRef(false);
   useEffect(() => {
     const sub = player.addListener('timeUpdate', ({ currentTime }) => {
       safely(() => {
-        if (!nudged.current && wantPlay.current && currentTime > trimStart + 0.25) {
+        if (!nudged.current && wantPlay.current && currentTime > trimStart + 0.2) {
           nudged.current = true;
+          player.pause();
           player.currentTime = currentTime;
+          player.play();
         }
         const end = trimEnd ?? player.duration;
         if ((trimEnd !== undefined && currentTime >= trimEnd) || currentTime < trimStart - 0.5) { player.currentTime = trimStart; return; }
