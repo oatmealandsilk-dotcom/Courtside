@@ -28,6 +28,7 @@ export function RichText({ children, mentionStyle, ...props }: TextProps & { chi
             accessibilityRole="link"
             accessibilityLabel={`Open ${user.name}'s profile`}
             style={[{ color: colors.brand, fontWeight: '600' }, mentionStyle]}
+            suppressHighlighting
             onPress={(event) => {
               event.stopPropagation();
               router.push(user.id === currentUserId ? '/profile' : `/user/${user.id}`);

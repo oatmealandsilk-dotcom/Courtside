@@ -7,7 +7,7 @@ export function PlayerName({ userId, children, ...props }: TextProps & { userId?
   // With no userId there is nothing to open, so the tap must fall through to
   // whatever row this sits in rather than being swallowed.
   if (!userId) return <Text {...props}>{children}</Text>;
-  return <Text {...props} accessibilityRole="link" onPress={event => {
+  return <Text {...props} suppressHighlighting accessibilityRole="link" onPress={event => {
     event.stopPropagation();
     router.push(userId === currentUserId ? '/profile' : `/user/${userId}`);
   }}>{children}</Text>;
