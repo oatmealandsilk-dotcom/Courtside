@@ -924,14 +924,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         (acc, id) => withNotification(acc, { userId: id, actorId: me, kind: 'tag', targetId: post.id, targetKind: 'post', preview: snippet(post.body || 'a post') }),
         state,
       );
+      const tellAll = (state: AppState) => notifyMentions(tell(state), post.body, me, post.id, 'post');
       if (uploading) {
         // The strip across the top counts the upload up; the celebration
         // waits until it has actually landed.
         startUpload(post.id, label, post.thumbnailUrl ?? post.imageUrl);
-        setState((prev) => tell({ ...prev, posts: [post, ...prev.posts] }));
+        setState((prev) => tellAll({ ...prev, posts: [post, ...prev.posts] }));
       } else {
         if (post.videoUrl || post.imageUrl) simulateUpload(post.id, label, post.thumbnailUrl ?? post.imageUrl);
-        setState((prev) => tell(celebratePosted({ ...prev, posts: [post, ...prev.posts] }, { ...celebration, quiet: !!(post.videoUrl || post.imageUrl) })));
+        setState((prev) => tellAll(celebratePosted({ ...prev, posts: [post, ...prev.posts] }, { ...celebration, quiet: !!(post.videoUrl || post.imageUrl) })));
       }
       if (live(me)) {
         (async () => {
@@ -1351,6 +1352,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return next;
       });
       if (made && live(me, questionId)) void remote.upsertAnswer(made);
+      setState((prev) => notifyMentions(prev, body, me, questionId, 'question', prev.questions.find((q) => q.id === questionId)?.authorId));
     },
     [requireUser],
   );
