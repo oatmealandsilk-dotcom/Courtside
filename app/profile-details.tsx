@@ -1,7 +1,8 @@
 import { PlayerName } from '@/components/PlayerName';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { CourtSpinner } from '@/components/CourtSpinner';
 import { useLocalSearchParams, router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,7 +30,7 @@ export default function Profile() {
   if (!user) {
     return (
       <Screen title="Game" compactTitle onBack={() => goBack()}>
-        <ActivityIndicator color={colors.brand} />
+        <CourtSpinner size={28} />
       </Screen>
     );
   }

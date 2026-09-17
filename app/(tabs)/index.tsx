@@ -384,8 +384,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   // photo, a thread's words) behind a curtain, which lifts when they are in
   // — or after six seconds, whichever is first. Only the main feed waits.
   const [readyIds, setReadyIds] = useState<Set<string>>(() => new Set());
-  const markReady = useCallback((id: string, ok: boolean) => {
-    if (!ok) return;
+  // A picture that failed counts as done too: nothing waits on it, and its cover lifts.
+  const markReady = useCallback((id: string, _ok: boolean) => {
     setReadyIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
   }, []);
   const [warmTimedOut, setWarmTimedOut] = useState(false);
@@ -496,9 +496,12 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               const pageKey = item.type === 'post' ? item.post.id : item.type === 'question' ? item.question.id : item.type === 'hit' ? item.story.id : 'tip';
               // Two pages behind and seven ahead stay built; the rest hold their slot.
               if (ahead < -WINDOW || ahead > AHEAD) {
-                // A placeholder page: holds its slot, costs nothing to render.
-                return <View key={pageKey} />;
+                // A page not built yet holds its slot with the brand on it, so a
+                // fast scroll lands on the mark (a post) or the name (a clip or thread).
+                return <View key={pageKey} style={styles.holdPage}>{item.type === 'post' && item.post.kind !== 'clip' ? <BrandMark size={72} /> : <Text style={styles.holdWord}>CourtSide</Text>}</View>;
               }
+              // The same over a built page whose picture has not landed yet.
+              const cover = (id: string, kind: 'mark' | 'word') => readyIds.has(id) ? null : <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.holdPage]}>{kind === 'mark' ? <BrandMark size={72} /> : <Text style={styles.holdWord}>CourtSide</Text>}</View>;
               // The page behind and the seven ahead keep their video buffered, ready to play.
               const near = distance <= 1 || (ahead > 0 && ahead <= AHEAD);
               const strip = index === suggestHost ? suggestStrip : null;
@@ -556,6 +559,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     </View>
                     </Reanimated.View>
                    </Reanimated.View></PinchZone>
+                    {cover(story.id, 'word')}
                   </View>
                 );
               }
@@ -623,6 +627,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       burst={burst.id === post.id ? <LikeBurst token={burst.n} /> : null}
                       onReady={(ok) => markReady(post.id, ok)}
                     />
+                    {cover(post.id, 'mark')}
                   </View>
                 );
               }
@@ -788,6 +793,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                   </View>
                   </Reanimated.View>
                  </Reanimated.View></PinchZone>
+                  {cover(post.id, 'word')}
                 </View>
               );
             }).map((page, index) => {
@@ -877,6 +883,8 @@ const styleDefinitions = StyleSheet.create({
   markPill: { width: 46, height: 46, borderRadius: 13, backgroundColor: colors.bg, opacity: 0.76, alignItems: 'center', justifyContent: 'center' },
   viewer: { flex: 1, width: '100%', minHeight: 0 },
   clip: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
+  holdPage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
+  holdWord: { fontSize: 34, fontWeight: '800', color: colors.brand, letterSpacing: -1 },
   clipFrame: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
   clipPortrait: { height: '100%', aspectRatio: 9 / 16, maxWidth: '100%', overflow: 'hidden', backgroundColor: colors.bg },
   clipLandscape: { width: '100%', aspectRatio: 16 / 9, maxHeight: '100%', overflow: 'hidden', backgroundColor: '#000' },

@@ -1,6 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { CourtSpinner } from '@/components/CourtSpinner';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
@@ -41,7 +42,7 @@ export default function Train() {
   if (!currentUser || !plan) {
     return (
       <Screen title="AI Coach">
-        <ActivityIndicator color={colors.brand} />
+        <CourtSpinner size={28} />
       </Screen>
     );
   }

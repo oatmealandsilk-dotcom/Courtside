@@ -26,7 +26,7 @@ const RESIZE_MIN = 40;
 // disc waiting behind it. Let go past the line and the feed glides to the
 // strip's top and stays there while the fetch runs; when the new pages are
 // in, it glides back. Every move is the scroller's own, so nothing jumps.
-const HOLD = 168;
+const HOLD = 156;
 // Past halfway the scroller's own snap settles at the strip's top; that is the line.
 const PULL_LINE = HOLD / 2;
 
@@ -153,7 +153,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       {/* Behind the feed, in the strip the pull reveals (below the status bar, above where the
           held page starts): the arc as you pull, the disc while it fetches. */}
       {onRefresh ? (
-        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top, height: HOLD - insets.top, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 48 }, gapStyle]}>
+        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top, height: HOLD - insets.top, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 48, paddingBottom: 6 }, gapStyle]}>
           {pullHeader}
           {refreshing ? <CourtSpinner size={28} /> : <View style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 2.5, borderColor: colors.brand, borderTopColor: 'transparent', opacity: 0.9 }} />}
         </Animated.View>

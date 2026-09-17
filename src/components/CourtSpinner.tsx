@@ -17,7 +17,8 @@ export function CourtSpinner({ size = 40, ink }: { size?: number; ink?: string }
   const lead = useSharedValue(0);
   const tail = useSharedValue(0);
   useEffect(() => {
-    lead.value = withRepeat(withTiming(360, { duration: 820, easing: Easing.linear }), -1, false);
+    // Each turn starts slow and gathers pace, the way a real spinner does, not one flat speed.
+    lead.value = withRepeat(withTiming(360, { duration: 900, easing: Easing.bezier(0.55, 0.05, 0.45, 0.95) }), -1, false);
     tail.value = withRepeat(withTiming(360, { duration: 1300, easing: Easing.inOut(Easing.quad) }), -1, false);
     return () => { cancelAnimation(lead); cancelAnimation(tail); };
   }, [lead, tail]);

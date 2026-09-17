@@ -1,7 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
@@ -10,6 +9,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 
+import { CourtSpinner } from '@/components/CourtSpinner';
 import { Tappable } from '@/components/Tappable';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -54,7 +54,7 @@ export function Button({
       ]}
     >
       <View style={styles.inner}>
-        {loading ? <ActivityIndicator size="small" color={palette.fg} /> : null}
+        {loading ? <CourtSpinner size={18} ink={palette.fg} /> : null}
         <Text style={[styles.label, { color: palette.fg }]}>{label}</Text>
       </View>
     </Tappable>

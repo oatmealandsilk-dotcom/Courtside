@@ -1,6 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { CourtSpinner } from '@/components/CourtSpinner';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
@@ -79,7 +80,7 @@ export default function Health() {
                       ) : null}
                     </View>
                     {loading ? (
-                      <ActivityIndicator color={colors.brand} />
+                      <CourtSpinner size={28} />
                     ) : (
                       <Button
                         label={integration.connected ? 'Disconnect' : 'Not yet'}
