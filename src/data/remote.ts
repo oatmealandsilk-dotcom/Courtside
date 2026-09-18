@@ -280,7 +280,8 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     db.from('coach_questions').select('*').order('created_at', { ascending: false }).limit(200),
     db.from('coach_replies').select('*').order('created_at', { ascending: true }).limit(2000),
     db.from('coaching_requests').select('*').order('created_at', { ascending: false }),
-    db.from('notifications').select('*').order('created_at', { ascending: false }).limit(200),
+    // The last month of notifications, so the screen can show this week and the weeks before it.
+    db.from('notifications').select('*').gte('created_at', new Date(Date.now() - 31 * 86_400_000).toISOString()).order('created_at', { ascending: false }).limit(600),
     db.from('user_state').select('*').eq('user_id', me).maybeSingle(),
     db.from('tips').select('*').order('created_at', { ascending: false }).limit(300),
   ]);

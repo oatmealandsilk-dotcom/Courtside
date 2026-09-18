@@ -23,6 +23,8 @@ import { Tappable } from '@/components/Tappable';
 import { VerticalPager, type VerticalPagerHandle } from '@/components/VerticalPager';
 import { subscribeScrollToTop } from '@/features/navigation/scrollToTop';
 import { setFeedWarm, useCurtainDown } from '@/features/feed/warmup';
+import { connectionIsQuick } from '@/lib/netSpeed';
+import { CourtSpinner } from '@/components/CourtSpinner';
 import { subscribeFeedRefresh } from '@/features/feed/feedBus';
 import { BAR_DUCK_PX, setBarCompact } from '@/features/navigation/barShrink';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
@@ -150,7 +152,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const currentUser = users.find((u) => u.id === currentUserId);
   const [active, setActive] = useState(0);
   const orderRef = useRef<string[]>([]);
-  useEffect(() => { const k = orderRef.current[active]; if (k) seenNow.current.add(k); }, [active]);
+  useEffect(() => { const k = orderRef.current[active]; if (k) seenNow.current.add(k); setQuick(connectionIsQuick()); }, [active]);
 
   // Pinch out on a clip or hit and everything but the picture goes away —
   // caption, buttons, wordmark, sound disc; pinch in brings it all back.
@@ -305,6 +307,12 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     </>
   ), [styles, holdWord]);
   const warmWaiters = useRef<(() => void)[]>([]);
+  // Quick or slow connection, read again whenever a new page comes up. Each
+  // page's cover takes the reading once, the first time it is drawn (off
+  // screen, while the page is built ahead), and keeps it, so a page that is
+  // waiting never switches from one loading screen to another in view.
+  const [quick, setQuick] = useState(connectionIsQuick);
+  const coverQuick = useRef(new Map<string, boolean>());
   const firstReadyRef = useRef(false);
   const refreshFeed = useCallback(async () => {
     const before = latest.current;
@@ -313,12 +321,18 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     // next render; ranking before that ranked the old list and nothing new
     // ever appeared. Wait for that render (briefly), then rank.
     for (let i = 0; i < 20 && latest.current === before; i += 1) await new Promise<void>((r) => setTimeout(r, 25));
+    // How to wait is chosen once, here, from how quickly clips have been
+    // loading: on a quick connection the feed holds until the new first clip
+    // is ready (a few seconds at most) and lands on it playing; on a slow one
+    // it comes straight back and waits on the CourtSide loading page. Either
+    // way there is one waiting screen, never two.
+    const quickNow = connectionIsQuick();
+    coverQuick.current.clear();
+    setQuick(quickNow);
     rerank(false, true);
-    // Hold until the new first pages have their pictures in (six seconds at
-    // most). Pages already loaded count straight away; nothing is unloaded.
     await new Promise<void>((resolve) => {
       const done = () => { clearTimeout(t); resolve(); };
-      const t = setTimeout(done, 4000);
+      const t = setTimeout(done, quickNow ? 3000 : 500);
       setTimeout(() => { if (firstReadyRef.current) done(); else warmWaiters.current.push(done); }, 80);
     });
     await new Promise<void>((resolve) => setTimeout(resolve, 240));
@@ -485,10 +499,23 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   // photo, a thread's words) behind a curtain, which lifts when they are in
   // — or after six seconds, whichever is first. Only the main feed waits.
   const [readyIds, setReadyIds] = useState<Set<string>>(() => new Set());
-  // A picture that failed counts as done too: nothing waits on it, and its cover lifts.
-  const markReady = useCallback((id: string, _ok: boolean) => {
-    setReadyIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+  // Clips whose player has been freed since they were ready (the page went
+  // out of reach): a rebuilt page fetches from nothing, so its cover comes
+  // back and a refresh landing on it waits for it again. readyIds itself only
+  // grows; it is what the opening curtain waits on.
+  const [goneIds, setGoneIds] = useState<Set<string>>(() => new Set());
+  // `ok` true: the page's picture is in (a picture that failed counts as done
+  // too: nothing waits on it, and its cover lifts). False: its video player was freed.
+  const markReady = useCallback((id: string, ok: boolean) => {
+    if (ok) {
+      setReadyIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+      setGoneIds((prev) => { if (!prev.has(id)) return prev; const next = new Set(prev); next.delete(id); return next; });
+    } else {
+      setGoneIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+    }
   }, []);
+  /** The page's picture is in right now, in the player that is actually built. */
+  const inNow = (id: string) => readyIds.has(id) && !goneIds.has(id);
   const [warmTimedOut, setWarmTimedOut] = useState(false);
   useEffect(() => {
     if (!ready || !feed.length || !(!isSupabaseConfigured || app.remoteLoaded)) return;
@@ -501,7 +528,9 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     return [];
   }), [feed]); // eslint-disable-line react-hooks/exhaustive-deps
   const warmDone = warmTargets.filter((id) => readyIds.has(id)).length;
-  const firstReady = warmDone >= warmTargets.length;
+  // A refresh waits for the new first page as it is now: one that was ready
+  // earlier but whose player has since been freed is fetching again.
+  const firstReady = warmTargets.every(inNow);
   firstReadyRef.current = firstReady;
   // A pull-to-refresh holding the feed down is let go once the new first pages are in.
   useEffect(() => { if (firstReady && warmWaiters.current.length) { const w = warmWaiters.current; warmWaiters.current = []; w.forEach((fn) => fn()); } }, [firstReady]);
@@ -610,7 +639,20 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                 return <View key={pageKey} style={styles.holdPage}>{item.type === 'post' && item.post.kind !== 'clip' ? skeletonPost : skeletonClip}</View>;
               }
               // The same over a built page whose picture has not landed yet.
-              const cover = (id: string, kind: 'mark' | 'word') => readyIds.has(id) ? null : <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.holdPage]}>{kind === 'mark' ? skeletonPost : skeletonClip}</View>;
+              const cover = (id: string, kind: 'mark' | 'word', poster?: string, wide?: boolean) => {
+                if (inNow(id)) { coverQuick.current.delete(id); return null; }
+                let quickCover = coverQuick.current.get(id);
+                if (quickCover === undefined) { quickCover = quick; coverQuick.current.set(id, quickCover); }
+                if (kind === 'word' && quickCover && poster) {
+                  return (
+                    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: wide || !phone ? '#000' : colors.bg }]}>
+                      <Image accessibilityIgnoresInvertColors source={{ uri: poster }} style={StyleSheet.absoluteFill} resizeMode={wide || !phone ? 'contain' : 'cover'} />
+                      <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}><CourtSpinner ink="white" /></View>
+                    </View>
+                  );
+                }
+                return <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.holdPage]}>{kind === 'mark' ? skeletonPost : skeletonClip}</View>;
+              };
               // The page behind and the seven ahead keep their video buffered, ready to play.
               const near = distance <= 1 || (ahead > 0 && ahead <= AHEAD);
               const strip = index === suggestHost ? suggestStrip : null;
@@ -668,7 +710,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     </View>
                     </Reanimated.View>
                    </Reanimated.View></PinchZone>
-                    {story.videoUrl ? cover(story.id, 'word') : null}
+                    {story.videoUrl ? cover(story.id, 'word', story.thumbnailUrl) : null}
                   </View>
                 );
               }
@@ -903,7 +945,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                   </View>
                   </Reanimated.View>
                  </Reanimated.View></PinchZone>
-                  {post.videoUrl ? cover(post.id, 'word') : null}
+                  {post.videoUrl ? cover(post.id, 'word', post.thumbnailUrl, post.orientation === 'landscape') : null}
                 </View>
               );
             }).map((page, index) => {

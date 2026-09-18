@@ -20,7 +20,11 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   discPinned?: boolean;
   /** A landscape clip: the picture sits in a wide box mid-screen with black around; the disc and line keep to the screen's edges. */
   letterbox?: boolean;
-  /** True once the first frame is in and it can play; the feed uses this to know a page is warm. */
+  /**
+   * True once the first frame is in and it can play; the feed uses this to
+   * know a page is warm. False only when the clip leaves the page, so a
+   * rebuilt page is known to be fetching again (a stall mid-play is not reported).
+   */
   onReady?: (ready: boolean) => void;
   /** A zoom and shift inside the frame, chosen in the editor. */
   crop?: MediaCrop;
@@ -34,7 +38,11 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(silent);
   const [ready, setReadyState] = useState(false);
-  const setReady = (ok: boolean) => { setReadyState(ok); onReady?.(ok); };
+  const setReady = (ok: boolean) => { setReadyState(ok); if (ok) onReady?.(true); };
+  const latestReady = useRef(onReady);
+  latestReady.current = onReady;
+  // Gone from the page (or given another clip): what it had fetched goes with it.
+  useEffect(() => () => latestReady.current?.(false), [uri]);
   // The sound disc eases in when the clip starts and fades out quickly; a
   // tap up there toggles the sound and brings it back the same way.
   const [discOn, setDiscOn] = useState(false);

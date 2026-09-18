@@ -13,12 +13,14 @@ import type { Notification, NotificationKind } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /**
- * One row per thing that happened to you.
+ * One row per thing that happened to you, the way Instagram does it.
  *
- * Notifications are grouped by what they landed on, the way every social app
- * does it — six people liking one clip is one line, not six. Opening the screen
- * marks everything read, but a row that was unread keeps its tint until you
- * leave, so you can still see what was new.
+ * A like you have not seen yet gets its own row, so each new one is noticed.
+ * Once seen, likes on the same thing fold into one line — "Sam, Alex and 12
+ * others liked your clip" — and so do comments and the rest. Rows sit under
+ * New, Today, This week, This month and Earlier. Opening the screen marks
+ * everything read, but a row that was unread keeps its tint until you leave,
+ * so you can still see what was new.
  */
 
 const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap; tint: keyof typeof colors }> = {
@@ -51,6 +53,7 @@ const VERB: Record<NotificationKind, string> = {
 
 interface Group {
   key: string;
+  section: string;
   kind: NotificationKind;
   targetId: string;
   targetKind: Notification['targetKind'];
@@ -71,9 +74,33 @@ function routeFor(group: Group): string {
   return `/coach-question/${group.targetId}`;
 }
 
+/** Which heading a row sits under: new ones first, then by how long ago. */
+function sectionFor(unread: boolean, at: string): string {
+  if (unread) return 'New';
+  const now = new Date();
+  const then = new Date(at);
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (then.getTime() >= startOfToday) return 'Today';
+  const days = (now.getTime() - then.getTime()) / 86_400_000;
+  if (days < 7) return 'This week';
+  if (days < 31) return 'This month';
+  return 'Earlier';
+}
+const SECTIONS = ['New', 'Today', 'This week', 'This month', 'Earlier'];
+
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
-  const { notifications, users, currentUserId, followRequests, actions } = useApp();
+  const { notifications, users, posts, currentUserId, followRequests, actions } = useApp();
+  // "liked your clip", "liked your photo": the verb names what was liked, not just "post".
+  const verbFor = (group: Group) => {
+    if (group.kind !== 'like' && group.kind !== 'comment' && group.kind !== 'share') return VERB[group.kind];
+    const act = group.kind === 'like' ? 'liked' : group.kind === 'comment' ? 'commented on' : 'shared';
+    if (group.targetKind === 'hit') return `${act} your hit`;
+    if (group.targetKind === 'question') return `${act} your thread`;
+    const post = posts.find((p) => p.id === group.targetId);
+    const thing = !post ? 'post' : post.kind === 'clip' ? 'clip' : post.videoUrl ? 'video' : post.imageUrl ? 'photo' : 'post';
+    return `${act} your ${thing}`;
+  };
 
   const mine = useMemo(
     () => notifications.filter((n) => n.userId === currentUserId),
@@ -86,8 +113,13 @@ export default function Notifications() {
     for (const n of [...mine].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     )) {
-      // Follows are one row per person, never bundled.
-      const key = n.kind === 'follow' || n.kind === 'follow-request' || n.kind === 'follow-accepted' ? `${n.kind}:${n.actorId}` : `${n.kind}:${n.targetKind}:${n.targetId}`;
+      // Follows are one row per person, never bundled. A like not yet seen is
+      // its own row too; once seen it folds in with the other likes on that thing.
+      const key = n.kind === 'follow' || n.kind === 'follow-request' || n.kind === 'follow-accepted'
+        ? `${n.kind}:${n.actorId}`
+        : n.kind === 'like' && !n.read
+          ? `like-new:${n.id}`
+          : `${n.kind}:${n.targetKind}:${n.targetId}:${n.read ? 'seen' : 'new'}`;
       const existing = byTarget.get(key);
       if (existing) {
         if (!existing.actorIds.includes(n.actorId)) existing.actorIds.push(n.actorId);
@@ -96,6 +128,7 @@ export default function Notifications() {
       }
       byTarget.set(key, {
         key,
+        section: sectionFor(!n.read, n.createdAt),
         kind: n.kind,
         targetId: n.targetId,
         targetKind: n.targetKind,
@@ -105,7 +138,7 @@ export default function Notifications() {
         unread: !n.read,
       });
     }
-    return [...byTarget.values()];
+    return [...byTarget.values()].sort((a, b) => SECTIONS.indexOf(a.section) - SECTIONS.indexOf(b.section) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
     // Deliberately keyed on length only: re-grouping as rows are marked read
     // would wipe the tint mid-view.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -127,7 +160,7 @@ export default function Notifications() {
         />
       ) : (
         <View style={styles.list}>
-          {groups.map((group) => {
+          {groups.map((group, index) => {
             const icon = ICON[group.kind];
             const [first, ...rest] = group.actorIds;
             const who =
@@ -137,18 +170,26 @@ export default function Notifications() {
                 ? nameOf(first)
                 : rest.length === 1
                   ? `${nameOf(first)} and ${nameOf(rest[0])}`
-                  : `${nameOf(first)} and ${rest.length} others`;
+                  : `${nameOf(first)}, ${nameOf(rest[0])} and ${rest.length - 1} ${rest.length - 1 === 1 ? 'other' : 'others'}`;
+            const heading = index === 0 || groups[index - 1].section !== group.section ? group.section : null;
 
             return (
+              <React.Fragment key={group.key}>
+              {heading ? <Text style={[styles.heading, index > 0 && { marginTop: spacing.lg }]}>{heading}</Text> : null}
               <Pressable
-                key={group.key}
                 accessibilityRole="link"
-                accessibilityLabel={`${who} ${VERB[group.kind]}`}
+                accessibilityLabel={`${who} ${verbFor(group)}`}
                 onPress={() => { const to = routeFor(group); if (to === '/') { router.navigate('/'); requestScrollToTop('/'); } else router.push(to); }}
                 style={[styles.row, group.unread && styles.rowUnread]}
               >
                 <View>
-                  <Avatar name={nameOf(first)} seed={first} size={44} />
+                  {/* Two faces, overlapped, when more than one person did it. */}
+                  {rest.length ? (
+                    <View style={styles.pair}>
+                      <View style={styles.pairBack}><Avatar name={nameOf(rest[0])} seed={rest[0]} size={32} /></View>
+                      <View style={styles.pairFront}><Avatar name={nameOf(first)} seed={first} size={32} /></View>
+                    </View>
+                  ) : <Avatar name={nameOf(first)} seed={first} size={44} />}
                   <View style={[styles.badge, { backgroundColor: colors[icon.tint] }]}>
                     <Ionicons name={icon.name} size={11} color={colors.brandInk} />
                   </View>
@@ -157,7 +198,7 @@ export default function Notifications() {
                 <View style={styles.body}>
                   <Text style={styles.text}>
                     <Text style={styles.who}>{who}</Text>
-                    <Text> {VERB[group.kind]}</Text>
+                    <Text> {verbFor(group)}</Text>
                   </Text>
                   {group.preview ? (
                     <Text style={styles.preview} numberOfLines={1}>
@@ -175,6 +216,7 @@ export default function Notifications() {
 
                 {group.unread ? <View style={styles.dot} /> : null}
               </Pressable>
+              </React.Fragment>
             );
           })}
         </View>
@@ -185,6 +227,10 @@ export default function Notifications() {
 
 const styleDefinitions = StyleSheet.create({
   list: { gap: 2 },
+  heading: { ...typography.smallStrong, color: colors.text, paddingHorizontal: spacing.sm, paddingBottom: spacing.xs },
+  pair: { width: 44, height: 44 },
+  pairBack: { position: 'absolute', right: 0, top: 0 },
+  pairFront: { position: 'absolute', left: 0, bottom: 0, borderRadius: 18, borderWidth: 2, borderColor: colors.bg },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

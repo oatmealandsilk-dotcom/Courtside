@@ -43,7 +43,7 @@ interface Props {
   /** Counts up on each double tap, so the heart on the button pops with it. */
   pop?: number;
   discInk?: string;
-  /** The picture (or video's first frame) is in. */
+  /** The picture (or video's first frame) is in; false only when the video's player is freed and a rebuilt page fetches again. */
   onReady?: (ready: boolean) => void;
 }
 

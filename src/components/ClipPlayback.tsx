@@ -30,7 +30,11 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   discPinned?: boolean;
   /** A landscape clip: the picture sits in a wide box mid-screen with black around; the disc and line keep to the screen's edges. */
   letterbox?: boolean;
-  /** True once the first frame is in and it can play; the feed uses this to know a page is warm. */
+  /**
+   * True once the first frame is in and it can play; the feed uses this to
+   * know a page is warm. False only when its player is freed, so a rebuilt
+   * page is known to be fetching again (a stall mid-play is not reported).
+   */
   onReady?: (ready: boolean) => void;
   /** A zoom and shift inside the frame, chosen in the editor. */
   crop?: MediaCrop;
@@ -40,7 +44,9 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   const [paused, setPaused] = useState(false);
   const [ready, setReadyState] = useState(false);
   // Once a clip has been ready it counts as ready: a moment of re-buffering mid-play is not a loading disc.
-  const setReady = (ok: boolean) => { setReadyState((was) => was || ok); onReady?.(ok); };
+  const setReady = (ok: boolean) => { setReadyState((was) => was || ok); if (ok) onReady?.(true); };
+  // Its player was freed: a new one starts its fetch from nothing.
+  const gone = () => { setReadyState(false); onReady?.(false); };
   // Sound on, the way a feed on a phone should be; a tap on the disc mutes it.
   const [muted, setMuted] = useState(silent);
   const lastTap = useRef(0);
@@ -99,11 +105,11 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
     <View style={StyleSheet.absoluteFill}>
       {letterbox ? (
         <View style={styles.wideFrame}><View style={cropLayer(crop)}>
-          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent} paused={paused} fit="contain" trimStart={trimStart} trimEnd={trimEnd} onProgress={onProgress} onReady={setReady} />
+          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent || !active} paused={paused} fit="contain" trimStart={trimStart} trimEnd={trimEnd} onProgress={onProgress} onReady={setReady} onGone={gone} />
         </View></View>
       ) : (
         <View style={cropLayer(crop)}>
-          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent} paused={paused} fit={fit} trimStart={trimStart} trimEnd={trimEnd} onProgress={onProgress} onReady={setReady} />
+          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent || !active} paused={paused} fit={fit} trimStart={trimStart} trimEnd={trimEnd} onProgress={onProgress} onReady={setReady} onGone={gone} />
         </View>
       )}
       {!ready && active ? <View pointerEvents="none" style={styles.centre}><CourtSpinner ink={discInk ?? 'white'} /></View> : null}

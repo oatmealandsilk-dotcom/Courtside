@@ -30,6 +30,11 @@ const HOLD = 132;
 // Past halfway the scroller's own snap settles at the strip's top; that is the line.
 const PULL_LINE = HOLD / 2;
 
+/** A page's own key when it has one, otherwise its place. */
+function pageKey(child: React.ReactNode, index: number) {
+  return React.isValidElement(child) && child.key != null ? `k:${child.key}` : `i:${index}`;
+}
+
 export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.ReactNode[]; onIndex: (index: number) => void; /** The page the scroll came to rest on. */ onSettled?: (index: number) => void; initialIndex?: number; /** Pulling down past the first page fetches what is new. */ onRefresh?: () => Promise<void>; /** Shown in the gap the pull opens, beside the disc. */ pullHeader?: React.ReactNode }>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0, onRefresh, pullHeader }, ref) {
   const [height, setHeight] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -186,7 +191,10 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
         >
           {top > 0 ? <View pointerEvents="none" style={{ height: HOLD }} /> : null}
           {children.map((child, index) => (
-            <View key={index} style={{ height }}>
+            // Each page is wrapped under its own key, not its place: when a
+            // refresh reorders the feed, a page that moves keeps everything it
+            // has built, its buffered video included, instead of starting over.
+            <View key={pageKey(child, index)} style={{ height }}>
               {child}
               {index === 0 && pulled ? <View pointerEvents="none" style={{ position: 'absolute', top: -22, left: -22, right: -22, height: 70, borderTopWidth: 22, borderLeftWidth: 22, borderRightWidth: 22, borderColor: colors.bg, borderTopLeftRadius: 44, borderTopRightRadius: 44 }} /> : null}
             </View>

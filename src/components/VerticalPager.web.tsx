@@ -8,6 +8,11 @@ import { colors } from '@/theme';
 
 export interface VerticalPagerHandle { scrollToTop: () => void }
 
+/** A page's own key when it has one, otherwise its place. */
+function pageKey(child: React.ReactNode, index: number) {
+  return React.isValidElement(child) && child.key != null ? `k:${child.key}` : `i:${index}`;
+}
+
 export const VerticalPager = forwardRef<VerticalPagerHandle, {
   children: React.ReactNode[];
   onIndex: (index: number) => void;
@@ -194,7 +199,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
     }}
     style={{ height: '100%', width: '100%', overflowY: 'auto', scrollSnapType: 'y mandatory', touchAction:'none', userSelect:'none',
       overscrollBehaviorY: 'contain', scrollbarWidth: 'thin', scrollbarColor: '#8B8373 #F1EFE6' }}>
-    {children.map((child, index) => <div key={index} style={{ display: 'flex', flexDirection: 'column',
+    {/* Under each page's own key, not its place: a page a refresh moves keeps its buffered video. */}
+    {children.map((child, index) => <div key={pageKey(child, index)} style={{ display: 'flex', flexDirection: 'column',
       height: '100%', width: '100%', scrollSnapAlign: 'start', scrollSnapStop: 'always',
       position: 'relative', overflow: 'hidden' }}>{child}</div>)}
   </div>

@@ -160,11 +160,12 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
           : poster
             ? <Image source={{ uri: poster }} resizeMode="cover" style={{ width: '100%', height: '100%' }}/>
             : <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="videocam" size={48} color={colors.textMuted}/></View>}
-        <View pointerEvents="none" style={{ position: 'absolute', left: 10, bottom: 10, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <Text style={{ color: 'white', fontSize: 11, fontWeight: '700', letterSpacing: 0.4 }}>{describe(value)}</Text>
+        {/* The small labels over the preview wear the app's own colours, not a black smudge. */}
+        <View pointerEvents="none" style={{ position: 'absolute', left: 10, bottom: 10, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: colors.brand }}>
+          <Text style={{ color: colors.brandInk, fontSize: 11, fontWeight: '700', letterSpacing: 0.4 }}>{describe(value)}</Text>
         </View>
-        <View pointerEvents="none" style={{ position: 'absolute', right: 10, top: 10, width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' }}>
-          <Ionicons name="expand-outline" size={16} color="white" />
+        <View pointerEvents="none" style={{ position: 'absolute', right: 10, top: 10, width: 30, height: 30, borderRadius: 15, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name="expand-outline" size={16} color={colors.brandInk} />
         </View>
       </Pressable>
       {/* Full screen, the clip playing with sound. One tap anywhere brings it back. */}

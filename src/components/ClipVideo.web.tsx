@@ -9,7 +9,9 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   onProgress?: (fraction: number, seconds: number, length: number) => void;
   onReady?: (ready: boolean) => void;
   onSize?: (width: number, height: number) => void;
-}>(function ClipVideo({ uri, poster, active = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, onProgress, onReady, onSize }, ref) {
+  /** The clip left the page (or was swapped for another): whatever it had fetched is gone with it. */
+  onGone?: () => void;
+}>(function ClipVideo({ uri, poster, active = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, onProgress, onReady, onSize, onGone }, ref) {
   const el = useRef<HTMLVideoElement>(null);
   useImperativeHandle(ref, () => ({ seek: (seconds) => { if (el.current) el.current.currentTime = seconds; }, player: null }), []);
   useEffect(() => {
@@ -17,8 +19,9 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
     if (!video) return;
     if (active && !paused) video.play().catch(() => undefined); else video.pause();
   }, [active, paused]);
-  const latest = useRef({ onProgress, onReady, onSize });
-  latest.current = { onProgress, onReady, onSize };
+  const latest = useRef({ onProgress, onReady, onSize, onGone });
+  latest.current = { onProgress, onReady, onSize, onGone };
+  useEffect(() => () => latest.current.onGone?.(), [uri]);
   useEffect(() => {
     const video = el.current;
     if (!video) return;

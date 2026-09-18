@@ -1,17 +1,20 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar, Field } from '@/components/ui';
 import { useMentionCandidates } from '@/features/mentions/useMentionCandidates';
 import { useApp } from '@/store/AppContext';
+import * as haptics from '@/lib/haptics';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /**
- * "Tag players": the people in the clip, as chips. Tap + to search — people
- * you follow first, then followers — tap a name to add, × to take one off.
- * Each tagged player is told, and the post shows up on their Tagged tab.
+ * "Tag players": the people in the clip, as chips. Tap the button to search —
+ * people you follow first, then followers. A tap on a name tags them there
+ * and then: their row checks itself and the search closes, the way Instagram
+ * does it. × on a chip takes one off. Each tagged player is told, and the
+ * post shows up on their Tagged tab.
  */
 export function TagPlayers({ tagged, onChange }: { tagged: string[]; onChange: (ids: string[]) => void }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -19,15 +22,27 @@ export function TagPlayers({ tagged, onChange }: { tagged: string[]; onChange: (
   const candidates = useMentionCandidates();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const matches = open ? candidates(query, 6).filter(({ user }) => !tagged.includes(user.id)) : [];
+  // The one just tapped keeps its row, checked, for the beat before the search closes.
+  const [justTagged, setJustTagged] = useState<string | null>(null);
+  const closing = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const matches = open ? candidates(query, 6).filter(({ user }) => !tagged.includes(user.id) || user.id === justTagged) : [];
+  const close = () => { if (closing.current) clearTimeout(closing.current); setOpen(false); setQuery(''); setJustTagged(null); };
+  const tag = (id: string) => {
+    if (tagged.includes(id)) return;
+    haptics.tap();
+    onChange([...tagged, id]);
+    setJustTagged(id);
+    if (closing.current) clearTimeout(closing.current);
+    closing.current = setTimeout(close, 260);
+  };
   return (
     <View style={styles.tagBlock}>
-      {/* Closed: one box button. Open: the search box with a square Done beside it, the same height. */}
+      {/* Closed: one box button. Open: the search box, with Cancel beside it the way iPhone search does it. */}
       {open ? (
         <View style={styles.searchRow}>
           <View style={{ flex: 1 }}><Field value={query} onChangeText={setQuery} placeholder="Search by name or @handle" /></View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Done tagging" onPress={() => { setOpen(false); setQuery(''); }} style={styles.done}>
-            <Ionicons name="checkmark" size={22} color={colors.brandInk} />
+          <Pressable accessibilityRole="button" accessibilityLabel="Stop tagging" onPress={close} hitSlop={8}>
+            <Text style={styles.cancel}>Cancel</Text>
           </Pressable>
         </View>
       ) : (
@@ -54,16 +69,19 @@ export function TagPlayers({ tagged, onChange }: { tagged: string[]; onChange: (
       ) : null}
       {open ? (
         <View style={styles.tagSearch}>
-          {matches.map(({ user, reason }) => (
-            <Pressable key={user.id} accessibilityRole="button" accessibilityLabel={`Tag ${user.name}`} onPress={() => { onChange([...tagged, user.id]); setQuery(''); }} style={styles.tagResult}>
-              <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={32} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.tagName}>{user.name}</Text>
-                <Text style={styles.tagHandle}>@{user.handle}{reason ? ` · ${reason}` : ''}</Text>
-              </View>
-              <Ionicons name="add-circle-outline" size={20} color={colors.brand} />
-            </Pressable>
-          ))}
+          {matches.map(({ user, reason }) => {
+            const on = tagged.includes(user.id);
+            return (
+              <Pressable key={user.id} accessibilityRole="button" accessibilityState={{ checked: on }} accessibilityLabel={`Tag ${user.name}`} onPress={() => tag(user.id)} style={styles.tagResult}>
+                <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={32} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.tagName}>{user.name}</Text>
+                  <Text style={styles.tagHandle}>@{user.handle}{reason ? ` · ${reason}` : ''}</Text>
+                </View>
+                <View style={[styles.check, on && styles.checkOn]}>{on ? <Ionicons name="checkmark" size={15} color={colors.brandInk} /> : null}</View>
+              </Pressable>
+            );
+          })}
           {!matches.length ? <Text style={styles.tagHandle}>{query ? 'No one by that name.' : 'Start typing a name.'}</Text> : null}
         </View>
       ) : null}
@@ -74,7 +92,9 @@ export function TagPlayers({ tagged, onChange }: { tagged: string[]; onChange: (
 const styleDefinitions = StyleSheet.create({
   button: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: spacing.sm, paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.md, borderWidth: 1, borderColor: colors.brand, backgroundColor: colors.brandDim },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  done: { width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brand },
+  cancel: { ...typography.bodyStrong, color: colors.brand, paddingHorizontal: 4 },
+  check: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  checkOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   buttonText: { ...typography.smallStrong, color: colors.brand },
   count: { ...typography.smallStrong, color: colors.brandInk, backgroundColor: colors.brand, minWidth: 20, textAlign: 'center', borderRadius: 10, paddingHorizontal: 6, overflow: 'hidden' },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },

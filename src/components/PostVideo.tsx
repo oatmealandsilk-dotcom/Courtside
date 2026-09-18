@@ -180,9 +180,12 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
         <View style={styles.timeRow}>
           <Text style={styles.time}>{clock(time.at)} <Text style={styles.timeDim}>/ {clock(time.length)}</Text></Text>
           <View style={{ flex: 1 }} />
-          <Pressable accessibilityRole="button" accessibilityLabel={muted ? 'Unmute' : 'Mute'} hitSlop={10} onPress={() => { setMuted((m) => !m); reveal(); }} style={styles.small}>
-            <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={18} color="white" />
-          </Pressable>
+          {/* Posted without sound: it stays silent, and there is no button to say otherwise. */}
+          {silent ? null : (
+            <Pressable accessibilityRole="button" accessibilityLabel={muted ? 'Unmute' : 'Mute'} hitSlop={10} onPress={() => { setMuted((m) => !m); reveal(); }} style={styles.small}>
+              <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={18} color="white" />
+            </Pressable>
+          )}
           <Pressable accessibilityRole="button" accessibilityLabel={full ? 'Leave full screen' : 'Full screen'} hitSlop={10} onPress={() => (full ? closeFull() : openFull())} style={styles.small}>
             <Ionicons name={full ? 'contract' : 'expand'} size={18} color="white" />
           </Pressable>
@@ -198,6 +201,10 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
   );
 
   const shared = player.current?.player ?? null;
+  // On a phone full screen shows this very player, so the one on the page
+  // keeps running and it is the sound. Only in a browser does full screen
+  // play a copy of its own, and then the one on the page stands aside.
+  const ownCopy = full && !shared;
   // Hover is judged on the whole player, so crossing a button is not "leaving".
   const hovering = useRef(false);
   const hoverIn = () => { hovering.current = true; if (hideTimer.current) clearTimeout(hideTimer.current); if (!shown) show(true); };
@@ -205,8 +212,10 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
   return (
     <View ref={rootRef} style={StyleSheet.absoluteFill} onPointerEnter={desktopWeb ? hoverIn : undefined} onPointerLeave={desktopWeb ? hoverOut : undefined}>
       <View style={cropLayer(crop)}>
-        <ClipVideo ref={player} uri={uri} poster={poster} active={active} muted={muted} paused={paused} fit="cover" trimStart={trimStart} trimEnd={trimEnd}
-          onProgress={(fraction, at, length) => { progress.value = fraction; timeRef.current = { fraction, at, length }; if (shownRef.current || !timeRef.current.length || length !== time.length) setTime({ fraction, at, length }); }} onReady={(ok) => { setReady(ok); onReady?.(ok); }} onSize={onSize} />
+        {/* The page is told only "in" and, when the player is freed, "gone"; a stall mid-play is this player's own spinner. */}
+        <ClipVideo ref={player} uri={uri} poster={poster} active={active && !ownCopy} muted={silent || muted || !active || ownCopy} paused={paused} fit="cover" trimStart={trimStart} trimEnd={trimEnd}
+          onProgress={(fraction, at, length) => { progress.value = fraction; timeRef.current = { fraction, at, length }; if (shownRef.current || !timeRef.current.length || length !== time.length) setTime({ fraction, at, length }); }}
+          onReady={(ok) => { setReady(ok); if (ok) onReady?.(true); }} onGone={() => onReady?.(false)} onSize={onSize} />
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel="Show video controls" onPress={(e) => tap(e.nativeEvent.locationX)} onLayout={(e) => { width.current = Math.max(1, e.nativeEvent.layout.width); }} style={StyleSheet.absoluteFill} />
       {!ready && active && !paused ? <View pointerEvents="none" style={styles.centre}><CourtSpinner ink={discInk ?? 'white'} /></View> : null}
@@ -222,7 +231,7 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
             {shared ? (
               <View style={cropLayer(crop)}><VideoView player={shared} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} allowsPictureInPicture={false} /></View>
             ) : (
-              <View style={cropLayer(crop)}><ClipVideo uri={uri} poster={poster} active={full} muted={muted} paused={paused} fit="contain" trimStart={trimStart} trimEnd={trimEnd} /></View>
+              <View style={cropLayer(crop)}><ClipVideo uri={uri} poster={poster} active={full} muted={silent || muted} paused={paused} fit="contain" trimStart={trimStart} trimEnd={trimEnd} /></View>
             )}
             <Pressable accessibilityRole="button" accessibilityLabel="Show video controls" onPress={(e) => tap(e.nativeEvent.locationX)} style={StyleSheet.absoluteFill} />
             {controls}

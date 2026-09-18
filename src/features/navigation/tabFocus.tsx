@@ -29,7 +29,12 @@ export function useTabActive(): boolean {
 export function asTabRoute<P extends object>(Screen: React.ComponentType<P>) {
   return function TabRoute(props: P) {
     const inPager = useContext(TabFocusContext) !== undefined;
-    if (Platform.OS !== 'web' && !inPager && Object.keys(props).length === 0) return null;
+    // The router hands every screen a `segment` prop of its own, so "no
+    // props" never held and the hidden copy was fully alive: a second Home
+    // feed, with its own player on the first clip, fighting the visible one.
+    // Only props a caller passed (a preview, one person's feed) count.
+    const own = Object.keys(props).filter((key) => key !== 'segment');
+    if (Platform.OS !== 'web' && !inPager && own.length === 0) return null;
     return <Screen {...props} />;
   };
 }
