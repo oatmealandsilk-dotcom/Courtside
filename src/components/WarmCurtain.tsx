@@ -31,7 +31,7 @@ export function WarmCurtain() {
         <BrandMark size={84} />
         <Text style={styles.wordmark}>CourtSide</Text>
       </View>
-      <Text style={styles.tagline}>Play. Talk. Improve.</Text>
+      <Text style={styles.tagline}>Growing the game</Text>
     </Animated.View>
   );
 }
@@ -40,5 +40,5 @@ const styles = StyleSheet.create({
   curtain: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', zIndex: 60 },
   brand: { alignItems: 'center', gap: spacing.md },
   wordmark: { fontSize: 34, fontWeight: '800', color: colors.brand, letterSpacing: -1 },
-  tagline: { position: 'absolute', bottom: 48, fontSize: 12, fontWeight: '600', letterSpacing: 1.4, color: colors.textFaint, textTransform: 'uppercase' },
+  tagline: { position: 'absolute', bottom: 40, fontSize: 12, fontWeight: '600', letterSpacing: 1.4, color: colors.textFaint, textTransform: 'uppercase' },
 });

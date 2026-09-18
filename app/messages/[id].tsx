@@ -3,6 +3,7 @@ import { PlayerName } from '@/components/PlayerName';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Animated,
   Pressable,
@@ -11,11 +12,13 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Clipboard from 'expo-clipboard';
 
 import { Avatar, EmptyState } from '@/components/ui';
 import { Tappable, useDoubleTap } from '@/components/Tappable';
@@ -25,9 +28,11 @@ import { useApp } from '@/store/AppContext';
 import { MentionSuggestions } from '@/components/MentionSuggestions';
 import { useMentionCandidates } from '@/features/mentions/useMentionCandidates';
 import { activeMention, applyMention } from '@/lib/mentions';
+import { show as showToast } from '@/lib/toast';
+import * as haptics from '@/lib/haptics';
 import type { Message } from '@/data/types';
 import { CHAT_THEMES, loadChatTheme, saveChatTheme, type ChatTheme } from '@/features/messaging/chatTheme';
-import Reanimated, { Easing, FadeIn, FadeInUp, FadeOut, LinearTransition, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Reanimated, { Easing, FadeIn, FadeInDown, FadeInUp, FadeOut, LinearTransition, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /** Two messages from the same person this close together read as one run: tighter, one tail. */
@@ -43,7 +48,9 @@ export default function Thread() {
   const insets = useSafeAreaInsets();
   const { conversations, messages, users, posts, questions, currentUserId, defaultReaction, actions } = useApp();
   const [draft, setDraft] = useState('');
-  const [picking, setPicking] = useState<string | null>(null);
+  // Holding a message opens its menu over the chat; Edit puts its words back in the box.
+  const [menu, setMenu] = useState<MenuTarget | null>(null);
+  const [editing, setEditing] = useState<Message | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
   // A phone browser's keyboard covers the bottom of the page without telling the layout; the visible-area size says how much.
   const [keyboardInset, setKeyboardInset] = useState(0);
@@ -117,6 +124,12 @@ export default function Thread() {
   const send = () => {
     const body = draft.trim();
     if (!body) return;
+    if (editing) {
+      actions.editMessage(editing.id, body);
+      setEditing(null);
+      setDraft('');
+      return;
+    }
     actions.sendMessage(conversation.id, body);
     setDraft('');
     // Stay in the box so the next message can be typed straight away.
@@ -195,10 +208,13 @@ export default function Thread() {
             return (
               <React.Fragment key={message.id}>
               {stamp}
-              <Reanimated.View entering={arrive} layout={LinearTransition.duration(120)} style={[mine ? styles.mineAlign : styles.theirsAlign, inRun && styles.inRun]}>
+              <Reanimated.View entering={arrive} layout={LinearTransition.duration(120)} style={[styles.row, mine ? styles.rowMine : styles.rowTheirs, inRun && styles.inRun]}>
+              <HoldArea onHold={(rect) => setMenu({ message, mine, rect })} style={styles.sharedCardArea}>
+              {(hold) => (
               <Tappable
                 accessibilityRole="link"
                 scaleTo={0.97}
+                onLongPress={hold}
                 onPress={() =>
                   shared
                     ? router.push(
@@ -208,7 +224,7 @@ export default function Thread() {
                       )
                     : undefined
                 }
-                style={[styles.sharedCard, mine ? styles.mineAlign : styles.theirsAlign]}
+                style={styles.sharedCard}
               >
                 <View style={styles.sharedHead}>
                   <Ionicons
@@ -224,6 +240,8 @@ export default function Thread() {
                   {label}
                 </Text>
               </Tappable>
+              )}
+              </HoldArea>
               </Reanimated.View>
               </React.Fragment>
             );
@@ -241,8 +259,8 @@ export default function Thread() {
               tint={chatTheme}
               styles={styles}
               me={currentUserId}
-              picking={picking === message.id}
-              onPick={(open) => setPicking(open ? message.id : null)}
+              held={menu?.message.id === message.id}
+              onHold={(rect) => setMenu({ message, mine, rect })}
               onReact={(emoji) => actions.reactToMessage(message.id, emoji)}
             />
             </React.Fragment>
@@ -282,6 +300,31 @@ export default function Thread() {
         </Reanimated.View>
       ) : null}
 
+      {menu ? (
+        <MessageMenu
+          target={menu}
+          me={currentUserId}
+          tint={chatTheme}
+          styles={styles}
+          onClose={() => setMenu(null)}
+          onReact={(emoji) => actions.reactToMessage(menu.message.id, emoji)}
+          onCopy={() => { void Clipboard.setStringAsync(menu.message.body); haptics.tap(); showToast({ title: 'Copied', icon: 'copy-outline' }); }}
+          onEdit={() => { setEditing(menu.message); setDraft(menu.message.body); setCaret(menu.message.body.length); setTimeout(() => inputRef.current?.focus(), 60); }}
+          onUnsend={() => actions.unsendMessage(menu.message.id)}
+          onDelete={() => actions.deleteMessageForMe(menu.message.id)}
+        />
+      ) : null}
+
+      {editing ? (
+        <View style={styles.editBar}>
+          <Ionicons name="create-outline" size={16} color={colors.brand} />
+          <Text style={styles.editLabel} numberOfLines={1}>Editing message</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Stop editing" hitSlop={10} onPress={() => { setEditing(null); setDraft(''); }}>
+            <Ionicons name="close" size={20} color={colors.textMuted} />
+          </Pressable>
+        </View>
+      ) : null}
+
       {mention && mentionRows.length ? (
         <View style={styles.mentionTray}>
           <MentionSuggestions candidates={mentionRows} onPick={pickMention} />
@@ -314,7 +357,7 @@ export default function Thread() {
           returnKeyType="send"
           accessibilityLabel="Message text"
         />
-        <SendButton ready={!!draft.trim()} onPress={send} styles={styles} tint={chatTheme} />
+        <SendButton ready={!!draft.trim() && (!editing || draft.trim() !== editing.body)} editing={!!editing} onPress={send} styles={styles} tint={chatTheme} />
       </View>
     </KeyboardAvoidingView>
   );
@@ -326,9 +369,11 @@ export default function Thread() {
  * Double tap leaves your default reaction; a long press opens the picker for a
  * different one. Reactions sit under the bubble and are tappable to remove.
  */
-function Bubble({ message, mine, inRun, tail, arrive, tint, styles, me, picking, onPick, onReact }: {
+function Bubble({ message, mine, inRun, tail, arrive, tint, styles, me, held = false, onHold, onReact }: {
   message: Message; mine: boolean; inRun: boolean; tail: boolean; arrive?: FadeInUp; tint: ChatTheme | null; styles: any; me: string | null;
-  picking: boolean; onPick: (open: boolean) => void; onReact: (emoji?: string) => void;
+  /** Its menu is open: the lifted copy stands in for it, so it steps out of sight. */
+  held?: boolean;
+  onHold: (rect: Rect) => void; onReact: (emoji?: string) => void;
 }) {
   const tap = useDoubleTap(() => onReact());
   const reactions = message.reactions ?? {};
@@ -343,54 +388,123 @@ function Bubble({ message, mine, inRun, tail, arrive, tint, styles, me, picking,
   const reacted = Object.keys(tally).length > 0;
 
   return (
-    <Reanimated.View entering={arrive} layout={LinearTransition.duration(120)} style={[mine ? styles.mineAlign : styles.theirsAlign, inRun && styles.inRun]}>
+    // The row spans the chat, so the bubble's width limit is a share of the
+    // chat itself. (A row that shrank to fit its text made that limit a share
+    // of the text's own width, and short messages broke onto a second line.)
+    <Reanimated.View entering={arrive} layout={LinearTransition.duration(120)} style={[styles.row, mine ? styles.rowMine : styles.rowTheirs, inRun && styles.inRun]}>
       {/* The chip is anchored to the bubble, not the row, so it sits on the
           bubble's bottom inner corner however wide the message is. */}
-      <View style={[styles.bubbleWrap, mine ? styles.mineAlign : styles.theirsAlign, reacted && styles.bubbleWrapReacted]}>
-        <Pressable
-          onPress={tap}
-          onLongPress={() => onPick(true)}
-          delayLongPress={280}
-          accessibilityRole="button"
-          accessibilityLabel={`Message: ${message.body}. Double tap to react, hold to choose a reaction.`}
-          style={[styles.bubble, mine ? styles.mine : styles.theirs, mine && tint && { backgroundColor: tint.mine }, !tail && styles.noTail]}
-        >
-          <RichText style={[styles.bubbleText, mine && { color: tint?.ink ?? colors.brandInk }]} mentionStyle={mine ? { color: tint?.ink ?? colors.brandInk, textDecorationLine: 'underline' } : undefined}>{message.body}</RichText>
-        </Pressable>
+      <HoldArea onHold={onHold} style={[styles.bubbleWrap, reacted && styles.bubbleWrapReacted, held && { opacity: 0 }]}>
+        {(hold) => (
+          <>
+            <Pressable
+              onPress={tap}
+              onLongPress={hold}
+              delayLongPress={320}
+              accessibilityRole="button"
+              accessibilityLabel={`Message: ${message.body}. Double tap to react, hold for more.`}
+              style={[styles.bubble, mine ? styles.mine : styles.theirs, mine && tint && { backgroundColor: tint.mine }, !tail && styles.noTail]}
+            >
+              <RichText style={[styles.bubbleText, mine && { color: tint?.ink ?? colors.brandInk }]} mentionStyle={mine ? { color: tint?.ink ?? colors.brandInk, textDecorationLine: 'underline' } : undefined}>{message.body}</RichText>
+            </Pressable>
 
-        {reacted ? (
-          // Instagram placement: tucked over the bottom corner that faces the
-          // other person — bottom-left on yours, bottom-right on theirs.
-          <View style={[styles.reactions, mine ? styles.reactionsMine : styles.reactionsTheirs]}>
-            {Object.entries(tally).map(([emoji, count]) => (
-              <ReactionChip
-                key={emoji}
-                emoji={emoji}
-                count={count}
-                mine={mineMark === emoji}
-                onPress={() => onReact(emoji)}
-                style={[styles.chip, mineMark === emoji && styles.chipMine]}
-              />
-            ))}
+            {reacted ? (
+              // Instagram placement: tucked over the bottom corner that faces the
+              // other person — bottom-left on yours, bottom-right on theirs.
+              <View style={[styles.reactions, mine ? styles.reactionsMine : styles.reactionsTheirs]}>
+                {Object.entries(tally).map(([emoji, count]) => (
+                  <ReactionChip
+                    key={emoji}
+                    emoji={emoji}
+                    count={count}
+                    mine={mineMark === emoji}
+                    onPress={() => onReact(emoji)}
+                    style={[styles.chip, mineMark === emoji && styles.chipMine]}
+                  />
+                ))}
+              </View>
+            ) : null}
+          </>
+        )}
+      </HoldArea>
+      {message.editedAt ? <Text style={styles.edited}>Edited</Text> : null}
+    </Reanimated.View>
+  );
+}
+
+interface Rect { x: number; y: number; w: number; h: number }
+interface MenuTarget { message: Message; mine: boolean; rect: Rect }
+
+/** Wraps a message so a hold can tell the menu exactly where the message sits on screen. */
+function HoldArea({ onHold, style, children }: { onHold: (rect: Rect) => void; style?: any; children: (hold: () => void) => React.ReactNode }) {
+  const ref = useRef<View>(null);
+  const hold = () => {
+    haptics.tap();
+    ref.current?.measureInWindow((x, y, w, h) => onHold({ x, y, w, h }));
+  };
+  return <View ref={ref} collapsable={false} style={style}>{children(hold)}</View>;
+}
+
+/**
+ * What a held message offers, the way iMessage and Instagram show it: the
+ * chat dims, the message stays lifted where it was, the reactions sit above
+ * it and the actions below. Your own message: Copy, Edit, Unsend, Delete.
+ * Theirs: Copy and Delete. Delete only takes it out of your own view.
+ */
+function MessageMenu({ target, me, tint, styles, onClose, onReact, onCopy, onEdit, onUnsend, onDelete }: {
+  target: MenuTarget; me: string | null; tint: ChatTheme | null; styles: any;
+  onClose: () => void; onReact: (emoji: string) => void; onCopy: () => void; onEdit: () => void; onUnsend: () => void; onDelete: () => void;
+}) {
+  const { width: W, height: H } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const { message, mine, rect } = target;
+  const text = message.kind === 'text';
+  const actions = [
+    ...(text ? [{ key: 'copy', label: 'Copy', icon: 'copy-outline' as const, run: onCopy }] : []),
+    ...(mine && text ? [{ key: 'edit', label: 'Edit', icon: 'create-outline' as const, run: onEdit }] : []),
+    ...(mine ? [{ key: 'unsend', label: 'Unsend', icon: 'arrow-undo-outline' as const, run: onUnsend }] : []),
+    { key: 'delete', label: mine ? 'Delete for you' : 'Delete', icon: 'trash-outline' as const, run: onDelete, danger: true },
+  ];
+  const ROW = 46, CARD_W = 220, BAR_H = 46, GAP = 8;
+  const cardH = actions.length * ROW;
+  // Reactions above, the message, the actions below; the group slides up or
+  // down as one if it would run off the screen, the way iMessage does.
+  const top = rect.y - BAR_H - GAP;
+  const bottom = rect.y + rect.h + GAP + cardH;
+  const floor = H - insets.bottom - 12;
+  const ceiling = insets.top + 12;
+  let shift = 0;
+  if (bottom > floor) shift = bottom - floor;
+  if (top - shift < ceiling) shift = top - ceiling;
+  const side = (w: number) => (mine ? { left: Math.max(12, Math.min(W - w - 12, rect.x + rect.w - w)) } : { left: Math.max(12, Math.min(W - w - 12, rect.x)) });
+  const mark = me ? message.reactions?.[me] : undefined;
+  const pick = (run: () => void) => { onClose(); run(); };
+  return (
+    <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
+      <Reanimated.View entering={FadeIn.duration(140)} style={StyleSheet.absoluteFill}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close menu" onPress={onClose} style={[StyleSheet.absoluteFill, styles.menuBackdrop]} />
+        {message.kind === 'text' ? (
+          <View pointerEvents="none" style={[styles.bubble, mine ? styles.mine : styles.theirs, mine && tint && { backgroundColor: tint.mine }, styles.lifted, { position: 'absolute', left: rect.x, top: rect.y - shift, width: rect.w, alignSelf: 'auto' }]}>
+            <RichText style={[styles.bubbleText, mine && { color: tint?.ink ?? colors.brandInk }]}>{message.body}</RichText>
           </View>
         ) : null}
-      </View>
-
-      {picking ? (
-        <View style={[styles.pickerRow, mine ? styles.theirsAlign : styles.mineAlign]}>
+        <Reanimated.View entering={FadeInDown.duration(160).easing(Easing.out(Easing.cubic))} style={[styles.menuReactions, { top: top - shift, height: BAR_H }, side(REACTIONS.length * 38 + 12)]}>
           {REACTIONS.map((emoji) => (
-            <Tappable
-              key={emoji}
-              accessibilityLabel={`React with ${emoji}`}
-              onPress={() => { onReact(emoji); onPick(false); }}
-              style={[styles.pickerItem, mineMark === emoji && styles.pickerItemOn]}
-            >
-              <Text style={{ fontSize: 19 }}>{emoji}</Text>
-            </Tappable>
+            <Pressable key={emoji} accessibilityRole="button" accessibilityLabel={`React with ${emoji}`} onPress={() => pick(() => onReact(emoji))} style={[styles.menuReaction, mark === emoji && styles.menuReactionOn]}>
+              <Text style={{ fontSize: 22 }}>{emoji}</Text>
+            </Pressable>
           ))}
-        </View>
-      ) : null}
-    </Reanimated.View>
+        </Reanimated.View>
+        <Reanimated.View entering={FadeInUp.duration(160).easing(Easing.out(Easing.cubic))} style={[styles.menuCard, { top: rect.y + rect.h + GAP - shift, width: CARD_W }, side(CARD_W)]}>
+          {actions.map((a, i) => (
+            <Pressable key={a.key} accessibilityRole="button" onPress={() => pick(a.run)} style={({ pressed }) => [styles.menuRow, i > 0 && styles.menuRowRule, pressed && styles.menuRowPressed]}>
+              <Text style={[styles.menuLabel, a.danger && { color: colors.danger }]}>{a.label}</Text>
+              <Ionicons name={a.icon} size={19} color={a.danger ? colors.danger : colors.text} />
+            </Pressable>
+          ))}
+        </Reanimated.View>
+      </Reanimated.View>
+    </Modal>
   );
 }
 
@@ -405,14 +519,14 @@ const EMOJI = [
 ];
 
 /** The send arrow: dim and small with nothing to send, springing up to full size as you type. */
-function SendButton({ ready, onPress, styles, tint }: { ready: boolean; onPress: () => void; styles: any; tint: ChatTheme | null }) {
+function SendButton({ ready, editing = false, onPress, styles, tint }: { ready: boolean; editing?: boolean; onPress: () => void; styles: any; tint: ChatTheme | null }) {
   const on = useSharedValue(ready ? 1 : 0);
   useEffect(() => { on.value = ready ? withSpring(1, { damping: 14, stiffness: 260 }) : withTiming(0, { duration: 160 }); }, [ready, on]);
   const style = useAnimatedStyle(() => ({ opacity: 0.4 + 0.6 * on.value, transform: [{ scale: 0.86 + 0.14 * on.value }] }));
   return (
     <Reanimated.View style={style}>
-      <Tappable immediate onPress={onPress} disabled={!ready} accessibilityLabel="Send message" style={[styles.send, tint && { backgroundColor: tint.mine }]}>
-        <Ionicons name="arrow-up" size={19} color={tint?.ink ?? colors.brandInk} />
+      <Tappable immediate onPress={onPress} disabled={!ready} accessibilityLabel={editing ? 'Save edit' : 'Send message'} style={[styles.send, tint && { backgroundColor: tint.mine }]}>
+        <Ionicons name={editing ? 'checkmark' : 'arrow-up'} size={19} color={tint?.ink ?? colors.brandInk} />
       </Tappable>
     </Reanimated.View>
   );
@@ -476,6 +590,23 @@ const styleDefinitions = StyleSheet.create({
   theirs: { alignSelf: 'flex-start', backgroundColor: colors.surfaceAlt, borderBottomLeftRadius: 6 },
   bubbleText: { ...typography.body, color: colors.text, lineHeight: 21 },
   bubbleWrap: { maxWidth: '78%' },
+  row: { width: '100%' },
+  rowMine: { alignItems: 'flex-end' },
+  rowTheirs: { alignItems: 'flex-start' },
+  sharedCardArea: { maxWidth: '78%' },
+  edited: { ...typography.caption, color: colors.textFaint, letterSpacing: 0, marginTop: 3, marginHorizontal: 6 },
+  menuBackdrop: { backgroundColor: colors.overlay },
+  lifted: { transform: [{ scale: 1.03 }], shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
+  menuReactions: { position: 'absolute', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, borderRadius: radius.pill, backgroundColor: colors.bgElevated, shadowColor: '#000', shadowOpacity: 0.16, shadowRadius: 14, shadowOffset: { width: 0, height: 4 } },
+  menuReaction: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  menuReactionOn: { backgroundColor: colors.brandDim },
+  menuCard: { position: 'absolute', borderRadius: radius.lg, backgroundColor: colors.bgElevated, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 16, shadowOffset: { width: 0, height: 6 } },
+  menuRow: { height: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg },
+  menuRowRule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  menuRowPressed: { backgroundColor: colors.surfaceAlt },
+  menuLabel: { ...typography.body, color: colors.text },
+  editBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, maxWidth: 700, width: '100%', alignSelf: 'center' },
+  editLabel: { ...typography.smallStrong, color: colors.brand, flex: 1 },
   // Leaves room for the chip that hangs off the bottom of the bubble.
   bubbleWrapReacted: { marginBottom: 12 },
   reactions: { position: 'absolute', bottom: -11, flexDirection: 'row', gap: 3, zIndex: 2 },
@@ -491,18 +622,6 @@ const styleDefinitions = StyleSheet.create({
     borderColor: colors.bg,
   },
   chipMine: { backgroundColor: colors.brandDim },
-  pickerRow: {
-    flexDirection: 'row',
-    gap: 2,
-    marginTop: 4,
-    padding: 4,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  pickerItem: { paddingHorizontal: 5, paddingVertical: 3, borderRadius: radius.pill },
-  pickerItemOn: { backgroundColor: colors.brandDim },
   emojiTray: {
     flexDirection: 'row',
     flexWrap: 'wrap',

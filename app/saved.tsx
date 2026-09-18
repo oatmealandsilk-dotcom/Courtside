@@ -1,22 +1,26 @@
-import { PlayerName } from '@/components/PlayerName';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { QuestionCard } from '@/components/QuestionCard';
 import { EmptyState, Screen, SegmentedControl } from '@/components/ui';
-import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, spacing, typography } from '@/theme';
 
 /** Everything the player has bookmarked: clips and posts, plus discussions. */
 export default function Saved() {
   const styles = useThemedStyles(styleDefinitions);
   const { saved, posts, questions, users, actions } = useApp();
   const [tab, setTab] = useState<'videos' | 'discussions'>('videos');
+  // The grid is three across, sized from its own measured width, the way the profile grid is.
+  const { width: windowWidth } = useWindowDimensions();
+  const [gridW, setGridW] = useState(0);
+  const tileW = Math.floor((gridW || windowWidth - spacing.lg * 2) / 3);
+  const tileH = Math.round((tileW * 4) / 3);
 
   const savedPosts = saved.postIds
     .map((id) => posts.find((p) => p.id === id))
@@ -44,49 +48,26 @@ export default function Saved() {
 
       {tab === 'videos' ? (
         savedPosts.length ? (
-          <View style={styles.grid}>
+          // The profile grid's look: tall tiles, the picture edge to edge and nothing else on it
+          // but a small mark for a video. A post with no picture shows its words instead.
+          <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>
             {savedPosts.map((post) => {
               const author = users.find((u) => u.id === post.authorId);
+              const picture = post.thumbnailUrl ?? post.imageUrl;
+              const video = post.kind === 'clip' || !!post.videoUrl;
               return (
                 <Pressable
                   key={post.id}
                   accessibilityRole="link"
-                  accessibilityLabel={`Open post by ${author?.name}`}
+                  accessibilityLabel={`Open ${video ? 'video' : 'post'} by ${author?.name ?? 'a player'}: ${post.body}`}
                   onPress={() => router.push(`/post/${post.id}`)}
-                  style={styles.tile}
+                  style={({ pressed }) => [styles.tile, { width: tileW, height: tileH }, pressed && { opacity: 0.85 }]}
                 >
-                  {post.thumbnailUrl ? (
-                    <>
-                      <Image
-                        accessibilityIgnoresInvertColors
-                        source={{ uri: post.thumbnailUrl }}
-                        style={StyleSheet.absoluteFill}
-                        resizeMode="cover"
-                      />
-                      <View style={styles.tileScrim} pointerEvents="none" />
-                    </>
-                  ) : null}
-                  <View style={styles.tileTop}>
-                    <Ionicons
-                      name={post.kind === 'clip' ? 'play' : 'document-text-outline'}
-                      size={16}
-                      color={colors.textMuted}
-                    />
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Remove from saved"
-                      onPress={() => actions.toggleSavePost(post.id)}
-                      hitSlop={8}
-                    >
-                      <Ionicons name="bookmark" size={16} color={colors.textMuted} />
-                    </Pressable>
+                  <View style={[StyleSheet.absoluteFill, styles.tileBlank]}>
+                    <Text numberOfLines={6} style={styles.tileText}>{post.body}</Text>
                   </View>
-                  <Text numberOfLines={4} style={styles.tileText}>
-                    {post.body}
-                  </Text>
-                  <PlayerName userId={author?.id} style={styles.tileMeta}>
-                    @{author?.handle ?? 'player'} · {relativeTime(post.createdAt)}
-                  </PlayerName>
+                  {picture ? <Image accessibilityIgnoresInvertColors source={{ uri: picture }} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={post.id} transition={120} /> : null}
+                  {video ? <Ionicons name="play" size={15} color="#FFFFFF" style={styles.tileMark} /> : null}
                 </Pressable>
               );
             })}
@@ -127,17 +108,10 @@ const styleDefinitions = StyleSheet.create({
   top: { gap: spacing.sm, paddingBottom: spacing.lg },
   note: { ...typography.small, color: colors.textFaint },
   list: { gap: spacing.md },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  tile: {
-    width: '48%',
-    aspectRatio: 0.95,
-    borderRadius: radius.md,
-    backgroundColor: colors.surfaceAlt,
-    padding: spacing.md,
-    justifyContent: 'space-between',
-  },
-  tileScrim: { position:'absolute',top:0,left:0,right:0,bottom:0, backgroundColor: colors.overlay },
-  tileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  tileText: { fontSize: 12, lineHeight: 17, color: colors.text },
-  tileMeta: { fontSize: 10, color: colors.textMuted },
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  // The same tile as the profile grid: a hairline of page colour between tiles, no rounding, no wash.
+  tile: { borderWidth: 1, borderColor: colors.bg, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
+  tileBlank: { padding: 10, justifyContent: 'center' },
+  tileText: { fontSize: 11, lineHeight: 15, color: colors.textMuted },
+  tileMark: { position: 'absolute', top: 6, right: 6, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
 });

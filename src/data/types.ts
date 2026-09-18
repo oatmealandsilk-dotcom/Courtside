@@ -505,6 +505,8 @@ export interface Message {
   sharedId?: ID;
   /** One reaction per person, keyed by who left it. */
   reactions?: Record<ID, string>;
+  /** When its sender last changed the words; the chat says "Edited" under it. */
+  editedAt?: string;
 }
 
 export interface Conversation {

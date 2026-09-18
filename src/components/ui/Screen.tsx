@@ -225,8 +225,12 @@ export function Screen({
   const columnWidth = showRail ? LAYOUT.feedColumn : LAYOUT.soloColumn;
   const containerWidth = showRail ? columnWidth + LAYOUT.rail + spacing.xxl : columnWidth;
 
-  const constrain = (node: ReactNode) =>
-    isPhone ? node : <View style={[styles.constrain, { maxWidth: containerWidth }]}>{node}</View>;
+  // On a computer the page sits in a centred column. A page that does not
+  // scroll (the map) fills the column's height; before, the column was only
+  // as tall as its content, and a map that fills its space had none, so it
+  // drew nothing at all.
+  const constrain = (node: ReactNode, fill = false) =>
+    isPhone ? node : <View style={[styles.constrain, fill && styles.flex, { maxWidth: containerWidth }]}>{node}</View>;
 
   const header =
     title || onBack ? (
@@ -266,6 +270,7 @@ export function Screen({
     ) : (
       main
     ),
+    !scroll,
   );
 
   return (

@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { VoteControls } from '@/components/VoteControls';
 import { TOPIC_META } from '@/components/QuestionCard';
+import { openTopic } from '@/features/community/openTopic';
 import { Avatar, Card, Chip, EmptyState, Screen } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
 import { RichText } from '@/components/RichText';
@@ -73,7 +74,7 @@ export default function QuestionDetail() {
               <Text style={styles.time}>{asker ? `@${asker.handle}` : ''} · {relativeTime(question.createdAt)}{question.editedAt ? ' · Edited' : ''}</Text>
             </View>
           </Pressable>
-          <Chip label={meta.label} selected tint={meta.tint} ink="#0A1120" small />
+          <Chip label={meta.label} selected tint={meta.tint} ink="#0A1120" small onPress={() => openTopic(question.topic)} />
         </View>
         <Text style={styles.title}>{question.title}</Text>
         <RichText style={styles.body}>{question.body}</RichText>

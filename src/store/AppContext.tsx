@@ -357,6 +357,12 @@ interface AppActions {
   /* Messaging */
   openConversationWith: (userId: ID) => ID;
   sendMessage: (conversationId: ID, body: string) => void;
+  /** New words for a message of yours; it then shows as edited. */
+  editMessage: (messageId: ID, body: string) => void;
+  /** Takes a message of yours back, for everyone in the chat. */
+  unsendMessage: (messageId: ID) => void;
+  /** Hides a message from your own view only. */
+  deleteMessageForMe: (messageId: ID) => void;
   shareToUsers: (userIds: ID[], kind: 'post' | 'question' | 'profile', sharedId: ID, note?: string) => void;
   markConversationRead: (conversationId: ID) => void;
 }
@@ -498,27 +504,43 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = currentUserForLive;
     let off: (() => void) | undefined;
     try {
-      off = remote.onNewMessage((message) => {
-        if (stateRef.current.messages.some((m) => m.id === message.id)) return;
-        const known = stateRef.current.conversations.some((c) => c.id === message.conversationId);
-        if (known) {
-          setState((prev) => prev.messages.some((m) => m.id === message.id) ? prev : {
-            ...prev,
-            messages: [...prev.messages, message],
-            conversations: prev.conversations.map((c) => c.id === message.conversationId
-              ? { ...c, messageIds: [...c.messageIds, message.id], updatedAt: message.createdAt, unreadCount: message.senderId === me ? c.unreadCount : c.unreadCount + 1 }
-              : c),
+      off = remote.onMessages({
+        added: (message) => {
+          if (stateRef.current.messages.some((m) => m.id === message.id)) return;
+          const known = stateRef.current.conversations.some((c) => c.id === message.conversationId);
+          if (known) {
+            setState((prev) => prev.messages.some((m) => m.id === message.id) ? prev : {
+              ...prev,
+              messages: [...prev.messages, message],
+              conversations: prev.conversations.map((c) => c.id === message.conversationId
+                ? { ...c, messageIds: [...c.messageIds, message.id], updatedAt: message.createdAt, unreadCount: message.senderId === me ? c.unreadCount : c.unreadCount + 1 }
+                : c),
+            });
+            return;
+          }
+          void remote.fetchConversation(me, message.conversationId).then((got) => {
+            if (!got) return;
+            setState((prev) => prev.conversations.some((c) => c.id === got.conversation.id) ? prev : {
+              ...prev,
+              conversations: [got.conversation, ...prev.conversations],
+              messages: [...prev.messages, ...got.messages.filter((m) => !prev.messages.some((p) => p.id === m.id))],
+            });
           });
-          return;
-        }
-        void remote.fetchConversation(me, message.conversationId).then((got) => {
-          if (!got) return;
-          setState((prev) => prev.conversations.some((c) => c.id === got.conversation.id) ? prev : {
+        },
+        // An edit, or a reaction, from the other phone: the words and reactions update in place.
+        changed: (message) => {
+          setState((prev) => prev.messages.some((m) => m.id === message.id)
+            ? { ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, body: message.body, editedAt: message.editedAt, reactions: message.reactions } : m)) }
+            : prev);
+        },
+        // Unsent by its sender: gone from this chat too.
+        removed: (messageId) => {
+          setState((prev) => prev.messages.some((m) => m.id === messageId) ? {
             ...prev,
-            conversations: [got.conversation, ...prev.conversations],
-            messages: [...prev.messages, ...got.messages.filter((m) => !prev.messages.some((p) => p.id === m.id))],
-          });
-        });
+            messages: prev.messages.filter((m) => m.id !== messageId),
+            conversations: prev.conversations.map((c) => (c.messageIds.includes(messageId) ? { ...c, messageIds: c.messageIds.filter((x) => x !== messageId) } : c)),
+          } : prev);
+        },
       });
     } catch { /* live updates are a nicety */ }
     return () => { off?.(); };
@@ -1703,6 +1725,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [requireUser, appendMessage, makeMessage],
   );
 
+  const editMessage = useCallback((messageId: ID, body: string) => {
+    const me = requireUser();
+    const words = body.trim();
+    const message = stateRef.current.messages.find((m) => m.id === messageId);
+    if (!words || !message || message.senderId !== me || message.body === words) return;
+    haptics.tap();
+    const editedAt = new Date().toISOString();
+    setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, body: words, editedAt } : m)) }));
+    if (live(me, messageId)) void remote.editMessage(messageId, words);
+  }, [requireUser]);
+
+  /** Out of this phone's chat either way; unsending also removes it from the database, so it leaves theirs. */
+  const dropMessage = (prev: AppState, messageId: ID): AppState => ({
+    ...prev,
+    messages: prev.messages.filter((m) => m.id !== messageId),
+    conversations: prev.conversations.map((c) => (c.messageIds.includes(messageId) ? { ...c, messageIds: c.messageIds.filter((x) => x !== messageId) } : c)),
+  });
+  const unsendMessage = useCallback((messageId: ID) => {
+    const me = requireUser();
+    const message = stateRef.current.messages.find((m) => m.id === messageId);
+    if (!message || message.senderId !== me) return;
+    haptics.untap();
+    setState((prev) => dropMessage(prev, messageId));
+    if (live(me, messageId)) void remote.unsendMessage(messageId);
+  }, [requireUser]);
+
+  const deleteMessageForMe = useCallback((messageId: ID) => {
+    const me = requireUser();
+    haptics.untap();
+    setState((prev) => dropMessage(prev, messageId));
+    if (live(me, messageId)) void remote.hideMessage(me, messageId);
+  }, [requireUser]);
+
   /** Share a clip or a thread into one or more DMs, Instagram style. */
   const shareToUsers = useCallback(
     (userIds: ID[], kind: 'post' | 'question' | 'profile', sharedId: ID, note?: string) => {
@@ -2171,6 +2226,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       recordView,
       openConversationWith,
       sendMessage,
+      editMessage,
+      unsendMessage,
+      deleteMessageForMe,
       shareToUsers,
       markConversationRead,
     }),
@@ -2241,6 +2299,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       recordView,
       openConversationWith,
       sendMessage,
+      editMessage,
+      unsendMessage,
+      deleteMessageForMe,
       shareToUsers,
       markConversationRead,
     ],

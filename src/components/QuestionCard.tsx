@@ -12,6 +12,7 @@ import { Avatar, Card, Chip } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
 import type { Question, QuestionTopic, User } from '@/data/types';
 import { Tappable } from '@/components/Tappable';
+import { openTopic } from '@/features/community/openTopic';
 import { colors, spacing, typography } from '@/theme';
 
 export const TOPIC_META: Record<QuestionTopic, { label: string; tint: string; icon: keyof typeof Ionicons.glyphMap }> = {
@@ -68,7 +69,8 @@ function QuestionCardInner({
       <Text style={styles.title}>{question.title}</Text>
       {showBody && !!question.body && <RichText style={styles.preview}>{question.body}</RichText>}
       <View style={styles.metaRow}>
-        <Chip label={meta.label} small />
+        {/* The topic is a tag: a tap shows every thread under it. */}
+        <Chip label={meta.label} small onPress={() => openTopic(question.topic)} />
         {answered ? (
           <View style={styles.answered}>
             <Ionicons name="checkmark-circle" size={14} color={colors.court} />

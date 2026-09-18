@@ -89,7 +89,7 @@ export default function Index() {
         <BrandMark size={84} />
         <Text style={styles.wordmark}>CourtSide</Text>
       </Animated.View>
-      <Text style={styles.tagline}>Play. Talk. Improve.</Text>
+      <Text style={styles.tagline}>Growing the game</Text>
     </Animated.View>
   );
 }
@@ -107,7 +107,7 @@ const styleDefinitions = StyleSheet.create({
   wordmark: { fontSize: 34, fontWeight: '800', color: colors.brand, letterSpacing: -1 },
   tagline: {
     position: 'absolute',
-    bottom: 48,
+    bottom: 40,
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: 1.4,

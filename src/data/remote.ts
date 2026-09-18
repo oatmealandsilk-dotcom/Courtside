@@ -224,7 +224,7 @@ const toUserState = (r: UserStateRow): UserState => ({
 });
 
 interface ConversationRow { id: string; updated_at: string; conversation_members?: { user_id: string; last_read_at: string | null }[] }
-interface MessageRow { id: string; conversation_id: string; sender_id: string; body: string; kind: string; shared_id: string | null; reactions: Record<string, string> | null; created_at: string }
+interface MessageRow { id: string; conversation_id: string; sender_id: string; body: string; kind: string; shared_id: string | null; reactions: Record<string, string> | null; created_at: string; edited_at?: string | null }
 
 /** Conversations and messages as the app holds them: who has read what comes from each member's last_read_at. */
 export function toConversations(me: ID, convRows: ConversationRow[], messageRows: MessageRow[]): { conversations: Conversation[]; messages: Message[] } {
@@ -238,6 +238,7 @@ export function toConversations(me: ID, convRows: ConversationRow[], messageRows
       id: row.id, conversationId: row.conversation_id, senderId: row.sender_id, body: row.body, createdAt: row.created_at,
       kind: (row.kind as Message['kind']) || 'text', sharedId: row.shared_id ?? undefined,
       reactions: row.reactions && Object.keys(row.reactions).length ? row.reactions : undefined,
+      editedAt: row.edited_at ?? undefined,
       readAtBy: Object.keys(readAtBy).length ? readAtBy : undefined,
       openedAtBy: Object.keys(readAtBy).length ? readAtBy : undefined,
     };
@@ -265,7 +266,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // is what left people re-doing the quiz: their profile never arrived.
   const storiesFull = db.from('stories').select('*, story_views(user_id), story_likes(user_id), story_comments(id, story_id, author_id, body, created_at, story_comment_likes(user_id))').order('created_at', { ascending: false }).limit(40);
   const storiesPlain = () => db.from('stories').select('*, story_views(user_id)').order('created_at', { ascending: false }).limit(40);
-  const [profiles, posts, storiesTry, follows, requests, convs, msgs, qs, ans, cqs, crs, creqs, notes, ustate, tipRows] = await Promise.all([
+  const [profiles, posts, storiesTry, follows, requests, convs, msgs, qs, ans, cqs, crs, creqs, notes, ustate, tipRows, hiddenRows] = await Promise.all([
     db.from('profiles').select('*'),
     db.from('posts').select('*, post_likes(user_id), post_saves(user_id), comments(id, post_id, author_id, body, created_at, comment_likes(user_id))').order('created_at', { ascending: false }).limit(60),
     storiesFull,
@@ -284,12 +285,15 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     db.from('notifications').select('*').gte('created_at', new Date(Date.now() - 31 * 86_400_000).toISOString()).order('created_at', { ascending: false }).limit(600),
     db.from('user_state').select('*').eq('user_id', me).maybeSingle(),
     db.from('tips').select('*').order('created_at', { ascending: false }).limit(300),
+    // Messages you deleted for yourself; a database without the table yet just gives none.
+    db.from('hidden_messages').select('message_id').eq('user_id', me),
   ]);
   if (qs.error) console.warn('[remote] community tables missing; run the pending migrations', qs.error.message);
   const answerRows = (ans.data ?? []) as AnswerRow[];
   const replyRows = (crs.data ?? []) as CoachReplyRow[];
   if (convs.error || msgs.error) console.warn('[remote] messages tables missing; run the pending migrations', (convs.error ?? msgs.error)?.message);
-  const dm = toConversations(me, (convs.data ?? []) as ConversationRow[], (msgs.data ?? []) as MessageRow[]);
+  const hidden = new Set(((hiddenRows.data ?? []) as { message_id: string }[]).map((r) => r.message_id));
+  const dm = toConversations(me, (convs.data ?? []) as ConversationRow[], ((msgs.data ?? []) as MessageRow[]).filter((m) => !hidden.has(m.id)));
   if (requests.error) console.warn('[remote] follow requests table missing; run the pending migrations', requests.error.message);
   const stories = storiesTry.error ? await storiesPlain() : storiesTry;
   if (storiesTry.error) console.warn('[remote] hit likes/comments tables missing; run the pending migrations', storiesTry.error.message);
@@ -417,6 +421,24 @@ export const remote = {
     if (error) fail('mark read')(error);
   },
 
+  /** New words for a message of yours; the database stamps it as edited. */
+  async editMessage(messageId: ID, body: string) {
+    const { error } = await need().from('messages').update({ body }).eq('id', messageId);
+    if (error) fail('message edit')(error);
+  },
+
+  /** Unsend: gone for everyone in the chat. */
+  async unsendMessage(messageId: ID) {
+    const { error } = await need().from('messages').delete().eq('id', messageId);
+    if (error) fail('message unsend')(error);
+  },
+
+  /** Delete for yourself: hidden from your view only. */
+  async hideMessage(me: ID, messageId: ID) {
+    const { error } = await need().from('hidden_messages').insert({ user_id: me, message_id: messageId });
+    if (error) fail('message delete')(error);
+  },
+
   async setMessageReactions(messageId: ID, reactions: Record<string, string>) {
     const { error } = await need().from('messages').update({ reactions }).eq('id', messageId);
     if (error) fail('message reaction')(error);
@@ -434,13 +456,21 @@ export const remote = {
     return dm.conversations[0] ? { conversation: dm.conversations[0], messages: dm.messages } : null;
   },
 
-  /** Live arrivals: every new message in a conversation you are in. Returns the unsubscribe. */
-  onNewMessage(handle: (message: Message) => void): () => void {
+  /**
+   * Live changes to messages in the conversations you are in: new ones, ones
+   * edited or reacted to, and ones their sender unsent. Returns the unsubscribe.
+   */
+  onMessages(handle: { added: (message: Message) => void; changed: (message: Message) => void; removed: (messageId: ID) => void }): () => void {
     const db = need();
-    const channel = db.channel('messages-live').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-      const row = payload.new as MessageRow;
-      handle(toConversations('', [{ id: row.conversation_id, updated_at: row.created_at }], [row]).messages[0]);
-    }).subscribe();
+    const one = (row: MessageRow) => toConversations('', [{ id: row.conversation_id, updated_at: row.created_at }], [row]).messages[0];
+    const channel = db.channel('messages-live')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => handle.added(one(payload.new as MessageRow)))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => handle.changed(one(payload.new as MessageRow)))
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
+        const id = (payload.old as { id?: string } | null)?.id;
+        if (id) handle.removed(id);
+      })
+      .subscribe();
     return () => { void db.removeChannel(channel); };
   },
 

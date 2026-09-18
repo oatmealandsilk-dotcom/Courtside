@@ -51,6 +51,10 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // The accounts that threads are pulled in under (Reddit, Talk Tennis) are not players.
   const players = users.filter(u => u.id !== currentUserId && !blockedIds.includes(u.id) && !sourceUserIds.includes(u.id) && `${u.name} ${u.handle} ${u.location}`.toLowerCase().includes(search.toLowerCase()));
   const [topic, setTopic] = useState<QuestionTopic | 'all'>('all');
+  // A topic picked from a thread's label may sit off the end of the strip: the strip slides it into view.
+  const topicStrip = useRef<ScrollView>(null);
+  const chipX = useRef<Record<string, number>>({});
+  useEffect(() => { const x = chipX.current[topic]; if (x !== undefined) topicStrip.current?.scrollTo({ x: Math.max(0, x - 16), animated: true }); }, [topic]);
   // A post's category label asks for its topic before opening this tab.
   useEffect(() => subscribeSectionRequest('/discuss#topic', (value) => setTopic(value in TOPIC_META ? (value as QuestionTopic) : 'all')), []);
 
@@ -81,17 +85,19 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         {!players.length && <EmptyState title="No players found" body="Try another name or city." />}
       </View> : <>
       <View style={styles.controls}>
-        <ScrollView nativeID="topic-filter-strip" horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.topicRow}>
+        <ScrollView ref={topicStrip} nativeID="topic-filter-strip" horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.topicRow}>
           {TOPICS.map((t) => (
-            <Chip
-              key={t}
-              label={t === 'all' ? 'All' : t === 'injury' ? 'Injuries' : t.charAt(0).toUpperCase() + t.slice(1)}
-              selected={topic === t}
-              tint={colors.surfaceAlt}
-              ink={colors.warning}
-              onPress={() => setTopic(t)}
-              small
-            />
+            // The picked topic is filled in the section's own colour, so it is plain which one is on.
+            <View key={t} onLayout={(e) => { chipX.current[t] = e.nativeEvent.layout.x; }}>
+              <Chip
+                label={t === 'all' ? 'All' : t === 'injury' ? 'Injuries' : t.charAt(0).toUpperCase() + t.slice(1)}
+                selected={topic === t}
+                tint={colors.warning}
+                ink={colors.brandInk}
+                onPress={() => setTopic(t)}
+                small
+              />
+            </View>
           ))}
         </ScrollView>
       </View>
