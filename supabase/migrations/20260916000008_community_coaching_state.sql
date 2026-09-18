@@ -54,16 +54,16 @@ returns jsonb language plpgsql immutable as $$
 declare
   existing int := (current_by ->> voter::text)::int;
   votes int := current_votes;
-  by jsonb := current_by;
+  voters jsonb := coalesce(current_by, '{}'::jsonb);
 begin
   if existing = dir then
-    by := by - voter::text; votes := votes - dir;
+    voters := voters - voter::text; votes := votes - dir;
   elsif existing is not null then
-    by := jsonb_set(by, array[voter::text], to_jsonb(dir)); votes := votes + 2 * dir;
+    voters := jsonb_set(voters, array[voter::text], to_jsonb(dir)); votes := votes + 2 * dir;
   else
-    by := jsonb_set(by, array[voter::text], to_jsonb(dir)); votes := votes + dir;
+    voters := jsonb_set(voters, array[voter::text], to_jsonb(dir)); votes := votes + dir;
   end if;
-  return jsonb_build_object('votes', votes, 'voted_by', by);
+  return jsonb_build_object('votes', votes, 'voted_by', voters);
 end $$;
 
 create or replace function public.vote_question(q uuid, dir int)
