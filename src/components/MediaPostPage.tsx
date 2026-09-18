@@ -131,16 +131,20 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
   // picture's own shape: never stretched across a wide window and cropped
   // down to fit its height. A tall picture may take 62% of the page's height.
   const [room, setRoom] = useState<{ w: number; h: number } | null>(null);
+  // The inset from the left edge only when the window has room for it: a
+  // narrow computer window (or a side panel) gets the post edge to edge.
+  const inset = desktopWeb && room && room.w >= 520 + LANE_INSET * 2 ? LANE_INSET : 0;
   const frameSize = (() => {
     if (!room) return null;
     const ratio = landscape ? (shape ?? 16 / 9) : (!post.videoUrl && shape ? shape : 4 / 5);
-    const h = Math.min(room.h * 0.62, room.w / ratio);
+    const h = Math.min(room.h * 0.62, (room.w - inset) / ratio);
     return { width: Math.round(h * ratio), height: Math.round(h) };
   })();
   // On a computer the post reads left to right: the picture sits at the left
   // at its own size, and the name, buttons and words line up under it, the
   // width of the picture (never cramped narrower than a phone).
-  const lane = desktopWeb && frameSize ? { width: Math.max(frameSize.width, 520), alignSelf: 'flex-start' as const, marginLeft: LANE_INSET } : null;
+  // It is never wider than the window, though: a fixed 520 ran off the right edge of a narrow one.
+  const lane = desktopWeb && frameSize && room ? { width: Math.min(Math.max(frameSize.width, 520), room.w - inset), alignSelf: 'flex-start' as const, marginLeft: inset } : null;
 
   return (
     // Without comments there is nothing to fill the bottom, so the picture and
@@ -164,7 +168,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
       {/* A finger on the picture belongs to the picture: no sideways page swipe from here. */}
       <View
         ref={frameRef}
-        style={[styles.frame, landscape ? styles.frameWide : styles.frameTall, lane && { alignSelf: 'flex-start', marginLeft: LANE_INSET }, frameSize ?? (landscape ? { alignSelf: 'stretch', aspectRatio: shape ?? 16 / 9 } : { width: '100%', maxHeight: '62%', aspectRatio: !post.videoUrl && shape ? shape : 4 / 5 })]}
+        style={[styles.frame, landscape ? styles.frameWide : styles.frameTall, lane && { alignSelf: 'flex-start', marginLeft: inset }, frameSize ?? (landscape ? { alignSelf: 'stretch', aspectRatio: shape ?? 16 / 9 } : { width: '100%', maxHeight: '62%', aspectRatio: !post.videoUrl && shape ? shape : 4 / 5 })]}
         onTouchStart={() => lockPageSwipe(true)}
         onTouchEnd={() => lockPageSwipe(false)}
         onTouchCancel={() => lockPageSwipe(false)}
