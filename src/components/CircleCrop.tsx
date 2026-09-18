@@ -1,81 +1,169 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withDecay, withSpring, withTiming } from 'react-native-reanimated';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { measure } from '@/features/compose/photoEdit';
-import { colors, radius, spacing, typography } from '@/theme';
+import { measureForEdit } from '@/features/compose/photoEdit';
+import * as haptics from '@/lib/haptics';
+import { spacing, typography } from '@/theme';
 
-const SPRING = { damping: 18, stiffness: 220 };
+/** How far past the edge a drag or a pinch may stretch before it resists, as a share of the overshoot. */
+const RUBBER = 0.32;
+const MAX_ZOOM = 5;
+const SPRING = { damping: 26, stiffness: 260, mass: 0.9 };
 
 /**
- * A round crop for the profile picture: the photo sits under a circular
- * window, drag to move it, pinch to zoom, and it never lets the window show
- * anything but photo. Done cuts exactly what the circle shows.
+ * "Move and Scale" for the profile picture, the way the iPhone does it: the
+ * photo sits under a round window on black. Drag to move it and it glides on
+ * after a flick; pinch to zoom around your fingers; double-tap to zoom in or
+ * back out. Past an edge, or past the zoom limits, it stretches a little and
+ * springs back, so the circle never shows anything but photo. Choose cuts
+ * exactly what the circle shows.
  */
 export function CircleCrop({ uri, onDone, onCancel }: { uri: string; onDone: (croppedUri: string) => void; onCancel: () => void }) {
   const { width: screenW, height: screenH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const D = Math.min(screenW, screenH) - 48;
+  const D = Math.min(screenW, screenH) - 32;
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  useEffect(() => { measure(uri).then(setSize).catch(() => setError('Could not read that photo.')); }, [uri]);
+  // The true pixel size, after the phone's own rotation of the photo, so the cut lands where the circle was.
+  useEffect(() => { measureForEdit(uri).then(setSize).catch(() => setError('Could not read that photo.')); }, [uri]);
 
-  // The photo starts covering the circle exactly; zoom only ever adds to that.
+  // At zoom 1 the photo just covers the circle; zoom only ever adds to that.
   const base = useMemo(() => (size ? D / Math.min(size.width, size.height) : 1), [size, D]);
+  const photoW = useSharedValue(D);
+  const photoH = useSharedValue(D);
+  useEffect(() => { if (size) { photoW.value = size.width * base; photoH.value = size.height * base; } }, [size, base, photoW, photoH]);
+
+  // Zoom and the photo centre's offset from the circle's centre, in points.
   const scale = useSharedValue(1);
   const tx = useSharedValue(0);
   const ty = useSharedValue(0);
-  const startScale = useSharedValue(1);
-  const startX = useSharedValue(0);
-  const startY = useSharedValue(0);
-  const dispW = useSharedValue(D);
-  const dispH = useSharedValue(D);
-  useEffect(() => { if (size) { dispW.value = size.width * base; dispH.value = size.height * base; } }, [size, base, dispW, dispH]);
+  const start = useSharedValue({ s: 1, x: 0, y: 0, fx: 0, fy: 0 });
+  // Where the circle's centre is inside the stage, for turning finger positions into offsets.
+  const centreX = useSharedValue(screenW / 2);
+  const centreY = useSharedValue(screenH / 2);
+  const shown = useSharedValue(0);
+  useEffect(() => { if (size) shown.value = withTiming(1, { duration: 220 }); }, [size, shown]);
 
-  /** The farthest the photo may slide before the circle would show its edge. */
-  const clamp = (value: number, extent: number) => {
+  /** How far the photo may sit off centre before the circle would show its edge. */
+  const room = (extent: number) => {
     'worklet';
-    const room = Math.max(0, (extent - D) / 2);
-    return Math.max(-room, Math.min(room, value));
+    return Math.max(0, (extent - D) / 2);
   };
+  /** Past the limit, movement is only a fraction of the finger's: the stretch. */
+  const rubber = (value: number, limit: number) => {
+    'worklet';
+    if (value > limit) return limit + (value - limit) * RUBBER;
+    if (value < -limit) return -limit + (value + limit) * RUBBER;
+    return value;
+  };
+  const rubberScale = (s: number) => {
+    'worklet';
+    if (s < 1) return 1 - (1 - s) * RUBBER;
+    if (s > MAX_ZOOM) return MAX_ZOOM + (s - MAX_ZOOM) * RUBBER;
+    return s;
+  };
+  /** Back inside the limits, springing, with the offset kept in step with the zoom. */
   const settle = () => {
     'worklet';
-    const s = Math.max(1, Math.min(4, scale.value));
+    const now = scale.value;
+    const s = Math.max(1, Math.min(MAX_ZOOM, now));
+    // A zoom that springs back in or out takes the offset with it, about the circle's centre.
+    const k = s / now;
+    const rx = room(photoW.value * s);
+    const ry = room(photoH.value * s);
+    const x = Math.max(-rx, Math.min(rx, tx.value * k));
+    const y = Math.max(-ry, Math.min(ry, ty.value * k));
     scale.value = withSpring(s, SPRING);
-    tx.value = withSpring(clamp(tx.value, dispW.value * s), SPRING);
-    ty.value = withSpring(clamp(ty.value, dispH.value * s), SPRING);
+    tx.value = withSpring(x, SPRING);
+    ty.value = withSpring(y, SPRING);
   };
+
+  // One finger moves the photo, stretching past the edges and gliding on after a flick.
   const pan = Gesture.Pan()
-    .onStart(() => { 'worklet'; startX.value = tx.value; startY.value = ty.value; })
-    .onUpdate((e) => { 'worklet'; tx.value = startX.value + e.translationX; ty.value = startY.value + e.translationY; })
-    .onEnd(() => { 'worklet'; settle(); });
+    .maxPointers(1)
+    .onStart(() => { 'worklet'; start.value = { s: scale.value, x: tx.value, y: ty.value, fx: 0, fy: 0 }; })
+    .onUpdate((e) => {
+      'worklet';
+      tx.value = rubber(start.value.x + e.translationX, room(photoW.value * scale.value));
+      ty.value = rubber(start.value.y + e.translationY, room(photoH.value * scale.value));
+    })
+    .onEnd((e) => {
+      'worklet';
+      const rx = room(photoW.value * scale.value);
+      const ry = room(photoH.value * scale.value);
+      // Already past an edge: straight back. Inside: glide on and stop at the edge with a small give.
+      if (Math.abs(tx.value) > rx) tx.value = withSpring(Math.sign(tx.value) * rx, SPRING);
+      else tx.value = withDecay({ velocity: e.velocityX, clamp: [-rx, rx], rubberBandEffect: true, rubberBandFactor: 0.6 });
+      if (Math.abs(ty.value) > ry) ty.value = withSpring(Math.sign(ty.value) * ry, SPRING);
+      else ty.value = withDecay({ velocity: e.velocityY, clamp: [-ry, ry], rubberBandEffect: true, rubberBandFactor: 0.6 });
+    });
+
+  // Two fingers zoom around the point between them, and move the photo as they move.
   const pinch = Gesture.Pinch()
-    .onStart(() => { 'worklet'; startScale.value = scale.value; })
-    .onUpdate((e) => { 'worklet'; scale.value = Math.max(0.7, Math.min(5, startScale.value * e.scale)); })
+    .onStart((e) => {
+      'worklet';
+      start.value = { s: scale.value, x: tx.value, y: ty.value, fx: e.focalX - centreX.value, fy: e.focalY - centreY.value };
+    })
+    .onUpdate((e) => {
+      'worklet';
+      const s = rubberScale(start.value.s * e.scale);
+      const fx = e.focalX - centreX.value;
+      const fy = e.focalY - centreY.value;
+      // The spot under the fingers when the pinch began stays under them.
+      const k = s / start.value.s;
+      tx.value = fx - (start.value.fx - start.value.x) * k;
+      ty.value = fy - (start.value.fy - start.value.y) * k;
+      scale.value = s;
+    })
     .onEnd(() => { 'worklet'; settle(); });
-  const gesture = Gesture.Simultaneous(pan, pinch);
+
+  // Two taps: in to 2.5× around the tap, or back out to the whole photo.
+  const doubleTap = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd((e) => {
+      'worklet';
+      const zoomingIn = scale.value < 1.5;
+      const s = zoomingIn ? 2.5 : 1;
+      const fx = e.x - centreX.value;
+      const fy = e.y - centreY.value;
+      const k = s / scale.value;
+      const rx = room(photoW.value * s);
+      const ry = room(photoH.value * s);
+      const x = zoomingIn ? fx - (fx - tx.value) * k : 0;
+      const y = zoomingIn ? fy - (fy - ty.value) * k : 0;
+      scale.value = withSpring(s, SPRING);
+      tx.value = withSpring(Math.max(-rx, Math.min(rx, x)), SPRING);
+      ty.value = withSpring(Math.max(-ry, Math.min(ry, y)), SPRING);
+    });
+
+  const gesture = Gesture.Simultaneous(pan, pinch, doubleTap);
   const photoStyle = useAnimatedStyle(() => ({
-    width: dispW.value, height: dispH.value,
+    width: photoW.value,
+    height: photoH.value,
+    opacity: shown.value,
     transform: [{ translateX: tx.value }, { translateY: ty.value }, { scale: scale.value }],
   }));
 
-  const done = async () => {
+  const choose = async () => {
     if (!size) return;
     setBusy(true);
+    haptics.tap();
     try {
-      const s = Math.max(1, Math.min(4, scale.value));
-      const x = clamp(tx.value, size.width * base * s);
-      const y = clamp(ty.value, size.height * base * s);
+      // Whatever the fingers left mid-spring, the cut uses the settled, in-bounds position.
+      const s = Math.max(1, Math.min(MAX_ZOOM, scale.value));
       const px = base * s; // screen points per image pixel
       const shownW = size.width * px;
       const shownH = size.height * px;
+      const x = Math.max(-(shownW - D) / 2, Math.min((shownW - D) / 2, tx.value));
+      const y = Math.max(-(shownH - D) / 2, Math.min((shownH - D) / 2, ty.value));
       const originX = Math.max(0, Math.round((shownW / 2 - x - D / 2) / px));
       const originY = Math.max(0, Math.round((shownH / 2 - y - D / 2) / px));
-      const side = Math.min(Math.round(D / px), size.width - originX, size.height - originY);
+      const side = Math.max(1, Math.min(Math.round(D / px), size.width - originX, size.height - originY));
       const context = ImageManipulator.manipulate(uri);
       context.crop({ originX, originY, width: side, height: side });
       if (side > 640) context.resize({ width: 640, height: 640 });
@@ -88,41 +176,55 @@ export function CircleCrop({ uri, onDone, onCancel }: { uri: string; onDone: (cr
     }
   };
 
+  // The dark surround: a ring whose hole is exactly the circle, as wide as it needs to be to cover the screen.
+  const ring = Math.max(screenW, screenH) * 1.5;
   return (
     <Modal visible animationType="fade" statusBarTranslucent onRequestClose={onCancel}>
       <View style={styles.root}>
-        <View style={[styles.bar, { paddingTop: insets.top + 8 }]}>
-          <Pressable accessibilityRole="button" onPress={onCancel} hitSlop={10}><Text style={styles.barText}>Cancel</Text></Pressable>
-          <Text style={styles.title}>Move and scale</Text>
-          <Pressable accessibilityRole="button" onPress={() => { void done(); }} disabled={busy || !size} hitSlop={10}><Text style={[styles.barText, styles.doneText, (busy || !size) && { opacity: 0.5 }]}>{busy ? 'Saving…' : 'Done'}</Text></Pressable>
-        </View>
         <GestureDetector gesture={gesture}>
-          <View style={styles.stage}>
+          <View
+            style={styles.stage}
+            onLayout={(e) => { centreX.value = e.nativeEvent.layout.width / 2; centreY.value = e.nativeEvent.layout.height / 2; }}
+          >
             {size ? (
               <Animated.View style={[styles.photo, photoStyle]}>
                 <Image accessibilityIgnoresInvertColors source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
               </Animated.View>
             ) : null}
-            {/* Everything outside the circle dims: a huge rounded border does the mask. */}
-            <View pointerEvents="none" style={[styles.mask, { width: D, height: D, borderRadius: D / 2 + 2000 }]} />
-            <View pointerEvents="none" style={[styles.ring, { width: D, height: D, borderRadius: D / 2 }]} />
+            <View pointerEvents="none" style={[styles.surround, { width: D + ring * 2, height: D + ring * 2, borderRadius: D / 2 + ring, borderWidth: ring }]} />
+            <View pointerEvents="none" style={[styles.edge, { width: D, height: D, borderRadius: D / 2 }]} />
           </View>
         </GestureDetector>
-        <Text style={[styles.hint, { paddingBottom: insets.bottom + spacing.lg }]}>{error || 'Drag to move · pinch to zoom'}</Text>
+        {/* The iPhone's layout: the title across the top, Cancel and Choose along the bottom. */}
+        <View pointerEvents="none" style={[styles.titleBar, { paddingTop: insets.top + spacing.md }]}>
+          <Text style={styles.title}>Move and Scale</Text>
+        </View>
+        <View style={[styles.bottomBar, { paddingBottom: insets.bottom + spacing.lg }]}>
+          <Pressable accessibilityRole="button" onPress={onCancel} hitSlop={12} style={({ pressed }) => pressed && styles.pressed}>
+            <Text style={styles.button}>Cancel</Text>
+          </Pressable>
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+          <Pressable accessibilityRole="button" onPress={() => { void choose(); }} disabled={busy || !size} hitSlop={12} style={({ pressed }) => pressed && styles.pressed}>
+            <Text style={[styles.button, styles.choose, (busy || !size) && { opacity: 0.45 }]}>{busy ? 'Saving…' : 'Choose'}</Text>
+          </Pressable>
+        </View>
       </View>
     </Modal>
   );
 }
 
+// Photo editing is always shown on black, the way the phone's own editor does it, whatever the theme.
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
-  bar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-  barText: { ...typography.body, color: 'white' },
-  doneText: { ...typography.bodyStrong, color: colors.brand },
-  title: { ...typography.bodyStrong, color: 'white' },
-  stage: { flex: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  photo: { position: 'absolute', overflow: 'hidden', borderRadius: radius.sm },
-  mask: { position: 'absolute', borderWidth: 2000, borderColor: 'rgba(0,0,0,0.62)', margin: -2000 },
-  ring: { position: 'absolute', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.8)' },
-  hint: { ...typography.small, color: 'rgba(255,255,255,0.7)', textAlign: 'center', paddingTop: spacing.md },
+  stage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  photo: { position: 'absolute' },
+  surround: { position: 'absolute', borderColor: 'rgba(0,0,0,0.6)' },
+  edge: { position: 'absolute', borderWidth: StyleSheet.hairlineWidth * 2, borderColor: 'rgba(255,255,255,0.55)' },
+  titleBar: { position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center' },
+  title: { ...typography.bodyStrong, color: 'white', fontSize: 17 },
+  bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl },
+  button: { ...typography.body, color: 'white', fontSize: 17 },
+  choose: { fontWeight: '600' },
+  pressed: { opacity: 0.5 },
+  error: { ...typography.small, color: 'rgba(255,255,255,0.75)', flex: 1, textAlign: 'center' },
 });
