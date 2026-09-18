@@ -13,6 +13,8 @@ import { getPendingTab, setPendingTab, subscribePendingTab } from '@/features/na
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { useApp } from '@/store/AppContext';
 import { recallAnswered } from '@/features/age/ageCheck';
+import { setCrashScreen } from '@/lib/crashReporting';
+import { listenForPushTaps, registerForPush } from '@/features/push/push';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { colors } from '@/theme';
 
@@ -58,7 +60,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [pathname]);
-  const { currentUserId, currentUser, ready, authResolved, remoteLoaded } = useApp();
+  const { currentUserId, currentUser, ready, authResolved, remoteLoaded, onboardingComplete } = useApp();
+  // Crash reports say which screen they happened on.
+  useEffect(() => { setCrashScreen(pathname); }, [pathname]);
+  // Alerts: a tap on one opens what it is about. Once someone is signed in
+  // and set up, the phone asks (once, ever) whether alerts may be sent, and
+  // keeps this phone's push address on the account fresh.
+  useEffect(() => listenForPushTaps(), []);
+  const pushAskedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isSupabaseConfigured || !currentUserId || !remoteLoaded || !onboardingComplete || !currentUser?.ageGroup) return;
+    if (pushAskedFor.current === currentUserId) return;
+    pushAskedFor.current = currentUserId;
+    void registerForPush();
+  }, [currentUserId, remoteLoaded, onboardingComplete, currentUser?.ageGroup]);
   // The age check: an account with no birthday on file is asked for one
   // before anything else, wherever it opens. (An answer given on this phone
   // counts too, in case the database's side of the check is not added yet.)

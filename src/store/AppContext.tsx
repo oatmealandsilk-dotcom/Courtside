@@ -26,6 +26,7 @@ import { finishUpload, setUploadProgress, simulateUpload, startUpload } from '@/
 import { requestFeedRefresh } from '@/features/feed/feedBus';
 import { blockDevice, groupFor, rememberAnswered, yearsOld, type AgeGroup } from '@/features/age/ageCheck';
 import { show as showToast } from '@/lib/toast';
+import { forgetPushToken } from '@/features/push/push';
 import { framesAt } from '@/features/compose/frames';
 import type {
   Answer,
@@ -844,7 +845,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(() => {
-    if (isSupabaseConfigured) remoteAuth.signOut();
+    // This phone stops getting the account's alerts before the session ends (the removal needs it).
+    if (isSupabaseConfigured) void forgetPushToken().finally(() => remoteAuth.signOut());
     setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false }));
   }, []);
 

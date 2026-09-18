@@ -43,6 +43,7 @@ module.exports = {
       ['expo-image-picker', { photosPermission: 'CourtSide needs your photo library to choose clips and photos to post.' }],
       'expo-video',
       ['expo-location', { locationWhenInUsePermission: 'CourtSide uses your location to show players near you on the map.' }],
+      ['expo-notifications', { color: '#3F7049' }],
     ],
     experiments: { baseUrl },
     extra: { eas: { projectId: process.env.EAS_PROJECT_ID } },

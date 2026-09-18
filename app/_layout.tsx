@@ -1,5 +1,6 @@
-import React from 'react';
-import { Stack } from 'expo-router';
+import React, { useEffect } from 'react';
+import { Pressable, Text, View } from 'react-native';
+import { Stack, type ErrorBoundaryProps } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -8,6 +9,30 @@ import { AppProvider } from '@/store/AppContext';
 import { AppShell } from '@/components/AppShell';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 import { colors } from '@/theme';
+import { BrandMark } from '@/components/BrandMark';
+import { installCrashReporting, reportError } from '@/lib/crashReporting';
+
+// Any error the app does not catch itself is filed as a crash report.
+installCrashReporting();
+
+/**
+ * If a screen breaks, this shows in its place instead of a blank or a red
+ * error page: the fault is filed as a crash report, and Try again rebuilds
+ * the screen.
+ */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  useEffect(() => { void reportError(error, { fatal: true, where: 'screen' }); }, [error]);
+  return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 32, backgroundColor: colors.bg }}>
+      <BrandMark size={52} />
+      <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text, textAlign: 'center' }}>Something went wrong</Text>
+      <Text style={{ fontSize: 15, color: colors.textMuted, textAlign: 'center', maxWidth: 320 }}>It has been reported, so we can fix it. Nothing you saved is lost.</Text>
+      <Pressable accessibilityRole="button" onPress={retry} style={{ marginTop: 8, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 999, backgroundColor: colors.brand }}>
+        <Text style={{ color: colors.brandInk, fontWeight: '700' }}>Try again</Text>
+      </Pressable>
+    </View>
+  );
+}
 
 export default function RootLayout() {
   return (
