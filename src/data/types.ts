@@ -468,7 +468,7 @@ export interface CoachApplication {
   ntrp?: string;
   yearsCoaching: number;
   certifications: string;
-  /** Résumé / CV, stored as a file label in the mock build. */
+  /** The résumé's file name, when one was attached (the file itself sits in private storage). */
   resumeLabel?: string;
   currentClients: string;
   specialties: CoachSpecialty[];

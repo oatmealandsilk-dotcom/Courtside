@@ -12,7 +12,7 @@ import * as WebBrowser from 'expo-web-browser';
  */
 
 import { supabase } from '@/lib/supabase';
-import type { Answer, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, Question, Story, Tip, User } from './types';
+import type { Answer, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, Question, Story, Tip, User, CoachApplication } from './types';
 
 const need = () => {
   if (!supabase) throw new Error('Supabase is not configured');
@@ -179,6 +179,7 @@ export interface RemoteData {
   notifications: Notification[];
   userState: UserState | null;
   tips: Tip[];
+  coachApplications: CoachApplication[];
 }
 
 interface TipRow { id: string; user_id: string; body: string; created_at: string; votes: number | null; voted_by: Record<string, 1 | -1> | null }
@@ -225,6 +226,18 @@ const toUserState = (r: UserStateRow): UserState => ({
   defaultPaymentId: r.default_payment_id, showActivity: r.show_activity, pushLikes: r.push_likes, pushCoach: r.push_coach,
 });
 
+interface CoachApplicationRow {
+  id: string; user_id: string; full_name: string; email: string; phone: string; utr: string | null; ntrp: string | null;
+  years_coaching: number; certifications: string; resume_name: string | null; current_clients: string; specialties: string[] | null;
+  reference_contacts: string; about: string; status: string; created_at: string;
+}
+const toCoachApplication = (r: CoachApplicationRow): CoachApplication => ({
+  id: r.id, userId: r.user_id, fullName: r.full_name, email: r.email, phone: r.phone, utr: r.utr ?? undefined, ntrp: r.ntrp ?? undefined,
+  yearsCoaching: r.years_coaching, certifications: r.certifications, resumeLabel: r.resume_name ?? undefined, currentClients: r.current_clients,
+  specialties: (r.specialties ?? []) as CoachApplication['specialties'], references: r.reference_contacts, about: r.about,
+  status: (['submitted', 'in-review', 'approved', 'rejected'].includes(r.status) ? r.status : 'submitted') as CoachApplication['status'], createdAt: r.created_at,
+});
+
 interface ConversationRow { id: string; updated_at: string; conversation_members?: { user_id: string; last_read_at: string | null }[] }
 interface MessageRow { id: string; conversation_id: string; sender_id: string; body: string; kind: string; shared_id: string | null; reactions: Record<string, string> | null; created_at: string; edited_at?: string | null }
 
@@ -268,7 +281,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // is what left people re-doing the quiz: their profile never arrived.
   const storiesFull = db.from('stories').select('*, story_views(user_id), story_likes(user_id), story_comments(id, story_id, author_id, body, created_at, story_comment_likes(user_id))').order('created_at', { ascending: false }).limit(40);
   const storiesPlain = () => db.from('stories').select('*, story_views(user_id)').order('created_at', { ascending: false }).limit(40);
-  const [profiles, posts, storiesTry, follows, requests, convs, msgs, qs, ans, cqs, crs, creqs, notes, ustate, tipRows, hiddenRows] = await Promise.all([
+  const [profiles, posts, storiesTry, follows, requests, convs, msgs, qs, ans, cqs, crs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows] = await Promise.all([
     db.from('profiles').select('*'),
     db.from('posts').select('*, post_likes(user_id), post_saves(user_id), comments(id, post_id, author_id, body, created_at, comment_likes(user_id))').order('created_at', { ascending: false }).limit(60),
     storiesFull,
@@ -289,6 +302,8 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     db.from('tips').select('*').order('created_at', { ascending: false }).limit(300),
     // Messages you deleted for yourself; a database without the table yet just gives none.
     db.from('hidden_messages').select('message_id').eq('user_id', me),
+    // Your own coach application, so the form can show where it stands.
+    db.from('coach_applications').select('*').eq('user_id', me).order('created_at', { ascending: false }).limit(3),
   ]);
   if (qs.error) console.warn('[remote] community tables missing; run the pending migrations', qs.error.message);
   const answerRows = (ans.data ?? []) as AnswerRow[];
@@ -333,6 +348,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     notifications: ((notes.data ?? []) as NotificationRow[]).map(toNotification),
     userState: ustate.data ? toUserState(ustate.data as UserStateRow) : null,
     tips: ((tipRows.data ?? []) as TipRow[]).map(toTip),
+    coachApplications: ((applicationRows.data ?? []) as CoachApplicationRow[]).map(toCoachApplication),
   };
 }
 
@@ -438,6 +454,32 @@ export const remote = {
       return null;
     }
     return data === 'teen' ? 'teen' : 'adult';
+  },
+
+  /**
+   * Files a coach application. The résumé, if one is attached, goes first to
+   * the private coach-applications shelf, in the applicant's own folder.
+   * Throws with a readable message if either step fails.
+   */
+  async submitCoachApplication(me: ID, application: CoachApplication, resume?: { uri: string; name: string; mimeType?: string }) {
+    const db = need();
+    let resumePath: string | null = null;
+    if (resume) {
+      const bytes = await (await fetch(resume.uri)).arrayBuffer();
+      if (bytes.byteLength > 10 * 1024 * 1024) throw new Error('That résumé is over 10 MB. Attach a smaller PDF or Word file.');
+      const safeName = resume.name.replace(/[^\w.\-]+/g, '_').slice(-80) || 'resume.pdf';
+      resumePath = `${me}/${Date.now().toString(36)}-${safeName}`;
+      const { error } = await db.storage.from('coach-applications').upload(resumePath, bytes, { contentType: resume.mimeType || 'application/pdf', upsert: false });
+      if (error) throw new Error(`The résumé did not upload: ${error.message}`);
+    }
+    const { error } = await db.from('coach_applications').insert({
+      id: application.id, user_id: me, full_name: application.fullName, email: application.email, phone: application.phone,
+      utr: application.utr ?? null, ntrp: application.ntrp ?? null, years_coaching: application.yearsCoaching,
+      certifications: application.certifications, resume_path: resumePath, resume_name: resume?.name ?? null,
+      current_clients: application.currentClients, specialties: application.specialties, reference_contacts: application.references,
+      about: application.about, status: 'submitted',
+    });
+    if (error) throw new Error(/relation|schema cache/i.test(error.message) ? 'Applications are not switched on yet. Try again soon.' : error.message);
   },
 
   /** New words for a message of yours; the database stamps it as edited. */

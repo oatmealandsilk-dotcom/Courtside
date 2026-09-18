@@ -336,7 +336,8 @@ interface AppActions {
   toggleReplyHelpful: (replyId: ID) => void;
 
   /* Become a coach */
-  submitCoachApplication: (input: CoachApplicationInput) => ID;
+  /** Files a coach application (and its résumé file, if any). Rejects with a readable message when it could not be sent. */
+  submitCoachApplication: (input: CoachApplicationInput, resume?: { uri: string; name: string; mimeType?: string }) => Promise<ID>;
 
   /* A coach's page */
   addCoachResult: (input: Omit<CoachResult, 'id' | 'coachId'>) => void;
@@ -637,6 +638,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           coachingRequests: [...data.coachingRequests, ...prev.coachingRequests.filter((r) => !data.coachingRequests.some((x) => x.id === r.id))],
           notifications: [...data.notifications, ...prev.notifications.filter((n) => !data.notifications.some((x) => x.id === n.id))],
           tips: [...data.tips, ...prev.tips.filter((t) => !data.tips.some((x) => x.id === t.id))],
+          coachApplications: [...data.coachApplications, ...prev.coachApplications.filter((a) => !data.coachApplications.some((x) => x.id === a.id))],
           mutedIds: data.userState ? data.userState.mutedIds : prev.mutedIds,
           blockedIds: data.userState ? data.userState.blockedIds : prev.blockedIds,
           paymentMethods: data.userState && data.userState.paymentMethods.length ? data.userState.paymentMethods : prev.paymentMethods,
@@ -1514,7 +1516,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   /* --------------------------- Coach application -------------------------- */
 
   const submitCoachApplication = useCallback(
-    (input: CoachApplicationInput): ID => {
+    async (input: CoachApplicationInput, resume?: { uri: string; name: string; mimeType?: string }): Promise<ID> => {
       const me = requireUser();
       const application: CoachApplication = {
         id: nextId('ca'),
@@ -1523,6 +1525,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createdAt: new Date().toISOString(),
         ...input,
       };
+      // Sent first: the form only says "received" once the application is really on file.
+      if (live(me)) await remote.submitCoachApplication(me, application, resume);
+      haptics.commit();
       setState((prev) => ({ ...prev, coachApplications: [application, ...prev.coachApplications] }));
       return application.id;
     },

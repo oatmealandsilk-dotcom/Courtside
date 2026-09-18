@@ -39,44 +39,62 @@ export default function CoachApply() {
   const [ntrp, setNtrp] = useState('');
   const [years, setYears] = useState('');
   const [certifications, setCertifications] = useState('');
-  const [resume, setResume] = useState<string | null>(null);
+  const [resume, setResume] = useState<{ uri: string; name: string; mimeType?: string } | null>(null);
   const [clients, setClients] = useState('');
   const [specialties, setSpecialties] = useState<CoachSpecialty[]>([]);
   const [references, setReferences] = useState('');
   const [about, setAbout] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [sendError, setSendError] = useState('');
+  // After a first tap on Submit, whatever is still missing is listed right above the button.
+  const [showMissing, setShowMissing] = useState(false);
 
   const toggleSpecialty = (value: CoachSpecialty) =>
     setSpecialties((prev) =>
       prev.includes(value) ? prev.filter((s) => s !== value) : [...prev, value],
     );
 
-  const canSubmit =
-    fullName.trim().length > 2 &&
-    /^\S+@\S+\.\S+$/.test(email.trim()) &&
-    phone.trim().length >= 7 &&
-    Number(years) > 0 &&
-    certifications.trim().length > 3 &&
-    specialties.length > 0 &&
-    about.trim().length > 40;
+  // "8", "8 years" and "about 8" all mean 8.
+  const yearsNumber = Number((years.match(/\d+/) ?? ['0'])[0]);
+  // What still stops the application, in the order the boxes appear.
+  const missing = [
+    fullName.trim().length > 2 ? null : 'your full name',
+    /^\S+@\S+\.\S+$/.test(email.trim()) ? null : 'a valid email',
+    phone.replace(/\D/g, '').length >= 7 ? null : 'a phone number',
+    yearsNumber > 0 ? null : 'years coaching (a number)',
+    certifications.trim().length > 3 ? null : 'your certifications',
+    specialties.length > 0 ? null : 'at least one thing you coach',
+    about.trim().length > 40 ? null : `a few more words on how you coach (${Math.max(0, 41 - about.trim().length)} more characters)`,
+  ].filter((m): m is string => m !== null);
+  const canSubmit = missing.length === 0;
 
-  const submit = () => {
-    if (!canSubmit) return;
-    actions.submitCoachApplication({
+  const submit = async () => {
+    if (busy) return;
+    if (!canSubmit) { setShowMissing(true); return; }
+    setBusy(true);
+    setSendError('');
+    try {
+      await actions.submitCoachApplication({
       fullName: fullName.trim(),
       email: email.trim(),
       phone: phone.trim(),
       utr: utr.trim() || undefined,
       ntrp: ntrp.trim() || undefined,
-      yearsCoaching: Number(years),
+      yearsCoaching: yearsNumber,
       certifications: certifications.trim(),
-      resumeLabel: resume ?? undefined,
+      resumeLabel: resume?.name,
       currentClients: clients.trim(),
       specialties,
       references: references.trim(),
       about: about.trim(),
-    });
-    setSubmitted(true);
+    }, resume ?? undefined);
+      setSubmitted(true);
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : 'Could not send your application. Check your connection and try again.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (submitted || existing) {
@@ -88,15 +106,15 @@ export default function CoachApply() {
           </View>
           <Text style={styles.doneTitle}>Application received</Text>
           <Text style={styles.doneBody}>
-            Our team reviews credentials, playing history, and references by hand. Verification
-            usually takes two to three business days. We will email you either way.
+            We review credentials, playing history, and references by hand. You will hear back
+            here in the app, and by email or phone if we need anything more.
           </Text>
           <View style={styles.stepsCard}>
             {[
               'Identity and credential check',
               'Rating verification (UTR / NTRP)',
               'Reference call',
-              'Payout setup and go live',
+              'Listed as a coach on CourtSide',
             ].map((step, index) => (
               <View key={step} style={styles.step}>
                 <View style={[styles.stepDot, index === 0 && styles.stepDotActive]}>
@@ -117,7 +135,7 @@ export default function CoachApply() {
   return (
     <Screen
       title="Apply to be a coach"
-      subtitle="Verified coaches keep 80% of what they earn"
+      subtitle="Verified coaches get a badge and a listing"
       compactTitle
       onBack={() => goBack()}
     >
@@ -125,7 +143,7 @@ export default function CoachApply() {
         <Ionicons name="shield-checkmark" size={20} color={colors.brand} />
         <Text style={styles.introText}>
           Every coach on CourtSide is verified by hand. We check credentials, ratings, and
-          references before anyone can take a booking.
+          references before anyone is listed as a coach.
         </Text>
       </View>
 
@@ -189,7 +207,8 @@ export default function CoachApply() {
             onPress={async () => {
               if (resume) { setResume(null); return; }
               const picked = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'], copyToCacheDirectory: true });
-              if (!picked.canceled && picked.assets[0]) setResume(picked.assets[0].name);
+              const file = !picked.canceled ? picked.assets[0] : undefined;
+              if (file) setResume({ uri: file.uri, name: file.name, mimeType: file.mimeType ?? undefined });
             }}
             style={styles.upload}
           >
@@ -198,7 +217,7 @@ export default function CoachApply() {
               size={22}
               color={resume ? colors.brand : colors.textMuted}
             />
-            <Text style={styles.uploadText} numberOfLines={1}>{resume ?? 'Attach your résumé (PDF or Word)'}</Text>
+            <Text style={styles.uploadText} numberOfLines={1}>{resume?.name ?? 'Attach your résumé (PDF or Word)'}</Text>
             {resume ? <Ionicons name="close" size={18} color={colors.textMuted} /> : null}
           </Pressable>
         </View>
@@ -228,16 +247,15 @@ export default function CoachApply() {
           minHeight={130}
         />
 
-        <Button label="Submit application" onPress={submit} disabled={!canSubmit} full />
-        {!canSubmit ? (
-          <Text style={styles.hint}>
-            Fill in your name, a valid email, phone, years coaching, certifications, at least one
-            specialty, and 40+ characters on how you coach.
-          </Text>
+        {showMissing && missing.length ? (
+          <Text style={styles.missing}>Still needed: {missing.join(', ')}.</Text>
         ) : null}
+        {sendError ? <Text style={styles.missing}>{sendError}</Text> : null}
+        {/* Always tappable: a tap with something missing says what, rather than doing nothing. */}
+        <Button label={busy ? 'Sending…' : 'Submit application'} loading={busy} onPress={submit} full />
         <Text style={styles.hint}>
-          By applying you agree to identity verification and to CourtSide taking a 20% platform fee
-          on paid sessions.
+          By applying you agree to identity verification. Paid sessions are not offered yet; if they
+          are later, they will come with their own terms.
         </Text>
       </View>
     </Screen>
@@ -260,6 +278,7 @@ const styleDefinitions = StyleSheet.create({
   label: { ...typography.smallStrong, color: colors.textMuted },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   pair: { flexDirection: 'row', gap: spacing.md },
+  missing: { ...typography.small, color: colors.danger, lineHeight: 18 },
   hint: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
   upload: {
     flexDirection: 'row',

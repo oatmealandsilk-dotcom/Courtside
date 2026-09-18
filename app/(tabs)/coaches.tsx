@@ -187,7 +187,7 @@ function Coaching() {
           <Ionicons name="ribbon-outline" size={24} color={colors.brand} />
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={styles.applyTitle}>Coach on CourtSide</Text>
-            <Text style={styles.small}>Set your prices, keep 80%. Verified by hand.</Text>
+            <Text style={styles.small}>Get a coach badge and a listing. Verified by hand.</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
         </Pressable>
