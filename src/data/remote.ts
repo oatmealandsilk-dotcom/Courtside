@@ -49,6 +49,7 @@ interface ProfileRow {
   id: string; handle: string; name: string; bio: string; location: string;
   avatar_url: string | null; is_coach: boolean; profile: Partial<PlayerProfile> | null; created_at: string;
   is_private?: boolean | null;
+  age_group?: string | null;
 }
 interface PostRow {
   id: string; author_id: string; kind: Post['kind']; body: string; media_label: string | null;
@@ -83,6 +84,7 @@ const toUser = (row: ProfileRow, followers: number, following: number): User => 
   avatarSeed: row.id,
   avatarUrl: row.avatar_url ?? undefined,
   isPrivate: row.is_private || undefined,
+  ageGroup: row.age_group === 'teen' || row.age_group === 'adult' ? row.age_group : undefined,
   isCoach: row.is_coach,
   followers,
   following,
@@ -402,8 +404,10 @@ export const remote = {
   /* ------------------------------ messages ------------------------------ */
 
   /** The 1:1 you already have with someone, or a new one under the id the app chose. Returns the id that stands. */
-  async openConversation(other: ID, wanted: ID): Promise<ID> {
+  async openConversation(other: ID, wanted: ID): Promise<ID | null> {
     const { data, error } = await need().rpc('open_conversation', { other, wanted });
+    // A teen who does not follow you cannot be sent a new chat: null says so.
+    if (error && /teen_closed/.test(error.message)) return null;
     if (error) { fail('open conversation')(error); return wanted; }
     return (data as string) || wanted;
   },
@@ -419,6 +423,21 @@ export const remote = {
   async markConversationRead(conversationId: ID, me: ID) {
     const { error } = await need().from('conversation_members').update({ last_read_at: new Date().toISOString() }).eq('conversation_id', conversationId).eq('user_id', me);
     if (error) fail('mark read')(error);
+  },
+
+  /**
+   * Records your date of birth (the first time only) and returns the account
+   * type it makes: 'teen' or 'adult', 'under_13' when it is too young for an
+   * account, or null when the database cannot say (its age check not added yet).
+   */
+  async setBirthDate(dob: string): Promise<'teen' | 'adult' | 'under_13' | null> {
+    const { data, error } = await need().rpc('set_birth_date', { dob });
+    if (error) {
+      if (/under_13/.test(error.message)) return 'under_13';
+      fail('birth date')(error);
+      return null;
+    }
+    return data === 'teen' ? 'teen' : 'adult';
   },
 
   /** New words for a message of yours; the database stamps it as edited. */

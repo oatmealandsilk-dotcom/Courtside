@@ -1,5 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
+import { BirthDateField } from '@/components/BirthDateField';
+import { blockDevice, isDeviceBlocked, toBirthDate, yearsOld } from '@/features/age/ageCheck';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -44,6 +46,11 @@ export default function SignIn() {
   const [name, setName] = useState('');
   const [handle, setHandle] = useState('');
   const [demoHandle, setDemoHandle] = useState('you');
+  // New accounts give a date of birth before the account exists, so a child's details are never taken in.
+  const [birth, setBirth] = useState({ month: '', day: '', year: '' });
+  const [ageBlocked, setAgeBlocked] = useState(false);
+  useEffect(() => { void isDeviceBlocked().then(setAgeBlocked); }, []);
+  const birthDate = toBirthDate(birth.month, birth.day, birth.year);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -73,7 +80,7 @@ export default function SignIn() {
 
   const cleanHandle = handle.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
   const ready = isSupabaseConfigured
-    ? email.includes('@') && password.length >= 6 && (mode === 'sign-in' || (name.trim().length > 0 && cleanHandle.length >= 2))
+    ? email.includes('@') && password.length >= 6 && (mode === 'sign-in' || (name.trim().length > 0 && cleanHandle.length >= 2 && !!birthDate && !ageBlocked))
     : demoHandle.trim().length > 0;
 
   const google = async () => {
@@ -115,7 +122,11 @@ export default function SignIn() {
       } else if (mode === 'sign-in') {
         await actions.signIn(email, password);
       } else {
+        if (!birthDate) return;
+        // Too young: no account is made, and this phone will not offer one again.
+        if (yearsOld(birthDate) < 13) { await blockDevice(); setAgeBlocked(true); return; }
         const result = await actions.signUp(email, password, name, cleanHandle);
+        if (result !== 'confirm') await actions.confirmBirthDate(birthDate);
         if (result === 'confirm') {
           setNotice('Check your email for a confirmation link, then sign in.');
           setMode('sign-in');
@@ -182,6 +193,8 @@ export default function SignIn() {
                     autoCapitalize="none"
                     hint={cleanHandle && cleanHandle !== handle ? `Will be @${cleanHandle}` : 'Letters, numbers and underscores.'}
                   />
+                  <BirthDateField month={birth.month} day={birth.day} year={birth.year} onChange={setBirth} />
+                  {ageBlocked ? <Text style={styles.ageNote}>Sorry, you can't create a CourtSide account.</Text> : null}
                 </>
               ) : null}
               <Field label="Email" value={email} onChangeText={setEmail} placeholder="you@example.com" autoCapitalize="none" keyboardType="email-address" />
@@ -261,6 +274,7 @@ export default function SignIn() {
 }
 
 const styleDefinitions = StyleSheet.create({
+  ageNote: { ...typography.small, color: colors.danger },
   root: { flex: 1, backgroundColor: colors.bg },
   scroll: { flexGrow: 1, padding: spacing.xl, justifyContent: 'center', gap: spacing.xxl, maxWidth: 520, width: '100%', alignSelf: 'center' },
   hero: { gap: spacing.md },

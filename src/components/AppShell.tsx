@@ -1,5 +1,5 @@
 import { useTheme } from '@/theme/ThemeProvider';
-import React, { useEffect, useRef, useSyncExternalStore } from 'react';
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Platform, View } from 'react-native';
 import { goBack } from '@/lib/goBack';
 import { Redirect, router, usePathname } from 'expo-router';
@@ -12,6 +12,8 @@ import { useResponsive } from '@/lib/useResponsive';
 import { getPendingTab, setPendingTab, subscribePendingTab } from '@/features/navigation/pendingTab';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { useApp } from '@/store/AppContext';
+import { recallAnswered } from '@/features/age/ageCheck';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { colors } from '@/theme';
 
 const paths = { index: '/', discuss: '/discuss', coaches: '/coaches', profile: '/profile' } as const;
@@ -56,7 +58,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [pathname]);
-  const { currentUserId, ready, authResolved } = useApp();
+  const { currentUserId, currentUser, ready, authResolved, remoteLoaded } = useApp();
+  // The age check: an account with no birthday on file is asked for one
+  // before anything else, wherever it opens. (An answer given on this phone
+  // counts too, in case the database's side of the check is not added yet.)
+  const [answered, setAnswered] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    setAnswered(undefined);
+    if (currentUserId) void recallAnswered(currentUserId).then(setAnswered);
+  }, [currentUserId, currentUser?.ageGroup]);
+  const needsBirthday = isSupabaseConfigured && !!currentUserId && remoteLoaded && !!currentUser && !currentUser.ageGroup
+    && answered === null && !['/birthday', '/sign-in'].includes(pathname);
   const { isPhone } = useResponsive();
   const selected = useRef(0);
   if (shown === '/') selected.current = 0;
@@ -65,7 +77,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   else if (shown === '/profile' || ['/settings', '/edit-profile', '/profile-details'].includes(shown)) selected.current = 3;
   const showNav = !!currentUserId && !['/sign-in', '/onboarding'].includes(pathname);
   // A shared link opened while signed out goes to sign-in, not to an empty page.
-  const mustSignIn = ready && authResolved && !currentUserId && !['/', '/index', '/sign-in', '/onboarding'].includes(pathname);
+  const mustSignIn = ready && authResolved && !currentUserId && !['/', '/index', '/sign-in', '/onboarding', '/birthday'].includes(pathname);
   const nav = <NavBar state={{ index: selected.current, routes }} navigation={{ navigate: name => {
     const destination = paths[name as keyof typeof paths];
     if (!destination) return;
@@ -86,6 +98,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     else router.navigate(destination);
   } }} />;
   if (mustSignIn) return <Redirect href="/sign-in" />;
+  if (needsBirthday) return <Redirect href="/birthday" />;
   return <View style={{ flex: 1, minHeight: 0, backgroundColor: colors.bg, flexDirection: isPhone ? 'column' : 'row' }}>
     {showNav && !isPhone && nav}
     <View style={{ flex: 1, minWidth: 0, minHeight: 0 }}><RouteTransition>{children}</RouteTransition><Toast /><UploadBar /></View>

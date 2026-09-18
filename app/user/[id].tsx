@@ -1,6 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { Image as ExpoImage } from 'expo-image';
 import React, { useState } from 'react';
+import { show as showToast } from '@/lib/toast';
 import { Image, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
@@ -121,7 +122,7 @@ export default function UserProfile() {
               <Button label={followLabel} variant={following || requested ? 'secondary' : 'primary'} onPress={() => actions.toggleFollow(user.id)} full />
             </View>
             <View style={{ flex: 1 }}>
-              <Button label="Message" variant="secondary" onPress={() => router.push(`/messages/${actions.openConversationWith(user.id)}`)} full />
+              <Button label="Message" variant="secondary" onPress={() => { if (!actions.canMessage(user.id)) { showToast({ title: `Only people ${user.name.split(' ')[0]} follows can message them`, icon: 'lock-closed-outline' }); return; } router.push(`/messages/${actions.openConversationWith(user.id)}`); }} full />
             </View>
           </View>
         ) : (

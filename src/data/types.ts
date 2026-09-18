@@ -89,6 +89,8 @@ export interface User {
   readReceiptsEnabled?: boolean;
   /** Only followers see their posts, hits and stats; following needs a request they accept. */
   isPrivate?: boolean;
+  /** From the age check: a teen account (13 to 17) or an adult one. The date of birth itself is never shown. */
+  ageGroup?: 'teen' | 'adult';
   isCoach: boolean;
   followers: number;
   following: number;

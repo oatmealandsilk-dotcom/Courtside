@@ -24,6 +24,8 @@ import * as haptics from '@/lib/haptics';
 import * as toast from '@/lib/toast';
 import { finishUpload, setUploadProgress, simulateUpload, startUpload } from '@/lib/uploads';
 import { requestFeedRefresh } from '@/features/feed/feedBus';
+import { blockDevice, groupFor, rememberAnswered, yearsOld, type AgeGroup } from '@/features/age/ageCheck';
+import { show as showToast } from '@/lib/toast';
 import { framesAt } from '@/features/compose/frames';
 import type {
   Answer,
@@ -357,6 +359,14 @@ interface AppActions {
   /* Messaging */
   openConversationWith: (userId: ID) => ID;
   sendMessage: (conversationId: ID, body: string) => void;
+  /**
+   * The age check: records a date of birth ("2009-04-17") once. Under 13 the
+   * account is removed and this phone will not ask again; 13 to 17 becomes a
+   * teen account, private to start with.
+   */
+  confirmBirthDate: (birthDate: string) => Promise<AgeGroup | 'under13'>;
+  /** Whether you may start a new chat with someone: a teen only gets new chats from people they follow. */
+  canMessage: (userId: ID) => boolean;
   /** New words for a message of yours; it then shows as edited. */
   editMessage: (messageId: ID, body: string) => void;
   /** Takes a message of yours back, for everyone in the chat. */
@@ -1676,6 +1686,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       };
       setState((prev) => ({ ...prev, conversations: [conversation, ...prev.conversations] }));
       if (live(me, userId)) void remote.openConversation(userId, conversation.id).then((standing) => {
+        if (standing === null) {
+          // The database said no: a teen who does not follow you. The empty chat goes.
+          setState((prev) => ({ ...prev, conversations: prev.conversations.filter((c) => c.id !== conversation.id) }));
+          const them = stateRef.current.users.find((u) => u.id === userId);
+          showToast({ title: `Only people ${them?.name.split(' ')[0] ?? 'they'} follows can message them`, icon: 'lock-closed-outline' });
+          return;
+        }
         if (standing === conversation.id) return;
         // The database already had one: fold this one into it.
         setState((prev) => ({
@@ -1757,6 +1774,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => dropMessage(prev, messageId));
     if (live(me, messageId)) void remote.hideMessage(me, messageId);
   }, [requireUser]);
+
+  const confirmBirthDate = useCallback(async (birthDate: string): Promise<AgeGroup | 'under13'> => {
+    const me = requireUser();
+    const tooYoung = async () => {
+      // Nothing is kept for a child: the account goes, and this phone remembers the answer.
+      await blockDevice();
+      try {
+        if (isSupabaseConfigured) await remoteAuth.deleteAccount();
+      } catch { /* the sign-out below still takes it off this phone */ }
+      const savedAccounts = await forgetAccount(me).catch(() => stateRef.current.savedAccounts);
+      setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, savedAccounts }));
+      return 'under13' as const;
+    };
+    const years = yearsOld(birthDate);
+    if (years < 13) return tooYoung();
+    let group: AgeGroup = groupFor(years);
+    if (live(me)) {
+      const answer = await remote.setBirthDate(birthDate);
+      if (answer === 'under_13') return tooYoung();
+      // The database's answer wins (it keeps the first date given); without its age check yet, the typed one stands.
+      if (answer) group = answer;
+    }
+    setState((prev) => ({
+      ...prev,
+      users: prev.users.map((u) => (u.id === me ? { ...u, ageGroup: group, isPrivate: group === 'teen' && !u.ageGroup ? true : u.isPrivate } : u)),
+    }));
+    await rememberAnswered(me, group);
+    return group;
+  }, [requireUser]);
+
+  const canMessage = useCallback((userId: ID) => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    if (!me) return false;
+    if (s.conversations.some((c) => c.participantIds.length === 2 && c.participantIds.includes(userId) && c.participantIds.includes(me))) return true;
+    const them = s.users.find((u) => u.id === userId);
+    if (them?.ageGroup !== 'teen') return true;
+    return s.followEdges.some((e) => e.followerId === userId && e.followingId === me);
+  }, []);
 
   /** Share a clip or a thread into one or more DMs, Instagram style. */
   const shareToUsers = useCallback(
@@ -2226,6 +2282,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       recordView,
       openConversationWith,
       sendMessage,
+      confirmBirthDate,
+      canMessage,
       editMessage,
       unsendMessage,
       deleteMessageForMe,
@@ -2299,6 +2357,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       recordView,
       openConversationWith,
       sendMessage,
+      confirmBirthDate,
+      canMessage,
       editMessage,
       unsendMessage,
       deleteMessageForMe,
