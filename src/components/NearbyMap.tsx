@@ -22,7 +22,7 @@ const CITY = { latitudeDelta: 0.16, longitudeDelta: 0.16 };
  * In the community tab it is a still card that opens into its own page;
  * expanded, every drag and pinch moves the map itself.
  */
-export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, fullscreen = false, at, onLocate, locationOn, onToggleLocation }: {
+export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, fullscreen = false, at, onLocate, locationOn, locating = false, onToggleLocation }: {
   me: User; players: User[]; onOpen: (id: string) => void;
   /** Tapping the card or the expand button opens the full map. */
   onExpand?: () => void;
@@ -35,6 +35,8 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
   onLocate?: () => void;
   /** Whether the app is using the device's location; the switch on the map flips it. */
   locationOn?: boolean;
+  /** Asking the device where it is, right now. */
+  locating?: boolean;
   onToggleLocation?: () => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -117,7 +119,7 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
           {onToggleLocation ? (
             <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? 'Turn location off' : 'Turn location on'} onPress={onToggleLocation} hitSlop={8} style={[styles.locPill, locationOn && styles.locPillOn]}>
               <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={12} color={locationOn ? colors.brandInk : colors.textMuted} />
-              <Text style={[styles.locPillText, locationOn && { color: colors.brandInk }]}>{locationOn ? 'Location on' : 'Location off'}</Text>
+              <Text style={[styles.locPillText, locationOn && { color: colors.brandInk }]}>{locating ? 'Finding you…' : locationOn ? 'Location on' : 'Location off'}</Text>
             </Pressable>
           ) : null}
         </View>}
@@ -139,7 +141,7 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
           {onToggleLocation ? (
             <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? 'Turn location off' : 'Turn location on'} onPress={onToggleLocation} style={[styles.useLocation, !locationOn && styles.useLocationOff]}>
               <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={15} color={locationOn ? colors.brandInk : colors.text} />
-              <Text style={[styles.useLocationText, !locationOn && { color: colors.text }]}>{locationOn ? 'Location on' : 'Location off'}</Text>
+              <Text style={[styles.useLocationText, !locationOn && { color: colors.text }]}>{locating ? 'Finding you…' : locationOn ? 'Location on' : 'Location off'}</Text>
             </Pressable>
           ) : !at && onLocate ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Use my location" onPress={onLocate} style={styles.useLocation}>
@@ -163,7 +165,7 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
         {onToggleLocation ? (
           <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? 'Turn location off' : 'Turn location on'} onPress={onToggleLocation} hitSlop={8} style={[styles.locPill, locationOn && styles.locPillOn]}>
             <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={12} color={locationOn ? colors.brandInk : colors.textMuted} />
-            <Text style={[styles.locPillText, locationOn && { color: colors.brandInk }]}>{locationOn ? 'Location on' : 'Location off'}</Text>
+            <Text style={[styles.locPillText, locationOn && { color: colors.brandInk }]}>{locating ? 'Finding you…' : locationOn ? 'Location on' : 'Location off'}</Text>
           </Pressable>
         ) : null}
         {onExpand ? (

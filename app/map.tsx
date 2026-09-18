@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 
 import { NearbyMap } from '@/components/NearbyMap';
+import { useLocationToggle } from '@/features/players/useLocationToggle';
 import { EmptyState, Screen } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 
@@ -11,6 +12,7 @@ import { useApp } from '@/store/AppContext';
 export default function MapScreen() {
   const { users, currentUser, currentUserId, blockedIds, locationEnabled, detectedCoords, actions } = useApp();
   const players = users.filter((u) => u.id !== currentUserId && !blockedIds.includes(u.id));
+  const location = useLocationToggle();
   // Opening the map is the moment to ask where you are, once.
   const asked = useRef(false);
   useEffect(() => {
@@ -23,7 +25,7 @@ export default function MapScreen() {
     <Screen title="Players near you" compactTitle scroll={false} padded={false} onBack={() => goBack('/discuss?section=players')}>
       {currentUser ? (
         <View style={{ flex: 1 }}>
-          <NearbyMap expanded fullscreen me={currentUser} players={players} at={detectedCoords} locationOn={locationEnabled} onToggleLocation={() => { void actions.setLocationEnabled(!locationEnabled); }} onOpen={(id) => router.push(`/user/${id}`)} />
+          <NearbyMap expanded fullscreen me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={(id) => router.push(`/user/${id}`)} />
         </View>
       ) : (
         <EmptyState title="Sign in to see who is around" />

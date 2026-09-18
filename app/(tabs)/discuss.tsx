@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { LevelPill } from '@/components/LevelPill';
 import { NearbyMap } from '@/components/NearbyMap';
+import { useLocationToggle } from '@/features/players/useLocationToggle';
 import { QuestionCard, TOPIC_META } from '@/components/QuestionCard';
 import { Avatar, Chip, EmptyState, Screen } from '@/components/ui';
 import { reportSection, subscribeSectionRequest } from '@/features/navigation/swipeOrder';
@@ -48,6 +49,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const [tabWidth, setTabWidth] = useState(0);
   const underline = useTabUnderline(sectionIndex, 2, tabWidth);
   const [search, setSearch] = useState('');
+  const location = useLocationToggle();
   // The accounts that threads are pulled in under (Reddit, Talk Tennis) are not players.
   const players = users.filter(u => u.id !== currentUserId && !blockedIds.includes(u.id) && !sourceUserIds.includes(u.id) && `${u.name} ${u.handle} ${u.location}`.toLowerCase().includes(search.toLowerCase()));
   const [topic, setTopic] = useState<QuestionTopic | 'all'>('all');
@@ -74,7 +76,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const content = (section:string) => (section === 'players' ? <View style={{ gap: 16 }}>
         <TextInput accessibilityLabel="Search players" placeholder="Search by name, handle, or city" placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} style={styles.search} />
         {currentUser && !search ? (section === 'players'
-          ? <NearbyMap me={currentUser} players={players} at={detectedCoords} locationOn={locationEnabled} onToggleLocation={() => { void actions.setLocationEnabled(!locationEnabled); }} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} />
+          ? <NearbyMap me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} />
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : <View style={styles.mapStandIn} />) : null}
         {players.map(user => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && { backgroundColor: colors.surfaceAlt }]}>
