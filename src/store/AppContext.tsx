@@ -223,6 +223,12 @@ interface AppState extends Bootstrap {
   savedAccounts: SavedAccount[];
   /** Every follow the app knows about, for followers and following lists. */
   followEdges: { followerId: ID; followingId: ID }[];
+  /**
+   * Where the feed has got to: the moment of the oldest post it has asked
+   * for, and whether older ones may still be waiting. The feed asks for the
+   * next page as it nears the end, rather than loading everything at once.
+   */
+  feed: { cursor: string | null; more: boolean };
   /** Pending asks to follow a private account — yours, and the ones waiting on you. */
   followRequests: { fromId: ID; toId: ID; createdAt: string }[];
   /** People whose posts you have muted — still followed, just quiet. */
@@ -363,6 +369,12 @@ interface AppActions {
   loadOlderMessages: (conversationId: ID) => Promise<number>;
   /** Every reply in a thread, loaded when it is opened. */
   loadThread: (questionId: ID) => Promise<void>;
+  /** The next page of older feed posts. Resolves with the ones that were added. */
+  loadMorePosts: () => Promise<Post[]>;
+  /** One player's own posts, loaded when their profile is opened. */
+  loadPostsOf: (userId: ID) => Promise<void>;
+  /** Everything bookmarked, loaded when Saved is opened. */
+  loadSavedPosts: () => Promise<void>;
   /** Whether a chat is with someone you are blocked with, either way. */
   isChatBlocked: (conversationId: ID) => Promise<boolean>;
   /** Someone's followers and following, loaded when their list is opened. */
@@ -434,6 +446,24 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Whether an id names a row in Supabase rather than a fixture. */
 const live = (...ids: (ID | null | undefined)[]) => isSupabaseConfigured && ids.every((id) => !!id && UUID.test(id));
 
+/** The moment of the oldest post in a batch: where the next page carries on from. */
+const oldestOf = (posts: Post[]) => posts.reduce<string | null>((old, p) => (!old || p.createdAt < old ? p.createdAt : old), null);
+
+/**
+ * Posts and comments that have just come down, added to the ones already
+ * held. A copy already in hand is kept as it is: it may carry a like or a
+ * comment made on this phone a moment ago that the database has not caught
+ * up with.
+ */
+function addPosts(prev: AppState, got: { posts: Post[]; comments: Comment[] }): AppState {
+  const havePost = new Set(prev.posts.map((p) => p.id));
+  const fresh = got.posts.filter((p) => !havePost.has(p.id));
+  const haveComment = new Set(prev.comments.map((c) => c.id));
+  const freshComments = got.comments.filter((c) => !haveComment.has(c.id));
+  if (!fresh.length && !freshComments.length) return prev;
+  return { ...prev, posts: [...prev.posts, ...fresh], comments: [...prev.comments, ...freshComments] };
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>({
     ...emptyBootstrap,
@@ -447,6 +477,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     followingIds: [],
     followEdges: [],
     followRequests: [],
+    feed: { cursor: null, more: false },
     remoteLoaded: false,
     savedAccounts: [],
     mutedIds: [],
@@ -650,6 +681,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           followingIds: data.followingIds,
           followEdges: data.followEdges,
           followRequests: data.followRequests,
+          // The feed carries on from the oldest post that came with the open.
+          feed: { cursor: oldestOf(data.posts), more: data.posts.length > 0 },
           // Your real conversations replace the demo ones once the messages tables exist.
           conversations: data.conversations.length || data.messages.length ? data.conversations : prev.conversations.filter((c) => c.participantIds.includes(me)),
           messages: data.conversations.length || data.messages.length ? data.messages : prev.messages,
@@ -1637,6 +1670,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return add.length ? { ...prev, followEdges: [...prev.followEdges, ...add] } : prev;
     });
   }, []);
+  // One page of posts at a time, and one ask per profile per session.
+  const loadingMore = useRef(false);
+  const loadedProfiles = useRef(new Set<ID>());
   // Reports, for admins. The database decides who may read and act on them.
   const loadReports = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchReports() : []), []);
   const loadReportedItem = useCallback(async (kind: 'post' | 'hit', id: ID) => (live(stateRef.current.currentUserId, id) ? remote.fetchReportedItem(kind, id) : null), []);
@@ -1674,6 +1710,56 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return { ...prev, messages, conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, messageIds: inChat } : c)) };
     });
     return got.messages.length;
+  }, []);
+  /**
+   * The feed nearing the end of what it holds: the page of posts older than
+   * the last one asked for. Resolves with the posts that were added, so the
+   * feed can put those pages on the end without re-ordering what you are
+   * already looking at.
+   */
+  const loadMorePosts = useCallback(async () => {
+    const { currentUserId: me, feed } = stateRef.current;
+    if (!live(me) || !feed.more || !feed.cursor || loadingMore.current) return [];
+    loadingMore.current = true;
+    try {
+      const got = await remote.fetchMorePosts(feed.cursor);
+      if (!got) { setState((prev) => ({ ...prev, feed: { ...prev.feed, more: false } })); return []; }
+      const known = new Set(stateRef.current.posts.map((p) => p.id));
+      const fresh = got.posts.filter((p) => !known.has(p.id));
+      setState((prev) => ({
+        ...addPosts(prev, got),
+        // A page that came back empty of new posts still moves the cursor on,
+        // so the next ask is for older ones and not the same page again.
+        feed: { cursor: oldestOf(got.posts) ?? prev.feed.cursor, more: got.more },
+      }));
+      return fresh;
+    } finally {
+      loadingMore.current = false;
+    }
+  }, []);
+  /**
+   * Opening a profile: that player's posts, however old, so their grid and
+   * their counts are whole and not just whatever the feed happened to hold.
+   * Asked once per player per session.
+   */
+  const loadPostsOf = useCallback(async (userId: ID) => {
+    if (!live(stateRef.current.currentUserId, userId) || loadedProfiles.current.has(userId)) return;
+    loadedProfiles.current.add(userId);
+    const got = await remote.fetchUserPosts(userId);
+    if (!got) { loadedProfiles.current.delete(userId); return; }
+    setState((prev) => addPosts(prev, got));
+  }, []);
+  /** Opening Saved: everything bookmarked, however far back, not only what the feed holds. */
+  const loadSavedPosts = useCallback(async () => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me)) return;
+    const got = await remote.fetchSavedPosts(me!);
+    if (!got) return;
+    setState((prev) => {
+      const next = addPosts(prev, got);
+      const ids = [...got.ids, ...prev.saved.postIds.filter((id) => !got.ids.includes(id))];
+      return { ...next, saved: { ...next.saved, postIds: ids } };
+    });
   }, []);
   // Opening a thread: all of its replies, not only the newest that came with the app.
   const loadThread = useCallback(async (questionId: ID) => {
@@ -2411,6 +2497,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       noteFeedSignal,
       loadOlderMessages,
       loadThread,
+      loadMorePosts,
+      loadPostsOf,
+      loadSavedPosts,
       isChatBlocked,
       loadFollowsOf,
       loadReports,
@@ -2494,6 +2583,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       noteFeedSignal,
       loadOlderMessages,
       loadThread,
+      loadMorePosts,
+      loadPostsOf,
+      loadSavedPosts,
       isChatBlocked,
       loadFollowsOf,
       loadReports,

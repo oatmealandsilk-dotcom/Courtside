@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
@@ -15,6 +15,9 @@ import { colors, spacing, typography } from '@/theme';
 export default function Saved() {
   const styles = useThemedStyles(styleDefinitions);
   const { saved, posts, questions, users, actions } = useApp();
+  // Everything bookmarked, however far back — otherwise older saves quietly
+  // drop off as the feed moves on.
+  useEffect(() => { void actions.loadSavedPosts(); }, [actions]);
   const [tab, setTab] = useState<'videos' | 'discussions'>('videos');
   // The grid is three across, sized from its own measured width, the way the profile grid is.
   const { width: windowWidth } = useWindowDimensions();

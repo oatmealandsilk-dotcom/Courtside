@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
@@ -20,6 +20,8 @@ type Tab = 'stories' | 'posts';
 export default function Archive() {
   const styles = useThemedStyles(styleDefinitions);
   const { posts, stories, currentUserId, actions } = useApp();
+  // Your own posts, put-away ones included; the feed never carries those.
+  useEffect(() => { if (currentUserId) void actions.loadPostsOf(currentUserId); }, [currentUserId, actions]);
   const [tab, setTab] = useState<Tab>('stories');
 
   const myStories = archivedStories(stories, currentUserId);

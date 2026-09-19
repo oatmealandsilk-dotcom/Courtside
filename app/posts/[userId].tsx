@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
@@ -17,7 +17,9 @@ type Set = 'own' | 'clips' | 'tagged';
  */
 export default function PlayerPosts() {
   const { userId, post: start, set = 'own' } = useLocalSearchParams<{ userId: string; post?: string; set?: Set }>();
-  const { users } = useApp();
+  const { users, actions } = useApp();
+  // The same posts the grid was built from, so this feed does not stop short.
+  useEffect(() => { if (userId) void actions.loadPostsOf(userId); }, [userId, actions]);
   if (!users.some((u) => u.id === userId)) {
     return (
       <Screen title="Posts" compactTitle onBack={() => goBack()}>

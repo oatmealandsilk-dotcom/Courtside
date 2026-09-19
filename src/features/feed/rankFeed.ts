@@ -28,3 +28,18 @@ export function rankFeed(posts: Post[], questions: Question[], comments: Comment
   }
   return result;
 }
+
+/**
+ * A shuffle that still knows what is fresh. Every page draws a random number,
+ * and a page the ranking liked gets a head start on it, so the feed comes out
+ * in a different order every time it is dealt without the newest clips
+ * sinking out of sight. The head start is deliberately small: the randomness
+ * spreads across the whole list, the ranking only leans on it.
+ */
+export function shuffleFeed(keys: string[]): string[] {
+  const lean = 0.35;
+  return keys
+    .map((key, rank) => ({ key, at: Math.random() * keys.length + rank * lean }))
+    .sort((a, b) => a.at - b.at)
+    .map((x) => x.key);
+}

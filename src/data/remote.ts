@@ -105,6 +105,24 @@ const toUser = (row: ProfileRow, followers: number, following: number): User => 
   stats: emptyStats,
 });
 
+/**
+ * What a post needs to arrive whole: who liked it, who saved it, and its
+ * comments. Used by the opening load and by every later page, so a post that
+ * comes in later is never a thinner version of the same thing.
+ */
+const POST_SELECT = '*, post_likes(user_id), post_saves(user_id), comments(id, post_id, author_id, body, created_at, comment_likes(user_id))';
+/** How many posts come at a time: on open, and each time the feed nears its end. */
+export const POST_PAGE = 40;
+type FullPostRow = PostRow & { comments?: CommentRow[]; removed_at?: string | null };
+/**
+ * Rows to the posts and comments the app holds. A post an admin removed never
+ * comes through; admins see it only on the Reports screen.
+ */
+function toPosts(rows: FullPostRow[]): { posts: Post[]; comments: Comment[] } {
+  const live = rows.filter((row) => !row.removed_at);
+  return { posts: live.map(toPost), comments: live.flatMap((row) => (row.comments ?? []).map(toComment)) };
+}
+
 const toPost = (row: PostRow): Post => ({
   id: row.id,
   authorId: row.author_id,
@@ -335,7 +353,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows] = await Promise.all([
     // Every profile, in chunks, so nobody is left out past the first 1,000.
     allRows<ProfileRow>((from, to) => db.from('profiles').select('*').order('created_at', { ascending: true }).range(from, to)),
-    db.from('posts').select('*, post_likes(user_id), post_saves(user_id), comments(id, post_id, author_id, body, created_at, comment_likes(user_id))').order('created_at', { ascending: false }).limit(60),
+    db.from('posts').select(POST_SELECT).order('created_at', { ascending: false }).limit(POST_PAGE),
     storiesFull,
     // Only the follows that involve you: who you follow, and who follows you.
     allRows<Edge>((from, to) => db.from('follows').select('follower_id, following_id').or(`follower_id.eq.${me},following_id.eq.${me}`).range(from, to)),
@@ -658,6 +676,66 @@ export const remote = {
     const { error } = await need().rpc('moderate_report', { report: reportId, decision });
     if (error) { fail('moderate')(error); return false; }
     return true;
+  },
+
+  /* ------------------------------ more posts ------------------------------ */
+
+  /**
+   * The page of feed posts just older than `before`, newest first, for when
+   * the feed nears the end of what is loaded. `more` says whether there are
+   * older ones still. Posts someone put away are left out: the feed never
+   * shows them, and your own come with your profile instead.
+   */
+  async fetchMorePosts(before: string): Promise<{ posts: Post[]; comments: Comment[]; more: boolean } | null> {
+    const { data, error } = await need().from('posts').select(POST_SELECT)
+      .lt('created_at', before).eq('archived', false)
+      .order('created_at', { ascending: false }).limit(POST_PAGE);
+    if (error) { fail('more posts')(error); return null; }
+    const rows = (data ?? []) as FullPostRow[];
+    return { ...toPosts(rows), more: rows.length === POST_PAGE };
+  },
+
+  /**
+   * Everything one player has posted, newest first, plus the posts they were
+   * tagged in — so their grid and their counts are whole however old the
+   * posts are. Your own put-away posts come too (nobody else's do: the
+   * database does not hand them over).
+   */
+  async fetchUserPosts(userId: ID): Promise<{ posts: Post[]; comments: Comment[] } | null> {
+    if (!UUID_RE.test(userId)) return null;
+    const db = need();
+    const [own, tagged] = await Promise.all([
+      allRows<FullPostRow>((from, to) => db.from('posts').select(POST_SELECT).eq('author_id', userId).order('created_at', { ascending: false }).range(from, to), 3000),
+      db.from('posts').select(POST_SELECT).contains('tagged_user_ids', [userId]).order('created_at', { ascending: false }).limit(300),
+    ]);
+    if (own.error) { fail('their posts')(own.error); return null; }
+    if (tagged.error) fail('tagged posts')(tagged.error);
+    const rows = [...own.data, ...((tagged.data ?? []) as FullPostRow[])];
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return toPosts([...byId.values()]);
+  },
+
+  /**
+   * The posts this player bookmarked, however far back they go, so nothing
+   * quietly drops off the Saved page once the app holds more than it opened
+   * with.
+   */
+  async fetchSavedPosts(me: ID): Promise<{ posts: Post[]; comments: Comment[]; ids: ID[] } | null> {
+    const db = need();
+    const saves = await allRows<{ post_id: string }>((from, to) => db.from('post_saves').select('post_id, created_at').eq('user_id', me).order('created_at', { ascending: false }).range(from, to), 3000);
+    if (saves.error) { fail('saved posts')(saves.error); return null; }
+    const ids = saves.data.map((row) => row.post_id);
+    const rows: FullPostRow[] = [];
+    // Asked for in handfuls: one long list of ids makes a web address the
+    // database refuses.
+    for (let at = 0; at < ids.length; at += 100) {
+      const { data, error } = await db.from('posts').select(POST_SELECT).in('id', ids.slice(at, at + 100));
+      if (error) { fail('saved posts')(error); break; }
+      rows.push(...((data ?? []) as FullPostRow[]));
+    }
+    // Newest save first, and one an admin removed is no longer saved for anyone.
+    const live = new Set(rows.filter((row) => !row.removed_at).map((row) => row.id));
+    return { ...toPosts(rows), ids: ids.filter((id) => live.has(id)) };
   },
 
   /** Every reply in one thread, oldest first: the whole conversation when it is opened. */

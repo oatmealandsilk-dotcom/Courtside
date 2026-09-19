@@ -32,7 +32,7 @@ import { TipPage } from '@/components/TipPage';
 import { isLive } from '@/features/stories/stories';
 import { sourceUserIds } from '@/features/community/importedThreads';
 import { ClipPlayback } from '@/components/ClipPlayback';
-import { rankFeed, type FeedItem } from '@/features/feed/rankFeed';
+import { rankFeed, shuffleFeed, type FeedItem } from '@/features/feed/rankFeed';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { relativeTime, timeLeft } from '@/lib/format';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -243,16 +243,13 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         .filter((p) => p.authorId === data.currentUserId && !p.archived && Date.now() - Date.parse(p.createdAt) < 5 * 60_000)
         .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
         .map((p) => `p:${p.id}`);
-      let rest = ranked.filter((k) => !justMine.includes(k));
-      if (fresh) {
-        // A pull-to-refresh is a new feed: what you have already looked at
-        // this session drops to the back, and what is left is dealt out in a
-        // fresh order each time — the top is never the same page again.
-        const unseen = rest.filter((k) => !seen.current.has(k));
-        const old = rest.filter((k) => seen.current.has(k));
-        const shuffled = unseen.map((k, i) => ({ k, at: i + Math.random() * 4 })).sort((a, b) => a.at - b.at).map((x) => x.k);
-        rest = [...shuffled, ...old];
-      }
+      // The feed is dealt, not listed: what you have already watched this
+      // session drops behind everything you have not, and both halves come
+      // out shuffled, so no two opens (or refreshes) read the same way.
+      const others = ranked.filter((k) => !justMine.includes(k));
+      const unseen = others.filter((k) => !seen.current.has(k));
+      const watched = others.filter((k) => seen.current.has(k));
+      const rest = [...shuffleFeed(unseen), ...shuffleFeed(watched)];
       const final = [...justMine, ...rest];
       // The feed always opens on a clip (unless something of yours just
       // landed): the first clip in the order is brought to the front.
@@ -279,6 +276,30 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       rerank();
     }, [ready, currentUserId, scope?.userId, scope?.set, rerank]),
   );
+  /**
+   * Nearing the end of what is loaded: the next page of older posts is asked
+   * for and dealt onto the end. The pages already in front of you are left
+   * exactly as they are — re-ranking here would throw you back to the top.
+   */
+  useEffect(() => {
+    if (scope || !ready) return;
+    if (!order.length || active < order.length - 5) return;
+    let dropped = false;
+    void actions.loadMorePosts().then((fresh) => {
+      if (dropped || !fresh.length) return;
+      setOrder((prev) => {
+        const have = new Set(prev);
+        const hidden = new Set([...latest.current.blockedIds, ...latest.current.mutedIds]);
+        const keys = fresh
+          .filter((p) => !p.archived && !hidden.has(p.authorId))
+          .map((p) => `p:${p.id}`)
+          .filter((k) => !have.has(k));
+        return keys.length ? [...prev, ...shuffleFeed(keys)] : prev;
+      });
+    });
+    return () => { dropped = true; };
+  }, [active, order.length, scope, ready, actions]);
+
   // A post of yours that just finished uploading: the feed starts over with it on top.
   useEffect(() => subscribeFeedRefresh(() => { if (!scope) rerank(); }), [scope, rerank]);
   // Pulling down on the first page fetches what is new and starts the feed over from the top.
