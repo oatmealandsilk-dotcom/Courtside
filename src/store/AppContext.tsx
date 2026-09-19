@@ -610,6 +610,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const remoteStories = new Set(data.stories.map((s) => s.id));
         const remoteComments = new Set(data.comments.map((c) => c.id));
         let users = [...data.users, ...prev.users.filter((u) => !remoteUsers.has(u.id))];
+        // What the coach works around is private: it comes from your own
+        // settings row and goes back into your profile here, on your phone only.
+        const ownConstraints = data.userState?.constraints;
+        if (ownConstraints) users = users.map((u) => (u.id === me ? { ...u, profile: { ...u.profile, constraints: ownConstraints } } : u));
         // The profile row is created by a trigger; if it has not landed yet,
         // stand in for it so the screens have someone to show.
         if (!remoteUsers.has(me)) {

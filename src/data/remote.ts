@@ -191,6 +191,8 @@ const toTip = (r: TipRow): Tip => ({ id: r.id, authorId: r.user_id, body: r.body
 export interface UserState {
   mutedIds: ID[]; blockedIds: ID[]; savedQuestionIds: ID[]; paymentMethods: PaymentMethod[]; defaultPaymentId: ID | null;
   showActivity: boolean; pushLikes: boolean; pushCoach: boolean;
+  /** What the coach works around (injuries, schedule, gear): kept in this private row, never on the public profile. Undefined on a database without migration 19. */
+  constraints?: PlayerProfile['constraints'];
 }
 
 interface QuestionRow { id: string; author_id: string; title: string; body: string; topic: string; tags: string[]; votes: number; voted_by: Record<string, 1 | -1>; accepted_answer_id: string | null; edited_at: string | null; created_at: string }
@@ -199,7 +201,7 @@ interface CoachQuestionRow { id: string; author_id: string; title: string; body:
 interface CoachReplyRow { id: string; question_id: string; coach_user_id: string; body: string; helpful_by: string[]; created_at: string }
 interface CoachingRequestRow { id: string; coach_id: string; user_id: string; service_id: string; question: string; video_label: string | null; status: string; response: string | null; responded_at: string | null; created_at: string }
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
-interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean }
+interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; private_profile?: { constraints?: PlayerProfile['constraints'] } | null }
 
 const toQuestion = (r: QuestionRow, answers: AnswerRow[]): Question => ({
   id: r.id, authorId: r.author_id, title: r.title, body: r.body, topic: r.topic as Question['topic'], tags: r.tags ?? [],
@@ -227,6 +229,7 @@ const toNotification = (r: NotificationRow): Notification => ({
 const toUserState = (r: UserStateRow): UserState => ({
   mutedIds: r.muted_ids ?? [], blockedIds: r.blocked_ids ?? [], savedQuestionIds: r.saved_question_ids ?? [], paymentMethods: r.payment_methods ?? [],
   defaultPaymentId: r.default_payment_id, showActivity: r.show_activity, pushLikes: r.push_likes, pushCoach: r.push_coach,
+  constraints: Array.isArray(r.private_profile?.constraints) ? r.private_profile!.constraints : undefined,
 });
 
 interface CoachApplicationRow {

@@ -108,7 +108,8 @@ export default function Profile() {
         </Card>
       </Section>
 
-      {profile.constraints.length > 0 ? (
+      {/* Injuries, schedule and gear notes are private: only their owner ever sees this section. */}
+      {isMe && profile.constraints.length > 0 ? (
         <Section title="THE COACH WORKS AROUND">
           <Card style={styles.listCard}>
             {profile.constraints.map((c) => (
