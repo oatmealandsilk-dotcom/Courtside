@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
+import Reanimated, { Easing, FadeInDown, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
 import { MediaPicker, pickFromDevice, type PickedMedia } from '@/components/MediaPicker';
 import { MediaEditor, type EditedMedia } from '@/components/MediaEditor';
@@ -18,6 +19,10 @@ import type { QuestionTopic } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
 
 type Mode = 'clip' | 'post' | 'story' | 'hit' | 'question';
+
+const goBackNow = () => router.back();
+/** Each choice in the Create box arrives a moment after the one above it. */
+const arrive = (index: number) => FadeInDown.delay(90 + index * 55).duration(260).easing(Easing.out(Easing.cubic));
 /** choose → library → form, with back always stepping one page left. */
 type Stage = 'choose' | 'library' | 'edit' | 'form';
 
@@ -38,6 +43,15 @@ export default function Compose() {
   const shotUri = params.shot === 'pending' ? takePendingShot() : params.shot;
   const isHit = params.mode === 'hit' && !!shotUri;
   const [stage, setStage] = useState<Stage>(isHit ? 'form' : 'choose');
+  // The Create box rises and grows into place with a small spring when it
+  // opens, and plays that backwards when it closes, instead of only fading.
+  const pop = useSharedValue(0);
+  useEffect(() => { pop.value = withSpring(1, { damping: 15, stiffness: 190, mass: 0.8 }); }, [pop]);
+  const popStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, pop.value * 1.6),
+    transform: [{ translateY: (1 - pop.value) * 28 }, { scale: 0.94 + 0.06 * pop.value }],
+  }));
+  const closeMenu = () => { pop.value = withTiming(0, { duration: 150 }, (done) => { if (done) runOnJS(goBackNow)(); }); };
   const [mode, setMode] = useState<Mode>(isHit ? 'hit' : params.mode === 'story' ? 'story' : 'post');
   const [media, setMedia] = useState<PickedMedia | null>(isHit ? { uri: shotUri as string, label: 'Hit', kind: 'photo', thumbnailUrl: shotUri as string, orientation: 'portrait' } : null);
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
@@ -125,26 +139,26 @@ export default function Compose() {
 
   if (stage === 'choose') return <View style={styles.choiceBackdrop}>
     <SheetBackdrop />
-    <Pressable accessibilityRole="button" accessibilityLabel="Close create menu" onPress={() => router.back()} style={StyleSheet.absoluteFill}/>
-    <View style={styles.choiceSheet}>
-      <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>Create</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => router.back()}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
+    <Pressable accessibilityRole="button" accessibilityLabel="Close create menu" onPress={closeMenu} style={StyleSheet.absoluteFill}/>
+    <Reanimated.View style={[styles.choiceSheet, popStyle]}>
+      <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>Create</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeMenu} hitSlop={10}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
       {/* Catches a Photos problem before it turns into the cryptic iOS 3164
           error mid-pick, and links straight to the fix. */}
       <PermissionBanner needs={['photos']} />
-      <Pressable accessibilityRole="button" accessibilityLabel="Create a clip" onPress={() => { setMode('clip'); void openDevice('video'); }} style={styles.choiceOption}>
+      <Reanimated.View entering={arrive(0)}><Pressable accessibilityRole="button" accessibilityLabel="Create a clip" onPress={() => { setMode('clip'); void openDevice('video'); }} style={styles.choiceOption}>
         <Ionicons name="videocam-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Clip</Text><Text style={styles.note}>Share a video from your device.</Text>
-      </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => { setMode('post'); void openDevice('all'); }} style={styles.choiceOption}>
+      </Pressable></Reanimated.View>
+      <Reanimated.View entering={arrive(1)}><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => { setMode('post'); void openDevice('all'); }} style={styles.choiceOption}>
         <Ionicons name="images-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Post</Text><Text style={styles.note}>Choose from your photos and videos.</Text>
-      </Pressable>
+      </Pressable></Reanimated.View>
       {pickError ? <Text style={styles.pickError}>{pickError}</Text> : null}
-      <Pressable accessibilityRole="button" accessibilityLabel="Take a hit" onPress={() => router.replace('/hit')} style={styles.choiceOption}>
+      <Reanimated.View entering={arrive(2)}><Pressable accessibilityRole="button" accessibilityLabel="Take a hit" onPress={() => router.replace('/hit')} style={styles.choiceOption}>
         <Ionicons name="camera-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Hit</Text><Text style={styles.note}>One photo after a session. Five-second count, no retakes. Up for 24 hours.</Text>
-      </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={styles.choiceOption}>
+      </Pressable></Reanimated.View>
+      <Reanimated.View entering={arrive(3)}><Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={styles.choiceOption}>
         <Ionicons name="chatbubbles-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Thread or question</Text><Text style={styles.note}>Ask the community or start a conversation.</Text>
-      </Pressable>
-    </View>
+      </Pressable></Reanimated.View>
+    </Reanimated.View>
   </View>;
 
   if (stage === 'edit' && media) {
