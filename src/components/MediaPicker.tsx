@@ -74,14 +74,16 @@ export async function pickFromDevice(selection: 'video' | 'photo' | 'all'): Prom
 }
 
 /**
- * Hand the file over as it is, and fetch it from iCloud when the phone has
- * offloaded it. Passthrough copies the raw file, and in that mode the library
- * only reaches iCloud with the download flag on — off, an offloaded video
- * fails with PHPhotosErrorDomain 3164 ("network access required").
+ * A picked video is converted by the iPhone itself to standard 1080p H.264
+ * before it is handed over: several times smaller than the raw file (often
+ * 4K), quicker to upload and to watch, and playable on every phone and
+ * browser (the raw file is often HEVC, which some Android phones and
+ * browsers cannot play). A video the phone has offloaded to iCloud is
+ * fetched automatically when converting. Photos are handed over as they are.
  */
 const AS_IS = {
   preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current,
-  videoExportPreset: ImagePicker.VideoExportPreset.Passthrough,
+  videoExportPreset: ImagePicker.VideoExportPreset.H264_1920x1080,
   shouldDownloadFromNetwork: true,
 };
 

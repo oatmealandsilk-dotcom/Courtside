@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import Reanimated, { Easing, FadeInDown, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
@@ -152,13 +152,18 @@ export default function Compose() {
 
   // Straight to the phone's library from the + menu; a cancel leaves the menu up.
   const [pickError, setPickError] = useState('');
+  // While a video is being picked and converted (a few seconds on iPhone), the box says so.
+  const [preparing, setPreparing] = useState<null | 'video' | 'all'>(null);
   const openDevice = async (selection: 'video' | 'all') => {
     setPickError('');
+    setPreparing(selection);
     try {
       const next = await pickFromDevice(selection);
       if (next) pick(next);
     } catch (err) {
       setPickError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPreparing(null);
     }
   };
 
@@ -166,6 +171,12 @@ export default function Compose() {
     <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimStyle]}><SheetBackdrop /></Reanimated.View>
     <Pressable accessibilityRole="button" accessibilityLabel="Close create menu" onPress={closeMenu} style={StyleSheet.absoluteFill}/>
     <Reanimated.View style={[styles.choiceSheet, popStyle]}>
+      {preparing ? (
+        <View style={styles.preparing} accessibilityLiveRegion="polite">
+          <ActivityIndicator color={colors.brand} />
+          <Text style={styles.preparingText}>{preparing === 'video' ? 'Preparing video…' : 'Preparing…'}</Text>
+        </View>
+      ) : null}
       <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>Create</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeMenu} hitSlop={10}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
       {/* Catches a Photos problem before it turns into the cryptic iOS 3164
           error mid-pick, and links straight to the fix. */}
@@ -355,6 +366,8 @@ export default function Compose() {
 const styleDefinitions = StyleSheet.create({
   choiceBackdrop: { flex: 1, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', padding: 20 },
   choiceSheet: { width: '100%', maxWidth: 400, borderRadius: 24, padding: 20, gap: 12, backgroundColor: colors.bg },
+  preparing: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 5, borderRadius: 24, alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: colors.bg },
+  preparingText: { ...typography.bodyStrong, color: colors.text },
   choiceHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8 },
   choiceTitle: { fontSize: 22, fontWeight: '700', color: colors.text },
   choiceOption: { padding: 20, gap: 8, borderRadius: 18, backgroundColor: colors.surface },
