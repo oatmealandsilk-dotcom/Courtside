@@ -1,5 +1,4 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { ThemeCourt } from '@/components/ThemeCourt';
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
@@ -92,8 +91,13 @@ function ThemeCard({ option, active, onPick, styles }: { option: (typeof themeLi
   return (
     <Pressable accessibilityRole="radio" accessibilityState={{ selected: active }} accessibilityLabel={`${option.label} theme`} onPress={onPick}>
       <Animated.View style={[styles.card, cardStyle]}>
-        <Animated.View style={swatchStyle}>
-          <ThemeCourt name={option.name} size={58} />
+        <Animated.View style={[styles.swatch, { backgroundColor: palette.bg, borderColor: palette.border }, swatchStyle]}>
+          <View style={[styles.swatchBar, { backgroundColor: palette.brand }]} />
+          <View style={styles.swatchRow}>
+            <View style={[styles.swatchDot, { backgroundColor: palette.court }]} />
+            <View style={[styles.swatchDot, { backgroundColor: palette.hard }]} />
+            <View style={[styles.swatchDot, { backgroundColor: palette.clay }]} />
+          </View>
         </Animated.View>
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={styles.name}>{option.label}</Text>

@@ -1,5 +1,4 @@
 import { PlayerName } from '@/components/PlayerName';
-import { ThemeCourt } from '@/components/ThemeCourt';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -240,10 +239,28 @@ export default function Settings() {
   );
 }
 
-/** The Theme row's icon: the chosen theme's court, seen from above, the same badge the Theme page shows. */
+/**
+ * The Theme row's icon: a small tile in the chosen theme's own colours — its
+ * ground, a stripe of its main colour, and dots for its three courts — the
+ * same picture the Theme page shows for each theme, in miniature.
+ */
 function ThemeTile({ name }: { name: ThemeName }) {
-  return <ThemeCourt name={name} size={28} />;
+  const p = themes[name];
+  return (
+    <View style={[tile.box, { backgroundColor: p.bg, borderColor: p.borderStrong }]}>
+      <View style={[tile.bar, { backgroundColor: p.brand }]} />
+      <View style={tile.dots}>
+        {[p.court, p.hard, p.clay].map((c, i) => <View key={i} style={[tile.dot, { backgroundColor: c }]} />)}
+      </View>
+    </View>
+  );
 }
+const tile = StyleSheet.create({
+  box: { width: 24, height: 24, borderRadius: 7, borderWidth: 1, padding: 3.5, justifyContent: 'space-between' },
+  bar: { height: 4, borderRadius: 2 },
+  dots: { flexDirection: 'row', gap: 2, justifyContent: 'center' },
+  dot: { width: 4, height: 4, borderRadius: 2 },
+});
 
 const styleDefinitions = StyleSheet.create({
   searchWrap: { paddingBottom: spacing.lg },

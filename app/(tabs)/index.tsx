@@ -18,7 +18,7 @@ import { QuestionCard } from '@/components/QuestionCard';
 import { PostCard } from '@/components/PostCard';
 import { BrandMark } from '@/components/BrandMark';
 import { Heart } from '@/components/Heart';
-import { MediaPostPage, laneInsetFor } from '@/components/MediaPostPage';
+import { MediaPostPage } from '@/components/MediaPostPage';
 import { Tappable } from '@/components/Tappable';
 import { VerticalPager, type VerticalPagerHandle } from '@/components/VerticalPager';
 import { subscribeScrollToTop } from '@/features/navigation/scrollToTop';
@@ -40,7 +40,7 @@ import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isDesktopBrowser } from '@/lib/browserDevice';
-import { colors, spacing } from '@/theme';
+import { colors } from '@/theme';
 
 /**
  * The heart that blooms when you double tap a clip.
@@ -180,8 +180,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const pictureStyle = useAnimatedStyle(() => ({ transform: [{ scale: punch.value }] }));
   useEffect(() => { setImmersive(false); immersion.value = 0; punch.value = 1; }, [active, immersion, punch]);
   const [visit, setVisit] = useState(0);
-  // The feed's own width, for lining the wordmark up with the post under it.
-  const [viewerWidth, setViewerWidth] = useState(0);
   const focused = useIsFocused();
   const latest = useRef(app);
   latest.current = app;
@@ -654,7 +652,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
           body={scope ? undefined : 'Use + to share a moment.'}
         />
       ) : (
-        <View style={styles.viewer} onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w && w !== viewerWidth) setViewerWidth(w); }}>
+        <View style={styles.viewer}>
           <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onRefresh={scope ? undefined : refreshFeed} pullHeader={scope || !currentUser ? undefined : (
             <View style={styles.pullGreeting}>
               <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={28} />
@@ -999,7 +997,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                   {page}
                   {/* Over a picture the wordmark sits in a small pill of the theme's own
                       background, so it reads on anything without touching the picture. */}
-                  {scope || hiddenMarks.has(key) || (immersive && index === active) ? null : <View pointerEvents="box-none" style={[styles.wordmarkOverlay, { top: insets.top + 24 }, !phone && item?.type === 'post' && item.post.kind !== 'clip' && [styles.wordmarkLeft, { paddingLeft: spacing.md + laneInsetFor(viewerWidth - spacing.md * 2) }], media && picture && styles.clipMarkOverlay]}>
+                  {scope || hiddenMarks.has(key) || (immersive && index === active) ? null : <View pointerEvents="box-none" style={[styles.wordmarkOverlay, { top: insets.top + 24 }, media && picture && styles.clipMarkOverlay]}>
                     {/* A tap on the mark tucks it away for this page only. Over a clip or hit it is the
                         small mark at the top left, part of the picture; on a post, the wordmark. */}
                     {media && picture ? (
@@ -1051,13 +1049,9 @@ const styleDefinitions = StyleSheet.create({
     position: 'absolute', width: '100%',
     paddingHorizontal: 20, zIndex: 5, alignItems: 'center',
   },
-  // On a computer a post sits at the left, so its wordmark lines up over it
-  // rather than floating in the middle of the window.
   pullGreeting: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   // The mark sits at the far left of the gap, level with the greeting; the greeting and disc in the middle.
   pullGreetingText: { color: colors.text, fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
-  // Lines up with the post under it: the same page padding, plus the same inset the post takes (see laneInsetFor).
-  wordmarkLeft: { alignItems: 'flex-start' },
   wordmark: {
     color: colors.brand, fontSize: 23, fontWeight: '800', letterSpacing: -0.3,
   },
