@@ -85,6 +85,10 @@ const AS_IS = {
   preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current,
   videoExportPreset: ImagePicker.VideoExportPreset.H264_1920x1080,
   shouldDownloadFromNetwork: true,
+  // Full screen, not a card: a card leaves the composer showing behind it, so
+  // the "Preparing video" note was read once while choosing and again while
+  // converting. Covered, it is only ever seen for the conversion it describes.
+  presentationStyle: ImagePicker.UIImagePickerPresentationStyle.FULL_SCREEN,
 };
 
 /** iOS's error codes, in words a person can act on. */

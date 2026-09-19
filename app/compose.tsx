@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import Reanimated, { Easing, FadeInDown, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
@@ -156,13 +156,17 @@ export default function Compose() {
   const [preparing, setPreparing] = useState<null | 'video' | 'all'>(null);
   const openDevice = async (selection: 'video' | 'all') => {
     setPickError('');
-    setPreparing(selection);
+    // The phone never says when the library closes and the converting starts,
+    // so the note waits out the library's own slide-up rather than flashing
+    // under it. A browser converts nothing, so it says nothing there.
+    const hold = Platform.OS === 'web' ? null : setTimeout(() => setPreparing(selection), 600);
     try {
       const next = await pickFromDevice(selection);
       if (next) pick(next);
     } catch (err) {
       setPickError(err instanceof Error ? err.message : String(err));
     } finally {
+      if (hold) clearTimeout(hold);
       setPreparing(null);
     }
   };
