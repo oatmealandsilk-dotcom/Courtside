@@ -570,18 +570,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => { off?.(); offReads?.(); };
   }, [remoteLoaded, currentUserForLive]);
 
-  // Notifications are filed inside state updates (withNotification), so the
-  // ones you caused are sent up from here, once each, as they appear.
-  const sentNotes = useRef<Set<string>>(new Set());
-  const notesNow = state.notifications;
-  useEffect(() => {
-    if (!isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive)) return;
-    for (const n of notesNow) {
-      if (n.actorId !== currentUserForLive || !UUID.test(n.id) || !UUID.test(n.userId) || sentNotes.current.has(n.id)) continue;
-      sentNotes.current.add(n.id);
-      void remote.insertNotification(n);
-    }
-  }, [notesNow, remoteLoaded, currentUserForLive]);
+  // Notifications for other people are never sent from this phone: the
+  // database files them itself when the real like, comment or follow is
+  // saved (migration 18), so nobody can make one up. The ones filed in state
+  // here (withNotification) only keep this screen up to date, and run the
+  // demo, where there is no database.
   // Your own settings (mutes, blocks, saved threads, payment methods, switches) follow the account.
   const settingsNow = JSON.stringify({ m: state.mutedIds, b: state.blockedIds, s: state.saved.questionIds, p: state.paymentMethods, d: state.defaultPaymentId, f: state.prefs });
   const settingsSeen = useRef<string | null>(null);

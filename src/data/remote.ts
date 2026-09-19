@@ -398,12 +398,6 @@ export const remote = {
     });
     if (error) fail('coaching request save')(error);
   },
-  async insertNotification(n: Notification) {
-    const { error } = await need().from('notifications').insert({
-      id: n.id, user_id: n.userId, actor_id: n.actorId, kind: n.kind, target_id: n.targetId, target_kind: n.targetKind, preview: n.preview ?? null, read: false, created_at: n.createdAt,
-    });
-    if (error) fail('notification')(error);
-  },
   async markNotificationsRead(ids: ID[]) {
     if (!ids.length) return;
     const { error } = await need().from('notifications').update({ read: true }).in('id', ids);
