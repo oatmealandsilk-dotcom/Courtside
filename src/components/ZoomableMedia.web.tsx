@@ -1,20 +1,76 @@
-import React, { forwardRef, useImperativeHandle, useRef } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 
 export interface HomeRect { x: number; y: number; width: number; height: number; radius?: number }
 export interface ZoomableMediaHandle { close: () => void }
 
 /**
- * The browser twin of ZoomableMedia: two-finger pinch on a touch screen or a
- * trackpad pinch on a computer scales the picture around the fingers, follows
- * them while they are down, and springs back on release.
+ * The browser twin of ZoomableMedia. On a touch screen, a two-finger pinch
+ * scales the picture around the fingers, follows them while they are down,
+ * and springs back on release, as on Instagram. On a computer's trackpad a
+ * pinch zooms around the pointer and stays where you leave it (a trackpad
+ * never says when the fingers lift, so nothing springs back on its own);
+ * sliding two fingers then moves around the picture, and pinching back out
+ * or a double-click returns it to normal.
  */
 export const ZoomableMedia = forwardRef<ZoomableMediaHandle, { children: React.ReactNode; onDismiss?: () => void; home?: HomeRect }>(function ZoomableMedia({ children, onDismiss }, ref) {
   useImperativeHandle(ref, () => ({ close: () => onDismiss?.() }), [onDismiss]);
   const box = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const start = useRef<{ gap: number; fx: number; fy: number } | null>(null);
-  const wheelScale = useRef(1);
-  const wheelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The trackpad zoom: how big, and how far the picture is moved (from centred).
+  const zoom = useRef({ s: 1, x: 0, y: 0 });
+  const showZoom = (animate: boolean) => {
+    const el = inner.current;
+    if (!el) return;
+    el.style.transition = animate ? 'transform 280ms cubic-bezier(.33,1,.68,1)' : 'none';
+    el.style.transform = `translate(${zoom.current.x}px, ${zoom.current.y}px) scale(${zoom.current.s})`;
+  };
+  // Never past the picture's edge: at 2x the picture can move half a screen each way.
+  const keepInside = () => {
+    const rect = box.current?.getBoundingClientRect();
+    if (!rect) return;
+    const z = zoom.current;
+    const roomX = ((z.s - 1) * rect.width) / 2;
+    const roomY = ((z.s - 1) * rect.height) / 2;
+    z.x = Math.max(-roomX, Math.min(roomX, z.x));
+    z.y = Math.max(-roomY, Math.min(roomY, z.y));
+  };
+  const resetZoom = (animate = true) => { zoom.current = { s: 1, x: 0, y: 0 }; showZoom(animate); };
+  useEffect(() => {
+    const node = box.current;
+    if (!node) return;
+    // Added by hand with passive off: React's own wheel listener cannot stop
+    // the browser from zooming the whole page on a pinch.
+    const onWheel = (e: WheelEvent) => {
+      const rect = node.getBoundingClientRect();
+      const z = zoom.current;
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        // Zoom around the pointer: the spot under it stays under it.
+        const px = e.clientX - rect.left - rect.width / 2;
+        const py = e.clientY - rect.top - rect.height / 2;
+        const next = Math.max(1, Math.min(4, z.s * Math.exp(-e.deltaY * 0.01)));
+        const k = next / z.s;
+        z.x = px - k * (px - z.x);
+        z.y = py - k * (py - z.y);
+        z.s = next;
+        if (z.s <= 1.01) { resetZoom(true); return; }
+        keepInside();
+        showZoom(false);
+        return;
+      }
+      // Two fingers sliding while zoomed in move around the picture.
+      if (z.s > 1.01) {
+        e.preventDefault();
+        z.x -= e.deltaX;
+        z.y -= e.deltaY;
+        keepInside();
+        showZoom(false);
+      }
+    };
+    node.addEventListener('wheel', onWheel, { passive: false });
+    return () => node.removeEventListener('wheel', onWheel);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const drag = useRef<{ x: number; y: number } | null>(null);
   const place = (scale: number, fx: number, fy: number, animate: boolean, driftX = 0, driftY = 0) => {
@@ -41,6 +97,7 @@ export const ZoomableMedia = forwardRef<ZoomableMediaHandle, { children: React.R
       // that bubbled through would swipe the page out from under it.
       onTouchStart={(e) => {
         e.stopPropagation();
+        if (zoom.current.s !== 1) zoom.current = { s: 1, x: 0, y: 0 };
         if (e.touches.length === 2) { const m = mid(e.touches); start.current = { gap: gap(e.touches), fx: m.x, fy: m.y }; drag.current = null; }
         else if (e.touches.length === 1) drag.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       }}
@@ -92,17 +149,8 @@ export const ZoomableMedia = forwardRef<ZoomableMediaHandle, { children: React.R
       onPointerDown={(e) => e.stopPropagation()}
       onPointerMove={(e) => e.stopPropagation()}
       onPointerUp={(e) => e.stopPropagation()}
-      onWheel={(e) => {
-        if (!e.ctrlKey && !e.metaKey) return;
-        e.preventDefault();
-        const rect = box.current?.getBoundingClientRect();
-        const fx = e.clientX - (rect?.left ?? 0);
-        const fy = e.clientY - (rect?.top ?? 0);
-        wheelScale.current = Math.max(1, Math.min(4, wheelScale.current * Math.exp(-e.deltaY * 0.01)));
-        place(wheelScale.current, fx, fy, false);
-        if (wheelTimer.current) clearTimeout(wheelTimer.current);
-        wheelTimer.current = setTimeout(() => { wheelScale.current = 1; place(1, fx, fy, true); }, 160);
-      }}
+      // A double-click puts a zoomed picture back to normal.
+      onDoubleClick={(e) => { if (zoom.current.s > 1.01) { e.stopPropagation(); resetZoom(true); } }}
     >
       <div ref={inner} style={{ position: 'absolute', inset: 0 }}>{children}</div>
     </div>
