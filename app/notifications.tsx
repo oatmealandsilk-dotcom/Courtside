@@ -37,6 +37,7 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap; tin
   'follow-accepted': { name: 'checkmark-done', tint: 'success' },
   posted: { name: 'checkmark', tint: 'success' },
   'coach-application': { name: 'ribbon', tint: 'brand' },
+  report: { name: 'flag', tint: 'warning' },
 };
 
 const VERB: Record<NotificationKind, string> = {
@@ -52,6 +53,7 @@ const VERB: Record<NotificationKind, string> = {
   'follow-accepted': 'accepted your follow request',
   posted: 'is live',
   'coach-application': 'updated your coach application',
+  report: 'sent a report',
 };
 
 interface Group {
@@ -69,6 +71,8 @@ interface Group {
 function routeFor(group: Group): string {
   // A coach application update opens the application, which shows where it stands.
   if (group.kind === 'coach-application') return '/coach-apply';
+  // A report opens the admin's Reports screen.
+  if (group.kind === 'report') return '/admin-reports';
   // Your own "it's up" note takes you to the feed, where the new thing sits first.
   if (group.kind === 'posted') return group.targetKind === 'question' ? `/question/${group.targetId}` : '/';
   // A follow of any kind opens the person, not a post.

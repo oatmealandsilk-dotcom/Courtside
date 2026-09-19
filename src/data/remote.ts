@@ -51,6 +51,9 @@ interface ProfileRow {
   is_private?: boolean | null;
   /** Kept by the database (migration 22); missing on a database without it. */
   followers_count?: number | null;
+  /** Moderation (migration 23). */
+  is_admin?: boolean | null;
+  suspended_at?: string | null;
   following_count?: number | null;
   age_group?: string | null;
   read_receipts?: boolean | null;
@@ -92,6 +95,8 @@ const toUser = (row: ProfileRow, followers: number, following: number): User => 
   // Off only when its owner turned it off; a database without the setting yet reads as on.
   readReceiptsEnabled: row.read_receipts !== false,
   isCoach: row.is_coach,
+  isAdmin: row.is_admin || undefined,
+  suspended: row.suspended_at ? true : undefined,
   // The database's own counts when it keeps them; otherwise counted from the follows loaded.
   followers: typeof row.followers_count === 'number' ? row.followers_count : followers,
   following: typeof row.following_count === 'number' ? row.following_count : following,
@@ -284,6 +289,20 @@ export function toConversations(me: ID, convRows: ConversationRow[], messageRows
 }
 
 type Edge = { follower_id: string; following_id: string };
+interface ReportRow { id: string; reporter_id: string; target_user_id: string | null; target: string | null; reason: string | null; created_at: string; status?: string | null; reviewed_at?: string | null }
+/** A report as the admin's Reports screen shows it. */
+export interface AdminReport {
+  id: ID;
+  reporterId: ID;
+  /** The account the report is about. */
+  userId?: ID;
+  kind: 'post' | 'hit' | 'profile';
+  targetId?: ID;
+  reason?: string;
+  createdAt: string;
+  status: 'open' | 'removed' | 'suspended' | 'dismissed';
+  reviewedAt?: string;
+}
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /**
  * Every row of a read, fetched 1,000 at a time (the most the database hands
@@ -377,8 +396,9 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     following.set(edge.follower_id, (following.get(edge.follower_id) ?? 0) + 1);
   }
 
-  const postRows = (posts.data ?? []) as (PostRow & { comments?: CommentRow[] })[];
-  const storyRows = (stories.data ?? []) as StoryRow[];
+  // A post or hit an admin removed never shows in a feed; admins see it only on the Reports screen.
+  const postRows = ((posts.data ?? []) as (PostRow & { comments?: CommentRow[]; removed_at?: string | null })[]).filter((row) => !row.removed_at);
+  const storyRows = ((stories.data ?? []) as (StoryRow & { removed_at?: string | null })[]).filter((row) => !row.removed_at);
   return {
     users: profileRows.map((row) => toUser(row, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
     posts: postRows.map(toPost),
@@ -608,6 +628,36 @@ export const remote = {
       .or(andFollowers ? `follower_id.in.(${list}),following_id.in.(${list})` : `follower_id.in.(${list})`).range(from, to), 10000);
     if (error) fail('follow lists')(error);
     return data.map((e) => ({ followerId: e.follower_id, followingId: e.following_id }));
+  },
+
+  /* ------------------------------ reports (admins) ------------------------------ */
+
+  /** Every report, newest first. Only admins can read them; for anyone else the list is empty. */
+  async fetchReports(): Promise<AdminReport[]> {
+    const { data, error } = await need().from('reports').select('*').order('created_at', { ascending: false }).limit(300);
+    if (error) { fail('reports')(error); return []; }
+    return ((data ?? []) as ReportRow[]).map((r) => {
+      const [kind, id] = (r.target ?? '').split(':');
+      return {
+        id: r.id, reporterId: r.reporter_id, userId: r.target_user_id ?? undefined,
+        kind: kind === 'post' || kind === 'hit' ? kind : 'profile', targetId: id || undefined,
+        reason: r.reason || undefined, createdAt: r.created_at, status: (r.status ?? 'open') as AdminReport['status'], reviewedAt: r.reviewed_at ?? undefined,
+      };
+    });
+  },
+  /** The reported post or hit as it stands, removed or not (admins can see removed ones). */
+  async fetchReportedItem(kind: 'post' | 'hit', id: ID): Promise<{ body: string; picture?: string; removed: boolean } | null> {
+    const table = kind === 'post' ? 'posts' : 'stories';
+    const { data, error } = await need().from(table).select('*').eq('id', id).maybeSingle();
+    if (error || !data) return null;
+    const row = data as { body?: string; caption?: string | null; image_url?: string | null; thumbnail_url?: string | null; removed_at?: string | null };
+    return { body: row.body ?? row.caption ?? '', picture: row.thumbnail_url ?? row.image_url ?? undefined, removed: !!row.removed_at };
+  },
+  /** An admin's decision on a report. Resolves false when the database refused. */
+  async moderateReport(reportId: ID, decision: 'remove' | 'restore' | 'suspend' | 'unsuspend' | 'dismiss'): Promise<boolean> {
+    const { error } = await need().rpc('moderate_report', { report: reportId, decision });
+    if (error) { fail('moderate')(error); return false; }
+    return true;
   },
 
   /** Every reply in one thread, oldest first: the whole conversation when it is opened. */

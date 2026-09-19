@@ -92,6 +92,10 @@ export interface User {
   /** From the age check: a teen account (13 to 17) or an adult one. The date of birth itself is never shown. */
   ageGroup?: 'teen' | 'adult';
   isCoach: boolean;
+  /** Reviews reports. Set only from Supabase. */
+  isAdmin?: boolean;
+  /** Suspended by an admin: cannot post, comment, reply or message. */
+  suspended?: boolean;
   followers: number;
   following: number;
   profile: PlayerProfile;
@@ -564,9 +568,11 @@ export type NotificationKind =
   /** Your own post, hit, or question went live. Actor is you. */
   | 'posted'
   /** CourtSide changed the status of your coach application (in review, approved, not approved). */
-  | 'coach-application';
+  | 'coach-application'
+  /** Someone sent a report. Only admins get these. */
+  | 'report';
 
-export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application';
+export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application' | 'report';
 
 export interface Notification {
   id: ID;

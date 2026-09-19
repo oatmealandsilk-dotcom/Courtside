@@ -104,6 +104,8 @@ export default function Settings() {
           detail: blockedIds.length ? String(blockedIds.length) : undefined,
           onPress: () => router.push('/blocked'),
         },
+        // Only admins see this row (and only admins can read the reports behind it).
+        ...(currentUser?.isAdmin ? [{ icon: 'flag-outline' as const, label: 'Reports', detail: 'Review what people reported', onPress: () => router.push('/admin-reports') }] : []),
       ],
     },
     {

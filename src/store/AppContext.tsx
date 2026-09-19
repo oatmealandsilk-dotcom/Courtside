@@ -12,7 +12,7 @@ import { AppState as DeviceState, Platform } from 'react-native';
 import { randomUUID } from 'expo-crypto';
 
 import { fetchBootstrap, fetchCommunityThreads, signIn as apiSignIn, type Bootstrap } from '@/data/api';
-import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type FeedSignal } from '@/data/remote';
+import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type AdminReport, type FeedSignal } from '@/data/remote';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { markMessagesOpened } from '@/features/messaging/readReceipts';
@@ -367,6 +367,10 @@ interface AppActions {
   isChatBlocked: (conversationId: ID) => Promise<boolean>;
   /** Someone's followers and following, loaded when their list is opened. */
   loadFollowsOf: (userId: ID) => Promise<void>;
+  /** Admins only: every report, the reported post or hit, and a decision on one. */
+  loadReports: () => Promise<AdminReport[]>;
+  loadReportedItem: (kind: 'post' | 'hit', id: ID) => Promise<{ body: string; picture?: string; removed: boolean } | null>;
+  decideReport: (reportId: ID, decision: 'remove' | 'restore' | 'suspend' | 'unsuspend' | 'dismiss') => Promise<boolean>;
 
   /* Messaging */
   openConversationWith: (userId: ID) => ID;
@@ -689,6 +693,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === post.id ? { ...p, thumbnailUrl: hosted } : p)) }));
           } catch (error) { console.warn('[remote] cover repair failed', error); }
         })();
+      }
+      if (data.users.find((u) => u.id === me)?.suspended) {
+        showToast({ title: 'Your account is suspended', body: 'You can still look around, but you cannot post, comment, reply or message.', icon: 'alert-circle-outline' });
       }
       // Then, without holding up the open: whom the people you follow follow,
       // so search can say "2 mutual" without the app downloading every follow.
@@ -1630,6 +1637,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return add.length ? { ...prev, followEdges: [...prev.followEdges, ...add] } : prev;
     });
   }, []);
+  // Reports, for admins. The database decides who may read and act on them.
+  const loadReports = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchReports() : []), []);
+  const loadReportedItem = useCallback(async (kind: 'post' | 'hit', id: ID) => (live(stateRef.current.currentUserId, id) ? remote.fetchReportedItem(kind, id) : null), []);
+  const decideReport = useCallback(async (reportId: ID, decision: 'remove' | 'restore' | 'suspend' | 'unsuspend' | 'dismiss') => {
+    if (!live(stateRef.current.currentUserId, reportId)) return false;
+    const ok = await remote.moderateReport(reportId, decision);
+    if (ok) haptics.commit();
+    return ok;
+  }, []);
   // Opening someone's followers or following: their follows come in then.
   const loadFollowsOf = useCallback(async (userId: ID) => {
     if (!live(stateRef.current.currentUserId, userId)) return;
@@ -2397,6 +2413,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadThread,
       isChatBlocked,
       loadFollowsOf,
+      loadReports,
+      loadReportedItem,
+      decideReport,
       openConversationWith,
       sendMessage,
       confirmBirthDate,
@@ -2477,6 +2496,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadThread,
       isChatBlocked,
       loadFollowsOf,
+      loadReports,
+      loadReportedItem,
+      decideReport,
       openConversationWith,
       sendMessage,
       confirmBirthDate,
