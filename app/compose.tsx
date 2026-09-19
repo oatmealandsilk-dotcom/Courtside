@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -8,6 +8,7 @@ import Reanimated, { Easing, FadeInDown, runOnJS, useAnimatedStyle, useSharedVal
 import { MediaPicker, pickFromDevice, type PickedMedia } from '@/components/MediaPicker';
 import { MediaEditor, type EditedMedia } from '@/components/MediaEditor';
 import { takePendingShot } from '@/features/compose/pendingShot';
+import { registerCreateClose } from '@/features/compose/createMenu';
 import { PermissionBanner } from '@/components/PermissionRows';
 import { SheetBackdrop } from '@/components/SheetBackdrop';
 import { TOPIC_META } from '@/components/QuestionCard';
@@ -52,6 +53,10 @@ export default function Compose() {
     transform: [{ translateY: (1 - pop.value) * 28 }, { scale: 0.94 + 0.06 * pop.value }],
   }));
   const closeMenu = () => { pop.value = withTiming(0, { duration: 150 }, (done) => { if (done) runOnJS(goBackNow)(); }); };
+  // While the box is up, the + in the tab bar can close it the same way.
+  const closeRef = useRef(closeMenu);
+  closeRef.current = closeMenu;
+  useEffect(() => (stage === 'choose' ? registerCreateClose(() => closeRef.current()) : undefined), [stage]);
   const [mode, setMode] = useState<Mode>(isHit ? 'hit' : params.mode === 'story' ? 'story' : 'post');
   const [media, setMedia] = useState<PickedMedia | null>(isHit ? { uri: shotUri as string, label: 'Hit', kind: 'photo', thumbnailUrl: shotUri as string, orientation: 'portrait' } : null);
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');

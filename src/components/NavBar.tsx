@@ -9,6 +9,7 @@ import { useFeedWarm } from '@/features/feed/warmup';
 import { useCallback, useEffect, useRef } from 'react';
 import { Easing, useSharedValue, withTiming } from 'react-native-reanimated';
 import { router, usePathname } from 'expo-router';
+import { closeCreateMenu } from '@/features/compose/createMenu';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -62,8 +63,12 @@ export function NavBar({ state, navigation }: NavBarProps) {
   // it never waits more than a few seconds, whatever the feed is doing.
   const warm = useFeedWarm();
   const pathname = usePathname();
-  // Already open: another tap on + leaves the Create box as it is (it used to open a second one over it).
-  const openCreate = () => { if (pathname !== '/compose') router.push('/compose'); };
+  // The + is a toggle: a second tap closes the Create box with its own
+  // animation. Mid-post (the box already gone) a tap there does nothing.
+  const openCreate = () => {
+    if (pathname !== '/compose') { router.push('/compose'); return; }
+    closeCreateMenu();
+  };
   const behindCurtain = !warm && (pathname === '/' || pathname === '/index');
   const entrance = useSharedValue(behindCurtain ? 1 : 0);
   useEffect(() => {
