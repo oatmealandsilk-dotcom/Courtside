@@ -107,7 +107,7 @@ const styleDefinitions = StyleSheet.create({
   wordmark: { fontSize: 34, fontWeight: '800', color: colors.brand, letterSpacing: -1 },
   tagline: {
     position: 'absolute',
-    bottom: 40,
+    bottom: 96, // where the launch image draws it too
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: 1.4,

@@ -40,5 +40,6 @@ const styles = StyleSheet.create({
   curtain: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', zIndex: 60 },
   brand: { alignItems: 'center', gap: spacing.md },
   wordmark: { fontSize: 34, fontWeight: '800', color: colors.brand, letterSpacing: -1 },
-  tagline: { position: 'absolute', bottom: 40, fontSize: 12, fontWeight: '600', letterSpacing: 1.4, color: colors.textFaint, textTransform: 'uppercase' },
+  // 96 points up, the same place the launch image draws it, so nothing jumps when one hands over to the other.
+  tagline: { position: 'absolute', bottom: 96, fontSize: 12, fontWeight: '600', letterSpacing: 1.4, color: colors.textFaint, textTransform: 'uppercase' },
 });

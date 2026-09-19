@@ -18,7 +18,7 @@ import { QuestionCard } from '@/components/QuestionCard';
 import { PostCard } from '@/components/PostCard';
 import { BrandMark } from '@/components/BrandMark';
 import { Heart } from '@/components/Heart';
-import { LANE_INSET, MediaPostPage } from '@/components/MediaPostPage';
+import { MediaPostPage, laneInsetFor } from '@/components/MediaPostPage';
 import { Tappable } from '@/components/Tappable';
 import { VerticalPager, type VerticalPagerHandle } from '@/components/VerticalPager';
 import { subscribeScrollToTop } from '@/features/navigation/scrollToTop';
@@ -40,7 +40,7 @@ import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isDesktopBrowser } from '@/lib/browserDevice';
-import { colors } from '@/theme';
+import { colors, spacing } from '@/theme';
 
 /**
  * The heart that blooms when you double tap a clip.
@@ -180,6 +180,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const pictureStyle = useAnimatedStyle(() => ({ transform: [{ scale: punch.value }] }));
   useEffect(() => { setImmersive(false); immersion.value = 0; punch.value = 1; }, [active, immersion, punch]);
   const [visit, setVisit] = useState(0);
+  // The feed's own width, for lining the wordmark up with the post under it.
+  const [viewerWidth, setViewerWidth] = useState(0);
   const focused = useIsFocused();
   const latest = useRef(app);
   latest.current = app;
@@ -609,7 +611,9 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   // Whatever is settled on screen counts as watched, once per session.
   const showing = feed[active];
   // A clip or a hit fills the page with a picture; a written post or thread does not.
-  const activeOnPicture = showing?.type === 'hit' || (showing?.type === 'post' && (showing.post.kind === 'clip' || !!showing.post.videoUrl || !!showing.post.imageUrl));
+  // Only clips and hits fill the screen with their picture; a photo or video post sits on the
+  // page's own ground, so anything drawn at the top (the back arrow) stays dark there.
+  const activeOnPicture = showing?.type === 'hit' || (showing?.type === 'post' && showing.post.kind === 'clip');
   useEffect(() => {
     if (!focused || !showing) return;
     // A hit counts as watched through the story viewer, not here.
@@ -650,7 +654,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
           body={scope ? undefined : 'Use + to share a moment.'}
         />
       ) : (
-        <View style={styles.viewer}>
+        <View style={styles.viewer} onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w && w !== viewerWidth) setViewerWidth(w); }}>
           <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onRefresh={scope ? undefined : refreshFeed} pullHeader={scope || !currentUser ? undefined : (
             <View style={styles.pullGreeting}>
               <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={28} />
@@ -995,7 +999,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                   {page}
                   {/* Over a picture the wordmark sits in a small pill of the theme's own
                       background, so it reads on anything without touching the picture. */}
-                  {scope || hiddenMarks.has(key) || (immersive && index === active) ? null : <View pointerEvents="box-none" style={[styles.wordmarkOverlay, { top: insets.top + 24 }, !phone && item?.type === 'post' && item.post.kind !== 'clip' && styles.wordmarkLeft, media && picture && styles.clipMarkOverlay]}>
+                  {scope || hiddenMarks.has(key) || (immersive && index === active) ? null : <View pointerEvents="box-none" style={[styles.wordmarkOverlay, { top: insets.top + 24 }, !phone && item?.type === 'post' && item.post.kind !== 'clip' && [styles.wordmarkLeft, { paddingLeft: spacing.md + laneInsetFor(viewerWidth - spacing.md * 2) }], media && picture && styles.clipMarkOverlay]}>
                     {/* A tap on the mark tucks it away for this page only. Over a clip or hit it is the
                         small mark at the top left, part of the picture; on a post, the wordmark. */}
                     {media && picture ? (
@@ -1052,7 +1056,8 @@ const styleDefinitions = StyleSheet.create({
   pullGreeting: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   // The mark sits at the far left of the gap, level with the greeting; the greeting and disc in the middle.
   pullGreetingText: { color: colors.text, fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
-  wordmarkLeft: { alignItems: 'flex-start', paddingLeft: 12 + LANE_INSET },
+  // Lines up with the post under it: the same page padding, plus the same inset the post takes (see laneInsetFor).
+  wordmarkLeft: { alignItems: 'flex-start' },
   wordmark: {
     color: colors.brand, fontSize: 23, fontWeight: '800', letterSpacing: -0.3,
   },

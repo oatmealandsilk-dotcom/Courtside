@@ -57,6 +57,13 @@ interface Props {
 const desktopWeb = Platform.OS === 'web' && isDesktopBrowser();
 /** How far in from the page edge a post sits on a computer; the wordmark above it lines up with this. */
 export const LANE_INSET = 28;
+/**
+ * How far in a post sits from the page's edge on a computer, for a content
+ * column of a given width: the full inset when there is room for it, none on
+ * a narrow window. The Home wordmark uses the same rule, so the two always
+ * share one left edge.
+ */
+export const laneInsetFor = (columnWidth: number) => (desktopWeb && columnWidth >= 520 + LANE_INSET * 2 ? LANE_INSET : 0);
 
 function MediaPostPageInner({ post, author, liked, saved, active, preload = false, onDoubleTap, onToggleLike, onToggleSave, onComment, onShare, onMore, topInset, burst, pop = 0, discInk, onReady }: Props) {
   const styles = useThemedStyles(styleDefinitions);
@@ -134,7 +141,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
   const [room, setRoom] = useState<{ w: number; h: number } | null>(null);
   // The inset from the left edge only when the window has room for it: a
   // narrow computer window (or a side panel) gets the post edge to edge.
-  const inset = desktopWeb && room && room.w >= 520 + LANE_INSET * 2 ? LANE_INSET : 0;
+  const inset = room ? laneInsetFor(room.w) : 0;
   const frameSize = (() => {
     if (!room) return null;
     const ratio = landscape ? (shape ?? 16 / 9) : (!post.videoUrl && shape ? shape : 4 / 5);
