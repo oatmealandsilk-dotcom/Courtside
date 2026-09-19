@@ -230,12 +230,13 @@ const toUserState = (r: UserStateRow): UserState => ({
 });
 
 interface CoachApplicationRow {
-  id: string; user_id: string; full_name: string; email: string; phone: string; utr: string | null; ntrp: string | null;
+  id: string; user_id: string; full_name: string; email: string; phone: string; utr: string | null; ntrp: string | null; utr_link?: string | null; ntrp_link?: string | null;
   years_coaching: number; certifications: string; resume_name: string | null; current_clients: string; specialties: string[] | null;
   reference_contacts: string; about: string; status: string; created_at: string;
 }
 const toCoachApplication = (r: CoachApplicationRow): CoachApplication => ({
   id: r.id, userId: r.user_id, fullName: r.full_name, email: r.email, phone: r.phone, utr: r.utr ?? undefined, ntrp: r.ntrp ?? undefined,
+  utrLink: r.utr_link ?? undefined, ntrpLink: r.ntrp_link ?? undefined,
   yearsCoaching: r.years_coaching, certifications: r.certifications, resumeLabel: r.resume_name ?? undefined, currentClients: r.current_clients,
   specialties: (r.specialties ?? []) as CoachApplication['specialties'], references: r.reference_contacts, about: r.about,
   status: (['submitted', 'in-review', 'approved', 'rejected'].includes(r.status) ? r.status : 'submitted') as CoachApplication['status'], createdAt: r.created_at,
@@ -478,6 +479,7 @@ export const remote = {
     const { error } = await db.from('coach_applications').insert({
       id: application.id, user_id: me, full_name: application.fullName, email: application.email, phone: application.phone,
       utr: application.utr ?? null, ntrp: application.ntrp ?? null, years_coaching: application.yearsCoaching,
+      utr_link: application.utrLink ?? null, ntrp_link: application.ntrpLink ?? null,
       certifications: application.certifications, resume_path: resumePath, resume_name: resume?.name ?? null,
       current_clients: application.currentClients, specialties: application.specialties, reference_contacts: application.references,
       about: application.about, status: 'submitted',

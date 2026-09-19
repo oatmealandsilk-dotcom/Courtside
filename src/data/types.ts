@@ -466,6 +466,10 @@ export interface CoachApplication {
   /** Highest verified rating the applicant holds. */
   utr?: string;
   ntrp?: string;
+  /** The applicant's UTR profile page (utrsports.net), for checking the rating. */
+  utrLink?: string;
+  /** The applicant's USTA page showing their NTRP rating (usta.com). */
+  ntrpLink?: string;
   yearsCoaching: number;
   certifications: string;
   /** The résumé's file name, when one was attached (the file itself sits in private storage). */
@@ -558,9 +562,11 @@ export type NotificationKind =
   /** A private account said yes to your request. */
   | 'follow-accepted'
   /** Your own post, hit, or question went live. Actor is you. */
-  | 'posted';
+  | 'posted'
+  /** CourtSide changed the status of your coach application (in review, approved, not approved). */
+  | 'coach-application';
 
-export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply';
+export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application';
 
 export interface Notification {
   id: ID;

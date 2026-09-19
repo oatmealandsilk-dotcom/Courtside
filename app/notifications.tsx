@@ -6,6 +6,7 @@ import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar, EmptyState, Screen } from '@/components/ui';
+import { BrandMark } from '@/components/BrandMark';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
@@ -35,6 +36,7 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap; tin
   'follow-request': { name: 'lock-closed', tint: 'brand' },
   'follow-accepted': { name: 'checkmark-done', tint: 'success' },
   posted: { name: 'checkmark', tint: 'success' },
+  'coach-application': { name: 'ribbon', tint: 'brand' },
 };
 
 const VERB: Record<NotificationKind, string> = {
@@ -49,6 +51,7 @@ const VERB: Record<NotificationKind, string> = {
   'follow-request': 'asked to follow you',
   'follow-accepted': 'accepted your follow request',
   posted: 'is live',
+  'coach-application': 'updated your coach application',
 };
 
 interface Group {
@@ -64,6 +67,8 @@ interface Group {
 }
 
 function routeFor(group: Group): string {
+  // A coach application update opens the application, which shows where it stands.
+  if (group.kind === 'coach-application') return '/coach-apply';
   // Your own "it's up" note takes you to the feed, where the new thing sits first.
   if (group.kind === 'posted') return group.targetKind === 'question' ? `/question/${group.targetId}` : '/';
   // A follow of any kind opens the person, not a post.
@@ -166,6 +171,7 @@ export default function Notifications() {
             const who =
               group.kind === 'posted'
                 ? group.preview?.startsWith('Hit') ? 'Your hit' : group.targetKind === 'question' ? 'Your question' : 'Your post'
+                : group.kind === 'coach-application' ? 'CourtSide'
                 : rest.length === 0
                 ? nameOf(first)
                 : rest.length === 1
@@ -184,7 +190,10 @@ export default function Notifications() {
               >
                 <View>
                   {/* Two faces, overlapped, when more than one person did it. */}
-                  {rest.length ? (
+                  {group.kind === 'coach-application' ? (
+                    // From CourtSide itself: the mark, not a person's face.
+                    <View style={styles.brandFace}><BrandMark size={24} /></View>
+                  ) : rest.length ? (
                     <View style={styles.pair}>
                       <View style={styles.pairBack}><Avatar name={nameOf(rest[0])} seed={rest[0]} size={32} /></View>
                       <View style={styles.pairFront}><Avatar name={nameOf(first)} seed={first} size={32} /></View>
@@ -227,6 +236,7 @@ export default function Notifications() {
 
 const styleDefinitions = StyleSheet.create({
   list: { gap: 2 },
+  brandFace: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandDim },
   heading: { ...typography.smallStrong, color: colors.text, paddingHorizontal: spacing.sm, paddingBottom: spacing.xs },
   pair: { width: 44, height: 44 },
   pairBack: { position: 'absolute', right: 0, top: 0 },
