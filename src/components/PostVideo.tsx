@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Modal, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import Reanimated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -108,6 +108,27 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
   const fillStyle = useAnimatedStyle(() => ({ width: `${progress.value * 100}%` }));
   const knobStyle = useAnimatedStyle(() => ({ left: `${progress.value * 100}%` }));
   const shownRef = useRef(false);
+  // The player reports its time only a few times a second (a browser about
+  // four), which on a one-second clip is a few big hops. Each report instead
+  // starts a straight glide to where the video will be at the next one, timed
+  // by how far apart the reports actually come, so the line moves every frame.
+  const lastReport = useRef(0);
+  const onProgress = (fraction: number, at: number, length: number) => {
+    const now = Date.now();
+    const gap = Math.min(400, Math.max(60, now - lastReport.current));
+    lastReport.current = now;
+    if (!length) progress.value = fraction;
+    else {
+      // Back to the start (it looped, or skipped back), or a jump ahead: go there first.
+      const drift = (fraction - progress.value) * length;
+      if (drift < -0.3 || drift > 0.6) progress.value = fraction;
+      progress.value = withTiming(Math.min(1, fraction + gap / 1000 / length), { duration: gap, easing: Easing.linear });
+    }
+    timeRef.current = { fraction, at, length };
+    if (shownRef.current || !timeRef.current.length || length !== time.length) setTime({ fraction, at, length });
+  };
+  // Paused, the line stops exactly where the video did, not a glide further on.
+  useEffect(() => { if (paused) progress.value = timeRef.current.fraction; }, [paused]); // eslint-disable-line react-hooks/exhaustive-deps
   const skipBy = (seconds: number, side: 'left' | 'right') => {
     const t = timeRef.current;
     const at = Math.max(0, Math.min(t.length, t.at + seconds));
@@ -153,6 +174,7 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
   const trackWidth = useRef(1);
   const scrubTo = (x: number) => {
     const fraction = Math.max(0, Math.min(1, x / trackWidth.current));
+    progress.value = fraction;
     player.current?.seek((trimStart ?? 0) + fraction * time.length);
     setTime((t) => ({ ...t, fraction, at: fraction * t.length }));
     reveal();
@@ -214,7 +236,7 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
       <View style={cropLayer(crop)}>
         {/* The page is told only "in" and, when the player is freed, "gone"; a stall mid-play is this player's own spinner. */}
         <ClipVideo ref={player} uri={uri} poster={poster} active={active && !ownCopy} muted={silent || muted || !active || ownCopy} paused={paused} fit="cover" trimStart={trimStart} trimEnd={trimEnd}
-          onProgress={(fraction, at, length) => { progress.value = fraction; timeRef.current = { fraction, at, length }; if (shownRef.current || !timeRef.current.length || length !== time.length) setTime({ fraction, at, length }); }}
+          onProgress={onProgress}
           onReady={(ok) => { setReady(ok); if (ok) onReady?.(true); }} onGone={() => onReady?.(false)} onSize={onSize} />
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel="Show video controls" onPress={(e) => tap(e.nativeEvent.locationX)} onLayout={(e) => { width.current = Math.max(1, e.nativeEvent.layout.width); }} style={StyleSheet.absoluteFill} />
@@ -231,7 +253,8 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
             {shared ? (
               <View style={cropLayer(crop)}><VideoView player={shared} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} allowsPictureInPicture={false} /></View>
             ) : (
-              <View style={cropLayer(crop)}><ClipVideo uri={uri} poster={poster} active={full} muted={silent || muted} paused={paused} fit="contain" trimStart={trimStart} trimEnd={trimEnd} /></View>
+              // In a browser full screen plays its own copy, so the line and the clock follow that copy.
+              <View style={cropLayer(crop)}><ClipVideo uri={uri} poster={poster} active={full} muted={silent || muted} paused={paused} fit="contain" trimStart={trimStart} trimEnd={trimEnd} onProgress={onProgress} /></View>
             )}
             <Pressable accessibilityRole="button" accessibilityLabel="Show video controls" onPress={(e) => tap(e.nativeEvent.locationX)} style={StyleSheet.absoluteFill} />
             {controls}
