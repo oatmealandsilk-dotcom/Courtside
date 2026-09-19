@@ -437,20 +437,30 @@ export const remote = {
   /* ------------------------------ messages ------------------------------ */
 
   /** The 1:1 you already have with someone, or a new one under the id the app chose. Returns the id that stands. */
-  async openConversation(other: ID, wanted: ID): Promise<ID | null> {
+  async openConversation(other: ID, wanted: ID): Promise<ID | null | 'blocked'> {
     const { data, error } = await need().rpc('open_conversation', { other, wanted });
     // A teen who does not follow you cannot be sent a new chat: null says so.
     if (error && /teen_closed/.test(error.message)) return null;
+    // Nor can someone you are blocked with, either way.
+    if (error && /blocked/.test(error.message)) return 'blocked';
     if (error) { fail('open conversation')(error); return wanted; }
     return (data as string) || wanted;
   },
 
-  async insertMessage(message: Message) {
+  /** Resolves 'refused' when the database will not take it (a chat with someone you are blocked with). */
+  async insertMessage(message: Message): Promise<'refused' | void> {
     const { error } = await need().from('messages').insert({
       id: message.id, conversation_id: message.conversationId, sender_id: message.senderId, body: message.body,
       kind: message.kind, shared_id: message.sharedId ?? null, created_at: message.createdAt,
     });
+    if (error && error.code === '42501') return 'refused';
     if (error) fail('message send')(error);
+  },
+
+  /** Whether a chat is with someone you are blocked with, either way (so it cannot be written in). */
+  async isChatBlocked(conversationId: ID): Promise<boolean> {
+    const { data, error } = await need().rpc('chat_is_blocked', { conv: conversationId });
+    return !error && data === true;
   },
 
   async markConversationRead(conversationId: ID, me: ID) {
@@ -758,8 +768,9 @@ export const remote = {
   },
 
   /** Asking to follow a private account, and what happens to the ask. */
-  async sendFollowRequest(me: ID, userId: ID) {
+  async sendFollowRequest(me: ID, userId: ID): Promise<'refused' | void> {
     const { error } = await need().from('follow_requests').upsert({ requester_id: me, target_id: userId });
+    if (error && error.code === '42501') return 'refused';
     if (error) fail('follow request')(error);
   },
   async cancelFollowRequest(me: ID, userId: ID) {
@@ -780,11 +791,13 @@ export const remote = {
     if (error) fail('post thumbnail')(error);
   },
 
-  async setFollow(me: ID, userId: ID, following: boolean) {
+  /** Resolves 'refused' when the database will not take a follow (someone you are blocked with). */
+  async setFollow(me: ID, userId: ID, following: boolean): Promise<'refused' | void> {
     const db = need();
     const { error } = following
       ? await db.from('follows').upsert({ follower_id: me, following_id: userId })
       : await db.from('follows').delete().match({ follower_id: me, following_id: userId });
+    if (error && error.code === '42501') return 'refused';
     if (error) fail('follow')(error);
   },
 

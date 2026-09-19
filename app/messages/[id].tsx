@@ -47,7 +47,7 @@ export default function Thread() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-  const { conversations, messages, users, posts, questions, currentUserId, defaultReaction, actions } = useApp();
+  const { conversations, messages, users, posts, questions, currentUserId, defaultReaction, actions, blockedIds } = useApp();
   const [draft, setDraft] = useState('');
   // Holding a message opens its menu over the chat; Edit puts its words back in the box.
   const [menu, setMenu] = useState<MenuTarget | null>(null);
@@ -92,6 +92,17 @@ export default function Thread() {
         .filter((m): m is NonNullable<typeof m> => Boolean(m)),
     [conversation, messages],
   );
+
+  // A chat with someone you are blocked with (either of you blocked the other)
+  // can still be read, but not written in: the box gives way to a note.
+  const [chatBlocked, setChatBlocked] = useState(false);
+  const checkBlocked = actions.isChatBlocked;
+  useEffect(() => {
+    let on = true;
+    if (conversation?.id) void checkBlocked(conversation.id).then((b) => { if (on) setChatBlocked(b); });
+    return () => { on = false; };
+  }, [conversation?.id, checkBlocked, blockedIds]);
+  const blockedHere = chatBlocked || (!!other && blockedIds.includes(other.id));
 
   // Scrolling up to the top loads the page of messages before the oldest
   // here, like Instagram; the view stays on the message you were reading
@@ -346,6 +357,12 @@ export default function Thread() {
           <MentionSuggestions candidates={mentionRows} onPick={pickMention} />
         </View>
       ) : null}
+      {blockedHere ? (
+        <View style={[styles.blockedNote, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+          <Ionicons name="lock-closed-outline" size={15} color={colors.textMuted} />
+          <Text style={styles.blockedNoteText}>You can't message this account.</Text>
+        </View>
+      ) : (
       <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, spacing.md) + keyboardInset }]}>
         <Tappable
           accessibilityLabel={emojiOpen ? 'Hide emoji' : 'Add an emoji'}
@@ -375,6 +392,7 @@ export default function Thread() {
         />
         <SendButton ready={!!draft.trim() && (!editing || draft.trim() !== editing.body)} editing={!!editing} onPress={send} styles={styles} />
       </View>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -567,6 +585,8 @@ function ReactionChip({ emoji, count, mine, onPress, style }: {
 }
 
 const styleDefinitions = StyleSheet.create({
+  blockedNote: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  blockedNoteText: { ...typography.small, color: colors.textMuted },
   olderSpinner: { position: 'absolute', top: 8, left: 0, right: 0, alignItems: 'center', zIndex: 2 },
   root: { flex: 1, backgroundColor: colors.bg },
   header: {

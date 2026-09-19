@@ -363,6 +363,8 @@ interface AppActions {
   loadOlderMessages: (conversationId: ID) => Promise<number>;
   /** Every reply in a thread, loaded when it is opened. */
   loadThread: (questionId: ID) => Promise<void>;
+  /** Whether a chat is with someone you are blocked with, either way. */
+  isChatBlocked: (conversationId: ID) => Promise<boolean>;
 
   /* Messaging */
   openConversationWith: (userId: ID) => ID;
@@ -1613,6 +1615,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * back into sight would inflate the number every time it passed.
    */
   const seenThisSession = useRef<Set<string>>(new Set());
+  // Whether a chat is with someone you are blocked with (either way), so it cannot be written in.
+  const isChatBlocked = useCallback(async (conversationId: ID) => {
+    if (!live(stateRef.current.currentUserId, conversationId)) return false;
+    return remote.isChatBlocked(conversationId);
+  }, []);
   // Scrolling up in a chat: the page of messages before the oldest one here.
   const loadOlderMessages = useCallback(async (conversationId: ID) => {
     const me = stateRef.current.currentUserId;
@@ -1747,6 +1754,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       };
       setState((prev) => ({ ...prev, conversations: [conversation, ...prev.conversations] }));
       if (live(me, userId)) void remote.openConversation(userId, conversation.id).then((standing) => {
+        if (standing === 'blocked') {
+          setState((prev) => ({ ...prev, conversations: prev.conversations.filter((c) => c.id !== conversation.id) }));
+          showToast({ title: "You can't message this account", icon: 'lock-closed-outline' });
+          return;
+        }
         if (standing === null) {
           // The database said no: a teen who does not follow you. The empty chat goes.
           setState((prev) => ({ ...prev, conversations: prev.conversations.filter((c) => c.id !== conversation.id) }));
@@ -1798,7 +1810,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!trimmed) return;
       const message = makeMessage(conversationId, me, trimmed);
       setState((prev) => appendMessage(prev, message));
-      if (live(me, conversationId)) void remote.insertMessage(message);
+      if (live(me, conversationId)) void remote.insertMessage(message).then((result) => {
+        if (result !== 'refused') return;
+        setState((prev) => ({
+          ...prev,
+          messages: prev.messages.filter((m) => m.id !== message.id),
+          conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, messageIds: c.messageIds.filter((mid) => mid !== message.id) } : c)),
+        }));
+        showToast({ title: "You can't message this account", icon: 'lock-closed-outline' });
+      });
     },
     [requireUser, appendMessage, makeMessage],
   );
@@ -2096,6 +2116,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const toggleIn = (list: ID[], id: ID) =>
     list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
 
+  // The database would not take a follow or an ask (someone you are blocked
+  // with): the button goes back, and a note says why.
+  const toggleFollowRef = useRef<(userId: ID) => void>(() => undefined);
+  const followRefused = (userId: ID) => {
+    showToast({ title: "You can't follow this account", icon: 'lock-closed-outline' });
+    toggleFollowRef.current(userId);
+  };
   const toggleFollow = useCallback((userId: ID) => {
     {
       const me = stateRef.current.currentUserId;
@@ -2105,7 +2132,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // A private account: this is an ask, not a follow. Asking twice takes it back.
         const asked = stateRef.current.followRequests.some((r) => r.fromId === me && r.toId === userId);
         asked ? haptics.untap() : haptics.tap();
-        if (live(me, userId)) asked ? remote.cancelFollowRequest(me, userId) : remote.sendFollowRequest(me, userId);
+        if (live(me, userId)) {
+          if (asked) void remote.cancelFollowRequest(me, userId);
+          else void remote.sendFollowRequest(me, userId).then((r) => { if (r === 'refused') followRefused(userId); });
+        }
         setState((prev) => {
           const next: AppState = {
             ...prev,
@@ -2118,7 +2148,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         });
         return;
       }
-      if (live(me, userId) && userId !== me) remote.setFollow(me!, userId, !following);
+      if (live(me, userId) && userId !== me) void remote.setFollow(me!, userId, !following).then((r) => { if (r === 'refused' && !following) followRefused(userId); });
     }
     setState((prev) => {
       const me = prev.currentUserId;
@@ -2144,6 +2174,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return next;
     });
   }, []);
+  toggleFollowRef.current = toggleFollow;
 
   const acceptFollowRequest = useCallback((requesterId: ID) => {
     const me = requireUser();
@@ -2344,6 +2375,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       noteFeedSignal,
       loadOlderMessages,
       loadThread,
+      isChatBlocked,
       openConversationWith,
       sendMessage,
       confirmBirthDate,
@@ -2422,6 +2454,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       noteFeedSignal,
       loadOlderMessages,
       loadThread,
+      isChatBlocked,
       openConversationWith,
       sendMessage,
       confirmBirthDate,
