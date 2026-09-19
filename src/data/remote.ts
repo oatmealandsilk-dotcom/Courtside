@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 /**
@@ -751,6 +751,42 @@ export const remote = {
     if (error) fail('view count')(error);
   },
 };
+
+/* ------------------------------------------------------------ feed signals */
+
+/**
+ * What someone did with a post in the feed, for a smarter feed later: they
+ * saw it, how long it was on screen, whether they swiped past it within a
+ * second and a half, and whether they tapped through to its author.
+ */
+export interface FeedSignal {
+  kind: 'post' | 'hit' | 'question';
+  id: ID;
+  seen?: boolean;
+  watched?: number;
+  skipped?: boolean;
+  profileTap?: boolean;
+}
+
+// Signals wait here and go up together every few seconds (or as the app goes
+// to the background), so a fast scroll is one small request, not dozens.
+let pendingSignals: FeedSignal[] = [];
+let signalTimer: ReturnType<typeof setTimeout> | null = null;
+async function flushSignals() {
+  if (signalTimer) { clearTimeout(signalTimer); signalTimer = null; }
+  if (!pendingSignals.length || !supabase) return;
+  const items = pendingSignals.splice(0, 60).map((sg) => ({ ...sg, watched: sg.watched ? Math.round(sg.watched * 10) / 10 : 0 }));
+  const { error } = await supabase.rpc('record_feed_signals', { items });
+  // A database without migration 20 simply refuses; nothing to retry.
+  if (error && !/function|schema cache/i.test(error.message)) fail('feed signals')(error);
+  if (pendingSignals.length) signalTimer = setTimeout(() => { void flushSignals(); }, 8000);
+}
+export function queueFeedSignal(signal: FeedSignal) {
+  pendingSignals.push(signal);
+  if (pendingSignals.length >= 40) { void flushSignals(); return; }
+  if (!signalTimer) signalTimer = setTimeout(() => { void flushSignals(); }, 8000);
+}
+AppState.addEventListener('change', (next) => { if (next !== 'active') void flushSignals(); });
 
 /* --------------------------------------------------------------- media */
 

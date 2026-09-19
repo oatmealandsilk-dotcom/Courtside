@@ -2,7 +2,7 @@ import { asTabRoute } from '@/features/navigation/tabFocus';
 import { ThreadReplies } from '@/components/ThreadReplies';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, AppState, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { goBack } from '@/lib/goBack';
@@ -187,6 +187,35 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   orderRef.current = order;
   // Every page you have rested on this session; a refresh sends these to the back.
   const seenNow = useRef(new Set<string>());
+  // Feed signals, for a smarter feed later: how long each page is on your
+  // screen while the feed is in front and the app is open, and whether you
+  // swiped past it within a second and a half. Sent when you move on.
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
+  useEffect(() => { const sub = AppState.addEventListener('change', (next) => setAppActive(next === 'active')); return () => sub.remove(); }, []);
+  const viewing = useRef<{ key: string; since: number } | null>(null);
+  const signalKind = (key: string) => (key.startsWith('p:') ? 'post' : key.startsWith('h:') ? 'hit' : key.startsWith('q:') ? 'question' : null);
+  const endViewing = useRef(() => undefined as void);
+  endViewing.current = () => {
+    const view = viewing.current;
+    viewing.current = null;
+    if (!view) return;
+    const kind = signalKind(view.key);
+    if (!kind) return;
+    const seconds = (Date.now() - view.since) / 1000;
+    actions.noteFeedSignal({ kind, id: view.key.slice(2), seen: true, watched: seconds, skipped: seconds < 1.5 });
+  };
+  const tappedAuthor = (key: string) => {
+    const kind = signalKind(key);
+    if (kind) actions.noteFeedSignal({ kind, id: key.slice(2), profileTap: true });
+  };
+  // A new page on screen (or the feed coming back to the front): the last one
+  // is closed off and the new one's clock starts.
+  const viewedKey = focused && appActive ? order[active] : undefined;
+  useEffect(() => {
+    endViewing.current();
+    if (viewedKey) viewing.current = { key: viewedKey, since: Date.now() };
+  }, [viewedKey]);
+  useEffect(() => () => endViewing.current(), []);
 
   // Re-rank when the session itself changes, not every time this screen regains
   // focus — otherwise stepping into a thread and back would reshuffle the feed
@@ -687,7 +716,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     <Reanimated.View style={[StyleSheet.absoluteFill, overlayStyle]} pointerEvents={immersive ? 'none' : 'box-none'}>
                     <LinearGradient pointerEvents="none" colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)']} style={styles.bottomFade} />
                     <View style={styles.caption}>
-                      <Pressable accessibilityRole="link" onPress={() => router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`)} style={styles.author}>
+                      <Pressable accessibilityRole="link" onPress={() => { tappedAuthor(`h:${story.id}`); router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`); }} style={styles.author}>
                         <Avatar name={author.name} seed={author.avatarSeed} size={34} />
                         <Text style={styles.authorName}>@{author.handle}<Text style={styles.authorTime}> · {relativeTime(story.createdAt)}</Text></Text>
                       </Pressable>
@@ -883,7 +912,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                   <View style={styles.caption}>
                     <Pressable
                       accessibilityRole="link"
-                      onPress={() => router.push(`/user/${author.id}`)}
+                      onPress={() => { tappedAuthor(`p:${post.id}`); router.push(`/user/${author.id}`); }}
                       style={styles.author}
                     >
                       <Avatar name={author.name} seed={author.avatarSeed} size={34} />

@@ -12,7 +12,7 @@ import { AppState as DeviceState, Platform } from 'react-native';
 import { randomUUID } from 'expo-crypto';
 
 import { fetchBootstrap, fetchCommunityThreads, signIn as apiSignIn, type Bootstrap } from '@/data/api';
-import { auth as remoteAuth, fetchRemote, isLocalMedia, remote, uploadMedia, emptyProfile } from '@/data/remote';
+import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type FeedSignal } from '@/data/remote';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { markMessagesOpened } from '@/features/messaging/readReceipts';
@@ -357,6 +357,8 @@ interface AppActions {
 
   /* Counting */
   recordView: (targetKind: 'post' | 'question', targetId: ID) => void;
+  /** What you did with a post in the feed (saw it, how long, skipped, tapped its author), saved for a smarter feed later. */
+  noteFeedSignal: (signal: FeedSignal) => void;
 
   /* Messaging */
   openConversationWith: (userId: ID) => ID;
@@ -1607,6 +1609,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * back into sight would inflate the number every time it passed.
    */
   const seenThisSession = useRef<Set<string>>(new Set());
+  // Only real accounts and real posts are recorded; the demo records nothing.
+  const noteFeedSignal = useCallback((signal: FeedSignal) => {
+    if (!live(stateRef.current.currentUserId, signal.id)) return;
+    queueFeedSignal(signal);
+  }, []);
   const recordView = useCallback((targetKind: 'post' | 'question', targetId: ID) => {
     const key = `${targetKind}:${targetId}`;
     if (seenThisSession.current.has(key)) return;
@@ -2298,6 +2305,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       markNotificationsRead,
       markNotificationRead,
       recordView,
+      noteFeedSignal,
       openConversationWith,
       sendMessage,
       confirmBirthDate,
@@ -2373,6 +2381,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       markNotificationsRead,
       markNotificationRead,
       recordView,
+      noteFeedSignal,
       openConversationWith,
       sendMessage,
       confirmBirthDate,

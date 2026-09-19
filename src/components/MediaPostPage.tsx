@@ -60,7 +60,7 @@ export const LANE_INSET = 28;
 
 function MediaPostPageInner({ post, author, liked, saved, active, preload = false, onDoubleTap, onToggleLike, onToggleSave, onComment, onShare, onMore, topInset, burst, pop = 0, discInk, onReady }: Props) {
   const styles = useThemedStyles(styleDefinitions);
-  const { comments, currentUser, currentUserId } = useApp();
+  const { comments, currentUser, currentUserId, actions } = useApp();
   // Newest first, the way the sheet lists them; they fill the bottom of the page.
   const thread = comments.filter((c) => c.postId === post.id).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   const [captionOpen, setCaptionOpen] = useState(false);
@@ -154,7 +154,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
      <View style={[styles.column, !thread.length && styles.pageCentred]} onLayout={(e) => { const { width, height } = e.nativeEvent.layout; if (width > 0 && height > 0) setRoom({ w: width, h: height }); }}>
       {/* Who and their level, in the space above the picture. */}
       <View style={[styles.whoRow, lane]}>
-        <Pressable accessibilityRole="link" accessibilityLabel={`View ${author.name}'s profile`} onPress={() => router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`)} style={styles.who}>
+        <Pressable accessibilityRole="link" accessibilityLabel={`View ${author.name}'s profile`} onPress={() => { actions.noteFeedSignal({ kind: 'post', id: post.id, profileTap: true }); router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`); }} style={styles.who}>
           <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={40} />
           <View style={{ flex: 1, gap: 1 }}>
             <View style={styles.nameRow}>
