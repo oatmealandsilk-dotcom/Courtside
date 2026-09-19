@@ -117,7 +117,8 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
     const now = Date.now();
     const gap = Math.min(400, Math.max(60, now - lastReport.current));
     lastReport.current = now;
-    if (!length) progress.value = fraction;
+    // Paused (or off screen), a report is just where it stands: no glide on from there.
+    if (!length || paused || !active) progress.value = fraction;
     else {
       // Back to the start (it looped, or skipped back), or a jump ahead: go there first.
       const drift = (fraction - progress.value) * length;
