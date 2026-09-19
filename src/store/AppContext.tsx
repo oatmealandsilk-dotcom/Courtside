@@ -365,6 +365,8 @@ interface AppActions {
   loadThread: (questionId: ID) => Promise<void>;
   /** Whether a chat is with someone you are blocked with, either way. */
   isChatBlocked: (conversationId: ID) => Promise<boolean>;
+  /** Someone's followers and following, loaded when their list is opened. */
+  loadFollowsOf: (userId: ID) => Promise<void>;
 
   /* Messaging */
   openConversationWith: (userId: ID) => ID;
@@ -688,6 +690,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           } catch (error) { console.warn('[remote] cover repair failed', error); }
         })();
       }
+      // Then, without holding up the open: whom the people you follow follow,
+      // so search can say "2 mutual" without the app downloading every follow.
+      void remote.fetchFollowEdges(data.followingIds, false).then(mergeFollowEdges);
       // Now the profile is known, the saved login gets its name and picture.
       const who = data.users.find((u) => u.id === me);
       if (who) rememberAccount({ id: me, handle: who.handle, name: who.name, avatarUrl: who.avatarUrl }).then((savedAccounts) => setState((prev) => ({ ...prev, savedAccounts })));
@@ -1615,6 +1620,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * back into sight would inflate the number every time it passed.
    */
   const seenThisSession = useRef<Set<string>>(new Set());
+  // Follows fetched on demand join the ones already here, once each.
+  const mergeFollowEdges = useCallback((edges: { followerId: ID; followingId: ID }[]) => {
+    if (!edges.length) return;
+    setState((prev) => {
+      const key = (e: { followerId: ID; followingId: ID }) => `${e.followerId}>${e.followingId}`;
+      const have = new Set(prev.followEdges.map(key));
+      const add = edges.filter((e) => !have.has(key(e)));
+      return add.length ? { ...prev, followEdges: [...prev.followEdges, ...add] } : prev;
+    });
+  }, []);
+  // Opening someone's followers or following: their follows come in then.
+  const loadFollowsOf = useCallback(async (userId: ID) => {
+    if (!live(stateRef.current.currentUserId, userId)) return;
+    mergeFollowEdges(await remote.fetchFollowEdges([userId], true));
+  }, [mergeFollowEdges]);
   // Whether a chat is with someone you are blocked with (either way), so it cannot be written in.
   const isChatBlocked = useCallback(async (conversationId: ID) => {
     if (!live(stateRef.current.currentUserId, conversationId)) return false;
@@ -2376,6 +2396,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadOlderMessages,
       loadThread,
       isChatBlocked,
+      loadFollowsOf,
       openConversationWith,
       sendMessage,
       confirmBirthDate,
@@ -2455,6 +2476,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadOlderMessages,
       loadThread,
       isChatBlocked,
+      loadFollowsOf,
       openConversationWith,
       sendMessage,
       confirmBirthDate,

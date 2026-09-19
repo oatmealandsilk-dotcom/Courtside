@@ -49,6 +49,9 @@ interface ProfileRow {
   id: string; handle: string; name: string; bio: string; location: string;
   avatar_url: string | null; is_coach: boolean; profile: Partial<PlayerProfile> | null; created_at: string;
   is_private?: boolean | null;
+  /** Kept by the database (migration 22); missing on a database without it. */
+  followers_count?: number | null;
+  following_count?: number | null;
   age_group?: string | null;
   read_receipts?: boolean | null;
 }
@@ -89,8 +92,9 @@ const toUser = (row: ProfileRow, followers: number, following: number): User => 
   // Off only when its owner turned it off; a database without the setting yet reads as on.
   readReceiptsEnabled: row.read_receipts !== false,
   isCoach: row.is_coach,
-  followers,
-  following,
+  // The database's own counts when it keeps them; otherwise counted from the follows loaded.
+  followers: typeof row.followers_count === 'number' ? row.followers_count : followers,
+  following: typeof row.following_count === 'number' ? row.following_count : following,
   profile: { ...emptyProfile, ...(row.profile ?? {}) },
   achievementIds: [],
   stats: emptyStats,
@@ -279,6 +283,24 @@ export function toConversations(me: ID, convRows: ConversationRow[], messageRows
   return { conversations, messages };
 }
 
+type Edge = { follower_id: string; following_id: string };
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/**
+ * Every row of a read, fetched 1,000 at a time (the most the database hands
+ * back at once) until there are no more, up to `cap` rows.
+ */
+async function allRows<T>(page: (from: number, to: number) => PromiseLike<{ data: unknown; error: unknown }>, cap = 20000): Promise<{ data: T[]; error: unknown }> {
+  const out: T[] = [];
+  for (let from = 0; from < cap; from += 1000) {
+    const { data, error } = await page(from, from + 999);
+    if (error) return { data: out, error };
+    const rows = (data ?? []) as T[];
+    out.push(...rows);
+    if (rows.length < 1000) break;
+  }
+  return { data: out, error: null };
+}
+
 /** How many messages of a chat come at a time: on open, and each time you scroll up for more. */
 export const MESSAGE_PAGE = 40;
 
@@ -292,10 +314,12 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   const storiesFull = db.from('stories').select('*, story_views(user_id), story_likes(user_id), story_comments(id, story_id, author_id, body, created_at, story_comment_likes(user_id))').order('created_at', { ascending: false }).limit(40);
   const storiesPlain = () => db.from('stories').select('*, story_views(user_id)').order('created_at', { ascending: false }).limit(40);
   const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows] = await Promise.all([
-    db.from('profiles').select('*'),
+    // Every profile, in chunks, so nobody is left out past the first 1,000.
+    allRows<ProfileRow>((from, to) => db.from('profiles').select('*').order('created_at', { ascending: true }).range(from, to)),
     db.from('posts').select('*, post_likes(user_id), post_saves(user_id), comments(id, post_id, author_id, body, created_at, comment_likes(user_id))').order('created_at', { ascending: false }).limit(60),
     storiesFull,
-    db.from('follows').select('follower_id, following_id'),
+    // Only the follows that involve you: who you follow, and who follows you.
+    allRows<Edge>((from, to) => db.from('follows').select('follower_id, following_id').or(`follower_id.eq.${me},following_id.eq.${me}`).range(from, to)),
     // Only the ones that involve you come back; a database without the table yet just gives none.
     db.from('follow_requests').select('requester_id, target_id, created_at'),
     // Direct messages: every chat, each with only its newest messages (older
@@ -339,7 +363,13 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   if (storiesTry.error) console.warn('[remote] hit likes/comments tables missing; run the pending migrations', storiesTry.error.message);
   for (const result of [profiles, posts, stories, follows]) if (result.error) throw result.error;
 
-  const edges = (follows.data ?? []) as { follower_id: string; following_id: string }[];
+  // A database without its own follow counts (migration 22) needs every
+  // follow to count them, as the app used to: fetch them all in that case.
+  const profileRows = profiles.data as ProfileRow[];
+  const keepsCounts = profileRows.length > 0 && typeof profileRows[0].followers_count === 'number';
+  const edges = keepsCounts
+    ? follows.data
+    : (await allRows<Edge>((from, to) => db.from('follows').select('follower_id, following_id').range(from, to))).data;
   const followers = new Map<string, number>();
   const following = new Map<string, number>();
   for (const edge of edges) {
@@ -350,7 +380,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   const postRows = (posts.data ?? []) as (PostRow & { comments?: CommentRow[] })[];
   const storyRows = (stories.data ?? []) as StoryRow[];
   return {
-    users: ((profiles.data ?? []) as ProfileRow[]).map((row) => toUser(row, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
+    users: profileRows.map((row) => toUser(row, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
     posts: postRows.map(toPost),
     comments: [
       ...postRows.flatMap((row) => (row.comments ?? []).map(toComment)),
@@ -562,6 +592,22 @@ export const remote = {
     const conv: ConversationRow = { id: conversationId, updated_at: before, conversation_members: (members.data ?? []) as ConversationRow['conversation_members'] };
     const dm = toConversations(me, [conv], rows.filter((m) => !hidden.has(m.id)).reverse());
     return { messages: dm.messages, more: rows.length === MESSAGE_PAGE };
+  },
+
+  /**
+   * The follows around some people: whom they follow, and (with `andFollowers`)
+   * who follows them. For a profile's follower list when it is opened, and for
+   * "mutual" counts in search (whom the people you follow follow).
+   */
+  async fetchFollowEdges(userIds: ID[], andFollowers: boolean): Promise<{ followerId: ID; followingId: ID }[]> {
+    const ids = userIds.filter((id) => UUID_RE.test(id)).slice(0, 150);
+    if (!ids.length) return [];
+    const db = need();
+    const list = ids.join(',');
+    const { data, error } = await allRows<Edge>((from, to) => db.from('follows').select('follower_id, following_id')
+      .or(andFollowers ? `follower_id.in.(${list}),following_id.in.(${list})` : `follower_id.in.(${list})`).range(from, to), 10000);
+    if (error) fail('follow lists')(error);
+    return data.map((e) => ({ followerId: e.follower_id, followingId: e.following_id }));
   },
 
   /** Every reply in one thread, oldest first: the whole conversation when it is opened. */

@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
@@ -20,6 +20,9 @@ export default function Follows() {
   const [tab, setTab] = useState<Tab>(params.tab === 'following' ? 'following' : 'followers');
   const [search, setSearch] = useState('');
   const subject = users.find((u) => u.id === userId);
+  // Their followers and following come in when the list opens.
+  const loadFollowsOf = actions.loadFollowsOf;
+  useEffect(() => { if (userId) void loadFollowsOf(userId); }, [loadFollowsOf, userId]);
 
   const ids = useMemo(() => {
     const edges = followEdges.filter((e) => !blockedIds.includes(e.followerId) && !blockedIds.includes(e.followingId));
