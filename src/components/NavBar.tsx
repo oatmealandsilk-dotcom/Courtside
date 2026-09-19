@@ -62,6 +62,8 @@ export function NavBar({ state, navigation }: NavBarProps) {
   // it never waits more than a few seconds, whatever the feed is doing.
   const warm = useFeedWarm();
   const pathname = usePathname();
+  // Already open: another tap on + leaves the Create box as it is (it used to open a second one over it).
+  const openCreate = () => { if (pathname !== '/compose') router.push('/compose'); };
   const behindCurtain = !warm && (pathname === '/' || pathname === '/index');
   const entrance = useSharedValue(behindCurtain ? 1 : 0);
   useEffect(() => {
@@ -103,7 +105,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
           const active = item.route === activeRoute;
           return (
             <React.Fragment key={item.route}>
-            {index === 2 && <View style={styles.createSlot}><Animated.View style={shrink}><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => router.push('/compose')} style={styles.createButton}><Ionicons name="add" size={30} color={colors.brandInk} /></Pressable></Animated.View></View>}
+            {index === 2 && <View style={styles.createSlot}><Animated.View style={shrink}><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={styles.createButton}><Ionicons name="add" size={30} color={colors.brandInk} /></Pressable></Animated.View></View>}
             <Pressable
               onPress={() => navigation.navigate(item.route)}
               accessibilityRole="tab"
@@ -240,7 +242,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
         </Pressable>
 
         <Pressable
-          onPress={() => router.push('/compose')}
+          onPress={openCreate}
           accessibilityRole="button"
           accessibilityLabel="Create a post"
           style={({ pressed }) => [
