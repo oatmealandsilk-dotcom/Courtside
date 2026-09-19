@@ -359,6 +359,10 @@ interface AppActions {
   recordView: (targetKind: 'post' | 'question', targetId: ID) => void;
   /** What you did with a post in the feed (saw it, how long, skipped, tapped its author), saved for a smarter feed later. */
   noteFeedSignal: (signal: FeedSignal) => void;
+  /** The next older page of a chat, for scrolling up. Resolves to how many older messages came (fewer than a page: that was the last). */
+  loadOlderMessages: (conversationId: ID) => Promise<number>;
+  /** Every reply in a thread, loaded when it is opened. */
+  loadThread: (questionId: ID) => Promise<void>;
 
   /* Messaging */
   openConversationWith: (userId: ID) => ID;
@@ -1609,6 +1613,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * back into sight would inflate the number every time it passed.
    */
   const seenThisSession = useRef<Set<string>>(new Set());
+  // Scrolling up in a chat: the page of messages before the oldest one here.
+  const loadOlderMessages = useCallback(async (conversationId: ID) => {
+    const me = stateRef.current.currentUserId;
+    if (!me || !live(me, conversationId)) return 0;
+    const have = stateRef.current.messages.filter((m) => m.conversationId === conversationId);
+    if (!have.length) return 0;
+    const oldest = have.reduce((a, b) => (a.createdAt < b.createdAt ? a : b));
+    const got = await remote.fetchOlderMessages(me, conversationId, oldest.createdAt);
+    if (!got || !got.messages.length) return 0;
+    setState((prev) => {
+      const known = new Set(prev.messages.map((m) => m.id));
+      const fresh = got.messages.filter((m) => !known.has(m.id));
+      if (!fresh.length) return prev;
+      const messages = [...fresh, ...prev.messages];
+      const inChat = messages.filter((m) => m.conversationId === conversationId).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1)).map((m) => m.id);
+      return { ...prev, messages, conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, messageIds: inChat } : c)) };
+    });
+    return got.messages.length;
+  }, []);
+  // Opening a thread: all of its replies, not only the newest that came with the app.
+  const loadThread = useCallback(async (questionId: ID) => {
+    if (!live(stateRef.current.currentUserId, questionId)) return;
+    const replies = await remote.fetchThreadAnswers(questionId);
+    if (!replies) return;
+    setState((prev) => {
+      const byId = new Map(prev.answers.map((a) => [a.id, a]));
+      for (const r of replies) if (!byId.has(r.id)) byId.set(r.id, r);
+      const answers = [...byId.values()];
+      const inThread = answers.filter((a) => a.questionId === questionId).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1)).map((a) => a.id);
+      return { ...prev, answers, questions: prev.questions.map((q) => (q.id === questionId ? { ...q, answerIds: inThread } : q)) };
+    });
+  }, []);
   // Only real accounts and real posts are recorded; the demo records nothing.
   const noteFeedSignal = useCallback((signal: FeedSignal) => {
     if (!live(stateRef.current.currentUserId, signal.id)) return;
@@ -2306,6 +2342,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       markNotificationRead,
       recordView,
       noteFeedSignal,
+      loadOlderMessages,
+      loadThread,
       openConversationWith,
       sendMessage,
       confirmBirthDate,
@@ -2382,6 +2420,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       markNotificationRead,
       recordView,
       noteFeedSignal,
+      loadOlderMessages,
+      loadThread,
       openConversationWith,
       sendMessage,
       confirmBirthDate,

@@ -27,6 +27,9 @@ export default function QuestionDetail() {
   const { questions, answers, users, currentUserId, actions } = useApp();
   const view = actions.recordView;
   useEffect(() => { view('question', String(id)); }, [view, id]);
+  // The app arrives with each thread's newest replies; opening one brings them all.
+  const loadThread = actions.loadThread;
+  useEffect(() => { void loadThread(String(id)); }, [loadThread, id]);
   const [draft, setDraft] = useState('');
   const [replying, setReplying] = useState(false);
   const replyInput = useRef<TextInput>(null);

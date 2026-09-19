@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -25,6 +26,7 @@ import { Tappable, useDoubleTap } from '@/components/Tappable';
 import { chatStamp } from '@/lib/format';
 import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
+import { MESSAGE_PAGE } from '@/data/remote';
 import { MentionSuggestions } from '@/components/MentionSuggestions';
 import { useMentionCandidates } from '@/features/mentions/useMentionCandidates';
 import { activeMention, applyMention } from '@/lib/mentions';
@@ -91,6 +93,26 @@ export default function Thread() {
     [conversation, messages],
   );
 
+  // Scrolling up to the top loads the page of messages before the oldest
+  // here, like Instagram; the view stays on the message you were reading
+  // instead of jumping. A small spinner shows at the top while it loads.
+  const [olderLoading, setOlderLoading] = useState(false);
+  const noMoreOlder = useRef(false);
+  const scrollY = useRef(0);
+  const contentHeight = useRef(0);
+  const holdPlace = useRef<{ height: number; y: number } | null>(null);
+  useEffect(() => { noMoreOlder.current = false; }, [id]);
+  const loadOlder = async () => {
+    if (olderLoading || noMoreOlder.current || !conversation) return;
+    setOlderLoading(true);
+    holdPlace.current = { height: contentHeight.current, y: scrollY.current };
+    const came = await actions.loadOlderMessages(conversation.id);
+    if (came < MESSAGE_PAGE) noMoreOlder.current = true;
+    setOlderLoading(false);
+    // Nothing older came: nothing will grow, so the next new message scrolls down as usual.
+    if (!came) holdPlace.current = null;
+  };
+
   // "@" in a message offers people, following first, the same as a comment.
   // (These hooks sit above the early return below: a thread that loads a
   // moment after the page would otherwise change the hook count and crash.)
@@ -153,9 +175,28 @@ export default function Thread() {
         ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
-        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: settled.current })}
+        onContentSizeChange={(_w, h) => {
+          const hold = holdPlace.current;
+          if (hold && h > hold.height) {
+            // Older messages went in above: keep the same message in view.
+            scrollRef.current?.scrollTo({ y: hold.y + (h - hold.height), animated: false });
+            holdPlace.current = null;
+          } else if (!hold) {
+            scrollRef.current?.scrollToEnd({ animated: settled.current });
+          }
+          contentHeight.current = h;
+        }}
+        onScroll={(e) => {
+          scrollY.current = e.nativeEvent.contentOffset.y;
+          if (settled.current && scrollY.current < 80) void loadOlder();
+        }}
+        scrollEventThrottle={64}
         keyboardShouldPersistTaps="handled"
       >
+        {olderLoading ? (
+          // Floats over the top of the chat, so it never pushes the messages around.
+          <View pointerEvents="none" style={styles.olderSpinner}><ActivityIndicator size="small" color={colors.textMuted} /></View>
+        ) : null}
         {thread.map((message, i) => {
           const mine = message.senderId === currentUserId;
           // A time line above the first message and after any quiet stretch,
@@ -526,6 +567,7 @@ function ReactionChip({ emoji, count, mine, onPress, style }: {
 }
 
 const styleDefinitions = StyleSheet.create({
+  olderSpinner: { position: 'absolute', top: 8, left: 0, right: 0, alignItems: 'center', zIndex: 2 },
   root: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: 'row',

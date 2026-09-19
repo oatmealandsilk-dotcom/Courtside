@@ -245,7 +245,7 @@ const toCoachApplication = (r: CoachApplicationRow): CoachApplication => ({
   status: (['submitted', 'in-review', 'approved', 'rejected'].includes(r.status) ? r.status : 'submitted') as CoachApplication['status'], createdAt: r.created_at,
 });
 
-interface ConversationRow { id: string; updated_at: string; conversation_members?: { user_id: string; last_read_at: string | null }[] }
+interface ConversationRow { id: string; updated_at: string; conversation_members?: { user_id: string; last_read_at: string | null }[]; messages?: MessageRow[] }
 interface MessageRow { id: string; conversation_id: string; sender_id: string; body: string; kind: string; shared_id: string | null; reactions: Record<string, string> | null; created_at: string; edited_at?: string | null }
 
 /** Conversations and messages as the app holds them: who has read what comes from each member's last_read_at. */
@@ -279,6 +279,9 @@ export function toConversations(me: ID, convRows: ConversationRow[], messageRows
   return { conversations, messages };
 }
 
+/** How many messages of a chat come at a time: on open, and each time you scroll up for more. */
+export const MESSAGE_PAGE = 40;
+
 /** Everything the signed-in player needs on open, in four queries. */
 export async function fetchRemote(me: ID): Promise<RemoteData> {
   const db = need();
@@ -288,20 +291,28 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // is what left people re-doing the quiz: their profile never arrived.
   const storiesFull = db.from('stories').select('*, story_views(user_id), story_likes(user_id), story_comments(id, story_id, author_id, body, created_at, story_comment_likes(user_id))').order('created_at', { ascending: false }).limit(40);
   const storiesPlain = () => db.from('stories').select('*, story_views(user_id)').order('created_at', { ascending: false }).limit(40);
-  const [profiles, posts, storiesTry, follows, requests, convs, msgs, qs, ans, cqs, crs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows] = await Promise.all([
+  const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows] = await Promise.all([
     db.from('profiles').select('*'),
     db.from('posts').select('*, post_likes(user_id), post_saves(user_id), comments(id, post_id, author_id, body, created_at, comment_likes(user_id))').order('created_at', { ascending: false }).limit(60),
     storiesFull,
     db.from('follows').select('follower_id, following_id'),
     // Only the ones that involve you come back; a database without the table yet just gives none.
     db.from('follow_requests').select('requester_id, target_id, created_at'),
-    // Direct messages; a database without the tables yet just gives none.
-    db.from('conversations').select('id, updated_at, conversation_members(user_id, last_read_at)').order('updated_at', { ascending: false }),
-    db.from('messages').select('*').order('created_at', { ascending: true }).limit(2000),
-    db.from('questions').select('*').order('created_at', { ascending: false }).limit(300),
-    db.from('answers').select('*').order('created_at', { ascending: true }).limit(3000),
-    db.from('coach_questions').select('*').order('created_at', { ascending: false }).limit(200),
-    db.from('coach_replies').select('*').order('created_at', { ascending: true }).limit(2000),
+    // Direct messages: every chat, each with only its newest messages (older
+    // ones load as you scroll up in the chat), the way Instagram does it. A
+    // database without the tables yet just gives none.
+    db.from('conversations').select('id, updated_at, conversation_members(user_id, last_read_at), messages(*)')
+      .order('updated_at', { ascending: false })
+      .order('created_at', { referencedTable: 'messages', ascending: false })
+      .limit(MESSAGE_PAGE, { referencedTable: 'messages' }),
+    // Threads and coach questions, each with its own newest replies (all of
+    // them load when the thread is opened), so no app-wide cap cuts replies off.
+    db.from('questions').select('*, answers(*)').order('created_at', { ascending: false }).limit(300)
+      .order('created_at', { referencedTable: 'answers', ascending: false })
+      .limit(100, { referencedTable: 'answers' }),
+    db.from('coach_questions').select('*, coach_replies(*)').order('created_at', { ascending: false }).limit(200)
+      .order('created_at', { referencedTable: 'coach_replies', ascending: false })
+      .limit(100, { referencedTable: 'coach_replies' }),
     db.from('coaching_requests').select('*').order('created_at', { ascending: false }),
     // The last month of notifications, so the screen can show this week and the weeks before it.
     db.from('notifications').select('*').gte('created_at', new Date(Date.now() - 31 * 86_400_000).toISOString()).order('created_at', { ascending: false }).limit(600),
@@ -313,11 +324,16 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     db.from('coach_applications').select('*').eq('user_id', me).order('created_at', { ascending: false }).limit(3),
   ]);
   if (qs.error) console.warn('[remote] community tables missing; run the pending migrations', qs.error.message);
-  const answerRows = (ans.data ?? []) as AnswerRow[];
-  const replyRows = (crs.data ?? []) as CoachReplyRow[];
-  if (convs.error || msgs.error) console.warn('[remote] messages tables missing; run the pending migrations', (convs.error ?? msgs.error)?.message);
+  const byTime = <T extends { created_at: string }>(a: T, b: T) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0);
+  const questionRows = (qs.data ?? []) as (QuestionRow & { answers?: AnswerRow[] })[];
+  const answerRows = questionRows.flatMap((q) => q.answers ?? []).sort(byTime);
+  const coachQuestionRows = (cqs.data ?? []) as (CoachQuestionRow & { coach_replies?: CoachReplyRow[] })[];
+  const replyRows = coachQuestionRows.flatMap((q) => q.coach_replies ?? []).sort(byTime);
+  if (convs.error) console.warn('[remote] messages tables missing; run the pending migrations', convs.error.message);
   const hidden = new Set(((hiddenRows.data ?? []) as { message_id: string }[]).map((r) => r.message_id));
-  const dm = toConversations(me, (convs.data ?? []) as ConversationRow[], ((msgs.data ?? []) as MessageRow[]).filter((m) => !hidden.has(m.id)));
+  const convRows = (convs.data ?? []) as ConversationRow[];
+  const messageRows = convRows.flatMap((c) => c.messages ?? []).filter((m) => !hidden.has(m.id)).sort(byTime);
+  const dm = toConversations(me, convRows, messageRows);
   if (requests.error) console.warn('[remote] follow requests table missing; run the pending migrations', requests.error.message);
   const stories = storiesTry.error ? await storiesPlain() : storiesTry;
   if (storiesTry.error) console.warn('[remote] hit likes/comments tables missing; run the pending migrations', storiesTry.error.message);
@@ -347,9 +363,9 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     followRequests: ((requests.data ?? []) as { requester_id: string; target_id: string; created_at: string }[]).map((r) => ({ fromId: r.requester_id, toId: r.target_id, createdAt: r.created_at })),
     conversations: dm.conversations,
     messages: dm.messages,
-    questions: ((qs.data ?? []) as QuestionRow[]).map((r) => toQuestion(r, answerRows)),
+    questions: questionRows.map((r) => toQuestion(r, answerRows)),
     answers: answerRows.map(toAnswer),
-    coachQuestions: ((cqs.data ?? []) as CoachQuestionRow[]).map((r) => toCoachQuestion(r, replyRows)),
+    coachQuestions: coachQuestionRows.map((r) => toCoachQuestion(r, replyRows)),
     coachReplies: replyRows.map(toCoachReply),
     coachingRequests: ((creqs.data ?? []) as CoachingRequestRow[]).map(toCoachingRequest),
     notifications: ((notes.data ?? []) as NotificationRow[]).map(toNotification),
@@ -512,11 +528,37 @@ export const remote = {
     const db = need();
     const [conv, msgs] = await Promise.all([
       db.from('conversations').select('id, updated_at, conversation_members(user_id, last_read_at)').eq('id', conversationId).maybeSingle(),
-      db.from('messages').select('*').eq('conversation_id', conversationId).order('created_at', { ascending: true }),
+      db.from('messages').select('*').eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(MESSAGE_PAGE),
     ]);
     if (conv.error || msgs.error || !conv.data) return null;
-    const dm = toConversations(me, [conv.data as ConversationRow], (msgs.data ?? []) as MessageRow[]);
+    const dm = toConversations(me, [conv.data as ConversationRow], ((msgs.data ?? []) as MessageRow[]).reverse());
     return dm.conversations[0] ? { conversation: dm.conversations[0], messages: dm.messages } : null;
+  },
+
+  /**
+   * The page of messages just before `before` in one chat, oldest first, for
+   * scrolling up. `more` says whether there are older ones still.
+   */
+  async fetchOlderMessages(me: ID, conversationId: ID, before: string): Promise<{ messages: Message[]; more: boolean } | null> {
+    const db = need();
+    const [members, msgs, hiddenRows] = await Promise.all([
+      db.from('conversation_members').select('user_id, last_read_at').eq('conversation_id', conversationId),
+      db.from('messages').select('*').eq('conversation_id', conversationId).lt('created_at', before).order('created_at', { ascending: false }).limit(MESSAGE_PAGE),
+      db.from('hidden_messages').select('message_id').eq('user_id', me),
+    ]);
+    if (msgs.error) { fail('older messages')(msgs.error); return null; }
+    const rows = (msgs.data ?? []) as MessageRow[];
+    const hidden = new Set(((hiddenRows.data ?? []) as { message_id: string }[]).map((r) => r.message_id));
+    const conv: ConversationRow = { id: conversationId, updated_at: before, conversation_members: (members.data ?? []) as ConversationRow['conversation_members'] };
+    const dm = toConversations(me, [conv], rows.filter((m) => !hidden.has(m.id)).reverse());
+    return { messages: dm.messages, more: rows.length === MESSAGE_PAGE };
+  },
+
+  /** Every reply in one thread, oldest first: the whole conversation when it is opened. */
+  async fetchThreadAnswers(questionId: ID): Promise<Answer[] | null> {
+    const { data, error } = await need().from('answers').select('*').eq('question_id', questionId).order('created_at', { ascending: true }).limit(1000);
+    if (error) { fail('thread replies')(error); return null; }
+    return ((data ?? []) as AnswerRow[]).map(toAnswer);
   },
 
   /**
