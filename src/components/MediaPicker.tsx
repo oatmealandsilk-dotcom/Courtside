@@ -10,7 +10,7 @@ import { ClipVideo } from '@/components/ClipVideo';
 import { framesAt } from '@/features/compose/frames';
 import { CoverScrubber } from '@/components/CoverScrubber';
 import { VideoSurface, type VideoSurfaceHandle } from '@/components/VideoSurface';
-import { colors } from '@/theme';
+import { colors, typography } from '@/theme';
 
 export interface PickedMedia {
   uri?: string;
@@ -181,12 +181,13 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
           : poster
             ? <Image source={{ uri: poster }} resizeMode="cover" style={{ width: '100%', height: '100%' }}/>
             : <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="videocam" size={48} color={colors.textMuted}/></View>}
-        {/* Edit cover, in the app's own colours: opens the row of frames underneath. */}
+        {/* Edit cover: a dark see-through pill over the video, like the editor's
+            Sound button; CourtSide blue while the cover strip is open. */}
         {value.kind === 'video' && !noCover ? (
           <Pressable accessibilityRole="button" accessibilityLabel={coverOpen ? 'Done choosing a cover' : 'Edit cover'} accessibilityState={{ expanded: coverOpen }} onPress={() => setCoverOpen((o) => !o)} hitSlop={6}
-            style={{ position: 'absolute', right: 10, bottom: 10, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: colors.brand }}>
-            <Ionicons name={coverOpen ? 'checkmark' : 'image-outline'} size={14} color={colors.brandInk} />
-            <Text style={{ color: colors.brandInk, fontSize: 12, fontWeight: '700', letterSpacing: 0.2 }}>{coverOpen ? 'Done' : 'Edit cover'}</Text>
+            style={({ pressed }) => ({ position: 'absolute', right: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 11, paddingRight: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: coverOpen ? 'transparent' : 'rgba(255,255,255,0.28)', backgroundColor: coverOpen ? colors.brand : 'rgba(10,14,20,0.55)', opacity: pressed ? 0.85 : 1, shadowColor: '#000', shadowOpacity: 0.28, shadowRadius: 7, shadowOffset: { width: 0, height: 3 } })}>
+            <Ionicons name={coverOpen ? 'checkmark' : 'image-outline'} size={15} color={coverOpen ? colors.brandInk : 'white'} />
+            <Text style={{ ...typography.caption, fontWeight: '600', letterSpacing: 0.1, color: coverOpen ? colors.brandInk : 'white' }}>{coverOpen ? 'Done' : 'Edit cover'}</Text>
           </Pressable>
         ) : null}
         <View pointerEvents="none" style={{ position: 'absolute', right: 10, top: 10, width: 30, height: 30, borderRadius: 15, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' }}>

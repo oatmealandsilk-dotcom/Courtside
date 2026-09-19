@@ -336,10 +336,20 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
                 aria-expanded={coverOpen}
                 onClick={(event) => { event.stopPropagation(); setCoverOpen((o) => !o); }}
                 onKeyDown={(event) => event.stopPropagation()}
-                style={{ position: 'absolute', right: 10, bottom: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 999, border: 'none', background: colors.brand, color: colors.brandInk, fontFamily: 'inherit', fontSize: 12, fontWeight: 700, letterSpacing: 0.2, cursor: 'pointer' }}
+                // Frosted glass over the video, like the editor's Sound button;
+                // CourtSide blue while the cover strip is open. The words are an
+                // app Text, so they wear the app's font, not the browser's serif.
+                style={{
+                  position: 'absolute', right: 12, bottom: 12, display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '8px 14px 8px 11px', borderRadius: 999, cursor: 'pointer', margin: 0,
+                  border: coverOpen ? '1px solid transparent' : '1px solid rgba(255,255,255,0.28)',
+                  background: coverOpen ? colors.brand : 'rgba(10,14,20,0.52)',
+                  backdropFilter: 'blur(12px) saturate(140%)', WebkitBackdropFilter: 'blur(12px) saturate(140%)',
+                  boxShadow: '0 4px 14px rgba(0,0,0,0.28)', transition: 'background 160ms ease, border-color 160ms ease',
+                }}
               >
-                <Ionicons name={coverOpen ? 'checkmark' : 'image-outline'} size={14} color={colors.brandInk} />
-                {coverOpen ? 'Done' : 'Edit cover'}
+                <Ionicons name={coverOpen ? 'checkmark' : 'image-outline'} size={15} color={coverOpen ? colors.brandInk : 'white'} />
+                <Text style={[styles.coverPillText, coverOpen && { color: colors.brandInk }]}>{coverOpen ? 'Done' : 'Edit cover'}</Text>
               </button>
             ) : null}
           </div>
@@ -549,6 +559,7 @@ const styleDefinitions = StyleSheet.create({
     paddingTop: spacing.md,
   },
   coverTitle: { ...typography.smallStrong, color: colors.text },
+  coverPillText: { ...typography.caption, fontWeight: '600', color: 'white', letterSpacing: 0.1 },
   coverHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   coverUploadButton: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, borderWidth: 1, borderColor: colors.brand },
   coverUploadButtonText: { ...typography.smallStrong, color: colors.brand },
