@@ -85,19 +85,23 @@ export function MediaEditor({ media, onBack, onDone }: {
     if (next === 'cover') {
       holding.current = true;
       stopPlayer();
-      const at = frozenAt ?? range[0];
+      // Cover opens on the moment you were watching, and that frame becomes
+      // the cover, so the still on screen is always the cover you will get.
+      const lo = range[0];
+      const hi = range[1] > lo ? range[1] : Number.POSITIVE_INFINITY;
+      const at = frozenAt ?? Math.max(lo, Math.min(hi, head.value));
       setFrozenAt(at);
       coverAtRef.current = at;
       setCoverAt(at);
       head.value = at;
       player.current?.seek(at);
-      if (!cover) settleCover(at);
+      if (frozenAt === null) settleCover(at);
     } else {
-      // Back from a cover still: play from the start of the kept part.
+      // Back from a cover still: play on from the cover's frame.
       // Back from Crop: the video just carries on where it was.
       if (frozenAt !== null) {
-        head.value = range[0];
-        player.current?.seek(range[0]);
+        head.value = frozenAt;
+        player.current?.seek(frozenAt);
       }
       setFrozenAt(null);
       startPlayer();
