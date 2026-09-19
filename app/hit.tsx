@@ -112,9 +112,10 @@ export default function Hit() {
           </Pressable>
         </View>
         <View style={styles.gate}>
-          <Ionicons name="camera-outline" size={34} color="rgba(255,255,255,0.7)" />
+          <Ionicons name="camera-outline" size={30} color="rgba(255,255,255,0.7)" />
           <Text style={styles.gateTitle}>Allow camera access</Text>
-          <Text style={styles.gateBody}>A hit is one photo taken right after a session: a five-second count, no retakes, up for 24{'\u00a0'}hours.</Text>
+          {/* What a hit is lives on the Hit option in the Create box; here it only says why the camera is asked for. */}
+          <Text style={styles.gateBody}>CourtSide uses it to take your hit.</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={permission.canAskAgain ? 'Allow camera' : 'Open Settings'}
@@ -202,11 +203,11 @@ const styleDefinitions = StyleSheet.create({
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl },
   title: { ...typography.title, color: colors.text },
   gate: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, maxWidth: 380, width: '100%', alignSelf: 'center' },
-  gateTitle: { fontSize: 19, fontWeight: '600', color: 'white', textAlign: 'center', marginTop: spacing.md },
-  gateBody: { fontSize: 14, lineHeight: 20, color: 'rgba(255,255,255,0.55)', textAlign: 'center', maxWidth: 300, marginTop: spacing.sm },
-  gateAllow: { marginTop: spacing.xl, paddingVertical: 11, paddingHorizontal: 22, borderRadius: 10, backgroundColor: 'white' },
-  gateAllowText: { fontSize: 15, fontWeight: '600', color: '#000' },
-  gateLaterText: { fontSize: 15, fontWeight: '500', color: 'rgba(255,255,255,0.55)', marginTop: spacing.lg },
+  gateTitle: { fontSize: 17, fontWeight: '600', color: 'white', textAlign: 'center', marginTop: spacing.md },
+  gateBody: { fontSize: 13, lineHeight: 18, color: 'rgba(255,255,255,0.55)', textAlign: 'center', maxWidth: 300, marginTop: 6 },
+  gateAllow: { marginTop: spacing.lg, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 9, backgroundColor: 'white' },
+  gateAllowText: { fontSize: 14, fontWeight: '600', color: '#000' },
+  gateLaterText: { fontSize: 14, fontWeight: '500', color: 'rgba(255,255,255,0.55)', marginTop: spacing.md },
   note: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
   topBar: { position: 'absolute', left: spacing.lg, right: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 2 },
   iconButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
