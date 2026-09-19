@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import * as haptics from '@/lib/haptics';
 import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -71,7 +72,7 @@ export default function HitThread() {
             <Text style={styles.meta}>@{author.handle} · {relativeTime(story.createdAt)}</Text>
           </View>
         </Pressable>
-        <Tappable accessibilityLabel={liked ? 'Unlike hit' : 'Like hit'} onPress={() => actions.toggleLikeStory(story.id)} scaleTo={0.8} style={styles.like}>
+        <Tappable accessibilityLabel={liked ? 'Unlike hit. Hold to see who liked it' : 'Like hit. Hold to see who liked it'} onPress={() => actions.toggleLikeStory(story.id)} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: story.id, kind: 'hit' } }); }} scaleTo={0.8} style={styles.like}>
           <Ionicons name={liked ? 'heart' : 'heart-outline'} size={22} color={liked ? colors.danger : colors.text} />
           <Text style={styles.likeCount}>{story.likedBy.length}</Text>
         </Tappable>

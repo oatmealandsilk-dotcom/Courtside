@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState, memo } from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import * as haptics from '@/lib/haptics';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ClipVideo } from '@/components/ClipVideo';
@@ -173,7 +174,7 @@ function PostCardInner({
       </Pressable>
 
       <View style={styles.actions}>
-        <Tappable onPress={onToggleLike} scaleTo={0.8} style={styles.action} accessibilityLabel={liked ? 'Unlike' : 'Like'}>
+        <Tappable onPress={onToggleLike} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: post.id } }); }} scaleTo={0.8} style={styles.action} accessibilityLabel={liked ? 'Unlike. Hold to see who liked it' : 'Like. Hold to see who liked it'}>
           <Ionicons
             name={liked ? 'heart' : 'heart-outline'}
             size={23}

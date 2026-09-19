@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import * as haptics from '@/lib/haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -129,7 +130,7 @@ export default function StoryViewer() {
       <View pointerEvents="box-none" style={[styles.bottom, { paddingBottom: insets.bottom + 16 }]}>
         {current.caption ? <Text style={styles.caption}>{current.caption}</Text> : null}
         <View style={styles.reactRow}>
-          <Pressable accessibilityRole="button" accessibilityLabel={liked ? 'Unlike hit' : 'Like hit'} onPress={() => actions.toggleLikeStory(current.id)} style={styles.views}>
+          <Pressable accessibilityRole="button" accessibilityLabel={liked ? 'Unlike hit. Hold to see who liked it' : 'Like hit. Hold to see who liked it'} onPress={() => actions.toggleLikeStory(current.id)} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: current.id, kind: 'hit' } }); }} style={styles.views}>
             <Ionicons name={liked ? 'heart' : 'heart-outline'} size={16} color={liked ? '#E17B7B' : '#FFFFFF'} />
             <Text style={styles.viewsText}>{current.likedBy.length}</Text>
           </Pressable>

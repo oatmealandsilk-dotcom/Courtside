@@ -5,6 +5,8 @@ interface Props {
   children: React.ReactNode;
   onPress?: () => void;
   onLongPress?: () => void;
+  /** How long a hold takes to count, in milliseconds. The phone's usual is 500. */
+  delayLongPress?: number;
   disabled?: boolean;
   /** How far it shrinks while held. Smaller number, bigger dip. */
   scaleTo?: number;
@@ -34,6 +36,7 @@ export function Tappable({
   children,
   onPress,
   onLongPress,
+  delayLongPress,
   disabled = false,
   scaleTo = 0.94,
   immediate = false,
@@ -58,6 +61,7 @@ export function Tappable({
     <Pressable
       onPress={disabled || immediate ? undefined : onPress}
       onLongPress={disabled ? undefined : onLongPress}
+      delayLongPress={delayLongPress}
       disabled={disabled}
       hitSlop={hitSlop}
       accessibilityRole={accessibilityRole}

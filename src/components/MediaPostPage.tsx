@@ -4,6 +4,7 @@ import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ZoomableMedia, type HomeRect, type ZoomableMediaHandle } from '@/components/ZoomableMedia';
 import { router } from 'expo-router';
+import * as haptics from '@/lib/haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { Heart } from '@/components/Heart';
 
@@ -209,7 +210,8 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
         {/* The clip's buttons, laid across instead of down: same glyphs, same
             sizes, the count under each one. */}
         <View style={styles.actions}>
-          <Tappable onPress={onToggleLike} immediate scaleTo={0.78} style={styles.action} accessibilityLabel={liked ? 'Unlike' : 'Like'}>
+          {/* A tap likes; holding it opens who liked it. The like waits for the finger to lift, so a hold never likes by accident. */}
+          <Tappable onPress={onToggleLike} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: post.id } }); }} scaleTo={0.78} style={styles.action} accessibilityLabel={liked ? 'Unlike. Hold to see who liked it' : 'Like. Hold to see who liked it'}>
             <Heart liked={liked} pop={pop} size={32} ink={colors.text} />
             <Text style={styles.actionText}>{compactNumber(post.likedBy.length)}</Text>
           </Tappable>

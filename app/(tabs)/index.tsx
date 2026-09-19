@@ -696,7 +696,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       <Text style={styles.swipeHint}>↑ Next moment   ·   ← Community</Text>
                     </View>
                     <View style={styles.actions}>
-                      <Tappable accessibilityLabel={hitLiked ? 'Unlike hit' : 'Like hit'} onPress={() => actions.toggleLikeStory(story.id)} immediate scaleTo={0.78} style={styles.action}>
+                      <Tappable accessibilityLabel={hitLiked ? 'Unlike hit. Hold to see who liked it' : 'Like hit. Hold to see who liked it'} onPress={() => actions.toggleLikeStory(story.id)} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: story.id, kind: 'hit' } }); }} scaleTo={0.78} style={styles.action}>
                         <Heart liked={hitLiked} pop={burst.id === story.id ? burst.n : 0} size={36} style={styles.actionGlyph} />
                         <Text style={styles.actionLabel}>{story.likedBy.length}</Text>
                       </Tappable>
@@ -898,9 +898,9 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
 
                   <View style={styles.actions}>
                     <Tappable
-                      accessibilityLabel={liked ? 'Unlike clip' : 'Like clip'}
+                      accessibilityLabel={liked ? 'Unlike clip. Hold to see who liked it' : 'Like clip. Hold to see who liked it'}
                       onPress={() => actions.toggleLike(post.id)}
-                      immediate
+                      onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: post.id } }); }}
                       scaleTo={0.78}
                       style={styles.action}
                     >
