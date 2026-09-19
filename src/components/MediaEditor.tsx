@@ -70,16 +70,6 @@ export function MediaEditor({ media, onBack, onDone, portraitRatio = 9 / 16 }: {
   // is picked, and only plays again when you go back to trimming.
   const [frozenAt, setFrozenAt] = useState<number | null>(null);
   const switchTool = (next: 'trim' | 'cover' | 'crop') => {
-    // Leaving Crop: the framed picture grows out of where the crop box was
-    // until it fills the frame, the way iPhone Photos closes a crop, instead
-    // of jumping from the whole picture to the framed one.
-    if (isVideo && tool === 'crop' && next !== 'crop') {
-      zoomX.value = cropPx.l + cropPx.w / 2 - (boxOff.x + box.w / 2);
-      zoomY.value = cropPx.t + cropPx.h / 2 - (boxOff.y + box.h / 2);
-      zoomS.value = Math.max(0.1, Math.min(1, cropPx.w / Math.max(1, box.w)));
-      zoomP.value = 0;
-      zoomP.value = withTiming(1, { duration: 320, easing: Easing.out(Easing.cubic) });
-    }
     setTool(next);
     if (next === 'crop') { holding.current = false; setFrozenAt(null); startPlayer(); return; }
     if (next === 'cover') {
@@ -352,98 +342,139 @@ export function MediaEditor({ media, onBack, onDone, portraitRatio = 9 / 16 }: {
   const boxOff = { x: stageSize.w ? Math.max(0, (stageSize.w - box.w) / 2) : 0, y: stageSize.h ? Math.max(0, (stageSize.h - box.h) / 2) : 0 };
   const boxRef = useRef(box);
   boxRef.current = box;
+  const boxOffRef = useRef(boxOff);
+  boxOffRef.current = boxOff;
   const dragStart = useRef<MediaCrop>(crop);
-  const cropDrag = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: () => { dragStart.current = cropRef.current; },
-    onPanResponderMove: (_e, g) => {
-      const s = dragStart.current;
-      setCrop(clampCrop({ scale: s.scale, x: s.x + g.dx / boxRef.current.w, y: s.y + g.dy / boxRef.current.h }));
-    },
-  }), []);
-  const ZOOM_MAX = 2.5;
   const zoomStripWidth = width - spacing.lg * 2;
-  // Cropping a clip: the whole picture is shown, and a box in the frame's
-  // shape says what to keep. Pinch to size it, drag it, or pull a corner.
-  // The box lives in fractions of the picture as displayed (cx, cy, w).
+  // Cropping a clip works like cropping a photo: the frame stays put in the
+  // post's shape and the video moves under it in any direction; two fingers
+  // (or a trackpad) zoom the video in; pulling a corner in crops closer. The
+  // parts outside the frame show dimmed. The crop is kept the way the feed
+  // plays it: a zoom, and a shift of the video's middle in fractions of the frame.
   const [vidSize, setVidSize] = useState<{ w: number; h: number } | null>(null);
   const onVidSize = useCallback((w: number, h: number) => setVidSize({ w, h }), []);
-  const [cropBox, setCropBox] = useState({ cx: 0.5, cy: 0.5, w: 1 });
-  const fa = box.w / Math.max(1, box.h);
-  const va = vidSize ? vidSize.w / vidSize.h : fa;
-  // The picture as shown whole inside the frame.
-  const disp = va > fa ? { w: box.w, h: box.w / va } : { w: box.h * va, h: box.h };
-  const dispOff = { x: (box.w - disp.w) / 2, y: (box.h - disp.h) / 2 };
-  const wMax = Math.min(1, (disp.h * fa) / Math.max(1, disp.w));
-  const boxH = (w: number) => (w * disp.w) / fa / Math.max(1, disp.h); // height as a fraction of the shown picture
-  const clampBox = (b: { cx: number; cy: number; w: number }) => {
-    const w = Math.max(0.2, Math.min(wMax, b.w));
-    const h = boxH(w);
-    return { w, cx: Math.max(w / 2, Math.min(1 - w / 2, b.cx)), cy: Math.max(h / 2, Math.min(1 - h / 2, b.cy)) };
+  const vw = vidSize?.w ?? box.w;
+  const vh = vidSize?.h ?? box.h;
+  const vidRef = useRef({ vw, vh });
+  vidRef.current = { vw, vh };
+  // The video as big as it is drawn at a zoom: filling the frame (no black bars), times the zoom.
+  const vidDrawn = (z: number, b: { w: number; h: number }, v: { vw: number; vh: number }) => {
+    const k0 = Math.max(b.w / Math.max(1, v.vw), b.h / Math.max(1, v.vh));
+    return { w: v.vw * k0 * z, h: v.vh * k0 * z };
   };
-  const boxRef2 = useRef(cropBox); boxRef2.current = cropBox;
-  const startBox = useRef(cropBox);
-  const dispRef = useRef(disp); dispRef.current = disp;
-  const clampBoxRef = useRef(clampBox); clampBoxRef.current = clampBox;
-  // A new frame shape or clip size can leave the box bigger than the picture
-  // (a clip wider than the frame); it is fitted back inside whenever they change.
-  useEffect(() => {
-    setCropBox((b) => { const c = clampBoxRef.current(b); return c.w === b.w && c.cx === b.cx && c.cy === b.cy ? b : c; });
-  }, [wMax, disp.w, disp.h]);
-  const moveBox = useMemo(() => Gesture.Pan().runOnJS(true).minDistance(2)
-    .onStart(() => { startBox.current = boxRef2.current; })
-    .onUpdate((e) => { const d = dispRef.current; setCropBox(clampBoxRef.current({ ...startBox.current, cx: startBox.current.cx + e.translationX / Math.max(1, d.w), cy: startBox.current.cy + e.translationY / Math.max(1, d.h) })); }), []);
-  const pinchBox = useMemo(() => Gesture.Pinch().runOnJS(true)
-    .onStart(() => { startBox.current = boxRef2.current; })
-    .onUpdate((e) => { setCropBox(clampBoxRef.current({ ...startBox.current, w: startBox.current.w / Math.max(0.2, e.scale) })); }), []);
-  const boxGestures = useMemo(() => Gesture.Simultaneous(moveBox, pinchBox), [moveBox, pinchBox]);
-  // A corner pulls its own corner; the opposite one stays put.
-  const cornerGesture = (sx: number, sy: number) => Gesture.Pan().runOnJS(true).minDistance(1)
-    .onStart(() => { startBox.current = boxRef2.current; })
-    .onUpdate((e) => {
-      const d = dispRef.current; const s = startBox.current;
-      const w = Math.max(0.2, Math.min(wMax, s.w + (sx * e.translationX) / Math.max(1, d.w)));
-      const h0 = boxH(s.w); const h = boxH(w);
-      const cx = sx > 0 ? (s.cx - s.w / 2) + w / 2 : (s.cx + s.w / 2) - w / 2;
-      const cy = sy > 0 ? (s.cy - h0 / 2) + h / 2 : (s.cy + h0 / 2) - h / 2;
-      setCropBox(clampBoxRef.current({ cx, cy, w }));
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const cornerGestures = useMemo(() => [cornerGesture(-1, -1), cornerGesture(1, -1), cornerGesture(-1, 1), cornerGesture(1, 1)], [wMax, disp.w, disp.h]);
-  // The box, turned into the zoom-and-shift the feed plays.
-  useEffect(() => {
-    if (!isVideo || !vidSize) return;
-    const coverK = Math.max(box.w / Math.max(1, disp.w), box.h / Math.max(1, disp.h));
-    const rw = cropBox.w * disp.w;
-    const scale = Math.min(ZOOM_MAX * 2, (box.w / Math.max(1, rw)) / coverK);
-    const ox = (cropBox.cx - 0.5) * disp.w;
-    const oy = (cropBox.cy - 0.5) * disp.h;
-    const next = clampCrop({ scale: scale <= 1.005 ? 1 : scale, x: scale <= 1.005 ? 0 : (-ox * coverK * scale) / Math.max(1, box.w), y: scale <= 1.005 ? 0 : (-oy * coverK * scale) / Math.max(1, box.h) });
-    setCrop(next);
-  }, [cropBox, vidSize, box.w, box.h, isVideo]); // eslint-disable-line react-hooks/exhaustive-deps
-  // A trackpad pinch in the browser arrives as a wheel with the control key.
+  // A shift can go as far as the video reaches past the frame, and no further.
+  const clampVid = (c: MediaCrop): MediaCrop => {
+    const b = boxRef.current;
+    const d = vidDrawn(c.scale, b, vidRef.current);
+    const rx = Math.max(0, (d.w - b.w) / 2 / Math.max(1, b.w));
+    const ry = Math.max(0, (d.h - b.h) / 2 / Math.max(1, b.h));
+    return { scale: c.scale, x: Math.max(-rx, Math.min(rx, c.x)), y: Math.max(-ry, Math.min(ry, c.y)) };
+  };
+  const clampVidRef = useRef(clampVid);
+  clampVidRef.current = clampVid;
+  useEffect(() => { if (isVideo) setCrop((c) => clampVidRef.current(c)); }, [box.w, box.h, vw, vh, isVideo]);
+  const VIDEO_ZOOM_MAX = 4;
+  const zoomVideoTo = (z: number) => setCrop((c) => clampVidRef.current({ ...c, scale: Math.max(1, Math.min(VIDEO_ZOOM_MAX, z)) }));
+  const zoomVideoRef = useRef(zoomVideoTo);
+  zoomVideoRef.current = zoomVideoTo;
+  const vZoomStart = useRef(1);
+  // A corner pulled in shrinks the frame around its middle (vCropS, 1 = full);
+  // let go, it grows back while the video zooms in to match.
+  const [vCropS, setVCropS] = useState(1);
+  const vCropSRef = useRef(1);
+  vCropSRef.current = vCropS;
+  const vCropSStart = useRef(1);
+  const vDragCorner = useRef<readonly [number, number] | null>(null);
+  const [vDragging, setVDragging] = useState(false);
+  const vFillFromCorner = (s0: number) => {
+    if (s0 > 0.995) { setVCropS(1); return; }
+    const c0 = cropRef.current;
+    const z1 = Math.min(VIDEO_ZOOM_MAX, c0.scale / s0);
+    const f = z1 / c0.scale;
+    const c1 = clampVidRef.current({ scale: z1, x: c0.x * f, y: c0.y * f });
+    const t0 = Date.now();
+    const step = () => {
+      const t = Math.min(1, (Date.now() - t0) / 260);
+      const e = 1 - Math.pow(1 - t, 3);
+      setCrop({ scale: c0.scale + (c1.scale - c0.scale) * e, x: c0.x + (c1.x - c0.x) * e, y: c0.y + (c1.y - c0.y) * e });
+      setVCropS(s0 + (1 - s0) * e);
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  };
+  const vFillRef = useRef(vFillFromCorner);
+  vFillRef.current = vFillFromCorner;
+  const videoCropGestures = useMemo(() => Gesture.Simultaneous(
+    Gesture.Pan().runOnJS(true).minDistance(1)
+      .onBegin((e) => {
+        const b = boxRef.current;
+        const o = boxOffRef.current;
+        const sz = vCropSRef.current;
+        const bw = b.w * sz;
+        const bh = b.h * sz;
+        const l = o.x + (b.w - bw) / 2;
+        const t = o.y + (b.h - bh) / 2;
+        const spots = [[l, t, -1, -1], [l + bw, t, 1, -1], [l, t + bh, -1, 1], [l + bw, t + bh, 1, 1]] as const;
+        const hit = spots.find(([x, y]) => Math.hypot(e.x - x, e.y - y) < 32);
+        vDragCorner.current = hit ? [hit[2], hit[3]] as const : null;
+      })
+      .onStart(() => {
+        if (vDragCorner.current) vCropSStart.current = vCropSRef.current;
+        else dragStart.current = cropRef.current;
+        setVDragging(true);
+      })
+      .onUpdate((e) => {
+        const corner = vDragCorner.current;
+        const b = boxRef.current;
+        if (corner) {
+          const [sx, sy] = corner;
+          const inward = Math.max((-sx * e.translationX * 2) / Math.max(1, b.w), (-sy * e.translationY * 2) / Math.max(1, b.h));
+          setVCropS(Math.max(0.3, Math.min(1, vCropSStart.current - inward)));
+        } else {
+          const st = dragStart.current;
+          setCrop(clampVidRef.current({ scale: st.scale, x: st.x + e.translationX / Math.max(1, b.w), y: st.y + e.translationY / Math.max(1, b.h) }));
+        }
+      })
+      .onFinalize(() => {
+        setVDragging(false);
+        if (vDragCorner.current) vFillRef.current(vCropSRef.current);
+        vDragCorner.current = null;
+      }),
+    Gesture.Pinch().runOnJS(true)
+      .onStart(() => { vZoomStart.current = cropRef.current.scale; })
+      .onUpdate((e) => zoomVideoRef.current(vZoomStart.current * e.scale)),
+  ), []); // eslint-disable-line react-hooks/exhaustive-deps
+  // A trackpad in the browser: two fingers sliding move the video; a pinch
+  // (a wheel with the control key in Chrome, Edge, Firefox, or Safari's own
+  // gesture events) zooms it.
   const stageEl = useRef<View>(null);
   useEffect(() => {
     if (Platform.OS !== 'web' || tool !== 'crop') return;
     const node = stageEl.current as unknown as HTMLElement | null;
     if (!node || typeof node.addEventListener !== 'function') return;
-    const onWheel = (e: WheelEvent) => { if (!e.ctrlKey) return; e.preventDefault(); setCropBox((b) => clampBoxRef.current({ ...b, w: b.w * (1 + e.deltaY / 300) })); };
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      if (e.ctrlKey) { zoomVideoRef.current(cropRef.current.scale * Math.exp(-e.deltaY / 100)); return; }
+      // Two fingers sliding on a trackpad move the video with them, any direction.
+      const b = boxRef.current;
+      setCrop((c) => clampVidRef.current({ ...c, x: c.x - e.deltaX / Math.max(1, b.w), y: c.y - e.deltaY / Math.max(1, b.h) }));
+    };
+    let from = 1;
+    const onGestureStart = (e: Event) => { e.preventDefault(); from = cropRef.current.scale; };
+    const onGestureChange = (e: Event) => { e.preventDefault(); zoomVideoRef.current(from * ((e as unknown as { scale?: number }).scale ?? 1)); };
     node.addEventListener('wheel', onWheel, { passive: false });
-    return () => node.removeEventListener('wheel', onWheel);
+    node.addEventListener('gesturestart', onGestureStart);
+    node.addEventListener('gesturechange', onGestureChange);
+    return () => {
+      node.removeEventListener('wheel', onWheel);
+      node.removeEventListener('gesturestart', onGestureStart);
+      node.removeEventListener('gesturechange', onGestureChange);
+    };
   }, [tool]);
-  // In pixels, for drawing.
-  const cropPx = { l: boxOff.x + dispOff.x + (cropBox.cx - cropBox.w / 2) * disp.w, t: boxOff.y + dispOff.y + (cropBox.cy - boxH(cropBox.w) / 2) * disp.h, w: cropBox.w * disp.w, h: boxH(cropBox.w) * disp.h };
-  const zoomTo = (x: number) => {
-    const t = Math.max(0, Math.min(1, x / zoomStripWidth));
-    setCrop((c) => clampCrop({ ...c, scale: 1 + t * (ZOOM_MAX - 1) }));
-  };
-  const zoomDrag = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: (e) => zoomTo(e.nativeEvent.locationX),
-    onPanResponderMove: (e) => zoomTo(e.nativeEvent.locationX),
-  }), [zoomStripWidth]); // eslint-disable-line react-hooks/exhaustive-deps
+  // In Crop the video is drawn whole, at the crop's zoom and shift, spilling past the frame.
+  const drawn = vidDrawn(crop.scale, box, { vw, vh });
+  const drawnStyle = { position: 'absolute' as const, width: drawn.w, height: drawn.h, left: (box.w - drawn.w) / 2 + crop.x * box.w, top: (box.h - drawn.h) / 2 + crop.y * box.h };
+  const cropChanged = crop.scale > 1.001 || Math.abs(crop.x) > 0.001 || Math.abs(crop.y) > 0.001;
 
   /* ----------------------------------- photo ---------------------------------- */
   // Nothing is cut until Next: the stage shows the turn, the shape, the zoom
@@ -584,14 +615,20 @@ export function MediaEditor({ media, onBack, onDone, portraitRatio = 9 / 16 }: {
       .onStart(() => { zoomStart.current = zoomRef.current; })
       .onUpdate((e) => zoomPhotoRef.current(zoomStart.current * e.scale)),
   ), []); // eslint-disable-line react-hooks/exhaustive-deps
-  // A trackpad pinch in the browser arrives as a wheel with the control key
-  // held (Chrome, Edge, Firefox) or as Safari's own gesture events.
+  // A trackpad in the browser: two fingers sliding move the photo; a pinch
+  // (a wheel with the control key in Chrome, Edge, Firefox, or Safari's own
+  // gesture events) zooms it.
   const stageRoot = useRef<View>(null);
   useEffect(() => {
     if (Platform.OS !== 'web' || isVideo) return;
     const node = stageRoot.current as unknown as HTMLElement | null;
     if (!node || typeof node.addEventListener !== 'function') return;
-    const onWheel = (e: WheelEvent) => { if (!e.ctrlKey) return; e.preventDefault(); zoomPhotoRef.current(zoomRef.current * Math.exp(-e.deltaY / 100)); };
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      if (e.ctrlKey) { zoomPhotoRef.current(zoomRef.current * Math.exp(-e.deltaY / 100)); return; }
+      // Two fingers sliding on a trackpad move the photo with them, any direction.
+      setPan((p) => clampRef.current({ x: p.x - e.deltaX, y: p.y - e.deltaY }, zoomRef.current));
+    };
     let from = 1;
     const onGestureStart = (e: Event) => { e.preventDefault(); from = zoomRef.current; };
     const onGestureChange = (e: Event) => { e.preventDefault(); zoomPhotoRef.current(from * ((e as unknown as { scale?: number }).scale ?? 1)); };
@@ -620,7 +657,7 @@ export function MediaEditor({ media, onBack, onDone, portraitRatio = 9 / 16 }: {
         trimStart: trimmed ? Number(range[0].toFixed(2)) : undefined,
         trimEnd: trimmed ? Number(range[1].toFixed(2)) : undefined,
         muted: muted || undefined,
-        crop: crop.scale > 1.01 ? { scale: Number(crop.scale.toFixed(3)), x: Number(crop.x.toFixed(4)), y: Number(crop.y.toFixed(4)) } : undefined,
+        crop: cropChanged ? { scale: Number(crop.scale.toFixed(3)), x: Number(crop.x.toFixed(4)), y: Number(crop.y.toFixed(4)) } : undefined,
       });
     } else {
       if (!photoTouched || !nat || !media.uri) {
@@ -659,9 +696,9 @@ export function MediaEditor({ media, onBack, onDone, portraitRatio = 9 / 16 }: {
         {/* A clip is shown in its post's shape; a photo gets the whole stage, so it can be as big as the screen allows. */}
         {/* A post's portrait frame is its own shape (4:5), sized to fit the stage, so what you frame here is what the feed shows. */}
         <View style={!isVideo ? StyleSheet.absoluteFill : frame === 'landscape' ? styles.wideFrame : postPortrait || desktopWeb ? styles.tallFrame : StyleSheet.absoluteFill}>
-          <Animated.View style={[!isVideo ? StyleSheet.absoluteFill : frame === 'landscape' ? styles.wideBox : postPortrait ? postBox : desktopWeb ? styles.tallBox : StyleSheet.absoluteFill, isVideo && zoomStyle]} onLayout={(e) => setBox({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) })}>
+          <Animated.View style={[!isVideo ? StyleSheet.absoluteFill : frame === 'landscape' ? styles.wideBox : postPortrait ? postBox : desktopWeb ? styles.tallBox : StyleSheet.absoluteFill, isVideo && zoomStyle, isVideo && tool === 'crop' && { overflow: 'visible' as const }]} onLayout={(e) => setBox({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) })}>
             {isVideo && media.uri ? (
-              <View style={tool === 'crop' ? StyleSheet.absoluteFill : cropLayer(crop)}>
+              <View style={tool === 'crop' ? drawnStyle : cropLayer(crop)}>
                 <VideoSurface ref={player} uri={media.uri} muted={muted} fit={tool === 'crop' ? 'contain' : 'cover'} from={range[0]} to={duration ? range[1] : undefined} paused={frozenAt !== null || userPaused} onTime={onTime} onDuration={onDuration} onSize={onVidSize} />
               </View>
             ) : media.uri && nat ? (
@@ -724,26 +761,37 @@ export function MediaEditor({ media, onBack, onDone, portraitRatio = 9 / 16 }: {
           </Pressable>
         ) : null}
         {isVideo && tool === 'crop' ? (
+          // The whole stage takes the drag and the pinch. The frame (shrunk
+          // while a corner is pulled) stays put; outside it is dimmed.
+          <GestureDetector gesture={videoCropGestures}>
           <View ref={stageEl} style={StyleSheet.absoluteFill}>
-            {/* Everything outside the box is dimmed. */}
-            <View pointerEvents="none" style={[styles.dimPane, { top: 0, left: 0, right: 0, height: cropPx.t }]} />
-            <View pointerEvents="none" style={[styles.dimPane, { top: cropPx.t + cropPx.h, left: 0, right: 0, bottom: 0 }]} />
-            <View pointerEvents="none" style={[styles.dimPane, { top: cropPx.t, left: 0, width: cropPx.l, height: cropPx.h }]} />
-            <View pointerEvents="none" style={[styles.dimPane, { top: cropPx.t, left: cropPx.l + cropPx.w, right: 0, height: cropPx.h }]} />
-            <GestureDetector gesture={boxGestures}>
-              <View style={[styles.cropBox, { left: cropPx.l, top: cropPx.t, width: cropPx.w, height: cropPx.h }]}>
-                {[1, 2].map((i) => <View key={`v${i}`} pointerEvents="none" style={[styles.gridLine, { left: `${(i / 3) * 100}%`, top: 0, bottom: 0, width: 1 }]} />)}
-                {[1, 2].map((i) => <View key={`h${i}`} pointerEvents="none" style={[styles.gridLine, { top: `${(i / 3) * 100}%`, left: 0, right: 0, height: 1 }]} />)}
-                {cornerGestures.map((g, i) => (
-                  <GestureDetector key={i} gesture={g}>
-                    <View style={[styles.corner, i % 2 === 0 ? { left: -14 } : { right: -14 }, i < 2 ? { top: -14 } : { bottom: -14 }]}>
-                      <View style={[styles.cornerMark, i % 2 === 0 ? { borderLeftWidth: 3 } : { borderRightWidth: 3 }, i < 2 ? { borderTopWidth: 3 } : { borderBottomWidth: 3 }]} />
+            {(() => {
+              const bw = box.w * vCropS;
+              const bh = box.h * vCropS;
+              const l = boxOff.x + (box.w - bw) / 2;
+              const t = boxOff.y + (box.h - bh) / 2;
+              return (
+                <>
+                  <View pointerEvents="none" style={[styles.dimPane, { top: 0, left: 0, right: 0, height: t }]} />
+                  <View pointerEvents="none" style={[styles.dimPane, { top: t + bh, left: 0, right: 0, bottom: 0 }]} />
+                  <View pointerEvents="none" style={[styles.dimPane, { top: t, left: 0, width: l, height: bh }]} />
+                  <View pointerEvents="none" style={[styles.dimPane, { top: t, left: l + bw, right: 0, height: bh }]} />
+                  <View pointerEvents="none" style={[styles.cropBox, { left: l, top: t, width: bw, height: bh }]}>
+                    <View style={[StyleSheet.absoluteFill, { opacity: vDragging ? 1 : 0 }]}>
+                      {[1, 2].map((i) => <View key={`v${i}`} style={[styles.gridLine, { left: `${(i / 3) * 100}%`, top: 0, bottom: 0, width: 1 }]} />)}
+                      {[1, 2].map((i) => <View key={`h${i}`} style={[styles.gridLine, { top: `${(i / 3) * 100}%`, left: 0, right: 0, height: 1 }]} />)}
                     </View>
-                  </GestureDetector>
-                ))}
-              </View>
-            </GestureDetector>
+                    {[0, 1, 2, 3].map((i) => (
+                      <View key={i} accessibilityLabel="Crop corner" style={[styles.corner, i % 2 === 0 ? { left: -14 } : { right: -14 }, i < 2 ? { top: -14 } : { bottom: -14 }]}>
+                        <View style={[styles.cornerMark, i % 2 === 0 ? { borderLeftWidth: 3 } : { borderRightWidth: 3 }, i < 2 ? { borderTopWidth: 3 } : { borderBottomWidth: 3 }]} />
+                      </View>
+                    ))}
+                  </View>
+                </>
+              );
+            })()}
           </View>
+          </GestureDetector>
         ) : null}
         {isVideo && duration ? <Text style={styles.time}>{frozenAt !== null ? `Cover · ${clock(frozenAt)}` : `${clock(now)} / ${clock(range[1] - range[0])}`}</Text> : null}
         {busy ? <View style={styles.busy}><Text style={styles.busyText}>Cutting…</Text></View> : null}
@@ -771,8 +819,8 @@ export function MediaEditor({ media, onBack, onDone, portraitRatio = 9 / 16 }: {
             </View>
             {tool === 'crop' ? (
               <View style={[styles.zoomRow, { justifyContent: 'space-between' }]}>
-                <Text style={styles.zoomText}>{crop.scale > 1.01 ? `${crop.scale.toFixed(1)}×` : 'Whole clip'}</Text>
-                {cropBox.w < wMax - 0.001 || Math.abs(cropBox.cx - 0.5) > 0.001 || Math.abs(cropBox.cy - 0.5) > 0.001 ? <Pressable accessibilityRole="button" accessibilityLabel="Reset crop" onPress={() => { setCropBox(clampBox({ cx: 0.5, cy: 0.5, w: 1 })); setCrop({ scale: 1, x: 0, y: 0 }); }} style={styles.tab}><Text style={styles.tabText}>Reset</Text></Pressable> : null}
+                <Text style={styles.zoomText}>{crop.scale > 1.01 ? `Zoom ${crop.scale.toFixed(1)}×` : cropChanged ? 'Moved' : 'As filmed'}</Text>
+                {cropChanged ? <Pressable accessibilityRole="button" accessibilityLabel="Reset crop" onPress={() => { setCrop({ scale: 1, x: 0, y: 0 }); setVCropS(1); }} style={styles.tab}><Text style={styles.tabText}>Reset</Text></Pressable> : null}
               </View>
             ) : tool === 'trim' ? (
               <View ref={stripRef} style={[styles.strip, { marginHorizontal: HANDLE }]}>
@@ -806,7 +854,7 @@ export function MediaEditor({ media, onBack, onDone, portraitRatio = 9 / 16 }: {
               </View>
             )}
             {/* Two lines kept for the hint whatever the tool, so switching never makes the picture above jump in size. */}
-            <Text numberOfLines={2} style={[styles.hint, styles.hintTwoLines]}>{tool === 'trim' ? 'Drag the ends to trim. The clip plays the part you keep.' : tool === 'cover' ? 'Drag along the strip to the frame you want as the cover.' : 'Pinch to size the box, drag it, or pull a corner. What is inside the box is what posts.'}</Text>
+            <Text numberOfLines={2} style={[styles.hint, styles.hintTwoLines]}>{tool === 'trim' ? 'Drag the ends to trim. The clip plays the part you keep.' : tool === 'cover' ? 'Drag along the strip to the frame you want as the cover.' : 'Drag the video to place it, pinch to zoom, or pull a corner in. What is inside the frame is what posts.'}</Text>
           </>
         ) : (
           <>

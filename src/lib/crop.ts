@@ -6,7 +6,7 @@ import type { MediaCrop } from '@/data/types';
  * about its centre — which is exactly "zoom in, then slide the picture".
  */
 export function cropLayer(crop?: MediaCrop) {
-  if (!crop || crop.scale <= 1.001) return { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0 };
+  if (!crop || (crop.scale <= 1.001 && !crop.x && !crop.y)) return { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0 };
   return {
     position: 'absolute' as const,
     width: '100%' as const,
@@ -19,7 +19,7 @@ export function cropLayer(crop?: MediaCrop) {
 
 /** The same layer for a browser element. */
 export function cropCss(crop?: MediaCrop): React.CSSProperties {
-  if (!crop || crop.scale <= 1.001) return { position: 'absolute', inset: 0 };
+  if (!crop || (crop.scale <= 1.001 && !crop.x && !crop.y)) return { position: 'absolute', inset: 0 };
   return { position: 'absolute', width: '100%', height: '100%', left: `${crop.x * 100}%`, top: `${crop.y * 100}%`, transform: `scale(${crop.scale})` };
 }
 
