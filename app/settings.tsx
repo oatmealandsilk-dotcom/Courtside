@@ -8,11 +8,13 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar, Field, Screen, Toggle } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
-import { useTheme, themeList } from '@/theme/ThemeProvider';
+import { useTheme, themeList, themes, type ThemeName } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography } from '@/theme';
 
 interface Row {
   icon: keyof typeof Ionicons.glyphMap;
+  /** Drawn in place of the icon when a row has something better to show (the theme's own colours). */
+  leading?: React.ReactNode;
   label: string;
   detail?: string;
   onPress?: () => void;
@@ -58,6 +60,7 @@ export default function Settings() {
         {
           icon: 'color-palette-outline',
           label: 'Theme',
+          leading: <ThemeTile name={theme} />,
           detail: themeList.find((t) => t.name === theme)?.label,
           onPress: () => router.push('/theme'),
         },
@@ -204,11 +207,13 @@ export default function Settings() {
                   pressed && (row.onPress || row.toggle) ? { backgroundColor: colors.surfaceAlt } : null,
                 ]}
               >
-                <Ionicons
-                  name={row.icon}
-                  size={21}
-                  color={row.danger ? colors.danger : colors.text}
-                />
+                {row.leading ?? (
+                  <Ionicons
+                    name={row.icon}
+                    size={21}
+                    color={row.danger ? colors.danger : colors.text}
+                  />
+                )}
                 <View style={styles.rowText}>
                   <Text style={[styles.rowLabel, row.danger && { color: colors.danger }]}>
                     {row.label}
@@ -232,6 +237,29 @@ export default function Settings() {
   );
 }
 
+/**
+ * The Theme row's icon: a small tile in the chosen theme's own colours — its
+ * ground, a stripe of its main colour, and dots for its three courts — the
+ * same picture the Theme page shows for each theme, in miniature.
+ */
+function ThemeTile({ name }: { name: ThemeName }) {
+  const p = themes[name];
+  return (
+    <View style={[tile.box, { backgroundColor: p.bg, borderColor: p.borderStrong }]}>
+      <View style={[tile.bar, { backgroundColor: p.brand }]} />
+      <View style={tile.dots}>
+        {[p.court, p.hard, p.clay].map((c, i) => <View key={i} style={[tile.dot, { backgroundColor: c }]} />)}
+      </View>
+    </View>
+  );
+}
+const tile = StyleSheet.create({
+  box: { width: 24, height: 24, borderRadius: 7, borderWidth: 1, padding: 3.5, justifyContent: 'space-between' },
+  bar: { height: 4, borderRadius: 2 },
+  dots: { flexDirection: 'row', gap: 2, justifyContent: 'center' },
+  dot: { width: 4, height: 4, borderRadius: 2 },
+});
+
 const styleDefinitions = StyleSheet.create({
   searchWrap: { paddingBottom: spacing.lg },
   accountCard: {
@@ -248,7 +276,8 @@ const styleDefinitions = StyleSheet.create({
   accountName: { ...typography.bodyStrong, color: colors.text },
   accountHandle: { ...typography.small, color: colors.textFaint },
   section: { gap: spacing.sm, paddingBottom: spacing.xl },
-  sectionTitle: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.1 },
+  // Plain sentence-case headings, the way Instagram's settings read: no spaced-out letters.
+  sectionTitle: { fontSize: 14, fontWeight: '600', color: colors.textMuted, letterSpacing: 0, paddingHorizontal: 4 },
   card: {
     borderRadius: radius.lg,
     borderWidth: 1,
