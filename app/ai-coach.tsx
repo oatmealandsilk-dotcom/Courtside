@@ -6,9 +6,10 @@ import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
-import { Button, Card, Chip, Field, Screen, StatTile, SegmentedControl } from '@/components/ui';
+import { Button, Card, Chip, EmptyState, Field, Screen, StatTile, SegmentedControl } from '@/components/ui';
 import { askAiCoach } from '@/data/api';
 import { generatePlan } from '@/features/aiCoach/planGenerator';
+import { AI_COACH_ON } from '@/features/aiCoach/switch';
 import { duration, formatDate } from '@/lib/format';
 import { healthSignal } from '@/lib/integrations';
 import { useApp } from '@/store/AppContext';
@@ -23,7 +24,23 @@ const BLOCK_META: Record<TrainingBlockKind, { icon: keyof typeof Ionicons.glyphM
   mental: { icon: 'bulb-outline', tint: '#8A6BE0' },
 };
 
-export default function Train() {
+/**
+ * The address on its own opens nothing while the coach is switched off: the
+ * screen underneath would answer with stand-in replies, and the app is
+ * public, so a typed address must not walk into a half-built feature.
+ */
+export default function AiCoachRoute() {
+  if (!AI_COACH_ON) {
+    return (
+      <Screen title="AI Coach" compactTitle onBack={() => goBack()}>
+        <EmptyState icon="sparkles-outline" title="AI coach is coming soon" body="A weekly plan, and a coach to ask about your game." />
+      </Screen>
+    );
+  }
+  return <Train />;
+}
+
+function Train() {
   const styles = useThemedStyles(styleDefinitions);
   const { currentUser, healthHistory, integrations } = useApp();
   const [openDay, setOpenDay] = useState<number | null>(null);

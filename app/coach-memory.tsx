@@ -6,11 +6,24 @@ import { goBack } from '@/lib/goBack';
 
 import { Button, EmptyState, Screen } from '@/components/ui';
 import { fetchCoachMemory, clearCoachMemory, type CoachMemory } from '@/data/api';
+import { AI_COACH_ON } from '@/features/aiCoach/switch';
 import { relativeTime } from '@/lib/format';
 import { colors, radius, spacing, typography } from '@/theme';
 
+/** Nothing is kept until the coach is switched on, so the screen says so. */
+export default function CoachMemoryRoute() {
+  if (!AI_COACH_ON) {
+    return (
+      <Screen title="Coach memory" compactTitle onBack={() => goBack()}>
+        <EmptyState icon="sparkles-outline" title="AI coach is coming soon" body="Once it is on, whatever it keeps about you shows here, with a button to wipe it." />
+      </Screen>
+    );
+  }
+  return <CoachMemoryScreen />;
+}
+
 /** What the AI coach has kept about you, in full, with the one button that wipes it. */
-export default function CoachMemoryScreen() {
+function CoachMemoryScreen() {
   const styles = useThemedStyles(styleDefinitions);
   const [memory, setMemory] = useState<CoachMemory | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);

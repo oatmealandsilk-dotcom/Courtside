@@ -57,7 +57,13 @@ function QuestionCardInner({
     <Card onPress={onPress} style={styles.card}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         {author && <Avatar name={author.name} seed={author.avatarSeed} size={30} />}
-        <PlayerName userId={author?.id} style={styles.footerText}>@{author?.handle ?? 'player'}</PlayerName>
+        {/* Who wrote it, the way the feed says it: the name first, the handle
+            after it. A thread carried in from outside keeps to the handle —
+            the badge beside it already says where it came from. */}
+        <PlayerName userId={author?.id} style={styles.footerText} numberOfLines={1}>
+          {author && !question.source ? <Text style={styles.footerName}>{author.name} </Text> : null}
+          @{author?.handle ?? 'player'}
+        </PlayerName>
         {question.source ? (
           <View style={styles.sourceBadge}>
             <Ionicons name={question.source.name === 'reddit' ? 'logo-reddit' : 'globe-outline'} size={12} color={colors.textMuted} />
@@ -130,6 +136,7 @@ const styleDefinitions = StyleSheet.create({
   metaRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
   footer: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingTop: spacing.xs },
   footerText: { ...typography.small, color: colors.textFaint },
+  footerName: { ...typography.smallStrong, color: colors.text },
   // Bigger targets and full-strength ink: these were competing with body text
   // at 16px and textFaint, which read as decoration rather than buttons.
   action: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7 },
