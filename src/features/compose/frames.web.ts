@@ -5,7 +5,8 @@ export interface Frame { time: number; uri: string }
  * each time and paint it onto a canvas. Anything the browser cannot decode
  * yields an empty list, and the strip shows nothing rather than blocking.
  */
-export async function framesAt(uri: string, times: number[]): Promise<Frame[]> {
+/** `width` is the picture's width in pixels: small for a strip, larger for a cover. */
+export async function framesAt(uri: string, times: number[], width = 240): Promise<Frame[]> {
   const video = document.createElement('video');
   video.preload = 'auto';
   video.muted = true;
@@ -21,8 +22,8 @@ export async function framesAt(uri: string, times: number[]): Promise<Frame[]> {
   if (!ready || !Number.isFinite(video.duration) || video.duration <= 0) return [];
   const canvas = document.createElement('canvas');
   const ratio = video.videoWidth ? video.videoHeight / video.videoWidth : 16 / 9;
-  canvas.width = 240;
-  canvas.height = Math.round(240 * ratio) || 320;
+  canvas.width = Math.min(width, video.videoWidth || width);
+  canvas.height = Math.round(canvas.width * ratio) || 320;
   const ctx = canvas.getContext('2d');
   if (!ctx) return [];
   const out: Frame[] = [];

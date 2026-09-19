@@ -278,7 +278,7 @@ export function MediaEditor({ media, onBack, onDone }: {
   const coverAtRef = useRef(0);
   const settleCover = (time: number) => {
     if (!media.uri) return;
-    framesAt(media.uri, [time]).then((got) => { if (got[0]) setCover(got[0].uri); });
+    framesAt(media.uri, [time], 720).then((got) => { if (got[0]) setCover(got[0].uri); });
   };
   const scrubTo = (time: number) => {
     const [a, b] = rangeRef.current;
@@ -507,7 +507,7 @@ export function MediaEditor({ media, onBack, onDone }: {
     if (isVideo) {
       const trimmed = duration && (range[0] > 0.05 || range[1] < duration - 0.05);
       let poster = cover ?? media.thumbnailUrl;
-      if (!poster && media.uri) poster = (await framesAt(media.uri, [range[0]]))[0]?.uri;
+      if (!poster && media.uri) poster = (await framesAt(media.uri, [range[0]], 720))[0]?.uri;
       onDone({
         media: { ...media, thumbnailUrl: poster },
         orientation: frame,

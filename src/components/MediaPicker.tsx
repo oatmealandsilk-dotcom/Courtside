@@ -1,13 +1,15 @@
 import { useTheme } from '@/theme/ThemeProvider';
-import React, { useEffect, useState } from 'react';
-import { Image, Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { Image, Modal, Pressable, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { ZoomableMedia } from './ZoomableMedia';
 import { cropLayer } from '@/lib/crop';
 import type { MediaCrop } from '@/data/types';
 import { ClipVideo } from '@/components/ClipVideo';
-import { framesAt, type Frame } from '@/features/compose/frames';
+import { framesAt } from '@/features/compose/frames';
+import { CoverScrubber } from '@/components/CoverScrubber';
+import { VideoSurface, type VideoSurfaceHandle } from '@/components/VideoSurface';
 import { colors } from '@/theme';
 
 export interface PickedMedia {
@@ -94,23 +96,20 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
   // The cover chooser under the preview, opened by its Edit cover button: a
-  // row of frames from the part of the clip that is kept, and Upload.
+  // strip to drag along. While it is open the preview holds still on the
+  // moment under the bar; letting go makes that frame the cover.
   const [coverOpen, setCoverOpen] = useState(false);
-  const [frames, setFrames] = useState<Frame[]>([]);
-  const [readingFrames, setReadingFrames] = useState(false);
-  const clipUri = value?.kind === 'video' ? value.uri : undefined;
-  const trimFrom = trim?.trimStart ?? 0;
-  const trimTo = trim?.trimEnd;
-  useEffect(() => {
-    if (!bare || !coverOpen || !clipUri || noCover) return;
-    let cancelled = false;
-    setReadingFrames(true);
-    // Without a trim end the length is not known here; frames past the end are simply left out.
-    const span = trimTo && trimTo > trimFrom ? trimTo - trimFrom : 12;
-    const times = Array.from({ length: 6 }, (_, i) => trimFrom + (span * i) / 6);
-    framesAt(clipUri, times).then((got) => { if (!cancelled) { setFrames(got); setReadingFrames(false); } });
-    return () => { cancelled = true; };
-  }, [bare, coverOpen, clipUri, noCover, trimFrom, trimTo]);
+  const [coverAt, setCoverAt] = useState<number | null>(null);
+  const [clipLength, setClipLength] = useState(0);
+  const still = useRef<VideoSurfaceHandle>(null);
+  const keepFrom = Math.max(0, trim?.trimStart ?? 0);
+  const keepTo = trim?.trimEnd && trim.trimEnd > keepFrom ? trim.trimEnd : clipLength;
+  const scrubCover = (seconds: number) => { setCoverAt(seconds); still.current?.seek(seconds); };
+  const settleCover = (seconds: number) => {
+    if (!value?.uri) return;
+    const picked = value;
+    framesAt(picked.uri!, [seconds], 720).then((got) => { if (got[0]) onChange({ ...picked, thumbnailUrl: got[0].uri }); });
+  };
   /**
    * Opens the library. Apple's current picker needs no permission prompt and
    * is tried first; if it throws (it does on some phones and inside sheets),
@@ -170,11 +169,14 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
       {/* The box takes the media's own shape — tall for portrait, wide for
           landscape — with rounded corners on the theme's ground, so there is
           nothing black around it. The media fills it edge to edge. */}
-      <Pressable accessibilityRole="button" accessibilityLabel="Open a larger preview" onPress={() => setExpanded(true)}
+      <Pressable accessibilityRole="button" accessibilityLabel="Open a larger preview" onPress={() => { if (!coverOpen) setExpanded(true); }}
         style={orientation === 'landscape'
           ? { width: '100%', aspectRatio: 16 / 9, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt }
           : { height: 480, aspectRatio: 9 / 16, alignSelf: 'center', borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt }}>
-        {value.kind === 'video' && value.uri
+        {value.kind === 'video' && value.uri && coverOpen
+          // Choosing a cover: the picture holds on the moment under the bar.
+          ? <View style={cropLayer(trim?.crop)}><VideoSurface ref={still} uri={value.uri} muted paused fit="cover" from={keepFrom} onDuration={(d) => { setClipLength(d); still.current?.seek(coverAt ?? keepFrom); }} /></View>
+          : value.kind === 'video' && value.uri
           ? <View style={cropLayer(trim?.crop)}><ClipVideo uri={value.uri} poster={value.thumbnailUrl} active muted fit="cover" trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} /></View>
           : poster
             ? <Image source={{ uri: poster }} resizeMode="cover" style={{ width: '100%', height: '100%' }}/>
@@ -193,29 +195,18 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
       </Pressable>
       {coverOpen && value.kind === 'video' && !noCover ? (
         <View style={{ gap: 4 }}>
-          <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>Cover</Text>
-          <Text style={{ color: colors.textFaint, fontSize: 13 }}>{readingFrames ? 'Reading frames…' : frames.length ? 'Pick the frame people see before it plays, or upload your own.' : 'Upload a picture to use as the cover.'}</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingTop: 8, paddingRight: 8 }}>
-            {value.thumbnailUrl && !frames.some((f) => f.uri === value.thumbnailUrl) ? (
-              <View accessibilityLabel="Current cover" style={{ width: 54, height: 74, borderRadius: 8, overflow: 'hidden', borderWidth: 2, borderColor: colors.brand }}>
-                <Image source={{ uri: value.thumbnailUrl }} resizeMode="cover" style={{ width: '100%', height: '100%' }} />
-              </View>
-            ) : null}
-            {frames.map((f) => {
-              const on = value.thumbnailUrl === f.uri;
-              return (
-                <Pressable key={f.time} accessibilityRole="button" accessibilityLabel="Use this frame as the cover" onPress={() => onChange({ ...value, thumbnailUrl: f.uri })}
-                  style={{ width: 54, height: 74, borderRadius: 8, overflow: 'hidden', borderWidth: 2, borderColor: on ? colors.brand : 'transparent', backgroundColor: colors.surfaceAlt }}>
-                  <Image source={{ uri: f.uri }} resizeMode="cover" style={{ width: '100%', height: '100%' }} />
-                </Pressable>
-              );
-            })}
-            <Pressable accessibilityRole="button" accessibilityLabel="Upload your own cover image" onPress={chooseCover}
-              style={{ width: 54, height: 74, borderRadius: 8, borderWidth: 2, borderColor: colors.border, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center', gap: 3 }}>
-              <Ionicons name="image-outline" size={18} color={colors.textMuted} />
-              <Text style={{ color: colors.textMuted, fontSize: 11 }}>Upload</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>Cover</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Upload your own cover image" onPress={chooseCover} hitSlop={8}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, borderWidth: 1, borderColor: colors.brand }}>
+              <Ionicons name="image-outline" size={15} color={colors.brand} />
+              <Text style={{ color: colors.brand, fontSize: 13, fontWeight: '600' }}>Upload</Text>
             </Pressable>
-          </ScrollView>
+          </View>
+          <Text style={{ color: colors.textFaint, fontSize: 13 }}>Drag along the strip to choose the frame people see before it plays.</Text>
+          {keepTo > keepFrom
+            ? <CoverScrubber uri={value.uri} from={keepFrom} to={keepTo} at={coverAt ?? keepFrom} onScrub={scrubCover} onSettle={settleCover} />
+            : <Text style={{ color: colors.textMuted, fontSize: 12, paddingVertical: 18 }}>Reading the clip…</Text>}
         </View>
       ) : null}
       {/* Full screen, the clip playing with sound. One tap anywhere brings it back. */}
