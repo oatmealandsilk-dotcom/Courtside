@@ -34,6 +34,8 @@ export interface MediaPickerProps {
   bare?: boolean;
   /** Shape of the bare stage. Defaults to portrait. */
   orientation?: 'portrait' | 'landscape';
+  /** Width over height of the portrait stage: 4:5 for a post, 9:16 (the default) for a clip. */
+  portraitRatio?: number;
   /** What the edit step decided: the previews play only the part kept, and honour the sound choice. */
   trim?: { trimStart?: number; trimEnd?: number; muted?: boolean; crop?: MediaCrop };
   /** No cover-picking controls — for places where the video is just evidence, not a post. */
@@ -91,7 +93,7 @@ function explainPickError(err: unknown): string {
   return `Could not open your library: ${reason}`;
 }
 
-export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false, orientation = 'portrait', trim, noCover = false }: MediaPickerProps) {
+export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false, orientation = 'portrait', portraitRatio = 9 / 16, trim, noCover = false }: MediaPickerProps) {
   useTheme();
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
@@ -172,7 +174,9 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
       <Pressable accessibilityRole="button" accessibilityLabel="Open a larger preview" onPress={() => { if (!coverOpen) setExpanded(true); }}
         style={orientation === 'landscape'
           ? { width: '100%', aspectRatio: 16 / 9, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt }
-          : { height: 480, aspectRatio: 9 / 16, alignSelf: 'center', borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt }}>
+          : portraitRatio > 0.6
+            ? { width: '100%', aspectRatio: portraitRatio, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt }
+            : { height: 480, aspectRatio: portraitRatio, alignSelf: 'center', borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt }}>
         {value.kind === 'video' && value.uri && coverOpen
           // Choosing a cover: the picture holds on the moment under the bar.
           ? <View style={cropLayer(trim?.crop)}><VideoSurface ref={still} uri={value.uri} muted paused fit="cover" from={keepFrom} onDuration={(d) => { setClipLength(d); still.current?.seek(coverAt ?? keepFrom); }} /></View>
@@ -185,8 +189,11 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
             Sound button; CourtSide blue while the cover strip is open. */}
         {value.kind === 'video' && !noCover ? (
           <Pressable accessibilityRole="button" accessibilityLabel={coverOpen ? 'Done choosing a cover' : 'Edit cover'} accessibilityState={{ expanded: coverOpen }} onPress={() => setCoverOpen((o) => !o)} hitSlop={6}
-            style={({ pressed }) => ({ position: 'absolute', right: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 11, paddingRight: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: coverOpen ? 'transparent' : 'rgba(255,255,255,0.28)', backgroundColor: coverOpen ? colors.brand : 'rgba(10,14,20,0.55)', opacity: pressed ? 0.85 : 1, shadowColor: '#000', shadowOpacity: 0.28, shadowRadius: 7, shadowOffset: { width: 0, height: 3 } })}>
-            <Ionicons name={coverOpen ? 'checkmark' : 'image-outline'} size={15} color={coverOpen ? colors.brandInk : 'white'} />
+            style={({ pressed }) => ({ position: 'absolute', right: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: coverOpen || !value.thumbnailUrl ? 11 : 6, paddingRight: 14, paddingVertical: coverOpen || !value.thumbnailUrl ? 8 : 5, borderRadius: 999, borderWidth: 1, borderColor: coverOpen ? 'transparent' : 'rgba(255,255,255,0.28)', backgroundColor: coverOpen ? colors.brand : 'rgba(10,14,20,0.55)', opacity: pressed ? 0.85 : 1, shadowColor: '#000', shadowOpacity: 0.28, shadowRadius: 7, shadowOffset: { width: 0, height: 3 } })}>
+            {/* The cover itself, small, so you can see which frame people will see first. */}
+            {coverOpen || !value.thumbnailUrl
+              ? <Ionicons name={coverOpen ? 'checkmark' : 'image-outline'} size={15} color={coverOpen ? colors.brandInk : 'white'} />
+              : <Image source={{ uri: value.thumbnailUrl }} resizeMode="cover" style={{ width: 22, height: 28, borderRadius: 5, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.9)' }} />}
             <Text style={{ ...typography.caption, fontWeight: '600', letterSpacing: 0.1, color: coverOpen ? colors.brandInk : 'white' }}>{coverOpen ? 'Done' : 'Edit cover'}</Text>
           </Pressable>
         ) : null}

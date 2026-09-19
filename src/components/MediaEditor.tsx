@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { PickedMedia } from '@/components/MediaPicker';
 import { VideoSurface, type VideoSurfaceHandle } from '@/components/VideoSurface';
 import { framesAt, type Frame } from '@/features/compose/frames';
-import { ASPECT_RATIO, editPhotoRect, measureForEdit, type Aspect } from '@/features/compose/photoEdit';
+import { editPhotoRect, measureForEdit } from '@/features/compose/photoEdit';
 import { clampCrop, cropLayer } from '@/lib/crop';
 import type { MediaCrop } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -42,13 +42,13 @@ const clock = (s: number) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toStrin
 // A computer's browser: the stage is wide, so a portrait post gets a phone-shaped box in the middle.
 const desktopWeb = Platform.OS === 'web' && isDesktopBrowser();
 
-/** The photo window's shape: the picture's own, a set shape, or whatever the corner handles make it. */
-type EditAspect = Aspect | 'free';
 
-export function MediaEditor({ media, onBack, onDone }: {
+export function MediaEditor({ media, onBack, onDone, portraitRatio = 9 / 16 }: {
   media: PickedMedia;
   onBack: () => void;
   onDone: (result: EditedMedia) => void;
+  /** Width over height of a portrait frame: 4:5 for a post (as the feed shows it), 9:16 for a full-screen clip. Landscape is 16:9. */
+  portraitRatio?: number;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
@@ -452,7 +452,11 @@ export function MediaEditor({ media, onBack, onDone }: {
   // The picture swings to each quarter turn rather than snapping.
   const spin = useRef(new RNAnimated.Value(0)).current;
   useEffect(() => { RNAnimated.spring(spin, { toValue: turns * 90, useNativeDriver: true, damping: 16, stiffness: 180 }).start(); }, [turns, spin]);
-  const [aspect, setAspect] = useState<EditAspect>('original');
+  // How the post is framed in the feed: Portrait (the post's own portrait
+  // shape) or Landscape (16:9). Picked from the picture's own shape and
+  // changeable here. A photo is cropped to exactly that shape.
+  const [frame, setFrame] = useState<'portrait' | 'landscape'>(media.orientation ?? 'portrait');
+  const [frameTouched, setFrameTouched] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
@@ -464,31 +468,28 @@ export function MediaEditor({ media, onBack, onDone }: {
   const odd = ((turns % 4) + 4) % 4 % 2 === 1;
   const RW = nat ? (odd ? nat.height : nat.width) : 1;
   const RH = nat ? (odd ? nat.width : nat.height) : 1;
-  // Free: the window is whatever the corner handles have been dragged to, as fractions of the stage.
-  const [freeWin, setFreeWin] = useState({ w: 0.8, h: 0.8 });
-  const cropRatio = aspect === 'original' ? RW / RH : aspect === 'free' ? (freeWin.w * box.w) / Math.max(1, freeWin.h * box.h) : ASPECT_RATIO[aspect as Exclude<Aspect, 'original'>];
-  const photoShape: 'portrait' | 'landscape' = cropRatio > 1 ? 'landscape' : 'portrait';
-  const win = aspect === 'free'
-    ? { w: box.w * freeWin.w, h: box.h * freeWin.h }
-    : box.w / box.h > cropRatio ? { w: box.h * cropRatio, h: box.h } : { w: box.w, h: box.w / cropRatio };
-  // Corner handles for the free crop: each one pulls its own corner in or out.
-  const freeStart = useRef(freeWin);
-  const cornerDrag = (sx: number, sy: number) => PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: () => { freeStart.current = freeWin; setDragging(true); },
-    onPanResponderMove: (_e, g) => {
-      const b = boxRef.current;
-      setFreeWin({
-        w: Math.max(0.2, Math.min(1, freeStart.current.w + (sx * g.dx * 2) / Math.max(1, b.w))),
-        h: Math.max(0.2, Math.min(1, freeStart.current.h + (sy * g.dy * 2) / Math.max(1, b.h))),
-      });
-    },
-    onPanResponderRelease: () => setDragging(false),
-    onPanResponderTerminate: () => setDragging(false),
-  });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const corners = useMemo(() => [cornerDrag(-1, -1), cornerDrag(1, -1), cornerDrag(-1, 1), cornerDrag(1, 1)], [freeWin.w, freeWin.h]);
+  const photoShape: 'portrait' | 'landscape' = RW / RH > 1 ? 'landscape' : 'portrait';
+  const cropRatio = frame === 'landscape' ? 16 / 9 : portraitRatio;
+  // A post's portrait video frame: its own shape, as large as the stage allows.
+  const postPortrait = isVideo && Math.abs(portraitRatio - 9 / 16) > 0.01;
+  const postBoxW = stageSize.w && stageSize.h ? Math.min(stageSize.w, stageSize.h * portraitRatio) : 0;
+  const postBox = { width: postBoxW, height: postBoxW / portraitRatio, overflow: 'hidden' as const };
+  // The room the photo has: the whole stage less a small margin all round.
+  const PHOTO_MARGIN = 14;
+  const room = { w: Math.max(1, box.w - PHOTO_MARGIN * 2), h: Math.max(1, box.h - PHOTO_MARGIN * 2) };
+  const win = room.w / room.h > cropRatio ? { w: room.h * cropRatio, h: room.h } : { w: room.w, h: room.w / cropRatio };
+  const winRef = useRef(win);
+  winRef.current = win;
+  // Pulling a corner in shrinks the crop box around its middle, keeping its
+  // shape; letting go, the box grows back to full size and the photo zooms
+  // in to match, the way iPhone Photos does it. cropS is the box's size, 1 = full.
+  const [cropS, setCropS] = useState(1);
+  const cropSRef = useRef(1);
+  cropSRef.current = cropS;
+  const cropSStart = useRef(1);
+  const fillFromCorner = useRef<(s: number) => void>(() => undefined);
+  // Which corner a drag started on, if any: set the moment a finger lands.
+  const dragCorner = useRef<readonly [number, number] | null>(null);
   const k = Math.max(win.w / RW, win.h / RH) * zoom;
   const shown = { rw: RW * k, rh: RH * k, uw: (nat?.width ?? 1) * k, uh: (nat?.height ?? 1) * k };
   const clampPan = (p: { x: number; y: number }, z = zoom) => {
@@ -502,33 +503,110 @@ export function MediaEditor({ media, onBack, onDone }: {
   const panStart = useRef(pan);
   const clampRef = useRef(clampPan);
   clampRef.current = clampPan;
-  const photoDrag = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: () => { panStart.current = panRef.current; setDragging(true); },
-    onPanResponderMove: (_e, g) => setPan(clampRef.current({ x: panStart.current.x + g.dx, y: panStart.current.y + g.dy })),
-    onPanResponderRelease: () => setDragging(false),
-    onPanResponderTerminate: () => setDragging(false),
-  }), []);
-  const PHOTO_ZOOM_MAX = 3;
-  const photoZoomTo = (x: number) => {
-    const t = Math.max(0, Math.min(1, x / zoomStripWidth));
-    const z = 1 + t * (PHOTO_ZOOM_MAX - 1);
-    setZoom(z);
-    setPan((p) => clampRef.current(p, z));
+  // One finger drags the photo; two fingers pinch to zoom (and drag while
+  // they pinch). On a computer a trackpad pinch zooms too (below).
+  const PHOTO_ZOOM_MAX = 4;
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const zoomStart = useRef(1);
+  // The zoom level shows for a moment while it changes, then fades.
+  const [zoomShown, setZoomShown] = useState(false);
+  const zoomTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const zoomPhotoTo = (z: number) => {
+    const next = Math.max(1, Math.min(PHOTO_ZOOM_MAX, z));
+    setZoom(next);
+    setPan((p) => clampRef.current(p, next));
+    setZoomShown(true);
+    if (zoomTimer.current) clearTimeout(zoomTimer.current);
+    zoomTimer.current = setTimeout(() => setZoomShown(false), 900);
   };
-  const photoZoomDrag = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: (e) => photoZoomTo(e.nativeEvent.locationX),
-    onPanResponderMove: (e) => photoZoomTo(e.nativeEvent.locationX),
-  }), [zoomStripWidth]); // eslint-disable-line react-hooks/exhaustive-deps
-  const photoTouched = turns !== 0 || aspect !== 'original' || zoom > 1.001 || pan.x !== 0 || pan.y !== 0;
-  useEffect(() => { setPan((p) => clampRef.current(p)); }, [aspect, turns, box.w, box.h]); // eslint-disable-line react-hooks/exhaustive-deps
-  // How the post is framed in the feed. Picked from the picture's own shape
-  // and changeable here; a landscape frame shows black either side.
-  const [frame, setFrame] = useState<'portrait' | 'landscape'>(media.orientation ?? 'portrait');
-  const [frameTouched, setFrameTouched] = useState(false);
+  const zoomPhotoRef = useRef(zoomPhotoTo);
+  zoomPhotoRef.current = zoomPhotoTo;
+  // A corner let go: the box grows back to full size while the photo zooms in
+  // by the same amount about the middle, so what was inside the box fills it.
+  fillFromCorner.current = (s0: number) => {
+    if (s0 > 0.995) { setCropS(1); return; }
+    const z0 = zoomRef.current;
+    const p0 = panRef.current;
+    const z1 = Math.min(PHOTO_ZOOM_MAX, z0 / s0);
+    const f = z1 / z0;
+    const p1 = clampRef.current({ x: p0.x * f, y: p0.y * f }, z1);
+    const t0 = Date.now();
+    const step = () => {
+      const t = Math.min(1, (Date.now() - t0) / 260);
+      const e = 1 - Math.pow(1 - t, 3);
+      setZoom(z0 + (z1 - z0) * e);
+      setPan({ x: p0.x + (p1.x - p0.x) * e, y: p0.y + (p1.y - p0.y) * e });
+      setCropS(s0 + (1 - s0) * e);
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  };
+  // One drag for the whole stage. Landing on a corner of the crop box pulls
+  // that corner (the box shrinks around its middle, keeping its shape);
+  // landing anywhere else moves the photo. Two fingers pinch to zoom.
+  const photoGestures = useMemo(() => Gesture.Simultaneous(
+    Gesture.Pan().runOnJS(true).minDistance(1)
+      .onBegin((e) => {
+        const w = winRef.current;
+        const b = boxRef.current;
+        const sz = cropSRef.current;
+        const bw = w.w * sz;
+        const bh = w.h * sz;
+        const l = (b.w - bw) / 2;
+        const t = (b.h - bh) / 2;
+        const spots = [[l, t, -1, -1], [l + bw, t, 1, -1], [l, t + bh, -1, 1], [l + bw, t + bh, 1, 1]] as const;
+        const hit = spots.find(([x, y]) => Math.hypot(e.x - x, e.y - y) < 32);
+        dragCorner.current = hit ? [hit[2], hit[3]] as const : null;
+      })
+      .onStart(() => {
+        if (dragCorner.current) cropSStart.current = cropSRef.current;
+        else panStart.current = panRef.current;
+        setDragging(true);
+      })
+      .onUpdate((e) => {
+        const corner = dragCorner.current;
+        if (corner) {
+          const [sx, sy] = corner;
+          const w = winRef.current;
+          const inward = Math.max((-sx * e.translationX * 2) / Math.max(1, w.w), (-sy * e.translationY * 2) / Math.max(1, w.h));
+          setCropS(Math.max(0.3, Math.min(1, cropSStart.current - inward)));
+        } else {
+          setPan(clampRef.current({ x: panStart.current.x + e.translationX, y: panStart.current.y + e.translationY }, zoomRef.current));
+        }
+      })
+      .onFinalize(() => {
+        setDragging(false);
+        if (dragCorner.current) fillFromCorner.current(cropSRef.current);
+        dragCorner.current = null;
+      }),
+    Gesture.Pinch().runOnJS(true)
+      .onStart(() => { zoomStart.current = zoomRef.current; })
+      .onUpdate((e) => zoomPhotoRef.current(zoomStart.current * e.scale)),
+  ), []); // eslint-disable-line react-hooks/exhaustive-deps
+  // A trackpad pinch in the browser arrives as a wheel with the control key
+  // held (Chrome, Edge, Firefox) or as Safari's own gesture events.
+  const stageRoot = useRef<View>(null);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || isVideo) return;
+    const node = stageRoot.current as unknown as HTMLElement | null;
+    if (!node || typeof node.addEventListener !== 'function') return;
+    const onWheel = (e: WheelEvent) => { if (!e.ctrlKey) return; e.preventDefault(); zoomPhotoRef.current(zoomRef.current * Math.exp(-e.deltaY / 100)); };
+    let from = 1;
+    const onGestureStart = (e: Event) => { e.preventDefault(); from = zoomRef.current; };
+    const onGestureChange = (e: Event) => { e.preventDefault(); zoomPhotoRef.current(from * ((e as unknown as { scale?: number }).scale ?? 1)); };
+    node.addEventListener('wheel', onWheel, { passive: false });
+    node.addEventListener('gesturestart', onGestureStart);
+    node.addEventListener('gesturechange', onGestureChange);
+    return () => {
+      node.removeEventListener('wheel', onWheel);
+      node.removeEventListener('gesturestart', onGestureStart);
+      node.removeEventListener('gesturechange', onGestureChange);
+    };
+  }, [isVideo, nat]);
+  // Cut on Next whenever anything was changed, or the photo is not already the post's shape.
+  const photoTouched = turns !== 0 || zoom > 1.001 || pan.x !== 0 || pan.y !== 0 || Math.abs(RW / RH - cropRatio) > 0.01;
+  useEffect(() => { setPan((p) => clampRef.current(p)); }, [frame, turns, box.w, box.h]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!frameTouched) setFrame(isVideo ? media.orientation ?? 'portrait' : nat ? photoShape : media.orientation ?? 'portrait'); }, [isVideo, media.orientation, photoShape, frameTouched, nat]);
 
   const done = async () => {
@@ -577,35 +655,59 @@ export function MediaEditor({ media, onBack, onDone }: {
         <Pressable accessibilityRole="button" accessibilityLabel="Next" onPress={() => { void done(); }} disabled={busy} style={[styles.next, busy && { opacity: 0.5 }]}><Text style={styles.nextText}>Next</Text></Pressable>
       </View>
 
-      <View style={styles.stage} onLayout={(e) => { const l = e.nativeEvent.layout; setStageSize((st) => (st.w === l.width && st.h === l.height ? st : { w: l.width, h: l.height })); }}>
-        <View style={frame === 'landscape' ? styles.wideFrame : desktopWeb ? styles.tallFrame : StyleSheet.absoluteFill}>
-          <Animated.View style={[frame === 'landscape' ? styles.wideBox : desktopWeb ? styles.tallBox : StyleSheet.absoluteFill, isVideo && zoomStyle]} onLayout={(e) => setBox({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) })}>
+      <View ref={stageRoot} style={styles.stage} onLayout={(e) => { const l = e.nativeEvent.layout; setStageSize((st) => (st.w === l.width && st.h === l.height ? st : { w: l.width, h: l.height })); }}>
+        {/* A clip is shown in its post's shape; a photo gets the whole stage, so it can be as big as the screen allows. */}
+        {/* A post's portrait frame is its own shape (4:5), sized to fit the stage, so what you frame here is what the feed shows. */}
+        <View style={!isVideo ? StyleSheet.absoluteFill : frame === 'landscape' ? styles.wideFrame : postPortrait || desktopWeb ? styles.tallFrame : StyleSheet.absoluteFill}>
+          <Animated.View style={[!isVideo ? StyleSheet.absoluteFill : frame === 'landscape' ? styles.wideBox : postPortrait ? postBox : desktopWeb ? styles.tallBox : StyleSheet.absoluteFill, isVideo && zoomStyle]} onLayout={(e) => setBox({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) })}>
             {isVideo && media.uri ? (
               <View style={tool === 'crop' ? StyleSheet.absoluteFill : cropLayer(crop)}>
                 <VideoSurface ref={player} uri={media.uri} muted={muted} fit={tool === 'crop' ? 'contain' : 'cover'} from={range[0]} to={duration ? range[1] : undefined} paused={frozenAt !== null || userPaused} onTime={onTime} onDuration={onDuration} onSize={onVidSize} />
               </View>
             ) : media.uri && nat ? (
-              <View style={styles.photoStage} pointerEvents="box-none">
-                <View {...photoDrag.panHandlers} style={[styles.photoWindow, { width: win.w, height: win.h }]}>
+              // The whole stage takes the drag and the pinch, not only the box;
+              // the photo shows past the box, dimmed, so you see what is cut.
+              <GestureDetector gesture={photoGestures}>
+              <View style={styles.photoStage}>
+                <View style={[styles.photoWindow, { width: win.w, height: win.h }]}>
                   <RNAnimated.Image
                     accessibilityIgnoresInvertColors
                     source={{ uri: media.uri }}
                     resizeMode="cover"
                     style={{ position: 'absolute', width: shown.uw, height: shown.uh, left: (win.w - shown.uw) / 2 + pan.x, top: (win.h - shown.uh) / 2 + pan.y, transform: [{ rotate: spin.interpolate({ inputRange: [0, 360], outputRange: ['0deg', '360deg'] }) }] }}
                   />
-                  {/* The thirds grid, while the picture is being moved. */}
-                  <View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: dragging ? 1 : 0 }]}>
-                    {[1, 2].map((i) => <View key={`v${i}`} style={[styles.gridLine, { left: `${(i / 3) * 100}%`, top: 0, bottom: 0, width: 1 }]} />)}
-                    {[1, 2].map((i) => <View key={`h${i}`} style={[styles.gridLine, { top: `${(i / 3) * 100}%`, left: 0, right: 0, height: 1 }]} />)}
-                  </View>
-                  <View pointerEvents="none" style={styles.cropEdge} />
-                  {aspect === 'free' ? corners.map((c, i) => (
-                    <View key={i} {...c.panHandlers} style={[styles.corner, i % 2 === 0 ? { left: -6 } : { right: -6 }, i < 2 ? { top: -6 } : { bottom: -6 }]}>
-                      <View style={[styles.cornerMark, i % 2 === 0 ? { borderLeftWidth: 3 } : { borderRightWidth: 3 }, i < 2 ? { borderTopWidth: 3 } : { borderBottomWidth: 3 }]} />
-                    </View>
-                  )) : null}
                 </View>
+                {(() => {
+                  // The crop box on the stage: the window, shrunk around its middle while a corner is pulled.
+                  const bw = win.w * cropS;
+                  const bh = win.h * cropS;
+                  const l = (box.w - bw) / 2;
+                  const t = (box.h - bh) / 2;
+                  return (
+                    <>
+                      <View pointerEvents="none" style={[styles.photoDim, { top: 0, left: 0, right: 0, height: t }]} />
+                      <View pointerEvents="none" style={[styles.photoDim, { top: t + bh, left: 0, right: 0, bottom: 0 }]} />
+                      <View pointerEvents="none" style={[styles.photoDim, { top: t, left: 0, width: l, height: bh }]} />
+                      <View pointerEvents="none" style={[styles.photoDim, { top: t, left: l + bw, right: 0, height: bh }]} />
+                      <View pointerEvents="box-none" style={{ position: 'absolute', left: l, top: t, width: bw, height: bh }}>
+                        {/* The thirds grid, while the picture or a corner is being moved. */}
+                        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: dragging ? 1 : 0 }]}>
+                          {[1, 2].map((i) => <View key={`v${i}`} style={[styles.gridLine, { left: `${(i / 3) * 100}%`, top: 0, bottom: 0, width: 1 }]} />)}
+                          {[1, 2].map((i) => <View key={`h${i}`} style={[styles.gridLine, { top: `${(i / 3) * 100}%`, left: 0, right: 0, height: 1 }]} />)}
+                        </View>
+                        <View pointerEvents="none" style={styles.cropEdge} />
+                        {[0, 1, 2, 3].map((i) => (
+                          <View key={i} pointerEvents="none" accessibilityLabel="Crop corner" style={[styles.corner, i % 2 === 0 ? { left: -14 } : { right: -14 }, i < 2 ? { top: -14 } : { bottom: -14 }]}>
+                            <View style={[styles.cornerMark, i % 2 === 0 ? { borderLeftWidth: 3 } : { borderRightWidth: 3 }, i < 2 ? { borderTopWidth: 3 } : { borderBottomWidth: 3 }]} />
+                          </View>
+                        ))}
+                        {zoomShown ? <View pointerEvents="none" style={styles.zoomBadge}><Text style={styles.zoomBadgeText}>{zoom.toFixed(1)}×</Text></View> : null}
+                      </View>
+                    </>
+                  );
+                })()}
               </View>
+              </GestureDetector>
             ) : null}
           </Animated.View>
         </View>
@@ -709,30 +811,16 @@ export function MediaEditor({ media, onBack, onDone }: {
         ) : (
           <>
             <View style={styles.tabs}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Turn" onPress={() => setTurns((t) => t + 1)} style={styles.tab}>
-                <Ionicons name="refresh-outline" size={15} color="white" /><Text style={styles.tabText}>Turn</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Rotate" onPress={() => setTurns((t) => t + 1)} style={styles.tab}>
+                <Ionicons name="refresh-outline" size={15} color="white" /><Text style={styles.tabText}>Rotate</Text>
               </Pressable>
-              {(['original', 'free', '9:16', '4:5', '1:1'] as EditAspect[]).map((a) => (
-                <Pressable key={a} accessibilityRole="button" accessibilityState={{ selected: aspect === a }} onPress={() => setAspect(a)} style={[styles.tab, aspect === a && styles.tabOn]}>
-                  <Text style={[styles.tabText, aspect === a && { color: colors.brandInk }]}>{a === 'original' ? 'Original' : a === 'free' ? 'Crop' : a}</Text>
-                </Pressable>
-              ))}
-              {photoTouched ? (
-                <Pressable accessibilityRole="button" accessibilityLabel="Reset edits" onPress={() => { setTurns(0); setAspect('original'); setZoom(1); setPan({ x: 0, y: 0 }); setFreeWin({ w: 0.8, h: 0.8 }); }} style={styles.tab}>
+              {turns !== 0 || zoom > 1.001 || pan.x !== 0 || pan.y !== 0 ? (
+                <Pressable accessibilityRole="button" accessibilityLabel="Reset edits" onPress={() => { setTurns(0); setZoom(1); setPan({ x: 0, y: 0 }); setCropS(1); }} style={styles.tab}>
                   <Text style={styles.tabText}>Reset</Text>
                 </Pressable>
               ) : null}
             </View>
-            <View style={styles.zoomRow}>
-              <Ionicons name="remove" size={16} color="rgba(255,255,255,0.7)" />
-              <View {...photoZoomDrag.panHandlers} style={styles.zoomStrip}>
-                <View style={styles.zoomTrack}><View style={[styles.zoomFill, { width: `${((zoom - 1) / (PHOTO_ZOOM_MAX - 1)) * 100}%` }]} /></View>
-                <View style={[styles.zoomKnob, { left: `${((zoom - 1) / (PHOTO_ZOOM_MAX - 1)) * 100}%` }]} />
-              </View>
-              <Ionicons name="add" size={16} color="rgba(255,255,255,0.7)" />
-              <Text style={styles.zoomText}>{zoom.toFixed(1)}×</Text>
-            </View>
-            <Text style={styles.hint}>Pick a shape, drag the photo to place it, slide to zoom. Nothing is cut until Next.</Text>
+            <Text style={styles.hint}>Drag the photo to place it, pinch to zoom, or pull a corner in to crop closer. Nothing is cut until Next.</Text>
           </>
         )}
         {error ? <Text style={[styles.hint, { color: colors.danger }]}>{error}</Text> : null}
@@ -770,6 +858,9 @@ const styleDefinitions = StyleSheet.create({
   cropBox: { position: 'absolute', borderWidth: 1.5, borderColor: 'white' },
   photoStage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   photoWindow: { overflow: 'visible', backgroundColor: '#000' },
+  photoDim: { position: 'absolute', backgroundColor: 'rgba(0,0,0,0.6)' },
+  zoomBadge: { position: 'absolute', top: 10, alignSelf: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: 'rgba(0,0,0,0.55)' },
+  zoomBadgeText: { ...typography.caption, color: 'white', letterSpacing: 0 },
   corner: { position: 'absolute', width: 36, height: 36, alignItems: 'center', justifyContent: 'center', zIndex: 3 },
   cornerMark: { width: 22, height: 22, borderColor: 'white' },
   gridLine: { position: 'absolute', backgroundColor: 'rgba(255,255,255,0.55)' },

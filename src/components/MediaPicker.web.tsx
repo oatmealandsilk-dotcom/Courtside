@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, radius, spacing, typography } from '@/theme';
@@ -165,7 +165,7 @@ export function pickFromDevice(selection: 'video' | 'photo' | 'all'): Promise<Pi
   });
 }
 
-export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false, orientation = 'portrait', trim, noCover = false }: MediaPickerProps) {
+export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false, orientation = 'portrait', portraitRatio = 9 / 16, trim, noCover = false }: MediaPickerProps) {
   const styles = useThemedStyles(styleDefinitions);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
@@ -312,7 +312,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
             // The box keeps the post's own shape even when the screen is short:
             // it gets narrower instead of cutting off the top and bottom, so the
             // whole picture shows, exactly as it will in the feed.
-            style={{ position: 'relative', width: orientation === 'landscape' ? 'min(100%, calc(62vh * 16 / 9))' : 'min(100%, calc(62vh * 9 / 16))', aspectRatio: orientation === 'landscape' ? '16 / 9' : '9 / 16', margin: '0 auto', borderRadius: 16, overflow: 'hidden', background: '#000', cursor: 'zoom-in' }}
+            style={{ position: 'relative', width: orientation === 'landscape' ? 'min(100%, calc(62vh * 16 / 9))' : `min(100%, calc(62vh * ${portraitRatio}))`, aspectRatio: orientation === 'landscape' ? '16 / 9' : String(portraitRatio), margin: '0 auto', borderRadius: 16, overflow: 'hidden', background: '#000', cursor: 'zoom-in' }}
             onClick={() => { if (!coverOpen) setExpanded(true); }}
             role="button"
             tabIndex={0}
@@ -341,14 +341,17 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
                 // app Text, so they wear the app's font, not the browser's serif.
                 style={{
                   position: 'absolute', right: 12, bottom: 12, display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '8px 14px 8px 11px', borderRadius: 999, cursor: 'pointer', margin: 0,
+                  padding: coverOpen || !value.thumbnailUrl ? '8px 14px 8px 11px' : '5px 14px 5px 6px', borderRadius: 999, cursor: 'pointer', margin: 0,
                   border: coverOpen ? '1px solid transparent' : '1px solid rgba(255,255,255,0.28)',
                   background: coverOpen ? colors.brand : 'rgba(10,14,20,0.52)',
                   backdropFilter: 'blur(12px) saturate(140%)', WebkitBackdropFilter: 'blur(12px) saturate(140%)',
                   boxShadow: '0 4px 14px rgba(0,0,0,0.28)', transition: 'background 160ms ease, border-color 160ms ease',
                 }}
               >
-                <Ionicons name={coverOpen ? 'checkmark' : 'image-outline'} size={15} color={coverOpen ? colors.brandInk : 'white'} />
+                {/* The cover itself, small, so you can see which frame people will see first. */}
+                {coverOpen || !value.thumbnailUrl
+                  ? <Ionicons name={coverOpen ? 'checkmark' : 'image-outline'} size={15} color={coverOpen ? colors.brandInk : 'white'} />
+                  : <img src={value.thumbnailUrl} alt="" style={{ width: 22, height: 28, borderRadius: 5, objectFit: 'cover', border: '1.5px solid rgba(255,255,255,0.9)', display: 'block' }} />}
                 <Text style={[styles.coverPillText, coverOpen && { color: colors.brandInk }]}>{coverOpen ? 'Done' : 'Edit cover'}</Text>
               </button>
             ) : null}
@@ -420,14 +423,15 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
         </View>}
 
         {expanded ? (
-          // Tap-through to a full-size look, with the cover strip still to hand
-          // so the cover can be changed while actually seeing the footage.
+          // Tap-through to a full-size look. A Modal draws it at the top of the
+          // page, so nothing on the form (the caption, Tag players) can sit on it.
+          <Modal visible transparent animationType="none" onRequestClose={() => setExpanded(false)}>
           <div
             role="dialog"
             aria-label="Media preview"
             onClick={() => setExpanded(false)}
             style={{
-              position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(6,12,10,0.92)',
+              position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(6,12,10,0.92)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
               cursor: 'zoom-out',
             }}
@@ -435,7 +439,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
             {value.kind === 'video' && value.uri ? (
               // The same player the feed uses: a tap pauses, a pinch zooms and
               // springs back; no browser controls.
-              <div onClick={(event) => event.stopPropagation()} style={{ position: 'relative', width: orientation === 'landscape' ? '100%' : 'min(100%, 56vh)', aspectRatio: orientation === 'landscape' ? '16 / 9' : '9 / 16', maxHeight: '100%', borderRadius: 12, overflow: 'hidden', background: '#000', cursor: 'default' }}>
+              <div onClick={(event) => event.stopPropagation()} style={{ position: 'relative', width: orientation === 'landscape' ? '100%' : `min(100%, calc(88vh * ${portraitRatio}))`, aspectRatio: orientation === 'landscape' ? '16 / 9' : String(portraitRatio), maxHeight: '100%', borderRadius: 12, overflow: 'hidden', background: '#000', cursor: 'default' }}>
                 <ZoomableMedia onDismiss={() => setExpanded(false)}>
                   <ClipPlayback uri={value.uri} poster={value.thumbnailUrl} active fit={orientation === 'landscape' ? 'contain' : 'cover'} trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} crop={trim?.crop} silent={trim?.muted} />
                 </ZoomableMedia>
@@ -449,6 +453,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
               />
             ) : null}
           </div>
+          </Modal>
         ) : null}
 
         {value.kind === 'video' && !noCover && bare && coverOpen && value.uri ? (

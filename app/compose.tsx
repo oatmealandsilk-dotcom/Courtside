@@ -76,6 +76,8 @@ export default function Compose() {
   closeRef.current = closeMenu;
   useEffect(() => (stage === 'choose' ? registerCreateClose(() => closeRef.current()) : undefined), [stage]);
   const [mode, setMode] = useState<Mode>(isHit ? 'hit' : params.mode === 'story' ? 'story' : 'post');
+  // A post is 4:5 upright, the way the feed shows it; a clip and a story fill a phone screen (9:16).
+  const portraitRatio = mode === 'post' ? 4 / 5 : 9 / 16;
   const [media, setMedia] = useState<PickedMedia | null>(isHit ? { uri: shotUri as string, label: 'Hit', kind: 'photo', thumbnailUrl: shotUri as string, orientation: 'portrait' } : null);
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
   // What the edit step decided: where a clip starts and stops, and whether it has sound.
@@ -189,6 +191,7 @@ export default function Compose() {
       <View style={[styles.backdrop, { backgroundColor: '#000' }]}>
         <MediaEditor
           media={media}
+          portraitRatio={portraitRatio}
           onBack={() => setStage('choose')}
           onDone={(result) => {
             setMedia(result.media);
@@ -282,7 +285,7 @@ export default function Compose() {
                       <Image source={{ uri: media.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel="Your hit" />
                     </View>
                   ) : (
-                    <MediaPicker bare orientation={orientation} selection={mode === 'clip' ? 'video' : 'all'} value={media} onChange={setMedia} trim={edit} />
+                    <MediaPicker bare orientation={orientation} portraitRatio={portraitRatio} selection={mode === 'clip' ? 'video' : 'all'} value={media} onChange={setMedia} trim={edit} />
                   )}
                 </View>
                 {mode === 'hit' ? (
@@ -370,7 +373,8 @@ const styleDefinitions = StyleSheet.create({
   },
   form: { gap: spacing.md, paddingTop: 0 },
   // Bleed past the screen's own padding so the media runs edge to edge.
-  stage: { marginTop: -spacing.sm },
+  // A little room under the header, so the preview's rounded top corners show.
+  stage: { marginTop: spacing.xs },
   inlineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   inlineLabel: { ...typography.small, color: colors.textMuted, flex: 1 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
