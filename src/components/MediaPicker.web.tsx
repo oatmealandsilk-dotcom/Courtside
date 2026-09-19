@@ -260,7 +260,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
   const settleCover = (seconds: number) => {
     if (!value?.uri) return;
     const picked = value;
-    framesAt(picked.uri!, [seconds], 720).then((got) => { if (got[0]) onChange({ ...picked, thumbnailUrl: got[0].uri }); });
+    framesAt(picked.uri!, [seconds], 1080).then((got) => { if (got[0]) onChange({ ...picked, thumbnailUrl: got[0].uri }); });
   };
 
   const onCoverFile = useCallback(
