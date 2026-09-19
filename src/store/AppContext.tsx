@@ -515,6 +515,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive)) return;
     const me = currentUserForLive;
     let off: (() => void) | undefined;
+    let offReads: (() => void) | undefined;
     try {
       off = remote.onMessages({
         added: (message) => {
@@ -554,8 +555,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
           } : prev);
         },
       });
+      // Someone read your messages: "Read" shows under them straight away.
+      offReads = remote.onReads((conversationId, userId, readAt) => {
+        if (userId === me) return;
+        const upTo = Date.parse(readAt);
+        setState((prev) => ({
+          ...prev,
+          messages: prev.messages.map((m) => (m.conversationId === conversationId && m.senderId !== userId && Date.parse(m.createdAt) <= upTo && !m.readAtBy?.[userId]
+            ? { ...m, readAtBy: { ...(m.readAtBy ?? {}), [userId]: readAt }, openedAtBy: { ...(m.openedAtBy ?? {}), [userId]: readAt } }
+            : m)),
+        }));
+      });
     } catch { /* live updates are a nicety */ }
-    return () => { off?.(); };
+    return () => { off?.(); offReads?.(); };
   }, [remoteLoaded, currentUserForLive]);
 
   // Notifications are filed inside state updates (withNotification), so the
@@ -888,6 +900,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = requireUser();
     saveReceiptPreference(me, enabled);
     patchCurrentUser(user => ({...user, readReceiptsEnabled: enabled}));
+    // Kept with the account, so the people you chat with see the change too.
+    if (live(me)) void remote.updateProfile(me, { readReceipts: enabled });
   }, [requireUser, patchCurrentUser]);
 
   const updateProfile = useCallback(

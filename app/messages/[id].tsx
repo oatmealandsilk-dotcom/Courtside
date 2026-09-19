@@ -31,7 +31,6 @@ import { activeMention, applyMention } from '@/lib/mentions';
 import { show as showToast } from '@/lib/toast';
 import * as haptics from '@/lib/haptics';
 import type { Message } from '@/data/types';
-import { CHAT_THEMES, loadChatTheme, saveChatTheme, type ChatTheme } from '@/features/messaging/chatTheme';
 import Reanimated, { Easing, FadeIn, FadeInDown, FadeInUp, FadeOut, LinearTransition, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -61,12 +60,6 @@ export default function Thread() {
     vv.addEventListener('resize', update); vv.addEventListener('scroll', update);
     return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
   }, []);
-  // The chat's colour: your bubbles and the send button. Picked from the palette button, kept per conversation.
-  const [themeId, setThemeId] = useState<string | null>(null);
-  const [themeOpen, setThemeOpen] = useState(false);
-  useEffect(() => { let live = true; if (id) void loadChatTheme(id).then((t) => { if (live) setThemeId(t); }); return () => { live = false; }; }, [id]);
-  const chatTheme: ChatTheme | null = CHAT_THEMES.find((t) => t.id === themeId) ?? null;
-  const pickTheme = (next: string | null) => { setThemeId(next); if (id) void saveChatTheme(id, next); };
   const scrollRef = useRef<ScrollView | null>(null);
   // Only messages that arrive after the first paint rise in; the history just appears.
   const settled = useRef(false);
@@ -154,23 +147,7 @@ export default function Thread() {
             <PlayerName userId={other.id} style={styles.headerHandle}>@{other.handle}</PlayerName>
           </View>
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={themeOpen ? 'Hide chat colours' : 'Change chat colour'} hitSlop={8} onPress={() => setThemeOpen((o) => !o)} style={styles.paletteButton}>
-          <Ionicons name={themeOpen ? 'color-palette' : 'color-palette-outline'} size={22} color={chatTheme?.mine ?? colors.brand} />
-        </Pressable>
       </View>
-      {themeOpen ? (
-        <Reanimated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.paletteRow}>
-          {[{ id: null as string | null, label: 'Default', mine: colors.brand }, ...CHAT_THEMES].map((t) => {
-            const on = (t.id ?? null) === (chatTheme?.id ?? null);
-            return (
-              <Pressable key={t.id ?? 'default'} accessibilityRole="button" accessibilityLabel={`${t.label} chat colour`} accessibilityState={{ selected: on }} onPress={() => pickTheme(t.id)} style={styles.swatchHit}>
-                <View style={[styles.swatch, { backgroundColor: t.mine }, on && styles.swatchOn]}>{on ? <Ionicons name="checkmark" size={14} color="#FFFFFF" /> : null}</View>
-                <Text style={[styles.swatchLabel, on && { color: colors.text }]}>{t.label}</Text>
-              </Pressable>
-            );
-          })}
-        </Reanimated.View>
-      ) : null}
 
       <ScrollView
         ref={scrollRef}
@@ -256,7 +233,6 @@ export default function Thread() {
               inRun={inRun}
               tail={lastOfRun}
               arrive={arrive}
-              tint={chatTheme}
               styles={styles}
               me={currentUserId}
               held={menu?.message.id === message.id}
@@ -304,7 +280,6 @@ export default function Thread() {
         <MessageMenu
           target={menu}
           me={currentUserId}
-          tint={chatTheme}
           styles={styles}
           onClose={() => setMenu(null)}
           onReact={(emoji) => actions.reactToMessage(menu.message.id, emoji)}
@@ -357,7 +332,7 @@ export default function Thread() {
           returnKeyType="send"
           accessibilityLabel="Message text"
         />
-        <SendButton ready={!!draft.trim() && (!editing || draft.trim() !== editing.body)} editing={!!editing} onPress={send} styles={styles} tint={chatTheme} />
+        <SendButton ready={!!draft.trim() && (!editing || draft.trim() !== editing.body)} editing={!!editing} onPress={send} styles={styles} />
       </View>
     </KeyboardAvoidingView>
   );
@@ -369,8 +344,8 @@ export default function Thread() {
  * Double tap leaves your default reaction; a long press opens the picker for a
  * different one. Reactions sit under the bubble and are tappable to remove.
  */
-function Bubble({ message, mine, inRun, tail, arrive, tint, styles, me, held = false, onHold, onReact }: {
-  message: Message; mine: boolean; inRun: boolean; tail: boolean; arrive?: FadeInUp; tint: ChatTheme | null; styles: any; me: string | null;
+function Bubble({ message, mine, inRun, tail, arrive, styles, me, held = false, onHold, onReact }: {
+  message: Message; mine: boolean; inRun: boolean; tail: boolean; arrive?: FadeInUp; styles: any; me: string | null;
   /** Its menu is open: the lifted copy stands in for it, so it steps out of sight. */
   held?: boolean;
   onHold: (rect: Rect) => void; onReact: (emoji?: string) => void;
@@ -403,9 +378,9 @@ function Bubble({ message, mine, inRun, tail, arrive, tint, styles, me, held = f
               delayLongPress={320}
               accessibilityRole="button"
               accessibilityLabel={`Message: ${message.body}. Double tap to react, hold for more.`}
-              style={[styles.bubble, mine ? styles.mine : styles.theirs, mine && tint && { backgroundColor: tint.mine }, !tail && styles.noTail]}
+              style={[styles.bubble, mine ? styles.mine : styles.theirs, !tail && styles.noTail]}
             >
-              <RichText style={[styles.bubbleText, mine && { color: tint?.ink ?? colors.brandInk }]} mentionStyle={mine ? { color: tint?.ink ?? colors.brandInk, textDecorationLine: 'underline' } : undefined}>{message.body}</RichText>
+              <RichText style={[styles.bubbleText, mine && { color: colors.brandInk }]} mentionStyle={mine ? { color: colors.brandInk, textDecorationLine: 'underline' } : undefined}>{message.body}</RichText>
             </Pressable>
 
             {reacted ? (
@@ -451,8 +426,8 @@ function HoldArea({ onHold, style, children }: { onHold: (rect: Rect) => void; s
  * it and the actions below. Your own message: Copy, Edit, Unsend, Delete.
  * Theirs: Copy and Delete. Delete only takes it out of your own view.
  */
-function MessageMenu({ target, me, tint, styles, onClose, onReact, onCopy, onEdit, onUnsend, onDelete }: {
-  target: MenuTarget; me: string | null; tint: ChatTheme | null; styles: any;
+function MessageMenu({ target, me, styles, onClose, onReact, onCopy, onEdit, onUnsend, onDelete }: {
+  target: MenuTarget; me: string | null; styles: any;
   onClose: () => void; onReact: (emoji: string) => void; onCopy: () => void; onEdit: () => void; onUnsend: () => void; onDelete: () => void;
 }) {
   const { width: W, height: H } = useWindowDimensions();
@@ -484,8 +459,8 @@ function MessageMenu({ target, me, tint, styles, onClose, onReact, onCopy, onEdi
       <Reanimated.View entering={FadeIn.duration(140)} style={StyleSheet.absoluteFill}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close menu" onPress={onClose} style={[StyleSheet.absoluteFill, styles.menuBackdrop]} />
         {message.kind === 'text' ? (
-          <View pointerEvents="none" style={[styles.bubble, mine ? styles.mine : styles.theirs, mine && tint && { backgroundColor: tint.mine }, styles.lifted, { position: 'absolute', left: rect.x, top: rect.y - shift, width: rect.w, alignSelf: 'auto' }]}>
-            <RichText style={[styles.bubbleText, mine && { color: tint?.ink ?? colors.brandInk }]}>{message.body}</RichText>
+          <View pointerEvents="none" style={[styles.bubble, mine ? styles.mine : styles.theirs, styles.lifted, { position: 'absolute', left: rect.x, top: rect.y - shift, width: rect.w, alignSelf: 'auto' }]}>
+            <RichText style={[styles.bubbleText, mine && { color: colors.brandInk }]}>{message.body}</RichText>
           </View>
         ) : null}
         <Reanimated.View entering={FadeInDown.duration(160).easing(Easing.out(Easing.cubic))} style={[styles.menuReactions, { top: top - shift, height: BAR_H }, side(REACTIONS.length * 38 + 12)]}>
@@ -519,14 +494,14 @@ const EMOJI = [
 ];
 
 /** The send arrow: dim and small with nothing to send, springing up to full size as you type. */
-function SendButton({ ready, editing = false, onPress, styles, tint }: { ready: boolean; editing?: boolean; onPress: () => void; styles: any; tint: ChatTheme | null }) {
+function SendButton({ ready, editing = false, onPress, styles }: { ready: boolean; editing?: boolean; onPress: () => void; styles: any }) {
   const on = useSharedValue(ready ? 1 : 0);
   useEffect(() => { on.value = ready ? withSpring(1, { damping: 14, stiffness: 260 }) : withTiming(0, { duration: 160 }); }, [ready, on]);
   const style = useAnimatedStyle(() => ({ opacity: 0.4 + 0.6 * on.value, transform: [{ scale: 0.86 + 0.14 * on.value }] }));
   return (
     <Reanimated.View style={style}>
-      <Tappable immediate onPress={onPress} disabled={!ready} accessibilityLabel={editing ? 'Save edit' : 'Send message'} style={[styles.send, tint && { backgroundColor: tint.mine }]}>
-        <Ionicons name={editing ? 'checkmark' : 'arrow-up'} size={19} color={tint?.ink ?? colors.brandInk} />
+      <Tappable immediate onPress={onPress} disabled={!ready} accessibilityLabel={editing ? 'Save edit' : 'Send message'} style={[styles.send]}>
+        <Ionicons name={editing ? 'checkmark' : 'arrow-up'} size={19} color={colors.brandInk} />
       </Tappable>
     </Reanimated.View>
   );
@@ -562,12 +537,6 @@ const styleDefinitions = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   headerUser: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1 },
-  paletteButton: { padding: 4 },
-  paletteRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, backgroundColor: colors.bgElevated },
-  swatchHit: { alignItems: 'center', gap: 4, width: 52 },
-  swatch: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'transparent' },
-  swatchOn: { borderColor: colors.text },
-  swatchLabel: { ...typography.caption, color: colors.textFaint, letterSpacing: 0 },
   headerName: { ...typography.bodyStrong, color: colors.text },
   headerHandle: { ...typography.small, color: colors.textFaint },
   scroll: { flex: 1 },

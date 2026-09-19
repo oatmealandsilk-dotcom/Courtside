@@ -50,6 +50,7 @@ interface ProfileRow {
   avatar_url: string | null; is_coach: boolean; profile: Partial<PlayerProfile> | null; created_at: string;
   is_private?: boolean | null;
   age_group?: string | null;
+  read_receipts?: boolean | null;
 }
 interface PostRow {
   id: string; author_id: string; kind: Post['kind']; body: string; media_label: string | null;
@@ -85,6 +86,8 @@ const toUser = (row: ProfileRow, followers: number, following: number): User => 
   avatarUrl: row.avatar_url ?? undefined,
   isPrivate: row.is_private || undefined,
   ageGroup: row.age_group === 'teen' || row.age_group === 'adult' ? row.age_group : undefined,
+  // Off only when its owner turned it off; a database without the setting yet reads as on.
+  readReceiptsEnabled: row.read_receipts !== false,
   isCoach: row.is_coach,
   followers,
   following,
@@ -521,6 +524,18 @@ export const remote = {
    * Live changes to messages in the conversations you are in: new ones, ones
    * edited or reacted to, and ones their sender unsent. Returns the unsubscribe.
    */
+  /** Live: someone in one of your chats has read up to a moment. Returns the unsubscribe. */
+  onReads(handle: (conversationId: ID, userId: ID, readAt: string) => void): () => void {
+    const db = need();
+    const channel = db.channel('reads-live')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversation_members' }, (payload) => {
+        const row = payload.new as { conversation_id?: string; user_id?: string; last_read_at?: string | null };
+        if (row.conversation_id && row.user_id && row.last_read_at) handle(row.conversation_id, row.user_id, row.last_read_at);
+      })
+      .subscribe();
+    return () => { void db.removeChannel(channel); };
+  },
+
   onMessages(handle: { added: (message: Message) => void; changed: (message: Message) => void; removed: (messageId: ID) => void }): () => void {
     const db = need();
     const one = (row: MessageRow) => toConversations('', [{ id: row.conversation_id, updated_at: row.created_at }], [row]).messages[0];
@@ -541,8 +556,9 @@ export const remote = {
   },
   async voteTip(tipId: ID, dir: 1 | -1) { const { error } = await need().rpc('vote_tip', { t: tipId, dir }); if (error) fail('tip vote')(error); },
 
-  async updateProfile(me: ID, patch: { name?: string; bio?: string; location?: string; avatarUrl?: string; profile?: PlayerProfile; isPrivate?: boolean }) {
+  async updateProfile(me: ID, patch: { name?: string; bio?: string; location?: string; avatarUrl?: string; profile?: PlayerProfile; isPrivate?: boolean; readReceipts?: boolean }) {
     const row: Record<string, unknown> = {};
+    if (patch.readReceipts !== undefined) row.read_receipts = patch.readReceipts;
     if (patch.isPrivate !== undefined) row.is_private = patch.isPrivate;
     if (patch.name !== undefined) row.name = patch.name;
     if (patch.bio !== undefined) row.bio = patch.bio;
