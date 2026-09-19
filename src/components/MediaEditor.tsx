@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated as RNAnimated, Image, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { useAnimatedStyle, useFrameCallback, useSharedValue } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useFrameCallback, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -70,6 +70,16 @@ export function MediaEditor({ media, onBack, onDone }: {
   // is picked, and only plays again when you go back to trimming.
   const [frozenAt, setFrozenAt] = useState<number | null>(null);
   const switchTool = (next: 'trim' | 'cover' | 'crop') => {
+    // Leaving Crop: the framed picture grows out of where the crop box was
+    // until it fills the frame, the way iPhone Photos closes a crop, instead
+    // of jumping from the whole picture to the framed one.
+    if (isVideo && tool === 'crop' && next !== 'crop') {
+      zoomX.value = cropPx.l + cropPx.w / 2 - (boxOff.x + box.w / 2);
+      zoomY.value = cropPx.t + cropPx.h / 2 - (boxOff.y + box.h / 2);
+      zoomS.value = Math.max(0.1, Math.min(1, cropPx.w / Math.max(1, box.w)));
+      zoomP.value = 0;
+      zoomP.value = withTiming(1, { duration: 320, easing: Easing.out(Easing.cubic) });
+    }
     setTool(next);
     if (next === 'crop') { holding.current = false; setFrozenAt(null); startPlayer(); return; }
     if (next === 'cover') {
@@ -83,13 +93,27 @@ export function MediaEditor({ media, onBack, onDone }: {
       player.current?.seek(at);
       if (!cover) settleCover(at);
     } else {
+      // Back from a cover still: play from the start of the kept part.
+      // Back from Crop: the video just carries on where it was.
+      if (frozenAt !== null) {
+        head.value = range[0];
+        player.current?.seek(range[0]);
+      }
       setFrozenAt(null);
-      head.value = range[0];
-      player.current?.seek(range[0]);
       startPlayer();
       setTimeout(() => { holding.current = false; }, 250);
     }
   };
+  const zoomP = useSharedValue(1);
+  const zoomX = useSharedValue(0);
+  const zoomY = useSharedValue(0);
+  const zoomS = useSharedValue(1);
+  const framed = tool !== 'crop';
+  const zoomStyle = useAnimatedStyle(() => {
+    if (!framed) return { transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 1 }] };
+    const p = zoomP.value;
+    return { transform: [{ translateX: zoomX.value * (1 - p) }, { translateY: zoomY.value * (1 - p) }, { scale: zoomS.value + (1 - zoomS.value) * p }] };
+  }, [framed]);
   const [now, setNow] = useState(0);
   // Paused by you: a tap on the video, or the space bar on a computer.
   const [userPaused, setUserPaused] = useState(false);
@@ -551,7 +575,7 @@ export function MediaEditor({ media, onBack, onDone }: {
 
       <View style={styles.stage} onLayout={(e) => { const l = e.nativeEvent.layout; setStageSize((st) => (st.w === l.width && st.h === l.height ? st : { w: l.width, h: l.height })); }}>
         <View style={frame === 'landscape' ? styles.wideFrame : desktopWeb ? styles.tallFrame : StyleSheet.absoluteFill}>
-          <View style={frame === 'landscape' ? styles.wideBox : desktopWeb ? styles.tallBox : StyleSheet.absoluteFill} onLayout={(e) => setBox({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) })}>
+          <Animated.View style={[frame === 'landscape' ? styles.wideBox : desktopWeb ? styles.tallBox : StyleSheet.absoluteFill, isVideo && zoomStyle]} onLayout={(e) => setBox({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) })}>
             {isVideo && media.uri ? (
               <View style={tool === 'crop' ? StyleSheet.absoluteFill : cropLayer(crop)}>
                 <VideoSurface ref={player} uri={media.uri} muted={muted} fit={tool === 'crop' ? 'contain' : 'cover'} from={range[0]} to={duration ? range[1] : undefined} paused={frozenAt !== null || userPaused} onTime={onTime} onDuration={onDuration} onSize={onVidSize} />
@@ -579,7 +603,7 @@ export function MediaEditor({ media, onBack, onDone }: {
                 </View>
               </View>
             ) : null}
-          </View>
+          </Animated.View>
         </View>
         {isVideo && tool === 'trim' ? (
           // A tap anywhere on the picture pauses or plays; a play sign sits in the middle while paused.
@@ -675,7 +699,8 @@ export function MediaEditor({ media, onBack, onDone }: {
                 {!frames.length ? <View style={styles.reading}><Text style={styles.hint}>Reading frames…</Text></View> : null}
               </View>
             )}
-            <Text style={styles.hint}>{tool === 'trim' ? 'Drag the ends to trim. The clip plays the part you keep.' : tool === 'cover' ? 'Drag along the strip to the frame you want as the cover.' : 'Pinch to size the box, drag it, or pull a corner. What is inside the box is what posts.'}</Text>
+            {/* Two lines kept for the hint whatever the tool, so switching never makes the picture above jump in size. */}
+            <Text numberOfLines={2} style={[styles.hint, styles.hintTwoLines]}>{tool === 'trim' ? 'Drag the ends to trim. The clip plays the part you keep.' : tool === 'cover' ? 'Drag along the strip to the frame you want as the cover.' : 'Pinch to size the box, drag it, or pull a corner. What is inside the box is what posts.'}</Text>
           </>
         ) : (
           <>
@@ -762,4 +787,5 @@ const styleDefinitions = StyleSheet.create({
   cursor: { position: 'absolute', top: -3, width: CURSOR, height: 62, borderRadius: 6, borderWidth: 2.5, borderColor: 'white', backgroundColor: 'rgba(255,255,255,0.12)' },
   reading: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   hint: { ...typography.caption, color: 'rgba(255,255,255,0.6)', letterSpacing: 0 },
+  hintTwoLines: { minHeight: 30 },
 });
