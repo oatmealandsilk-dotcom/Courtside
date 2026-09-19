@@ -33,10 +33,19 @@ export const VideoSurface = forwardRef<VideoSurfaceHandle, {
     video.addEventListener('loadedmetadata', onMeta);
     video.addEventListener('timeupdate', onTick);
     if (Number.isFinite(video.duration) && video.duration > 0) onMeta();
+    // A browser only reports the time about four times a second, so the trim's
+    // end is also watched every screen frame: the loop back to the start
+    // happens right on the end, not up to a quarter second past it.
+    let frame = 0;
+    const watchEnd = () => {
+      if (to !== undefined && !video.paused && video.currentTime >= to) video.currentTime = from;
+      frame = requestAnimationFrame(watchEnd);
+    };
+    if (!paused) frame = requestAnimationFrame(watchEnd);
     // Browsers only let a video start on its own when it is silent; a tap on
     // the sound button lifts that.
     if (paused) video.pause(); else video.play().catch(() => undefined);
-    return () => { video.removeEventListener('loadedmetadata', onMeta); video.removeEventListener('timeupdate', onTick); video.pause(); };
+    return () => { cancelAnimationFrame(frame); video.removeEventListener('loadedmetadata', onMeta); video.removeEventListener('timeupdate', onTick); video.pause(); };
   }, [from, to, paused, onTime, onDuration, onSize]);
   useImperativeHandle(ref, () => ({
     seek: (seconds) => { if (el.current) el.current.currentTime = seconds; },

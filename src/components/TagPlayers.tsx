@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -11,10 +11,10 @@ import { colors, radius, spacing, typography } from '@/theme';
 
 /**
  * "Tag players": the people in the clip, as chips. Tap the button to search —
- * people you follow first, then followers. A tap on a name tags them there
- * and then: their row checks itself and the search closes, the way Instagram
- * does it. × on a chip takes one off. Each tagged player is told, and the
- * post shows up on their Tagged tab.
+ * people you follow first, then followers. A tap on a name checks it and
+ * tags them; the list stays open so you can tag several in a row, and a
+ * second tap unchecks. Done closes the search. × on a chip takes one off.
+ * Each tagged player is told, and the post shows up on their Tagged tab.
  */
 export function TagPlayers({ tagged, onChange }: { tagged: string[]; onChange: (ids: string[]) => void }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -22,27 +22,21 @@ export function TagPlayers({ tagged, onChange }: { tagged: string[]; onChange: (
   const candidates = useMentionCandidates();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  // The one just tapped keeps its row, checked, for the beat before the search closes.
-  const [justTagged, setJustTagged] = useState<string | null>(null);
-  const closing = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const matches = open ? candidates(query, 6).filter(({ user }) => !tagged.includes(user.id) || user.id === justTagged) : [];
-  const close = () => { if (closing.current) clearTimeout(closing.current); setOpen(false); setQuery(''); setJustTagged(null); };
+  // Tagged people stay in the list, checked, so a second tap can untag them.
+  const matches = open ? candidates(query, 8) : [];
+  const close = () => { setOpen(false); setQuery(''); };
   const tag = (id: string) => {
-    if (tagged.includes(id)) return;
     haptics.tap();
-    onChange([...tagged, id]);
-    setJustTagged(id);
-    if (closing.current) clearTimeout(closing.current);
-    closing.current = setTimeout(close, 260);
+    onChange(tagged.includes(id) ? tagged.filter((t) => t !== id) : [...tagged, id]);
   };
   return (
     <View style={styles.tagBlock}>
-      {/* Closed: one box button. Open: the search box, with Cancel beside it the way iPhone search does it. */}
+      {/* Closed: one box button. Open: the search box, with Done beside it. */}
       {open ? (
         <View style={styles.searchRow}>
           <View style={{ flex: 1 }}><Field value={query} onChangeText={setQuery} placeholder="Search by name or @handle" /></View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Stop tagging" onPress={close} hitSlop={8}>
-            <Text style={styles.cancel}>Cancel</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Done tagging" onPress={close} hitSlop={8}>
+            <Text style={styles.cancel}>Done</Text>
           </Pressable>
         </View>
       ) : (
@@ -72,7 +66,7 @@ export function TagPlayers({ tagged, onChange }: { tagged: string[]; onChange: (
           {matches.map(({ user, reason }) => {
             const on = tagged.includes(user.id);
             return (
-              <Pressable key={user.id} accessibilityRole="button" accessibilityState={{ checked: on }} accessibilityLabel={`Tag ${user.name}`} onPress={() => tag(user.id)} style={styles.tagResult}>
+              <Pressable key={user.id} accessibilityRole="button" accessibilityState={{ checked: on }} accessibilityLabel={on ? `Untag ${user.name}` : `Tag ${user.name}`} onPress={() => tag(user.id)} style={styles.tagResult}>
                 <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={32} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.tagName}>{user.name}</Text>

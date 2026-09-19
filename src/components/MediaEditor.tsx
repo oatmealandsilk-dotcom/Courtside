@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated as RNAnimated, Image, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useFrameCallback, useSharedValue } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -71,10 +71,10 @@ export function MediaEditor({ media, onBack, onDone }: {
   const [frozenAt, setFrozenAt] = useState<number | null>(null);
   const switchTool = (next: 'trim' | 'cover' | 'crop') => {
     setTool(next);
-    if (next === 'crop') { holding.current = false; setFrozenAt(null); player.current?.play(); return; }
+    if (next === 'crop') { holding.current = false; setFrozenAt(null); startPlayer(); return; }
     if (next === 'cover') {
       holding.current = true;
-      player.current?.pause();
+      stopPlayer();
       const at = frozenAt ?? range[0];
       setFrozenAt(at);
       coverAtRef.current = at;
@@ -86,26 +86,61 @@ export function MediaEditor({ media, onBack, onDone }: {
       setFrozenAt(null);
       head.value = range[0];
       player.current?.seek(range[0]);
-      player.current?.play();
+      startPlayer();
       setTimeout(() => { holding.current = false; }, 250);
     }
   };
   const [now, setNow] = useState(0);
-  // The playhead glides on the animation thread. The player only reports its
-  // time a few times a second; each report starts a short straight-line run
-  // to where the video will be at the next one, so the line never hops.
-  const TICK = 0.1;
+  // Paused by you: a tap on the video, or the space bar on a computer.
+  const [userPaused, setUserPaused] = useState(false);
+  const userPausedRef = useRef(false);
+  userPausedRef.current = userPaused;
+  // The playhead runs on its own clock, one step every screen frame, while
+  // the video is playing. The player only reports its time a few times a
+  // second (a browser about four); those reports just nudge the line back
+  // into step, so it glides instead of inching from report to report.
   const head = useSharedValue(0);
+  const rolling = useSharedValue(true);
+  // Seconds since the video last reported a new time. A video that stalls
+  // (loading, or paused) stops reporting, and the line stops with it.
+  const sinceReport = useSharedValue(1);
+  const keepFrom = useSharedValue(0);
+  const keepTo = useSharedValue(0);
+  useFrameCallback((frame) => {
+    const dt = (frame.timeSincePreviousFrame ?? 0) / 1000;
+    sinceReport.value += dt;
+    if (!rolling.value || sinceReport.value > 0.6 || dt <= 0 || dt > 0.25) return;
+    const a = keepFrom.value;
+    const b = keepTo.value;
+    if (b - a < 0.05) return;
+    let next = head.value + dt;
+    // Past the end of the kept part the video loops back to its start; so does the line.
+    if (next >= b) next = a + Math.min(next - b, 0.1);
+    head.value = next;
+  });
+  const stopPlayer = () => { rolling.value = false; player.current?.pause(); };
+  const startPlayer = () => {
+    if (userPausedRef.current) return;
+    rolling.value = true;
+    player.current?.play();
+  };
   // While a handle is being dragged, or the picture is frozen on a cover
   // frame, the line sits exactly where it is put — the player's own reports
   // (it fires one after every seek) would otherwise yank it around.
   const scrubbing = useRef(false);
   const holding = useRef(false);
+  const lastReported = useRef(-1);
   const onTime = useCallback((seconds: number) => {
     setNow(seconds);
+    if (seconds !== lastReported.current) { lastReported.current = seconds; sinceReport.value = 0; }
     if (scrubbing.current || holding.current) return;
-    head.value = withTiming(seconds + TICK, { duration: TICK * 1000, easing: Easing.linear });
-  }, [head]);
+    const [a, b] = rangeRef.current;
+    // The line has already looped round and the video is a beat from doing
+    // the same: a last report from the end would only pull the line back.
+    if (b > a && seconds > b - 0.35 && head.value < a + 0.35) return;
+    const drift = seconds - head.value;
+    head.value = Math.abs(drift) > 0.3 ? seconds : head.value + drift * 0.3;
+  }, [head, sinceReport]); // eslint-disable-line react-hooks/exhaustive-deps
   const onDuration = useCallback((seconds: number) => {
     setDuration((d) => {
       if (d) return d;
@@ -128,11 +163,59 @@ export function MediaEditor({ media, onBack, onDone }: {
   const secondsPerPx = duration ? duration / stripWidth : 0;
   const rangeRef = useRef(range);
   rangeRef.current = range;
+  useEffect(() => { keepFrom.value = range[0]; keepTo.value = range[1]; }, [range, keepFrom, keepTo]);
+  useEffect(() => { rolling.value = frozenAt === null && !userPaused; }, [frozenAt, userPaused, rolling]);
+  // Pause and play: tap the video, or press the space bar on a computer.
+  // Choosing a cover already holds on a still, so there it does nothing.
+  const togglePause = () => {
+    if (!isVideo || tool === 'cover' || frozenAt !== null) return;
+    setUserPaused((p) => !p);
+  };
+  const toggleRef = useRef(togglePause);
+  toggleRef.current = togglePause;
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !isVideo || typeof window === 'undefined') return;
+    const isSpace = (e: KeyboardEvent) => e.code === 'Space' || e.key === ' ';
+    const typing = (target: EventTarget | null) => {
+      const el = target as HTMLElement | null;
+      return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+    };
+    // Caught before anything else on the page, so the space bar never also
+    // presses whichever button was clicked last (the video itself, after a
+    // click on it, which would pause and play again at once), or scrolls.
+    let spaceAt = 0;
+    const down = (e: KeyboardEvent) => {
+      if (!isSpace(e) || typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      spaceAt = Date.now();
+      const focused = document.activeElement as HTMLElement | null;
+      if (focused && focused !== document.body) focused.blur();
+      if (!e.repeat) toggleRef.current();
+    };
+    const up = (e: KeyboardEvent) => {
+      if (!isSpace(e) || typing(e.target)) return;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    // A click the keyboard made (it has no mouse position count) just after a space is the same press again.
+    const click = (e: MouseEvent) => {
+      if (e.detail === 0 && Date.now() - spaceAt < 600) { e.preventDefault(); e.stopPropagation(); }
+    };
+    window.addEventListener('keydown', down, true);
+    window.addEventListener('keyup', up, true);
+    window.addEventListener('click', click, true);
+    return () => {
+      window.removeEventListener('keydown', down, true);
+      window.removeEventListener('keyup', up, true);
+      window.removeEventListener('click', click, true);
+    };
+  }, [isVideo]);
   const startAt = useRef(0);
   const makeHandle = (side: 0 | 1) => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: () => { scrubbing.current = true; startAt.current = rangeRef.current[side]; player.current?.pause(); },
+    onPanResponderGrant: () => { scrubbing.current = true; startAt.current = rangeRef.current[side]; stopPlayer(); },
     onPanResponderMove: (_, g) => {
       const [a, b] = rangeRef.current;
       const raw = startAt.current + g.dx * secondsPerPx;
@@ -148,7 +231,7 @@ export function MediaEditor({ media, onBack, onDone }: {
       const from = rangeRef.current[0];
       head.value = from;
       player.current?.seek(from);
-      player.current?.play();
+      startPlayer();
       // The seek's own report lands a beat later; ignore it too.
       setTimeout(() => { scrubbing.current = false; }, 250);
     },
@@ -163,7 +246,7 @@ export function MediaEditor({ media, onBack, onDone }: {
     onMoveShouldSetPanResponder: () => true,
     onPanResponderGrant: (e) => {
       scrubbing.current = true;
-      player.current?.pause();
+      stopPlayer();
       const pageX = e.nativeEvent.pageX;
       const seekAt = (x: number) => {
         const [a, b] = rangeRef.current;
@@ -180,7 +263,7 @@ export function MediaEditor({ media, onBack, onDone }: {
       player.current?.seek(at);
     },
     onPanResponderRelease: () => {
-      player.current?.play();
+      startPlayer();
       setTimeout(() => { scrubbing.current = false; }, 250);
     },
     onPanResponderTerminate: () => { scrubbing.current = false; },
@@ -211,7 +294,7 @@ export function MediaEditor({ media, onBack, onDone }: {
     onMoveShouldSetPanResponder: () => true,
     onPanResponderGrant: (e) => {
       scrubbing.current = true;
-      player.current?.pause();
+      stopPlayer();
       scrubTo(e.nativeEvent.locationX * secondsPerPx);
     },
     onPanResponderMove: (e) => scrubTo(e.nativeEvent.locationX * secondsPerPx),
@@ -232,6 +315,13 @@ export function MediaEditor({ media, onBack, onDone }: {
   const cropRef = useRef(crop);
   cropRef.current = crop;
   const [box, setBox] = useState({ w: 1, h: 1 });
+  // The stage's size. The frame sits centred on it (in a landscape post, or
+  // on a computer), and the crop box is drawn on the stage, so it is moved
+  // by the same margins. Worked out from the two sizes rather than read from
+  // the frame's position, which is not re-reported when only the position
+  // changes (switching to Crop makes the stage shorter).
+  const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
+  const boxOff = { x: stageSize.w ? Math.max(0, (stageSize.w - box.w) / 2) : 0, y: stageSize.h ? Math.max(0, (stageSize.h - box.h) / 2) : 0 };
   const boxRef = useRef(box);
   boxRef.current = box;
   const dragStart = useRef<MediaCrop>(crop);
@@ -268,6 +358,11 @@ export function MediaEditor({ media, onBack, onDone }: {
   const startBox = useRef(cropBox);
   const dispRef = useRef(disp); dispRef.current = disp;
   const clampBoxRef = useRef(clampBox); clampBoxRef.current = clampBox;
+  // A new frame shape or clip size can leave the box bigger than the picture
+  // (a clip wider than the frame); it is fitted back inside whenever they change.
+  useEffect(() => {
+    setCropBox((b) => { const c = clampBoxRef.current(b); return c.w === b.w && c.cx === b.cx && c.cy === b.cy ? b : c; });
+  }, [wMax, disp.w, disp.h]);
   const moveBox = useMemo(() => Gesture.Pan().runOnJS(true).minDistance(2)
     .onStart(() => { startBox.current = boxRef2.current; })
     .onUpdate((e) => { const d = dispRef.current; setCropBox(clampBoxRef.current({ ...startBox.current, cx: startBox.current.cx + e.translationX / Math.max(1, d.w), cy: startBox.current.cy + e.translationY / Math.max(1, d.h) })); }), []);
@@ -310,7 +405,7 @@ export function MediaEditor({ media, onBack, onDone }: {
     return () => node.removeEventListener('wheel', onWheel);
   }, [tool]);
   // In pixels, for drawing.
-  const cropPx = { l: dispOff.x + (cropBox.cx - cropBox.w / 2) * disp.w, t: dispOff.y + (cropBox.cy - boxH(cropBox.w) / 2) * disp.h, w: cropBox.w * disp.w, h: boxH(cropBox.w) * disp.h };
+  const cropPx = { l: boxOff.x + dispOff.x + (cropBox.cx - cropBox.w / 2) * disp.w, t: boxOff.y + dispOff.y + (cropBox.cy - boxH(cropBox.w) / 2) * disp.h, w: cropBox.w * disp.w, h: boxH(cropBox.w) * disp.h };
   const zoomTo = (x: number) => {
     const t = Math.max(0, Math.min(1, x / zoomStripWidth));
     setCrop((c) => clampCrop({ ...c, scale: 1 + t * (ZOOM_MAX - 1) }));
@@ -454,12 +549,12 @@ export function MediaEditor({ media, onBack, onDone }: {
         <Pressable accessibilityRole="button" accessibilityLabel="Next" onPress={() => { void done(); }} disabled={busy} style={[styles.next, busy && { opacity: 0.5 }]}><Text style={styles.nextText}>Next</Text></Pressable>
       </View>
 
-      <View style={styles.stage}>
+      <View style={styles.stage} onLayout={(e) => { const l = e.nativeEvent.layout; setStageSize((st) => (st.w === l.width && st.h === l.height ? st : { w: l.width, h: l.height })); }}>
         <View style={frame === 'landscape' ? styles.wideFrame : desktopWeb ? styles.tallFrame : StyleSheet.absoluteFill}>
           <View style={frame === 'landscape' ? styles.wideBox : desktopWeb ? styles.tallBox : StyleSheet.absoluteFill} onLayout={(e) => setBox({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) })}>
             {isVideo && media.uri ? (
               <View style={tool === 'crop' ? StyleSheet.absoluteFill : cropLayer(crop)}>
-                <VideoSurface ref={player} uri={media.uri} muted={muted} fit={tool === 'crop' ? 'contain' : 'cover'} from={range[0]} to={duration ? range[1] : undefined} paused={frozenAt !== null} onTime={onTime} onDuration={onDuration} onSize={onVidSize} />
+                <VideoSurface ref={player} uri={media.uri} muted={muted} fit={tool === 'crop' ? 'contain' : 'cover'} from={range[0]} to={duration ? range[1] : undefined} paused={frozenAt !== null || userPaused} onTime={onTime} onDuration={onDuration} onSize={onVidSize} />
               </View>
             ) : media.uri && nat ? (
               <View style={styles.photoStage} pointerEvents="box-none">
@@ -486,6 +581,12 @@ export function MediaEditor({ media, onBack, onDone }: {
             ) : null}
           </View>
         </View>
+        {isVideo && tool === 'trim' ? (
+          // A tap anywhere on the picture pauses or plays; a play sign sits in the middle while paused.
+          <Pressable accessibilityRole="button" accessibilityLabel={userPaused ? 'Play' : 'Pause'} onPress={togglePause} style={styles.tapToPause}>
+            {userPaused ? <View pointerEvents="none" style={styles.pausedBadge}><Ionicons name="play" size={34} color="white" style={{ marginLeft: 4 }} /></View> : null}
+          </Pressable>
+        ) : null}
         {isVideo ? (
           <Pressable accessibilityRole="button" accessibilityLabel={muted ? 'Sound off' : 'Sound on'} onPress={() => setMuted((m) => !m)} style={styles.sound}>
             <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={16} color="white" />
@@ -531,7 +632,7 @@ export function MediaEditor({ media, onBack, onDone }: {
           <>
             <View style={styles.tabs}>
               {(['trim', 'cover', 'crop'] as const).map((t) => (
-                <Pressable key={t} accessibilityRole="tab" accessibilityState={{ selected: tool === t }} onPress={() => switchTool(t)} style={[styles.tab, tool === t && styles.tabOn]}>
+                <Pressable key={t} accessibilityRole="tab" accessibilityState={{ selected: tool === t }} onPress={() => switchTool(t === 'crop' && tool === 'crop' ? 'trim' : t)} style={[styles.tab, tool === t && styles.tabOn]}>
                   <Ionicons name={t === 'trim' ? 'cut-outline' : t === 'cover' ? 'image-outline' : 'crop-outline'} size={15} color={tool === t ? colors.brandInk : 'white'} />
                   <Text style={[styles.tabText, tool === t && { color: colors.brandInk }]}>{t === 'trim' ? 'Trim' : t === 'cover' ? 'Cover' : 'Crop'}</Text>
                 </Pressable>
@@ -541,7 +642,7 @@ export function MediaEditor({ media, onBack, onDone }: {
             {tool === 'crop' ? (
               <View style={[styles.zoomRow, { justifyContent: 'space-between' }]}>
                 <Text style={styles.zoomText}>{crop.scale > 1.01 ? `${crop.scale.toFixed(1)}×` : 'Whole clip'}</Text>
-                {cropBox.w < 0.999 || cropBox.cx !== 0.5 || cropBox.cy !== 0.5 ? <Pressable accessibilityRole="button" accessibilityLabel="Reset crop" onPress={() => { setCropBox({ cx: 0.5, cy: 0.5, w: 1 }); setCrop({ scale: 1, x: 0, y: 0 }); }} style={styles.tab}><Text style={styles.tabText}>Reset</Text></Pressable> : null}
+                {cropBox.w < wMax - 0.001 || Math.abs(cropBox.cx - 0.5) > 0.001 || Math.abs(cropBox.cy - 0.5) > 0.001 ? <Pressable accessibilityRole="button" accessibilityLabel="Reset crop" onPress={() => { setCropBox(clampBox({ cx: 0.5, cy: 0.5, w: 1 })); setCrop({ scale: 1, x: 0, y: 0 }); }} style={styles.tab}><Text style={styles.tabText}>Reset</Text></Pressable> : null}
               </View>
             ) : tool === 'trim' ? (
               <View ref={stripRef} style={[styles.strip, { marginHorizontal: HANDLE }]}>
@@ -654,6 +755,8 @@ const styleDefinitions = StyleSheet.create({
   dim: { position: 'absolute', top: 0, height: 56, backgroundColor: 'rgba(0,0,0,0.55)' },
   window: { position: 'absolute', top: 0, height: 56, borderWidth: 2, borderColor: colors.brand, borderRadius: 4 },
   playhead: { position: 'absolute', left: 0, top: -4, width: 2, height: 64, backgroundColor: 'white' },
+  tapToPause: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
+  pausedBadge: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.45)' },
   handle: { position: 'absolute', top: 0, width: HANDLE, height: 56, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', borderRadius: 4 },
   grip: { width: 3, height: 22, borderRadius: 2, backgroundColor: colors.brandInk },
   cursor: { position: 'absolute', top: -3, width: CURSOR, height: 62, borderRadius: 6, borderWidth: 2.5, borderColor: 'white', backgroundColor: 'rgba(255,255,255,0.12)' },

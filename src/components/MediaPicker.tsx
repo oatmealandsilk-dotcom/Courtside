@@ -1,12 +1,13 @@
 import { useTheme } from '@/theme/ThemeProvider';
-import React, { useState } from 'react';
-import { Image, Modal, Pressable, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Image, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { ZoomableMedia } from './ZoomableMedia';
 import { cropLayer } from '@/lib/crop';
 import type { MediaCrop } from '@/data/types';
 import { ClipVideo } from '@/components/ClipVideo';
+import { framesAt, type Frame } from '@/features/compose/frames';
 import { colors } from '@/theme';
 
 export interface PickedMedia {
@@ -92,6 +93,24 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
   useTheme();
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
+  // The cover chooser under the preview, opened by its Edit cover button: a
+  // row of frames from the part of the clip that is kept, and Upload.
+  const [coverOpen, setCoverOpen] = useState(false);
+  const [frames, setFrames] = useState<Frame[]>([]);
+  const [readingFrames, setReadingFrames] = useState(false);
+  const clipUri = value?.kind === 'video' ? value.uri : undefined;
+  const trimFrom = trim?.trimStart ?? 0;
+  const trimTo = trim?.trimEnd;
+  useEffect(() => {
+    if (!bare || !coverOpen || !clipUri || noCover) return;
+    let cancelled = false;
+    setReadingFrames(true);
+    // Without a trim end the length is not known here; frames past the end are simply left out.
+    const span = trimTo && trimTo > trimFrom ? trimTo - trimFrom : 12;
+    const times = Array.from({ length: 6 }, (_, i) => trimFrom + (span * i) / 6);
+    framesAt(clipUri, times).then((got) => { if (!cancelled) { setFrames(got); setReadingFrames(false); } });
+    return () => { cancelled = true; };
+  }, [bare, coverOpen, clipUri, noCover, trimFrom, trimTo]);
   /**
    * Opens the library. Apple's current picker needs no permission prompt and
    * is tried first; if it throws (it does on some phones and inside sheets),
@@ -160,14 +179,45 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
           : poster
             ? <Image source={{ uri: poster }} resizeMode="cover" style={{ width: '100%', height: '100%' }}/>
             : <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="videocam" size={48} color={colors.textMuted}/></View>}
-        {/* The small labels over the preview wear the app's own colours, not a black smudge. */}
-        <View pointerEvents="none" style={{ position: 'absolute', left: 10, bottom: 10, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: colors.brand }}>
-          <Text style={{ color: colors.brandInk, fontSize: 11, fontWeight: '700', letterSpacing: 0.4 }}>{describe(value)}</Text>
-        </View>
+        {/* Edit cover, in the app's own colours: opens the row of frames underneath. */}
+        {value.kind === 'video' && !noCover ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={coverOpen ? 'Done choosing a cover' : 'Edit cover'} accessibilityState={{ expanded: coverOpen }} onPress={() => setCoverOpen((o) => !o)} hitSlop={6}
+            style={{ position: 'absolute', right: 10, bottom: 10, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: colors.brand }}>
+            <Ionicons name={coverOpen ? 'checkmark' : 'image-outline'} size={14} color={colors.brandInk} />
+            <Text style={{ color: colors.brandInk, fontSize: 12, fontWeight: '700', letterSpacing: 0.2 }}>{coverOpen ? 'Done' : 'Edit cover'}</Text>
+          </Pressable>
+        ) : null}
         <View pointerEvents="none" style={{ position: 'absolute', right: 10, top: 10, width: 30, height: 30, borderRadius: 15, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' }}>
           <Ionicons name="expand-outline" size={16} color={colors.brandInk} />
         </View>
       </Pressable>
+      {coverOpen && value.kind === 'video' && !noCover ? (
+        <View style={{ gap: 4 }}>
+          <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>Cover</Text>
+          <Text style={{ color: colors.textFaint, fontSize: 13 }}>{readingFrames ? 'Reading frames…' : frames.length ? 'Pick the frame people see before it plays, or upload your own.' : 'Upload a picture to use as the cover.'}</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingTop: 8, paddingRight: 8 }}>
+            {value.thumbnailUrl && !frames.some((f) => f.uri === value.thumbnailUrl) ? (
+              <View accessibilityLabel="Current cover" style={{ width: 54, height: 74, borderRadius: 8, overflow: 'hidden', borderWidth: 2, borderColor: colors.brand }}>
+                <Image source={{ uri: value.thumbnailUrl }} resizeMode="cover" style={{ width: '100%', height: '100%' }} />
+              </View>
+            ) : null}
+            {frames.map((f) => {
+              const on = value.thumbnailUrl === f.uri;
+              return (
+                <Pressable key={f.time} accessibilityRole="button" accessibilityLabel="Use this frame as the cover" onPress={() => onChange({ ...value, thumbnailUrl: f.uri })}
+                  style={{ width: 54, height: 74, borderRadius: 8, overflow: 'hidden', borderWidth: 2, borderColor: on ? colors.brand : 'transparent', backgroundColor: colors.surfaceAlt }}>
+                  <Image source={{ uri: f.uri }} resizeMode="cover" style={{ width: '100%', height: '100%' }} />
+                </Pressable>
+              );
+            })}
+            <Pressable accessibilityRole="button" accessibilityLabel="Upload your own cover image" onPress={chooseCover}
+              style={{ width: 54, height: 74, borderRadius: 8, borderWidth: 2, borderColor: colors.border, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+              <Ionicons name="image-outline" size={18} color={colors.textMuted} />
+              <Text style={{ color: colors.textMuted, fontSize: 11 }}>Upload</Text>
+            </Pressable>
+          </ScrollView>
+        </View>
+      ) : null}
       {/* Full screen, the clip playing with sound. One tap anywhere brings it back. */}
       <Modal visible={expanded} transparent animationType="none" statusBarTranslucent onRequestClose={() => setExpanded(false)}>
         <View style={{ flex: 1, backgroundColor: 'transparent' }}>

@@ -9,6 +9,7 @@ import { ClipPlayback } from './ClipPlayback';
 import { ClipVideo } from './ClipVideo';
 import { ZoomableMedia } from './ZoomableMedia';
 import { cropCss } from '@/lib/crop';
+import { framesAt } from '@/features/compose/frames';
 
 export type { PickedMedia, MediaPickerProps } from './MediaPicker';
 
@@ -170,6 +171,11 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
   const coverUrl = useRef<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [frames, setFrames] = useState<CoverFrame[]>([]);
+  // Which video the frames above were read from, and whether they are being read now.
+  const framesOf = useRef<string | null>(null);
+  const [readingFrames, setReadingFrames] = useState(false);
+  // The cover chooser under the preview, opened by its Edit cover button.
+  const [coverOpen, setCoverOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   // Release the blob URL when the picker unmounts or the choice changes.
@@ -223,6 +229,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
       }
 
       setFrames(shots);
+      framesOf.current = url;
       const picked: PickedMedia = {
         uri: url,
         label,
@@ -235,6 +242,32 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
     },
     [onChange, revoke, selection],
   );
+
+  // A clip that arrived already chosen (from the editor, not this box) has
+  // its frames read here, from the part that is kept, so there is always a
+  // row of frames to choose a cover from.
+  const trimFrom = trim?.trimStart;
+  const trimTo = trim?.trimEnd;
+  useEffect(() => {
+    if (!value || value.kind !== 'video' || !value.uri || noCover) return;
+    if (framesOf.current === value.uri) return;
+    const uri = value.uri;
+    framesOf.current = uri;
+    let cancelled = false;
+    setReadingFrames(true);
+    (async () => {
+      const seconds = (await probeDuration(uri)) ?? 0;
+      const from = Math.max(0, trimFrom ?? 0);
+      const to = trimTo && trimTo > from ? trimTo : seconds;
+      const count = 6;
+      const times = to > from ? Array.from({ length: count }, (_, i) => from + ((to - from) * i) / count) : [from];
+      const got = await framesAt(uri, times);
+      if (cancelled) return;
+      setFrames(got.map((f) => ({ time: f.time, dataUrl: f.uri })));
+      setReadingFrames(false);
+    })();
+    return () => { cancelled = true; setReadingFrames(false); if (framesOf.current === uri) framesOf.current = null; };
+  }, [value?.uri, value?.kind, noCover, trimFrom, trimTo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onCoverFile = useCallback(
     (files: FileList | null) => {
@@ -282,7 +315,10 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
           // The media is the whole box: the cover frame edge to edge with a
           // play badge, the way it will sit in the feed. Tap to watch it.
           <div
-            style={{ position: 'relative', width: '100%', aspectRatio: orientation === 'landscape' ? '16 / 9' : '9 / 16', maxHeight: '62vh', overflow: 'hidden', background: '#000', cursor: 'zoom-in' }}
+            // The box keeps the post's own shape even when the screen is short:
+            // it gets narrower instead of cutting off the top and bottom, so the
+            // whole picture shows, exactly as it will in the feed.
+            style={{ position: 'relative', width: orientation === 'landscape' ? 'min(100%, calc(62vh * 16 / 9))' : 'min(100%, calc(62vh * 9 / 16))', aspectRatio: orientation === 'landscape' ? '16 / 9' : '9 / 16', margin: '0 auto', borderRadius: 16, overflow: 'hidden', background: '#000', cursor: 'zoom-in' }}
             onClick={() => setExpanded(true)}
             role="button"
             tabIndex={0}
@@ -296,9 +332,19 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
               <img src={value.uri} alt={describe(value)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
             ) : null}
 
-            <div style={{ position: 'absolute', left: 12, bottom: 10, color: 'white', fontSize: 12, fontWeight: 600, textShadow: '0 1px 3px rgba(0,0,0,0.6)', pointerEvents: 'none' }}>
-              {describe(value)}
-            </div>
+            {value.kind === 'video' && !noCover ? (
+              <button
+                type="button"
+                aria-label={coverOpen ? 'Done choosing a cover' : 'Edit cover'}
+                aria-expanded={coverOpen}
+                onClick={(event) => { event.stopPropagation(); setCoverOpen((o) => !o); }}
+                onKeyDown={(event) => event.stopPropagation()}
+                style={{ position: 'absolute', right: 10, bottom: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 999, border: 'none', background: colors.brand, color: colors.brandInk, fontFamily: 'inherit', fontSize: 12, fontWeight: 700, letterSpacing: 0.2, cursor: 'pointer' }}
+              >
+                <Ionicons name={coverOpen ? 'checkmark' : 'image-outline'} size={14} color={colors.brandInk} />
+                {coverOpen ? 'Done' : 'Edit cover'}
+              </button>
+            ) : null}
           </div>
         ) : (
           // Portrait stage, the shape a clip actually posts in, so what you see
@@ -398,16 +444,20 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
           </div>
         ) : null}
 
-        {value.kind === 'video' && !noCover ? (
+        {value.kind === 'video' && !noCover && (!bare || coverOpen) ? (
           <View style={[styles.coverBlock, bare && { borderTopWidth: 0, paddingTop: 0 }]}>
             {hiddenCoverInput}
             <Text style={styles.coverTitle}>Cover</Text>
             <Text style={styles.coverHint}>
-              {frames.length
-                ? 'Pick the frame people see before it plays.'
-                : 'We could not read frames from this file, so it will use the placeholder art.'}
+              {readingFrames ? 'Reading frames…' : frames.length ? 'Pick the frame people see before it plays, or upload your own.' : 'Upload a picture to use as the cover.'}
             </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.coverRow}>
+              {/* The cover you have now (chosen in the editor, or uploaded), first. */}
+              {value.thumbnailUrl && !frames.some((f) => f.dataUrl === value.thumbnailUrl) ? (
+                <View style={[styles.coverTile, styles.coverTileActive]} accessibilityLabel="Current cover">
+                  <img src={value.thumbnailUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                </View>
+              ) : null}
               {frames.map((frame) => {
                 const active = value.thumbnailUrl === frame.dataUrl;
                 return (

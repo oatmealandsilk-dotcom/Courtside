@@ -2,7 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import Reanimated, { Easing, FadeInDown, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
 import { MediaPicker, pickFromDevice, type PickedMedia } from '@/components/MediaPicker';
@@ -48,11 +48,29 @@ export default function Compose() {
   // opens, and plays that backwards when it closes, instead of only fading.
   const pop = useSharedValue(0);
   useEffect(() => { pop.value = withSpring(1, { damping: 15, stiffness: 190, mass: 0.8 }); }, [pop]);
+  // Closing is its own motion, not the opening played backwards: from the
+  // first frame the box starts fading, sinks a little and shrinks slightly,
+  // and the dimmed page behind it fades with it, so everything leaves as one.
+  const leave = useSharedValue(0);
   const popStyle = useAnimatedStyle(() => ({
-    opacity: Math.min(1, pop.value * 1.6),
-    transform: [{ translateY: (1 - pop.value) * 28 }, { scale: 0.94 + 0.06 * pop.value }],
+    opacity: Math.min(1, pop.value * 1.6) * (1 - leave.value),
+    transform: [
+      { translateY: (1 - pop.value) * 28 + leave.value * 16 },
+      { scale: (0.94 + 0.06 * pop.value) * (1 - 0.05 * leave.value) },
+    ],
   }));
-  const closeMenu = () => { pop.value = withTiming(0, { duration: 150 }, (done) => { if (done) runOnJS(goBackNow)(); }); };
+  const dimStyle = useAnimatedStyle(() => ({ opacity: 1 - leave.value }));
+  const navigation = useNavigation();
+  const closing = useRef(false);
+  const closeMenu = () => {
+    if (closing.current) return;
+    closing.current = true;
+    // The page's own fade would run after the box has already gone, leaving
+    // an invisible layer that swallows taps for a moment; it is switched off
+    // now, well before the page leaves.
+    navigation.setOptions({ animation: 'none' });
+    leave.value = withTiming(1, { duration: 210, easing: Easing.out(Easing.cubic) }, (done) => { if (done) runOnJS(goBackNow)(); });
+  };
   // While the box is up, the + in the tab bar can close it the same way.
   const closeRef = useRef(closeMenu);
   closeRef.current = closeMenu;
@@ -143,7 +161,7 @@ export default function Compose() {
   };
 
   if (stage === 'choose') return <View style={styles.choiceBackdrop}>
-    <SheetBackdrop />
+    <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimStyle]}><SheetBackdrop /></Reanimated.View>
     <Pressable accessibilityRole="button" accessibilityLabel="Close create menu" onPress={closeMenu} style={StyleSheet.absoluteFill}/>
     <Reanimated.View style={[styles.choiceSheet, popStyle]}>
       <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>Create</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeMenu} hitSlop={10}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
