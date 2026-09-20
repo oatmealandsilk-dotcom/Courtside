@@ -28,7 +28,6 @@ export const TOPIC_META: Record<QuestionTopic, { label: string; tint: string; ic
 interface Props {
   showBody?: boolean;
   /** The home feed: the page carries the CourtSide mark up by its eyebrow, so no date here. */
-  brandCorner?: boolean;
   question: Question;
   author: User | undefined;
   onPress: () => void;
@@ -47,7 +46,6 @@ function QuestionCardInner({
   onToggleSave,
   onShare,
   showBody = false,
-  brandCorner = false,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const meta = TOPIC_META[question.topic];
@@ -55,22 +53,28 @@ function QuestionCardInner({
 
   return (
     <Card onPress={onPress} style={styles.card}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        {author && <Avatar name={author.name} seed={author.avatarSeed} size={30} />}
-        {/* Who wrote it, the way the feed says it: the name first, the handle
-            after it. A thread carried in from outside keeps to the handle —
-            the badge beside it already says where it came from. */}
-        <PlayerName userId={author?.id} style={styles.footerText} numberOfLines={1}>
-          {author && !question.source ? <Text style={styles.footerName}>{author.name} </Text> : null}
-          @{author?.handle ?? 'player'}
-        </PlayerName>
+      {/* Who wrote it, said exactly the way a post says it: the name on its
+          own line, the handle and the time under it, the level to the right. */}
+      <View style={styles.header}>
+        {author && <Avatar name={author.name} seed={author.avatarSeed} size={42} />}
+        <View style={styles.headerText}>
+          <View style={styles.nameRow}>
+            <PlayerName userId={author?.id} style={styles.name} numberOfLines={1}>
+              {author?.name ?? 'Player'}
+            </PlayerName>
+            {author?.isCoach ? <Ionicons name="shield-checkmark" size={14} color={colors.brand} /> : null}
+          </View>
+          <Text style={styles.sub} numberOfLines={1}>
+            @{author?.handle ?? 'player'} · {relativeTime(question.createdAt)}{question.editedAt ? ' · Edited' : ''}
+          </Text>
+        </View>
         {question.source ? (
           <View style={styles.sourceBadge}>
             <Ionicons name={question.source.name === 'reddit' ? 'logo-reddit' : 'globe-outline'} size={12} color={colors.textMuted} />
-            <Text style={styles.sourceText}>{question.source.label}</Text>
+            {/* The name above already says where it came from; repeating it here read as a stutter. */}
+            {author && author.name === question.source.label ? null : <Text style={styles.sourceText}>{question.source.label}</Text>}
           </View>
         ) : author ? <LevelPill profile={author.profile} small /> : null}
-        {brandCorner ? null : <Text style={[styles.footerText, { marginLeft: 'auto' }]}>{relativeTime(question.createdAt)}{question.editedAt ? ' · Edited' : ''}</Text>}
       </View>
       <Text style={styles.title}>{question.title}</Text>
       {showBody && !!question.body && <RichText style={styles.preview}>{question.body}</RichText>}
@@ -136,7 +140,11 @@ const styleDefinitions = StyleSheet.create({
   metaRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
   footer: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingTop: spacing.xs },
   footerText: { ...typography.small, color: colors.textFaint },
-  footerName: { ...typography.smallStrong, color: colors.text },
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  headerText: { flex: 1, gap: 1 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  name: { ...typography.bodyStrong, color: colors.text },
+  sub: { ...typography.small, color: colors.textFaint },
   // Bigger targets and full-strength ink: these were competing with body text
   // at 16px and textFaint, which read as decoration rather than buttons.
   action: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7 },
