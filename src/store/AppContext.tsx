@@ -10,6 +10,7 @@ import React, {
 } from 'react';
 import { AppState as DeviceState, Platform } from 'react-native';
 import { randomUUID } from 'expo-crypto';
+import { sourceUserIds } from '@/features/community/importedThreads';
 
 import { fetchBootstrap, fetchCommunityThreads, signIn as apiSignIn, type Bootstrap } from '@/data/api';
 import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type AdminReport, type FeedSignal } from '@/data/remote';
@@ -443,6 +444,63 @@ const nextId = (prefix: string): string => {
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The made-up players, posts and threads the app ships with so a demo is
+ * never empty — Dev Sharma, @junevolley and the rest.
+ *
+ * Once a real account is signed in they are dropped. A stranger cannot tell a
+ * fixture from a person; a coaching request sent to a coach who does not exist
+ * goes nowhere; and Apple rejects apps that present invented content as real.
+ * Anything the database hands back carries a proper id and anything made on
+ * this phone in a real session is given one, so the id is what tells them
+ * apart. With no database configured nothing is dropped and the demo stands.
+ */
+function dropFixtures(state: AppState): AppState {
+  if (!isSupabaseConfigured) return state;
+  const real = <T extends { id: ID }>(rows: T[]) => rows.filter((row) => UUID.test(row.id));
+  // Threads carried in from Reddit and Talk Tennis stay. They are not invented:
+  // each one names the forum it came from and the person who wrote it, and
+  // links back to the original. Their two source accounts stay with them, or
+  // the threads would have nobody's name on them.
+  const sources = new Set<ID>(sourceUserIds);
+  const users = state.users.filter((u) => UUID.test(u.id) || sources.has(u.id));
+  const posts = real(state.posts);
+  const questions = state.questions.filter((q) => UUID.test(q.id) || (!!q.source && sources.has(q.authorId)));
+  const threads = new Set(questions.map((q) => q.id));
+  const keep = new Set<ID>([...posts.map((p) => p.id), ...threads]);
+  return {
+    ...state,
+    users,
+    posts,
+    questions,
+    stories: real(state.stories),
+    comments: real(state.comments),
+    answers: state.answers.filter((a) => UUID.test(a.id) || threads.has(a.questionId)),
+    coaches: real(state.coaches),
+    coachingRequests: real(state.coachingRequests),
+    coachQuestions: real(state.coachQuestions),
+    coachReplies: real(state.coachReplies),
+    coachApplications: real(state.coachApplications),
+    coachResults: real(state.coachResults),
+    coachReviews: real(state.coachReviews),
+    conversations: real(state.conversations),
+    messages: real(state.messages),
+    notifications: real(state.notifications),
+    tips: real(state.tips),
+    // The lists that only hold ids follow the things they point at.
+    followingIds: state.followingIds.filter((id) => UUID.test(id)),
+    followEdges: state.followEdges.filter((e) => UUID.test(e.followerId) && UUID.test(e.followingId)),
+    mutedIds: state.mutedIds.filter((id) => UUID.test(id)),
+    blockedIds: state.blockedIds.filter((id) => UUID.test(id)),
+    alertIds: state.alertIds.filter((id) => UUID.test(id)),
+    saved: {
+      postIds: state.saved.postIds.filter((id) => keep.has(id)),
+      questionIds: state.saved.questionIds.filter((id) => keep.has(id)),
+    },
+  };
+}
+
 /** Whether an id names a row in Supabase rather than a fixture. */
 const live = (...ids: (ID | null | undefined)[]) => isSupabaseConfigured && ids.every((id) => !!id && UUID.test(id));
 
@@ -672,7 +730,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }, ...users];
         }
         const self = users.find((u) => u.id === me);
-        return {
+        return dropFixtures({
           ...prev,
           users,
           posts: [...data.posts, ...prev.posts.filter((p) => !remotePosts.has(p.id))],
@@ -707,7 +765,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           onboardingComplete: prev.onboardingComplete || !!self?.profile.onboardedAt || (self?.profile.goals.length ?? 0) > 0,
           authResolved: true,
           error: null,
-        };
+        });
       });
       // An ask that arrived while the app was closed gets its notification now.
       setState((prev) => data.followRequests
