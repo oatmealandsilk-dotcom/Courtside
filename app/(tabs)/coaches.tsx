@@ -6,10 +6,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { Avatar, Screen } from '@/components/ui';
+import { Avatar, Button, Screen } from '@/components/ui';
 import { money, relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
-import * as toast from '@/lib/toast';
 import { colors, radius, spacing, typography } from '@/theme';
 
 function Coaching() {
@@ -23,33 +22,23 @@ function Coaching() {
 
   return (
     <Screen memoryKey="coaches" title="Coaching">
-      <View style={styles.ai}>
-        {/* Built and wired, held back until launch: the card says so instead of opening. */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Courtside AI Coach, coming soon"
-          onPress={() => toast.show({ title: 'AI coach is coming soon', body: 'A weekly plan and a coach to ask, coming soon', icon: 'sparkles' })}
-          style={{ gap: 18 }}
-        >
-          <View style={styles.row}>
-            <View style={styles.aiBadge}>
-              <Text style={styles.aiText}>AI</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.title}>Courtside AI Coach</Text>
-              <Text style={styles.available}>Coming soon</Text>
-            </View>
-            <View style={styles.soon}><Text style={styles.soonText}>SOON</Text></View>
-          </View>
-          <Text style={styles.description}>
-            A weekly plan built from your game, goals, and body, and a coach you can ask before your next session.
-          </Text>
-        </Pressable>
-      </View>
-
       <View style={styles.heading}>
         <Text style={styles.eyebrow}>CERTIFIED COACHES</Text>
       </View>
+
+      {coaches.length === 0 ? (
+        <View style={styles.none}>
+          <Ionicons name="shield-checkmark-outline" size={26} color={colors.textFaint} />
+          <Text style={styles.noneTitle}>No coaches on CourtSide yet</Text>
+          <Text style={styles.noneBody}>
+            Every coach here is approved by hand, so a name on this list means something. Ask a
+            question below in the meantime — it stays up until a coach answers it.
+          </Text>
+          {currentUser?.isCoach ? null : (
+            <Button label="Apply to coach" onPress={() => router.push('/coach-apply')} />
+          )}
+        </View>
+      ) : null}
 
       {coaches.map((coach) => {
         const user = users.find((u) => u.id === coach.userId);
@@ -177,7 +166,7 @@ function Coaching() {
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
         </Pressable>
-      ) : (
+      ) : coaches.length === 0 ? null : (
         <Pressable
           accessibilityRole="link"
           accessibilityLabel="Apply to be a coach"
@@ -197,6 +186,9 @@ function Coaching() {
 }
 
 const styleDefinitions = StyleSheet.create({
+  none: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl, paddingHorizontal: spacing.lg },
+  noneTitle: { ...typography.heading, color: colors.text },
+  noneBody: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 19, marginBottom: spacing.sm },
   ai: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
