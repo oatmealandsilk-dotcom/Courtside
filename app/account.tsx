@@ -38,6 +38,11 @@ export default function AccountCentre() {
     actions.accountInfo().then(setInfo).catch(() => setInfo(null));
   }, [actions]);
 
+  // Straight off the reset email: setting the new password is the whole
+  // reason for the trip, so the sheet is already open rather than waiting to
+  // be found on a screen full of other rows.
+  useEffect(() => { if (reset) { setPassword(''); setPassword2(''); setSheet('password'); } }, [reset]);
+
   const say = (text: string) => { setNotice(text); setError(''); setTimeout(() => setNotice(''), 3000); };
   const run = async (work: () => Promise<void>, done: string) => {
     setBusy(true);
