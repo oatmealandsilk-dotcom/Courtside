@@ -1,0 +1,520 @@
+{
+ "schemaVersion": 2,
+ "generatedAt": "2026-09-20T04:04:51Z",
+ "title": "Design System: CourtSide",
+ "extensions": {
+  "colorMeta": {
+   "bg": {
+    "role": "neutral",
+    "displayName": "Ball Can Cream",
+    "canonical": "oklch(97.6% 0.007 97.4)",
+    "tonalRamp": [
+     "oklch(15.0% 0.007 97.4)",
+     "oklch(26.4% 0.007 97.4)",
+     "oklch(37.9% 0.007 97.4)",
+     "oklch(49.3% 0.007 97.4)",
+     "oklch(60.7% 0.007 97.4)",
+     "oklch(72.1% 0.007 97.4)",
+     "oklch(83.6% 0.007 97.4)",
+     "oklch(95.0% 0.007 97.4)"
+    ]
+   },
+   "bg-elevated": {
+    "role": "neutral",
+    "displayName": "Raised Cream",
+    "canonical": "oklch(95.1% 0.012 96.4)",
+    "tonalRamp": [
+     "oklch(15.0% 0.012 96.4)",
+     "oklch(26.4% 0.012 96.4)",
+     "oklch(37.9% 0.012 96.4)",
+     "oklch(49.3% 0.012 96.4)",
+     "oklch(60.7% 0.012 96.4)",
+     "oklch(72.1% 0.012 96.4)",
+     "oklch(83.6% 0.012 96.4)",
+     "oklch(95.0% 0.012 96.4)"
+    ]
+   },
+   "surface": {
+    "role": "neutral",
+    "displayName": "Warm Sand",
+    "canonical": "oklch(96.0% 0.012 96.4)",
+    "tonalRamp": [
+     "oklch(15.0% 0.012 96.4)",
+     "oklch(26.4% 0.012 96.4)",
+     "oklch(37.9% 0.012 96.4)",
+     "oklch(49.3% 0.012 96.4)",
+     "oklch(60.7% 0.012 96.4)",
+     "oklch(72.1% 0.012 96.4)",
+     "oklch(83.6% 0.012 96.4)",
+     "oklch(95.0% 0.012 96.4)"
+    ]
+   },
+   "surface-alt": {
+    "role": "neutral",
+    "displayName": "Warm Sand Deep",
+    "canonical": "oklch(92.4% 0.016 95.2)",
+    "tonalRamp": [
+     "oklch(15.0% 0.016 95.2)",
+     "oklch(26.4% 0.016 95.2)",
+     "oklch(37.9% 0.016 95.2)",
+     "oklch(49.3% 0.016 95.2)",
+     "oklch(60.7% 0.016 95.2)",
+     "oklch(72.1% 0.016 95.2)",
+     "oklch(83.6% 0.016 95.2)",
+     "oklch(95.0% 0.016 95.2)"
+    ]
+   },
+   "border": {
+    "role": "neutral",
+    "displayName": "Hairline Tan",
+    "canonical": "oklch(87.7% 0.020 87.5)",
+    "tonalRamp": [
+     "oklch(15.0% 0.020 87.5)",
+     "oklch(26.4% 0.020 87.5)",
+     "oklch(37.9% 0.020 87.5)",
+     "oklch(49.3% 0.020 87.5)",
+     "oklch(60.7% 0.020 87.5)",
+     "oklch(72.1% 0.020 87.5)",
+     "oklch(83.6% 0.020 87.5)",
+     "oklch(95.0% 0.020 87.5)"
+    ]
+   },
+   "border-strong": {
+    "role": "neutral",
+    "displayName": "Strong Tan",
+    "canonical": "oklch(75.7% 0.027 84.6)",
+    "tonalRamp": [
+     "oklch(15.0% 0.027 84.6)",
+     "oklch(26.4% 0.027 84.6)",
+     "oklch(37.9% 0.027 84.6)",
+     "oklch(49.3% 0.027 84.6)",
+     "oklch(60.7% 0.027 84.6)",
+     "oklch(72.1% 0.027 84.6)",
+     "oklch(83.6% 0.027 84.6)",
+     "oklch(95.0% 0.027 84.6)"
+    ]
+   },
+   "text": {
+    "role": "neutral",
+    "displayName": "Court Ink",
+    "canonical": "oklch(26.1% 0.011 114.8)",
+    "tonalRamp": [
+     "oklch(15.0% 0.011 114.8)",
+     "oklch(26.4% 0.011 114.8)",
+     "oklch(37.9% 0.011 114.8)",
+     "oklch(49.3% 0.011 114.8)",
+     "oklch(60.7% 0.011 114.8)",
+     "oklch(72.1% 0.011 114.8)",
+     "oklch(83.6% 0.011 114.8)",
+     "oklch(95.0% 0.011 114.8)"
+    ]
+   },
+   "text-muted": {
+    "role": "neutral",
+    "displayName": "Muted Ink",
+    "canonical": "oklch(56.4% 0.025 87.2)",
+    "tonalRamp": [
+     "oklch(15.0% 0.025 87.2)",
+     "oklch(26.4% 0.025 87.2)",
+     "oklch(37.9% 0.025 87.2)",
+     "oklch(49.3% 0.025 87.2)",
+     "oklch(60.7% 0.025 87.2)",
+     "oklch(72.1% 0.025 87.2)",
+     "oklch(83.6% 0.025 87.2)",
+     "oklch(95.0% 0.025 87.2)"
+    ]
+   },
+   "text-faint": {
+    "role": "neutral",
+    "displayName": "Faint Ink",
+    "canonical": "oklch(61.2% 0.025 84.6)",
+    "tonalRamp": [
+     "oklch(15.0% 0.025 84.6)",
+     "oklch(26.4% 0.025 84.6)",
+     "oklch(37.9% 0.025 84.6)",
+     "oklch(49.3% 0.025 84.6)",
+     "oklch(60.7% 0.025 84.6)",
+     "oklch(72.1% 0.025 84.6)",
+     "oklch(83.6% 0.025 84.6)",
+     "oklch(95.0% 0.025 84.6)"
+    ]
+   },
+   "brand": {
+    "role": "primary",
+    "displayName": "Club Green",
+    "canonical": "oklch(49.9% 0.082 149.3)",
+    "tonalRamp": [
+     "oklch(15.0% 0.082 149.3)",
+     "oklch(26.4% 0.082 149.3)",
+     "oklch(37.9% 0.082 149.3)",
+     "oklch(49.3% 0.082 149.3)",
+     "oklch(60.7% 0.082 149.3)",
+     "oklch(72.1% 0.082 149.3)",
+     "oklch(83.6% 0.082 149.3)",
+     "oklch(95.0% 0.082 149.3)"
+    ]
+   },
+   "brand-ink": {
+    "role": "primary",
+    "displayName": "Green Ink",
+    "canonical": "oklch(97.8% 0.011 95.2)",
+    "tonalRamp": [
+     "oklch(15.0% 0.011 95.2)",
+     "oklch(26.4% 0.011 95.2)",
+     "oklch(37.9% 0.011 95.2)",
+     "oklch(49.3% 0.011 95.2)",
+     "oklch(60.7% 0.011 95.2)",
+     "oklch(72.1% 0.011 95.2)",
+     "oklch(83.6% 0.011 95.2)",
+     "oklch(95.0% 0.011 95.2)"
+    ]
+   },
+   "brand-dim": {
+    "role": "primary",
+    "displayName": "Dim Green",
+    "canonical": "oklch(92.1% 0.019 119.8)",
+    "tonalRamp": [
+     "oklch(15.0% 0.019 119.8)",
+     "oklch(26.4% 0.019 119.8)",
+     "oklch(37.9% 0.019 119.8)",
+     "oklch(49.3% 0.019 119.8)",
+     "oklch(60.7% 0.019 119.8)",
+     "oklch(72.1% 0.019 119.8)",
+     "oklch(83.6% 0.019 119.8)",
+     "oklch(95.0% 0.019 119.8)"
+    ]
+   },
+   "court": {
+    "role": "secondary",
+    "displayName": "Court",
+    "canonical": "oklch(54.5% 0.075 146.8)",
+    "tonalRamp": [
+     "oklch(15.0% 0.075 146.8)",
+     "oklch(26.4% 0.075 146.8)",
+     "oklch(37.9% 0.075 146.8)",
+     "oklch(49.3% 0.075 146.8)",
+     "oklch(60.7% 0.075 146.8)",
+     "oklch(72.1% 0.075 146.8)",
+     "oklch(83.6% 0.075 146.8)",
+     "oklch(95.0% 0.075 146.8)"
+    ]
+   },
+   "clay": {
+    "role": "secondary",
+    "displayName": "Clay",
+    "canonical": "oklch(58.6% 0.075 50.5)",
+    "tonalRamp": [
+     "oklch(15.0% 0.075 50.5)",
+     "oklch(26.4% 0.075 50.5)",
+     "oklch(37.9% 0.075 50.5)",
+     "oklch(49.3% 0.075 50.5)",
+     "oklch(60.7% 0.075 50.5)",
+     "oklch(72.1% 0.075 50.5)",
+     "oklch(83.6% 0.075 50.5)",
+     "oklch(95.0% 0.075 50.5)"
+    ]
+   },
+   "hard": {
+    "role": "secondary",
+    "displayName": "Hard",
+    "canonical": "oklch(50.0% 0.062 235.4)",
+    "tonalRamp": [
+     "oklch(15.0% 0.062 235.4)",
+     "oklch(26.4% 0.062 235.4)",
+     "oklch(37.9% 0.062 235.4)",
+     "oklch(49.3% 0.062 235.4)",
+     "oklch(60.7% 0.062 235.4)",
+     "oklch(72.1% 0.062 235.4)",
+     "oklch(83.6% 0.062 235.4)",
+     "oklch(95.0% 0.062 235.4)"
+    ]
+   },
+   "grass": {
+    "role": "secondary",
+    "displayName": "Grass",
+    "canonical": "oklch(58.8% 0.054 126.8)",
+    "tonalRamp": [
+     "oklch(15.0% 0.054 126.8)",
+     "oklch(26.4% 0.054 126.8)",
+     "oklch(37.9% 0.054 126.8)",
+     "oklch(49.3% 0.054 126.8)",
+     "oklch(60.7% 0.054 126.8)",
+     "oklch(72.1% 0.054 126.8)",
+     "oklch(83.6% 0.054 126.8)",
+     "oklch(95.0% 0.054 126.8)"
+    ]
+   },
+   "info": {
+    "role": "secondary",
+    "displayName": "Hard Blue (info)",
+    "canonical": "oklch(50.0% 0.062 235.4)",
+    "tonalRamp": [
+     "oklch(15.0% 0.062 235.4)",
+     "oklch(26.4% 0.062 235.4)",
+     "oklch(37.9% 0.062 235.4)",
+     "oklch(49.3% 0.062 235.4)",
+     "oklch(60.7% 0.062 235.4)",
+     "oklch(72.1% 0.062 235.4)",
+     "oklch(83.6% 0.062 235.4)",
+     "oklch(95.0% 0.062 235.4)"
+    ]
+   },
+   "success": {
+    "role": "secondary",
+    "displayName": "Court Green (success)",
+    "canonical": "oklch(54.5% 0.075 146.8)",
+    "tonalRamp": [
+     "oklch(15.0% 0.075 146.8)",
+     "oklch(26.4% 0.075 146.8)",
+     "oklch(37.9% 0.075 146.8)",
+     "oklch(49.3% 0.075 146.8)",
+     "oklch(60.7% 0.075 146.8)",
+     "oklch(72.1% 0.075 146.8)",
+     "oklch(83.6% 0.075 146.8)",
+     "oklch(95.0% 0.075 146.8)"
+    ]
+   },
+   "warning": {
+    "role": "tertiary",
+    "displayName": "Line Judge Amber",
+    "canonical": "oklch(57.5% 0.100 83.6)",
+    "tonalRamp": [
+     "oklch(15.0% 0.100 83.6)",
+     "oklch(26.4% 0.100 83.6)",
+     "oklch(37.9% 0.100 83.6)",
+     "oklch(49.3% 0.100 83.6)",
+     "oklch(60.7% 0.100 83.6)",
+     "oklch(72.1% 0.100 83.6)",
+     "oklch(83.6% 0.100 83.6)",
+     "oklch(95.0% 0.100 83.6)"
+    ]
+   },
+   "danger": {
+    "role": "tertiary",
+    "displayName": "Fault Red",
+    "canonical": "oklch(52.6% 0.117 30.3)",
+    "tonalRamp": [
+     "oklch(15.0% 0.117 30.3)",
+     "oklch(26.4% 0.117 30.3)",
+     "oklch(37.9% 0.117 30.3)",
+     "oklch(49.3% 0.117 30.3)",
+     "oklch(60.7% 0.117 30.3)",
+     "oklch(72.1% 0.117 30.3)",
+     "oklch(83.6% 0.117 30.3)",
+     "oklch(95.0% 0.117 30.3)"
+    ]
+   }
+  },
+  "typographyMeta": {
+   "display": {
+    "displayName": "Display",
+    "purpose": "A screen's own title, once per screen."
+   },
+   "title": {
+    "displayName": "Title",
+    "purpose": "Section heads and sheet titles."
+   },
+   "heading": {
+    "displayName": "Heading",
+    "purpose": "The head of a card or grouped list."
+   },
+   "body": {
+    "displayName": "Body",
+    "purpose": "Post text, thread bodies, messages."
+   },
+   "body-strong": {
+    "displayName": "Body Strong",
+    "purpose": "Button labels, names, anything found while scrolling."
+   },
+   "small": {
+    "displayName": "Small",
+    "purpose": "Metadata, timestamps, handles."
+   },
+   "small-strong": {
+    "displayName": "Small Strong",
+    "purpose": "Field labels and emphasised metadata."
+   },
+   "label": {
+    "displayName": "Label",
+    "purpose": "Eyebrows and pills; the only tracked-out style."
+   }
+  },
+  "shadows": [
+   {
+    "name": "floating-card",
+    "value": "0 6px 14px rgba(0,0,0,0.12)",
+    "purpose": "A detached card such as the upload bar."
+   },
+   {
+    "name": "sheet",
+    "value": "0 -10px 28px rgba(0,0,0,0.28)",
+    "purpose": "A sheet rising from the bottom edge."
+   },
+   {
+    "name": "toast",
+    "value": "0 4px 18px rgba(0,0,0,0.18)",
+    "purpose": "A message passing over the page."
+   },
+   {
+    "name": "over-media",
+    "value": "0 3px 7px rgba(0,0,0,0.28)",
+    "purpose": "A control on top of a photo or video, where a border would vanish."
+   }
+  ],
+  "motion": [
+   {
+    "name": "press",
+    "value": "scale 0.97 over 60ms (0.94 for small icons)",
+    "purpose": "Every pressable gives under the finger."
+   },
+   {
+    "name": "hover",
+    "value": "scale 1.04 over 60ms",
+    "purpose": "Pointer only; never fires on a touch screen."
+   },
+   {
+    "name": "page-settle",
+    "value": "cubic-bezier(0.33, 1, 0.68, 1) over 280-320ms",
+    "purpose": "Zoom, sheets and anything coming to rest."
+   }
+  ],
+  "breakpoints": [
+   {
+    "name": "phone",
+    "value": "<768px"
+   },
+   {
+    "name": "desktop",
+    "value": ">=768px"
+   }
+  ]
+ },
+ "components": [
+  {
+   "name": "Primary Button",
+   "kind": "button",
+   "refersTo": "button-primary",
+   "description": "The one action worth taking on a screen.",
+   "html": "<button class=\"ds-btn-primary\">Post</button>",
+   "css": ".ds-btn-primary{background:#3F7049;color:#FAF8F0;border-color:transparent;padding:13px 24px;border-radius:999px;border:1px solid;font-family:system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;font-size:15px;font-weight:600;cursor:pointer;transition:transform .06s ease,opacity .15s ease;}.ds-btn-primary:hover{transform:scale(1.04)}.ds-btn-primary:active{transform:scale(.97)}.ds-btn-primary:focus-visible{outline:2px solid #3F7049;outline-offset:2px}"
+  },
+  {
+   "name": "Secondary Button",
+   "kind": "button",
+   "refersTo": "button-secondary",
+   "description": "The alternative beside a primary action.",
+   "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+   "css": ".ds-btn-secondary{background:#E9E6DA;color:#24251F;border-color:#B8AF9D;padding:13px 24px;border-radius:999px;border:1px solid;font-family:system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;font-size:15px;font-weight:600;cursor:pointer;transition:transform .06s ease,opacity .15s ease;}.ds-btn-secondary:hover{transform:scale(1.04)}.ds-btn-secondary:active{transform:scale(.97)}.ds-btn-secondary:focus-visible{outline:2px solid #B8AF9D;outline-offset:2px}"
+  },
+  {
+   "name": "Danger Button",
+   "kind": "button",
+   "refersTo": "button-danger",
+   "description": "Destructive actions are outlined, never filled.",
+   "html": "<button class=\"ds-btn-danger\">Delete account</button>",
+   "css": ".ds-btn-danger{background:transparent;color:#A34D40;border-color:#A34D40;padding:13px 24px;border-radius:999px;border:1px solid;font-family:system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;font-size:15px;font-weight:600;cursor:pointer;transition:transform .06s ease,opacity .15s ease;}.ds-btn-danger:hover{transform:scale(1.04)}.ds-btn-danger:active{transform:scale(.97)}.ds-btn-danger:focus-visible{outline:2px solid #A34D40;outline-offset:2px}"
+  },
+  {
+   "name": "Chip",
+   "kind": "chip",
+   "refersTo": "chip",
+   "description": "Topic and filter chips; selected takes the accent fill.",
+   "html": "<span class=\"ds-chip\">Gear</span> <span class=\"ds-chip ds-chip-on\">Technique</span>",
+   "css": ".ds-chip{display:inline-block;padding:7px 12px;border-radius:999px;border:1px solid #DCD6C8;background:#E9E6DA;color:#7C7565;font-family:system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;font-size:13px;font-weight:600}.ds-chip-on{background:#3F7049;color:#FAF8F0;border-color:transparent}"
+  },
+  {
+   "name": "Card",
+   "kind": "card",
+   "refersTo": "card",
+   "description": "Flat surface, hairline border, never a shadow.",
+   "html": "<div class=\"ds-card\"><div class=\"ds-card-h\">Best string for a Yonex EZONE</div><div class=\"ds-card-b\">Gear &middot; 4 replies</div></div>",
+   "css": ".ds-card{background:#F4F2E9;border:1px solid #DCD6C8;border-radius:16px;padding:16px;font-family:system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;max-width:420px}.ds-card-h{color:#24251F;font-size:17px;font-weight:700;margin-bottom:4px}.ds-card-b{color:#8B8373;font-size:13px}"
+  },
+  {
+   "name": "Text Field",
+   "kind": "input",
+   "refersTo": "input",
+   "description": "Label above, hint below, hairline border.",
+   "html": "<label class=\"ds-field\"><span class=\"ds-field-l\">City</span><input class=\"ds-input\" value=\"Kalamazoo, MI\"><span class=\"ds-field-h\">Shown on your profile.</span></label>",
+   "css": ".ds-field{display:flex;flex-direction:column;gap:8px;font-family:system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;max-width:320px}.ds-field-l{color:#7C7565;font-size:13px;font-weight:600}.ds-input{background:#F4F2E9;border:1px solid #DCD6C8;border-radius:12px;padding:12px 16px;color:#24251F;font-size:15px;font-family:inherit}.ds-input:focus{outline:none;border-color:#B8AF9D}.ds-field-h{color:#8B8373;font-size:13px}"
+  },
+  {
+   "name": "Avatar",
+   "kind": "custom",
+   "refersTo": "avatar",
+   "description": "Initials on one of six muted tints, chosen from the handle. No image assets ship.",
+   "html": "<span class=\"ds-avatar\">D</span>",
+   "css": ".ds-avatar{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:999px;background:#667967;color:#FAF8F0;font-family:system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;font-size:17px;font-weight:700}"
+  }
+ ],
+ "narrative": {
+  "northStar": "Courtside Seats",
+  "overview": "You are at the edge of the court and the match is the thing. The interface takes the seat, not the court: a premium, understated surface makes a phone-shot rally look worth watching, where a loud one would compete with it and lose. The material is warm paper rather than glass or neon - cream grounds, soft tan borders, a muted club green at lower chroma than most apps' neutrals. Surfaces are flat and separated by a hairline border. Type is the platform's own; no font ships with the app. The palette is not one world but six, and every screen is authored once and recoloured at draw time, which is why every palette must define every slot.",
+  "keyCharacteristics": [
+   "Warm paper neutrals, never grey and never white",
+   "Low-chroma accents; club signage, not sports-brand green",
+   "Flat by default - hairline borders separate, shadows only lift",
+   "Platform type only; no brand font, no icon font, no shipped imagery",
+   "Pill-shaped actions against softly-rounded containers",
+   "Six complete palettes, one authored source"
+  ],
+  "rules": [
+   {
+    "name": "The Warm Neutral Rule",
+    "body": "No pure white and no pure black anywhere. Every neutral carries warmth.",
+    "section": "colors"
+   },
+   {
+    "name": "The Every-Slot Rule",
+    "body": "Every palette defines every colour key, and no component writes a literal hex. Breakage is silent: correct in the default theme, wrong in a slam theme.",
+    "section": "colors"
+   },
+   {
+    "name": "The Surface Vocabulary Rule",
+    "body": "Clay, hard, grass and court classify; they never command. A surface colour on a button is a category error.",
+    "section": "colors"
+   },
+   {
+    "name": "The Tight Top Rule",
+    "body": "Tracking tightens as size grows and opens only at label size.",
+    "section": "typography"
+   },
+   {
+    "name": "The Two-Weight Rule",
+    "body": "Hierarchy comes from weight and size; colour reinforces but never carries it alone.",
+    "section": "typography"
+   },
+   {
+    "name": "The One Column Rule",
+    "body": "Content never spans a large screen. Past the cap the space stays empty or becomes the rail.",
+    "section": "layout"
+   },
+   {
+    "name": "The Flat-By-Default Rule",
+    "body": "On the page: a border. Over the page: a shadow. Never both.",
+    "section": "elevation"
+   },
+   {
+    "name": "The Pill Rule",
+    "body": "Actions are pills; containers are rounded rectangles. If it is fully round, you can press it.",
+    "section": "shapes"
+   }
+  ],
+  "dos": [
+   "Do take every colour from the theme, so all six palettes keep working.",
+   "Do separate surfaces with a 1px border and a half-step of warmth.",
+   "Do keep actions pill-shaped and containers rounded-rectangular.",
+   "Do let type weight carry hierarchy, with colour as reinforcement.",
+   "Do give a clip the whole viewport.",
+   "Do outline destructive actions rather than filling them."
+  ],
+  "donts": [
+   "Don't write a literal hex in a component.",
+   "Don't use #FFFFFF or #000000. Every neutral is warm.",
+   "Don't add a shadow to something that sits on the page.",
+   "Don't use a surface colour (clay, hard, grass, court) as an action colour.",
+   "Don't introduce a webfont or an icon font.",
+   "Don't ship placeholder imagery. Initials and court cards are the placeholder system."
+  ]
+ }
+}
