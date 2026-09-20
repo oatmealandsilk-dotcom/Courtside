@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { usePauseWhenHidden } from '@/features/feed/pauseWhenHidden';
 import { Pressable, Text, View } from 'react-native';
 import { Stack, type ErrorBoundaryProps } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -35,6 +36,8 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
 }
 
 export default function RootLayout() {
+  // A browser tab in the background carries on playing; this stops it.
+  usePauseWhenHidden();
   return (
     <GestureHandlerRootView style={{ flex: 1 }}><ThemeProvider><SafeAreaProvider>
       <AppProvider>
