@@ -17,7 +17,7 @@ export default function Saved() {
   const { saved, posts, questions, users, actions } = useApp();
   // Everything bookmarked, however far back — otherwise older saves quietly
   // drop off as the feed moves on.
-  useEffect(() => { void actions.loadSavedPosts(); }, [actions]);
+  useEffect(() => { void actions.loadSavedPosts(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [tab, setTab] = useState<'videos' | 'discussions'>('videos');
   // The grid is three across, sized from its own measured width, the way the profile grid is.
   const { width: windowWidth } = useWindowDimensions();

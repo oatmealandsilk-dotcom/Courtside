@@ -19,7 +19,7 @@ export default function PlayerPosts() {
   const { userId, post: start, set = 'own' } = useLocalSearchParams<{ userId: string; post?: string; set?: Set }>();
   const { users, actions } = useApp();
   // The same posts the grid was built from, so this feed does not stop short.
-  useEffect(() => { if (userId) void actions.loadPostsOf(userId); }, [userId, actions]);
+  useEffect(() => { if (userId) void actions.loadPostsOf(userId); }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!users.some((u) => u.id === userId)) {
     return (
       <Screen title="Posts" compactTitle onBack={() => goBack()}>

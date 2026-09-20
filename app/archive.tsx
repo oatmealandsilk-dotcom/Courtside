@@ -21,7 +21,7 @@ export default function Archive() {
   const styles = useThemedStyles(styleDefinitions);
   const { posts, stories, currentUserId, actions } = useApp();
   // Your own posts, put-away ones included; the feed never carries those.
-  useEffect(() => { if (currentUserId) void actions.loadPostsOf(currentUserId); }, [currentUserId, actions]);
+  useEffect(() => { if (currentUserId) void actions.loadPostsOf(currentUserId); }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
   const [tab, setTab] = useState<Tab>('stories');
 
   const myStories = archivedStories(stories, currentUserId);

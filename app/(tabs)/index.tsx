@@ -285,20 +285,22 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     if (scope || !ready) return;
     if (!order.length || active < order.length - 5) return;
     let dropped = false;
-    void actions.loadMorePosts().then((fresh) => {
+    void latest.current.actions.loadMorePosts().then((fresh) => {
       if (dropped || !fresh.length) return;
+      const hidden = new Set([...latest.current.blockedIds, ...latest.current.mutedIds]);
+      // Shuffled out here, not inside the update: an update has to be able to
+      // run twice and come out the same, and a shuffle never would.
+      const dealt = shuffleFeed(fresh.filter((p) => !p.archived && !hidden.has(p.authorId)).map((p) => `p:${p.id}`));
       setOrder((prev) => {
         const have = new Set(prev);
-        const hidden = new Set([...latest.current.blockedIds, ...latest.current.mutedIds]);
-        const keys = fresh
-          .filter((p) => !p.archived && !hidden.has(p.authorId))
-          .map((p) => `p:${p.id}`)
-          .filter((k) => !have.has(k));
-        return keys.length ? [...prev, ...shuffleFeed(keys)] : prev;
+        const keys = dealt.filter((k) => !have.has(k));
+        return keys.length ? [...prev, ...keys] : prev;
       });
     });
     return () => { dropped = true; };
-  }, [active, order.length, scope, ready, actions]);
+    // The feed's own actions never change; asking for them by name here would
+    // re-run this on every render for nothing.
+  }, [active, order.length, scope, ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A post of yours that just finished uploading: the feed starts over with it on top.
   useEffect(() => subscribeFeedRefresh(() => { if (!scope) rerank(); }), [scope, rerank]);

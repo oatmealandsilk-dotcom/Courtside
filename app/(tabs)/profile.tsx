@@ -24,7 +24,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const { currentUser: user, posts, saved, conversations, notifications, currentUserId, savedAccounts, actions } = useApp();
  // Your own posts, however far back they go: the grid and the counts are
  // yours entirely, not just whichever of them the feed happens to hold.
- useEffect(() => { if (user?.id) void actions.loadPostsOf(user.id); }, [user?.id, actions]);
+ useEffect(() => { if (user?.id) void actions.loadPostsOf(user.id); }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
  const { width: windowWidth } = useWindowDimensions();
  // The section lives here, not in the address (see discuss.tsx for why).
  const [localTab, setLocalTab] = useState<'Posts' | 'Clips' | 'Tagged'>('Posts');

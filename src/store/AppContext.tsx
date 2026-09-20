@@ -1731,6 +1731,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // One page of posts at a time, and one ask per profile per session.
   const loadingMore = useRef(false);
   const loadedProfiles = useRef(new Set<ID>());
+  const loadedSaved = useRef(false);
   // Reports, for admins. The database decides who may read and act on them.
   const loadReports = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchReports() : []), []);
   const loadReportedItem = useCallback(async (kind: 'post' | 'hit', id: ID) => (live(stateRef.current.currentUserId, id) ? remote.fetchReportedItem(kind, id) : null), []);
@@ -1804,13 +1805,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!live(stateRef.current.currentUserId, userId) || loadedProfiles.current.has(userId)) return;
     loadedProfiles.current.add(userId);
     const got = await remote.fetchUserPosts(userId);
-    if (!got) { loadedProfiles.current.delete(userId); return; }
+    if (!got) return;
     setState((prev) => addPosts(prev, got));
   }, []);
   /** Opening Saved: everything bookmarked, however far back, not only what the feed holds. */
   const loadSavedPosts = useCallback(async () => {
     const me = stateRef.current.currentUserId;
-    if (!live(me)) return;
+    if (!live(me) || loadedSaved.current) return;
+    loadedSaved.current = true;
     const got = await remote.fetchSavedPosts(me!);
     if (!got) return;
     setState((prev) => {

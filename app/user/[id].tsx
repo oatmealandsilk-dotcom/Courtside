@@ -30,7 +30,7 @@ export default function UserProfile() {
   const { users, posts, coaches, currentUserId, followingIds, followRequests, mutedIds, blockedIds, alertIds, actions } = useApp();
   // Their posts come in when their profile is opened, so the grid and the
   // counts are whole however old the posts are.
-  useEffect(() => { if (id) void actions.loadPostsOf(id); }, [id, actions]);
+  useEffect(() => { if (id) void actions.loadPostsOf(id); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [menuOpen, setMenuOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const [tab, setTab] = useState<typeof TABS[number]>('Posts');
