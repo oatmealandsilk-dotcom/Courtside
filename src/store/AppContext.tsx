@@ -498,6 +498,17 @@ function dropFixtures(state: AppState): AppState {
       postIds: state.saved.postIds.filter((id) => keep.has(id)),
       questionIds: state.saved.questionIds.filter((id) => keep.has(id)),
     },
+    // Invented sleep, recovery and calories — not this person's, and health
+    // numbers read as fact. They go, and the Health screen simply shows
+    // nothing until something real is connected.
+    healthHistory: [],
+    // The list of what can be connected stays; the demo's "already connected,
+    // synced two hours ago" does not.
+    integrations: state.integrations.map((i) => (i.connected ? { ...i, connected: false, lastSyncedAt: undefined } : i)),
+    // The demo's card on file. Nobody should open Payments and find a Visa
+    // they never added.
+    paymentMethods: [],
+    defaultPaymentId: null,
   };
 }
 
