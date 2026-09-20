@@ -779,6 +779,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     <View style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
                       <QuestionCard
                         showBody
+                        brandCorner
                         question={item.question}
                         author={users.find((u) => u.id === item.question.authorId)}
                         answered={Boolean(item.question.acceptedAnswerId)}
