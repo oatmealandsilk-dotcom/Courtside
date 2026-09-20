@@ -776,7 +776,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       {hiddenMarks.has(item.question.id) ? <View style={{ width: 34, height: 34 }} /> : <TapAway label="Hide the CourtSide logo" onHidden={() => hideMark(item.question.id)} style={styles.threadMark}><BrandMark size={34} /></TapAway>}
                     </View>
                     {strip}
-                    <View style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                    <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: 'center' }}>
                       <QuestionCard
                         showBody
                         brandCorner
@@ -844,7 +844,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       {post.kind === 'match' ? 'SET PLAY' : post.kind.toUpperCase()} · FOR YOU
                     </Text>}
                     {strip}
-                    <View style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                    <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: 'center' }}>
                       <PostCard
                         post={post}
                         author={author}
@@ -856,6 +856,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                         onComment={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id } })}
                         onPress={() => router.push(`/post/${post.id}`)}
                         onPressAuthor={() => router.push(`/user/${author.id}`)}
+                        clamp={8}
                       />
                     </View>
                     <Pressable accessibilityRole="link" onPress={() => router.push(`/post/${post.id}`)}>
@@ -939,7 +940,11 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       style={styles.author}
                     >
                       <Avatar name={author.name} seed={author.avatarSeed} size={34} />
-                      <Text style={styles.authorName}>@{author.handle}<Text style={styles.authorTime}> · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}{post.location ? ` · ${post.location}` : ''}</Text></Text>
+                      {/* The level belongs on the clip above all: a rally read
+                          against a rating is the whole point, and this was the
+                          one page that left it off. */}
+                      <Text style={[styles.authorName, styles.authorFill]} numberOfLines={1}>@{author.handle}<Text style={styles.authorTime}> · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}{post.location ? ` · ${post.location}` : ''}</Text></Text>
+                      <LevelPill profile={author.profile} small />
                     </Pressable>
                     <RichText numberOfLines={3} style={styles.body}>
                       {post.body}
@@ -1133,6 +1138,7 @@ const styleDefinitions = StyleSheet.create({
     gap: 8,
   },
   author: { flexDirection: 'row', gap: 9, alignItems: 'center' },
+  authorFill: { flexShrink: 1 },
   hitClock: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.45)' },
   hitClockText: { color: 'white', fontSize: 11, fontWeight: '700', letterSpacing: 0.6 },
   authorName: { color: 'white', fontSize: 14, fontWeight: '700' },

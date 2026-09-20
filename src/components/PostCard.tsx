@@ -28,6 +28,11 @@ interface Props {
   saved?: boolean;
   onToggleSave?: () => void;
   onShare?: () => void;
+  /**
+   * How many lines of the post's words to show before the card would outgrow
+   * its page. The feed passes this; a page that scrolls leaves it off.
+   */
+  clamp?: number;
   /** Shown as ••• on your own posts: archive or delete. */
   onArchive?: () => void;
   onDelete?: () => void;
@@ -58,6 +63,7 @@ function PostCardInner({
   saved = false,
   onToggleSave,
   onShare,
+  clamp,
   onArchive,
   onDelete,
 }: Props) {
@@ -125,7 +131,7 @@ function PostCardInner({
           <Ionicons name="chevron-forward" size={11} color={meta.tint} />
         </Tappable>
 
-        <RichText style={styles.text}>{post.body}</RichText>
+        <RichText numberOfLines={clamp} style={styles.text}>{post.body}</RichText>
 
         {post.match ? (
           <View style={styles.detailBox}>
@@ -215,7 +221,10 @@ function PostCardInner({
 }
 
 const styleDefinitions = StyleSheet.create({
-  card: { gap: spacing.md, borderRadius: 0, borderWidth: 0, borderBottomWidth: 1, paddingHorizontal: 0, paddingBottom: spacing.xl, backgroundColor: colors.bg },
+  // In the feed the card sits in a page of fixed height. It shrinks rather
+  // than overflowing, and the words below are what gives, so the row of
+  // buttons is never sliced through the middle.
+  card: { gap: spacing.md, borderRadius: 0, borderWidth: 0, borderBottomWidth: 1, paddingHorizontal: 0, paddingBottom: spacing.xl, backgroundColor: colors.bg, flexShrink: 1, minHeight: 0 },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   more: { padding: 4 },
   backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
@@ -228,7 +237,7 @@ const styleDefinitions = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   name: { ...typography.bodyStrong, color: colors.text },
   sub: { ...typography.small, color: colors.textFaint },
-  body: { gap: spacing.md },
+  body: { gap: spacing.md, flexShrink: 1, minHeight: 0 },
   kindRow: {
     flexDirection: 'row',
     alignItems: 'center',

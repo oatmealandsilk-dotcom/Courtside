@@ -11,7 +11,7 @@ type Palette = Record<keyof typeof lightColors, string>;
  */
 export const darkColors: Palette = {
   bg: '#0F1412', bgElevated: '#161D19', surface: '#1A221E', surfaceAlt: '#232C27',
-  border: '#2C3832', borderStrong: '#46554D', text: '#EDF1EE', textMuted: '#A6B1AB', textFaint: '#7C8781',
+  border: '#2C3832', borderStrong: '#46554D', text: '#EDF1EE', textMuted: '#A6B1AB', textFaint: '#8A948F',
   brand: '#6FB483', brandInk: '#0C1710', brandDim: '#1F2E25', court: '#6FB483', clay: '#C98A6A',
   hard: '#7FA9C4', grass: '#86B393', info: '#7FA9C4', success: '#6FB483', warning: '#D2B36A', danger: '#D97F73',
   overlay: 'rgba(0, 0, 0, 0.65)',
@@ -23,7 +23,7 @@ export const darkColors: Palette = {
  */
 const aoColors: Palette = {
   bg: '#EBF5FC', bgElevated: '#D7E9F4', surface: '#E1EFF8', surfaceAlt: '#C8DEEE',
-  border: '#AECFE5', borderStrong: '#6394BC', text: '#0D2B43', textMuted: '#3C6480', textFaint: '#6A8EA7',
+  border: '#AECFE5', borderStrong: '#6394BC', text: '#0D2B43', textMuted: '#34566E', textFaint: '#496273',
   brand: '#2E85BF', brandInk: '#FFFFFF', brandDim: '#CFE4F2', court: '#4179A8', clay: '#B97753',
   hard: '#2E85BF', grass: '#4E8A57', info: '#3979AF', success: '#2A7F60', warning: '#9C7016', danger: '#B8463F',
   overlay: 'rgba(7, 26, 42, 0.58)',
@@ -36,7 +36,7 @@ const aoColors: Palette = {
  */
 const rolandGarrosColors: Palette = {
   bg: '#F8F0E9', bgElevated: '#EFDFD1', surface: '#F4E7DB', surfaceAlt: '#E6D2C0',
-  border: '#D6BCA2', borderStrong: '#B08A66', text: '#33201A', textMuted: '#78553F', textFaint: '#9A7A61',
+  border: '#D6BCA2', borderStrong: '#B08A66', text: '#33201A', textMuted: '#664836', textFaint: '#6D5745',
   brand: '#AD4E2E', brandInk: '#FFF6F0', brandDim: '#ECD9CB', court: '#9E432E', clay: '#C67443',
   hard: '#3E6982', grass: '#1F5F3F', info: '#3E6982', success: '#1F5F3F', warning: '#9A6718', danger: '#9E432E',
   overlay: 'rgba(46, 22, 12, 0.58)',
@@ -48,7 +48,7 @@ const rolandGarrosColors: Palette = {
  */
 const wimbledonColors: Palette = {
   bg: '#F2F6EC', bgElevated: '#E4EDD8', surface: '#ECF2E2', surfaceAlt: '#D7E3C9',
-  border: '#C4D5B3', borderStrong: '#8CA37B', text: '#18291A', textMuted: '#4E6149', textFaint: '#77896F',
+  border: '#C4D5B3', borderStrong: '#8CA37B', text: '#18291A', textMuted: '#485943', textFaint: '#586552',
   brand: '#256B3A', brandInk: '#FFFFFF', brandDim: '#D9E6D4', court: '#4E8A4A', clay: '#A9694A',
   hard: '#4F2683', grass: '#4E8A4A', info: '#4F2683', success: '#256B3A', warning: '#8A6A19', danger: '#943634',
   overlay: 'rgba(14, 26, 16, 0.55)',
@@ -61,7 +61,7 @@ const wimbledonColors: Palette = {
  */
 const usOpenColors: Palette = {
   bg: '#14283D', bgElevated: '#1B3350', surface: '#1F3A5A', surfaceAlt: '#2A4A6E',
-  border: '#32557A', borderStrong: '#5C82AC', text: '#E9F0F8', textMuted: '#A7BCD3', textFaint: '#7F97B0',
+  border: '#32557A', borderStrong: '#5C82AC', text: '#E9F0F8', textMuted: '#BDCDDE', textFaint: '#A9B9CA',
   brand: '#F5D547', brandInk: '#1B1A0A', brandDim: '#4A4A2C', court: '#4E87C4', clay: '#D08A5E',
   hard: '#4E87C4', grass: '#5C9BD8', info: '#5C9BD8', success: '#FFE066', warning: '#E3B85A', danger: '#E07E72',
   overlay: 'rgba(4, 12, 22, 0.7)',
