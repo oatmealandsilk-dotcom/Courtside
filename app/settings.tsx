@@ -106,6 +106,7 @@ export default function Settings() {
         },
         // Only admins see this row (and only admins can read the reports behind it).
         ...(currentUser?.isAdmin ? [{ icon: 'flag-outline' as const, label: 'Reports', detail: 'Review what people reported', onPress: () => router.push('/admin-reports') }] : []),
+        ...(currentUser?.isAdmin ? [{ icon: 'mail-outline' as const, label: 'Waitlist', detail: 'Who asked for early access, and their feedback', onPress: () => router.push('/admin-waitlist') }] : []),
       ],
     },
     {
