@@ -14,7 +14,7 @@ import { TERMS_VERSION } from '@/lib/legal';
 import { sourceUserIds } from '@/features/community/importedThreads';
 
 import { fetchBootstrap, fetchCommunityThreads, signIn as apiSignIn, type Bootstrap } from '@/data/api';
-import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type AdminReport, type FeedSignal } from '@/data/remote';
+import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type AdminReport, type FeedSignal, type SiteFeedback, type WaitlistEntry } from '@/data/remote';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { markMessagesOpened } from '@/features/messaging/readReceipts';
@@ -391,6 +391,9 @@ interface AppActions {
   loadFollowsOf: (userId: ID) => Promise<void>;
   /** Admins only: every report, the reported post or hit, and a decision on one. */
   loadReports: () => Promise<AdminReport[]>;
+  /** Admins only: the waitlist and the waitlist page's feedback. */
+  loadWaitlist: () => Promise<WaitlistEntry[]>;
+  loadSiteFeedback: () => Promise<SiteFeedback[]>;
   loadReportedItem: (kind: 'post' | 'hit', id: ID) => Promise<{ body: string; picture?: string; removed: boolean } | null>;
   decideReport: (reportId: ID, decision: 'remove' | 'restore' | 'suspend' | 'unsuspend' | 'dismiss') => Promise<boolean>;
 
@@ -1768,6 +1771,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const loadedSaved = useRef(false);
   // Reports, for admins. The database decides who may read and act on them.
   const loadReports = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchReports() : []), []);
+  const loadWaitlist = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchWaitlist() : []), []);
+  const loadSiteFeedback = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchSiteFeedback() : []), []);
   const loadReportedItem = useCallback(async (kind: 'post' | 'hit', id: ID) => (live(stateRef.current.currentUserId, id) ? remote.fetchReportedItem(kind, id) : null), []);
   const decideReport = useCallback(async (reportId: ID, decision: 'remove' | 'restore' | 'suspend' | 'unsuspend' | 'dismiss') => {
     if (!live(stateRef.current.currentUserId, reportId)) return false;
@@ -2598,6 +2603,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       isChatBlocked,
       loadFollowsOf,
       loadReports,
+      loadWaitlist,
+      loadSiteFeedback,
       loadReportedItem,
       decideReport,
       openConversationWith,
@@ -2685,6 +2692,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       isChatBlocked,
       loadFollowsOf,
       loadReports,
+      loadWaitlist,
+      loadSiteFeedback,
       loadReportedItem,
       decideReport,
       openConversationWith,
