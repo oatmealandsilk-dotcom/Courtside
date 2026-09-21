@@ -10,6 +10,7 @@ import React, {
 } from 'react';
 import { AppState as DeviceState, Platform } from 'react-native';
 import { randomUUID } from 'expo-crypto';
+import { TERMS_VERSION } from '@/lib/legal';
 import { sourceUserIds } from '@/features/community/importedThreads';
 
 import { fetchBootstrap, fetchCommunityThreads, signIn as apiSignIn, type Bootstrap } from '@/data/api';
@@ -220,6 +221,12 @@ interface AppState extends Bootstrap {
   followingIds: ID[];
   /** True once the signed-in account's data has come down from Supabase. */
   remoteLoaded: boolean;
+  /**
+   * Which terms the signed-in account has agreed to: a version, null when it
+   * has agreed to none, or undefined while that is not known yet (so nobody
+   * is sent to agree before their account has even been read).
+   */
+  termsVersion: string | null | undefined;
   /** Logins remembered on this device, newest first. */
   savedAccounts: SavedAccount[];
   /** Every follow the app knows about, for followers and following lists. */
@@ -294,6 +301,8 @@ interface AppActions {
   /* Account centre */
   accountInfo: () => Promise<{ email: string; providers: string[]; createdAt: string; lastSignInAt: string | null; emailConfirmed: boolean } | null>;
   changePassword: (password: string) => Promise<void>;
+  /** Agree to the current terms, for an account that has not yet (a Google sign-up, or one made before). */
+  acceptTerms: () => Promise<void>;
   changeEmail: (email: string) => Promise<void>;
   signOutEverywhere: () => Promise<void>;
   /** Signs in as an account remembered on this device, without a password. */
@@ -512,6 +521,12 @@ function dropFixtures(state: AppState): AppState {
   };
 }
 
+/** The terms version an account agreed to, from what is written on the account itself. */
+const termsOf = (user: { user_metadata?: Record<string, unknown> }): string | null => {
+  const version = user.user_metadata?.terms_version;
+  return typeof version === 'string' ? version : null;
+};
+
 /** Whether an id names a row in Supabase rather than a fixture. */
 const live = (...ids: (ID | null | undefined)[]) => isSupabaseConfigured && ids.every((id) => !!id && UUID.test(id));
 
@@ -548,6 +563,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     followRequests: [],
     feed: { cursor: null, more: false },
     remoteLoaded: false,
+    termsVersion: undefined,
     savedAccounts: [],
     mutedIds: [],
     blockedIds: [],
@@ -831,7 +847,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // Known to be signed in: let the app open now and merge the feed in
         // when it lands, instead of holding the splash for the whole fetch.
         const me = data.session.user.id;
-        setState((prev) => ({ ...prev, currentUserId: prev.currentUserId ?? me, authResolved: true }));
+        setState((prev) => ({ ...prev, currentUserId: prev.currentUserId ?? me, authResolved: true, termsVersion: termsOf(data.session.user) }));
         loadRemote(me, data.session.user.email);
       } else setState((prev) => ({ ...prev, authResolved: true }));
     }).catch(() => setState((prev) => ({ ...prev, authResolved: true })));
@@ -844,10 +860,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         rememberAccount({ id: session.user.id, email: session.user.email ?? undefined, refreshToken: session.refresh_token })
           .then((savedAccounts) => { if (!cancelled) setState((prev) => ({ ...prev, savedAccounts })); });
       }
+      // The terms travel on the account, so every new look at it (signing in,
+      // switching accounts, agreeing just now) carries the current answer.
+      if (session) setState((prev) => ({ ...prev, termsVersion: termsOf(session.user) }));
       if (event === 'SIGNED_IN' && session) loadRemote(session.user.id, session.user.email);
       // A refreshed token after a failed first load: try again with the new one.
       if (event === 'TOKEN_REFRESHED' && session && !stateRef.current.remoteLoaded) loadRemote(session.user.id, session.user.email);
-      if (event === 'SIGNED_OUT') setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false }));
+      if (event === 'SIGNED_OUT') setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, termsVersion: undefined }));
     });
     // Tokens only refresh while the app is in front.
     const sub = DeviceState.addEventListener('change', (status) => {
@@ -910,6 +929,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const accountInfo = useCallback(async () => (isSupabaseConfigured ? remoteAuth.account() : null), []);
   const changePassword = useCallback((password: string) => remoteAuth.updatePassword(password), []);
+  const acceptTerms = useCallback(async () => {
+    await remoteAuth.acceptTerms();
+    setState((prev) => ({ ...prev, termsVersion: TERMS_VERSION }));
+  }, []);
   const changeEmail = useCallback((email: string) => remoteAuth.updateEmail(email), []);
   const linkGoogle = useCallback(() => remoteAuth.linkGoogle(), []);
   const signOutEverywhere = useCallback(async () => {
@@ -2523,6 +2546,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       signOut,
       accountInfo,
       changePassword,
+      acceptTerms,
       changeEmail,
       signOutEverywhere,
       switchAccount,
@@ -2609,6 +2633,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       signOut,
       accountInfo,
       changePassword,
+      acceptTerms,
       changeEmail,
       signOutEverywhere,
       switchAccount,

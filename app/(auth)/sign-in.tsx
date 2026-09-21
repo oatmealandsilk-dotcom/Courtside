@@ -7,6 +7,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { BrandMark } from '@/components/BrandMark';
+import { TermsCheck } from '@/components/TermsCheck';
 import { Avatar, Button, Field } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { useApp } from '@/store/AppContext';
@@ -48,6 +49,8 @@ export default function SignIn() {
   const [demoHandle, setDemoHandle] = useState('you');
   // New accounts give a date of birth before the account exists, so a child's details are never taken in.
   const [birth, setBirth] = useState({ month: '', day: '', year: '' });
+  // Starts unticked, every time: agreeing has to be something you did.
+  const [agreed, setAgreed] = useState(false);
   const [ageBlocked, setAgeBlocked] = useState(false);
   useEffect(() => { void isDeviceBlocked().then(setAgeBlocked); }, []);
   const birthDate = toBirthDate(birth.month, birth.day, birth.year);
@@ -80,7 +83,7 @@ export default function SignIn() {
 
   const cleanHandle = handle.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
   const ready = isSupabaseConfigured
-    ? email.includes('@') && password.length >= 6 && (mode === 'sign-in' || (name.trim().length > 0 && cleanHandle.length >= 2 && !!birthDate && !ageBlocked))
+    ? email.includes('@') && password.length >= 6 && (mode === 'sign-in' || (name.trim().length > 0 && cleanHandle.length >= 2 && !!birthDate && !ageBlocked && agreed))
     : demoHandle.trim().length > 0;
 
   const google = async () => {
@@ -211,7 +214,9 @@ export default function SignIn() {
                 <Pressable accessibilityRole="button" accessibilityLabel="Forgot password" onPress={forgot} hitSlop={8} style={{ alignSelf: 'flex-end' }}>
                   <Text style={styles.forgot}>Forgot password?</Text>
                 </Pressable>
-              ) : null}
+              ) : (
+                <TermsCheck checked={agreed} onChange={setAgreed} />
+              )}
             </>
           ) : (
             <Field

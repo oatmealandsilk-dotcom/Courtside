@@ -16,6 +16,7 @@ import { recallAnswered } from '@/features/age/ageCheck';
 import { setCrashScreen } from '@/lib/crashReporting';
 import { listenForPushTaps, registerForPush } from '@/features/push/push';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { TERMS_VERSION } from '@/lib/legal';
 import { colors } from '@/theme';
 
 const paths = { index: '/', discuss: '/discuss', coaches: '/coaches', profile: '/profile' } as const;
@@ -60,7 +61,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [pathname]);
-  const { currentUserId, currentUser, ready, authResolved, remoteLoaded, onboardingComplete } = useApp();
+  const { currentUserId, currentUser, ready, authResolved, remoteLoaded, onboardingComplete, termsVersion } = useApp();
   // Crash reports say which screen they happened on.
   useEffect(() => { setCrashScreen(pathname); }, [pathname]);
   // Alerts: a tap on one opens what it is about. Once someone is signed in
@@ -84,13 +85,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [currentUserId, currentUser?.ageGroup]);
   const needsBirthday = isSupabaseConfigured && !!currentUserId && remoteLoaded && !!currentUser && !currentUser.ageGroup
     && answered === null && !['/birthday', '/sign-in'].includes(pathname);
+  // The terms: an account that has not agreed to the current ones — a Google
+  // sign-up, one made before sign-up asked, or anyone after the terms change —
+  // agrees once before going further. It comes after the age check, so
+  // nobody under 13 is asked to agree to anything.
+  const needsTerms = isSupabaseConfigured && !!currentUserId && remoteLoaded && termsVersion !== undefined
+    && termsVersion !== TERMS_VERSION && !needsBirthday && !['/agree', '/birthday', '/sign-in'].includes(pathname);
   const { isPhone } = useResponsive();
   const selected = useRef(0);
   if (shown === '/') selected.current = 0;
   else if (shown === '/discuss' || shown.startsWith('/question/') || shown.startsWith('/user/')) selected.current = 1;
   else if (shown === '/coaches' || shown.startsWith('/coach/')) selected.current = 2;
   else if (shown === '/profile' || ['/settings', '/edit-profile', '/profile-details'].includes(shown)) selected.current = 3;
-  const showNav = !!currentUserId && !['/sign-in', '/onboarding'].includes(pathname);
+  const showNav = !!currentUserId && !['/sign-in', '/onboarding', '/agree'].includes(pathname);
   // A shared link opened while signed out goes to sign-in, not to an empty page.
   const mustSignIn = ready && authResolved && !currentUserId && !['/', '/index', '/sign-in', '/onboarding', '/birthday'].includes(pathname);
   const nav = <NavBar state={{ index: selected.current, routes }} navigation={{ navigate: name => {
@@ -114,6 +121,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   } }} />;
   if (mustSignIn) return <Redirect href="/sign-in" />;
   if (needsBirthday) return <Redirect href="/birthday" />;
+  if (needsTerms) return <Redirect href="/agree" />;
   return <View style={{ flex: 1, minHeight: 0, backgroundColor: colors.bg, flexDirection: isPhone ? 'column' : 'row' }}>
     {showNav && !isPhone && nav}
     <View style={{ flex: 1, minWidth: 0, minHeight: 0 }}><RouteTransition>{children}</RouteTransition><Toast /><UploadBar /></View>

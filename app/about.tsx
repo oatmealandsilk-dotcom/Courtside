@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BrandMark } from '@/components/BrandMark';
 import { Screen } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { openLegal } from '@/lib/legal';
 import { colors, radius, spacing, typography } from '@/theme';
 
 const VERSION = '0.1.0';
@@ -19,7 +20,7 @@ export default function About() {
       <View style={styles.hero}>
         <BrandMark size={56} />
         <Text style={styles.name}>CourtSide</Text>
-        <Text style={styles.version}>Version {VERSION} · demo build</Text>
+        <Text style={styles.version}>Version {VERSION}{isSupabaseConfigured ? '' : ' · demo build'}</Text>
       </View>
 
       <Text style={styles.body}>
@@ -29,14 +30,18 @@ export default function About() {
 
       <View style={styles.card}>
         {[
-          { icon: 'help-circle-outline', label: 'Help', to: '/help' },
-          { icon: 'shield-checkmark-outline', label: 'Privacy center', to: '/privacy' },
-          { icon: 'ribbon-outline', label: 'Apply to be a coach', to: '/coach-apply' },
+          { icon: 'help-circle-outline', label: 'Help', open: () => router.push('/help') },
+          { icon: 'shield-checkmark-outline', label: 'Privacy center', open: () => router.push('/privacy') },
+          { icon: 'ribbon-outline', label: 'Apply to be a coach', open: () => router.push('/coach-apply') },
+          // The documents themselves, a tap away whenever someone wants them,
+          // not only at the moment of signing up.
+          { icon: 'document-text-outline', label: 'Terms of Use', open: () => openLegal('terms'), external: true },
+          { icon: 'lock-closed-outline', label: 'Privacy Policy', open: () => openLegal('privacy'), external: true },
         ].map((row, index) => (
-          <Pressable key={row.label} accessibilityRole="link" onPress={() => router.push(row.to)} style={[styles.row, index > 0 && styles.rowBorder]}>
+          <Pressable key={row.label} accessibilityRole="link" onPress={row.open} style={[styles.row, index > 0 && styles.rowBorder]}>
             <Ionicons name={row.icon as keyof typeof Ionicons.glyphMap} size={20} color={colors.text} />
             <Text style={styles.rowLabel}>{row.label}</Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+            <Ionicons name={row.external ? 'open-outline' : 'chevron-forward'} size={16} color={colors.textFaint} />
           </Pressable>
         ))}
       </View>

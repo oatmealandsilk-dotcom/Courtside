@@ -13,6 +13,7 @@ import * as WebBrowser from 'expo-web-browser';
 
 import { supabase } from '@/lib/supabase';
 import type { Answer, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, Question, Story, Tip, User, CoachApplication } from './types';
+import { TERMS_VERSION } from '@/lib/legal';
 
 const need = () => {
   if (!supabase) throw new Error('Supabase is not configured');
@@ -1139,7 +1140,9 @@ export const auth = {
     const { data, error } = await need().auth.signUp({
       email: email.trim(),
       password,
-      options: { data: { name: name.trim(), handle: handle.trim().toLowerCase() } },
+      // The sign-up form cannot be sent without ticking the terms, so the
+      // agreement is written onto the account as it is made.
+      options: { data: { name: name.trim(), handle: handle.trim().toLowerCase(), terms_version: TERMS_VERSION, terms_accepted_at: new Date().toISOString() } },
     });
     if (error) throw new Error(error.message);
     // With email confirmation on, there is no session yet; the screen says so.
@@ -1220,6 +1223,11 @@ export const auth = {
     const base = (process.env.EXPO_BASE_URL ?? '').replace(/\/$/, '');
     const redirectTo = Platform.OS === 'web' ? `${window.location.origin}${base}/account?reset=1` : 'https://oatmealandsilk-dotcom.github.io/Courtside/account?reset=1';
     const { error } = await need().auth.resetPasswordForEmail(email.trim(), { redirectTo });
+    if (error) throw new Error(error.message);
+  },
+  /** Records that this account agreed to the current terms, on the account itself. */
+  async acceptTerms() {
+    const { error } = await need().auth.updateUser({ data: { terms_version: TERMS_VERSION, terms_accepted_at: new Date().toISOString() } });
     if (error) throw new Error(error.message);
   },
   async updatePassword(password: string) {
