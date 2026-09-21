@@ -671,6 +671,13 @@ export const remote = {
       .map((r) => ({ id: r.id, message: r.message, email: r.email ?? undefined, createdAt: r.created_at }));
   },
 
+  /** Takes one row off the waitlist or out of the feedback box. Admins only; resolves false when refused. */
+  async removeFromWaitlistPage(table: 'waitlist' | 'site_feedback', id: string): Promise<boolean> {
+    const { data, error } = await need().from(table).delete().eq('id', id).select('id');
+    if (error) { fail('remove from ' + table)(error); return false; }
+    return (data ?? []).length > 0;
+  },
+
   /** Every report, newest first. Only admins can read them; for anyone else the list is empty. */
   async fetchReports(): Promise<AdminReport[]> {
     const { data, error } = await need().from('reports').select('*').order('created_at', { ascending: false }).limit(300);
