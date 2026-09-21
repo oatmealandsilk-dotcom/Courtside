@@ -840,7 +840,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
 
               if (post.kind !== 'clip') {
                 return (
-                  <View key={post.id} style={[styles.article, scope && styles.articleScoped]}>
+                  <View key={post.id} style={[styles.article, scope && styles.articleScoped, !phone && styles.articleCentred]}>
                     {/* Inside one person's posts the feed label means nothing, and the back chevron wants the room. */}
                     {scope ? null : <Text style={styles.eyebrow}>
                       {post.kind === 'match' ? 'SET PLAY' : post.kind.toUpperCase()} · FOR YOU
@@ -1160,6 +1160,9 @@ const styleDefinitions = StyleSheet.create({
   article: { flex: 1, backgroundColor: colors.bg, padding: 20, paddingTop: 64, paddingBottom: 32, gap: 20 },
   // In a scoped feed the back chevron has its own line above the words.
   articleScoped: { paddingTop: 116 },
+  // On a computer a written post is a centred column like a photo post, not
+  // a card stretched across the whole window with its words at the far left.
+  articleCentred: { width: '100%', maxWidth: 600, alignSelf: 'center' },
   strip: { gap: 6, paddingBottom: 4 },
   stripHead: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   stripTitle: { fontSize: 13, fontWeight: '700', color: colors.text },
