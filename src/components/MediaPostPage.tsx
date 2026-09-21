@@ -55,15 +55,16 @@ interface Props {
  * in the app's own type and colours, rather than painted over the picture.
  */
 const desktopWeb = Platform.OS === 'web' && isDesktopBrowser();
-/** How far in from the page edge a post sits on a computer; the wordmark above it lines up with this. */
+/** The breathing room either side of a post on a computer, when the window has it to spare. */
 export const LANE_INSET = 28;
 /**
- * How far in a post sits from the page's edge on a computer, for a content
+ * How much room to keep either side of a post on a computer, for a content
  * column of a given width: the full inset when there is room for it, none on
- * a narrow window. The Home wordmark uses the same rule, so the two always
- * share one left edge.
+ * a narrow window.
  */
 export const laneInsetFor = (columnWidth: number) => (desktopWeb && columnWidth >= 520 + LANE_INSET * 2 ? LANE_INSET : 0);
+/** The narrowest the words and buttons under a post get, so a tall picture never squeezes them. */
+const LANE_MIN = 400;
 
 function MediaPostPageInner({ post, author, liked, saved, active, preload = false, onDoubleTap, onToggleLike, onToggleSave, onComment, onShare, onMore, topInset, burst, pop = 0, discInk, onReady }: Props) {
   const styles = useThemedStyles(styleDefinitions);
@@ -139,20 +140,21 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
   // picture's own shape: never stretched across a wide window and cropped
   // down to fit its height. A tall picture may take 62% of the page's height.
   const [room, setRoom] = useState<{ w: number; h: number } | null>(null);
-  // The inset from the left edge only when the window has room for it: a
-  // narrow computer window (or a side panel) gets the post edge to edge.
+  // Room either side only when the window has it: a narrow computer window
+  // (or a side panel) gets the post edge to edge.
   const inset = room ? laneInsetFor(room.w) : 0;
   const frameSize = (() => {
     if (!room) return null;
     const ratio = landscape ? (shape ?? 16 / 9) : (!post.videoUrl && shape ? shape : 4 / 5);
-    const h = Math.min(room.h * 0.62, (room.w - inset) / ratio);
+    const h = Math.min(room.h * 0.62, (room.w - inset * 2) / ratio);
     return { width: Math.round(h * ratio), height: Math.round(h) };
   })();
-  // On a computer the post reads left to right: the picture sits at the left
-  // at its own size, and the name, buttons and words line up under it, the
-  // width of the picture (never cramped narrower than a phone).
-  // It is never wider than the window, though: a fixed 520 ran off the right edge of a narrow one.
-  const lane = desktopWeb && frameSize && room ? { width: Math.min(Math.max(frameSize.width, 520), room.w - inset), alignSelf: 'flex-start' as const, marginLeft: inset } : null;
+  // On a computer the post is one centred column, the way it is on a phone:
+  // the picture in the middle at its own size, and the name above it and the
+  // words and buttons below it the same width, so all of it shares two edges.
+  // A tall, narrow picture still leaves the words a readable width, and
+  // nothing is ever wider than the window.
+  const lane = desktopWeb && frameSize && room ? { width: Math.min(Math.max(frameSize.width, LANE_MIN), room.w - inset * 2), alignSelf: 'center' as const } : null;
 
   return (
     // Without comments there is nothing to fill the bottom, so the picture and
@@ -176,7 +178,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
       {/* A finger on the picture belongs to the picture: no sideways page swipe from here. */}
       <View
         ref={frameRef}
-        style={[styles.frame, landscape ? styles.frameWide : styles.frameTall, lane && { alignSelf: 'flex-start', marginLeft: inset }, frameSize ?? (landscape ? { alignSelf: 'stretch', aspectRatio: shape ?? 16 / 9 } : { width: '100%', maxHeight: '62%', aspectRatio: !post.videoUrl && shape ? shape : 4 / 5 })]}
+        style={[styles.frame, landscape ? styles.frameWide : styles.frameTall, frameSize ?? (landscape ? { alignSelf: 'stretch', aspectRatio: shape ?? 16 / 9 } : { width: '100%', maxHeight: '62%', aspectRatio: !post.videoUrl && shape ? shape : 4 / 5 })]}
         onTouchStart={() => lockPageSwipe(true)}
         onTouchEnd={() => lockPageSwipe(false)}
         onTouchCancel={() => lockPageSwipe(false)}
