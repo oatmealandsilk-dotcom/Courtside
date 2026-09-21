@@ -154,7 +154,18 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
   // words and buttons below it the same width, so all of it shares two edges.
   // A tall, narrow picture still leaves the words a readable width, and
   // nothing is ever wider than the window.
-  const lane = desktopWeb && frameSize && room ? { width: Math.min(Math.max(frameSize.width, LANE_MIN), room.w - inset * 2), alignSelf: 'center' as const } : null;
+  //
+  // Until the page has measured itself, the column already stands in the
+  // middle at its narrowest width. Without this it began stretched across the
+  // whole window, the name and words starting at the far left, and only
+  // jumped to the centre half a second later.
+  const firstLane = desktopWeb ? { width: '100%' as const, maxWidth: LANE_MIN, alignSelf: 'center' as const } : null;
+  const lane = desktopWeb && frameSize && room ? { width: Math.min(Math.max(frameSize.width, LANE_MIN), room.w - inset * 2), alignSelf: 'center' as const } : firstLane;
+  // The picture's stand-in size for that same first moment: centred, and no
+  // wider than the column it will sit in.
+  const firstFrame = landscape
+    ? (desktopWeb ? { width: '100%' as const, maxWidth: LANE_MIN, alignSelf: 'center' as const, aspectRatio: shape ?? 16 / 9 } : { alignSelf: 'stretch' as const, aspectRatio: shape ?? 16 / 9 })
+    : { width: '100%' as const, maxHeight: '62%' as const, aspectRatio: !post.videoUrl && shape ? shape : 4 / 5, ...(desktopWeb ? { maxWidth: LANE_MIN } : null) };
 
   return (
     // Without comments there is nothing to fill the bottom, so the picture and
@@ -178,7 +189,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
       {/* A finger on the picture belongs to the picture: no sideways page swipe from here. */}
       <View
         ref={frameRef}
-        style={[styles.frame, landscape ? styles.frameWide : styles.frameTall, frameSize ?? (landscape ? { alignSelf: 'stretch', aspectRatio: shape ?? 16 / 9 } : { width: '100%', maxHeight: '62%', aspectRatio: !post.videoUrl && shape ? shape : 4 / 5 })]}
+        style={[styles.frame, landscape ? styles.frameWide : styles.frameTall, frameSize ?? firstFrame]}
         onTouchStart={() => lockPageSwipe(true)}
         onTouchEnd={() => lockPageSwipe(false)}
         onTouchCancel={() => lockPageSwipe(false)}
