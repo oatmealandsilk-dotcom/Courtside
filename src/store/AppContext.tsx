@@ -394,6 +394,8 @@ interface AppActions {
   /** Admins only: the waitlist and the waitlist page's feedback. */
   loadWaitlist: () => Promise<WaitlistEntry[]>;
   loadSiteFeedback: () => Promise<SiteFeedback[]>;
+  /** Admins only: take someone off the waitlist (they asked), or clear a feedback note. */
+  removeFromWaitlistPage: (table: 'waitlist' | 'site_feedback', id: ID) => Promise<boolean>;
   loadReportedItem: (kind: 'post' | 'hit', id: ID) => Promise<{ body: string; picture?: string; removed: boolean } | null>;
   decideReport: (reportId: ID, decision: 'remove' | 'restore' | 'suspend' | 'unsuspend' | 'dismiss') => Promise<boolean>;
 
@@ -1773,6 +1775,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const loadReports = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchReports() : []), []);
   const loadWaitlist = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchWaitlist() : []), []);
   const loadSiteFeedback = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchSiteFeedback() : []), []);
+  const removeFromWaitlistPage = useCallback(async (table: 'waitlist' | 'site_feedback', id: ID) => (live(stateRef.current.currentUserId, id) ? remote.removeFromWaitlistPage(table, id) : false), []);
   const loadReportedItem = useCallback(async (kind: 'post' | 'hit', id: ID) => (live(stateRef.current.currentUserId, id) ? remote.fetchReportedItem(kind, id) : null), []);
   const decideReport = useCallback(async (reportId: ID, decision: 'remove' | 'restore' | 'suspend' | 'unsuspend' | 'dismiss') => {
     if (!live(stateRef.current.currentUserId, reportId)) return false;
@@ -2605,6 +2608,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadReports,
       loadWaitlist,
       loadSiteFeedback,
+      removeFromWaitlistPage,
       loadReportedItem,
       decideReport,
       openConversationWith,
@@ -2694,6 +2698,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadReports,
       loadWaitlist,
       loadSiteFeedback,
+      removeFromWaitlistPage,
       loadReportedItem,
       decideReport,
       openConversationWith,
