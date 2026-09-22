@@ -467,6 +467,56 @@
     form.replaceWith(box);
   }
 
+  // A short burst of colour when someone joins — the one moment on this page
+  // worth marking. Nothing is drawn for anyone who has asked for less motion.
+  function celebrate() {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const style = getComputedStyle(document.documentElement);
+    const palette = ['--brand', '--brand', '--text', '--border-strong', '--danger']
+      .map((name) => style.getPropertyValue(name).trim() || '#3F7049');
+    const canvas = document.createElement('canvas');
+    canvas.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:50';
+    document.body.append(canvas);
+    const ctx = canvas.getContext('2d');
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = innerWidth * dpr;
+    canvas.height = innerHeight * dpr;
+    ctx.scale(dpr, dpr);
+    // Thrown up from below the middle, the way a ball leaves the hand on a toss.
+    const pieces = Array.from({ length: 80 }, () => ({
+      x: innerWidth / 2 + (Math.random() - 0.5) * 140,
+      y: innerHeight * 0.64,
+      vx: (Math.random() - 0.5) * 11,
+      vy: -(9 + Math.random() * 9),
+      size: 5 + Math.random() * 6,
+      angle: Math.random() * Math.PI,
+      spin: (Math.random() - 0.5) * 0.3,
+      colour: palette[Math.floor(Math.random() * palette.length)],
+    }));
+    const LIFE = 1900;
+    const started = performance.now();
+    (function frame(now) {
+      const age = now - started;
+      ctx.clearRect(0, 0, innerWidth, innerHeight);
+      for (const piece of pieces) {
+        piece.vy += 0.34;
+        piece.vx *= 0.995;
+        piece.x += piece.vx;
+        piece.y += piece.vy;
+        piece.angle += piece.spin;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, 1 - age / LIFE);
+        ctx.translate(piece.x, piece.y);
+        ctx.rotate(piece.angle);
+        ctx.fillStyle = piece.colour;
+        ctx.fillRect(-piece.size / 2, -piece.size / 4, piece.size, piece.size / 2);
+        ctx.restore();
+      }
+      if (age < LIFE) requestAnimationFrame(frame);
+      else canvas.remove();
+    })(started);
+  }
+
   const failures = {
     busy: 'Lots of people are signing up right now. Give it a minute and try again.',
     offline: 'That didn’t go through — check your connection and try again.',
@@ -500,6 +550,7 @@
         confirmIn(form,
           result === 'ok' ? 'You’re on the list.' : 'You’re already on the list.',
           `We’ll email ${email} when your invite to the iPhone app is ready.`);
+        celebrate();
         return;
       }
       msg.className = 'msg error';
