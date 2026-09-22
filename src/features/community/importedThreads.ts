@@ -1,23 +1,23 @@
 import type { ID, Question, QuestionTopic, ThreadSourceName, User } from '@/data/types';
 
 /**
- * Live threads from the two places tennis players already talk: Reddit
- * (r/10s and r/tennis) and the Tennis Warehouse "Talk Tennis" forum. They
- * fill the Discussions board on day one, when nobody has posted here yet.
+ * Live threads from Reddit (r/10s and r/tennis), to give the Discussions board
+ * something to read before people post their own.
  *
- * Neither site lets a browser read it directly (Reddit only answers
- * registered apps, Talk Tennis blocks cross-site requests), so a scheduled
- * job — scripts/community-feeds.mjs, run by GitHub Actions — fetches both
- * and saves public/community.json next to the site. That file is the first
- * thing tried here. The live fetches below are the fallback for the native
- * app, which can reach Talk Tennis on its own, and for a relay set in
+ * Reddit only answers registered apps, so a scheduled job —
+ * scripts/community-feeds.mjs, run by GitHub Actions — fetches them and saves
+ * public/community.json next to the site. That file is the first thing tried
+ * here; the live fetch below is the fallback, through a relay set in
  * EXPO_PUBLIC_FEED_PROXY.
+ *
+ * Talk Tennis (Tennis Warehouse's forum) used to be carried in too. It no
+ * longer is: its threads are dropped even if an older saved file still has
+ * them.
  */
 
 const SUBREDDITS = ['10s', 'tennis'];
 const REDDIT_LIMIT = 20;
-const TW_RSS = 'https://tt.tennis-warehouse.com/index.php?forums/-/index.rss';
-const CACHE_KEY = 'courtside-imported-threads';
+const CACHE_KEY = 'courtside-imported-threads-v2';
 const CACHE_TTL_MS = 60 * 60 * 1000;
 const TIMEOUT_MS = 8000;
 
@@ -44,11 +44,6 @@ export const SOURCE_USERS: Record<ThreadSourceName, User> = {
   reddit: {
     id: 'u-src-reddit', handle: 'reddit', name: 'Reddit tennis', bio: 'Threads from r/10s and r/tennis.',
     location: 'reddit.com', joinedAt: '2008-01-25T00:00:00.000Z', avatarSeed: 'reddit-tennis', isCoach: false,
-    followers: 0, following: 0, achievementIds: [], stats, profile: sourceProfile,
-  },
-  'tennis-warehouse': {
-    id: 'u-src-tw', handle: 'talktennis', name: 'Talk Tennis', bio: 'Threads from the Tennis Warehouse forum.',
-    location: 'tt.tennis-warehouse.com', joinedAt: '1999-01-01T00:00:00.000Z', avatarSeed: 'talk-tennis', isCoach: false,
     followers: 0, following: 0, achievementIds: [], stats, profile: sourceProfile,
   },
 };
@@ -156,33 +151,6 @@ export async function fetchRedditThreads(): Promise<Question[]> {
     );
 }
 
-export async function fetchTennisWarehouseThreads(): Promise<Question[]> {
-  const proxy = process.env.EXPO_PUBLIC_FEED_PROXY ?? '';
-  const url = proxy ? `${proxy}${encodeURIComponent(TW_RSS)}` : TW_RSS;
-  const res = await withTimeout(fetch(url));
-  if (!res.ok) throw new Error(`talk tennis ${res.status}`);
-  const xml = await res.text();
-  const items = xml.match(/<item>[\s\S]*?<\/item>/g) ?? [];
-  const field = (item: string, tag: string) =>
-    item.match(new RegExp(`<${tag}[^>]*>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?<\\/${tag}>`))?.[1] ?? '';
-  return items.slice(0, 25).map((item) => {
-    const link = field(item, 'link').trim();
-    const id = link.match(/\.(\d+)\/?$/)?.[1] ?? link.replace(/\W+/g, '').slice(-16);
-    return makeQuestion({
-      id: `q-tw-${id}`,
-      source: 'tennis-warehouse',
-      label: 'Talk Tennis',
-      title: unescapeHtml(field(item, 'title')).slice(0, 180),
-      body: unescapeHtml(field(item, 'description') || field(item, 'content:encoded')).slice(0, 600),
-      url: link,
-      author: unescapeHtml(field(item, 'dc:creator') || field(item, 'author')) || 'Talk Tennis member',
-      createdAt: new Date(field(item, 'pubDate') || Date.now()).toISOString(),
-      votes: 0,
-      replies: 0,
-    });
-  }).filter((q) => q.title);
-}
-
 /* ------------------------------ Saved file ------------------------------- */
 
 interface SavedThread {
@@ -201,7 +169,8 @@ export async function fetchSavedThreads(): Promise<Question[]> {
   const res = await withTimeout(fetch(savedFileUrl(), { cache: 'no-cache' }));
   if (!res.ok) throw new Error(`community.json ${res.status}`);
   const json = (await res.json()) as { threads?: SavedThread[] };
-  return (json.threads ?? []).filter((t) => t && t.id && t.title && t.url).map((t) => makeQuestion(t));
+  // Only sources still carried: an older file may hold Talk Tennis threads.
+  return (json.threads ?? []).filter((t) => t && t.id && t.title && t.url && t.source === 'reddit').map((t) => makeQuestion(t));
 }
 
 /* --------------------------------- Cache --------------------------------- */
@@ -236,11 +205,11 @@ export async function fetchImportedThreads(): Promise<ImportedBundle> {
     // No saved file (or it is unreachable): try the sources directly.
   }
   if (!questions.length) {
-    const [reddit, tw] = await Promise.allSettled([fetchRedditThreads(), fetchTennisWarehouseThreads()]);
-    questions = [
-      ...(reddit.status === 'fulfilled' ? reddit.value : []),
-      ...(tw.status === 'fulfilled' ? tw.value : []),
-    ];
+    try {
+      questions = await fetchRedditThreads();
+    } catch {
+      // Reddit is down or refusing: the board just shows people's own threads.
+    }
   }
   const used = new Set(questions.map((q) => q.authorId));
   const bundle: ImportedBundle = {
