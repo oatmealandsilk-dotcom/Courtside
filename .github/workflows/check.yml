@@ -1,0 +1,36 @@
+# Every change is type-checked before it can go live.
+#
+# `npm run typecheck` is the project's only automated check, and until now it
+# only ran when someone remembered to. With more than one person (and more
+# than one Claude) sending changes, it runs here on every pull request and
+# every pushed branch, so a change that breaks the build shows a red cross on
+# GitHub before anyone merges it, instead of breaking the live site after.
+name: Check
+
+on:
+  pull_request:
+  push:
+    branches-ignore: [gh-pages]
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Installed the same way the deploy installs them.
+      - name: Install
+        run: npm install --legacy-peer-deps
+
+      - name: Type-check
+        run: npm run typecheck
