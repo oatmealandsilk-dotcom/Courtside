@@ -1258,3 +1258,26 @@ export const auth = {
     await need().auth.signOut();
   },
 };
+
+/* ------------------------------------------------------------- waitlist */
+
+/** Whether the address was added, or was already on the list. */
+export type WaitlistResult = 'joined' | 'already-joined';
+
+/**
+ * Put someone on the launch waitlist. Unlike everything above this needs no
+ * account: the table's insert policy is open to anonymous visitors, and
+ * nothing here reads the list back.
+ */
+export async function joinWaitlist(entry: { email: string; name?: string; note?: string }): Promise<WaitlistResult> {
+  const { error } = await need().from('waitlist').insert({
+    email: entry.email.trim(),
+    name: entry.name?.trim() ?? '',
+    note: entry.note?.trim() ?? '',
+  });
+  if (!error) return 'joined';
+  // The unique index on the address: they signed up already, which is not a
+  // failure worth showing as one.
+  if (error.code === '23505') return 'already-joined';
+  throw new Error(error.message);
+}

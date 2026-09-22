@@ -99,7 +99,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   else if (shown === '/profile' || ['/settings', '/edit-profile', '/profile-details'].includes(shown)) selected.current = 3;
   const showNav = !!currentUserId && !['/sign-in', '/onboarding', '/agree'].includes(pathname);
   // A shared link opened while signed out goes to sign-in, not to an empty page.
-  const mustSignIn = ready && authResolved && !currentUserId && !['/', '/index', '/sign-in', '/onboarding', '/birthday'].includes(pathname);
+  // The waitlist is the exception: it exists for people who have no account yet.
+  const mustSignIn = ready && authResolved && !currentUserId && !['/', '/index', '/sign-in', '/onboarding', '/birthday', '/waitlist'].includes(pathname);
   const nav = <NavBar state={{ index: selected.current, routes }} navigation={{ navigate: name => {
     const destination = paths[name as keyof typeof paths];
     if (!destination) return;
