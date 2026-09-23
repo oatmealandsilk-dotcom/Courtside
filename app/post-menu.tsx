@@ -56,7 +56,7 @@ export default function PostMenu() {
 
   if (!item) return <View style={styles.backdrop}><SheetBackdrop /><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => goBack('/')} style={StyleSheet.absoluteFill} /></View>;
 
-  const url = `https://oatmealandsilk-dotcom.github.io/Courtside/post/${item.id}`;
+  const url = `https://app.courtsidebase.com/post/${item.id}`;
   // A hit is a moment, not a keepsake: nothing to save or send on.
   const rows: Row[] = post ? [
     { key: 'save', icon: isSaved ? 'bookmark' : 'bookmark-outline', label: isSaved ? 'Remove from saved' : 'Save', onPress: () => { actions.toggleSavePost(post.id); close(); } },

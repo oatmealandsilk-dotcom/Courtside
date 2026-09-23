@@ -45,7 +45,9 @@ jobs:
       - name: Export static web build
         env:
           # Project pages are served from https://<user>.github.io/<repo>/
-          EXPO_BASE_URL: /${{ github.event.repository.name }}
+          # Served from app.courtsidebase.com (see public/CNAME), so the app sits
+          # at the root rather than under /<repo>.
+          EXPO_BASE_URL: ''
           # Public-safe values, kept out of the repo so .env never needs to be
           # committed. Set under Settings → Secrets and variables → Variables.
           EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL }}

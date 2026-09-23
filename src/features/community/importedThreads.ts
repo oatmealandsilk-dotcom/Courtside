@@ -162,7 +162,7 @@ interface SavedThread {
 function savedFileUrl(): string {
   const base = (process.env.EXPO_BASE_URL ?? '').replace(/\/$/, '');
   if (typeof window !== 'undefined' && window.location?.origin) return `${window.location.origin}${base}/community.json`;
-  return 'https://oatmealandsilk-dotcom.github.io/Courtside/community.json';
+  return 'https://app.courtsidebase.com/community.json';
 }
 
 export async function fetchSavedThreads(): Promise<Question[]> {
