@@ -89,7 +89,7 @@ export default function ShareSheet() {
     setTimeout(dismiss, 900);
   };
 
-  const url = `https://oatmealandsilk-dotcom.github.io/Courtside/${kind === 'profile' ? 'user' : kind}/${id}`;
+  const url = `https://app.courtsidebase.com/${kind === 'profile' ? 'user' : kind}/${id}`;
   const shareOut = async () => {
     try { setFallbackNote(await shareOutside(title, url)); }
     catch { setFallbackNote(`Share this link: ${url}`); }

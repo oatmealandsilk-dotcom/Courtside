@@ -1,6 +1,6 @@
 name: Refresh community threads
 
-# Fetches the latest Talk Tennis and Reddit threads into public/community.json.
+# Fetches the latest Reddit threads into public/community.json.
 # Committing the file to main triggers the normal web deploy, so the live site
 # picks up fresh threads within a few minutes of each run.
 on:

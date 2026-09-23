@@ -103,7 +103,7 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
 }
 
 /**
- * Threads pulled in from Reddit and Talk Tennis so the board is never empty.
+ * Threads pulled in from Reddit so the board is never empty.
  * Fetched after the bootstrap so a slow feed never delays the app opening.
  * A real backend does this on a schedule and serves the result from here.
  */

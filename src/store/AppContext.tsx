@@ -473,7 +473,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function dropFixtures(state: AppState): AppState {
   if (!isSupabaseConfigured) return state;
   const real = <T extends { id: ID }>(rows: T[]) => rows.filter((row) => UUID.test(row.id));
-  // Threads carried in from Reddit and Talk Tennis stay. They are not invented:
+  // Threads carried in from Reddit stay. They are not invented:
   // each one names the forum it came from and the person who wrote it, and
   // links back to the original. Their two source accounts stay with them, or
   // the threads would have nobody's name on them.

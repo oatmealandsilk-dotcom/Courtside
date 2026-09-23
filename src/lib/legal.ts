@@ -14,7 +14,7 @@ export function legalUrl(page: 'terms' | 'privacy'): string {
     const base = (process.env.EXPO_BASE_URL ?? '').replace(/\/$/, '');
     return `${window.location.origin}${base}/${page}.html`;
   }
-  return `https://oatmealandsilk-dotcom.github.io/Courtside/${page}.html`;
+  return `https://app.courtsidebase.com/${page}.html`;
 }
 
 /** Opens the terms or the privacy policy without losing your place in the app. */

@@ -1248,7 +1248,7 @@ export const auth = {
   /** Sends the "set a new password" email. The link signs them in on the site, where the account page takes the new password. */
   async requestPasswordReset(email: string) {
     const base = (process.env.EXPO_BASE_URL ?? '').replace(/\/$/, '');
-    const redirectTo = Platform.OS === 'web' ? `${window.location.origin}${base}/account?reset=1` : 'https://oatmealandsilk-dotcom.github.io/Courtside/account?reset=1';
+    const redirectTo = Platform.OS === 'web' ? `${window.location.origin}${base}/account?reset=1` : 'https://app.courtsidebase.com/account?reset=1';
     const { error } = await need().auth.resetPasswordForEmail(email.trim(), { redirectTo });
     if (error) throw new Error(error.message);
   },

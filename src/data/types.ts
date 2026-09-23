@@ -251,11 +251,11 @@ export interface Question {
   source?: ThreadSource;
 }
 
-export type ThreadSourceName = 'reddit' | 'tennis-warehouse';
+export type ThreadSourceName = 'reddit';
 
 export interface ThreadSource {
   name: ThreadSourceName;
-  /** e.g. "r/10s" or "Talk Tennis" */
+  /** e.g. "r/10s" */
   label: string;
   url: string;
   author: string;

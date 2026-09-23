@@ -50,7 +50,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const underline = useTabUnderline(sectionIndex, 2, tabWidth);
   const [search, setSearch] = useState('');
   const location = useLocationToggle();
-  // The accounts that threads are pulled in under (Reddit, Talk Tennis) are not players.
+  // The account that threads are pulled in under (Reddit) is not a player.
   const players = users.filter(u => u.id !== currentUserId && !blockedIds.includes(u.id) && !sourceUserIds.includes(u.id) && `${u.name} ${u.handle} ${u.location}`.toLowerCase().includes(search.toLowerCase()));
   const [topic, setTopic] = useState<QuestionTopic | 'all'>('all');
   // A topic picked from a thread's label may sit off the end of the strip: the strip slides it into view.
