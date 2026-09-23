@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, lightColors } from './index';
 
 type Palette = Record<keyof typeof lightColors, string>;
@@ -15,6 +16,20 @@ export const darkColors: Palette = {
   brand: '#6FB483', brandInk: '#0C1710', brandDim: '#1F2E25', court: '#6FB483', clay: '#C98A6A',
   hard: '#7FA9C4', grass: '#86B393', info: '#7FA9C4', success: '#6FB483', warning: '#D2B36A', danger: '#D97F73',
   overlay: 'rgba(0, 0, 0, 0.65)',
+};
+
+/**
+ * Clean — a plain white page, the way X, Instagram and Strava are built. No
+ * warmth in the neutrals at all: white ground, near-black text, grey hairlines.
+ * The green is lifted a little from the default one, which was mixed for paper
+ * and goes slightly flat against pure white.
+ */
+const cleanColors: Palette = {
+  bg: '#FFFFFF', bgElevated: '#F7F8F8', surface: '#FAFAFA', surfaceAlt: '#F0F1F1',
+  border: '#E6E7E8', borderStrong: '#C7CACC', text: '#0F1419', textMuted: '#536471', textFaint: '#5F6871',
+  brand: '#2C7446', brandInk: '#FFFFFF', brandDim: '#E8F3EC', court: '#2C7446', clay: '#B4653A',
+  hard: '#2C6885', grass: '#477F50', info: '#2C6885', success: '#2C7446', warning: '#806311', danger: '#B93129',
+  overlay: 'rgba(15, 20, 25, 0.5)',
 };
 
 /**
@@ -67,10 +82,11 @@ const usOpenColors: Palette = {
   overlay: 'rgba(4, 12, 22, 0.7)',
 };
 
-export type ThemeName = 'default' | 'night' | 'ao' | 'roland-garros' | 'wimbledon' | 'us-open';
+export type ThemeName = 'default' | 'clean' | 'night' | 'ao' | 'roland-garros' | 'wimbledon' | 'us-open';
 
 export const themes: Record<ThemeName, Palette> = {
   default: { ...lightColors },
+  clean: cleanColors,
   night: darkColors,
   ao: aoColors,
   'roland-garros': rolandGarrosColors,
@@ -80,6 +96,7 @@ export const themes: Record<ThemeName, Palette> = {
 
 export const themeList: { name: ThemeName; label: string; blurb: string }[] = [
   { name: 'default', label: 'CourtSide', blurb: 'Warm neutrals, club green' },
+  { name: 'clean', label: 'Clean', blurb: 'Plain white, black text' },
   { name: 'night', label: 'Night', blurb: 'Dark, for late sessions' },
   { name: 'ao', label: 'Australian Open', blurb: 'Blue hard court' },
   { name: 'roland-garros', label: 'Roland Garros', blurb: 'Crushed brick clay' },
@@ -113,11 +130,29 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, updateTheme] = useState<ThemeName>(readStored);
   Object.assign(colors, themes[theme]);
 
+  // A phone has no localStorage, and its own store can only be read back
+  // asynchronously — so the app opens on the default and switches to the saved
+  // theme on the first frame after. Without this the choice lasted until the
+  // app was closed.
+  useEffect(() => {
+    if (Platform.OS === 'web') return undefined;
+    let live = true;
+    AsyncStorage.getItem(STORAGE_KEY)
+      .then((saved) => {
+        if (!live || !saved || !(saved in themes)) return;
+        Object.assign(colors, themes[saved as ThemeName]);
+        updateTheme(saved as ThemeName);
+      })
+      .catch(() => {});
+    return () => { live = false; };
+  }, []);
+
   const setTheme = (name: ThemeName) => {
     Object.assign(colors, themes[name]);
     updateTheme(name);
     try {
       if (Platform.OS === 'web') localStorage.setItem(STORAGE_KEY, name);
+      else void AsyncStorage.setItem(STORAGE_KEY, name);
     } catch {}
   };
 

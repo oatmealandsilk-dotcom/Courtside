@@ -257,7 +257,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
               <Image source={{ uri: value.kind === 'photo' ? value.uri : value.thumbnailUrl }}
                 resizeMode="contain" style={{ width: '100%', height: '100%' }}/>
             ) : (
-              <Ionicons name="videocam" size={40} color="#6B7A6E"/>
+              <Ionicons name="videocam" size={40} color={colors.textFaint}/>
             )}
             {value.kind === 'video' && (
               <View style={{ position: 'absolute', alignItems: 'center', justifyContent: 'center' }}>

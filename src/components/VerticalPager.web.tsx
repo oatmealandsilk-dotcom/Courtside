@@ -5,6 +5,7 @@ import { pagerStep } from '@/lib/pagerGesture';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { colors } from '@/theme';
+import { useTheme } from '@/theme/ThemeProvider';
 
 export interface VerticalPagerHandle { scrollToTop: () => void }
 
@@ -26,6 +27,9 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   pullHeader?: React.ReactNode;
 }>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0, onRefresh, pullHeader }, ref) {
   // The pull: how far (0..1 of the line), and whether the fetch is running.
+  // The scrollbar is part of the design too: reading the theme here is what
+  // redraws it when the palette changes.
+  useTheme();
   const [pullAmount, setPullAmount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const refreshRef = useRef(onRefresh); refreshRef.current = onRefresh;
@@ -198,7 +202,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
       onIndex(index);
     }}
     style={{ height: '100%', width: '100%', overflowY: 'auto', scrollSnapType: 'y mandatory', touchAction:'none', userSelect:'none',
-      overscrollBehaviorY: 'contain', scrollbarWidth: 'thin', scrollbarColor: '#8B8373 #F1EFE6' }}>
+      overscrollBehaviorY: 'contain', scrollbarWidth: 'thin', scrollbarColor: `${colors.borderStrong} ${colors.bgElevated}` }}>
     {/* Under each page's own key, not its place: a page a refresh moves keeps its buffered video. */}
     {children.map((child, index) => <div key={pageKey(child, index)} style={{ display: 'flex', flexDirection: 'column',
       height: '100%', width: '100%', scrollSnapAlign: 'start', scrollSnapStop: 'always',
