@@ -1,0 +1,15 @@
+Screens on this page
+--------------------
+Every image in this folder is an unretouched screenshot of the CourtSide iPhone
+app, captured 22 September 2026 on the owner's own phone, from his own account
+(@mrdinosaur62). Nothing is a mockup, a render or a composite. They were resized
+for the web and re-encoded as JPEG; nothing else was changed.
+
+post.jpg     the feed, a post of photos from a session
+feed.jpg     the feed, a clip playing full screen
+profile.jpg  the owner's profile and his grid of posts
+thread.jpg   a community thread about strings
+board.jpg    the community board, threads by topic
+
+A sixth capture (Find Players, with the map) is deliberately not shipped: it
+showed another player's name, handle and city.
