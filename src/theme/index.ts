@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 /** CourtSide: warm neutrals and muted court-green accents. */
 export const lightColors = {
   bg: '#F8F7F2', bgElevated: '#F1EFE6', surface: '#F4F2E9', surfaceAlt: '#E9E6DA',
@@ -41,10 +42,12 @@ export const fontFamily = {
 } as const;
 
 /** A weight as a style: `{...font('500')}` where a literal fontWeight used to be. */
-export const font = (weight: '400' | '500' | '600' | '700') => ({
-  fontFamily: { '400': fontFamily.regular, '500': fontFamily.medium, '600': fontFamily.semibold, '700': fontFamily.bold }[weight],
-  fontWeight: weight,
-});
+export const font = (weight: '400' | '500' | '600' | '700') => {
+  const family = { '400': fontFamily.regular, '500': fontFamily.medium, '600': fontFamily.semibold, '700': fontFamily.bold }[weight];
+  // A browser takes a list and falls back to the system's own sans should Inter
+  // ever be slow; a phone takes exactly one name and has Inter in the bundle.
+  return { fontFamily: Platform.OS === 'web' ? `${family}, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif` : family, fontWeight: weight };
+};
 
 /**
  * Lighter than it was: display and title at medium rather than black, with
