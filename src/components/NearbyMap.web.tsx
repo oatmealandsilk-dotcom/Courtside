@@ -15,114 +15,14 @@ import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { levelBadge } from '@/lib/badges';
 import { useWeather } from '@/features/players/useWeather';
-import { initials } from '@/lib/format';
-import { colors, radius, spacing, surfaceColorFor, typography } from '@/theme';
+import { colors, radius, spacing, typography } from '@/theme';
+import { DAY, NIGHT, STYLE, applyLook } from '@/components/map/look';
+import { courtPinHtml, mePinHtml, playerPinHtml } from '@/components/map/markers';
 
 const HEIGHT = 330;
 const START_ZOOM = 11.5;
 /** Close enough to read street names, when the map goes to someone. */
 const CLOSE_ZOOM = 13.5;
-/**
- * The plainest vector style OpenFreeMap offers (free, no key), recoloured
- * below into the soft, quiet look of Apple Maps: warm paper, white roads,
- * pale water and parks, and only the labels that matter.
- */
-const STYLE = 'https://tiles.openfreemap.org/styles/positron';
-
-type Look = Record<string, { fill?: string; line?: string; text?: string; halo?: string; hide?: boolean }>;
-const DAY: Look = {
-  background: { fill: '#F6F4EF' },
-  landuse_residential: { fill: '#F1EFE9' },
-  park: { fill: '#D7E9CB' },
-  landcover_wood: { fill: '#D2E3C5' },
-  water: { fill: '#B7D6EC' },
-  waterway: { line: '#B7D6EC' },
-  building: { fill: '#EAE7E0' },
-  highway_path: { line: '#E6E2DA' },
-  highway_minor: { line: '#FFFFFF' },
-  highway_major_casing: { line: '#E3DFD6' },
-  highway_major_inner: { line: '#FFFFFF' },
-  highway_major_subtle: { line: '#FFFFFF' },
-  highway_motorway_casing: { line: '#E8D9A0' },
-  highway_motorway_inner: { line: '#FBEFC1' },
-  highway_motorway_subtle: { line: '#FBEFC1' },
-  highway_motorway_bridge_casing: { line: '#E8D9A0' },
-  highway_motorway_bridge_inner: { line: '#FBEFC1' },
-  tunnel_motorway_casing: { line: '#EEE6CC' },
-  tunnel_motorway_inner: { line: '#F8F1D8' },
-  railway: { line: '#E0DCD3' }, railway_transit: { line: '#E0DCD3' }, railway_service: { line: '#E0DCD3' },
-  railway_dashline: { hide: true }, railway_transit_dashline: { hide: true }, railway_service_dashline: { hide: true },
-  boundary_2: { line: '#CFCAC0' }, boundary_3: { line: '#D9D4CB' },
-  'highway-name-path': { hide: true },
-  'highway-name-minor': { text: '#8E8A80', halo: '#FFFFFF' },
-  'highway-name-major': { text: '#6F6B62', halo: '#FFFFFF' },
-  'highway-shield-non-us': { hide: true }, 'highway-shield-us-interstate': { hide: true }, road_shield_us: { hide: true },
-  airport: { text: '#8E8A80', halo: '#F6F4EF' },
-  label_other: { text: '#8E8A80', halo: '#F6F4EF' },
-  label_village: { text: '#6F6B62', halo: '#F6F4EF' },
-  label_town: { text: '#5C584F', halo: '#F6F4EF' },
-  label_city: { text: '#3A372F', halo: '#F6F4EF' },
-  label_city_capital: { text: '#3A372F', halo: '#F6F4EF' },
-  label_state: { text: '#9A968C', halo: '#F6F4EF' },
-  water_name_point_label: { text: '#6A94B5', halo: '#B7D6EC' },
-  water_name_line_label: { text: '#6A94B5', halo: '#B7D6EC' },
-  waterway_line_label: { text: '#6A94B5', halo: '#B7D6EC' },
-};
-const NIGHT: Look = {
-  background: { fill: '#1C1C1E' },
-  landuse_residential: { fill: '#222224' },
-  park: { fill: '#1F2A21' },
-  landcover_wood: { fill: '#1D271F' },
-  water: { fill: '#152232' },
-  waterway: { line: '#152232' },
-  building: { fill: '#262628' },
-  highway_path: { line: '#2C2C2E' },
-  highway_minor: { line: '#333335' },
-  highway_major_casing: { line: '#2A2A2C' },
-  highway_major_inner: { line: '#3F3F42' },
-  highway_major_subtle: { line: '#3F3F42' },
-  highway_motorway_casing: { line: '#3A3620' },
-  highway_motorway_inner: { line: '#5A5230' },
-  highway_motorway_subtle: { line: '#5A5230' },
-  highway_motorway_bridge_casing: { line: '#3A3620' },
-  highway_motorway_bridge_inner: { line: '#5A5230' },
-  tunnel_motorway_casing: { line: '#2E2C22' },
-  tunnel_motorway_inner: { line: '#403C2A' },
-  railway: { line: '#2E2E30' }, railway_transit: { line: '#2E2E30' }, railway_service: { line: '#2E2E30' },
-  railway_dashline: { hide: true }, railway_transit_dashline: { hide: true }, railway_service_dashline: { hide: true },
-  boundary_2: { line: '#3A3A3C' }, boundary_3: { line: '#333335' },
-  'highway-name-path': { hide: true },
-  'highway-name-minor': { text: '#8E8E93', halo: '#1C1C1E' },
-  'highway-name-major': { text: '#AEAEB2', halo: '#1C1C1E' },
-  'highway-shield-non-us': { hide: true }, 'highway-shield-us-interstate': { hide: true }, road_shield_us: { hide: true },
-  airport: { text: '#8E8E93', halo: '#1C1C1E' },
-  label_other: { text: '#8E8E93', halo: '#1C1C1E' },
-  label_village: { text: '#AEAEB2', halo: '#1C1C1E' },
-  label_town: { text: '#C7C7CC', halo: '#1C1C1E' },
-  label_city: { text: '#E5E5EA', halo: '#1C1C1E' },
-  label_city_capital: { text: '#E5E5EA', halo: '#1C1C1E' },
-  label_state: { text: '#8E8E93', halo: '#1C1C1E' },
-  water_name_point_label: { text: '#6B8FB0', halo: '#152232' },
-  water_name_line_label: { text: '#6B8FB0', halo: '#152232' },
-  waterway_line_label: { text: '#6B8FB0', halo: '#152232' },
-};
-
-/** Recolours the loaded style layer by layer; anything the style lacks is skipped. */
-function applyLook(map: maplibregl.Map, look: Look) {
-  for (const [id, rule] of Object.entries(look)) {
-    if (!map.getLayer(id)) continue;
-    try {
-      if (rule.hide) { map.setLayoutProperty(id, 'visibility', 'none'); continue; }
-      if (rule.fill) map.setPaintProperty(id, id === 'background' ? 'background-color' : 'fill-color', rule.fill);
-      if (rule.line) map.setPaintProperty(id, 'line-color', rule.line);
-      if (rule.text) map.setPaintProperty(id, 'text-color', rule.text);
-      if (rule.halo) map.setPaintProperty(id, 'text-halo-color', rule.halo);
-    } catch {
-      // A layer that turned out to be a different type than expected: leave it.
-    }
-  }
-}
-
 // MapLibre does its heavy lifting in a background worker script. The bundler
 // cannot find that file on its own, so a copy ships in public/ and the map is
 // pointed at it — under the site's base path on GitHub Pages.
@@ -209,18 +109,15 @@ export function NearbyMap(props: NearbyMapProps) {
     for (const p of shown) {
       const on = p.user.id === selectedId;
       const size = on ? 38 : 30;
-      const face = p.user.avatarUrl ? `background-image:url('${p.user.avatarUrl}');background-size:cover;` : `background:${surfaceColorFor(p.user.avatarSeed)};`;
-      const label = expanded ? `<div style="margin-top:2px;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 6px;border-radius:999px;background:${colors.bg};color:${colors.text};font:600 11px Inter,system-ui,sans-serif">${p.user.name.split(' ')[0]}</div>` : '';
-      const node = pin(`<div style="display:flex;flex-direction:column;align-items:center;cursor:pointer"><div style="width:${size + 8}px;height:${size + 8}px;border-radius:999px;background:${colors.bg};border:${on ? 3 : 2}px solid ${levelBadge(p.user.profile).tint};display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.22)"><div style="width:${size}px;height:${size}px;border-radius:999px;${face}color:#fff;font:600 11px Inter,system-ui,sans-serif;display:flex;align-items:center;justify-content:center">${p.user.avatarUrl ? '' : initials(p.user.name)}</div></div>${label}</div>`);
+      const node = pin(playerPinHtml(p.user, { size, on, label: expanded }));
       node.setAttribute('role', expanded ? 'button' : 'link');
       node.setAttribute('aria-label', expanded ? p.user.name : `${p.user.name}, open profile`);
       node.addEventListener('click', (event) => { event.stopPropagation(); if (expanded) latest.current.select(p.user.id); else latest.current.onOpen(p.user.id); });
       markers.push(new maplibregl.Marker({ element: node, anchor: expanded ? 'top' : 'center', offset: expanded ? [0, -(size + 8) / 2] : [0, 0] }).setLngLat([p.at.lng, p.at.lat]).addTo(instance));
     }
-    const meFace = me.avatarUrl ? `background-image:url('${me.avatarUrl}');background-size:cover;` : `background:${surfaceColorFor(me.avatarSeed)};`;
     const meSize = expanded ? 34 : 26;
     markers.push(new maplibregl.Marker({
-      element: pin(`<div style="width:64px;height:64px;border-radius:999px;background:${colors.brandDim};display:flex;align-items:center;justify-content:center;opacity:.96"><div style="width:${meSize + 9}px;height:${meSize + 9}px;border-radius:999px;background:${colors.bg};border:2.5px solid ${colors.brand};display:flex;align-items:center;justify-content:center"><div style="width:${meSize}px;height:${meSize}px;border-radius:999px;${meFace}color:#fff;font:600 11px Inter,system-ui,sans-serif;display:flex;align-items:center;justify-content:center">${me.avatarUrl ? '' : initials(me.name)}</div></div></div>`),
+      element: pin(mePinHtml(me, meSize)),
       anchor: 'center',
     }).setLngLat([home.lng, home.lat]).addTo(instance));
     return () => { markers.forEach((m) => m.remove()); };
@@ -235,7 +132,7 @@ export function NearbyMap(props: NearbyMapProps) {
     for (const c of model.courts) {
       const on = c.id === selectedCourtId;
       const node = document.createElement('div');
-      node.innerHTML = `<div style="display:flex;align-items:center;gap:3px;height:24px;padding:0 7px;border-radius:12px;background:${colors.court};border:2px solid ${colors.bg};box-shadow:0 2px 6px rgba(0,0,0,.18);cursor:pointer;transform:scale(${on ? 1.2 : 1})"><span style="width:10px;height:10px;border-radius:999px;background:${colors.brandInk};display:inline-block"></span>${c.count > 1 ? `<span style="color:${colors.brandInk};font:600 11px Inter,system-ui,sans-serif">${c.count}</span>` : ''}</div>`;
+      node.innerHTML = courtPinHtml(c, on);
       node.setAttribute('role', 'button'); node.setAttribute('aria-label', c.name);
       node.addEventListener('click', (event) => { event.stopPropagation(); latest.current.selectCourt(c.id); });
       markers.push(new maplibregl.Marker({ element: node, anchor: 'center' }).setLngLat([c.lng, c.lat]).addTo(instance));
