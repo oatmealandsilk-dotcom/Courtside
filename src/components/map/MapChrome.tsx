@@ -67,18 +67,20 @@ const FILTERS: { key: MapFilter; label: string }[] = [
 export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoading }: { filter: MapFilter; onFilter: (next: MapFilter) => void; courtsOn: boolean; onCourts: () => void; courtsLoading: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={styles.chipsWrap}>
-      {FILTERS.map((f) => (
-        <Pressable key={f.key} accessibilityRole="tab" accessibilityState={{ selected: filter === f.key }} onPress={() => onFilter(f.key)} style={[styles.chip, filter === f.key && styles.chipOn]}>
-          <Text style={[styles.chipText, filter === f.key && styles.chipTextOn]}>{f.label}</Text>
-        </Pressable>
-      ))}
-      <View style={styles.chipRule} />
-      <Pressable accessibilityRole="switch" accessibilityState={{ checked: courtsOn }} accessibilityLabel="Show courts" onPress={onCourts} style={[styles.chip, courtsOn && styles.chipOn]}>
+    <View style={styles.chipsRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={styles.chipsWrap}>
+        {FILTERS.map((f) => (
+          <Pressable key={f.key} accessibilityRole="tab" accessibilityState={{ selected: filter === f.key }} onPress={() => onFilter(f.key)} style={[styles.chip, filter === f.key && styles.chipOn]}>
+            <Text style={[styles.chipText, filter === f.key && styles.chipTextOn]}>{f.label}</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+      {/* Courts stays put at the end, whatever the row scrolls to. */}
+      <Pressable accessibilityRole="switch" accessibilityState={{ checked: courtsOn }} accessibilityLabel="Show courts" onPress={onCourts} style={[styles.chip, styles.chipCourts, courtsOn && styles.chipOn]}>
         {courtsLoading ? <ActivityIndicator size="small" color={courtsOn ? colors.brandInk : colors.text} /> : <Ionicons name="tennisball-outline" size={14} color={courtsOn ? colors.brandInk : colors.text} />}
         <Text style={[styles.chipText, courtsOn && styles.chipTextOn]}>Courts</Text>
       </Pressable>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -153,7 +155,7 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
             <Text style={styles.personName} numberOfLines={1}>{user.name}</Text>
             <LevelPill profile={user.profile} small />
           </View>
-          <Text style={styles.personMeta} numberOfLines={1}>@{user.handle} · {user.location || 'Somewhere near'} · {formatMiles(miles)}</Text>
+          <Text style={styles.personMeta} numberOfLines={1}>{[`@${user.handle}`, user.location || null, formatMiles(miles)].filter(Boolean).join(' · ')}</Text>
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
           <Ionicons name="close" size={18} color={colors.textMuted} />
@@ -235,13 +237,14 @@ const styleDefinitions = StyleSheet.create({
   roundOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   search: { flex: 1, height: 42, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
   searchInput: { flex: 1, ...typography.body, color: colors.text, paddingVertical: 0 },
-  chipsWrap: { flexGrow: 0 },
-  chips: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  chipsRow: { flexDirection: 'row', alignItems: 'center', paddingRight: spacing.md, paddingVertical: spacing.sm },
+  chipsWrap: { flexGrow: 0, flexShrink: 1 },
+  chips: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md },
+  chipCourts: { marginLeft: 6 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, height: 32, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   chipOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   chipText: { ...typography.smallStrong, color: colors.text },
   chipTextOn: { color: colors.brandInk },
-  chipRule: { width: 1, height: 18, backgroundColor: colors.border, marginHorizontal: 4 },
   weather: { alignSelf: 'flex-start', marginLeft: spacing.md, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   weatherText: { ...typography.caption, color: colors.text, letterSpacing: 0 },
   buttons: { position: 'absolute', right: spacing.md, alignItems: 'flex-end', gap: spacing.sm },

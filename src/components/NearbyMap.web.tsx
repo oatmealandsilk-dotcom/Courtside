@@ -1,4 +1,4 @@
-import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
+import { themes, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -16,7 +16,7 @@ import { useApp } from '@/store/AppContext';
 import { levelBadge } from '@/lib/badges';
 import { useWeather } from '@/features/players/useWeather';
 import { colors, radius, spacing, typography } from '@/theme';
-import { DAY, NIGHT, STYLE, applyLook } from '@/components/map/look';
+import { STYLE, applyLook, lookFor } from '@/components/map/look';
 import { courtPinHtml, mePinHtml, playerPinHtml } from '@/components/map/markers';
 
 const HEIGHT = 330;
@@ -38,7 +38,7 @@ maplibregl.setWorkerUrl(`${BASE}/maplibre/maplibre-gl-worker.mjs`);
 export function NearbyMap(props: NearbyMapProps) {
   const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation } = props;
   const styles = useThemedStyles(styleDefinitions);
-  const { night } = useTheme();
+  const { theme, night } = useTheme();
   const insets = useSafeAreaInsets();
   const { followingIds, actions } = useApp();
   const model = useMapModel(me, players, at);
@@ -68,7 +68,7 @@ export function NearbyMap(props: NearbyMapProps) {
       touchPitch: false,
     });
     instance.touchZoomRotate.disableRotation();
-    instance.on('load', () => applyLook(instance, night ? NIGHT : DAY));
+    instance.on('load', () => applyLook(instance, lookFor(themes[theme])));
     instance.on('click', () => { latest.current.select(null); latest.current.selectCourt(null); });
     instance.on('moveend', () => { if (latest.current.courtsOn) { const c = instance.getCenter(); void latest.current.loadCourts({ lat: c.lat, lng: c.lng }); } });
     // Trackpad: a pinch arrives as a wheel with Ctrl held and zooms around the
@@ -96,7 +96,7 @@ export function NearbyMap(props: NearbyMapProps) {
       instance.remove();
       map.current = null;
     };
-  }, [expanded, night, home.lat, home.lng]);
+  }, [expanded, theme, home.lat, home.lng]);
 
   // Pins: rebuilt when who is shown or who is picked changes.
   const shown = expanded ? model.shown : model.inTown.length ? model.inTown : model.ranked.slice(0, 12);
@@ -145,7 +145,7 @@ export function NearbyMap(props: NearbyMapProps) {
   useEffect(() => { if (model.selectedCourt) map.current?.flyTo({ center: [model.selectedCourt.lng, model.selectedCourt.lat], zoom: Math.max(map.current.getZoom(), CLOSE_ZOOM), duration: 500 }); }, [model.selectedCourt]);
   useEffect(() => { if (model.place) map.current?.flyTo({ center: [model.place.lng, model.place.lat], zoom: START_ZOOM, duration: 700 }); }, [model.place]);
 
-  const canvas = <div ref={host} style={{ position: 'absolute', inset: 0, background: colors.bgElevated }} />;
+  const canvas = <div ref={host} style={{ position: 'absolute', inset: 0, background: colors.bg }} />;
 
   if (!expanded) {
     return (
@@ -191,5 +191,5 @@ const styleDefinitions = StyleSheet.create({
   fill: { flex: 1, backgroundColor: colors.bgElevated, overflow: 'hidden' },
   top: { position: 'absolute', left: 0, right: 0, top: 0, gap: 2, zIndex: 10 },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', gap: spacing.sm, zIndex: 10 },
-  credit: { position: 'absolute', right: 6, bottom: 4, zIndex: 5, ...typography.caption, fontSize: 9, letterSpacing: 0, color: 'rgba(0,0,0,0.45)', backgroundColor: 'rgba(255,255,255,0.6)', paddingHorizontal: 4, borderRadius: 3 },
+  credit: { position: 'absolute', left: 8, bottom: 4, zIndex: 5, ...typography.caption, fontSize: 9, letterSpacing: 0, color: 'rgba(0,0,0,0.45)', backgroundColor: 'rgba(255,255,255,0.6)', paddingHorizontal: 4, borderRadius: 3 },
 });

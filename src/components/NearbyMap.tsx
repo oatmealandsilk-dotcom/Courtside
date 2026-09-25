@@ -1,4 +1,4 @@
-import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
+import { themes, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CourtSheet, FilterChips, MapButtons, MapTopBar, NearbyRail, PlayerSheet, PreviewOverlay, WeatherChip } from '@/components/map/MapChrome';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle } from '@/components/map/MapCanvas';
+import { lookFor } from '@/components/map/look';
 import { courtPinHtml, mePinHtml, playerPinHtml } from '@/components/map/markers';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { milesBetween } from '@/features/players/geo';
@@ -36,7 +37,8 @@ export type { NearbyMapProps };
 export function NearbyMap(props: NearbyMapProps) {
   const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation } = props;
   const styles = useThemedStyles(styleDefinitions);
-  const { night } = useTheme();
+  const { theme } = useTheme();
+  const look = useMemo(() => lookFor(themes[theme]), [theme]);
   const insets = useSafeAreaInsets();
   const { followingIds, actions } = useApp();
   const model = useMapModel(me, players, at);
@@ -68,14 +70,14 @@ export function NearbyMap(props: NearbyMapProps) {
     }
     list.push({ id: 'me', lat: home.lat, lng: home.lng, html: mePinHtml(me, expanded ? 34 : 26) });
     return list;
-  }, [model.courts, shown, selectedId, selectedCourtId, expanded, home.lat, home.lng, me]);
+  }, [model.courts, shown, selectedId, selectedCourtId, expanded, home.lat, home.lng, me, theme]);
 
   const mapView = (
     <MapCanvas
       ref={canvas}
       center={home}
       zoom={CITY_ZOOM}
-      night={night}
+      look={look}
       interactive={expanded}
       markers={markers}
       onTap={(id) => { if (id.startsWith('c:')) model.selectCourt(id.slice(2)); else if (id.startsWith('p:')) (expanded ? model.select(id.slice(2)) : onOpen(id.slice(2))); }}
@@ -130,5 +132,5 @@ const styleDefinitions = StyleSheet.create({
   fill: { flex: 1, backgroundColor: colors.bgElevated, overflow: 'hidden' },
   top: { position: 'absolute', left: 0, right: 0, top: 0, gap: 2 },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', gap: spacing.sm },
-  credit: { position: 'absolute', right: 6, bottom: 4, fontSize: 9, color: 'rgba(0,0,0,0.45)', backgroundColor: 'rgba(255,255,255,0.6)', paddingHorizontal: 4, borderRadius: 3 },
+  credit: { position: 'absolute', left: 8, bottom: 4, fontSize: 9, color: 'rgba(0,0,0,0.45)', backgroundColor: 'rgba(255,255,255,0.6)', paddingHorizontal: 4, borderRadius: 3 },
 });
