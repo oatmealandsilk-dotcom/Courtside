@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { ClipVideo } from '@/components/ClipVideo';
 import { Tappable } from '@/components/Tappable';
+import { useOptimisticToggle } from '@/lib/useOptimisticToggle';
 import { Avatar, Card, Chip } from '@/components/ui';
 import { LevelPill } from '@/components/LevelPill';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
@@ -70,6 +71,8 @@ function PostCardInner({
   const styles = useThemedStyles(styleDefinitions);
   const [menuOpen, setMenuOpen] = useState(false);
   const meta = KIND_META[post.kind];
+  // The heart fills on the tap; the store's own redraw follows without changing anything on screen.
+  const like = useOptimisticToggle(`p:${post.id}`, liked, onToggleLike);
 
   return (
     <Card style={styles.card}>
@@ -180,14 +183,14 @@ function PostCardInner({
       </Pressable>
 
       <View style={styles.actions}>
-        <Tappable onPress={onToggleLike} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: post.id } }); }} scaleTo={0.8} style={styles.action} accessibilityLabel={liked ? 'Unlike. Hold to see who liked it' : 'Like. Hold to see who liked it'}>
+        <Tappable onPress={like.toggle} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: post.id } }); }} scaleTo={0.8} style={styles.action} accessibilityLabel={like.on ? 'Unlike. Hold to see who liked it' : 'Like. Hold to see who liked it'}>
           <Ionicons
-            name={liked ? 'heart' : 'heart-outline'}
+            name={like.on ? 'heart' : 'heart-outline'}
             size={23}
-            color={liked ? colors.danger : colors.textMuted}
+            color={like.on ? colors.danger : colors.textMuted}
           />
-          <Text style={[styles.actionText, liked && { color: colors.danger }]}>
-            {compactNumber(post.likedBy.length)}
+          <Text style={[styles.actionText, like.on && { color: colors.danger }]}>
+            {compactNumber(post.likedBy.length + like.delta)}
           </Text>
         </Tappable>
         <Tappable onPress={onComment ?? onPress} scaleTo={0.8} style={styles.action} accessibilityLabel="Comments">

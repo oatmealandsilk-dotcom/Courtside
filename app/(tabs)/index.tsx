@@ -24,7 +24,9 @@ import { Heart } from '@/components/Heart';
 import { MediaPostPage } from '@/components/MediaPostPage';
 import { Tappable } from '@/components/Tappable';
 import { VerticalPager, type VerticalPagerHandle } from '@/components/VerticalPager';
-import { subscribeScrollToTop } from '@/features/navigation/scrollToTop';
+import { subscribeReveal, subscribeScrollToTop } from '@/features/navigation/scrollToTop';
+import { LikeButton } from '@/components/LikeButton';
+import { wantsOn } from '@/lib/useOptimisticToggle';
 import { setFeedWarm, useCurtainDown } from '@/features/feed/warmup';
 import { connectionIsQuick } from '@/lib/netSpeed';
 import { CourtSpinner } from '@/components/CourtSpinner';
@@ -271,6 +273,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       setActive(0);
       if (remount) setVisit((v) => v + 1);
   }, [scope?.userId, scope?.set, scope?.start]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => subscribeReveal(() => { if (!scope) rerank(); }), [scope, rerank]);
   useFocusEffect(
     useCallback(() => {
       const stamp = `${ready}:${currentUserId}:${scope?.userId ?? ''}:${scope?.set ?? ''}`;
@@ -514,13 +517,13 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const likeByTap = (postId: string, _alreadyLiked?: boolean) => {
     const { posts: all, me } = likedNow.current;
     const post = all.find((p) => p.id === postId);
-    if (post && me && !post.likedBy.includes(me)) actions.toggleLike(postId);
+    if (post && me && !(wantsOn(`p:${postId}`) ?? post.likedBy.includes(me))) actions.toggleLike(postId);
     setBurst((b) => ({ id: postId, n: b.n + 1 }));
   };
   const likeHitByTap = (storyId: string, _alreadyLiked?: boolean) => {
     const { stories, me } = likedNow.current;
     const story = stories.find((s) => s.id === storyId);
-    if (story && me && !story.likedBy.includes(me)) actions.toggleLikeStory(storyId);
+    if (story && me && !(wantsOn(`h:${storyId}`) ?? story.likedBy.includes(me))) actions.toggleLikeStory(storyId);
     setBurst((b) => ({ id: storyId, n: b.n + 1 }));
   };
   const lastHitTap = useRef(0);
@@ -764,10 +767,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       <Text style={styles.swipeHint}>↑ Next moment   ·   ← Community</Text>
                     </View>
                     <View style={styles.actions}>
-                      <Tappable accessibilityLabel={hitLiked ? 'Unlike hit. Hold to see who liked it' : 'Like hit. Hold to see who liked it'} onPress={() => actions.toggleLikeStory(story.id)} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: story.id, kind: 'hit' } }); }} scaleTo={0.78} style={styles.action}>
-                        <Heart liked={hitLiked} pop={burst.id === story.id ? burst.n : 0} size={36} style={styles.actionGlyph} />
-                        <Text style={styles.actionLabel}>{story.likedBy.length}</Text>
-                      </Tappable>
+                      <LikeButton ledgerKey={`h:${story.id}`} liked={hitLiked} count={story.likedBy.length} onToggle={() => actions.toggleLikeStory(story.id)} likesRoute={{ pathname: '/likes', params: { id: story.id, kind: 'hit' } }} pop={burst.id === story.id ? burst.n : 0} what="hit" style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
                       <Tappable accessibilityLabel="Hit comments" onPress={() => router.push({ pathname: '/comments', params: { kind: 'hit', id: story.id } })} scaleTo={0.78} style={styles.action}>
                         <Ionicons name="chatbubble-outline" size={33} color="white" style={styles.actionGlyph} />
                         <Text style={styles.actionLabel}>{story.commentIds.length}</Text>
@@ -972,16 +972,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                   </View>
 
                   <View style={styles.actions}>
-                    <Tappable
-                      accessibilityLabel={liked ? 'Unlike clip. Hold to see who liked it' : 'Like clip. Hold to see who liked it'}
-                      onPress={() => actions.toggleLike(post.id)}
-                      onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: post.id } }); }}
-                      scaleTo={0.78}
-                      style={styles.action}
-                    >
-                      <Heart liked={liked} pop={burst.id === post.id ? burst.n : 0} size={36} style={styles.actionGlyph} />
-                      <Text style={styles.actionLabel}>{post.likedBy.length}</Text>
-                    </Tappable>
+                    <LikeButton ledgerKey={`p:${post.id}`} liked={liked} count={post.likedBy.length} onToggle={() => actions.toggleLike(post.id)} likesRoute={{ pathname: '/likes', params: { id: post.id } }} pop={burst.id === post.id ? burst.n : 0} what="clip" style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
                     <Tappable
                       accessibilityLabel="Clip comments"
                       onPress={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id } })}

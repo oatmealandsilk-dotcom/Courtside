@@ -6,6 +6,7 @@ import Reanimated, { Easing as REasing, useAnimatedStyle, useSharedValue, withTi
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { revealPost } from '@/features/navigation/scrollToTop';
 import { useUploads, type UploadJob } from '@/lib/uploads';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -64,7 +65,7 @@ export function UploadBar() {
   const title = shown.state === 'done' ? 'Posted' : shown.state === 'failed' ? 'Could not post' : `Posting… ${pct}%`;
   return (
     <Animated.View pointerEvents={shown.state === 'done' ? 'box-none' : 'none'} style={[styles.wrap, { top: insets.top + spacing.xs, transform: [{ translateY: slide }] }]}>
-      <Pressable accessibilityRole={shown.state === 'done' ? 'link' : 'text'} accessibilityLabel={shown.state === 'done' ? 'Open the post' : title} disabled={shown.state !== 'done'} onPress={() => router.push(`/post/${shown.id}`)} style={styles.card}>
+      <Pressable accessibilityRole={shown.state === 'done' ? 'link' : 'text'} accessibilityLabel={shown.state === 'done' ? 'See it at the top of your feed' : title} disabled={shown.state !== 'done'} onPress={() => { router.navigate('/'); revealPost(shown.id); }} style={styles.card}>
         <View style={styles.row}>
           {shown.thumb ? <Image accessibilityIgnoresInvertColors source={{ uri: shown.thumb }} style={styles.thumb} /> : <View style={[styles.thumb, styles.thumbBlank]}><Ionicons name="tennisball" size={18} color={colors.brand} /></View>}
           <View style={{ flex: 1 }}>
