@@ -1,41 +1,38 @@
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker, type Region } from 'react-native-maps';
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Avatar } from '@/components/ui';
 import { CourtSheet, FilterChips, MapButtons, MapTopBar, NearbyRail, PlayerSheet, PreviewOverlay, WeatherChip } from '@/components/map/MapChrome';
+import { MapCanvas, type CanvasMarker, type MapCanvasHandle } from '@/components/map/MapCanvas';
+import { courtPinHtml, mePinHtml, playerPinHtml } from '@/components/map/markers';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { milesBetween } from '@/features/players/geo';
 import { useMapModel } from '@/features/players/mapModel';
-import type { LatLng } from '@/features/players/positions';
 import { useWeather } from '@/features/players/useWeather';
-import { levelBadge } from '@/lib/badges';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing } from '@/theme';
 
 const HEIGHT = 330;
-/** How much of the world the map shows at first: roughly a city. */
-const CITY = { latitudeDelta: 0.16, longitudeDelta: 0.16 };
+/** How far in the map starts: roughly a city. */
+const CITY_ZOOM = 11.5;
 /** Close enough to read street names, when the map goes to someone. */
-const CLOSE = { latitudeDelta: 0.035, longitudeDelta: 0.035 };
+const CLOSE_ZOOM = 13.5;
 
+export type { NearbyMapProps };
 
 /**
- * A real map of who is around you — Apple Maps on iPhone. Profiles only say
- * a city, so each player is set down at a fixed spot near theirs rather
- * than tracked.
+ * A real map of who is around you, in the app's own warm-paper look (the
+ * same vector map the browser draws, inside a web view — not Apple's stock
+ * map). Profiles only say a city, so each player is set down at a fixed
+ * spot near theirs rather than tracked.
  *
  * In the Find Players tab it is a still card. Opened, it is the whole page:
  * search, filters, a courts layer, a rail of the nearest players along the
  * bottom, and a card for whoever you tap.
  */
-export type { NearbyMapProps };
-
 export function NearbyMap(props: NearbyMapProps) {
   const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation } = props;
   const styles = useThemedStyles(styleDefinitions);
@@ -46,101 +43,52 @@ export function NearbyMap(props: NearbyMapProps) {
   const { home } = model;
   const weather = useWeather(home);
   const cityName = me.location.trim() ? me.location.split(',')[0] : 'you';
-  const start: Region = { latitude: home.lat, longitude: home.lng, ...CITY };
-  const map = useRef<MapView | null>(null);
-  const [region, setRegion] = useState<Region>(start);
-  const goTo = (spot: LatLng, delta = CLOSE, ms = 420) => {
-    const next = { latitude: spot.lat, longitude: spot.lng, ...delta };
-    setRegion(next);
-    map.current?.animateToRegion(next, ms);
-  };
+  const canvas = useRef<MapCanvasHandle | null>(null);
   // A fix arriving after the map is up moves the map to it.
   const lastHome = useRef(home);
   useEffect(() => {
     if (lastHome.current.lat === home.lat && lastHome.current.lng === home.lng) return;
     lastHome.current = home;
-    goTo(home, CITY, 500);
-  }, [home]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Picking someone, or typing a city, takes the map there.
-  useEffect(() => { if (model.selected) goTo(model.selected.at); }, [model.selected]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (model.selectedCourt) goTo(model.selectedCourt); }, [model.selectedCourt]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (model.place) goTo(model.place, CITY); }, [model.place]); // eslint-disable-line react-hooks/exhaustive-deps
+    canvas.current?.flyTo(home, CITY_ZOOM, 600);
+  }, [home]);
+  // Picking someone, a court, or typing a city takes the map there.
+  useEffect(() => { if (model.selected) canvas.current?.flyTo(model.selected.at, CLOSE_ZOOM); }, [model.selected]);
+  useEffect(() => { if (model.selectedCourt) canvas.current?.flyTo(model.selectedCourt, CLOSE_ZOOM); }, [model.selectedCourt]);
+  useEffect(() => { if (model.place) canvas.current?.flyTo(model.place, CITY_ZOOM, 700); }, [model.place]);
 
-  const pins = (expanded ? model.shown : model.inTown.length ? model.inTown : model.ranked.slice(0, 12)).map((p) => {
-    const on = model.selected?.user.id === p.user.id;
-    return (
-      <Marker
-        key={`${p.user.id}${on ? '-on' : ''}`}
-        coordinate={{ latitude: p.at.lat, longitude: p.at.lng }}
-        anchor={{ x: 0.5, y: expanded ? 0.35 : 0.5 }}
-        tracksViewChanges={false}
-        zIndex={on ? 10 : 1}
-        accessibilityLabel={`${p.user.name}${expanded ? '' : ', open profile'}`}
-        onPress={() => (expanded ? model.select(p.user.id) : onOpen(p.user.id))}
-      >
-        {/* The pin is the player: their picture in a ring of their level's colour, their name beneath on the full map. */}
-        <View style={styles.pin}>
-          <View style={[styles.pinRing, { borderColor: levelBadge(p.user.profile).tint }, on && styles.pinRingOn]}>
-            <Avatar name={p.user.name} seed={p.user.avatarSeed} size={on ? 38 : 30} ring={p.user.isCoach} />
-          </View>
-          {expanded ? <Text style={styles.pinLabel} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text> : null}
-        </View>
-      </Marker>
-    );
-  });
-  const courtPins = model.courts.map((c) => {
-    const on = model.selectedCourt?.id === c.id;
-    return (
-      <Marker key={`${c.id}${on ? '-on' : ''}`} coordinate={{ latitude: c.lat, longitude: c.lng }} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false} accessibilityLabel={c.name} onPress={() => model.selectCourt(c.id)}>
-        <View style={[styles.court, on && styles.courtOn]}>
-          <Ionicons name="tennisball" size={13} color={colors.brandInk} />
-          {c.count > 1 ? <Text style={styles.courtCount}>{c.count}</Text> : null}
-        </View>
-      </Marker>
-    );
-  });
-  const mePin = (
-    <Marker coordinate={{ latitude: home.lat, longitude: home.lng }} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false} accessibilityLabel="You" zIndex={5}>
-      <View style={styles.meHalo}>
-        <View style={styles.meRing}>
-          <Avatar name={me.name} seed={me.avatarSeed} size={expanded ? 34 : 26} />
-        </View>
-      </View>
-    </Marker>
-  );
+  const shown = expanded ? model.shown : model.inTown.length ? model.inTown : model.ranked.slice(0, 12);
+  const selectedId = model.selected?.user.id ?? null;
+  const selectedCourtId = model.selectedCourt?.id ?? null;
+  const markers = useMemo<CanvasMarker[]>(() => {
+    const list: CanvasMarker[] = model.courts.map((c) => ({ id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, c.id === selectedCourtId) }));
+    for (const p of shown) {
+      const on = p.user.id === selectedId;
+      const size = on ? 38 : 30;
+      list.push({ id: `p:${p.user.id}`, lat: p.at.lat, lng: p.at.lng, html: playerPinHtml(p.user, { size, on, label: expanded }), anchor: expanded ? 'top' : 'center', offsetY: expanded ? -(size + 8) / 2 : 0 });
+    }
+    list.push({ id: 'me', lat: home.lat, lng: home.lng, html: mePinHtml(me, expanded ? 34 : 26) });
+    return list;
+  }, [model.courts, shown, selectedId, selectedCourtId, expanded, home.lat, home.lng, me]);
 
-  const canvas = (
-    <MapView
-      ref={map}
-      style={StyleSheet.absoluteFill}
-      initialRegion={start}
-      onRegionChangeComplete={expanded ? (r) => { setRegion(r); if (model.courtsOn) void model.loadCourts({ lat: r.latitude, lng: r.longitude }); } : undefined}
-      onPress={expanded ? () => { model.select(null); model.selectCourt(null); } : undefined}
-      scrollEnabled={expanded}
-      zoomEnabled={expanded}
-      rotateEnabled={false}
-      pitchEnabled={false}
-      showsCompass={false}
-      showsPointsOfInterests={false}
-      showsBuildings={false}
-      showsTraffic={false}
-      showsIndoors={false}
-      // Apple's quieter map: fewer labels, softer colour, so it sits with the paper.
-      mapType="mutedStandard"
-      toolbarEnabled={false}
-      userInterfaceStyle={night ? 'dark' : 'light'}
-      pointerEvents={expanded ? 'auto' : 'none'}
-    >
-      {courtPins}
-      {pins}
-      {mePin}
-    </MapView>
+  const mapView = (
+    <MapCanvas
+      ref={canvas}
+      center={home}
+      zoom={CITY_ZOOM}
+      night={night}
+      interactive={expanded}
+      markers={markers}
+      onTap={(id) => { if (id.startsWith('c:')) model.selectCourt(id.slice(2)); else if (id.startsWith('p:')) (expanded ? model.select(id.slice(2)) : onOpen(id.slice(2))); }}
+      onMapTap={() => { model.select(null); model.selectCourt(null); }}
+      onMove={(c) => { if (model.courtsOn) void model.loadCourts(c); }}
+    />
   );
 
   if (!expanded) {
     return (
       <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of players near you" onPress={onExpand} disabled={!onExpand} style={styles.card}>
-        {canvas}
+        {mapView}
+        <Text style={styles.credit}>© OpenStreetMap</Text>
         <PreviewOverlay cityName={cityName} count={model.inTown.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} />
       </Pressable>
     );
@@ -156,14 +104,15 @@ export function NearbyMap(props: NearbyMapProps) {
   };
   return (
     <View style={styles.fill}>
-      {canvas}
+      {mapView}
+      <Text style={styles.credit}>© OpenStreetMap</Text>
       <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
         <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} />
         <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
         <WeatherChip weather={weather} />
       </View>
       <View pointerEvents="box-none" style={[styles.bottom, { paddingBottom: insets.bottom }]}>
-        <MapButtons onRecentre={() => { model.select(null); goTo(home, CITY, 360); }} />
+        <MapButtons onRecentre={() => { model.select(null); canvas.current?.flyTo(home, CITY_ZOOM, 600); }} />
         {model.selected ? (
           <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onFollow={() => actions.toggleFollow(model.selected!.user.id)} />
         ) : model.selectedCourt ? (
@@ -172,8 +121,6 @@ export function NearbyMap(props: NearbyMapProps) {
           <NearbyRail items={model.shown} cityName={model.place ? model.place.name.split(',')[0] : cityName} selectedId={null} onSelect={model.select} />
         )}
       </View>
-      {/* Keeps the region state honest for the courts layer; nothing to draw. */}
-      <View pointerEvents="none" style={{ position: 'absolute', width: 0, height: 0 }} accessibilityElementsHidden>{region.latitude ? null : null}</View>
     </View>
   );
 }
@@ -183,13 +130,5 @@ const styleDefinitions = StyleSheet.create({
   fill: { flex: 1, backgroundColor: colors.bgElevated, overflow: 'hidden' },
   top: { position: 'absolute', left: 0, right: 0, top: 0, gap: 2 },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', gap: spacing.sm },
-  pin: { alignItems: 'center', gap: 2 },
-  pinRing: { padding: 2, borderRadius: radius.pill, backgroundColor: colors.bg, borderWidth: 2, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
-  pinRingOn: { borderWidth: 3 },
-  pinLabel: { ...typography.caption, letterSpacing: 0, color: colors.text, backgroundColor: colors.bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.pill, overflow: 'hidden', maxWidth: 90 },
-  meHalo: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center', opacity: 0.96 },
-  meRing: { padding: 2, borderRadius: radius.pill, backgroundColor: colors.bg, borderWidth: 2.5, borderColor: colors.brand },
-  court: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, height: 24, borderRadius: 12, backgroundColor: colors.court, borderWidth: 2, borderColor: colors.bg, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
-  courtOn: { transform: [{ scale: 1.2 }] },
-  courtCount: { ...typography.caption, letterSpacing: 0, color: colors.brandInk },
+  credit: { position: 'absolute', right: 6, bottom: 4, fontSize: 9, color: 'rgba(0,0,0,0.45)', backgroundColor: 'rgba(255,255,255,0.6)', paddingHorizontal: 4, borderRadius: 3 },
 });
