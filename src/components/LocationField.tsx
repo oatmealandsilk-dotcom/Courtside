@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Field } from '@/components/ui';
 import { searchPlaces } from '@/data/locations';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, font } from '@/theme';
 
 /**
  * A city box that offers places from the bank as you type, and — when
@@ -91,5 +91,5 @@ const styleDefinitions = StyleSheet.create({
   },
   option: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: 11 },
   optionText: { ...typography.body, color: colors.text },
-  match: { fontWeight: '700', color: colors.text },
+  match: { ...font('700'), color: colors.text },
 });

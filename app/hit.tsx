@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { setPendingShot } from '@/features/compose/pendingShot';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, font } from '@/theme';
 
 const COUNTDOWN = 5;
 
@@ -203,11 +203,11 @@ const styleDefinitions = StyleSheet.create({
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl },
   title: { ...typography.title, color: colors.text },
   gate: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, maxWidth: 380, width: '100%', alignSelf: 'center' },
-  gateTitle: { fontSize: 17, fontWeight: '600', color: 'white', textAlign: 'center', marginTop: spacing.md },
+  gateTitle: { fontSize: 17, ...font('600'), color: 'white', textAlign: 'center', marginTop: spacing.md },
   gateBody: { fontSize: 13, lineHeight: 18, color: 'rgba(255,255,255,0.55)', textAlign: 'center', maxWidth: 300, marginTop: 6 },
   gateAllow: { marginTop: spacing.lg, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 9, backgroundColor: 'white' },
-  gateAllowText: { fontSize: 14, fontWeight: '600', color: '#000' },
-  gateLaterText: { fontSize: 14, fontWeight: '500', color: 'rgba(255,255,255,0.55)', marginTop: spacing.md },
+  gateAllowText: { fontSize: 14, ...font('600'), color: '#000' },
+  gateLaterText: { fontSize: 14, ...font('500'), color: 'rgba(255,255,255,0.55)', marginTop: spacing.md },
   note: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
   topBar: { position: 'absolute', left: spacing.lg, right: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 2 },
   iconButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
@@ -218,8 +218,8 @@ const styleDefinitions = StyleSheet.create({
   reviewBig: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.brand, borderWidth: 4, borderColor: 'rgba(255,255,255,0.35)', alignItems: 'center', justifyContent: 'center' },
   reviewLabel: { ...typography.caption, color: 'white', letterSpacing: 0.5 },
   tag: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: 'rgba(0,0,0,0.45)' },
-  tagText: { color: 'white', fontSize: 11, fontWeight: '700', letterSpacing: 1.2 },
-  count: { fontSize: 140, fontWeight: '800', color: 'white', textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 18 },
+  tagText: { color: 'white', fontSize: 11, ...font('700'), letterSpacing: 1.2 },
+  count: { fontSize: 140, ...font('700'), color: 'white', textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 18 },
   getReady: { ...typography.body, color: 'white' },
   hint: { ...typography.small, color: 'rgba(255,255,255,0.8)', textAlign: 'center' },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: spacing.lg, gap: spacing.md },

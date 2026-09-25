@@ -6,7 +6,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 
 import { BrandMark } from '@/components/BrandMark';
 import { useApp } from '@/store/AppContext';
-import { colors, spacing, typography } from '@/theme';
+import { colors, spacing, typography, font } from '@/theme';
 import { Button } from '@/components/ui';
 
 /** How long the mark stays up even when the data is instant — a beat, not a wait. */
@@ -104,12 +104,12 @@ const styleDefinitions = StyleSheet.create({
   brand: { alignItems: 'center', gap: spacing.md },
   failTitle: { ...typography.title, color: colors.text, textAlign: 'center' },
   failBody: { ...typography.body, color: colors.textMuted, textAlign: 'center', maxWidth: 320 },
-  wordmark: { fontSize: 34, fontWeight: '800', color: colors.brand, letterSpacing: -1 },
+  wordmark: { fontSize: 34, ...font('700'), color: colors.brand, letterSpacing: -1 },
   tagline: {
     position: 'absolute',
     bottom: 96, // where the launch image draws it too
     fontSize: 12,
-    fontWeight: '600',
+    ...font('600'),
     letterSpacing: 1.4,
     color: colors.textFaint,
     textTransform: 'uppercase',

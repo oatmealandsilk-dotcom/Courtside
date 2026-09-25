@@ -1,6 +1,6 @@
 ---
 name: CourtSide
-description: A tennis app that stays quiet so the court can be loud.
+description: A tennis app that reads like a page from the same magazine as the site people joined on.
 colors:
   bg: "#F8F7F2"
   bg-elevated: "#F1EFE6"
@@ -9,8 +9,8 @@ colors:
   border: "#DCD6C8"
   border-strong: "#B8AF9D"
   text: "#24251F"
-  text-muted: "#7C7565"
-  text-faint: "#8B8373"
+  text-muted: "#5D584C"
+  text-faint: "#6C665A"
   brand: "#3F7049"
   brand-ink: "#FAF8F0"
   brand-dim: "#E3E7D9"
@@ -25,37 +25,39 @@ colors:
   overlay: "rgba(24, 32, 27, 0.5)"
 typography:
   display:
-    fontFamily: "system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif"
+    fontFamily: "Inter_500Medium"
     fontSize: "30px"
-    fontWeight: 800
-    letterSpacing: "-0.6px"
+    fontWeight: 500
+    letterSpacing: "-1.05px"
   title:
-    fontFamily: "system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif"
+    fontFamily: "Inter_500Medium"
     fontSize: "22px"
-    fontWeight: 700
-    letterSpacing: "-0.3px"
+    fontWeight: 500
+    letterSpacing: "-0.66px"
   heading:
-    fontFamily: "system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif"
+    fontFamily: "Inter_600SemiBold"
     fontSize: "17px"
-    fontWeight: 700
+    fontWeight: 600
+    letterSpacing: "-0.3px"
   body:
-    fontFamily: "system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif"
+    fontFamily: "Inter_400Regular"
     fontSize: "15px"
     fontWeight: 400
   body-strong:
-    fontFamily: "system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif"
+    fontFamily: "Inter_600SemiBold"
     fontSize: "15px"
     fontWeight: 600
+    letterSpacing: "-0.15px"
   small:
-    fontFamily: "system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif"
+    fontFamily: "Inter_400Regular"
     fontSize: "13px"
     fontWeight: 400
   small-strong:
-    fontFamily: "system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif"
+    fontFamily: "Inter_600SemiBold"
     fontSize: "13px"
     fontWeight: 600
-  label:
-    fontFamily: "system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif"
+  caption:
+    fontFamily: "Inter_600SemiBold"
     fontSize: "11px"
     fontWeight: 600
     letterSpacing: "0.4px"
@@ -79,30 +81,25 @@ components:
     textColor: "{colors.brand-ink}"
     typography: "{typography.body-strong}"
     rounded: "{rounded.pill}"
-    padding: "13px 24px"
+    padding: "14px 24px"
   button-secondary:
     backgroundColor: "{colors.surface-alt}"
     textColor: "{colors.text}"
     typography: "{typography.body-strong}"
     rounded: "{rounded.pill}"
-    padding: "13px 24px"
+    padding: "14px 24px"
   button-ghost:
     backgroundColor: "transparent"
     textColor: "{colors.text-muted}"
     typography: "{typography.body-strong}"
     rounded: "{rounded.pill}"
-    padding: "13px 24px"
+    padding: "14px 24px"
   button-danger:
     backgroundColor: "transparent"
     textColor: "{colors.danger}"
     typography: "{typography.body-strong}"
     rounded: "{rounded.pill}"
-    padding: "13px 24px"
-  card:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.text}"
-    rounded: "{rounded.lg}"
-    padding: "16px"
+    padding: "14px 24px"
   chip:
     backgroundColor: "{colors.surface-alt}"
     textColor: "{colors.text-muted}"
@@ -115,234 +112,317 @@ components:
     typography: "{typography.small-strong}"
     rounded: "{rounded.pill}"
     padding: "7px 12px"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.lg}"
+    padding: "16px"
+  card-feature:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "20px"
+    padding: "24px"
   input:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.text}"
     typography: "{typography.body}"
     rounded: "{rounded.md}"
     padding: "12px 16px"
+  input-pill:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    typography: "{typography.body}"
+    rounded: "{rounded.pill}"
+    padding: "12px 16px"
+  empty-tile:
+    backgroundColor: "{colors.brand-dim}"
+    textColor: "{colors.brand}"
+    rounded: "{rounded.lg}"
+    size: "56px"
 ---
 
 # Design System: CourtSide
 
 ## Overview
 
-**Creative North Star: "Courtside Seats"**
+**Creative North Star: "The Same Magazine"**
 
-You are at the edge of the court and the match is the thing. Everything the interface does is in
-service of a clip, a photo taken minutes after a session, or a thread someone is trying to read
-properly — so the interface takes the seat, not the court. Restraint here is not minimalism for its
-own sake; it is the position. A premium, understated surface makes a phone-shot rally look like
-something worth watching, where a loud one would compete with it and lose.
+The app is the second surface of a world that began on the public waitlist page
+(`public/waitlist.html`). People signed up on a cream page set in Inter at medium weight, with a
+clay-and-grass wash feathering out of the top, dotted rules between sections, pill actions and
+hairlines instead of boxes. The app now shares all of it: the face, the ground, the washes, the
+pills, the dotted rule and the card. A screen should read like a page from the same magazine as the
+site, not like the category's chrome (800-weight screen titles, all-caps eyebrows, bordered cards
+stacked as page structure), which is exactly what the previous system was.
 
-The material is warm paper rather than glass or neon. Cream grounds, soft tan borders and a muted
-club green, all of them low-chroma — the brand accent sits at 0.082 chroma, which is less saturated
-than most apps' *neutrals*. Surfaces are flat and separated by a single hairline border, not by
-shadow. Type is the platform's own: no font ships with the app, so text renders in San Francisco on
-iPhone and the system stack on the web, which is both faster and quieter than a brand face would be.
+What stayed from the earlier world is the material: the six palettes and the recolour-by-slot rule,
+the 4px spacing ladder, the 8/12/16/24/pill radius ladder, hairline tan borders, initials avatars
+and tinted court placeholders, pill-shaped actions. What changed is the voice on top of it. Type
+is now Inter, bundled with the app, and display and title dropped from 800 and 700 to 500 with
+tracking that tightens as size grows. Section breaks are dotted rules. Colour arrives as a wash,
+not a fill. One shadow exists on the page: the primary action lifting on a soft shadow of its own
+green. And the mark draws itself once, on the success and end cards.
 
-The palette is not one world but six, and that is structural rather than a novelty setting. Every
-screen is authored once against the default palette and recoloured at draw time, which is why every
-palette must define every colour slot — a missing slot leaks a colour from whichever theme the
-screen was written in. The Grand Slam themes are the product wearing a tournament, and they only
-work because no component ever hardcodes a colour.
+Density is lower than the content would suggest. Lists are rows on hairlines, not cards; a screen
+opens with its title, one muted line, and air. Colour is rare enough that a single green pill is
+the loudest thing on most screens.
 
 **Key Characteristics:**
-- Warm paper neutrals, never grey and never white
-- Low-chroma accents; the green is muted club signage, not sports-brand green
-- Flat by default — hairline borders do the separating, shadows only lift
-- Platform type only; no brand font, no icon font, no shipped imagery
-- Pill-shaped actions against softly-rounded containers
-- Six complete palettes, one authored source
+- Inter at 400/500/600, display and title at medium weight with tight tracking; no black weights
+- Warm paper neutrals; never pure white or pure black in the default palette
+- Hairlines separate; boxes are for the few things that are genuinely a card
+- One shadow on the page, in the brand's own colour, under the primary action only
+- The wash: clay low-left, brand high-right, feathered to nothing, at a screen's opening or inside a card
+- Dotted rules for section breaks, drawn in strong tan at 70%
+- Six complete palettes, one authored source, no literal hex in a component
 
 ## Colors
 
-Warm, low-chroma and close together in value, so content supplies the contrast rather than the
-interface.
+Warm, low-chroma and close in value, so the content and the wash supply the colour rather than the
+chrome. The token block above is the default palette; the six palettes in `ThemeProvider.tsx`
+(CourtSide, Night, Clean, Australian Open, Roland Garros, Wimbledon, US Open) each fill every one
+of the same slots, and the wash, the mark, the lift shadow and the dotted rule all draw from those
+slots so each court arrives in its own colours.
 
 ### Primary
-- **Club Green** (`#3F7049`): every action worth taking. Primary buttons, selected chips and the
-  active state of anything toggleable. Muted deliberately — at half the chroma of a sports-brand
-  green it reads as club signage rather than a call to action shouting from a shelf.
-- **Green Ink** (`#FAF8F0`): the only colour that sits on Club Green. Warm off-white, not pure
-  white, so a filled button stays in the paper world.
-- **Dim Green** (`#E3E7D9`): a tint of the accent for quiet highlights — badge backgrounds and
-  selected rows that must not carry a full-strength fill.
+- **Club Green** (`brand`): the primary pill, the round create button, the arrow on the ask field,
+  the sent message bubble, selected chips, the mark, the live dot, the lift shadow. Muted club
+  signage, not sports-brand green.
+- **Green Ink** (`brand-ink`): the only colour set on Club Green. Warm off-white in the default
+  palette so a filled pill stays in the paper world.
+- **Dim Green** (`brand-dim`): the 56px tile behind the mark on the tip and end cards and behind the
+  icon of an empty state; the quiet highlight behind a chosen reaction.
 
 ### Secondary
-The four court surfaces, used as classification colour rather than decoration. They label a kind of
-thing; they never fill a button.
-- **Court** (`#527C56`): the game itself, and the success state.
-- **Clay** (`#A06F53`): warm brick.
-- **Hard** (`#3E6982`): cool blue, and the information state.
-- **Grass** (`#748360`): desaturated lawn.
+The four court surfaces classify; they never fill a button. The wash borrows `clay` for its warm
+low-left pool and `brand` for the high-right one, so the wash is the one place clay appears at
+scale.
+- **Court** (`court`): the game and the success state.
+- **Clay** (`clay`): warm brick; the wash's warm half.
+- **Hard** (`hard` / `info`): cool blue; the Coaching tab's active tint.
+- **Grass** (`grass`): desaturated lawn. `warning` is the Community tab's active tint.
 
 ### Neutral
-- **Ball Can Cream** (`#F8F7F2`): the page. Warm enough to read as paper under a phone's night
-  brightness.
-- **Warm Sand** (`#F4F2E9` surface, `#F1EFE6` elevated, `#E9E6DA` alt): the three steps between the
-  page and a raised surface, each a small step warmer or darker than the last rather than a jump.
-- **Hairline Tan** (`#DCD6C8`) and **Strong Tan** (`#B8AF9D`): every border in the app. The strong
-  one appears only where a boundary must be felt — a secondary button's edge, an input under focus.
-- **Court Ink** (`#24251F`): body text. Near-black with a trace of green, never `#000`.
-- **Muted Ink** (`#7C7565`) and **Faint Ink** (`#8B8373`): secondary text and metadata.
+- **Ball Can Cream** (`bg`): the page and the tab bar.
+- **Warm Sand** (`surface`, `bg-elevated`, `surface-alt`): three small steps up from the page. A
+  card, a received bubble and a field are `surface`; a pressed inbox row is `bg-elevated`; an
+  unselected chip and the secondary pill are `surface-alt`.
+- **Hairline Tan** (`border`) and **Strong Tan** (`border-strong`): every rule and border. Strong
+  tan draws the dotted rule, the secondary pill's edge and a field under press.
+- **Court Ink** (`text`): all reading text, and the "All" filter chip's fill in the inbox.
+- **Muted Ink** (`text-muted`) and **Faint Ink** (`text-faint`): subtitles, previews, metadata,
+  placeholders. Both deepened from the previous world to match the waitlist page and hold contrast
+  against the wash.
 
 ### Named Rules
-**The Warm Neutral Rule.** No pure white and no pure black anywhere. Every neutral carries warmth
-(`#F8F7F2`, not `#FFFFFF`; `#24251F`, not `#000000`). A pure value on a warm ground reads as a bug.
+**The Every-Slot Rule.** Every palette defines every colour key, and no component writes a literal
+hex. Styles are authored once against the default palette and recoloured by slot at draw time; a
+missing slot leaves a stray colour from the theme the screen was written in, and it looks correct
+until someone picks Wimbledon. Only black-on-media surfaces (a video frame, a story) may use a
+literal `#000` or `#FFFFFF`, because the picture, not the palette, is their ground.
 
-**The Every-Slot Rule.** Every palette defines every colour key, and no component ever writes a
-literal hex. Styles are authored once and recoloured at draw time by slot; a missing slot leaves a
-stray colour from the theme the screen was written in. This is the one rule whose breakage is
-silent — it looks fine in the default theme and wrong only in a slam theme.
+**The Wash Rule.** Colour at scale arrives as a wash, never as a filled band. The wash is two
+radial pools, clay at 42% low-left and brand at 26% high-right (both multiplied by 0.7 on a dark
+palette), under a linear fade to the page colour from 35% of its height. It sits behind a screen's
+opening moment (Coaching, 360px at 0.85 strength) or inside a card (tip and end cards, 260px at
+0.6). It never sits under a scrolling list.
 
-**The Surface Vocabulary Rule.** Clay, hard, grass and court classify; they never command. A surface
-colour on a button is a category error.
+**The Surface Vocabulary Rule.** Clay, hard, grass and court classify. A surface colour on an
+action is a category error.
 
 ## Typography
 
-**Display / Body / Label Font:** the platform's own (`system-ui`, San Francisco on iPhone, Roboto on
-Android). No font ships with the app.
+**Display / Body / Label Font:** Inter, bundled in the app via `@expo-google-fonts/inter`
+(`Inter_400Regular`, `Inter_500Medium`, `Inter_600SemiBold`, `Inter_700Bold`), loaded before the
+first frame so nothing renders in a fallback. The web build resolves the same names. The
+`font(weight)` helper in `src/theme/index.ts` returns both `fontFamily` and `fontWeight`, and is the
+only sanctioned way to set a weight.
 
-**Character:** neutral by choice. With a small, tight scale and heavy weights doing the hierarchy,
-the system face reads as precise rather than generic, and it never costs a download or a flash of
-unstyled text.
+**Character:** lighter than it was. Hierarchy still comes from size and weight, but the top of the
+scale is medium, not black, and it tightens as it grows. A 30px title at 500 with -1.05px tracking
+reads as set, not shouted.
 
 ### Hierarchy
-- **Display** (800, 30px, -0.6px tracking): a screen's own title, once per screen.
-- **Title** (700, 22px, -0.3px): section heads and sheet titles.
-- **Heading** (700, 17px): the head of a card or a grouped list.
-- **Body** (400, 15px): post text, thread bodies, messages.
-- **Body Strong** (600, 15px): button labels, names, anything that must be found while scrolling.
-- **Small** (400, 13px) / **Small Strong** (600, 13px): metadata, timestamps, handles, hints.
-- **Label** (600, 11px, +0.4px tracking): eyebrows and pills. The only tracked-out style.
+- **Display** (500, 30px, -1.05px): a screen's own title, once per screen, at the top of the
+  header with 24px above it.
+- **Title** (500, 22px, -0.66px): section heads ("Coaches"), the tip and end card titles, sheet
+  titles. The Coaching lead ("Ask a coach.") is this style at 24px.
+- **Heading** (600, 17px, -0.3px): the head of an empty state or a grouped list.
+- **Body** (400, 15px): posts, threads, bubbles at 21px line height. Names in rows are body at 500
+  and 16px; a field's text is 16px so iOS does not zoom it.
+- **Body Strong** (600, 15px, -0.15px): pill labels, prices (tabular numerals), anything found while
+  scrolling.
+- **Small** (400, 13px) and **Small Strong** (600, 13px): subtitles under titles, previews,
+  timestamps, links inside cards. Subtitle and card body run at 19px line height.
+- **Caption** (600, 11px, +0.4px): stamps and tile labels; the only tracked-out style.
 
 ### Named Rules
-**The Tight Top Rule.** Tracking tightens as size grows (-0.6px at display, -0.3px at title, 0 at
-body) and opens only at label size. Large type set loose looks web; large type set tight looks
-considered.
+**The Medium Top Rule.** Nothing above 17px is set heavier than 500. A screen title at 700 or 800
+is the previous world and reads as the category's chrome.
 
-**The Two-Weight Rule.** Hierarchy comes from weight and size, never from colour alone. A muted
-colour marks something as secondary; it is not allowed to be the only thing marking it.
+**The Tight Top Rule.** Tracking tightens as size grows (-1.05 at 30, -0.66 at 22, -0.3 at 17,
+-0.15 at strong body) and opens only at caption size.
+
+**The No-Kicker Rule.** No all-caps eyebrow sits above a heading. A screen opens with its display
+title and one muted line beneath it; a section opens with a title and one muted line beneath it.
+Uppercase caption survives only as a stamp inside content (a thread's date stamp at 11px, +0.6px)
+or as a tile label, never as a lead-in to a heading.
 
 ## Layout
 
-A single measured column, centred. On a phone the column is the screen; on a computer it is capped —
-630px for the feed when a rail sits beside it, 700px for a page on its own, with a 280px rail and a
-220px sidebar (76px compact). A sheet or floating card caps at 520px.
+A single measured column. On the phone it is the screen with 16px side padding; the header carries
+24px above the title and the title's subtitle sits 4px beneath it. On a computer the column is
+capped at 700px for a page (630px for the feed beside its rail) with a 220px sidebar (76px
+compact); a card caps at 520px and centres.
 
-Spacing runs on a 4px base through 8, 12, 16, 24, 32 and 48. Screen padding is 16px; a card's
-interior is 16px; groups of related controls sit 8px apart and unrelated blocks 24px.
+Spacing runs on a 4px base through 8, 12, 16, 24, 32 and 48. Rows on a hairline carry 15px or 16px
+of vertical padding and 12px between avatar and words; the words own the hairline, so it runs from
+the text's left edge, not the picture's. A section is a title, a 4px gap, one muted line, then 8px
+before its rows. Section breaks are a dotted rule with 24px above and below.
 
-Density is deliberately low for an app with this much content: the feed gives one post the whole
-viewport rather than stacking two, because a clip that shares the screen stops being the thing you
-are looking at.
+Lists are rows on hairlines, not stacked cards. A screen's structure is type and air; a bordered
+container appears only when the thing is genuinely a card (tip, end, apply, a received bubble).
 
 ### Named Rules
-**The One Column Rule.** Content never spans the full width of a large screen. Past the column cap,
-the extra space stays empty or becomes the rail — it never widens the reading measure.
+**The Rows-Not-Boxes Rule.** A list item is a row on a hairline. Wrapping list items in bordered
+cards is the previous world.
+
+**The One Column Rule.** Past the column cap, extra width stays empty or becomes the rail; it never
+widens the reading measure.
 
 ## Elevation & Depth
 
-Flat. Depth comes from a hairline border and a half-step change in surface warmth, not from shadow:
-a card is `surface` on `bg` with a 1px `border`, and that is the entire vocabulary for anything that
-sits *on* the page.
+Flat, with one exception. Depth on the page is a hairline and a half-step of surface warmth. The
+exception is the primary action, which lifts on a soft shadow in its own colour: `shadowColor:
+brand, opacity 0.28, radius 12, offset 0/6` on the primary pill, and the same recipe at radius 10
+and offset 0/5 on the round create button, the ask field's arrow and the thread's send button.
+Because the shadow is the brand colour, it recolours with the palette and reads as a glow rather
+than a drop.
 
-Shadow is reserved for things that genuinely float above it — the upload bar, a dragged sheet, a
-toast, a scrubber cursor, a frosted control over video. There are eleven such places in the whole
-app, and that is the intended order of magnitude.
+Things that float over the page rather than sit on it (a sheet, a toast, the upload bar, a
+long-press menu, a control over video) keep a neutral black shadow, as before; they are overlays,
+not page elements.
 
 ### Shadow Vocabulary
-- **Floating card** (`0 6px 14px rgba(0,0,0,0.12)`): the upload bar and similar detached cards.
-- **Sheet** (`0 -10px 28px rgba(0,0,0,0.28)`): a sheet rising from the bottom edge.
-- **Toast** (`0 4px 18px rgba(0,0,0,0.18)`): a message passing over the page.
-- **Control over media** (`0 3px 7px rgba(0,0,0,0.28)`): a pill or cursor on top of a photo or video,
-  where a border would disappear into the picture.
+- **Lift** (`0 6px 12px {brand} @ 0.28`, elevation 3): the primary pill. The one shadow on the page.
+- **Lift, small** (`0 5px 10px {brand} @ 0.28`): the round create button and round arrow buttons.
+- **Overlay** (`0 6px 16px #000 @ 0.18` and kin): sheets, menus, toasts, the upload bar. Not page
+  elements.
 
 ### Named Rules
-**The Flat-By-Default Rule.** If a thing belongs to the page, it gets a border. If it floats over the
-page, it gets a shadow. Nothing gets both, and a card never gets a shadow to look important.
+**The One Shadow Rule.** On the page, only the primary action casts a shadow, and it casts it in
+its own colour. Cards, rows, fields and secondary pills get a hairline. A shadow on a card to make
+it look important is a defect.
 
 ## Shapes
 
-Roundness scales with the size of the thing: 8px on small marks, 12px on inputs and tiles, 16px on
-cards, 24px on sheets and the largest containers, and fully round (999px) on anything you press that
-is smaller than a card.
+Roundness scales with the thing: 8px on small marks, 12px on fields and tiles, 16px on cards and the
+brand-dim tile, 20px on the feature card (tip, end) and message bubbles (with a 6px corner on the
+speaking side), 24px on sheets, and fully round on anything pressed that is smaller than a card,
+including the ask field and the inbox search.
 
-Every container carries a 1px border. Borders are the structural material of the system — remove
-them and the warm surfaces collapse into one another, because they are only a few percent apart in
-lightness.
+Rules are hairlines (`StyleSheet.hairlineWidth`) in Hairline Tan. Section breaks are a dotted rule:
+1px dotted, Strong Tan at 70% opacity. Cards carry a 1px border; without it the warm surfaces
+collapse into one another.
 
 ### Named Rules
-**The Pill Rule.** Actions are pills; containers are rounded rectangles. If it is fully round, you
-can press it.
+**The Pill Rule.** Actions are pills; fields that behave like actions (ask, search) are pills too;
+containers are rounded rectangles. If it is fully round, you can press it or type into it.
+
+**The Dotted Break Rule.** A break between sections of one screen is a dotted rule, never a solid
+one and never a band of surface colour.
 
 ## Components
 
 ### Buttons
-- **Shape:** fully round (999px), 13px tall inside, 24px of horizontal room, 1px border in every
-  variant so all four align on the same silhouette.
-- **Primary:** Club Green fill, Green Ink label, no visible border.
-- **Secondary:** Warm Sand alt fill, Court Ink label, Strong Tan border.
-- **Ghost:** transparent, Muted Ink label, transparent border — it holds the same space as the
-  others so rows of mixed buttons stay aligned.
-- **Danger:** transparent with a Danger red label and border. Destructive actions are outlined, never
-  filled: a red fill reads as the primary action on the screen, which is exactly wrong.
-- **Press / hover:** scales to 0.97 on press and 1.04 on hover over 60ms. Wide buttons use a gentler
-  press than small icons, which travel to 0.94.
-- **Loading:** the label stays and a court-ball spinner appears beside it at the label's own colour;
-  the button does not change size.
+- **Shape:** fully round, 14px vertical and 24px horizontal padding, 1px border in every variant
+  so all four share a silhouette.
+- **Primary:** Club Green fill, Green Ink label, the lift shadow. Disabled sits at 50% opacity and
+  keeps the shadow at that opacity.
+- **Secondary:** Warm Sand alt fill, Court Ink label, Strong Tan border, no shadow.
+- **Ghost:** transparent, Muted Ink label. Also appears as a bare Small Strong link ("Back to the
+  top", "See everyone's tips and vote →") centred under a primary pill.
+- **Danger:** transparent, Danger red label and border; destructive actions are outlined, never
+  filled.
+- **Press:** scales to 0.97; loading keeps the label and adds a court spinner in the label colour.
+- **Round icon button:** 38px (arrow, send) or 50px (create), Club Green, Green Ink glyph, the small
+  lift shadow.
 
 ### Chips
-- **Unselected:** Warm Sand alt fill, Muted Ink label, Hairline Tan border.
-- **Selected:** Club Green fill (or a passed-in tint, for topic colours), Green Ink label, no border.
-- **Sizes:** 7px/12px normal, 4px/8px small with label type.
+- **Unselected:** Warm Sand alt fill, Muted Ink label, Hairline Tan border, 7px/12px.
+- **Selected:** Club Green fill and Green Ink label by default; a caller may pass a tint (the inbox
+  filter uses Court Ink so the row of chips stays quiet next to the green create button).
 
 ### Cards / Containers
-- **Corners:** 16px.
-- **Background:** `surface` on the page's `bg` — one half-step of warmth apart.
-- **Border:** 1px Hairline Tan, always.
-- **Shadow:** none. See Elevation.
-- **Padding:** 16px when padded; a media card carries its picture edge to edge and pads only the text.
-- **Pressed:** drops to 72% opacity rather than moving.
+- **Standard card:** `surface`, 16px corners, 1px Hairline Tan, 16px padding.
+- **Feature card (tip, end, success):** `surface`, 20px corners, 1px Hairline Tan, 24px padding,
+  16px gap, max 520px, `overflow: hidden` so the wash inside it clips to the corners. Layout is
+  the waitlist's: a 56px brand-dim tile with the mark, title at 22/500, one Small body at 19px
+  line height, a field if it asks for something, one primary pill, one ghost link.
+- **Rows:** no container; a hairline above each row after the first.
 
 ### Inputs / Fields
-- **Style:** `surface` fill, 1px Hairline Tan border, 12px corners, 16px/12px padding, 15px text.
-- **Label:** Small Strong in Muted Ink, 8px above the field.
-- **Hint:** Small in Faint Ink, below.
+- **Field:** `surface` fill, 1px Hairline Tan, 12px corners, 16px/12px padding, 15px text.
+  Multiline fields set a min height (96px on the tip card).
+- **Pill field:** the same, fully round, 16px text, 52px min height, with a round green arrow or a
+  search glyph inside. Press darkens the border to Strong Tan.
+- **Thread composer:** pill field with a 38px round send button that only lifts when there is text.
 
 ### Navigation
-- **Phone:** four tabs — Home, Community, Coaching, Profile.
-- **Computer:** a left sidebar (220px, 76px when compact) replaces the tab bar.
-- **Wordmark:** centred at the top of the feed on every screen and every width.
+- **Phone:** four tabs on Ball Can Cream under a hairline, labels at 10.5px Small Strong in Faint
+  Ink. The active tab takes a tint: brand for Home and Profile, `info` for Coaching, `warning` for
+  Community. A 50px round green create button sits in the centre and shrinks to 0.86 as the bar
+  ducks on scroll.
+- **Computer:** a 220px sidebar (76px compact) replaces the bar; the active item sits on `surface`.
+- **Header:** back chevron, display title, one Small muted subtitle; on a pushed screen the title
+  compacts to Title size beside the chevron.
 
-### The Feed Page (signature)
-One post fills the viewport and the next is a vertical page away. Over a clip or a hit, the
-interface goes translucent and sits directly on the picture — the only place in the app where
-controls have no surface under them, which is why those controls carry shadow. Pinching out removes
-the interface entirely.
+### The Wash (signature)
+`Wash` in `src/components/Wash.tsx`: an SVG of two radial gradients (clay low-left, brand high-right)
+under a vertical fade to the page colour, absolutely positioned at the top of its parent and
+non-interactive. `Screen` takes `wash` to place it behind the header (360px, 0.85); the feature
+card places it inside itself (260px, 0.6). It reads the theme, so the four slam palettes wash in
+their own court colours and Night pulls the opacity to 70%.
 
-### Court Placeholders (signature)
-No image assets ship. An avatar is the person's initials on one of six muted tints, chosen
-deterministically from their handle, and a photo or video with nothing loaded yet renders as a
-tinted court card. Both are part of the look, not a stopgap: the app is recognisably itself before a
-single byte of media arrives.
+### The Drawn Mark (signature)
+`MarkDraw`: the CourtSide mark as strokes, drawing itself in when a success or end card appears:
+court outline over 640ms, then the net at 360ms, then the post at 540ms, on an exponential ease-out
+(`cubic-bezier(0.22, 1, 0.36, 1)`). It is the one authored moment on those cards. Under Reduce
+Motion it appears already drawn. Sits in the 56px brand-dim tile at 30px.
+
+### The Live Dot (signature)
+`LiveDot`: an 8px brand dot with a ring that leaves it every 1.8s (scale to 2.8, fading from 55%),
+the waitlist scoreboard's "in play" mark, for anything still waiting on a person ("Awaiting a
+coach"). Still under Reduce Motion.
+
+### Empty State
+Icon at 24px in brand on a 56px brand-dim tile, Heading title, Small muted body at 19px line height
+capped at 300px, 48px of vertical air.
+
+### Court Placeholders
+Unchanged from the previous world: avatars are initials on one of six muted tints chosen from the
+handle; media with nothing loaded is a tinted court card. No binary imagery ships.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** take every colour from the theme, so all six palettes keep working.
-- **Do** separate surfaces with a 1px border and a half-step of warmth.
-- **Do** keep actions pill-shaped and containers rounded-rectangular.
-- **Do** let type weight carry hierarchy, with colour as reinforcement.
-- **Do** give a clip the whole viewport.
-- **Do** outline destructive actions rather than filling them.
+- **Do** set weight through `font('500')` and the typography scale; never a bare `fontWeight`.
+- **Do** open a screen with its display title and one muted line, with the wash behind it only if
+  it is that screen's opening moment.
+- **Do** build lists as rows on hairlines with the line starting at the words.
+- **Do** break sections with `DottedRule`.
+- **Do** keep the lift shadow to the primary action and round brand buttons, in the brand colour.
+- **Do** use the feature card (tile, title, body, one pill, one link, wash inside) for success and
+  end moments.
+- **Do** take every colour from the theme so all six palettes keep working.
+- **Do** give every animated flourish a Reduce Motion path that lands on the finished state.
 
 ### Don't:
-- **Don't** write a literal hex in a component. The recolouring works by slot; a literal survives
-  the theme change and looks correct until someone picks Wimbledon.
-- **Don't** use `#FFFFFF` or `#000000`. Every neutral is warm.
-- **Don't** add a shadow to something that sits on the page.
-- **Don't** use a surface colour (clay, hard, grass, court) as an action colour.
-- **Don't** introduce a webfont or an icon font. Type is the platform's, icons are vector.
-- **Don't** ship placeholder imagery. Initials and court cards are the placeholder system.
+- **Don't** set a title at 700 or 800, or use a display size above 30px on a screen title.
+- **Don't** put an all-caps kicker or eyebrow above a heading.
+- **Don't** put the wash under a scrolling list, or on every screen by default.
+- **Don't** add a neutral or black shadow to anything that sits on the page.
+- **Don't** stack bordered cards as page structure.
+- **Don't** write a literal hex in a component outside a black-on-media surface.
+- **Don't** use a court surface colour (clay, hard, grass, court) as an action colour.
+- **Don't** ship imagery or an icon font; the mark is drawn, icons are vector, avatars are initials.

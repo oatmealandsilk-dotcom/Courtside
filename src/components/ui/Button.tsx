@@ -48,6 +48,7 @@ export function Button({
       accessibilityLabel={label}
       style={[
         styles.base,
+        variant === 'primary' && !inactive && styles.lift,
         full && styles.full,
         { backgroundColor: palette.bg, borderColor: palette.border, opacity: inactive ? 0.5 : 1 },
         style,
@@ -76,13 +77,15 @@ function paletteFor(variant: Variant): { bg: string; fg: string; border: string 
 
 const styleDefinitions = StyleSheet.create({
   base: {
-    paddingVertical: 13,
+    paddingVertical: 14,
     paddingHorizontal: spacing.xl,
     borderRadius: radius.pill,
     borderWidth: 1,
     alignItems: 'center',
   },
   full: { alignSelf: 'stretch' },
+  // The one shadow on the page: the primary action, in its own colour, soft.
+  lift: { shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
   inner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   label: { ...typography.bodyStrong },
 });

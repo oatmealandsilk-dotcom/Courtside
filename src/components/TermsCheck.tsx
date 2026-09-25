@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { openLegal } from '@/lib/legal';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, spacing, typography } from '@/theme';
+import { colors, spacing, typography, font } from '@/theme';
 
 /**
  * The terms, agreed to on purpose, on the sign-up form: a round check that
@@ -49,6 +49,6 @@ const styleDefinitions = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingVertical: spacing.xs },
   words: { flex: 1, gap: 3 },
   label: { ...typography.small, color: colors.text, lineHeight: 19 },
-  link: { fontWeight: '700', color: colors.text, textDecorationLine: 'underline' },
+  link: { ...font('700'), color: colors.text, textDecorationLine: 'underline' },
   rule: { ...typography.small, fontSize: 12, lineHeight: 17, color: colors.textFaint },
 });

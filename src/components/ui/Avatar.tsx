@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useApp } from '@/store/AppContext';
 import { initials } from '@/lib/format';
-import { colors, radius } from '@/theme';
+import { colors, radius, font } from '@/theme';
 
 /**
  * A default picture takes one of the theme's own accents, chosen by the
@@ -73,5 +73,5 @@ export function Avatar({ uri, name, seed, size = 40, style, ring = false }: Prop
 const styleDefinitions = StyleSheet.create({
   base: { alignItems: 'center', justifyContent: 'center' },
   badge: { position: 'absolute', backgroundColor: COACH_GREEN, borderWidth: 2, borderColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
-  label: { color: '#FFFFFF', fontWeight: '800' },
+  label: { color: '#FFFFFF', ...font('700') },
 });

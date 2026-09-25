@@ -17,7 +17,7 @@ import { TagPlayers } from '@/components/TagPlayers';
 import { addToBank, getBank } from '@/features/compose/mediaBank';
 import { useApp } from '@/store/AppContext';
 import type { QuestionTopic } from '@/data/types';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, font } from '@/theme';
 
 type Mode = 'clip' | 'post' | 'story' | 'hit' | 'question';
 
@@ -78,7 +78,7 @@ export default function Compose() {
   const [mode, setMode] = useState<Mode>(isHit ? 'hit' : params.mode === 'story' ? 'story' : 'post');
   // A post is 4:5 upright, the way the feed shows it; a clip and a story fill a phone screen (9:16).
   const portraitRatio = mode === 'post' ? 4 / 5 : 9 / 16;
-  const [media, setMedia] = useState<PickedMedia | null>(isHit ? { uri: shotUri as string, label: 'Hit', kind: 'photo', thumbnailUrl: shotUri as string, orientation: 'portrait' } : null);
+  const [media, setMedia] = useState<PickedMedia | null>(isHit ? { uri: shotUri as string, label: 'Instant', kind: 'photo', thumbnailUrl: shotUri as string, orientation: 'portrait' } : null);
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
   // What the edit step decided: where a clip starts and stops, and whether it has sound.
   const [edit, setEdit] = useState<Pick<EditedMedia, 'trimStart' | 'trimEnd' | 'muted' | 'crop'>>({});
@@ -112,7 +112,7 @@ export default function Compose() {
         caption: body.trim() || undefined,
         imageUrl: media?.kind === 'photo' ? media.uri : undefined,
         videoUrl: media?.kind === 'video' ? media.uri : undefined,
-        mediaLabel: mode === 'hit' ? 'Hit' : media?.label,
+        mediaLabel: mode === 'hit' ? 'Instant' : media?.label,
         thumbnailUrl: media?.thumbnailUrl ?? (media?.kind === 'photo' ? media.uri : undefined),
       });
       // A hit came in over the camera page, which has already gone; land on the feed.
@@ -193,7 +193,7 @@ export default function Compose() {
       </Pressable></Reanimated.View>
       {pickError ? <Text style={styles.pickError}>{pickError}</Text> : null}
       <Reanimated.View entering={arrive(2)}><Pressable accessibilityRole="button" accessibilityLabel="Take a hit" onPress={() => router.replace('/hit')} style={styles.choiceOption}>
-        <Ionicons name="camera-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Hit</Text><Text style={styles.note}>One photo after a session. Five-second count, no retakes. Up for 24 hours.</Text>
+        <Ionicons name="camera-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Instant</Text><Text style={styles.note}>One photo after a session. Five-second count, no retakes. Up for 24 hours.</Text>
       </Pressable></Reanimated.View>
       <Reanimated.View entering={arrive(3)}><Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={styles.choiceOption}>
         <Ionicons name="chatbubbles-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Thread or question</Text><Text style={styles.note}>Ask the community or start a conversation.</Text>
@@ -297,7 +297,7 @@ export default function Compose() {
                   {mode === 'hit' && media?.uri ? (
                     // The hit is what the camera took, full stop: shown plainly, nothing to click.
                     <View style={styles.hitFrame}>
-                      <Image source={{ uri: media.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel="Your hit" />
+                      <Image source={{ uri: media.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel="Your instant" />
                     </View>
                   ) : (
                     <MediaPicker bare orientation={orientation} portraitRatio={portraitRatio} selection={mode === 'clip' ? 'video' : 'all'} value={media} onChange={setMedia} trim={edit} />
@@ -373,9 +373,9 @@ const styleDefinitions = StyleSheet.create({
   preparing: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 5, borderRadius: 24, alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: colors.bg },
   preparingText: { ...typography.bodyStrong, color: colors.text },
   choiceHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8 },
-  choiceTitle: { fontSize: 22, fontWeight: '700', color: colors.text },
+  choiceTitle: { fontSize: 22, ...font('700'), color: colors.text },
   choiceOption: { padding: 20, gap: 8, borderRadius: 18, backgroundColor: colors.surface },
-  choiceLabel: { fontSize: 16, fontWeight: '600', color: colors.text },
+  choiceLabel: { fontSize: 16, ...font('600'), color: colors.text },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' },
   sheet: {
     height: '100%',
@@ -400,7 +400,7 @@ const styleDefinitions = StyleSheet.create({
   hitFrame: { width: '100%', aspectRatio: 4 / 3, maxHeight: 520, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000', alignSelf: 'center' },
   hitMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   hitPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: colors.brand, backgroundColor: colors.brandDim },
-  hitPillText: { color: colors.brand, fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
+  hitPillText: { color: colors.brand, fontSize: 11, ...font('700'), letterSpacing: 1.2 },
   hitMetaText: { ...typography.small, color: colors.textMuted, flex: 1 },
   libraryTitle: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.1, paddingTop: spacing.xl, paddingBottom: spacing.sm },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 3 },

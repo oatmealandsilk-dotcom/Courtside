@@ -553,11 +553,27 @@ function addPosts(prev: AppState, got: { posts: Post[]; comments: Comment[] }): 
   return { ...prev, posts: [...prev.posts, ...fresh], comments: [...prev.comments, ...freshComments] };
 }
 
+/**
+ * Demo build in a browser: `?as=handle` on any address signs that fixture in
+ * and keeps it for the tab, so a screen can be opened straight from its
+ * address — which is how the design checks take their pictures. Never with a
+ * real database, never on a phone.
+ */
+const demoHandle: string | null = (() => {
+  if (isSupabaseConfigured || Platform.OS !== 'web') return null;
+  try {
+    const asked = new URLSearchParams(window.location.search).get('as');
+    if (asked) { window.sessionStorage.setItem('courtside-demo-as', asked); return asked; }
+    return window.sessionStorage.getItem('courtside-demo-as');
+  } catch { return null; }
+})();
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>({
     ...emptyBootstrap,
     ready: false,
-    authResolved: !isSupabaseConfigured,
+    // A demo handle on the address is signing in: the sign-in gate waits for it.
+    authResolved: !isSupabaseConfigured && !demoHandle,
     currentUserId: null,
     onboardingComplete: false,
     error: null,
@@ -915,6 +931,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       error: null,
     }));
   }, [loadRemote]);
+
+  useEffect(() => {
+    if (!demoHandle) return;
+    let live = true;
+    signIn(demoHandle)
+      .catch(() => { try { window.sessionStorage.removeItem('courtside-demo-as'); } catch {} })
+      .finally(() => { if (live) setState((prev) => ({ ...prev, authResolved: true })); });
+    return () => { live = false; };
+  }, [signIn]);
 
   const signUp = useCallback(async (email: string, password: string, name: string, handle: string) => {
     const session = await remoteAuth.signUp(email, password, name, handle);
@@ -1280,8 +1305,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...input,
       };
       const celebration = {
-        userId: me, targetId: story.id, targetKind: 'post' as const, preview: `Hit${story.caption ? ` · ${snippet(story.caption, 60)}` : ''}`,
-        title: 'Hit posted', body: 'Up for 24 hours, then kept in your archive.',
+        userId: me, targetId: story.id, targetKind: 'post' as const, preview: `Instant${story.caption ? ` · ${snippet(story.caption, 60)}` : ''}`,
+        title: 'Instant posted', body: 'Up for 24 hours, then kept in your archive.',
         href: '/', icon: 'camera' as const,
       };
       if (!live(me)) {

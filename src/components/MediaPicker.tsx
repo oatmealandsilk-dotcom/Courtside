@@ -10,7 +10,7 @@ import { ClipVideo } from '@/components/ClipVideo';
 import { framesAt } from '@/features/compose/frames';
 import { CoverScrubber } from '@/components/CoverScrubber';
 import { VideoSurface, type VideoSurfaceHandle } from '@/components/VideoSurface';
-import { colors, typography } from '@/theme';
+import { colors, typography, font } from '@/theme';
 
 export interface PickedMedia {
   uri?: string;
@@ -210,11 +210,11 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
       {coverOpen && value.kind === 'video' && !noCover ? (
         <View style={{ gap: 4 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>Cover</Text>
+            <Text style={{ color: colors.text, fontSize: 14, ...font('600') }}>Cover</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Upload your own cover image" onPress={chooseCover} hitSlop={8}
               style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, borderWidth: 1, borderColor: colors.brand }}>
               <Ionicons name="image-outline" size={15} color={colors.brand} />
-              <Text style={{ color: colors.brand, fontSize: 13, fontWeight: '600' }}>Upload</Text>
+              <Text style={{ color: colors.brand, fontSize: 13, ...font('600') }}>Upload</Text>
             </Pressable>
           </View>
           <Text style={{ color: colors.textFaint, fontSize: 13 }}>Drag along the strip to choose the frame people see before it plays.</Text>
@@ -291,7 +291,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
         </Pressable>
       </Modal>
       <Ionicons name={selection === 'video' ? 'videocam-outline' : 'images-outline'} size={30} color={colors.textMuted}/>
-      <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>{value ? describe(value) : label ?? (compact ? 'Photo or video' : 'Select a photo or video')}</Text>
+      <Text style={{ color: colors.text, fontSize: 16, ...font('600') }}>{value ? describe(value) : label ?? (compact ? 'Photo or video' : 'Select a photo or video')}</Text>
       <Text style={{ color: colors.textMuted }}>{value ? 'Tap to replace' : 'Choose from your photos and videos.'}</Text>
     </Pressable>
     {value?.kind === 'video' && !noCover && <Pressable accessibilityRole="button" accessibilityLabel="Choose a cover image" onPress={chooseCover}
@@ -301,7 +301,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
         : <View style={{ width: 40, height: 54, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceAlt }}>
             <Ionicons name="image-outline" size={16} color={colors.textMuted}/>
           </View>}
-      <Text style={{ color: colors.info, fontWeight: '600' }}>{value.thumbnailUrl ? 'Change cover' : 'Choose a cover'}</Text>
+      <Text style={{ color: colors.info, ...font('600') }}>{value.thumbnailUrl ? 'Change cover' : 'Choose a cover'}</Text>
     </Pressable>}
     {value && <Pressable accessibilityRole="button" onPress={() => onChange(null)}><Text style={{ color: colors.danger }}>Remove media</Text></Pressable>}
     {!!error && <Text style={{ color: colors.danger }}>{error}</Text>}

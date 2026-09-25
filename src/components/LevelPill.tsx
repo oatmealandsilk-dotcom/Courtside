@@ -15,22 +15,25 @@ export function LevelPill({ profile, small = false }: { profile: PlayerProfile; 
       style={[
         styles.pill,
         small && styles.small,
-        { backgroundColor: badge.tint },
+        { borderColor: badge.tint },
       ]}
     >
-      <Text style={[small ? styles.textSmall : styles.text, { color: badge.ink }]}>{badge.label}</Text>
+      <Text style={[small ? styles.textSmall : styles.text, { color: badge.tint }]}>{badge.label}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  // The level is written in its band's colour on a hairline, the way the
+  // waitlist's tags are set: colour as a label, not a fill.
   pill: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
     borderRadius: radius.pill,
+    borderWidth: 1,
     alignSelf: 'flex-start',
   },
-  small: { paddingHorizontal: spacing.sm, paddingVertical: 2 },
-  text: { ...typography.smallStrong },
-  textSmall: { ...typography.caption },
+  small: { paddingHorizontal: 7, paddingVertical: 2 },
+  text: { ...typography.caption, letterSpacing: 0.5 },
+  textSmall: { ...typography.caption, fontSize: 10, letterSpacing: 0.5 },
 });

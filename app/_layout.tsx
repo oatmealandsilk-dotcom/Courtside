@@ -5,11 +5,12 @@ import { Stack, type ErrorBoundaryProps } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 
 import { AppProvider } from '@/store/AppContext';
 import { AppShell } from '@/components/AppShell';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
-import { colors } from '@/theme';
+import { colors, font } from '@/theme';
 import { BrandMark } from '@/components/BrandMark';
 import { installCrashReporting, reportError } from '@/lib/crashReporting';
 
@@ -26,10 +27,10 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 32, backgroundColor: colors.bg }}>
       <BrandMark size={52} />
-      <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text, textAlign: 'center' }}>Something went wrong</Text>
+      <Text style={{ fontSize: 20, ...font('700'), color: colors.text, textAlign: 'center' }}>Something went wrong</Text>
       <Text style={{ fontSize: 15, color: colors.textMuted, textAlign: 'center', maxWidth: 320 }}>It has been reported, so we can fix it. Nothing you saved is lost.</Text>
       <Pressable accessibilityRole="button" onPress={retry} style={{ marginTop: 8, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 999, backgroundColor: colors.brand }}>
-        <Text style={{ color: colors.brandInk, fontWeight: '700' }}>Try again</Text>
+        <Text style={{ color: colors.brandInk, ...font('700') }}>Try again</Text>
       </Pressable>
     </View>
   );
@@ -38,6 +39,10 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
 export default function RootLayout() {
   // A browser tab in the background carries on playing; this stops it.
   usePauseWhenHidden();
+  // Inter ships in the bundle, so on a phone this resolves before the splash
+  // has gone; in a browser it is one small fetch, kept after that.
+  const [fontsReady] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
+  if (!fontsReady) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
   return (
     <GestureHandlerRootView style={{ flex: 1 }}><ThemeProvider><SafeAreaProvider>
       <AppProvider>

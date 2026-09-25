@@ -1,4 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { Wash } from '@/components/Wash';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -34,7 +35,7 @@ import { show as showToast } from '@/lib/toast';
 import * as haptics from '@/lib/haptics';
 import type { Message } from '@/data/types';
 import Reanimated, { Easing, FadeIn, FadeInDown, FadeInUp, FadeOut, LinearTransition, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, font } from '@/theme';
 
 /** Two messages from the same person this close together read as one run: tighter, one tail. */
 const GROUP_GAP_MS = 2 * 60_000;
@@ -133,6 +134,7 @@ export default function Thread() {
   if (!conversation || !other) {
     return (
       <View style={styles.root}>
+        <Wash height={320} strength={0.7} />
         <EmptyState title="Conversation not found" body="It may have been removed." />
       </View>
     );
@@ -165,6 +167,7 @@ export default function Thread() {
 
   return (
     <KeyboardAvoidingView style={[styles.root, { paddingTop: insets.top }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <Wash height={320} strength={0.7} />
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back">
           <Ionicons name="chevron-back" size={24} color={colors.text} />
@@ -594,13 +597,13 @@ const styleDefinitions = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
   headerUser: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1 },
-  headerName: { ...typography.bodyStrong, color: colors.text },
-  headerHandle: { ...typography.small, color: colors.textFaint },
+  headerName: { ...typography.bodyStrong, ...font('500'), fontSize: 16, color: colors.text },
+  headerHandle: { ...typography.small, color: colors.textMuted },
   scroll: { flex: 1 },
   scrollContent: {
     padding: spacing.lg,
@@ -613,12 +616,12 @@ const styleDefinitions = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   bubble: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: radius.xl,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 20,
   },
   mine: { alignSelf: 'flex-end', backgroundColor: colors.brand, borderBottomRightRadius: 6 },
-  theirs: { alignSelf: 'flex-start', backgroundColor: colors.surfaceAlt, borderBottomLeftRadius: 6 },
+  theirs: { alignSelf: 'flex-start', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 6 },
   bubbleText: { ...typography.body, color: colors.text, lineHeight: 21 },
   bubbleWrap: { maxWidth: '78%' },
   row: { width: '100%' },
@@ -697,7 +700,7 @@ const styleDefinitions = StyleSheet.create({
   sharedKind: { ...typography.caption, color: colors.brand },
   sharedBody: { ...typography.small, color: colors.text, lineHeight: 19 },
   timestamp: { ...typography.caption, color: colors.textFaint, textAlign: 'center', paddingTop: spacing.md },
-  stamp: { ...typography.caption, color: colors.textFaint, textAlign: 'center', paddingVertical: spacing.md },
+  stamp: { ...typography.caption, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', color: colors.textFaint, textAlign: 'center', paddingTop: spacing.xl, paddingBottom: spacing.md },
   mentionTray: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
   composer: {
     flexDirection: 'row',
@@ -718,16 +721,17 @@ const styleDefinitions = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: 11,
     color: colors.text,
-    fontSize: 15,
+    ...typography.body,
   },
   send: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: colors.brand,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3,
   },
 });

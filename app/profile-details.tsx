@@ -13,7 +13,7 @@ import { Avatar, Button, Card, Meter, Screen, StatTile } from '@/components/ui';
 import { evaluateAchievements, fitnessLabel, levelBadge, playStyleLabel, surfaceLabel, winRate } from '@/lib/badges';
 import { formatDate } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, font } from '@/theme';
 
 /**
  * The tennis side of a player — yours, or anyone's from their profile: rating
@@ -188,7 +188,7 @@ const styleDefinitions = StyleSheet.create({
   bio: { ...typography.small, color: colors.textMuted, lineHeight: 20 },
   followRow: { flexDirection: 'row', gap: spacing.lg, flexWrap: 'wrap' },
   followText: { ...typography.small, color: colors.textFaint },
-  followCount: { color: colors.text, fontWeight: '700' },
+  followCount: { color: colors.text, ...font('700') },
   tileRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingVertical: spacing.lg },
   tileHalf: { width: '48%', flexGrow: 1 },
   section: { gap: spacing.sm, paddingBottom: spacing.xl },

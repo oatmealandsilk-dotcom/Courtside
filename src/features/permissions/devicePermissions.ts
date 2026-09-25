@@ -12,7 +12,7 @@ export type DevicePermission = 'camera' | 'photos' | 'microphone' | 'location';
 export type PermissionState = 'granted' | 'denied' | 'undetermined' | 'unavailable';
 
 export const PERMISSION_META: Record<DevicePermission, { label: string; why: string; icon: string }> = {
-  camera: { label: 'Camera', why: 'To take a hit after a session.', icon: 'camera-outline' },
+  camera: { label: 'Camera', why: 'To take an instant after a session.', icon: 'camera-outline' },
   // "Limited" access looks granted to iOS but breaks handing a video over
   // (error 3164), so the wording says "All Photos" specifically, not just "on".
   photos: { label: 'Photos', why: 'To pick clips and photos to post. Choose All Photos, not a selection, or videos may fail to open.', icon: 'images-outline' },

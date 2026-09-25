@@ -2,7 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '@/theme';
+import { colors, font } from '@/theme';
 
 export function voteCounts(item: { votes: number; votedBy: Record<string, 1 | -1> }) {
   const votes = Object.values(item.votedBy);
@@ -35,5 +35,5 @@ const styleDefinitions = StyleSheet.create({
   row: { flexDirection: 'row', gap: 6 },
   button: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, minHeight: 36, borderRadius: 20, backgroundColor: colors.bgElevated },
   active: { backgroundColor: colors.brandDim },
-  count: { color: colors.textMuted, fontSize: 12, fontWeight: '600' },
+  count: { color: colors.textMuted, fontSize: 12, ...font('600') },
 });

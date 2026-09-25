@@ -4,11 +4,14 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 
 import { Button, Field } from '@/components/ui';
-import { colors, radius, spacing } from '@/theme';
+import { MarkDraw } from '@/components/MarkDraw';
+import { Wash } from '@/components/Wash';
+import { colors, radius, spacing, typography } from '@/theme';
 
 /**
  * A page in the feed while the app is young: early people say what they
- * would change, and the best of it gets built. One box, one button.
+ * would change, and the best of it gets built. One box, one button — set
+ * like the card on the waitlist page, wash and all.
  */
 export function TipPage({ onSubmit }: { onSubmit: (body: string) => Promise<void> | void }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -24,14 +27,20 @@ export function TipPage({ onSubmit }: { onSubmit: (body: string) => Promise<void
   return (
     <View style={styles.page}>
       <View style={styles.card}>
-        <Text style={styles.badgeText}>EARLY ACCESS</Text>
-        <Text style={styles.title}>Submit a tip</Text>
-        <Text style={styles.body}>You are one of the first people on CourtSide, so your tips matter more than they ever will again. Tell us what you would add or change, and it might just come to fruition.</Text>
-        <View style={styles.divider} />
+        <Wash height={260} strength={0.6} />
+        <View style={styles.top}>
+          <View style={styles.tile}><MarkDraw size={30} /></View>
+          <View style={styles.words}>
+            <Text style={styles.title}>Submit a tip</Text>
+            <Text style={styles.body}>You’re one of the first people on CourtSide, so what you say now counts more than it ever will again. Tell us what you’d add or change.</Text>
+          </View>
+        </View>
         <Field value={body} onChangeText={setBody} placeholder="What would make CourtSide better?" multiline minHeight={96} />
         <Button label={busy ? 'Sending…' : sent ? 'Send another' : 'Send tip'} onPress={send} disabled={!body.trim() || busy} full />
-        <Pressable accessibilityRole="link" onPress={() => router.push('/tips')} hitSlop={8}><Text style={styles.link}>See everyone's tips and vote →</Text></Pressable>
-        {sent ? <Text style={styles.thanks}>Sent. It is on the board now.</Text> : null}
+        <Pressable accessibilityRole="link" onPress={() => router.push('/tips')} hitSlop={8} style={styles.linkWrap}>
+          <Text style={styles.link}>See everyone’s tips and vote →</Text>
+        </Pressable>
+        {sent ? <Text style={styles.thanks} accessibilityLiveRegion="polite">Sent. It’s on the board now.</Text> : null}
       </View>
     </View>
   );
@@ -39,12 +48,16 @@ export function TipPage({ onSubmit }: { onSubmit: (body: string) => Promise<void
 
 const styleDefinitions = StyleSheet.create({
   page: { flex: 1, alignSelf: 'stretch', backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
-  card: { alignSelf: 'center', maxWidth: 520, width: '100%', gap: spacing.md, padding: spacing.xl, borderRadius: 22, borderWidth: 1, borderColor: colors.brand, backgroundColor: colors.surface },
-  badgeText: { color: colors.brand, fontSize: 11, fontWeight: '800', letterSpacing: 3, textAlign: 'center' },
-  title: { color: colors.text, fontSize: 26, fontWeight: '800', letterSpacing: -0.3, textAlign: 'center' },
-  divider: { alignSelf: 'stretch', height: StyleSheet.hairlineWidth, backgroundColor: colors.borderStrong },
-  hint: { color: colors.textFaint, fontSize: 12, fontStyle: 'italic', textAlign: 'center' },
-  link: { color: colors.brand, fontSize: 13, fontWeight: '700', textAlign: 'center' },
-  body: { color: colors.textMuted, fontSize: 15, lineHeight: 22, textAlign: 'center' },
-  thanks: { color: colors.success, fontSize: 13, fontWeight: '600', textAlign: 'center' },
+  card: {
+    alignSelf: 'center', maxWidth: 520, width: '100%', gap: spacing.lg, padding: spacing.xl,
+    borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden',
+  },
+  top: { flexDirection: 'row', gap: spacing.lg, alignItems: 'flex-start' },
+  tile: { width: 56, height: 56, borderRadius: radius.lg, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  words: { flex: 1, gap: 6, minWidth: 0 },
+  title: { ...typography.title, color: colors.text },
+  body: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
+  linkWrap: { alignSelf: 'center' },
+  link: { ...typography.smallStrong, color: colors.brand },
+  thanks: { ...typography.smallStrong, color: colors.success, textAlign: 'center' },
 });

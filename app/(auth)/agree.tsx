@@ -8,7 +8,7 @@ import { Button } from '@/components/ui';
 import { openLegal, TERMS_VERSION } from '@/lib/legal';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, spacing, typography } from '@/theme';
+import { colors, spacing, typography, font } from '@/theme';
 
 /** The short version of the terms, numbered like a code of conduct rather than dressed up. */
 const RULES = [
@@ -100,7 +100,7 @@ const styleDefinitions = StyleSheet.create({
   number: { ...typography.smallStrong, color: colors.textFaint, width: 14, lineHeight: 21, fontVariant: ['tabular-nums'] },
   ruleText: { ...typography.body, color: colors.text, flex: 1, lineHeight: 21 },
   fine: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
-  link: { color: colors.text, fontWeight: '600', textDecorationLine: 'underline' },
+  link: { color: colors.text, ...font('600'), textDecorationLine: 'underline' },
   error: { ...typography.small, color: colors.danger },
   actions: { gap: spacing.xs },
 });

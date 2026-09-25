@@ -9,7 +9,7 @@ import { BrandMark } from '@/components/BrandMark';
 import { Screen } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { openLegal } from '@/lib/legal';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, font } from '@/theme';
 
 const VERSION = '0.1.0';
 
@@ -66,7 +66,7 @@ export default function About() {
 
 const styleDefinitions = StyleSheet.create({
   hero: { alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.xl },
-  name: { fontSize: 26, fontWeight: '800', color: colors.text, letterSpacing: -0.5 },
+  name: { fontSize: 26, ...font('700'), color: colors.text, letterSpacing: -0.5 },
   version: { ...typography.small, color: colors.textFaint },
   body: { ...typography.body, color: colors.textMuted, lineHeight: 22, textAlign: 'center', paddingBottom: spacing.xl },
   sectionTitle: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.1, paddingTop: spacing.lg, paddingBottom: spacing.sm },

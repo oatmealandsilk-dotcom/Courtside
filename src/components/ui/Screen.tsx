@@ -13,6 +13,7 @@ import Reanimated, { runOnJS, useAnimatedReaction, useAnimatedScrollHandler, use
 import { Ionicons } from '@expo/vector-icons';
 
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
+import { Wash } from '@/components/Wash';
 import { colors, spacing, typography } from '@/theme';
 
 /**
@@ -62,6 +63,8 @@ interface Props {
   scrollRef?: React.MutableRefObject<ScrollView | null>;
   /** Pull down past the top to run this; a small "Updated" note confirms it. */
   onRefresh?: () => Promise<void> | void;
+  /** The colour wash behind the top of the page. Every page carries it; pass false to go without. */
+  wash?: boolean;
 }
 
 export function Screen({
@@ -78,6 +81,7 @@ export function Screen({
   memoryKey,
   scrollRef,
   onRefresh,
+  wash = true,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
@@ -143,6 +147,9 @@ export function Screen({
   // animation thread, frame for frame with the finger, so it never steps.
   const lastY = useSharedValue(-1);
   const pullY = useSharedValue(0);
+  // Where the page is, so the wash behind the top scrolls away with it.
+  const scrollY = useSharedValue(0);
+  const washStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -Math.max(0, scrollY.value - strip) }] }));
   const beginPull = useCallback(() => { void refreshNowRef.current(); }, []);
   const armed = useSharedValue(false);
   const tick = useCallback(() => haptics.tap(), []);
@@ -155,6 +162,7 @@ export function Screen({
   const onScrollAnimated = useAnimatedScrollHandler({
     onScroll: (event) => {
       const y = event.contentOffset.y;
+      scrollY.value = y;
       runOnJS(remember)(y);
       pullY.value = y < strip ? strip - y : 0;
       if (strip > 0) {
@@ -281,6 +289,7 @@ export function Screen({
       behavior={Platform.OS === 'ios' && !scroll ? 'padding' : undefined}
       enabled={Platform.OS === 'ios' && !scroll}
     >
+      {wash ? <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, washStyle]}><Wash height={360} strength={0.85} /></Reanimated.View> : null}
       {headerWrapper ? headerWrapper(header) : header}
       {scroll ? (
         <View style={styles.flex}>
@@ -353,12 +362,12 @@ const styleDefinitions = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.md,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.lg,
     gap: spacing.md,
   },
-  headerWide: { paddingTop: spacing.xl, paddingBottom: spacing.lg },
-  headerText: { flex: 1, gap: 2 },
+  headerWide: { paddingTop: spacing.xxl, paddingBottom: spacing.xl },
+  headerText: { flex: 1, gap: 4 },
   title: { ...typography.display, color: colors.text },
   titleCompact: { ...typography.title, color: colors.text },
   back: { paddingRight: spacing.xs, paddingVertical: spacing.xs },

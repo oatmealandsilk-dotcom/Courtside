@@ -1,4 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { Wash } from '@/components/Wash';
 import React, { useEffect, useState } from 'react';
 import { BirthDateField } from '@/components/BirthDateField';
 import { blockDevice, isDeviceBlocked, toBirthDate, yearsOld } from '@/features/age/ageCheck';
@@ -11,7 +12,7 @@ import { TermsCheck } from '@/components/TermsCheck';
 import { Avatar, Button, Field } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, font } from '@/theme';
 
 type Mode = 'sign-in' | 'sign-up';
 
@@ -146,6 +147,7 @@ export default function SignIn() {
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <Wash height={420} strength={0.85} />
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.hero}>
           <BrandMark size={56} />
@@ -283,7 +285,7 @@ const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   scroll: { flexGrow: 1, padding: spacing.xl, justifyContent: 'center', gap: spacing.xxl, maxWidth: 520, width: '100%', alignSelf: 'center' },
   hero: { gap: spacing.md },
-  wordmark: { fontSize: 44, fontWeight: '800', color: colors.brand, letterSpacing: -1.4 },
+  wordmark: { fontSize: 44, ...font('700'), color: colors.brand, letterSpacing: -1.4 },
   tagline: { ...typography.body, color: colors.textMuted, lineHeight: 23, maxWidth: 380 },
   form: { gap: spacing.lg },
   accounts: { borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden', marginBottom: spacing.lg },

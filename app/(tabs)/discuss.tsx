@@ -18,7 +18,7 @@ import { reportSection, subscribeSectionRequest } from '@/features/navigation/sw
 import { useApp } from '@/store/AppContext';
 import { sourceUserIds } from '@/features/community/importedThreads';
 import type { QuestionTopic } from '@/data/types';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, font } from '@/theme';
 
 const TOPICS: (QuestionTopic | 'all')[] = [
   'all',
@@ -51,7 +51,12 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const [search, setSearch] = useState('');
   const location = useLocationToggle();
   // The account that threads are pulled in under (Reddit) is not a player.
-  const players = users.filter(u => u.id !== currentUserId && !blockedIds.includes(u.id) && !sourceUserIds.includes(u.id) && `${u.name} ${u.handle} ${u.location}`.toLowerCase().includes(search.toLowerCase()));
+  const myCity = (currentUser?.location ?? '').split(',')[0].trim().toLowerCase();
+  const sameCity = (u: (typeof users)[number]) => !!myCity && (u.location ?? '').toLowerCase().startsWith(myCity);
+  // Your own city first — the people you could actually hit with this week.
+  const players = users
+    .filter(u => u.id !== currentUserId && !blockedIds.includes(u.id) && !sourceUserIds.includes(u.id) && `${u.name} ${u.handle} ${u.location}`.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => Number(sameCity(b)) - Number(sameCity(a)));
   const [topic, setTopic] = useState<QuestionTopic | 'all'>('all');
   // A topic picked from a thread's label may sit off the end of the strip: the strip slides it into view.
   const topicStrip = useRef<ScrollView>(null);
@@ -74,15 +79,28 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const slice = visible.slice(0, shownCount);
 
   const content = (section:string) => (section === 'players' ? <View style={{ gap: 16 }}>
-        <TextInput accessibilityLabel="Search players" placeholder="Search by name, handle, or city" placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} style={styles.search} />
+        <View style={styles.searchWrap}>
+          <Ionicons name="search" size={17} color={colors.textFaint} style={styles.searchIcon} />
+          <TextInput accessibilityLabel="Search players" placeholder="Name, handle or city" placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} style={styles.search} />
+        </View>
         {currentUser && !search ? (section === 'players'
           ? <NearbyMap me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} />
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : <View style={styles.mapStandIn} />) : null}
-        {players.map(user => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && { backgroundColor: colors.surfaceAlt }]}>
-          <Avatar name={user.name} seed={user.avatarSeed} size={44} />
-          <View style={{ flex: 1, gap: 4 }}><View style={{flexDirection:"row",alignItems:"center",gap:8,flexWrap:"wrap"}}><Text style={styles.playerName}>{user.name}</Text><LevelPill profile={user.profile} small /></View><Text style={styles.playerMeta}>@{user.handle} · {user.location}</Text></View>
-
+        {players.length ? <View style={styles.playersHead}>
+          <Text style={styles.playersTitle}>Players</Text>
+          <Text style={styles.playersBody}>{search ? `${players.length} ${players.length === 1 ? 'match' : 'matches'}` : 'Your level, your side of town.'}</Text>
+        </View> : null}
+        {players.map((user, index) => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
+          <Avatar name={user.name} seed={user.avatarSeed} size={52} ring={user.isCoach} />
+          <View style={[styles.playerBody, index > 0 && styles.playerLine]}>
+            <View style={styles.playerTop}><Text style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
+            <View style={styles.playerTop}>
+              {sameCity(user) ? <View style={styles.near}><Text style={styles.nearText}>Near you</Text></View> : null}
+              <Text style={styles.playerMeta} numberOfLines={1}>@{user.handle} · {user.location}</Text>
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.textFaint} style={styles.playerChevron} />
         </Pressable>)}
         {!players.length && <EmptyState title="No players found" body="Try another name or city." />}
       </View> : <>
@@ -94,7 +112,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
               <Chip
                 label={t === 'all' ? 'All' : t === 'injury' ? 'Injuries' : t.charAt(0).toUpperCase() + t.slice(1)}
                 selected={topic === t}
-                tint={colors.warning}
+                tint={colors.text}
                 ink={colors.brandInk}
                 onPress={() => setTopic(t)}
                 small
@@ -137,7 +155,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       </>);
 
   return (
-    <Screen memoryKey="discuss"
+    <Screen memoryKey="discuss" wash
       title="Community"
       subtitle="Find your people. Talk about your game."
       right={
@@ -158,7 +176,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       }
     >
       <View style={styles.sections} onLayout={e => setTabWidth(e.nativeEvent.layout.width / 2)}>
-        {(['discussions', 'players'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: section === value }} onPress={() => setSection(value)} style={styles.section}><Text style={{ fontSize: 16, fontWeight: '600', color: section === value ? colors.warning : colors.textMuted }}>{value === 'discussions' ? 'Discussions' : 'Find Players'}</Text></Pressable>)}
+        {(['discussions', 'players'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: section === value }} onPress={() => setSection(value)} style={styles.section}><Text style={{ ...typography.bodyStrong, fontSize: 16, color: section === value ? colors.text : colors.textMuted }}>{value === 'discussions' ? 'Discussions' : 'Find Players'}</Text></Pressable>)}
         {tabWidth > 0 && <Reanimated.View pointerEvents="none" style={[styles.sectionUnderline, { width: tabWidth }, underline.style]} />}
       </View>
       <SectionPager
@@ -179,12 +197,24 @@ const styleDefinitions = StyleSheet.create({
   more: { alignSelf: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, marginTop: spacing.md },
   moreText: { ...typography.smallStrong, color: colors.text },
   section: { flex: 1, alignItems: 'center', paddingVertical: 18 },
-  sectionUnderline: { position: 'absolute', left: 0, bottom: -1, height: 3, backgroundColor: colors.warning, borderRadius: 1.5 },
-  search: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 14, fontSize: 14, color: colors.text, backgroundColor: colors.surface },
+  sectionUnderline: { position: 'absolute', left: 0, bottom: -1, height: 2, backgroundColor: colors.brand, borderRadius: 1 },
+  searchWrap: { position: 'relative', justifyContent: 'center' },
+  searchIcon: { position: 'absolute', left: 16, zIndex: 1 },
+  search: { ...typography.body, fontSize: 16, color: colors.text, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingLeft: 42, paddingRight: spacing.lg, paddingVertical: 12 },
   mapStandIn: { height: 306, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  player: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 18, borderBottomWidth: 1, borderBottomColor: colors.border },
-  playerName: { fontWeight: '600', fontSize: 15, color: colors.text },
-  playerMeta: { fontSize: 12, color: colors.textMuted },
+  playersHead: { gap: 3, paddingTop: spacing.sm },
+  playersTitle: { ...typography.title, color: colors.text },
+  playersBody: { ...typography.small, color: colors.textMuted },
+  player: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginHorizontal: -spacing.lg, paddingLeft: spacing.lg },
+  playerPressed: { backgroundColor: colors.bgElevated },
+  playerBody: { flex: 1, gap: 4, minWidth: 0, paddingVertical: 14 },
+  playerLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  playerTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  playerName: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text, flexShrink: 1 },
+  playerMeta: { ...typography.small, color: colors.textMuted, flexShrink: 1 },
+  near: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.brandDim },
+  nearText: { ...typography.caption, fontSize: 10, color: colors.brand, letterSpacing: 0.5, textTransform: 'uppercase' },
+  playerChevron: { marginRight: spacing.lg },
   fab: {
     width: 38,
     height: 38,

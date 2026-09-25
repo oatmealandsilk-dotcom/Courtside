@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Avatar } from './ui';
 import { useTheme } from '@/theme/ThemeProvider';
-import { colors } from '@/theme';
+import { colors, font } from '@/theme';
 export function ProfilePhotoPicker({ value, name, onChange }: { value?: string; name: string; onChange: (uri: string) => void }) {
   useTheme();
   const input = useRef<HTMLInputElement>(null);
@@ -34,7 +34,7 @@ export function ProfilePhotoPicker({ value, name, onChange }: { value?: string; 
     }}/>
     <Pressable accessibilityRole="button" accessibilityLabel="Change profile photo" onPress={() => input.current?.click()} style={{alignItems:'center',gap:12}}>
       <Avatar name={name} seed="profile-photo-preview" uri={value} size={88}/>
-      <Text style={{color:colors.brand,fontWeight:'600'}}>Change profile photo</Text>
+      <Text style={{color:colors.brand,...font('600')}}>Change profile photo</Text>
     </Pressable>
     {!!error && <Text style={{color:colors.danger}}>{error}</Text>}
   </View>;

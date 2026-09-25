@@ -64,7 +64,7 @@ export default function StoryViewer() {
         <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => router.back()} style={styles.close}>
           <Ionicons name="close" size={28} color="#FFFFFF" />
         </Pressable>
-        <EmptyState title="Nothing to show" body="This hit has gone." />
+        <EmptyState title="Nothing to show" body="This instant has gone." />
       </View>
     );
   }
@@ -94,14 +94,14 @@ export default function StoryViewer() {
           <Image accessibilityIgnoresInvertColors source={{ uri: current.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
         ) : (
           <View style={styles.placeholder}>
-            <MediaPlaceholder label={current.mediaLabel ?? 'Hit'} seed={current.id} portrait />
+            <MediaPlaceholder label={current.mediaLabel ?? 'Instant'} seed={current.id} portrait />
           </View>
         )}
       </View>
 
       {/* Tap zones: a third on the left goes back, the rest goes forward. */}
-      <Pressable accessibilityRole="button" accessibilityLabel="Previous hit" onPress={() => step(-1)} style={styles.zoneLeft} />
-      <Pressable accessibilityRole="button" accessibilityLabel="Next hit" onPress={() => step(1)} style={styles.zoneRight} />
+      <Pressable accessibilityRole="button" accessibilityLabel="Previous instant" onPress={() => step(-1)} style={styles.zoneLeft} />
+      <Pressable accessibilityRole="button" accessibilityLabel="Next instant" onPress={() => step(1)} style={styles.zoneRight} />
 
       <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + 8 }]}>
         <View style={styles.bars}>
@@ -118,7 +118,7 @@ export default function StoryViewer() {
         <View style={styles.head}>
           <Pressable accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.who}>
             <Avatar name={user.name} seed={user.avatarSeed} size={34} />
-            <Text style={styles.name}>{mine ? 'Your hit' : user.name}</Text>
+            <Text style={styles.name}>{mine ? 'Your instant' : user.name}</Text>
             <Text style={styles.time}>{relativeTime(current.createdAt)} · {timeLeft(current.expiresAt)}</Text>
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => router.back()} hitSlop={10}>

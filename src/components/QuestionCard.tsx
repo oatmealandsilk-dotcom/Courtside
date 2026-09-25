@@ -13,7 +13,7 @@ import { relativeTime } from '@/lib/format';
 import type { Question, QuestionTopic, User } from '@/data/types';
 import { Tappable } from '@/components/Tappable';
 import { openTopic } from '@/features/community/openTopic';
-import { colors, spacing, typography } from '@/theme';
+import { colors, spacing, typography, radius } from '@/theme';
 
 export const TOPIC_META: Record<QuestionTopic, { label: string; tint: string; icon: keyof typeof Ionicons.glyphMap }> = {
   gear: { label: 'Gear', tint: colors.clay, icon: 'pricetag-outline' },
@@ -75,12 +75,14 @@ function QuestionCardInner({
       <Text style={styles.title}>{question.title}</Text>
       {showBody && !!question.body && <RichText style={styles.preview}>{question.body}</RichText>}
       <View style={styles.metaRow}>
-        {/* The topic is a tag: a tap shows every thread under it. */}
-        <Chip label={meta.label} small onPress={() => openTopic(question.topic)} />
+        {/* The topic is a tag in its own colour: a tap shows every thread under it. */}
+        <Pressable accessibilityRole="button" accessibilityLabel={`${meta.label} threads`} onPress={() => openTopic(question.topic)} hitSlop={6} style={({ pressed }) => [styles.tag, { borderColor: meta.tint }, pressed && { opacity: 0.7 }]}>
+          <Text style={[styles.tagText, { color: meta.tint }]}>{meta.label}</Text>
+        </Pressable>
         {answered ? (
-          <View style={styles.answered}>
-            <Ionicons name="checkmark-circle" size={14} color={colors.court} />
-            <Text style={styles.answeredText}>Answered</Text>
+          <View style={[styles.tag, styles.tagDone]}>
+            <Ionicons name="checkmark" size={11} color={colors.court} />
+            <Text style={[styles.tagText, { color: colors.court }]}>Answered</Text>
           </View>
         ) : null}
       </View>
@@ -125,7 +127,7 @@ function QuestionCardInner({
 }
 
 const styleDefinitions = StyleSheet.create({
-  card: { gap: 16, borderWidth: 0, borderBottomWidth: 1, borderRadius: 0, paddingHorizontal: 0, paddingVertical: 20, backgroundColor: colors.bg },
+  card: { gap: 16, borderWidth: 0, borderBottomWidth: 1, borderRadius: 0, paddingHorizontal: 0, paddingVertical: 20, backgroundColor: 'transparent' },
   row: { flexDirection: 'row', gap: spacing.lg },
   voteBox: { alignItems: 'center', width: 44, gap: 1 },
   voteCount: { ...typography.title, color: colors.brand },
@@ -143,8 +145,9 @@ const styleDefinitions = StyleSheet.create({
   actionLabel: { ...typography.smallStrong, color: colors.text },
   sourceBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: colors.surfaceAlt },
   sourceText: { ...typography.caption, color: colors.textMuted, letterSpacing: 0 },
-  answered: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  answeredText: { ...typography.caption, color: colors.court },
+  tag: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border },
+  tagDone: { borderColor: colors.brandDim, backgroundColor: colors.brandDim },
+  tagText: { ...typography.caption, fontSize: 10, letterSpacing: 0.6, textTransform: 'uppercase' },
   spacer: { flex: 1 },
 });
 

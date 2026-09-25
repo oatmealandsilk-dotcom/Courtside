@@ -55,7 +55,7 @@ function tintFor(progress: number): { tint: string; ink: string } {
   if (progress >= 0.78) return { tint: colors.brand, ink: readableInk(colors.brand) };
   if (progress >= 0.58) return { tint: colors.hard, ink: readableInk(colors.hard) };
   if (progress >= 0.38) return { tint: colors.court, ink: readableInk(colors.court) };
-  return { tint: colors.surfaceAlt, ink: colors.text };
+  return { tint: colors.borderStrong, ink: colors.text };
 }
 
 export function tierColor(tier: AchievementTier): string {

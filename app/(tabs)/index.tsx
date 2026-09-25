@@ -14,9 +14,12 @@ import * as haptics from '@/lib/haptics';
 
 import { Avatar, Button, EmptyState } from '@/components/ui';
 import { LevelPill } from '@/components/LevelPill';
+import { FollowPill } from '@/components/FollowPill';
 import { QuestionCard } from '@/components/QuestionCard';
 import { PostCard } from '@/components/PostCard';
 import { BrandMark } from '@/components/BrandMark';
+import { MarkDraw } from '@/components/MarkDraw';
+import { Wash } from '@/components/Wash';
 import { Heart } from '@/components/Heart';
 import { MediaPostPage } from '@/components/MediaPostPage';
 import { Tappable } from '@/components/Tappable';
@@ -40,7 +43,7 @@ import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isDesktopBrowser } from '@/lib/browserDevice';
-import { colors } from '@/theme';
+import { colors, radius, typography, spacing, font } from '@/theme';
 
 /**
  * The heart that blooms when you double tap a clip.
@@ -467,7 +470,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     <View style={styles.strip}>
       <View style={styles.stripHead}>
         <Text style={styles.stripTitle}>Players you might know</Text>
-        <Text style={styles.stripSub}>Contacts, mutuals, interactions</Text>
+        <Text style={styles.stripSub}>From your contacts, mutuals and who you've played.</Text>
       </View>
       {/* Its own sideways bar: nativeID keeps the page swipe off it. */}
       <ScrollView
@@ -483,13 +486,14 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         {suggestions.slice(0, 6).map(({ user, reason }) => (
           <View key={user.id} style={styles.stripCard}>
             <Pressable accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.stripBody}>
-              <Avatar name={user.name} seed={user.avatarSeed} size={40} ring={user.isCoach} />
-              <Text style={styles.stripName} numberOfLines={1}>{user.name.split(' ')[0]}</Text>
-              <Text style={styles.stripReason} numberOfLines={1}>{reason}</Text>
+              <Avatar name={user.name} seed={user.avatarSeed} size={52} ring={user.isCoach} />
+              <View style={styles.stripWords}>
+                <Text style={styles.stripName} numberOfLines={1}>{user.name}</Text>
+                <Text style={styles.stripReason} numberOfLines={1}>{reason}</Text>
+              </View>
+              <LevelPill profile={user.profile} small />
             </Pressable>
-            <Tappable accessibilityLabel={`Follow ${user.name}`} onPress={() => actions.toggleFollow(user.id)} style={styles.stripFollow}>
-              <Text style={styles.stripFollowText}>Follow</Text>
-            </Tappable>
+            <FollowPill following={followingIds.includes(user.id)} onPress={() => actions.toggleFollow(user.id)} small />
           </View>
         ))}
       </ScrollView>
@@ -652,17 +656,16 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const endPage = (
     <View key="the-end" style={styles.endPage}>
       <View style={styles.endCard}>
-        <Text style={styles.endEyebrow}>YOU FOUND IT</Text>
-        <BrandMark size={40} />
-        <Text style={styles.endTitle}>The bottom of CourtSide.</Text>
-        <Text style={styles.endBody}>Almost nobody scrolls this far. You are one of the first people ever on here.</Text>
-        <View style={styles.endDivider} />
-        <Text style={styles.endSecret}>EARLY · №{String(feed.length).padStart(3, '0')}</Text>
-        <Text style={styles.endHint}>Remember this page. It will mean something later.</Text>
-      </View>
-      <View style={styles.endActions}>
-        <Pressable accessibilityRole="button" onPress={() => router.push('/compose')} style={styles.endButton}><Text style={styles.endButtonText}>Leave something here</Text></Pressable>
-        <Pressable accessibilityRole="button" onPress={() => pager.current?.scrollToTop()} hitSlop={8}><Text style={styles.endBack}>↑ Back to the top</Text></Pressable>
+        <Wash height={300} strength={0.65} />
+        <View style={styles.endTile}><MarkDraw size={30} /></View>
+        <Text style={styles.endTitle}>You found the bottom of CourtSide.</Text>
+        <Text style={styles.endBody}>Almost nobody scrolls this far. You are one of the first people ever on here — remember this page, it will mean something later.</Text>
+        <View style={styles.endActions}>
+          <Button label="Leave something here" onPress={() => router.push('/compose')} full />
+          <Pressable accessibilityRole="button" onPress={() => pager.current?.scrollToTop()} hitSlop={8} style={styles.endBackWrap}>
+            <Text style={styles.endBack}>↑ Back to the top</Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -721,17 +724,17 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                 return (
                   <View key={story.id} style={styles.clip}>
                    <PinchZone onPinchOut={() => lock(true)} onPinchIn={() => lock(false)}><Reanimated.View style={[StyleSheet.absoluteFill, pictureStyle]}>
-                    <View accessibilityLabel={`${author.name}'s hit`} style={styles.clipFrame}>
+                    <View accessibilityLabel={`${author.name}'s instant`} style={styles.clipFrame}>
                       <View style={phone ? StyleSheet.absoluteFill : styles.clipPortrait}>
                         {story.videoUrl ? (
                           <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={focused && active === index && warmed && playable} preload={near} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
                         ) : (
                           // Two quick taps like a hit, the way they like a clip.
-                          <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s hit`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
+                          <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s instant`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
                             {story.imageUrl ? (
                               <HitPicture uri={story.imageUrl} />
                             ) : (
-                              <MediaPlaceholder label={story.mediaLabel ?? 'Hit'} seed={story.id} portrait fill />
+                              <MediaPlaceholder label={story.mediaLabel ?? 'Instant'} seed={story.id} portrait fill />
                             )}
                           </Pressable>
                         )}
@@ -1055,7 +1058,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   );
 }
 
-/** "HIT · 22h left", ticking once a minute so it never reads stale. */
+/** "INSTANT · 22h left", ticking once a minute so it never reads stale. */
 function HitClock({ expiresAt }: { expiresAt: string }) {
   const styles = useThemedStyles(styleDefinitions);
   const [, tick] = useState(0);
@@ -1063,7 +1066,7 @@ function HitClock({ expiresAt }: { expiresAt: string }) {
   return (
     <View style={styles.hitClock}>
       <Ionicons name="time-outline" size={13} color="white" />
-      <Text style={styles.hitClockText}>HIT · {timeLeft(expiresAt)}</Text>
+      <Text style={styles.hitClockText}>INSTANT · {timeLeft(expiresAt)}</Text>
     </View>
   );
 }
@@ -1079,9 +1082,9 @@ const styleDefinitions = StyleSheet.create({
   },
   pullGreeting: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   // The mark sits at the far left of the gap, level with the greeting; the greeting and disc in the middle.
-  pullGreetingText: { color: colors.text, fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
+  pullGreetingText: { ...typography.bodyStrong, color: colors.text },
   wordmark: {
-    color: colors.brand, fontSize: 23, fontWeight: '800', letterSpacing: -0.3,
+    color: colors.brand, ...typography.title, fontSize: 23, ...font('600'), letterSpacing: -0.6,
   },
   // Kept as a hook for anything the wordmark needs over video; the shadow that
   // used to live here was doing more harm than good.
@@ -1092,7 +1095,7 @@ const styleDefinitions = StyleSheet.create({
   viewer: { flex: 1, width: '100%', minHeight: 0 },
   clip: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
   holdPage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
-  holdWord: { fontSize: 34, fontWeight: '800', color: colors.brand, letterSpacing: -1 },
+  holdWord: { ...typography.display, fontSize: 34, ...font('600'), color: colors.brand, letterSpacing: -1.2 },
   bone: { height: 12, borderRadius: 6, backgroundColor: colors.border },
   holdPost: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingBottom: 16 + BAR_DUCK_PX, alignItems: 'center' },
   boneFrame: { alignSelf: 'stretch', aspectRatio: 4 / 5, maxHeight: '58%', borderRadius: 16, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' },
@@ -1116,7 +1119,7 @@ const styleDefinitions = StyleSheet.create({
   previewTitle: {
     color: colors.text,
     fontSize: 16,
-    fontWeight: '600',
+    ...font('600'),
     textAlign: 'center',
     backgroundColor: '#203E2ACC',
     padding: 8,
@@ -1142,9 +1145,9 @@ const styleDefinitions = StyleSheet.create({
   author: { flexDirection: 'row', gap: 9, alignItems: 'center' },
   authorFill: { flexShrink: 1 },
   hitClock: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.45)' },
-  hitClockText: { color: 'white', fontSize: 11, fontWeight: '700', letterSpacing: 0.6 },
-  authorName: { color: 'white', fontSize: 14, fontWeight: '700' },
-  authorTime: { color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: '500' },
+  hitClockText: { color: 'white', fontSize: 11, ...font('700'), letterSpacing: 0.6 },
+  authorName: { color: 'white', fontSize: 14, ...font('700') },
+  authorTime: { color: 'rgba(255,255,255,0.75)', fontSize: 12, ...font('500') },
   body: { color: 'white', fontSize: 13, lineHeight: 19 },
   tags: { color: 'rgba(255,255,255,0.85)', fontSize: 11 },
   swipeHint: { color: 'rgba(255,255,255,0.7)', fontSize: 10 },
@@ -1154,7 +1157,7 @@ const styleDefinitions = StyleSheet.create({
   // Instagram's trick: plain white glyphs made bolder by a soft dark shadow
   // rather than a heavier icon, so they hold up over bright footage.
   actionGlyph: { textShadowColor: 'rgba(0, 0, 0, 0.55)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
-  actionLabel: { color: 'white', fontSize: 13, fontWeight: '700', textShadowColor: 'rgba(0, 0, 0, 0.55)', textShadowRadius: 4 },
+  actionLabel: { color: 'white', fontSize: 13, ...font('700'), textShadowColor: 'rgba(0, 0, 0, 0.55)', textShadowRadius: 4 },
   // The feed's pages hold their size while the bar ducks, so the bottom few
   // points can sit under a full-size bar: written pages keep that much clear.
   article: { flex: 1, backgroundColor: colors.bg, padding: 20, paddingTop: 64, paddingBottom: 32, gap: 20 },
@@ -1163,43 +1166,39 @@ const styleDefinitions = StyleSheet.create({
   // On a computer a written post is a centred column like a photo post, not
   // a card stretched across the whole window with its words at the far left.
   articleCentred: { width: '100%', maxWidth: 600, alignSelf: 'center' },
-  strip: { gap: 6, paddingBottom: 4 },
-  stripHead: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
-  stripTitle: { fontSize: 13, fontWeight: '700', color: colors.text },
-  stripSub: { fontSize: 11, color: colors.textFaint },
-  stripRow: { gap: 8, paddingHorizontal: 20, paddingVertical: 4 },
+  strip: { gap: 10, paddingBottom: 6 },
+  stripHead: { gap: 2 },
+  stripTitle: { ...typography.heading, fontSize: 16, color: colors.text },
+  stripSub: { ...typography.small, color: colors.textMuted },
+  stripRow: { gap: 10, paddingHorizontal: 20, paddingVertical: 6 },
+  // A card per player: the picture first, the name, the level in its colour, why they're here.
   stripCard: {
-    width: 104,
-    padding: 8,
-    gap: 6,
-    borderRadius: 12,
+    width: 148,
+    padding: 14,
+    gap: 12,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
-  stripBody: { alignItems: 'center', gap: 3 },
-  stripName: { fontSize: 12, fontWeight: '700', color: colors.text },
-  stripReason: { fontSize: 10, color: colors.textMuted },
-  stripFollow: { paddingVertical: 5, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center' },
-  stripFollowText: { color: colors.brandInk, fontSize: 12, fontWeight: '700' },
+  stripBody: { alignItems: 'center', gap: 8 },
+  stripWords: { alignItems: 'center', gap: 2 },
+  stripName: { ...typography.bodyStrong, fontSize: 14, color: colors.text, textAlign: 'center' },
+  stripReason: { ...typography.small, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
   threadArticle: { gap: 8, paddingBottom: 20 },
-  eyebrow: { color: colors.warning, fontWeight: '700', letterSpacing: 1.2, fontSize: 11 },
+  eyebrow: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.1 },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   threadMark: { marginRight: 6, marginTop: 6 },
   hint: { color: colors.textMuted, fontSize: 11, textAlign: 'center', paddingBottom: 10 },
   // The theme's own colours, so the page belongs to whichever look is on.
-  endPage: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', gap: 22, padding: 28 },
-  endCard: { alignSelf: 'stretch', alignItems: 'center', gap: 12, padding: 26, borderRadius: 22, borderWidth: 1, borderColor: colors.brand, backgroundColor: colors.surface },
-  endEyebrow: { color: colors.brand, fontSize: 11, fontWeight: '800', letterSpacing: 3 },
-  endTitle: { color: colors.text, fontSize: 22, fontWeight: '800', letterSpacing: -0.3, textAlign: 'center' },
-  endBody: { color: colors.textMuted, fontSize: 14, lineHeight: 21, textAlign: 'center' },
-  endDivider: { alignSelf: 'stretch', height: StyleSheet.hairlineWidth, backgroundColor: colors.borderStrong, marginVertical: 4 },
-  endSecret: { color: colors.brand, fontSize: 13, fontWeight: '700', letterSpacing: 2, fontVariant: ['tabular-nums'] },
-  endHint: { color: colors.textFaint, fontSize: 12, fontStyle: 'italic', textAlign: 'center' },
-  endActions: { alignSelf: 'stretch', alignItems: 'center', gap: 16 },
-  endButton: { alignSelf: 'stretch', paddingVertical: 14, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center' },
-  endButtonText: { color: colors.brandInk, fontWeight: '800', fontSize: 15 },
-  endBack: { color: colors.textMuted, fontSize: 13, fontWeight: '600' },
+  endPage: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
+  endCard: { alignSelf: 'stretch', maxWidth: 520, width: '100%', gap: spacing.lg, padding: spacing.xl, borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
+  endTile: { width: 56, height: 56, borderRadius: radius.lg, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  endTitle: { ...typography.title, color: colors.text },
+  endBody: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
+  endActions: { gap: spacing.md, paddingTop: spacing.xs },
+  endBackWrap: { alignSelf: 'center' },
+  endBack: { ...typography.smallStrong, color: colors.textMuted },
 });
 
 export default asTabRoute<{ previewSection?: string; scope?: FeedScope }>(Home);

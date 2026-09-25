@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, font } from '@/theme';
 
 /**
  * Minimal shape of what react-navigation hands a custom tabBar. Typed locally
@@ -270,11 +270,11 @@ export function NavBar({ state, navigation }: NavBarProps) {
 
 const styleDefinitions = StyleSheet.create({
   createSlot: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  createButton: { width: 48, height: 48, borderRadius: 14, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  createButton: { width: 50, height: 50, borderRadius: 25, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
   // No padding of its own: the padded row inside is the whole bar, so the
   // bar's top edge and its line are the same edge.
   bottomBar: {
-    backgroundColor: colors.bgElevated,
+    backgroundColor: colors.bg,
   },
   topLine: { position: 'absolute', top: 0, left: 0, right: 0, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   bottomItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -284,10 +284,10 @@ const styleDefinitions = StyleSheet.create({
     minWidth: 17, height: 17, borderRadius: 9, paddingHorizontal: 4,
     backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center',
     // Ringed in the bar colour so it stays legible over the active icon.
-    borderWidth: 2, borderColor: colors.bgElevated,
+    borderWidth: 2, borderColor: colors.bg,
   },
-  bottomBadgeText: { color: 'white', fontSize: 9, fontWeight: '800' },
-  bottomLabel: { ...typography.caption, fontSize: 10, color: colors.textFaint, letterSpacing: 0 },
+  bottomBadgeText: { color: 'white', fontSize: 9, ...font('700') },
+  bottomLabel: { ...typography.smallStrong, fontSize: 10.5, color: colors.textFaint, letterSpacing: 0 },
 
   sidebar: {
     backgroundColor: colors.bg,
@@ -298,7 +298,7 @@ const styleDefinitions = StyleSheet.create({
   },
   brandRow: { paddingHorizontal: spacing.md, paddingBottom: spacing.xxl },
   brandRowCompact: { paddingHorizontal: 0, alignItems: 'center' },
-  wordmark: { fontSize: 23, fontWeight: '800', color: colors.text, letterSpacing: -0.5 },
+  wordmark: { ...typography.title, fontSize: 23, color: colors.text, letterSpacing: -0.8 },
   sidebarItems: { flex: 1, gap: spacing.xs },
   sidebarItem: {
     flexDirection: 'row',
@@ -311,7 +311,7 @@ const styleDefinitions = StyleSheet.create({
   sidebarItemCompact: { justifyContent: 'center', paddingHorizontal: 0, gap: 0 },
   sidebarItemActive: { backgroundColor: colors.surface },
   sidebarLabel: { ...typography.body, color: colors.textMuted },
-  sidebarLabelActive: { color: colors.text, fontWeight: '700' },
+  sidebarLabelActive: { color: colors.text, ...font('700') },
   sidebarBadge: {
     position: 'absolute',
     top: -4,
@@ -324,6 +324,6 @@ const styleDefinitions = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sidebarBadgeText: { color: colors.brandInk, fontSize: 9, fontWeight: '700' },
+  sidebarBadgeText: { color: colors.brandInk, fontSize: 9, ...font('700') },
   sidebarFootnote: { ...typography.caption, color: colors.textFaint, paddingHorizontal: spacing.md },
 });

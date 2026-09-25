@@ -16,7 +16,7 @@ import { Tappable } from '@/components/Tappable';
 import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
 import { relativeTime, timeLeft } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, font } from '@/theme';
 
 /** One hit with its likes and comments — the same page a post gets. */
 export default function HitThread() {
@@ -33,7 +33,7 @@ export default function HitThread() {
 
   if (!story || !author) {
     return (
-      <Screen title="Hit" compactTitle onBack={() => goBack()}>
+      <Screen title="Instant" compactTitle onBack={() => goBack()}>
         <EmptyState title="This hit has gone" body="It may have expired or been taken down." />
       </Screen>
     );
@@ -49,18 +49,18 @@ export default function HitThread() {
   };
 
   return (
-    <Screen title="Hit" compactTitle onBack={() => goBack()}>
+    <Screen title="Instant" compactTitle onBack={() => goBack()}>
       <Pressable accessibilityRole="button" accessibilityLabel="Open this hit full screen" onPress={() => router.push({ pathname: `/story/${author.id}`, params: { story: story.id } })} style={styles.frame}>
         {story.videoUrl ? (
           <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={focused} preload />
         ) : story.imageUrl ? (
           <Image accessibilityIgnoresInvertColors source={{ uri: story.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
         ) : (
-          <MediaPlaceholder label={story.mediaLabel ?? 'Hit'} seed={story.id} portrait />
+          <MediaPlaceholder label={story.mediaLabel ?? 'Instant'} seed={story.id} portrait />
         )}
         <View pointerEvents="none" style={styles.clock}>
           <Ionicons name="time-outline" size={13} color="white" />
-          <Text style={styles.clockText}>HIT · {timeLeft(story.expiresAt)}</Text>
+          <Text style={styles.clockText}>INSTANT · {timeLeft(story.expiresAt)}</Text>
         </View>
       </Pressable>
 
@@ -94,7 +94,7 @@ export default function HitThread() {
 const styleDefinitions = StyleSheet.create({
   frame: { width: '100%', aspectRatio: 3 / 4, maxHeight: 520, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
   clock: { position: 'absolute', top: 12, left: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.5)' },
-  clockText: { color: 'white', fontSize: 11, fontWeight: '700', letterSpacing: 0.6 },
+  clockText: { color: 'white', fontSize: 11, ...font('700'), letterSpacing: 0.6 },
   authorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingTop: spacing.lg },
   author: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   name: { ...typography.bodyStrong, color: colors.text },

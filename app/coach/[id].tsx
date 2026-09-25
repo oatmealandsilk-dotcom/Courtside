@@ -10,7 +10,7 @@ import { Avatar, Button, Card, Chip, EmptyState, Field, Screen } from '@/compone
 import { LevelPill } from '@/components/LevelPill';
 import { duration, money, relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, font } from '@/theme';
 
 const KIND_LABEL: Record<string, string> = {
   'video-review': 'Video review',
@@ -348,8 +348,8 @@ const styleDefinitions = StyleSheet.create({
   resultRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   resultCell: { flex: 1, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.bgElevated, gap: 2 },
   resultLabel: { ...typography.caption, fontSize: 9, color: colors.textFaint },
-  resultBefore: { fontSize: 20, fontWeight: '700', color: colors.textMuted },
-  resultAfter: { fontSize: 20, fontWeight: '800', color: colors.brand },
+  resultBefore: { fontSize: 20, ...font('700'), color: colors.textMuted },
+  resultAfter: { fontSize: 20, ...font('700'), color: colors.brand },
   resultNote: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   stars: { flexDirection: 'row', gap: 1 },
   starPick: { flexDirection: 'row', gap: spacing.sm },
