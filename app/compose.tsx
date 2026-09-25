@@ -199,7 +199,7 @@ export default function Compose() {
         {preparing === 'all' ? <PreparingRing size={28} done={prepDone} /> : <Ionicons name="images-outline" size={28} color={colors.textMuted}/>}<Text style={styles.choiceLabel}>Post</Text><Text style={styles.note}>{preparing === 'all' ? 'Getting it ready…' : 'Choose from your photos and videos.'}</Text>
       </Pressable></Reanimated.View>
       {pickError ? <Text style={styles.pickError}>{pickError}</Text> : null}
-      <Reanimated.View entering={arrive(2)}><Pressable accessibilityRole="button" accessibilityLabel="Take a hit" onPress={() => router.replace('/hit')} style={styles.choiceOption}>
+      <Reanimated.View entering={arrive(2)}><Pressable accessibilityRole="button" accessibilityLabel="Take an instant" onPress={() => router.replace('/hit')} style={styles.choiceOption}>
         <Ionicons name="camera-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Instant</Text><Text style={styles.note}>One photo after a session. Five-second count, no retakes. Up for 24 hours.</Text>
       </Pressable></Reanimated.View>
       <Reanimated.View entering={arrive(3)}><Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={styles.choiceOption}>
@@ -301,10 +301,10 @@ export default function Compose() {
       {mode === 'hit' ? null : <SheetBackdrop />}
       <View style={styles.sheet}>
         <Screen
-          title={mode === 'clip' ? 'New clip' : mode === 'post' ? 'New post' : mode === 'story' ? 'New story' : mode === 'hit' ? 'New hit' : 'Ask the room'}
+          title={mode === 'clip' ? 'New clip' : mode === 'post' ? 'New post' : mode === 'story' ? 'New story' : mode === 'hit' ? 'New instant' : 'Ask the room'}
           compactTitle
           onBack={() => (mode === 'question' ? router.back() : mode === 'hit' ? router.navigate('/hit') : setStage('edit'))}
-          right={<Button label={mode === 'story' ? 'Add to story' : mode === 'hit' ? 'Post hit' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit} />}
+          right={<Button label={mode === 'story' ? 'Add to story' : mode === 'hit' ? 'Post instant' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit} />}
         >
           <View style={styles.form}>
             {mode !== 'question' ? (

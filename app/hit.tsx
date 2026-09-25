@@ -1,12 +1,11 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Image, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Animated, Image, KeyboardAvoidingView, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { setPendingShot } from '@/features/compose/pendingShot';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font } from '@/theme';
@@ -93,9 +92,16 @@ export default function Hit() {
     }
   };
 
-  // The photo is the hit; the caption and the posting happen in the same
-  // composer a clip uses, so the two flows feel like one.
-  const useShot = () => { if (!shot) return; setPendingShot(shot); router.replace({ pathname: '/compose', params: { mode: 'hit', shot: 'pending' } }); };
+  // The photo is the instant. A line to go with it and Post live right here,
+  // over the picture, the way a story is sent — no second page.
+  const [caption, setCaption] = useState('');
+  const [posting, setPosting] = useState(false);
+  const post = () => {
+    if (!shot || posting) return;
+    setPosting(true);
+    actions.addStory({ caption: caption.trim() || undefined, imageUrl: shot, mediaLabel: 'Instant', thumbnailUrl: shot });
+    router.replace('/');
+  };
   // Another go: the count starts again the moment the camera is back.
   const retake = () => { setShot(null); setCount(null); };
 
@@ -114,8 +120,8 @@ export default function Hit() {
         <View style={styles.gate}>
           <Ionicons name="camera-outline" size={30} color="rgba(255,255,255,0.7)" />
           <Text style={styles.gateTitle}>Allow camera access</Text>
-          {/* What a hit is lives on the Hit option in the Create box; here it only says why the camera is asked for. */}
-          <Text style={styles.gateBody}>CourtSide uses it to take your hit.</Text>
+          {/* What an instant is lives on the Instant option in the Create box; here it only says why the camera is asked for. */}
+          <Text style={styles.gateBody}>CourtSide uses it to take your instant.</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={permission.canAskAgain ? 'Allow camera' : 'Open Settings'}
@@ -134,27 +140,39 @@ export default function Hit() {
 
   if (shot) {
     return (
-      <View style={styles.root}>
-        <Image source={{ uri: shot }} style={StyleSheet.absoluteFill} resizeMode="contain" accessibilityLabel="Your hit" />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.root}>
+        <Image source={{ uri: shot }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel="Your instant" />
+        <View pointerEvents="none" style={styles.scrimTop} />
+        <View pointerEvents="none" style={styles.scrimBottom} />
         <View style={[styles.topBar, { top: insets.top + spacing.sm }]}>
           <Pressable accessibilityRole="button" accessibilityLabel="Cancel" onPress={() => router.back()} style={styles.iconButton}>
             <Ionicons name="close" size={24} color="white" />
           </Pressable>
-          <View style={styles.tag}><Ionicons name="tennisball" size={12} color="white" /><Text style={styles.tagText}>YOUR HIT</Text></View>
-        </View>
-        {/* A camera's own review row: retake on the left, the big send in the middle, the way a phone camera does it. */}
-        <View style={[styles.reviewRow, { paddingBottom: insets.bottom + spacing.xl }]}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Retake" onPress={retake} style={styles.reviewSide}>
-            <View style={styles.reviewSmall}><Ionicons name="refresh" size={22} color="white" /></View>
-            <Text style={styles.reviewLabel}>Retake</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Retake" onPress={retake} style={styles.retake}>
+            <Ionicons name="refresh" size={16} color="white" />
+            <Text style={styles.retakeText}>Retake</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Use this hit" onPress={useShot} style={styles.reviewMain}>
-            <View style={styles.reviewBig}><Ionicons name="arrow-forward" size={30} color={colors.brandInk} /></View>
-            <Text style={styles.reviewLabel}>Use it</Text>
-          </Pressable>
-          <View style={styles.reviewSide} />
         </View>
-      </View>
+        <View style={[styles.bottom, { paddingBottom: insets.bottom + spacing.md }]}>
+          <TextInput
+            value={caption}
+            onChangeText={setCaption}
+            placeholder="Say something…"
+            placeholderTextColor="rgba(255,255,255,0.6)"
+            maxLength={120}
+            returnKeyType="done"
+            accessibilityLabel="A line to go with it"
+            style={styles.caption}
+          />
+          <View style={styles.actions}>
+            <View style={styles.hours}><Ionicons name="time-outline" size={13} color="rgba(255,255,255,0.85)" /><Text style={styles.hoursText}>On the feed for 24 hours</Text></View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Post instant" accessibilityState={{ disabled: posting }} disabled={posting} onPress={post} style={({ pressed }) => [styles.post, pressed && { opacity: 0.85 }, posting && { opacity: 0.6 }]}>
+              <Text style={styles.postText}>Post</Text>
+              <Ionicons name="arrow-forward" size={17} color={colors.brandInk} />
+            </Pressable>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -175,7 +193,7 @@ export default function Hit() {
         <Pressable accessibilityRole="button" accessibilityLabel="Cancel" onPress={() => router.back()} style={styles.iconButton}>
           <Ionicons name="close" size={24} color="white" />
         </Pressable>
-        <View style={styles.tag}><Ionicons name="tennisball" size={12} color="white" /><Text style={styles.tagText}>ONE TAKE</Text></View>
+        <View style={styles.retake}><Ionicons name="tennisball" size={13} color="white" /><Text style={styles.retakeText}>Instant · one take</Text></View>
       </View>
       <View style={styles.centre} pointerEvents="none">
         {failed ? (
@@ -187,7 +205,7 @@ export default function Hit() {
         ) : null}
       </View>
       <View style={[styles.bottom, { paddingBottom: insets.bottom + spacing.xl }]} pointerEvents="none">
-        <Text style={styles.hint}>{count === null ? '' : 'No retakes. Whatever the camera sees at zero is the hit.'}</Text>
+        <Text style={styles.hint}>{count === null ? '' : 'No retakes. Whatever the camera sees at zero is the instant.'}</Text>
       </View>
     </View>
   );
@@ -211,21 +229,17 @@ const styleDefinitions = StyleSheet.create({
   note: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
   topBar: { position: 'absolute', left: spacing.lg, right: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 2 },
   iconButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
-  reviewRow: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', paddingHorizontal: spacing.xl },
-  reviewSide: { width: 72, alignItems: 'center', gap: 6 },
-  reviewMain: { alignItems: 'center', gap: 6 },
-  reviewSmall: { width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.18)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)', alignItems: 'center', justifyContent: 'center' },
-  reviewBig: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.brand, borderWidth: 4, borderColor: 'rgba(255,255,255,0.35)', alignItems: 'center', justifyContent: 'center' },
-  reviewLabel: { ...typography.caption, color: 'white', letterSpacing: 0.5 },
-  tag: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: 'rgba(0,0,0,0.45)' },
-  tagText: { color: 'white', fontSize: 11, ...font('700'), letterSpacing: 1.2 },
+  retake: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 40, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: 'rgba(0,0,0,0.45)' },
+  retakeText: { ...typography.smallStrong, color: 'white' },
+  hours: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  hoursText: { ...typography.small, color: 'rgba(255,255,255,0.85)' },
   count: { fontSize: 140, ...font('700'), color: 'white', textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 18 },
   getReady: { ...typography.body, color: 'white' },
   hint: { ...typography.small, color: 'rgba(255,255,255,0.8)', textAlign: 'center' },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: spacing.lg, gap: spacing.md },
   scrimTop: { position: 'absolute', left: 0, right: 0, top: 0, height: 120, backgroundColor: 'rgba(0,0,0,0.35)' },
   scrimBottom: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 200, backgroundColor: 'rgba(0,0,0,0.45)' },
-  caption: { color: 'white', fontSize: 16, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.4)' },
+  caption: { ...typography.body, fontSize: 17, color: 'white', paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.4)' },
   actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   discard: { paddingVertical: spacing.md, paddingHorizontal: spacing.sm },
   discardText: { ...typography.bodyStrong, color: 'white' },
