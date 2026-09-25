@@ -12,7 +12,7 @@ import { Avatar, Button, Chip, EmptyState, Field, Screen } from '@/components/ui
 import { relativeTime } from '@/lib/format';
 import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, font } from '@/theme';
 
 /** One Ask-a-Coach thread: the player's question and every coach reply. */
 export default function CoachQuestionDetail() {
@@ -76,7 +76,7 @@ export default function CoachQuestionDetail() {
           </Text>
           {question.authorId === currentUserId && replies.length ? (
             <Pressable accessibilityRole="button" accessibilityLabel={question.resolved ? 'Reopen the question' : 'This answered it'} onPress={() => actions.resolveCoachQuestion(question.id)} hitSlop={8} style={{ marginLeft: 'auto' }}>
-              <Text style={[styles.meta, { color: colors.brand, fontWeight: '700' }]}>{question.resolved ? 'Reopen' : 'This answered it'}</Text>
+              <Text style={[styles.meta, { color: colors.brand, ...font('700') }]}>{question.resolved ? 'Reopen' : 'This answered it'}</Text>
             </Pressable>
           ) : null}
         </View>

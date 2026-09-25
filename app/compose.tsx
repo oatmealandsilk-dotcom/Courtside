@@ -17,7 +17,7 @@ import { TagPlayers } from '@/components/TagPlayers';
 import { addToBank, getBank } from '@/features/compose/mediaBank';
 import { useApp } from '@/store/AppContext';
 import type { QuestionTopic } from '@/data/types';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, font } from '@/theme';
 
 type Mode = 'clip' | 'post' | 'story' | 'hit' | 'question';
 
@@ -373,9 +373,9 @@ const styleDefinitions = StyleSheet.create({
   preparing: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 5, borderRadius: 24, alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: colors.bg },
   preparingText: { ...typography.bodyStrong, color: colors.text },
   choiceHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8 },
-  choiceTitle: { fontSize: 22, fontWeight: '700', color: colors.text },
+  choiceTitle: { fontSize: 22, ...font('700'), color: colors.text },
   choiceOption: { padding: 20, gap: 8, borderRadius: 18, backgroundColor: colors.surface },
-  choiceLabel: { fontSize: 16, fontWeight: '600', color: colors.text },
+  choiceLabel: { fontSize: 16, ...font('600'), color: colors.text },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' },
   sheet: {
     height: '100%',
@@ -400,7 +400,7 @@ const styleDefinitions = StyleSheet.create({
   hitFrame: { width: '100%', aspectRatio: 4 / 3, maxHeight: 520, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000', alignSelf: 'center' },
   hitMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   hitPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: colors.brand, backgroundColor: colors.brandDim },
-  hitPillText: { color: colors.brand, fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
+  hitPillText: { color: colors.brand, fontSize: 11, ...font('700'), letterSpacing: 1.2 },
   hitMetaText: { ...typography.small, color: colors.textMuted, flex: 1 },
   libraryTitle: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.1, paddingTop: spacing.xl, paddingBottom: spacing.sm },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 3 },

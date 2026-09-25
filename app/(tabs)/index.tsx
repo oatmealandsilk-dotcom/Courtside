@@ -1117,7 +1117,7 @@ const styleDefinitions = StyleSheet.create({
   previewTitle: {
     color: colors.text,
     fontSize: 16,
-    fontWeight: '600',
+    ...font('600'),
     textAlign: 'center',
     backgroundColor: '#203E2ACC',
     padding: 8,
@@ -1143,9 +1143,9 @@ const styleDefinitions = StyleSheet.create({
   author: { flexDirection: 'row', gap: 9, alignItems: 'center' },
   authorFill: { flexShrink: 1 },
   hitClock: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.45)' },
-  hitClockText: { color: 'white', fontSize: 11, fontWeight: '700', letterSpacing: 0.6 },
-  authorName: { color: 'white', fontSize: 14, fontWeight: '700' },
-  authorTime: { color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: '500' },
+  hitClockText: { color: 'white', fontSize: 11, ...font('700'), letterSpacing: 0.6 },
+  authorName: { color: 'white', fontSize: 14, ...font('700') },
+  authorTime: { color: 'rgba(255,255,255,0.75)', fontSize: 12, ...font('500') },
   body: { color: 'white', fontSize: 13, lineHeight: 19 },
   tags: { color: 'rgba(255,255,255,0.85)', fontSize: 11 },
   swipeHint: { color: 'rgba(255,255,255,0.7)', fontSize: 10 },
@@ -1155,7 +1155,7 @@ const styleDefinitions = StyleSheet.create({
   // Instagram's trick: plain white glyphs made bolder by a soft dark shadow
   // rather than a heavier icon, so they hold up over bright footage.
   actionGlyph: { textShadowColor: 'rgba(0, 0, 0, 0.55)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
-  actionLabel: { color: 'white', fontSize: 13, fontWeight: '700', textShadowColor: 'rgba(0, 0, 0, 0.55)', textShadowRadius: 4 },
+  actionLabel: { color: 'white', fontSize: 13, ...font('700'), textShadowColor: 'rgba(0, 0, 0, 0.55)', textShadowRadius: 4 },
   // The feed's pages hold their size while the bar ducks, so the bottom few
   // points can sit under a full-size bar: written pages keep that much clear.
   article: { flex: 1, backgroundColor: colors.bg, padding: 20, paddingTop: 64, paddingBottom: 32, gap: 20 },

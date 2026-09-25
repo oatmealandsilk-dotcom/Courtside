@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, font } from '@/theme';
 
 /**
  * Minimal shape of what react-navigation hands a custom tabBar. Typed locally
@@ -286,7 +286,7 @@ const styleDefinitions = StyleSheet.create({
     // Ringed in the bar colour so it stays legible over the active icon.
     borderWidth: 2, borderColor: colors.bg,
   },
-  bottomBadgeText: { color: 'white', fontSize: 9, fontWeight: '800' },
+  bottomBadgeText: { color: 'white', fontSize: 9, ...font('700') },
   bottomLabel: { ...typography.smallStrong, fontSize: 10.5, color: colors.textFaint, letterSpacing: 0 },
 
   sidebar: {
@@ -311,7 +311,7 @@ const styleDefinitions = StyleSheet.create({
   sidebarItemCompact: { justifyContent: 'center', paddingHorizontal: 0, gap: 0 },
   sidebarItemActive: { backgroundColor: colors.surface },
   sidebarLabel: { ...typography.body, color: colors.textMuted },
-  sidebarLabelActive: { color: colors.text, fontWeight: '700' },
+  sidebarLabelActive: { color: colors.text, ...font('700') },
   sidebarBadge: {
     position: 'absolute',
     top: -4,
@@ -324,6 +324,6 @@ const styleDefinitions = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sidebarBadgeText: { color: colors.brandInk, fontSize: 9, fontWeight: '700' },
+  sidebarBadgeText: { color: colors.brandInk, fontSize: 9, ...font('700') },
   sidebarFootnote: { ...typography.caption, color: colors.textFaint, paddingHorizontal: spacing.md },
 });

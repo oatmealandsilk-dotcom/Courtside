@@ -3,7 +3,7 @@ import { Text, type StyleProp, type TextProps, type TextStyle } from 'react-nati
 import { router } from 'expo-router';
 
 import { useApp } from '@/store/AppContext';
-import { colors } from '@/theme';
+import { colors, font } from '@/theme';
 
 const MENTION = /(@[a-z0-9_.]{2,30})/gi;
 
@@ -35,7 +35,7 @@ function Mention({ label, name, mentionStyle, onPress }: { label: string; name: 
     <Text
       accessibilityRole="link"
       accessibilityLabel={`Open ${name}'s profile`}
-      style={[{ color: colors.brand, fontWeight: '600' }, mentionStyle, down && { opacity: 0.5 }]}
+      style={[{ color: colors.brand, ...font('600') }, mentionStyle, down && { opacity: 0.5 }]}
       suppressHighlighting
       onPressIn={() => setDown(true)}
       onPressOut={() => setDown(false)}

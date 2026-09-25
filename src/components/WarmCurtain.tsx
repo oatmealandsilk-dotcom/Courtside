@@ -5,7 +5,7 @@ import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 
 
 import { BrandMark } from '@/components/BrandMark';
 import { setCurtainDown, useFeedWarm } from '@/features/feed/warmup';
-import { colors, spacing } from '@/theme';
+import { colors, spacing, font } from '@/theme';
 
 /**
  * The splash, kept up over the app until the feed's first pages are in, then
@@ -39,7 +39,7 @@ export function WarmCurtain() {
 const styles = StyleSheet.create({
   curtain: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', zIndex: 60 },
   brand: { alignItems: 'center', gap: spacing.md },
-  wordmark: { fontSize: 34, fontWeight: '800', color: colors.brand, letterSpacing: -1 },
+  wordmark: { fontSize: 34, ...font('700'), color: colors.brand, letterSpacing: -1 },
   // 96 points up, the same place the launch image draws it, so nothing jumps when one hands over to the other.
-  tagline: { position: 'absolute', bottom: 96, fontSize: 12, fontWeight: '600', letterSpacing: 1.4, color: colors.textFaint, textTransform: 'uppercase' },
+  tagline: { position: 'absolute', bottom: 96, fontSize: 12, ...font('600'), letterSpacing: 1.4, color: colors.textFaint, textTransform: 'uppercase' },
 });

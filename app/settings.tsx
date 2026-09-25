@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Avatar, Field, Screen, Toggle } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { useTheme, themeList, themes, type ThemeName } from '@/theme/ThemeProvider';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, font } from '@/theme';
 
 interface Row {
   icon: keyof typeof Ionicons.glyphMap;
@@ -280,7 +280,7 @@ const styleDefinitions = StyleSheet.create({
   accountHandle: { ...typography.small, color: colors.textFaint },
   section: { gap: spacing.sm, paddingBottom: spacing.xl },
   // Plain sentence-case headings, the way Instagram's settings read: no spaced-out letters.
-  sectionTitle: { fontSize: 14, fontWeight: '600', color: colors.textMuted, letterSpacing: 0, paddingHorizontal: 4 },
+  sectionTitle: { fontSize: 14, ...font('600'), color: colors.textMuted, letterSpacing: 0, paddingHorizontal: 4 },
   card: {
     borderRadius: radius.lg,
     borderWidth: 1,

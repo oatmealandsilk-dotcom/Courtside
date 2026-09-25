@@ -8,7 +8,7 @@ import { Avatar } from '@/components/ui';
 import { railEntries } from '@/features/stories/stories';
 import { timeLeft } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
-import { colors, radius } from '@/theme';
+import { colors, radius, font } from '@/theme';
 
 /**
  * Hit tiles across the top of the feed — one photo each, taken after a session. Your own tile comes first and doubles
@@ -79,7 +79,7 @@ const styleDefinitions = StyleSheet.create({
     position: 'absolute', right: -1, bottom: -1, width: 20, height: 20, borderRadius: 10,
     backgroundColor: colors.brand, borderWidth: 2, borderColor: colors.bg, alignItems: 'center', justifyContent: 'center',
   },
-  name: { fontSize: 11, fontWeight: '600', color: colors.text, maxWidth: 66 },
-  left: { fontSize: 10, fontWeight: '500', color: colors.textMuted, maxWidth: 66, marginTop: -3 },
+  name: { fontSize: 11, ...font('600'), color: colors.text, maxWidth: 66 },
+  left: { fontSize: 10, ...font('500'), color: colors.textMuted, maxWidth: 66, marginTop: -3 },
   nameOnVideo: { color: '#FFFFFF', textShadowColor: '#0009', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
 });

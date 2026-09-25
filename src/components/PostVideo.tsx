@@ -4,7 +4,7 @@ import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme/ThemeProvider';
-import { colors } from '@/theme';
+import { colors, font } from '@/theme';
 
 import { ClipVideo, type ClipVideoHandle } from './ClipVideo';
 import { CourtSpinner } from './CourtSpinner';
@@ -279,8 +279,8 @@ const styles = StyleSheet.create({
   bigGlyph: { textShadowColor: 'rgba(0,0,0,0.55)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 12, paddingBottom: 6, gap: 2 },
   timeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  time: { color: 'white', fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  timeDim: { color: 'rgba(255,255,255,0.7)', fontWeight: '500' },
+  time: { color: 'white', fontSize: 12, ...font('600'), fontVariant: ['tabular-nums'] },
+  timeDim: { color: 'rgba(255,255,255,0.7)', ...font('500') },
   small: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   trackHit: { height: 24, justifyContent: 'center' },
   track: { height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.3)', overflow: 'hidden' },
@@ -288,6 +288,6 @@ const styles = StyleSheet.create({
   knob: { position: 'absolute', top: 5, marginLeft: -7, width: 14, height: 14, borderRadius: 7, backgroundColor: 'white' },
   fullRoot: { flex: 1, backgroundColor: 'transparent' },
   skip: { position: 'absolute', top: '50%', marginTop: -22, width: 64, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
-  skipText: { color: 'white', fontSize: 11, fontWeight: '700', marginTop: 1 },
+  skipText: { color: 'white', fontSize: 11, ...font('700'), marginTop: 1 },
   close: { position: 'absolute', right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
 });

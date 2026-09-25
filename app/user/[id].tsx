@@ -14,7 +14,7 @@ import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
 import { evaluateAchievements, playStyleLabel, surfaceLabel, tierColor } from '@/lib/badges';
 import { compactNumber } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, font } from '@/theme';
 
 const TABS = ['Posts', 'Clips', 'Tagged'] as const;
 
@@ -223,12 +223,12 @@ const styleDefinitions = StyleSheet.create({
   more: { padding: 4 },
   identity: { gap: 10, paddingTop: 10, paddingBottom: 20, paddingHorizontal: 12, alignItems: 'center' },
   nameRow: { flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', marginTop: 4 },
-  name: { fontSize: 20, fontWeight: '700', color: colors.text },
+  name: { fontSize: 20, ...font('700'), color: colors.text },
   bio: { fontSize: 14, lineHeight: 21, color: colors.textMuted, textAlign: 'center', maxWidth: 320 },
   meta: { fontSize: 12, color: colors.textMuted, lineHeight: 19 },
   followRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   follow: { flexDirection: 'row', alignItems: 'baseline' },
-  followCount: { fontSize: 15, fontWeight: '700', color: colors.text },
+  followCount: { fontSize: 15, ...font('700'), color: colors.text },
   followDot: { color: colors.textFaint, fontSize: 14 },
   buttons: { flexDirection: 'row', gap: 8, alignSelf: 'stretch', marginTop: 6 },
   blockedBox: {
@@ -241,7 +241,7 @@ const styleDefinitions = StyleSheet.create({
   lockedTitle: { ...typography.heading, color: colors.text },
   lockedBody: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
   tennis: { padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.surface, gap: 8 },
-  eyebrow: { letterSpacing: 1.2, fontSize: 11, fontWeight: '700', color: colors.textMuted },
+  eyebrow: { letterSpacing: 1.2, fontSize: 11, ...font('700'), color: colors.textMuted },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   details: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   detail: { width: '46%', gap: 2 },
@@ -253,7 +253,7 @@ const styleDefinitions = StyleSheet.create({
   tabs: { flexDirection: 'row', marginTop: 16, borderBottomWidth: 2, borderBottomColor: colors.border },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 18, marginBottom: -2, borderBottomWidth: 2, borderBottomColor: 'transparent' },
   tabOn: { borderBottomColor: colors.brand },
-  tabCount: { fontSize: 12, fontWeight: '600', color: colors.textFaint },
+  tabCount: { fontSize: 12, ...font('600'), color: colors.textFaint },
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: 0, minHeight: 120, paddingBottom: spacing.xl },
   tile: { borderWidth: 1, borderColor: colors.bg, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   tileBlank: { padding: 10, justifyContent: 'center' },

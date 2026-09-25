@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { measureForEdit } from '@/features/compose/photoEdit';
 import * as haptics from '@/lib/haptics';
-import { spacing, typography } from '@/theme';
+import { spacing, typography, font } from '@/theme';
 
 /** How far past the edge a drag or a pinch may stretch before it resists, as a share of the overshoot. */
 const RUBBER = 0.32;
@@ -224,7 +224,7 @@ const styles = StyleSheet.create({
   title: { ...typography.bodyStrong, color: 'white', fontSize: 17 },
   bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl },
   button: { ...typography.body, color: 'white', fontSize: 17 },
-  choose: { fontWeight: '600' },
+  choose: { ...font('600') },
   pressed: { opacity: 0.5 },
   error: { ...typography.small, color: 'rgba(255,255,255,0.75)', flex: 1, textAlign: 'center' },
 });
