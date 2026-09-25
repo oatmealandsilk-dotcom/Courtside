@@ -34,12 +34,24 @@ export default function AdminWaitlist() {
   }, [actions]);
   useEffect(() => { void load(); }, [load]);
 
-  // Which posts are working: signups counted by the ?ref= on the link they came from.
+  // Which posts are working: signups counted by the ?ref= on the link they came
+  // from, with anyone brought by a friend's link counted under "a friend".
   const sources = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const e of entries ?? []) counts.set(e.source ?? 'direct', (counts.get(e.source ?? 'direct') ?? 0) + 1);
+    for (const e of entries ?? []) {
+      const key = e.referredBy ? 'a friend' : (e.source ?? 'direct');
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
     return [...counts.entries()].sort((a, b) => b[1] - a[1]);
   }, [entries]);
+
+  // How many each person has brought in — their code is the start of their id.
+  const brought = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const e of entries ?? []) if (e.referredBy) counts.set(e.referredBy, (counts.get(e.referredBy) ?? 0) + 1);
+    return counts;
+  }, [entries]);
+  const codeOf = (id: string) => id.replace(/-/g, '').slice(0, 8);
 
   // Someone asked to come off the list (the privacy policy promises it), or a test row.
   const remove = async (table: 'waitlist' | 'site_feedback', id: string) => {
@@ -98,7 +110,12 @@ export default function AdminWaitlist() {
                   <View style={styles.rowWords}>
                     <Text style={styles.email} numberOfLines={1} selectable>{entry.email}</Text>
                     <Text style={styles.muted} numberOfLines={1}>
-                      {[entry.name, entry.source ? `from ${entry.source}` : null, relativeTime(entry.createdAt)].filter(Boolean).join(' · ')}
+                      {[
+                        entry.name,
+                        entry.referredBy ? 'invited by a friend' : entry.source ? `from ${entry.source}` : null,
+                        brought.get(codeOf(entry.id)) ? `brought ${brought.get(codeOf(entry.id))}` : null,
+                        relativeTime(entry.createdAt),
+                      ].filter(Boolean).join(' · ')}
                     </Text>
                   </View>
                   <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${entry.email} from the waitlist`} disabled={removing === entry.id} onPress={() => void remove('waitlist', entry.id)} hitSlop={8}>

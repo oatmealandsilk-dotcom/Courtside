@@ -311,7 +311,7 @@ type Edge = { follower_id: string; following_id: string };
 interface ReportRow { id: string; reporter_id: string; target_user_id: string | null; target: string | null; reason: string | null; created_at: string; status?: string | null; reviewed_at?: string | null }
 /** A report as the admin's Reports screen shows it. */
 /** Someone who asked for early access on the waitlist page. */
-export interface WaitlistEntry { id: string; email: string; name?: string; source?: string; createdAt: string }
+export interface WaitlistEntry { id: string; email: string; name?: string; source?: string; referredBy?: string; createdAt: string }
 /** A note from the waitlist page's feedback box. */
 export interface SiteFeedback { id: string; message: string; email?: string; createdAt: string }
 
@@ -658,10 +658,10 @@ export const remote = {
 
   /** Everyone on the waitlist, newest first. Only admins can read it; for anyone else it is empty. */
   async fetchWaitlist(): Promise<WaitlistEntry[]> {
-    const { data, error } = await allRows<{ id: string; email: string; name: string | null; source: string | null; created_at: string }>(
-      (from, to) => need().from('waitlist').select('id, email, name, source, created_at').order('created_at', { ascending: false }).range(from, to), 20000);
+    const { data, error } = await allRows<{ id: string; email: string; name: string | null; source: string | null; referred_by: string | null; created_at: string }>(
+      (from, to) => need().from('waitlist').select('id, email, name, source, referred_by, created_at').order('created_at', { ascending: false }).range(from, to), 20000);
     if (error) { fail('waitlist')(error); return []; }
-    return data.map((r) => ({ id: r.id, email: r.email, name: r.name ?? undefined, source: r.source ?? undefined, createdAt: r.created_at }));
+    return data.map((r) => ({ id: r.id, email: r.email, name: r.name ?? undefined, source: r.source ?? undefined, referredBy: r.referred_by ?? undefined, createdAt: r.created_at }));
   },
   /** Notes left in the build log's feedback box, newest first. Admins only. */
   async fetchSiteFeedback(): Promise<SiteFeedback[]> {
