@@ -1,14 +1,14 @@
 /**
  * The map's look, shared by the browser canvas (MapLibre in the page) and
  * the phone canvas (the same MapLibre inside a web view): OpenFreeMap's
- * plainest style, recoloured into warm paper by day and a quiet dark by
- * night, with only the labels that matter.
+ * plainest style, recoloured into the app's own theme.
  */
 /** The few MapLibre calls the recolouring needs, so this file has no MapLibre import of its own. */
 export interface LookMap {
   getLayer(id: string): unknown;
   setLayoutProperty(id: string, name: string, value: unknown): unknown;
   setPaintProperty(id: string, name: string, value: unknown): unknown;
+  setLayerZoomRange(id: string, min: number, max: number): unknown;
 }
 
 /**
@@ -18,83 +18,76 @@ export interface LookMap {
  */
 export const STYLE = 'https://tiles.openfreemap.org/styles/positron';
 
-export type Look = Record<string, { fill?: string; line?: string; text?: string; halo?: string; hide?: boolean }>;
-export const DAY: Look = {
-  background: { fill: '#F6F4EF' },
-  landuse_residential: { fill: '#F1EFE9' },
-  park: { fill: '#D7E9CB' },
-  landcover_wood: { fill: '#D2E3C5' },
-  water: { fill: '#B7D6EC' },
-  waterway: { line: '#B7D6EC' },
-  building: { fill: '#EAE7E0' },
-  highway_path: { line: '#E6E2DA' },
-  highway_minor: { line: '#FFFFFF' },
-  highway_major_casing: { line: '#E3DFD6' },
-  highway_major_inner: { line: '#FFFFFF' },
-  highway_major_subtle: { line: '#FFFFFF' },
-  highway_motorway_casing: { line: '#E8D9A0' },
-  highway_motorway_inner: { line: '#FBEFC1' },
-  highway_motorway_subtle: { line: '#FBEFC1' },
-  highway_motorway_bridge_casing: { line: '#E8D9A0' },
-  highway_motorway_bridge_inner: { line: '#FBEFC1' },
-  tunnel_motorway_casing: { line: '#EEE6CC' },
-  tunnel_motorway_inner: { line: '#F8F1D8' },
-  railway: { line: '#E0DCD3' }, railway_transit: { line: '#E0DCD3' }, railway_service: { line: '#E0DCD3' },
-  railway_dashline: { hide: true }, railway_transit_dashline: { hide: true }, railway_service_dashline: { hide: true },
-  boundary_2: { line: '#CFCAC0' }, boundary_3: { line: '#D9D4CB' },
-  'highway-name-path': { hide: true },
-  'highway-name-minor': { text: '#8E8A80', halo: '#FFFFFF' },
-  'highway-name-major': { text: '#6F6B62', halo: '#FFFFFF' },
-  'highway-shield-non-us': { hide: true }, 'highway-shield-us-interstate': { hide: true }, road_shield_us: { hide: true },
-  airport: { text: '#8E8A80', halo: '#F6F4EF' },
-  label_other: { text: '#8E8A80', halo: '#F6F4EF' },
-  label_village: { text: '#6F6B62', halo: '#F6F4EF' },
-  label_town: { text: '#5C584F', halo: '#F6F4EF' },
-  label_city: { text: '#3A372F', halo: '#F6F4EF' },
-  label_city_capital: { text: '#3A372F', halo: '#F6F4EF' },
-  label_state: { text: '#9A968C', halo: '#F6F4EF' },
-  water_name_point_label: { text: '#6A94B5', halo: '#B7D6EC' },
-  water_name_line_label: { text: '#6A94B5', halo: '#B7D6EC' },
-  waterway_line_label: { text: '#6A94B5', halo: '#B7D6EC' },
+export type Look = Record<string, { fill?: string; line?: string; text?: string; halo?: string; hide?: boolean; /** Only from this zoom in — small roads appear once you are close. */ minZoom?: number }>;
+
+/** The handful of palette colours the map is mixed from. */
+export interface MapPalette { bg: string; surface: string; text: string; textMuted: string; brand: string; court: string; hard: string; clay: string }
+
+const hex = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+const isDark = (c: string) => { const [r, g, b] = hex(c); return (r * 299 + g * 587 + b * 114) / 1000 < 128; };
+/** `t` of the way from `a` to `b`. */
+export const mix = (a: string, b: string, t: number) => {
+  const A = hex(a); const B = hex(b);
+  return `#${A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join('')}`;
 };
-export const NIGHT: Look = {
-  background: { fill: '#1C1C1E' },
-  landuse_residential: { fill: '#222224' },
-  park: { fill: '#1F2A21' },
-  landcover_wood: { fill: '#1D271F' },
-  water: { fill: '#152232' },
-  waterway: { line: '#152232' },
-  building: { fill: '#262628' },
-  highway_path: { line: '#2C2C2E' },
-  highway_minor: { line: '#333335' },
-  highway_major_casing: { line: '#2A2A2C' },
-  highway_major_inner: { line: '#3F3F42' },
-  highway_major_subtle: { line: '#3F3F42' },
-  highway_motorway_casing: { line: '#3A3620' },
-  highway_motorway_inner: { line: '#5A5230' },
-  highway_motorway_subtle: { line: '#5A5230' },
-  highway_motorway_bridge_casing: { line: '#3A3620' },
-  highway_motorway_bridge_inner: { line: '#5A5230' },
-  tunnel_motorway_casing: { line: '#2E2C22' },
-  tunnel_motorway_inner: { line: '#403C2A' },
-  railway: { line: '#2E2E30' }, railway_transit: { line: '#2E2E30' }, railway_service: { line: '#2E2E30' },
-  railway_dashline: { hide: true }, railway_transit_dashline: { hide: true }, railway_service_dashline: { hide: true },
-  boundary_2: { line: '#3A3A3C' }, boundary_3: { line: '#333335' },
-  'highway-name-path': { hide: true },
-  'highway-name-minor': { text: '#8E8E93', halo: '#1C1C1E' },
-  'highway-name-major': { text: '#AEAEB2', halo: '#1C1C1E' },
-  'highway-shield-non-us': { hide: true }, 'highway-shield-us-interstate': { hide: true }, road_shield_us: { hide: true },
-  airport: { text: '#8E8E93', halo: '#1C1C1E' },
-  label_other: { text: '#8E8E93', halo: '#1C1C1E' },
-  label_village: { text: '#AEAEB2', halo: '#1C1C1E' },
-  label_town: { text: '#C7C7CC', halo: '#1C1C1E' },
-  label_city: { text: '#E5E5EA', halo: '#1C1C1E' },
-  label_city_capital: { text: '#E5E5EA', halo: '#1C1C1E' },
-  label_state: { text: '#8E8E93', halo: '#1C1C1E' },
-  water_name_point_label: { text: '#6B8FB0', halo: '#152232' },
-  water_name_line_label: { text: '#6B8FB0', halo: '#152232' },
-  waterway_line_label: { text: '#6B8FB0', halo: '#152232' },
-};
+
+/*
+ * Snap Map, in the app's own colours: the ground is the theme's page, the
+ * parks are its court green, the water its hard-court blue, the roads a
+ * whisper lighter than the ground (small ones only when you are close).
+ * No buildings, no road names, no shields, no motorway yellow — just
+ * neighbourhoods and towns, so it reads as a place, not a street atlas.
+ */
+export function lookFor(p: MapPalette): Look {
+  const dark = isDark(p.bg);
+  const ground = p.bg;
+  const built = mix(p.bg, p.surface, 0.6);
+  const park = mix(ground, p.court, dark ? 0.22 : 0.2);
+  const wood = mix(ground, p.court, dark ? 0.28 : 0.26);
+  const grass = mix(ground, p.court, dark ? 0.14 : 0.12);
+  const water = mix(ground, p.hard, dark ? 0.38 : 0.36);
+  const road = dark ? mix(ground, p.text, 0.16) : '#FFFFFF';
+  const big = dark ? mix(ground, p.text, 0.24) : mix('#FFFFFF', p.clay, 0.12);
+  const tunnel = mix(ground, road, 0.5);
+  const hidden = { hide: true };
+  return {
+    background: { fill: ground },
+    landuse_residential: { fill: built },
+    park: { fill: park },
+    landcover_wood: { fill: wood },
+    landcover_grass: { fill: grass },
+    water: { fill: water },
+    waterway: { line: water },
+    building: hidden,
+    highway_path: hidden,
+    highway_minor: { line: road, minZoom: 14 },
+    highway_major_casing: hidden,
+    highway_major_inner: { line: road },
+    highway_major_subtle: { line: road },
+    highway_motorway_casing: hidden,
+    highway_motorway_inner: { line: big },
+    highway_motorway_subtle: { line: big },
+    highway_motorway_bridge_casing: hidden,
+    highway_motorway_bridge_inner: { line: big },
+    tunnel_motorway_casing: hidden,
+    tunnel_motorway_inner: { line: tunnel },
+    railway: hidden, railway_transit: hidden, railway_service: hidden,
+    railway_dashline: hidden, railway_transit_dashline: hidden, railway_service_dashline: hidden,
+    boundary_2: hidden, boundary_3: hidden,
+    'highway-name-path': hidden, 'highway-name-minor': hidden, 'highway-name-major': hidden,
+    'highway-shield-non-us': hidden, 'highway-shield-us-interstate': hidden, road_shield_us: hidden,
+    airport: hidden,
+    label_other: hidden,
+    label_village: { text: p.textMuted, halo: ground },
+    label_town: { text: p.textMuted, halo: ground },
+    label_city: { text: p.text, halo: ground },
+    label_city_capital: { text: p.text, halo: ground },
+    label_state: hidden,
+    water_name_point_label: { text: mix(p.hard, p.text, 0.3), halo: water },
+    water_name_line_label: hidden,
+    waterway_line_label: hidden,
+  };
+}
 
 /** Recolours the loaded style layer by layer; anything the style lacks is skipped. */
 export function applyLook(map: LookMap, look: Look) {
@@ -102,6 +95,7 @@ export function applyLook(map: LookMap, look: Look) {
     if (!map.getLayer(id)) continue;
     try {
       if (rule.hide) { map.setLayoutProperty(id, 'visibility', 'none'); continue; }
+      if (rule.minZoom !== undefined) map.setLayerZoomRange(id, rule.minZoom, 24);
       if (rule.fill) map.setPaintProperty(id, id === 'background' ? 'background-color' : 'fill-color', rule.fill);
       if (rule.line) map.setPaintProperty(id, 'line-color', rule.line);
       if (rule.text) map.setPaintProperty(id, 'text-color', rule.text);
