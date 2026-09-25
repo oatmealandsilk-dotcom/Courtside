@@ -321,8 +321,8 @@ export default function Compose() {
                   mentions
                 />
 
-                {mode !== 'story' && mode !== 'hit' ? <TagPlayers tagged={tagged} onChange={setTagged} /> : null}
                 {mode !== 'story' && mode !== 'hit' ? <LocationChip value={location} onChange={setLocation} /> : null}
+                {mode !== 'story' && mode !== 'hit' ? <TagPlayers tagged={tagged} onChange={setTagged} /> : null}
 
                 {mode !== 'story' && mode !== 'hit' ? (
                   <View style={styles.inlineRow}>

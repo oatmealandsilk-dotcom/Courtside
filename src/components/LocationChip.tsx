@@ -74,11 +74,11 @@ export function LocationChip({ value, onChange }: { value: string; onChange: (ne
     return (
       <View style={styles.row}>
         <Pressable accessibilityRole="button" accessibilityLabel={`Location: ${value}. Tap to change it`} onPress={() => { setQuery(value); setOpen(true); }} style={styles.set}>
-          <Ionicons name="location" size={16} color={colors.brand} />
+          <Ionicons name="location" size={20} color={colors.brand} />
           <Text style={styles.setText} numberOfLines={1}>{value}</Text>
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="Remove location" hitSlop={8} onPress={() => onChange('')}>
-          <Ionicons name="close-circle" size={18} color={colors.textFaint} />
+          <Ionicons name="close-circle" size={20} color={colors.textFaint} />
         </Pressable>
       </View>
     );
@@ -86,19 +86,20 @@ export function LocationChip({ value, onChange }: { value: string; onChange: (ne
 
   return (
     <Pressable accessibilityRole="button" accessibilityLabel="Add location" onPress={() => setOpen(true)} style={styles.row}>
-      <Ionicons name="location-outline" size={18} color={colors.textMuted} />
+      <Ionicons name="location-outline" size={20} color={colors.text} />
       <Text style={styles.label}>Add location</Text>
-      <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+      <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
     </Pressable>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
-  // The closed row matches the form's other quiet lines (an icon, muted words).
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 4 },
-  label: { ...typography.small, color: colors.textMuted, flex: 1 },
-  set: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
-  setText: { ...typography.smallStrong, color: colors.text, flexShrink: 1 },
+  // Closed, it is Instagram's row: the first line under the caption, full
+  // width, a hairline beneath, the chevron at the far edge.
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  label: { ...typography.body, color: colors.text, flex: 1 },
+  set: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 },
+  setText: { ...typography.bodyStrong, color: colors.text, flexShrink: 1 },
   // Open, it is one small panel: the search line, then the places under it.
   open: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.surface, paddingHorizontal: spacing.md },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 4 },
