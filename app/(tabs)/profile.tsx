@@ -96,7 +96,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const page = (selected: string, live: boolean) => {
   const index = TABS.indexOf(selected as typeof TABS[number]);
   const body = <>
-   {skipped.length > 0 && <Pressable accessibilityRole="link" accessibilityLabel="Finish setting up your profile" onPress={() => router.push({ pathname: '/onboarding', params: { step: String(SETUP_STEP_INDEX[skipped[0]]) } })} style={styles.setup}>
+   {skipped.length > 0 && <Pressable accessibilityRole="link" accessibilityLabel="Finish setting up your profile" onPress={() => router.push({ pathname: '/onboarding', params: { step: String(SETUP_STEP_INDEX[skipped[0]]), from: 'profile' } })} style={styles.setup}>
      <Ionicons name="sparkles-outline" size={20} color={colors.brand}/>
      <View style={{ flex: 1 }}><Text style={styles.setupTitle}>Finish setting up</Text><Text style={styles.meta}>{[skipped.includes('permissions') && 'camera and photos', skipped.includes('body') && 'fitness and goals', skipped.includes('calendar') && 'your next tournament'].filter(Boolean).join(', ').replace(/^./, (c) => c.toUpperCase())} — about a minute.</Text></View>
      <Ionicons name="chevron-forward" size={16} color={colors.textMuted}/>

@@ -118,7 +118,7 @@ export default function Onboarding() {
   const { currentUser, currentUserId, actions } = useApp();
   const insets = useSafeAreaInsets();
   // The profile's "finish setting up" card lands straight on the step it names.
-  const params = useLocalSearchParams<{ step?: string }>();
+  const params = useLocalSearchParams<{ step?: string; from?: string }>();
   const startAt = Math.min(STEPS.length - 1, Math.max(0, Number(params.step) || 0));
   const [step, setStep] = useState(startAt);
   const skipped = useRef<Set<SetupStep>>(new Set());
@@ -212,7 +212,8 @@ export default function Onboarding() {
     }
     actions.completeOnboarding(profile);
     if (currentUserId) void writeSkipped(currentUserId, [...skipped.current]);
-    router.replace('/(tabs)');
+    // Came here from the profile's "finish setting up"? Back to the profile, not to the top of the feed.
+    router.replace(params.from === 'profile' ? '/(tabs)/profile' : '/(tabs)');
   };
 
   const skipStep = () => {
