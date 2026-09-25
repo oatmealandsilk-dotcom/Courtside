@@ -13,6 +13,7 @@ import { PermissionBanner } from '@/components/PermissionRows';
 import { SheetBackdrop } from '@/components/SheetBackdrop';
 import { TOPIC_META } from '@/components/QuestionCard';
 import { Button, Chip, Field, Screen } from '@/components/ui';
+import { LocationChip } from '@/components/LocationChip';
 import { TagPlayers } from '@/components/TagPlayers';
 import { addToBank, getBank } from '@/features/compose/mediaBank';
 import { useApp } from '@/store/AppContext';
@@ -86,6 +87,7 @@ export default function Compose() {
   const [minutes, setMinutes] = useState('');
   // People tagged in the post: chips under the caption, added from a short search.
   const [tagged, setTagged] = useState<string[]>([]);
+  const [location, setLocation] = useState('');
   const [questionTitle, setQuestionTitle] = useState('');
   const [topic, setTopic] = useState<QuestionTopic>('gear');
 
@@ -128,6 +130,7 @@ export default function Compose() {
       body: body.trim(),
       tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
       taggedUserIds: tagged.length ? tagged : undefined,
+      location: location.trim() || undefined,
       imageUrl: media?.kind === 'photo' ? media.uri : undefined,
       videoUrl: media?.kind === 'video' ? media.uri : undefined,
       mediaLabel: media?.label,
@@ -319,6 +322,7 @@ export default function Compose() {
                 />
 
                 {mode !== 'story' && mode !== 'hit' ? <TagPlayers tagged={tagged} onChange={setTagged} /> : null}
+                {mode !== 'story' && mode !== 'hit' ? <LocationChip value={location} onChange={setLocation} /> : null}
 
                 {mode !== 'story' && mode !== 'hit' ? (
                   <View style={styles.inlineRow}>

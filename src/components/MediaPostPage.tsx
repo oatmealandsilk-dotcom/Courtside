@@ -17,6 +17,7 @@ import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { BAR_DUCK_PX } from '@/features/navigation/barShrink';
 import { allowTurning, stayUpright } from '@/lib/orientation';
 import { Tappable } from '@/components/Tappable';
+import { useOptimisticToggle } from '@/lib/useOptimisticToggle';
 import { Avatar, Chip } from '@/components/ui';
 import { LevelPill } from '@/components/LevelPill';
 import { RichText } from '@/components/RichText';
@@ -68,6 +69,8 @@ export const laneInsetFor = (columnWidth: number) => (desktopWeb && columnWidth 
 const LANE_MIN = 400;
 
 function MediaPostPageInner({ post, author, liked, saved, active, preload = false, onDoubleTap, onToggleLike, onToggleSave, onComment, onShare, onMore, topInset, burst, pop = 0, discInk, onReady }: Props) {
+  // Fills on the tap; the store's own redraw follows without changing anything on screen.
+  const like = useOptimisticToggle(`p:${post.id}`, liked, onToggleLike, pop);
   const styles = useThemedStyles(styleDefinitions);
   const { comments, currentUser, currentUserId, actions } = useApp();
   // Newest first, the way the sheet lists them; they fill the bottom of the page.
@@ -233,9 +236,9 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
             sizes, the count under each one. */}
         <View style={styles.actions}>
           {/* A tap likes; holding it opens who liked it. The like waits for the finger to lift, so a hold never likes by accident. */}
-          <Tappable onPress={onToggleLike} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: post.id } }); }} scaleTo={0.78} style={styles.action} accessibilityLabel={liked ? 'Unlike. Hold to see who liked it' : 'Like. Hold to see who liked it'}>
-            <Heart liked={liked} pop={pop} size={32} ink={colors.text} />
-            <Text style={styles.actionText}>{compactNumber(post.likedBy.length)}</Text>
+          <Tappable onPress={like.toggle} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: post.id } }); }} scaleTo={0.78} style={styles.action} accessibilityLabel={like.on ? 'Unlike. Hold to see who liked it' : 'Like. Hold to see who liked it'}>
+            <Heart liked={like.on} pop={pop} size={32} ink={colors.text} />
+            <Text style={styles.actionText}>{compactNumber(post.likedBy.length + like.delta)}</Text>
           </Tappable>
           <Tappable onPress={onComment} scaleTo={0.78} style={styles.action} accessibilityLabel="Comments">
             <Ionicons name="chatbubble-outline" size={29} color={colors.text} />

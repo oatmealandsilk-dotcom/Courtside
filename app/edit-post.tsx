@@ -5,6 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { DragSheet } from '@/components/DragSheet';
+import { LocationChip } from '@/components/LocationChip';
 import { TagPlayers } from '@/components/TagPlayers';
 import { Button, Field } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
@@ -64,7 +65,7 @@ export default function EditPost() {
           <>
             <Field label="Caption" value={body} onChangeText={setBody} placeholder="Write a caption…" multiline minHeight={80} mentions />
             <TagPlayers tagged={tagged} onChange={setTagged} />
-            <Field label="Location" value={location} onChangeText={setLocation} placeholder="Where was this? (optional)" />
+            <LocationChip value={location} onChange={setLocation} />
           </>
         )}
         {mine ? <Button label="Save" onPress={save} disabled={!canSave} full /> : null}

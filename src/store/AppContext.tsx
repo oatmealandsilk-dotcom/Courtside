@@ -71,6 +71,8 @@ interface NewStoryInput {
 
 interface NewPostInput {
   kind: PostKind;
+  /** Where it was, if they said. */
+  location?: string;
   /** People tagged in it; each gets a notification. */
   taggedUserIds?: ID[];
   orientation?: 'portrait' | 'landscape';
@@ -1089,14 +1091,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const toggleLike = useCallback(
     (postId: ID) => {
       const me = requireUser();
-      if (live(me, postId)) {
-        const post = stateRef.current.posts.find((p) => p.id === postId);
-        if (post) remote.setLike(postId, me, !post.likedBy.includes(me));
-      }
+      const now = stateRef.current.posts.find((p) => p.id === postId);
+      // The buzz answers the tap itself. Inside the update it waited for
+      // React to get round to redrawing the whole feed, which read as lag.
+      if (now) now.likedBy.includes(me) ? haptics.untap() : haptics.reward();
+      if (live(me, postId) && now) remote.setLike(postId, me, !now.likedBy.includes(me));
       setState((prev) => {
         const post = prev.posts.find((p) => p.id === postId);
         const liking = !!post && !post.likedBy.includes(me);
-        liking ? haptics.reward() : haptics.untap();
         const next: AppState = {
           ...prev,
           posts: prev.posts.map((p) =>
@@ -1374,14 +1376,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const toggleLikeStory = useCallback(
     (storyId: ID) => {
       const me = requireUser();
-      if (live(me, storyId)) {
-        const story = stateRef.current.stories.find((st) => st.id === storyId);
-        if (story) remote.setStoryLike(storyId, me, !story.likedBy.includes(me));
-      }
+      const now = stateRef.current.stories.find((st) => st.id === storyId);
+      if (now) now.likedBy.includes(me) ? haptics.untap() : haptics.reward();
+      if (live(me, storyId) && now) remote.setStoryLike(storyId, me, !now.likedBy.includes(me));
       setState((prev) => {
         const story = prev.stories.find((st) => st.id === storyId);
         const liking = !!story && !story.likedBy.includes(me);
-        liking ? haptics.reward() : haptics.untap();
         const next: AppState = {
           ...prev,
           stories: prev.stories.map((st) =>
@@ -1931,12 +1931,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const toggleSavePost = useCallback((postId: ID) => {
     {
       const me = stateRef.current.currentUserId;
-      if (live(me, postId)) remote.setSaved(postId, me!, !stateRef.current.saved.postIds.includes(postId));
+      const saving = !stateRef.current.saved.postIds.includes(postId);
+      saving ? haptics.tap() : haptics.untap();
+      if (live(me, postId)) remote.setSaved(postId, me!, saving);
     }
     setState((prev) => {
       const me = prev.currentUserId;
       const saving = !prev.saved.postIds.includes(postId);
-      saving ? haptics.tap() : haptics.untap();
       return {
         ...prev,
         saved: {
@@ -2398,12 +2399,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (live(me, userId) && userId !== me) void remote.setFollow(me!, userId, !following).then((r) => { if (r === 'refused' && !following) followRefused(userId); });
+      // The buzz answers the tap itself, not the redraw that follows it.
+      if (me && userId !== me) following ? haptics.untap() : haptics.tap();
     }
     setState((prev) => {
       const me = prev.currentUserId;
       if (!me || userId === me) return prev;
       const following = !prev.followingIds.includes(userId);
-      following ? haptics.tap() : haptics.untap();
       const delta = following ? 1 : -1;
       let next: AppState = {
         ...prev,

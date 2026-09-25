@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Screen } from '@/components/ui';
 import { useTheme, themeList, themes, type ThemeName } from '@/theme/ThemeProvider';
-import { colors, radius, spacing, typography, font } from '@/theme';
+import { colors, radius, spacing, typography } from '@/theme';
 
 /** Every court, with a swatch and a line on what it is, on its own page. */
 export default function ThemePage() {
@@ -23,8 +23,8 @@ export default function ThemePage() {
     <Screen title="Theme" compactTitle onBack={() => goBack()}>
       <Text style={styles.lead}>Applies everywhere straight away. Pick the court you would rather be on.</Text>
       <View style={styles.list}>
-        {themeList.map((option, index) => (
-          <React.Fragment key={option.name}>{index > 0 ? <View style={styles.rule} /> : null}<ThemeCard option={option} active={(chosen ?? theme) === option.name} onPick={() => { haptics.tap(); setChosen(option.name); setTimeout(() => setTheme(option.name), 16); }} styles={styles} /></React.Fragment>
+        {themeList.map((option) => (
+          <ThemeCard key={option.name} option={option} active={(chosen ?? theme) === option.name} onPick={() => { haptics.tap(); setChosen(option.name); setTimeout(() => setTheme(option.name), 16); }} styles={styles} />
         ))}
       </View>
     </Screen>
@@ -33,27 +33,30 @@ export default function ThemePage() {
 
 const styleDefinitions = StyleSheet.create({
   lead: { ...typography.small, color: colors.textMuted, lineHeight: 20, paddingBottom: spacing.lg },
-  list: { borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
+  list: { gap: spacing.sm },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.lg,
-    paddingVertical: 14,
-    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
+    padding: spacing.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
   },
-  cardActive: {},
-  swatch: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, overflow: 'hidden' },
-  swatchHalf: { position: 'absolute', top: -10, bottom: -10, left: -6, width: 34, transform: [{ rotate: '18deg' }] },
-  rule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: spacing.lg + 44 + spacing.lg },
-  name: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text },
+  cardActive: { borderColor: colors.brand },
+  // The court as a colour chip: its ground, its colour in the middle, nothing else.
+  swatch: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  swatchDot: { width: 20, height: 20, borderRadius: 10 },
+  name: { ...typography.bodyStrong, color: colors.text },
   blurb: { ...typography.small, color: colors.textMuted },
-  ring: { width: 22, height: 22, borderRadius: 11, borderWidth: 1, borderColor: colors.borderStrong },
+  ring: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: colors.borderStrong },
 });
 
 /**
  * One theme to pick. Choosing it is a small moment: the card gives a little
  * push and its edge warms to the brand colour, the empty ring fills with a
- * check that pops in, and the swatch settles. Everything runs on the
+ * check that pops in. Everything runs on the
  * animation thread, so it is smooth even as the whole app recolours.
  */
 function ThemeCard({ option, active, onPick, styles }: { option: (typeof themeList)[number]; active: boolean; onPick: () => void; styles: ReturnType<typeof useThemedStyles<typeof styleDefinitions>> }) {
@@ -76,14 +79,12 @@ function ThemeCard({ option, active, onPick, styles }: { option: (typeof themeLi
     transform: [{ scale: 0.8 + 0.2 * on.value }],
   }));
   const ringStyle = useAnimatedStyle(() => ({ opacity: 1 - on.value }));
-  const swatchStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 }] }));
   return (
     <Pressable accessibilityRole="radio" accessibilityState={{ selected: active }} accessibilityLabel={`${option.label} theme`} onPress={onPick}>
       <Animated.View style={[styles.card, cardStyle]}>
-        {/* The palette itself, not a diagram of it: the court's colour on its own paper. */}
-        <Animated.View style={[styles.swatch, { backgroundColor: palette.surfaceAlt, borderColor: palette.borderStrong }, swatchStyle]}>
-          <View style={[styles.swatchHalf, { backgroundColor: palette.brand }]} />
-        </Animated.View>
+        <View style={[styles.swatch, { backgroundColor: palette.bg, borderColor: palette.border }]}>
+          <View style={[styles.swatchDot, { backgroundColor: palette.brand }]} />
+        </View>
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={styles.name}>{option.label}</Text>
           <Text style={styles.blurb}>{option.blurb}</Text>
