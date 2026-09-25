@@ -20,7 +20,7 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "__YOUR_APPLE_ID_EMAIL__",
+        "appleId": "robertzchen@icloud.com",
         "ascAppId": "__FROM_APP_STORE_CONNECT__"
       },
       "android": {

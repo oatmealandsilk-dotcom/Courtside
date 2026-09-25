@@ -46,6 +46,7 @@ module.exports = {
       ['expo-notifications', { color: '#3F7049' }],
     ],
     experiments: { baseUrl },
-    extra: { eas: { projectId: process.env.EAS_PROJECT_ID } },
+    // The app's home on Expo's build service (the robertzchen account), for builds and push alerts.
+    extra: { eas: { projectId: process.env.EAS_PROJECT_ID ?? 'ce2e922d-6122-47f6-97b7-58a7fad4b3ef' } },
   },
 };
