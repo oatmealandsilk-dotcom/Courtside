@@ -147,6 +147,9 @@ export function Screen({
   // animation thread, frame for frame with the finger, so it never steps.
   const lastY = useSharedValue(-1);
   const pullY = useSharedValue(0);
+  // Where the page is, so the wash behind the top scrolls away with it.
+  const scrollY = useSharedValue(0);
+  const washStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -Math.max(0, scrollY.value - strip) }] }));
   const beginPull = useCallback(() => { void refreshNowRef.current(); }, []);
   const armed = useSharedValue(false);
   const tick = useCallback(() => haptics.tap(), []);
@@ -159,6 +162,7 @@ export function Screen({
   const onScrollAnimated = useAnimatedScrollHandler({
     onScroll: (event) => {
       const y = event.contentOffset.y;
+      scrollY.value = y;
       runOnJS(remember)(y);
       pullY.value = y < strip ? strip - y : 0;
       if (strip > 0) {
@@ -285,7 +289,7 @@ export function Screen({
       behavior={Platform.OS === 'ios' && !scroll ? 'padding' : undefined}
       enabled={Platform.OS === 'ios' && !scroll}
     >
-      {wash ? <Wash height={360} strength={0.85} /> : null}
+      {wash ? <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, washStyle]}><Wash height={360} strength={0.85} /></Reanimated.View> : null}
       {headerWrapper ? headerWrapper(header) : header}
       {scroll ? (
         <View style={styles.flex}>

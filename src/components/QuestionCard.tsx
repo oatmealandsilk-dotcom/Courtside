@@ -125,7 +125,7 @@ function QuestionCardInner({
 }
 
 const styleDefinitions = StyleSheet.create({
-  card: { gap: 16, borderWidth: 0, borderBottomWidth: 1, borderRadius: 0, paddingHorizontal: 0, paddingVertical: 20, backgroundColor: colors.bg },
+  card: { gap: 16, borderWidth: 0, borderBottomWidth: 1, borderRadius: 0, paddingHorizontal: 0, paddingVertical: 20, backgroundColor: 'transparent' },
   row: { flexDirection: 'row', gap: spacing.lg },
   voteBox: { alignItems: 'center', width: 44, gap: 1 },
   voteCount: { ...typography.title, color: colors.brand },
