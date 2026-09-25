@@ -1,3 +1,4 @@
+import { useTheme } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { Text, type StyleProp, type TextProps, type TextStyle } from 'react-native';
 import { router } from 'expo-router';
@@ -30,6 +31,8 @@ export function RichText({ children, mentionStyle, ...props }: TextProps & { chi
 
 /** One @handle in the text: it dims for a beat when tapped, a small sign the tap took. */
 function Mention({ label, name, mentionStyle, onPress }: { label: string; name: string; mentionStyle?: StyleProp<TextStyle>; onPress: () => void }) {
+  // Hears a theme change, so its own colours never lag the page's.
+  useTheme();
   const [down, setDown] = useState(false);
   return (
     <Text

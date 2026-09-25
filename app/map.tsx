@@ -1,3 +1,4 @@
+import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
@@ -11,6 +12,8 @@ import { colors } from '@/theme';
 
 /** The community map as the whole page: tiles edge to edge, the controls laid over them. */
 export default function MapScreen() {
+  // Hears a theme change, so its own colours never lag the page's.
+  useTheme();
   const { users, currentUser, currentUserId, blockedIds, locationEnabled, detectedCoords, actions } = useApp();
   const players = users.filter((u) => u.id !== currentUserId && !blockedIds.includes(u.id));
   const location = useLocationToggle();

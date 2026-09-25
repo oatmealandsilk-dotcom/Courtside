@@ -1,3 +1,4 @@
+import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@/theme';
@@ -29,6 +30,8 @@ export function DragSheet({
   /** Bump this number to close the sheet from outside (a Close button, a finished send). */
   closeSignal?: number;
 }) {
+  // Hears a theme change, so its own colours never lag the page's.
+  useTheme();
   const insets = useSafeAreaInsets();
   const area = useRef<HTMLDivElement>(null);
   const sheet = useRef<HTMLDivElement>(null);

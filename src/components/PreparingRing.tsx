@@ -1,4 +1,4 @@
-import { useTheme } from '@/theme/ThemeProvider';
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, ZoomIn, useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -19,7 +19,7 @@ const LAP = 2 * Math.PI * R;
  * never standing still, and it closes the moment the video lands.
  */
 export function PreparingRing({ label, note, done = false }: { label: string; note?: string; done?: boolean }) {
-  useTheme();
+  const styles = useThemedStyles(styleDefinitions);
   const progress = useSharedValue(0);
   useEffect(() => {
     progress.value = withTiming(0.92, { duration: 9000, easing: Easing.out(Easing.cubic) });
@@ -54,7 +54,7 @@ export function PreparingRing({ label, note, done = false }: { label: string; no
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   box: { alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.xl },
   words: { alignItems: 'center', gap: 4 },
   label: { ...typography.bodyStrong, color: colors.text, textAlign: 'center' },

@@ -1,4 +1,4 @@
-import { useTheme } from '@/theme/ThemeProvider';
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -17,7 +17,7 @@ const SHOW_MS = 2600;
  * later, then it lifts away on its own. Tap it to open what you just made.
  */
 export function Toast() {
-  useTheme();
+  const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const incoming = useToast();
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -77,7 +77,7 @@ export function Toast() {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   wrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, zIndex: 50, alignItems: 'center' },
   card: {
     flexDirection: 'row',
