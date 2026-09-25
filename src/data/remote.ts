@@ -12,7 +12,7 @@ import * as WebBrowser from 'expo-web-browser';
  */
 
 import { supabase } from '@/lib/supabase';
-import type { Answer, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, Question, Story, Tip, User, CoachApplication } from './types';
+import type { Answer, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, Question, Story, Tip, User, CoachApplication } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
 
 const need = () => {
@@ -672,6 +672,61 @@ export const remote = {
   /* ------------------------------ reports (admins) ------------------------------ */
 
   /** Everyone on the waitlist, newest first. Only admins can read it; for anyone else it is empty. */
+  /* --------------------------------------------------------------- health */
+
+  /** A person's days and which sources are connected. Null while the tables do not exist yet. */
+  async fetchHealth(me: ID): Promise<{ days: DailyHealth[]; connections: { provider: IntegrationProvider; lastSyncedAt?: string }[] } | null> {
+    const db = need();
+    const [d, c] = await Promise.all([
+      db.from('health_days').select('*').eq('user_id', me).order('date', { ascending: false }).limit(60),
+      db.from('health_connections').select('*').eq('user_id', me),
+    ]);
+    if (d.error || c.error) return null;
+    const days = (d.data ?? []).map((r) => ({
+      date: r.date as string, calories: r.calories ?? 0, proteinGrams: r.protein_g ?? 0, carbGrams: r.carb_g ?? 0, fatGrams: r.fat_g ?? 0,
+      restingHeartRate: r.resting_hr ?? 0, hrvMs: r.hrv_ms ?? 0, sleepHours: Number(r.sleep_hours ?? 0), recovery: r.recovery ?? 0, steps: r.steps ?? 0,
+    }));
+    return { days, connections: (c.data ?? []).map((r) => ({ provider: r.provider as IntegrationProvider, lastSyncedAt: r.last_synced_at ?? undefined })) };
+  },
+
+  /** Writes only the numbers a source gave, leaving another source's numbers on the same day alone. */
+  async upsertHealthDays(me: ID, days: (Partial<DailyHealth> & { date: string })[], source: IntegrationProvider) {
+    const db = need();
+    if (!days.length) return;
+    const dates = days.map((d) => d.date);
+    const { data: have } = await db.from('health_days').select('date, sources').eq('user_id', me).in('date', dates);
+    const known = new Map((have ?? []).map((r) => [r.date as string, (r.sources ?? {}) as Record<string, string>]));
+    const col: Record<string, string> = { calories: 'calories', proteinGrams: 'protein_g', carbGrams: 'carb_g', fatGrams: 'fat_g', restingHeartRate: 'resting_hr', hrvMs: 'hrv_ms', sleepHours: 'sleep_hours', recovery: 'recovery', steps: 'steps' };
+    const rows = days.map((d) => {
+      const row: Record<string, unknown> = { user_id: me, date: d.date, updated_at: new Date().toISOString() };
+      const sources = { ...(known.get(d.date) ?? {}) };
+      for (const [k, c] of Object.entries(col)) {
+        const v = (d as Record<string, unknown>)[k];
+        if (v !== undefined && v !== null) { row[c] = v; sources[c] = source; }
+      }
+      row.sources = sources;
+      return row;
+    });
+    const { error } = await db.from('health_days').upsert(rows, { onConflict: 'user_id,date' });
+    if (error) throw new Error(error.message);
+  },
+
+  async setHealthConnection(me: ID, provider: IntegrationProvider, connected: boolean) {
+    const db = need();
+    const { error } = connected
+      ? await db.from('health_connections').upsert({ user_id: me, provider, last_synced_at: new Date().toISOString() })
+      : await db.from('health_connections').delete().match({ user_id: me, provider });
+    if (error) throw new Error(error.message);
+  },
+
+  /** The WHOOP function on the server: start, sync, disconnect. */
+  async whoop<T = { url?: string; days?: number; ok?: boolean }>(path: 'start' | 'sync' | 'disconnect', body: object = {}): Promise<T> {
+    const { data, error } = await need().functions.invoke<T & { error?: string }>(`whoop/${path}`, { body });
+    if (error) throw new Error('WHOOP is not reachable right now.');
+    if (data && (data as { error?: string }).error) throw new Error((data as { error?: string }).error);
+    return data as T;
+  },
+
   async fetchWaitlist(): Promise<WaitlistEntry[]> {
     const { data, error } = await allRows<{ id: string; email: string; name: string | null; source: string | null; referred_by: string | null; created_at: string }>(
       (from, to) => need().from('waitlist').select('id, email, name, source, referred_by, created_at').order('created_at', { ascending: false }).range(from, to), 20000);

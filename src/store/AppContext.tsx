@@ -20,9 +20,13 @@ import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { markMessagesOpened } from '@/features/messaging/readReceipts';
 import { readReceiptPreference, saveReceiptPreference } from '@/features/messaging/preferences';
 import { connectProvider, disconnectProvider } from '@/lib/integrations';
+import { connectAppleHealth, readAppleHealth } from '@/features/health/appleHealth';
+import { pickCronometerExport } from '@/features/health/cronometer';
 import { nearestPlace } from '@/data/locations';
 import { getPosition } from '@/lib/geo';
 import * as haptics from '@/lib/haptics';
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import * as toast from '@/lib/toast';
 import { finishUpload, setUploadProgress, simulateUpload, startUpload } from '@/lib/uploads';
 import { requestFeedRefresh } from '@/features/feed/feedBus';
@@ -31,6 +35,8 @@ import { show as showToast } from '@/lib/toast';
 import { forgetPushToken } from '@/features/push/push';
 import { framesAt } from '@/features/compose/frames';
 import type {
+  DailyHealth,
+  IntegrationProvider,
   Answer,
   Coach,
   CoachApplication,
@@ -349,6 +355,8 @@ interface AppActions {
 
   submitCoachingRequest: (coachId: ID, serviceId: ID, question: string, videoLabel?: string) => ID;
   toggleIntegration: (provider: Integration['provider']) => Promise<void>;
+  /** Pull the latest from a connected source (Apple Health reads the phone; WHOOP asks the server; Cronometer asks for a fresh export). */
+  syncHealth: (provider: Integration['provider']) => Promise<void>;
 
   /* Ask a coach */
   askCoach: (input: NewCoachQuestionInput) => ID;
@@ -2541,17 +2549,79 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, prefs: { ...prev.prefs, [key]: value } }));
   }, []);
 
-  const toggleIntegration = useCallback(async (provider: Integration['provider']) => {
-    const current = stateRef.current.integrations.find((i) => i.provider === provider);
-    if (!current) return;
-    const updated = current.connected
-      ? await disconnectProvider(current)
-      : await connectProvider(current);
+  /* ------------------------------------------------------------- health */
+  // The three real sources: Apple Health (read on the phone), WHOOP (through
+  // the server, which holds the keys), Cronometer (an export file). Without
+  // Supabase the demo simply flips the flag.
+  const applyHealth = useCallback((got: { days: DailyHealth[]; connections: { provider: IntegrationProvider; lastSyncedAt?: string }[] }) => {
     setState((prev) => ({
       ...prev,
-      integrations: prev.integrations.map((i) => (i.provider === provider ? updated : i)),
+      healthHistory: got.days,
+      integrations: prev.integrations.map((i) => { const c = got.connections.find((x) => x.provider === i.provider); return { ...i, connected: !!c, lastSyncedAt: c?.lastSyncedAt }; }),
     }));
   }, []);
+  const reloadHealth = useCallback(async () => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me)) return;
+    const got = await remote.fetchHealth(me!).catch(() => null);
+    if (got) applyHealth(got);
+  }, [applyHealth]);
+  useEffect(() => { if (live(state.currentUserId)) void reloadHealth(); }, [state.currentUserId, reloadHealth]);
+
+  const pullFrom = useCallback(async (me: ID, provider: Integration['provider']): Promise<boolean> => {
+    if (provider === 'apple-health') {
+      const days = await readAppleHealth(7);
+      await remote.upsertHealthDays(me, days, 'apple-health');
+      await remote.setHealthConnection(me, provider, true);
+      return true;
+    }
+    if (provider === 'cronometer') {
+      const days = await pickCronometerExport();
+      if (!days) return false;
+      await remote.upsertHealthDays(me, days, 'cronometer');
+      await remote.setHealthConnection(me, provider, true);
+      return true;
+    }
+    if (provider === 'whoop') { await remote.whoop('sync'); return true; }
+    return false;
+  }, []);
+
+  const toggleIntegration = useCallback(async (provider: Integration['provider']) => {
+    const me = stateRef.current.currentUserId;
+    const current = stateRef.current.integrations.find((i) => i.provider === provider);
+    if (!current) return;
+    if (!live(me)) {
+      const updated = current.connected ? await disconnectProvider(current) : await connectProvider(current);
+      setState((prev) => ({ ...prev, integrations: prev.integrations.map((i) => (i.provider === provider ? updated : i)) }));
+      return;
+    }
+    if (current.connected) {
+      if (provider === 'whoop') await remote.whoop('disconnect'); else await remote.setHealthConnection(me!, provider, false);
+      haptics.untap();
+      await reloadHealth();
+      return;
+    }
+    if (provider === 'apple-health') {
+      await connectAppleHealth();
+      await pullFrom(me!, provider);
+    } else if (provider === 'whoop') {
+      // The server sends the browser to WHOOP; WHOOP sends it back to the server, which sends it back here.
+      const back = Linking.createURL('health');
+      const { url } = await remote.whoop<{ url: string }>('start', { back });
+      const result = await WebBrowser.openAuthSessionAsync(url, back);
+      if (result.type !== 'success') throw new Error('WHOOP was not connected.');
+    } else if (provider === 'cronometer') {
+      if (!(await pullFrom(me!, provider))) return;
+    }
+    haptics.commit();
+    await reloadHealth();
+  }, [pullFrom, reloadHealth]);
+
+  const syncHealth = useCallback(async (provider: Integration['provider']) => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me)) return;
+    if (await pullFrom(me!, provider)) { haptics.tap(); await reloadHealth(); }
+  }, [pullFrom, reloadHealth]);
 
   const actions = useMemo<AppActions>(
     () => ({
@@ -2615,6 +2685,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       voteAnswer,
       submitCoachingRequest,
       toggleIntegration,
+      syncHealth,
       askCoach,
       replyToCoachQuestion,
       toggleReplyHelpful,
@@ -2705,6 +2776,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       voteAnswer,
       submitCoachingRequest,
       toggleIntegration,
+      syncHealth,
       askCoach,
       replyToCoachQuestion,
       toggleReplyHelpful,

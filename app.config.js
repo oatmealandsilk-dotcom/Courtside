@@ -23,7 +23,7 @@ module.exports = {
       infoPlist: {
         // No custom encryption: skips the export-compliance question on every upload.
         ITSAppUsesNonExemptEncryption: false,
-        NSCameraUsageDescription: 'CourtSide uses the camera to take a hit — one photo right after your session.',
+        NSCameraUsageDescription: 'CourtSide uses the camera to take an instant — one photo right after your session.',
         NSPhotoLibraryUsageDescription: 'CourtSide needs your photo library to choose clips and photos to post.',
         NSMicrophoneUsageDescription: 'CourtSide records audio when you capture video for a clip.',
         NSLocationWhenInUseUsageDescription: 'CourtSide uses your location, only while the app is open, to show players near you.',
@@ -39,11 +39,13 @@ module.exports = {
     web: { bundler: 'metro', output: 'single', name: 'CourtSide' },
     plugins: [
       'expo-router',
-      ['expo-camera', { cameraPermission: 'CourtSide uses the camera to take a hit — one photo right after your session.' }],
+      ['expo-camera', { cameraPermission: 'CourtSide uses the camera to take an instant — one photo right after your session.' }],
       ['expo-image-picker', { photosPermission: 'CourtSide needs your photo library to choose clips and photos to post.' }],
       'expo-video',
       ['expo-location', { locationWhenInUsePermission: 'CourtSide uses your location to show players near you on the map.' }],
       ['expo-notifications', { color: '#3F7049' }],
+      // Apple Health, in the App Store build only (Expo Go has no HealthKit).
+      ['react-native-health', { healthSharePermission: 'CourtSide reads your sleep, heart rate variability, resting heart rate, steps and active energy so the AI coach can plan around how recovered you are.', healthUpdatePermission: 'CourtSide does not write to Health.' }],
     ],
     experiments: { baseUrl },
     // The app's home on Expo's build service (the robertzchen account), for builds and push alerts.

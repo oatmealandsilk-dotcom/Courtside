@@ -3,19 +3,11 @@ import type { DailyHealth, Integration } from '../types';
 
 export const integrations: Integration[] = [
   {
-    provider: 'cronometer',
-    label: 'Cronometer',
-    category: 'nutrition',
-    connected: true,
-    lastSyncedAt: isoDaysAgo(0, 2),
-    provides: ['Calories', 'Macros', 'Micronutrients', 'Hydration'],
-  },
-  {
-    provider: 'myfitnesspal',
-    label: 'MyFitnessPal',
-    category: 'nutrition',
+    provider: 'apple-health',
+    label: 'Apple Health',
+    category: 'wearable',
     connected: false,
-    provides: ['Calories', 'Macros', 'Meal timing'],
+    provides: ['Sleep', 'HRV', 'Resting heart rate', 'Steps', 'Active energy'],
   },
   {
     provider: 'whoop',
@@ -23,28 +15,15 @@ export const integrations: Integration[] = [
     category: 'wearable',
     connected: true,
     lastSyncedAt: isoDaysAgo(0, 5),
-    provides: ['Recovery', 'HRV', 'Resting heart rate', 'Sleep'],
+    provides: ['Recovery', 'HRV', 'Resting heart rate', 'Sleep', 'Strain'],
   },
   {
-    provider: 'apple-health',
-    label: 'Apple Health',
-    category: 'wearable',
-    connected: false,
-    provides: ['Workouts', 'Heart rate', 'Steps', 'Sleep'],
-  },
-  {
-    provider: 'garmin',
-    label: 'Garmin',
-    category: 'wearable',
-    connected: false,
-    provides: ['Training load', 'VO2 max', 'Sleep'],
-  },
-  {
-    provider: 'strava',
-    label: 'Strava',
-    category: 'activity',
-    connected: false,
-    provides: ['Runs', 'Rides', 'Cross-training volume'],
+    provider: 'cronometer',
+    label: 'Cronometer',
+    category: 'nutrition',
+    connected: true,
+    lastSyncedAt: isoDaysAgo(0, 2),
+    provides: ['Calories', 'Protein', 'Carbs', 'Fat'],
   },
 ];
 
