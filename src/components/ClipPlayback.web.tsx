@@ -39,6 +39,10 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   const [muted, setMuted] = useState(silent);
   const [ready, setReadyState] = useState(false);
   const setReady = (ok: boolean) => { setReadyState(ok); if (ok) onReady?.(true); };
+  // A video that cannot load is a fact, not a wait: the page shows its poster
+  // and a line saying so, rather than a placeholder that never clears.
+  const [failed, setFailed] = useState(false);
+  const fail = () => { setFailed(true); setReadyState(false); onReady?.(true); };
   const latestReady = useRef(onReady);
   latestReady.current = onReady;
   // Gone from the page (or given another clip): what it had fetched goes with it.
@@ -96,7 +100,8 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
 
   return <div style={{ position: 'absolute', inset: 0, background: letterbox ? '#000' : undefined, display: 'flex', alignItems: 'center' }}>
     <div style={{ ...cropCss(crop), display: 'flex', alignItems: 'center' }}>
-      <video ref={video} src={uri} poster={poster} loop muted={muted || silent} playsInline preload={active || preload ? 'auto' : 'none'} onError={() => setReady(false)} onLoadedData={() => setReady(true)} onCanPlay={() => setReady(true)} onWaiting={() => setReady(false)} onPlaying={() => setReady(true)} style={{ width: '100%', height: '100%', objectFit: letterbox ? 'contain' : fit, pointerEvents: 'none' }} />
+      <video ref={video} src={uri} poster={poster} loop muted={muted || silent} playsInline preload={active || preload ? 'auto' : 'none'} onError={fail} onLoadedData={() => setReady(true)} onCanPlay={() => setReady(true)} onWaiting={() => setReady(false)} onPlaying={() => setReady(true)} style={{ width: '100%', height: '100%', objectFit: letterbox ? 'contain' : fit, pointerEvents: 'none' }} />
+      {failed ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><span style={{ padding: '8px 14px', borderRadius: 999, background: 'rgba(0,0,0,0.55)', color: 'white', font: '600 13px Inter_600SemiBold, system-ui, sans-serif' }}>This video didn’t load</span></div> : null}
     </div>
     <button aria-label={paused ? 'Play clip' : 'Pause clip'} onClick={() => {
       // One tap plays or pauses, two likes. The pause is held back until the
