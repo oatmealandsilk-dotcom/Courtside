@@ -11,6 +11,8 @@ import { useRevealOnFocus } from '@/lib/keyboardScroll';
 interface Props {
   inputRef?: React.Ref<TextInput>;
   label?: string;
+  /** Something small on the label's line, at the right: a link, a count. */
+  labelRight?: React.ReactNode;
   value: string;
   onChangeText: (next: string) => void;
   placeholder?: string;
@@ -44,6 +46,7 @@ const submitOnEnter = Platform.OS === 'web';
 export function Field({
   inputRef,
   label,
+  labelRight,
   value,
   onChangeText,
   placeholder,
@@ -82,7 +85,12 @@ export function Field({
   };
   return (
     <View style={styles.wrap}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+      {label || labelRight ? (
+        <View style={styles.labelRow}>
+          {label ? <Text style={styles.label}>{label}</Text> : <View />}
+          {labelRight}
+        </View>
+      ) : null}
       <TextInput
         ref={inputRef ?? own}
         accessibilityLabel={label}
@@ -120,6 +128,7 @@ export function Field({
 
 const styleDefinitions = StyleSheet.create({
   wrap: { gap: spacing.sm },
+  labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   label: { ...typography.smallStrong, color: colors.textMuted },
   input: {
     backgroundColor: colors.surface,
