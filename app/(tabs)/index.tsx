@@ -42,7 +42,7 @@ import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isDesktopBrowser } from '@/lib/browserDevice';
-import { colors, radius, typography, spacing } from '@/theme';
+import { colors, radius, typography, spacing, font } from '@/theme';
 
 /**
  * The heart that blooms when you double tap a clip.
@@ -655,13 +655,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     <View key="the-end" style={styles.endPage}>
       <View style={styles.endCard}>
         <Wash height={300} strength={0.65} />
-        <View style={styles.endTop}>
-          <View style={styles.endTile}><MarkDraw size={30} /></View>
-          <View style={styles.endNo}>
-            <Text style={styles.endNoLabel}>Early</Text>
-            <Text style={styles.endNoValue}>№ {String(feed.length).padStart(3, '0')}</Text>
-          </View>
-        </View>
+        <View style={styles.endTile}><MarkDraw size={30} /></View>
         <Text style={styles.endTitle}>You found the bottom of CourtSide.</Text>
         <Text style={styles.endBody}>Almost nobody scrolls this far. You are one of the first people ever on here — remember this page, it will mean something later.</Text>
         <View style={styles.endActions}>
@@ -1088,7 +1082,7 @@ const styleDefinitions = StyleSheet.create({
   // The mark sits at the far left of the gap, level with the greeting; the greeting and disc in the middle.
   pullGreetingText: { ...typography.bodyStrong, color: colors.text },
   wordmark: {
-    color: colors.brand, fontSize: 23, fontWeight: '800', letterSpacing: -0.3,
+    color: colors.brand, ...typography.title, fontSize: 23, ...font('600'), letterSpacing: -0.6,
   },
   // Kept as a hook for anything the wordmark needs over video; the shadow that
   // used to live here was doing more harm than good.
@@ -1099,7 +1093,7 @@ const styleDefinitions = StyleSheet.create({
   viewer: { flex: 1, width: '100%', minHeight: 0 },
   clip: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
   holdPage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
-  holdWord: { fontSize: 34, fontWeight: '800', color: colors.brand, letterSpacing: -1 },
+  holdWord: { ...typography.display, fontSize: 34, ...font('600'), color: colors.brand, letterSpacing: -1.2 },
   bone: { height: 12, borderRadius: 6, backgroundColor: colors.border },
   holdPost: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingBottom: 16 + BAR_DUCK_PX, alignItems: 'center' },
   boneFrame: { alignSelf: 'stretch', aspectRatio: 4 / 5, maxHeight: '58%', borderRadius: 16, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' },
@@ -1197,11 +1191,7 @@ const styleDefinitions = StyleSheet.create({
   // The theme's own colours, so the page belongs to whichever look is on.
   endPage: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   endCard: { alignSelf: 'stretch', maxWidth: 520, width: '100%', gap: spacing.lg, padding: spacing.xl, borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
-  endTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   endTile: { width: 56, height: 56, borderRadius: radius.lg, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
-  endNo: { alignItems: 'flex-end', gap: 2 },
-  endNoLabel: { ...typography.caption, color: colors.textFaint, textTransform: 'uppercase' },
-  endNoValue: { ...typography.title, fontSize: 26, color: colors.brand, fontVariant: ['tabular-nums'] },
   endTitle: { ...typography.title, color: colors.text },
   endBody: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   endActions: { gap: spacing.md, paddingTop: spacing.xs },

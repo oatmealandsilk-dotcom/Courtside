@@ -19,7 +19,7 @@ OWN-WORLD: Inter 400/500/600 everywhere, display at 500 with tight tracking, bod
 
 STORY: Open Coaching and meet a quiet editorial page that says what coaching will be and lets you ask a coach now. Open Messages and read names at 500 over previews, one hairline apart. Hit the tip page or the bottom of the feed and recognise the waitlist's card language.
 
-FIRST VIEWPORT (Coaching, iPhone 390×844): "Coaching" at 30/500 tight with a one-line muted subtitle, a feathered wash behind the top third; below, the Ask-a-coach card (tinted mark tile, 17/600 headline, one-line body, primary pill "Ask a coach"); then coaches as hairline rows (name 500, credential small muted, price right-aligned tabular); the apply card closes the page as a quiet bordered block. Primary action: the pill in the Ask card.
+FIRST VIEWPORT (Coaching, iPhone 390×844): "Coaching" at 30/500 tight with a one-line muted subtitle, a feathered wash behind the top third; below, "Ask a coach." at 24/500 with a one-line body, then a pill-shaped field reading "What are you stuck on?" with a round green arrow — a question you could start typing, not a card about asking (the tile-and-pill card was built first and the owner called it "too AI"); then coaches as hairline rows (name 500, credential small muted, price right-aligned tabular); the apply card closes the page as a quiet bordered block. Primary action: the arrow on that field.
 
 FORM: Owner-pinned — the waitlist page's own world (public/waitlist.html) with Brightwill's card polish; no concept roll (seed: owner-pinned). Signature interaction: the mark draws itself on the tip and end cards when they appear; motion grammar is exponential ease-out from a visible default, one authored moment per screen, none under Reduce Motion.
 

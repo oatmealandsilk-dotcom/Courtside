@@ -6,7 +6,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { Avatar, Button, Screen } from '@/components/ui';
+import { Avatar, Button, DottedRule, Screen } from '@/components/ui';
 import { LiveDot } from '@/components/LiveDot';
 import { money, relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
@@ -66,6 +66,7 @@ function Coaching() {
       ) : null}
 
       {/* ------------------------------ Coaches ---------------------------------- */}
+      <DottedRule gap={spacing.xxl} />
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Coaches</Text>
         <Text style={styles.sectionBody}>Every name here was checked by hand.</Text>
@@ -96,9 +97,10 @@ function Coaching() {
                   <Text style={styles.meta} numberOfLines={1}>
                     {coach.credentials[0]} · {coach.specialties.slice(0, 2).map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(' & ')}
                   </Text>
-                  <Text style={styles.meta}>
-                    <Text style={styles.rating}>★ {coach.ratingAvg.toFixed(1)}</Text> · {coach.ratingCount} reviews
-                  </Text>
+                  <View style={styles.metaRow}>
+                    <Ionicons name="star" size={12} color={colors.text} />
+                    <Text style={styles.meta}><Text style={styles.rating}>{coach.ratingAvg.toFixed(1)}</Text> · {coach.ratingCount} reviews</Text>
+                  </View>
                 </View>
                 <View style={styles.priceCol}>
                   <Text style={styles.price}>{money(price)}</Text>
@@ -113,6 +115,7 @@ function Coaching() {
       {/* ------------------------------ Your requests ---------------------------- */}
       {myRequests.length ? (
         <>
+          <DottedRule gap={spacing.xxl} />
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Your requests</Text>
           </View>
@@ -181,7 +184,7 @@ const styleDefinitions = StyleSheet.create({
   rowTitle: { ...typography.body, ...font('500'), color: colors.text, lineHeight: 21 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   meta: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
-  section: { gap: 4, paddingTop: spacing.xxl, paddingBottom: spacing.sm },
+  section: { gap: 4, paddingBottom: spacing.sm },
   sectionTitle: { ...typography.title, color: colors.text },
   sectionBody: { ...typography.small, color: colors.textMuted },
   none: { gap: spacing.sm, paddingVertical: spacing.lg, alignItems: 'flex-start' },

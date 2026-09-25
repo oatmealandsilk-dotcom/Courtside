@@ -37,8 +37,8 @@ export function Wash({ height = 320, strength = 1, style }: Props) {
     <View pointerEvents="none" style={[styles.wrap, { height }, style]}>
       <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
         <Defs>
-          <RadialGradient id={`clay${id}`} cx="8" cy="72" rx="58" ry="62" gradientUnits="userSpaceOnUse">
-            <Stop offset="0" stopColor={colors.clay} stopOpacity={0.30 * s} />
+          <RadialGradient id={`clay${id}`} cx="6" cy="58" rx="62" ry="58" gradientUnits="userSpaceOnUse">
+            <Stop offset="0" stopColor={colors.clay} stopOpacity={0.42 * s} />
             <Stop offset="1" stopColor={colors.clay} stopOpacity={0} />
           </RadialGradient>
           <RadialGradient id={`grass${id}`} cx="94" cy="12" rx="60" ry="64" gradientUnits="userSpaceOnUse">
