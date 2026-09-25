@@ -15,12 +15,14 @@ export function LevelPill({ profile, small = false, onMedia = false }: { profile
       style={[
         styles.pill,
         small && styles.small,
-        // On a page it is an outline in the band's colour; over a picture or a
-        // clip an outline vanishes, so there it is a solid pill with readable ink.
-        onMedia ? { backgroundColor: badge.tint, borderColor: badge.tint, shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 4, shadowOffset: { width: 0, height: 1 } } : { borderColor: badge.tint },
+        // On a page it is an outline in the band's colour. Over a clip it is
+        // the chip every reels feed uses — frosted dark, white text, a faint
+        // edge — with the band's colour kept as a dot at the front.
+        onMedia ? styles.frost : { borderColor: badge.tint },
       ]}
     >
-      <Text style={[small ? styles.textSmall : styles.text, { color: onMedia ? badge.ink : badge.tint }]}>{badge.label}</Text>
+      {onMedia ? <View style={[styles.dot, { backgroundColor: badge.tint }]} /> : null}
+      <Text style={[small ? styles.textSmall : styles.text, { color: onMedia ? '#FFFFFF' : badge.tint }]}>{badge.label}</Text>
     </View>
   );
 }
@@ -29,12 +31,17 @@ const styles = StyleSheet.create({
   // The level is written in its band's colour on a hairline, the way the
   // waitlist's tags are set: colour as a label, not a fill.
   pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     paddingHorizontal: 9,
     paddingVertical: 3,
     borderRadius: radius.pill,
     borderWidth: 1,
     alignSelf: 'flex-start',
   },
+  frost: { backgroundColor: 'rgba(12, 14, 12, 0.48)', borderColor: 'rgba(255, 255, 255, 0.22)', paddingHorizontal: 8 },
+  dot: { width: 6, height: 6, borderRadius: 3 },
   small: { paddingHorizontal: 7, paddingVertical: 2 },
   text: { ...typography.caption, letterSpacing: 0.5 },
   textSmall: { ...typography.caption, fontSize: 10, letterSpacing: 0.5 },
