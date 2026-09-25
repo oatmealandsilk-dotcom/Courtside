@@ -11,6 +11,8 @@ interface Props {
   /** 1 is the waitlist page's strength; a card inside a screen wants less. */
   strength?: number;
   style?: StyleProp<ViewStyle>;
+  /** What the wash fades into: the page by default, a card's own colour inside a card. */
+  fade?: string;
 }
 
 /** Perceived lightness of a hex colour, 0..1 — enough to tell a dark court from a light one. */
@@ -27,12 +29,13 @@ function lightness(hex: string): number {
  * behind a screen's opening moment or inside a card, never under a list.
  * Colours come from the palette, so each court washes in its own colours.
  */
-export function Wash({ height = 320, strength = 1, style }: Props) {
+export function Wash({ height = 320, strength = 1, style, fade }: Props) {
   // Reading the theme here is what redraws the gradients when it changes.
   useTheme();
   const id = useId().replace(/[^a-zA-Z0-9]/g, '');
   const dark = lightness(colors.bg) < 0.5;
   const s = strength * (dark ? 0.7 : 1);
+  const to = fade ?? colors.bg;
   return (
     <View pointerEvents="none" style={[styles.wrap, { height }, style]}>
       <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -46,8 +49,8 @@ export function Wash({ height = 320, strength = 1, style }: Props) {
             <Stop offset="1" stopColor={colors.brand} stopOpacity={0} />
           </RadialGradient>
           <LinearGradient id={`fade${id}`} x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0.35" stopColor={colors.bg} stopOpacity={0} />
-            <Stop offset="1" stopColor={colors.bg} stopOpacity={1} />
+            <Stop offset="0.35" stopColor={to} stopOpacity={0} />
+            <Stop offset="1" stopColor={to} stopOpacity={1} />
           </LinearGradient>
         </Defs>
         <Rect x="0" y="0" width="100" height="100" fill={`url(#clay${id})`} />

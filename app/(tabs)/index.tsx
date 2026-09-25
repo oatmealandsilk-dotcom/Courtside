@@ -486,7 +486,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         {suggestions.slice(0, 6).map(({ user, reason }) => (
           <View key={user.id} style={styles.stripCard}>
             <Pressable accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.stripBody}>
-              <Avatar name={user.name} seed={user.avatarSeed} size={52} ring={user.isCoach} />
+              <Avatar name={user.name} seed={user.avatarSeed} size={44} ring={user.isCoach} />
               <View style={styles.stripWords}>
                 <Text style={styles.stripName} numberOfLines={1}>{user.name}</Text>
                 <Text style={styles.stripReason} numberOfLines={1}>{reason}</Text>
@@ -656,7 +656,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const endPage = (
     <View key="the-end" style={styles.endPage}>
       <View style={styles.endCard}>
-        <Wash height={300} strength={0.65} />
+        <Wash height={300} strength={0.65} fade={colors.surface} />
         <View style={styles.endTile}><MarkDraw size={30} /></View>
         <Text style={styles.endTitle}>You found the bottom of CourtSide.</Text>
         <Text style={styles.endBody}>Almost nobody scrolls this far. You are one of the first people ever on here — remember this page, it will mean something later.</Text>
@@ -781,7 +781,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       {hiddenMarks.has(item.question.id) ? <View style={{ width: 34, height: 34 }} /> : <TapAway label="Hide the CourtSide logo" onHidden={() => hideMark(item.question.id)} style={styles.threadMark}><BrandMark size={34} /></TapAway>}
                     </View>
                     {strip}
-                    <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: 'center' }}>
+                    <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: strip ? 'flex-start' : 'center' }}>
                       <QuestionCard
                         showBody
                         brandCorner
@@ -849,7 +849,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       {post.kind === 'match' ? 'SET PLAY' : post.kind.toUpperCase()} · FOR YOU
                     </Text>}
                     {strip}
-                    <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: 'center' }}>
+                    <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: strip ? 'flex-start' : 'center' }}>
                       <PostCard
                         post={post}
                         author={author}
@@ -1166,22 +1166,22 @@ const styleDefinitions = StyleSheet.create({
   // On a computer a written post is a centred column like a photo post, not
   // a card stretched across the whole window with its words at the far left.
   articleCentred: { width: '100%', maxWidth: 600, alignSelf: 'center' },
-  strip: { gap: 10, paddingBottom: 6 },
+  strip: { gap: 8, paddingBottom: 2 },
   stripHead: { gap: 2 },
   stripTitle: { ...typography.heading, fontSize: 16, color: colors.text },
   stripSub: { ...typography.small, color: colors.textMuted },
   stripRow: { gap: 10, paddingHorizontal: 20, paddingVertical: 6 },
   // A card per player: the picture first, the name, the level in its colour, why they're here.
   stripCard: {
-    width: 148,
-    padding: 14,
-    gap: 12,
+    width: 136,
+    padding: 12,
+    gap: 10,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
-  stripBody: { alignItems: 'center', gap: 8 },
+  stripBody: { alignItems: 'center', gap: 6 },
   stripWords: { alignItems: 'center', gap: 2 },
   stripName: { ...typography.bodyStrong, fontSize: 14, color: colors.text, textAlign: 'center' },
   stripReason: { ...typography.small, fontSize: 12, color: colors.textMuted, textAlign: 'center' },

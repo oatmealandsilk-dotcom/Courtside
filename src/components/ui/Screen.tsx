@@ -149,7 +149,8 @@ export function Screen({
   const pullY = useSharedValue(0);
   // Where the page is, so the wash behind the top scrolls away with it.
   const scrollY = useSharedValue(0);
-  const washStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -Math.max(0, scrollY.value - strip) }] }));
+  // A browser pays for every frame of this on the main thread, so there the wash simply stays put.
+  const washStyle = useAnimatedStyle(() => (Platform.OS === 'web' ? {} : { transform: [{ translateY: -Math.max(0, scrollY.value - strip) }] }));
   const beginPull = useCallback(() => { void refreshNowRef.current(); }, []);
   const armed = useSharedValue(false);
   const tick = useCallback(() => haptics.tap(), []);

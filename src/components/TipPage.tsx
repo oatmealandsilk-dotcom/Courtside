@@ -27,7 +27,7 @@ export function TipPage({ onSubmit }: { onSubmit: (body: string) => Promise<void
   return (
     <View style={styles.page}>
       <View style={styles.card}>
-        <Wash height={260} strength={0.6} />
+        <Wash height={260} strength={0.6} fade={colors.surface} />
         <View style={styles.top}>
           <View style={styles.tile}><MarkDraw size={30} /></View>
           <View style={styles.words}>
