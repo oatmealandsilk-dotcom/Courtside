@@ -94,70 +94,66 @@ function Coaching() {
       )}
 
       {/* ------------------------------ Questions -------------------------------- */}
-      {recentQuestions.length ? (
+      {(recentQuestions.length || myRequests.length) ? (
         <>
           <View style={styles.section}>
             <View style={styles.sectionRow}>
-              <Text style={styles.sectionTitle}>Questions to coaches</Text>
+              <Text style={styles.sectionTitle}>Questions</Text>
               <Text style={styles.sectionCount}>{unanswered ? `${unanswered} waiting` : 'all answered'}</Text>
             </View>
-            <Text style={styles.sectionBody}>Public. Anyone can read the answers.</Text>
+            <Text style={styles.sectionBody}>What players have asked. Yours to one coach are marked private.</Text>
           </View>
           <View style={styles.group}>
-            {recentQuestions.map((question, index) => {
-              const author = users.find((u) => u.id === question.authorId);
-              const waiting = question.replyIds.length === 0;
-              return (
-                <Pressable
-                  key={question.id}
-                  accessibilityRole="link"
-                  onPress={() => router.push(`/coach-question/${question.id}`)}
-                  style={({ pressed }) => [styles.row, index > 0 && styles.rowLine, pressed && styles.pressed]}
-                >
-                  <View style={styles.rowWords}>
-                    <Text style={styles.rowTitle} numberOfLines={2}>{question.title}</Text>
-                    <View style={styles.metaRow}>
-                      {waiting ? <LiveDot size={7} /> : <Ionicons name="checkmark-circle" size={13} color={colors.success} />}
-                      <PlayerName userId={author?.id} style={styles.meta}>
-                        {waiting ? 'Awaiting a coach' : question.resolved ? 'Answered' : `${question.replyIds.length} ${question.replyIds.length === 1 ? 'reply' : 'replies'}`} · @{author?.handle ?? 'player'} · {relativeTime(question.createdAt)}
-                      </PlayerName>
+            {[
+              ...recentQuestions.map((question) => ({ key: `q-${question.id}`, at: question.createdAt, question, request: null as (typeof myRequests)[number] | null })),
+              ...myRequests.map((request) => ({ key: `r-${request.id}`, at: request.createdAt, question: null as (typeof recentQuestions)[number] | null, request })),
+            ]
+              .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+              .map((entry, index) => {
+                if (entry.question) {
+                  const question = entry.question;
+                  const author = users.find((u) => u.id === question.authorId);
+                  const waiting = question.replyIds.length === 0;
+                  return (
+                    <Pressable
+                      key={entry.key}
+                      accessibilityRole="link"
+                      onPress={() => router.push(`/coach-question/${question.id}`)}
+                      style={({ pressed }) => [styles.row, index > 0 && styles.rowLine, pressed && styles.pressed]}
+                    >
+                      <View style={styles.rowWords}>
+                        <Text style={styles.rowTitle} numberOfLines={2}>{question.title}</Text>
+                        <View style={styles.metaRow}>
+                          {waiting ? <LiveDot size={7} /> : <Ionicons name="checkmark-circle" size={13} color={colors.success} />}
+                          <PlayerName userId={author?.id} style={styles.meta}>
+                            {waiting ? 'Awaiting a coach' : question.resolved ? 'Answered' : `${question.replyIds.length} ${question.replyIds.length === 1 ? 'reply' : 'replies'}`} · @{author?.handle ?? 'player'} · {relativeTime(question.createdAt)}
+                          </PlayerName>
+                        </View>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+                    </Pressable>
+                  );
+                }
+                const r = entry.request!;
+                const coach = coaches.find((c) => c.id === r.coachId);
+                const coachUser = users.find((u) => u.id === coach?.userId);
+                const service = coach?.services.find((x) => x.id === r.serviceId);
+                const waiting = r.status !== 'answered';
+                return (
+                  <Pressable key={entry.key} accessibilityRole="link" onPress={() => coach && router.push(`/coach/${coach.id}`)} style={({ pressed }) => [styles.row, index > 0 && styles.rowLine, pressed && styles.pressed]}>
+                    <View style={styles.rowWords}>
+                      <Text style={styles.rowTitle} numberOfLines={2}>{r.question || service?.title || 'Coaching request'}</Text>
+                      <View style={styles.metaRow}>
+                        {waiting ? <LiveDot size={7} /> : <Ionicons name="checkmark-circle" size={13} color={colors.success} />}
+                        <Text style={styles.meta} numberOfLines={1}>
+                          {r.status === 'answered' ? 'Answered' : r.status === 'in-review' ? 'Being looked at' : 'Sent'} · Private, with {coachUser?.name ?? 'a coach'} · {relativeTime(r.createdAt)}
+                        </Text>
+                      </View>
                     </View>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
-                </Pressable>
-              );
-            })}
-          </View>
-        </>
-      ) : null}
-
-      {/* ------------------------------ Your requests ---------------------------- */}
-      {myRequests.length ? (
-        <>
-          <View style={styles.section}>
-            <View style={styles.sectionRow}>
-              <Text style={styles.sectionTitle}>Your private requests</Text>
-              <Text style={styles.sectionCount}>{myRequests.length}</Text>
-            </View>
-            <Text style={styles.sectionBody}>Between you and one coach: reviews, answers, sessions.</Text>
-          </View>
-          <View style={styles.group}>
-            {myRequests.map((r, index) => {
-              const coach = coaches.find((c) => c.id === r.coachId);
-              const coachUser = users.find((u) => u.id === coach?.userId);
-              const service = coach?.services.find((s) => s.id === r.serviceId);
-              return (
-                <Pressable key={r.id} accessibilityRole="link" onPress={() => coach && router.push(`/coach/${coach.id}`)} style={({ pressed }) => [styles.coach, index > 0 && styles.rowLine, pressed && styles.pressed]}>
-                  <Avatar name={coachUser?.name ?? '?'} seed={coachUser?.avatarSeed ?? r.coachId} uri={coachUser?.avatarUrl} size={36} />
-                  <View style={styles.rowWords}>
-                    <Text style={styles.name}>{service?.title ?? 'Coaching'} · {coachUser?.name ?? 'Coach'}</Text>
-                    <Text style={styles.meta}>{r.status === 'answered' ? 'Answered' : r.status === 'in-review' ? 'Being looked at' : 'Sent'} · {relativeTime(r.createdAt)}</Text>
-                    {r.question ? <Text style={styles.meta} numberOfLines={2}>{r.question}</Text> : null}
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
-                </Pressable>
-              );
-            })}
+                    <Ionicons name="lock-closed-outline" size={14} color={colors.textFaint} />
+                  </Pressable>
+                );
+              })}
           </View>
         </>
       ) : null}
