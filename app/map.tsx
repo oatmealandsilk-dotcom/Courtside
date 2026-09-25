@@ -5,10 +5,11 @@ import { goBack } from '@/lib/goBack';
 
 import { NearbyMap } from '@/components/NearbyMap';
 import { useLocationToggle } from '@/features/players/useLocationToggle';
-import { EmptyState, Screen } from '@/components/ui';
+import { EmptyState } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
+import { colors } from '@/theme';
 
-/** The community map on its own page, big enough to actually look at. */
+/** The community map as the whole page: tiles edge to edge, the controls laid over them. */
 export default function MapScreen() {
   const { users, currentUser, currentUserId, blockedIds, locationEnabled, detectedCoords, actions } = useApp();
   const players = users.filter((u) => u.id !== currentUserId && !blockedIds.includes(u.id));
@@ -20,16 +21,14 @@ export default function MapScreen() {
     asked.current = true;
     void actions.setLocationEnabled(true);
   }, [locationEnabled, actions]);
+  const back = () => goBack('/discuss?section=players');
   return (
-    // No page scroll here: every drag and pinch belongs to the map itself.
-    <Screen title="Players near you" compactTitle scroll={false} padded={false} onBack={() => goBack('/discuss?section=players')}>
+    <View style={{ flex: 1, backgroundColor: colors.bgElevated }}>
       {currentUser ? (
-        <View style={{ flex: 1 }}>
-          <NearbyMap expanded fullscreen me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={(id) => router.push(`/user/${id}`)} />
-        </View>
+        <NearbyMap expanded fullscreen me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onBack={back} onOpen={(id) => router.push(`/user/${id}`)} />
       ) : (
         <EmptyState title="Sign in to see who is around" />
       )}
-    </Screen>
+    </View>
   );
 }

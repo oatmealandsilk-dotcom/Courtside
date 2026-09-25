@@ -88,8 +88,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : <View style={styles.mapStandIn} />) : null}
         {players.length ? <View style={styles.playersHead}>
-          <Text style={styles.playersTitle}>Players</Text>
-          <Text style={styles.playersBody}>{search ? `${players.length} ${players.length === 1 ? 'match' : 'matches'}` : 'Your level, your side of town.'}</Text>
+          <Text style={styles.playersTitle}>{search ? 'Players' : 'Players near you'}</Text>
+          {search ? <Text style={styles.playersBody}>{`${players.length} ${players.length === 1 ? 'match' : 'matches'}`}</Text> : null}
         </View> : null}
         {players.map((user, index) => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
           <Avatar name={user.name} seed={user.avatarSeed} size={52} ring={user.isCoach} />
@@ -201,7 +201,7 @@ const styleDefinitions = StyleSheet.create({
   searchWrap: { position: 'relative', justifyContent: 'center' },
   searchIcon: { position: 'absolute', left: 16, zIndex: 1 },
   search: { ...typography.body, fontSize: 16, color: colors.text, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingLeft: 42, paddingRight: spacing.lg, paddingVertical: 12 },
-  mapStandIn: { height: 306, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  mapStandIn: { height: 330, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   playersHead: { gap: 3, paddingTop: spacing.sm },
   playersTitle: { ...typography.title, color: colors.text },
   playersBody: { ...typography.small, color: colors.textMuted },

@@ -1,19 +1,27 @@
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Ionicons } from '@expo/vector-icons';
 
-import type { User } from '@/data/types';
+import { CourtSheet, FilterChips, MapButtons, MapTopBar, NearbyRail, PlayerSheet, PreviewOverlay, WeatherChip } from '@/components/map/MapChrome';
+import type { NearbyMapProps } from '@/components/NearbyMap.types';
+import { milesBetween } from '@/features/players/geo';
+import { useMapModel } from '@/features/players/mapModel';
+import { show as showToast } from '@/lib/toast';
+import { useApp } from '@/store/AppContext';
 import { levelBadge } from '@/lib/badges';
-import { homeFor, positionFor, type LatLng } from '@/features/players/positions';
 import { useWeather } from '@/features/players/useWeather';
 import { initials } from '@/lib/format';
 import { colors, radius, spacing, surfaceColorFor, typography } from '@/theme';
 
-const HEIGHT = 290;
+const HEIGHT = 330;
 const START_ZOOM = 11.5;
+/** Close enough to read street names, when the map goes to someone. */
+const CLOSE_ZOOM = 13.5;
 /**
  * The plainest vector style OpenFreeMap offers (free, no key), recoloured
  * below into the soft, quiet look of Apple Maps: warm paper, white roads,
@@ -123,33 +131,26 @@ maplibregl.setWorkerUrl(`${BASE}/maplibre/maplibre-gl-worker.mjs`);
 
 /**
  * A real map of who is around you, in the browser, drawn by MapLibre — the
- * same vector-map engine behind modern map apps, so streets, parks and
- * water render crisply at any zoom. You sit where your device says you are,
- * or at the centre of your city, and players are set down near theirs.
+ * same vector-map engine behind modern map apps. You sit where your device
+ * says you are, or at the centre of your city, and players are set down
+ * near theirs. The controls laid over it are shared with the phone.
  */
-export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, fullscreen = false, at, onLocate, locationOn, locating = false, onToggleLocation }: {
-  me: User; players: User[]; onOpen: (id: string) => void;
-  onExpand?: () => void;
-  expanded?: boolean;
-  fullscreen?: boolean;
-  at?: LatLng | null;
-  onLocate?: () => void;
-  /** Whether the app is using the device's location; the switch on the map flips it. */
-  locationOn?: boolean;
-  /** Asking the device where it is, right now. */
-  locating?: boolean;
-  onToggleLocation?: () => void;
-}) {
+export function NearbyMap(props: NearbyMapProps) {
+  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation } = props;
   const styles = useThemedStyles(styleDefinitions);
   const { night } = useTheme();
-  const nearby = expanded ? players.slice(0, 40) : players.slice(0, 12);
-  const home = useMemo(() => homeFor(me, at), [me, at]);
+  const insets = useSafeAreaInsets();
+  const { followingIds, actions } = useApp();
+  const model = useMapModel(me, players, at);
+  const { home } = model;
   const weather = useWeather(home);
+  const cityName = me.location.trim() ? me.location.split(',')[0] : 'you';
   const host = useRef<HTMLDivElement | null>(null);
   const map = useRef<maplibregl.Map | null>(null);
-  const latestOpen = useRef(onOpen);
-  latestOpen.current = onOpen;
+  const latest = useRef({ onOpen, select: model.select, selectCourt: model.selectCourt, loadCourts: model.loadCourts, courtsOn: model.courtsOn });
+  latest.current = { onOpen, select: model.select, selectCourt: model.selectCourt, loadCourts: model.loadCourts, courtsOn: model.courtsOn };
 
+  // The map itself: made once per look and home, kept across everything else.
   useEffect(() => {
     const el = host.current;
     if (!el) return;
@@ -168,31 +169,8 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
     });
     instance.touchZoomRotate.disableRotation();
     instance.on('load', () => applyLook(instance, night ? NIGHT : DAY));
-
-    const pin = (html: string, size: number) => {
-      const node = document.createElement('div');
-      node.style.width = `${size}px`;
-      node.style.height = `${size}px`;
-      node.innerHTML = html;
-      return node;
-    };
-    const markers: maplibregl.Marker[] = [];
-    for (const player of nearby) {
-      const spot = positionFor(player, home);
-      const face = player.avatarUrl
-        ? `background-image:url('${player.avatarUrl}');background-size:cover;`
-        : `background:${surfaceColorFor(player.avatarSeed)};`;
-      const node = pin(`<div style="width:36px;height:36px;border-radius:18px;background:${colors.bg};border:2px solid ${levelBadge(player.profile).tint};display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.22);cursor:pointer"><div style="width:30px;height:30px;border-radius:15px;${face}color:#fff;font:600 11px system-ui,sans-serif;display:flex;align-items:center;justify-content:center">${player.avatarUrl ? '' : initials(player.name)}</div></div>`, 34);
-      node.setAttribute('role', 'link');
-      node.setAttribute('aria-label', `${player.name}, open profile`);
-      node.addEventListener('click', (event) => { event.stopPropagation(); latestOpen.current(player.id); });
-      markers.push(new maplibregl.Marker({ element: node, anchor: 'center' }).setLngLat([spot.lng, spot.lat]).addTo(instance));
-    }
-    markers.push(new maplibregl.Marker({
-      element: pin(`<div style="width:18px;height:18px;border-radius:9px;background:${colors.brand};border:3px solid ${colors.bg};box-shadow:0 0 0 6px ${colors.brand}33"></div>`, 18),
-      anchor: 'center',
-    }).setLngLat([home.lng, home.lat]).addTo(instance));
-
+    instance.on('click', () => { latest.current.select(null); latest.current.selectCourt(null); });
+    instance.on('moveend', () => { if (latest.current.courtsOn) { const c = instance.getCenter(); void latest.current.loadCourts({ lat: c.lat, lng: c.lng }); } });
     // Trackpad: a pinch arrives as a wheel with Ctrl held and zooms around the
     // pointer; a plain two-finger scroll slides the map. Both are ours.
     const onWheel = (event: WheelEvent) => {
@@ -208,8 +186,6 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     map.current = instance;
-    // The box can change size after the map is made (the page settles, the
-    // window resizes); the map has to be told or its centre drifts.
     const settle = setTimeout(() => { instance.resize(); instance.jumpTo({ center: [home.lng, home.lat] }); }, 60);
     const watcher = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => instance.resize()) : null;
     watcher?.observe(el);
@@ -217,124 +193,106 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
       clearTimeout(settle);
       watcher?.disconnect();
       el.removeEventListener('wheel', onWheel);
-      markers.forEach((m) => m.remove());
       instance.remove();
       map.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expanded, night, home.lat, home.lng, nearby.map((p) => p.id).join(',')]);
+  }, [expanded, night, home.lat, home.lng]);
+
+  // Pins: rebuilt when who is shown or who is picked changes.
+  const shown = expanded ? model.shown : model.inTown.length ? model.inTown : model.ranked.slice(0, 12);
+  const selectedId = model.selected?.user.id ?? null;
+  useEffect(() => {
+    const instance = map.current;
+    if (!instance) return;
+    const markers: maplibregl.Marker[] = [];
+    const pin = (html: string) => { const node = document.createElement('div'); node.innerHTML = html; return node; };
+    for (const p of shown) {
+      const on = p.user.id === selectedId;
+      const size = on ? 38 : 30;
+      const face = p.user.avatarUrl ? `background-image:url('${p.user.avatarUrl}');background-size:cover;` : `background:${surfaceColorFor(p.user.avatarSeed)};`;
+      const label = expanded ? `<div style="margin-top:2px;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 6px;border-radius:999px;background:${colors.bg};color:${colors.text};font:600 11px Inter,system-ui,sans-serif">${p.user.name.split(' ')[0]}</div>` : '';
+      const node = pin(`<div style="display:flex;flex-direction:column;align-items:center;cursor:pointer"><div style="width:${size + 8}px;height:${size + 8}px;border-radius:999px;background:${colors.bg};border:${on ? 3 : 2}px solid ${levelBadge(p.user.profile).tint};display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.22)"><div style="width:${size}px;height:${size}px;border-radius:999px;${face}color:#fff;font:600 11px Inter,system-ui,sans-serif;display:flex;align-items:center;justify-content:center">${p.user.avatarUrl ? '' : initials(p.user.name)}</div></div>${label}</div>`);
+      node.setAttribute('role', expanded ? 'button' : 'link');
+      node.setAttribute('aria-label', expanded ? p.user.name : `${p.user.name}, open profile`);
+      node.addEventListener('click', (event) => { event.stopPropagation(); if (expanded) latest.current.select(p.user.id); else latest.current.onOpen(p.user.id); });
+      markers.push(new maplibregl.Marker({ element: node, anchor: expanded ? 'top' : 'center', offset: expanded ? [0, -(size + 8) / 2] : [0, 0] }).setLngLat([p.at.lng, p.at.lat]).addTo(instance));
+    }
+    const meFace = me.avatarUrl ? `background-image:url('${me.avatarUrl}');background-size:cover;` : `background:${surfaceColorFor(me.avatarSeed)};`;
+    const meSize = expanded ? 34 : 26;
+    markers.push(new maplibregl.Marker({
+      element: pin(`<div style="width:64px;height:64px;border-radius:999px;background:${colors.brandDim};display:flex;align-items:center;justify-content:center;opacity:.96"><div style="width:${meSize + 9}px;height:${meSize + 9}px;border-radius:999px;background:${colors.bg};border:2.5px solid ${colors.brand};display:flex;align-items:center;justify-content:center"><div style="width:${meSize}px;height:${meSize}px;border-radius:999px;${meFace}color:#fff;font:600 11px Inter,system-ui,sans-serif;display:flex;align-items:center;justify-content:center">${me.avatarUrl ? '' : initials(me.name)}</div></div></div>`),
+      anchor: 'center',
+    }).setLngLat([home.lng, home.lat]).addTo(instance));
+    return () => { markers.forEach((m) => m.remove()); };
+  }, [shown, selectedId, expanded, home.lat, home.lng, me, night]);
+
+  // Courts, when that layer is on.
+  const selectedCourtId = model.selectedCourt?.id ?? null;
+  useEffect(() => {
+    const instance = map.current;
+    if (!instance) return;
+    const markers: maplibregl.Marker[] = [];
+    for (const c of model.courts) {
+      const on = c.id === selectedCourtId;
+      const node = document.createElement('div');
+      node.innerHTML = `<div style="display:flex;align-items:center;gap:3px;height:24px;padding:0 7px;border-radius:12px;background:${colors.court};border:2px solid ${colors.bg};box-shadow:0 2px 6px rgba(0,0,0,.18);cursor:pointer;transform:scale(${on ? 1.2 : 1})"><span style="width:10px;height:10px;border-radius:999px;background:${colors.brandInk};display:inline-block"></span>${c.count > 1 ? `<span style="color:${colors.brandInk};font:600 11px Inter,system-ui,sans-serif">${c.count}</span>` : ''}</div>`;
+      node.setAttribute('role', 'button'); node.setAttribute('aria-label', c.name);
+      node.addEventListener('click', (event) => { event.stopPropagation(); latest.current.selectCourt(c.id); });
+      markers.push(new maplibregl.Marker({ element: node, anchor: 'center' }).setLngLat([c.lng, c.lat]).addTo(instance));
+    }
+    return () => { markers.forEach((m) => m.remove()); };
+  }, [model.courts, selectedCourtId, night]);
+
+  // Picking someone, a court, or typing a city takes the map there.
+  useEffect(() => { if (model.selected) map.current?.flyTo({ center: [model.selected.at.lng, model.selected.at.lat], zoom: Math.max(map.current.getZoom(), CLOSE_ZOOM), duration: 500 }); }, [model.selected]);
+  useEffect(() => { if (model.selectedCourt) map.current?.flyTo({ center: [model.selectedCourt.lng, model.selectedCourt.lat], zoom: Math.max(map.current.getZoom(), CLOSE_ZOOM), duration: 500 }); }, [model.selectedCourt]);
+  useEffect(() => { if (model.place) map.current?.flyTo({ center: [model.place.lng, model.place.lat], zoom: START_ZOOM, duration: 700 }); }, [model.place]);
 
   const canvas = <div ref={host} style={{ position: 'absolute', inset: 0, background: colors.bgElevated }} />;
 
-  if (expanded) {
+  if (!expanded) {
     return (
-      <View style={fullscreen ? styles.fill : styles.card}>
-        {fullscreen ? null : <View style={styles.head}>
-          <Ionicons name="location-outline" size={16} color={colors.brand} />
-          <Text style={styles.title}>Players near {me.location.trim() ? me.location.split(',')[0] : 'you'}</Text>
-          <Text style={styles.count}>{nearby.length}</Text>
-          <View style={{ flex: 1 }} />
-          {onToggleLocation ? (
-            <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? 'Turn location off' : 'Turn location on'} onPress={onToggleLocation} hitSlop={8} style={[styles.locPill, locationOn && styles.locPillOn]}>
-              <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={12} color={locationOn ? colors.brandInk : colors.textMuted} />
-              <Text style={[styles.locPillText, locationOn && { color: colors.brandInk }]}>{locating ? 'Finding you…' : locationOn ? 'Location on' : 'Location off'}</Text>
-            </Pressable>
-          ) : null}
-        </View>}
-        <View style={[styles.map, fullscreen ? styles.fill : styles.mapExpanded]}>
-          {canvas}
-          <Text style={styles.credit}>© OpenStreetMap</Text>
-          {weather ? <View pointerEvents="none" style={styles.weather}><Ionicons name={weather.icon as keyof typeof Ionicons.glyphMap} size={14} color={colors.text} /><Text style={styles.weatherText}>{weather.tempF}° · {weather.label}</Text></View> : null}
-          <View style={styles.zoomControls}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Zoom in" onPress={() => map.current?.zoomIn()} style={styles.zoomButton}>
-              <Ionicons name="add" size={18} color={colors.text} />
-            </Pressable>
-            <View style={styles.zoomRule} />
-            <Pressable accessibilityRole="button" accessibilityLabel="Zoom out" onPress={() => map.current?.zoomOut()} style={styles.zoomButton}>
-              <Ionicons name="remove" size={18} color={colors.text} />
-            </Pressable>
-          </View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Back to me" onPress={() => map.current?.flyTo({ center: [home.lng, home.lat], zoom: START_ZOOM, duration: 600 })} style={styles.locate}>
-            <Ionicons name="locate-outline" size={18} color={colors.brand} />
-          </Pressable>
-          {onToggleLocation ? (
-            <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? 'Turn location off' : 'Turn location on'} onPress={onToggleLocation} style={[styles.useLocation, !locationOn && styles.useLocationOff]}>
-              <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={15} color={locationOn ? colors.brandInk : colors.text} />
-              <Text style={[styles.useLocationText, !locationOn && { color: colors.text }]}>{locating ? 'Finding you…' : locationOn ? 'Location on' : 'Location off'}</Text>
-            </Pressable>
-          ) : !at && onLocate ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Use my location" onPress={onLocate} style={styles.useLocation}>
-              <Ionicons name="navigate" size={15} color={colors.brandInk} />
-              <Text style={styles.useLocationText}>Use my location</Text>
-            </Pressable>
-          ) : null}
-        </View>
-        {fullscreen ? null : <Text style={styles.hint}>Drag to move around. Pinch or use + / − to zoom. Tap a player to open their profile.</Text>}
+      <View style={styles.card}>
+        {canvas}
+        <Text style={styles.credit}>© OpenStreetMap</Text>
+        {/* A still card: the tap goes to the full map, not to the tiles. */}
+        <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of players near you" onPress={onExpand} disabled={!onExpand} style={StyleSheet.absoluteFill} />
+        <PreviewOverlay cityName={cityName} count={model.inTown.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} />
       </View>
     );
   }
 
+  const message = (id: string) => {
+    if (!actions.canMessage(id)) { showToast({ title: 'Only people they follow can message them', icon: 'lock-closed-outline' }); return; }
+    router.push(`/messages/${actions.openConversationWith(id)}`);
+  };
   return (
-    <View style={styles.card}>
-      <View style={styles.head}>
-        <Ionicons name="location-outline" size={16} color={colors.brand} />
-        <Text style={styles.title}>Players near {me.location.trim() ? me.location.split(',')[0] : 'you'}</Text>
-        <Text style={styles.count}>{nearby.length}</Text>
-        <View style={{ flex: 1 }} />
-        {onToggleLocation ? (
-          <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? 'Turn location off' : 'Turn location on'} onPress={onToggleLocation} hitSlop={8} style={[styles.locPill, locationOn && styles.locPillOn]}>
-            <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={12} color={locationOn ? colors.brandInk : colors.textMuted} />
-            <Text style={[styles.locPillText, locationOn && { color: colors.brandInk }]}>{locating ? 'Finding you…' : locationOn ? 'Location on' : 'Location off'}</Text>
-          </Pressable>
-        ) : null}
-        {onExpand ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="Open map" onPress={onExpand} hitSlop={8} style={styles.expand}>
-            <Ionicons name="expand-outline" size={16} color={colors.brand} />
-            <Text style={styles.expandText}>Open map</Text>
-          </Pressable>
-        ) : null}
+    <View style={styles.fill}>
+      {canvas}
+      <Text style={styles.credit}>© OpenStreetMap</Text>
+      <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
+        <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} />
+        <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
+        <WeatherChip weather={weather} />
       </View>
-      <View style={styles.map}>
-        {canvas}
-        <Text style={styles.credit}>© OpenStreetMap</Text>
-          {weather ? <View pointerEvents="none" style={styles.weather}><Ionicons name={weather.icon as keyof typeof Ionicons.glyphMap} size={14} color={colors.text} /><Text style={styles.weatherText}>{weather.tempF}° · {weather.label}</Text></View> : null}
-        {/* A still card: the tap goes to the full map, not to the tiles. */}
-        <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of players near you" onPress={onExpand} disabled={!onExpand} style={StyleSheet.absoluteFill} />
+      <View pointerEvents="box-none" style={[styles.bottom, { paddingBottom: insets.bottom }]}>
+        <MapButtons onRecentre={() => { model.select(null); map.current?.flyTo({ center: [home.lng, home.lat], zoom: START_ZOOM, duration: 600 }); }} onZoomIn={() => map.current?.zoomIn()} onZoomOut={() => map.current?.zoomOut()} />
+        {model.selected ? (
+          <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onFollow={() => actions.toggleFollow(model.selected!.user.id)} />
+        ) : model.selectedCourt ? (
+          <CourtSheet court={model.selectedCourt} miles={milesBetween(home, model.selectedCourt)} onClose={() => model.selectCourt(null)} onDirections={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${model.selectedCourt!.lat},${model.selectedCourt!.lng}`, '_blank', 'noopener')} />
+        ) : (
+          <NearbyRail items={model.shown} cityName={model.place ? model.place.name.split(',')[0] : cityName} selectedId={null} onSelect={model.select} />
+        )}
       </View>
-      <Text style={styles.hint}>Tap the map to open it. The badge means coach.</Text>
     </View>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
-  card: {
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    overflow: 'hidden',
-  },
-  head: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md },
-  title: { ...typography.smallStrong, color: colors.text },
-  // The count sits right by the words, in the theme colour, so it reads as part of them.
-  count: { ...typography.smallStrong, fontSize: 15, color: colors.brand, marginLeft: -2 },
-  locPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bg },
-  locPillOn: { backgroundColor: colors.brand, borderColor: colors.brand },
-  locPillText: { ...typography.caption, color: colors.textMuted, letterSpacing: 0 },
-  useLocationOff: { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
-  weather: { position: 'absolute', left: 10, top: 10, zIndex: 10, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
-  weatherText: { ...typography.caption, color: colors.text, letterSpacing: 0 },
-  expand: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: spacing.sm },
-  expandText: { ...typography.caption, color: colors.brand, letterSpacing: 0 },
-  map: { height: HEIGHT, backgroundColor: colors.bgElevated, overflow: 'hidden' },
-  mapExpanded: { height: 520, backgroundColor: colors.bgElevated },
+  card: { height: HEIGHT, borderRadius: radius.xl, overflow: 'hidden', backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.border },
   fill: { flex: 1, backgroundColor: colors.bgElevated, overflow: 'hidden' },
-  zoomControls: { position: 'absolute', right: 10, top: 10, zIndex: 10, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bg, overflow: 'hidden' },
-  zoomButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
-  zoomRule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
-  locate: { position: 'absolute', right: 10, bottom: 10, zIndex: 10, width: 38, height: 38, borderRadius: 19, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
-  useLocation: { position: 'absolute', left: 12, bottom: 12, zIndex: 10, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.pill, backgroundColor: colors.brand },
-  useLocationText: { ...typography.smallStrong, color: colors.brandInk },
-  hint: { ...typography.caption, color: colors.textFaint, letterSpacing: 0, padding: spacing.md, paddingTop: spacing.sm },
-  credit: { position: 'absolute', right: 6, bottom: 4, fontSize: 9, color: 'rgba(0,0,0,0.45)', backgroundColor: 'rgba(255,255,255,0.6)', paddingHorizontal: 4, borderRadius: 3 },
+  top: { position: 'absolute', left: 0, right: 0, top: 0, gap: 2, zIndex: 10 },
+  bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', gap: spacing.sm, zIndex: 10 },
+  credit: { position: 'absolute', right: 6, bottom: 4, zIndex: 5, ...typography.caption, fontSize: 9, letterSpacing: 0, color: 'rgba(0,0,0,0.45)', backgroundColor: 'rgba(255,255,255,0.6)', paddingHorizontal: 4, borderRadius: 3 },
 });
