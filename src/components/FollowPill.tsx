@@ -14,7 +14,7 @@ const EASE = Easing.bezier(0.22, 1, 0.36, 1);
  * fills with the brand colour as the check slides in. Under Reduce Motion the
  * colour still changes; nothing moves.
  */
-export function FollowPill({ following, onPress, small = false }: { following: boolean; onPress: () => void; small?: boolean }) {
+export function FollowPill({ following, onPress, small = false, name }: { following: boolean; onPress: () => void; small?: boolean; name?: string }) {
   useTheme();
   const on = useSharedValue(following ? 1 : 0);
   const bump = useSharedValue(1);
@@ -36,7 +36,7 @@ export function FollowPill({ following, onPress, small = false }: { following: b
   };
 
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ selected: following }} accessibilityLabel={following ? 'Following' : 'Follow'} onPress={press} hitSlop={4}>
+    <Pressable accessibilityRole="button" accessibilityState={{ selected: following }} accessibilityLabel={`${following ? 'Following' : 'Follow'}${name ? ` ${name}` : ''}`} onPress={press} hitSlop={4}>
       <Animated.View style={[styles.pill, small && styles.small, pill]}>
         {following ? <Ionicons name="checkmark" size={14} color={colors.brandInk} /> : null}
         <Animated.Text style={[styles.text, small && styles.textSmall, label]}>{following ? 'Following' : 'Follow'}</Animated.Text>

@@ -493,7 +493,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               </View>
               <LevelPill profile={user.profile} small />
             </Pressable>
-            <FollowPill following={followingIds.includes(user.id)} onPress={() => actions.toggleFollow(user.id)} small />
+            <FollowPill following={followingIds.includes(user.id)} onPress={() => actions.toggleFollow(user.id)} small name={user.name} />
           </View>
         ))}
       </ScrollView>

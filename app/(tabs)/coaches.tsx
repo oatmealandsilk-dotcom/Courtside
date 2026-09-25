@@ -75,7 +75,8 @@ function Coaching() {
               <Pressable key={coach.id} accessibilityRole="link" onPress={() => router.push(`/coach/${coach.id}`)} style={({ pressed }) => [styles.coachCard, pressed && styles.pressed]}>
                 <Avatar name={user?.name ?? 'Coach'} seed={coach.id} size={64} style={{ backgroundColor: colors.borderStrong }} />
                 <View style={styles.coachWords}>
-                  <PlayerName userId={user?.id} style={styles.coachName}>{user?.name}</PlayerName>
+                  {/* The whole card is the coach's page; the name is not a second door. */}
+                  <Text style={styles.coachName} numberOfLines={1}>{user?.name}</Text>
                   <Text style={styles.meta} numberOfLines={1}>{coach.credentials[0]}</Text>
                   <Text style={styles.meta} numberOfLines={1}>{coach.specialties.slice(0, 2).map((x) => x.charAt(0).toUpperCase() + x.slice(1)).join(' & ')}</Text>
                 </View>
