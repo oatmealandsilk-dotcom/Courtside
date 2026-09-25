@@ -82,10 +82,13 @@ export function NavBar({ state, navigation }: NavBarProps) {
   // gets the room. The padding is a layout change, which the phone applies
   // reliably only through the plain Animated value below — so the ducking
   // amount is mirrored into one and the paddings follow it.
-  const padAmount = useRef(new RNAnimated.Value(0)).current;
+  // Seeded from the shared value, not from zero: the bar can mount (after
+  // sign-in, onboarding, a reload) while the feed already has it ducked, and
+  // the feed sizes its pages from the padding this bar actually has.
+  const padAmount = useRef(new RNAnimated.Value(barCompact.value)).current;
   const mirror = useCallback((v: number) => { padAmount.setValue(v); }, [padAmount]);
   // Only a visible change (a couple of hundredths, and always the ends) crosses over — a handful of times per swipe rather than every frame.
-  const mirrored = useSharedValue(0);
+  const mirrored = useSharedValue(barCompact.value);
   useAnimatedReaction(() => barCompact.value, (v) => {
     if (v === mirrored.value) return;
     if (v === 0 || v === 1 || Math.abs(v - mirrored.value) >= 0.04) { mirrored.value = v; runOnJS(mirror)(v); }
