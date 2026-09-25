@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import Reanimated, { Easing, FadeInDown, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
@@ -14,6 +14,7 @@ import { SheetBackdrop } from '@/components/SheetBackdrop';
 import { TOPIC_META } from '@/components/QuestionCard';
 import { Button, Chip, Field, Screen } from '@/components/ui';
 import { LocationLink, LocationSearch } from '@/components/LocationChip';
+import { PreparingRing } from '@/components/PreparingRing';
 import { TagPlayers } from '@/components/TagPlayers';
 import { addToBank, getBank } from '@/features/compose/mediaBank';
 import { useApp } from '@/store/AppContext';
@@ -163,6 +164,8 @@ export default function Compose() {
   const [pickError, setPickError] = useState('');
   // While a video is being picked and converted (a few seconds on iPhone), the box says so.
   const [preparing, setPreparing] = useState<null | 'video' | 'all'>(null);
+  // The ring closes fully before the note goes, so it is seen to finish.
+  const [prepDone, setPrepDone] = useState(false);
   const openDevice = async (selection: 'video' | 'all') => {
     setPickError('');
     // The phone never says when the library closes and the converting starts,
@@ -176,7 +179,8 @@ export default function Compose() {
       setPickError(err instanceof Error ? err.message : String(err));
     } finally {
       if (hold) clearTimeout(hold);
-      setPreparing(null);
+      setPrepDone(true);
+      setTimeout(() => { setPreparing(null); setPrepDone(false); }, 300);
     }
   };
 
@@ -186,8 +190,7 @@ export default function Compose() {
     <Reanimated.View style={[styles.choiceSheet, popStyle]}>
       {preparing ? (
         <View style={styles.preparing} accessibilityLiveRegion="polite">
-          <ActivityIndicator color={colors.brand} />
-          <Text style={styles.preparingText}>{preparing === 'video' ? 'Preparing video…' : 'Preparing…'}</Text>
+          <PreparingRing label={preparing === 'video' ? 'Getting your video ready' : 'Getting it ready'} note={preparing === 'video' ? 'Shrinking it so it posts fast and plays everywhere.' : undefined} done={prepDone} />
         </View>
       ) : null}
       <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>Create</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeMenu} hitSlop={10}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
@@ -391,7 +394,6 @@ const styleDefinitions = StyleSheet.create({
   choiceBackdrop: { flex: 1, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', padding: 20 },
   choiceSheet: { width: '100%', maxWidth: 400, borderRadius: 24, padding: 20, gap: 12, backgroundColor: colors.bg },
   preparing: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 5, borderRadius: 24, alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: colors.bg },
-  preparingText: { ...typography.bodyStrong, color: colors.text },
   choiceHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8 },
   choiceTitle: { fontSize: 22, ...font('700'), color: colors.text },
   choiceOption: { padding: 20, gap: 8, borderRadius: 18, backgroundColor: colors.surface },
