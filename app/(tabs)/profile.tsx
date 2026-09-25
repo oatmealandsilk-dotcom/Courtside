@@ -89,7 +89,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const grids = useMemo(() => TABS.map((t) => content(t)), [posts, user?.id, styles, tileW]);
  if (!user) {
    const remembered = savedAccounts.find((a) => a.id === currentUserId);
-   return <Screen memoryKey="profile" title="Profile" subtitle={remembered?.handle ? `@${remembered.handle}` : ' '}><ProfileSkeleton name={remembered?.name} avatarUrl={remembered?.avatarUrl} seed={currentUserId ?? 'you'}/></Screen>;
+   return <Screen memoryKey="profile" title="Profile" wash subtitle={remembered?.handle ? `@${remembered.handle}` : ' '}><ProfileSkeleton name={remembered?.name} avatarUrl={remembered?.avatarUrl} seed={currentUserId ?? 'you'}/></Screen>;
  }
  const profile = user.profile;
  const share = () => router.push(`/share?kind=profile&id=${user.id}`);
@@ -140,7 +140,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
   // the tab row's (Profile to Coaching). Only the grid below the line changes.
   return body;
  };
- return <Screen memoryKey="profile" title="Profile" subtitle={`@${user.handle}`} onRefresh={previewSection === undefined ? actions.refresh : undefined} right={<View style={styles.headerActions}>
+ return <Screen memoryKey="profile" title="Profile" wash subtitle={`@${user.handle}`} onRefresh={previewSection === undefined ? actions.refresh : undefined} right={<View style={styles.headerActions}>
    <Tappable accessibilityRole="link" accessibilityLabel={unseen ? `Notifications, ${unseen} new` : 'Notifications'} onPress={() => router.push('/notifications')} hitSlop={10} style={styles.headerButton}>
      <Ionicons name={unseen ? 'notifications' : 'notifications-outline'} size={27} color={colors.text}/>
      {unseen > 0 && <View style={styles.headerBadge}><Text style={styles.headerBadgeText}>{unseen > 9 ? '9+' : unseen}</Text></View>}

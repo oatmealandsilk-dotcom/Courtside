@@ -63,6 +63,7 @@ export default function Inbox() {
   return (
     <Screen
       title="Messages"
+      wash
       compactTitle
       onBack={() => goBack()}
       right={

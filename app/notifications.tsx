@@ -174,7 +174,7 @@ export default function Notifications() {
             const [first, ...rest] = group.actorIds;
             const who =
               group.kind === 'posted'
-                ? group.preview?.startsWith('Hit') ? 'Your hit' : group.targetKind === 'question' ? 'Your question' : 'Your post'
+                ? (group.preview?.startsWith('Instant') || group.preview?.startsWith('Hit')) ? 'Your instant' : group.targetKind === 'question' ? 'Your question' : 'Your post'
                 : group.kind === 'coach-application' ? 'CourtSide'
                 : rest.length === 0
                 ? nameOf(first)

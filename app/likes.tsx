@@ -50,7 +50,7 @@ export default function Likes() {
             <EmptyState
               icon="heart-outline"
               title={wanted ? 'No one by that name' : 'No likes yet'}
-              body={wanted ? 'Try another name or @handle.' : `When people like this ${isHit ? 'hit' : 'post'}, they show up here.`}
+              body={wanted ? 'Try another name or @handle.' : `When people like this ${isHit ? 'instant' : 'post'}, they show up here.`}
             />
           ) : (
             shown.map((user) => {

@@ -88,7 +88,7 @@ export default function AdminReports() {
           return (
             <View key={report.id} style={styles.card}>
               <View style={styles.head}>
-                <View style={styles.kind}><Text style={styles.kindText}>{report.kind === 'post' ? 'Post' : report.kind === 'hit' ? 'Hit' : 'Profile'}</Text></View>
+                <View style={styles.kind}><Text style={styles.kindText}>{report.kind === 'post' ? 'Post' : report.kind === 'hit' ? 'Instant' : 'Profile'}</Text></View>
                 <Text style={styles.muted}>{relativeTime(report.createdAt)}</Text>
                 {report.status !== 'open' ? <Text style={styles.status}>{report.status === 'removed' ? 'Removed' : report.status === 'suspended' ? 'Suspended' : 'Dismissed'}</Text> : null}
               </View>

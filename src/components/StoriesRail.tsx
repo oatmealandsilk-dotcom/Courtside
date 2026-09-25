@@ -18,7 +18,7 @@ import { colors, radius, font } from '@/theme';
 export function StoriesRail({ onVideo = false }: { onVideo?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const { stories, users, currentUserId, blockedIds, mutedIds } = useApp();
-  // Only players with a live hit: no empty circles, no "take a hit" tile.
+  // Only players with a live hit: no empty circles, no "take an instant" tile.
   // Your own comes first when you have one up.
   const entries = railEntries(stories, users, currentUserId, [...blockedIds, ...mutedIds]).filter((e) => e.stories.length > 0);
   // Ticks once a minute so the countdown under each tile stays honest.
@@ -32,7 +32,7 @@ export function StoriesRail({ onVideo = false }: { onVideo?: boolean }) {
       showsHorizontalScrollIndicator={false}
       style={{ flexGrow: 0 }}
       contentContainerStyle={styles.row}
-      accessibilityLabel="Hits"
+      accessibilityLabel="Instants"
     >
       {entries.map(({ user, stories: list, seen }) => {
         const mine = user.id === currentUserId;
@@ -44,7 +44,7 @@ export function StoriesRail({ onVideo = false }: { onVideo?: boolean }) {
           <Pressable
             key={user.id}
             accessibilityRole="button"
-            accessibilityLabel={mine ? (empty ? 'Take a hit' : 'Your hit') : `${user.name}'s hit${seen ? ', seen' : ''}`}
+            accessibilityLabel={mine ? (empty ? 'Take an instant' : 'Your instant') : `${user.name}'s instant${seen ? ', seen' : ''}`}
             onPress={open}
             onLongPress={mine ? () => router.push('/hit') : undefined}
             style={styles.tile}
@@ -58,7 +58,7 @@ export function StoriesRail({ onVideo = false }: { onVideo?: boolean }) {
               ) : null}
             </View>
             <Text numberOfLines={1} style={[styles.name, onVideo && styles.nameOnVideo]}>
-              {mine ? 'Your hit' : user.name.split(' ')[0]}
+              {mine ? 'Your instant' : user.name.split(' ')[0]}
             </Text>
             <Text numberOfLines={1} style={[styles.left, onVideo && styles.nameOnVideo]}>{left}</Text>
           </Pressable>

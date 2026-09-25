@@ -128,7 +128,7 @@ export default function AccountCentre() {
 
       <Text style={styles.sectionTitle}>YOUR INFORMATION</Text>
       <View style={styles.card}>
-        {row('download-outline', 'Download your data', 'Profile, posts, questions, hits, messages — as one file', () => { void download(); }, false, 0)}
+        {row('download-outline', 'Download your data', 'Profile, posts, questions, instants, messages — as one file', () => { void download(); }, false, 0)}
         {row('sparkles-outline', 'What the coach remembers', 'Notes the AI coach keeps about you', () => toast.show({ title: 'AI coach is coming soon', body: 'A weekly plan and a coach to ask, coming soon', icon: 'sparkles' }), false, 1)}
         {row('shield-checkmark-outline', 'Privacy center', 'What we store and who can see it', () => router.push('/privacy'), false, 2)}
         {row('card-outline', 'Payment methods', undefined, () => router.push('/payments'), false, 3)}
@@ -165,7 +165,7 @@ export default function AccountCentre() {
             {sheet === 'delete' ? (
               <>
                 <Text style={[styles.sheetTitle, { color: colors.danger }]}>Delete your account?</Text>
-                <Text style={styles.sheetNote}>Your profile, posts, clips, hits, questions and messages are removed for good. Coaches keep records of paid sessions. Type DELETE to confirm.</Text>
+                <Text style={styles.sheetNote}>Your profile, posts, clips, instants, questions and messages are removed for good. Coaches keep records of paid sessions. Type DELETE to confirm.</Text>
                 <Field value={confirmWord} onChangeText={setConfirmWord} autoCapitalize="none" placeholder="DELETE" />
                 {error ? <Text style={styles.error}>{error}</Text> : null}
                 <Button label="Delete my account" variant="danger" loading={busy} disabled={confirmWord.trim() !== 'DELETE'} onPress={() => run(async () => { await actions.deleteAccount(); router.replace('/'); }, 'Account deleted.')} full />

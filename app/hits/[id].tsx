@@ -33,7 +33,7 @@ export default function HitThread() {
 
   if (!story || !author) {
     return (
-      <Screen title="Hit" compactTitle onBack={() => goBack()}>
+      <Screen title="Instant" compactTitle onBack={() => goBack()}>
         <EmptyState title="This hit has gone" body="It may have expired or been taken down." />
       </Screen>
     );
@@ -49,18 +49,18 @@ export default function HitThread() {
   };
 
   return (
-    <Screen title="Hit" compactTitle onBack={() => goBack()}>
+    <Screen title="Instant" compactTitle onBack={() => goBack()}>
       <Pressable accessibilityRole="button" accessibilityLabel="Open this hit full screen" onPress={() => router.push({ pathname: `/story/${author.id}`, params: { story: story.id } })} style={styles.frame}>
         {story.videoUrl ? (
           <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={focused} preload />
         ) : story.imageUrl ? (
           <Image accessibilityIgnoresInvertColors source={{ uri: story.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
         ) : (
-          <MediaPlaceholder label={story.mediaLabel ?? 'Hit'} seed={story.id} portrait />
+          <MediaPlaceholder label={story.mediaLabel ?? 'Instant'} seed={story.id} portrait />
         )}
         <View pointerEvents="none" style={styles.clock}>
           <Ionicons name="time-outline" size={13} color="white" />
-          <Text style={styles.clockText}>HIT · {timeLeft(story.expiresAt)}</Text>
+          <Text style={styles.clockText}>INSTANT · {timeLeft(story.expiresAt)}</Text>
         </View>
       </Pressable>
 

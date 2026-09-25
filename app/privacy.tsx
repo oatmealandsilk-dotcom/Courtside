@@ -42,7 +42,7 @@ export default function PrivacyCentre() {
           <Ionicons name="lock-closed-outline" size={20} color={colors.text} />
           <View style={{ flex: 1 }}>
             <Text style={styles.rowLabel}>Private account</Text>
-            <Text style={styles.rowDetail}>Only followers see your posts, hits and stats. New followers have to ask, and you say yes or no.</Text>
+            <Text style={styles.rowDetail}>Only followers see your posts, instants and stats. New followers have to ask, and you say yes or no.</Text>
           </View>
           <Toggle value={!!currentUser?.isPrivate} onChange={actions.setPrivateAccount} accessibilityLabel="Private account" />
         </View>

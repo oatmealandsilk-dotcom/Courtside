@@ -1305,8 +1305,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...input,
       };
       const celebration = {
-        userId: me, targetId: story.id, targetKind: 'post' as const, preview: `Hit${story.caption ? ` · ${snippet(story.caption, 60)}` : ''}`,
-        title: 'Hit posted', body: 'Up for 24 hours, then kept in your archive.',
+        userId: me, targetId: story.id, targetKind: 'post' as const, preview: `Instant${story.caption ? ` · ${snippet(story.caption, 60)}` : ''}`,
+        title: 'Instant posted', body: 'Up for 24 hours, then kept in your archive.',
         href: '/', icon: 'camera' as const,
       };
       if (!live(me)) {

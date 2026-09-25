@@ -722,17 +722,17 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                 return (
                   <View key={story.id} style={styles.clip}>
                    <PinchZone onPinchOut={() => lock(true)} onPinchIn={() => lock(false)}><Reanimated.View style={[StyleSheet.absoluteFill, pictureStyle]}>
-                    <View accessibilityLabel={`${author.name}'s hit`} style={styles.clipFrame}>
+                    <View accessibilityLabel={`${author.name}'s instant`} style={styles.clipFrame}>
                       <View style={phone ? StyleSheet.absoluteFill : styles.clipPortrait}>
                         {story.videoUrl ? (
                           <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={focused && active === index && warmed && playable} preload={near} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
                         ) : (
                           // Two quick taps like a hit, the way they like a clip.
-                          <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s hit`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
+                          <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s instant`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
                             {story.imageUrl ? (
                               <HitPicture uri={story.imageUrl} />
                             ) : (
-                              <MediaPlaceholder label={story.mediaLabel ?? 'Hit'} seed={story.id} portrait fill />
+                              <MediaPlaceholder label={story.mediaLabel ?? 'Instant'} seed={story.id} portrait fill />
                             )}
                           </Pressable>
                         )}
@@ -1056,7 +1056,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   );
 }
 
-/** "HIT · 22h left", ticking once a minute so it never reads stale. */
+/** "INSTANT · 22h left", ticking once a minute so it never reads stale. */
 function HitClock({ expiresAt }: { expiresAt: string }) {
   const styles = useThemedStyles(styleDefinitions);
   const [, tick] = useState(0);
@@ -1064,7 +1064,7 @@ function HitClock({ expiresAt }: { expiresAt: string }) {
   return (
     <View style={styles.hitClock}>
       <Ionicons name="time-outline" size={13} color="white" />
-      <Text style={styles.hitClockText}>HIT · {timeLeft(expiresAt)}</Text>
+      <Text style={styles.hitClockText}>INSTANT · {timeLeft(expiresAt)}</Text>
     </View>
   );
 }

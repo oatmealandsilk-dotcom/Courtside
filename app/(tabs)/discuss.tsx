@@ -147,7 +147,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       </>);
 
   return (
-    <Screen memoryKey="discuss"
+    <Screen memoryKey="discuss" wash
       title="Community"
       subtitle="Find your people. Talk about your game."
       right={

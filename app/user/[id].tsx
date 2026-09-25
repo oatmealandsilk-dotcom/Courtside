@@ -142,7 +142,7 @@ export default function UserProfile() {
         <View style={styles.lockedBox}>
           <Ionicons name="lock-closed-outline" size={26} color={colors.textMuted} />
           <Text style={styles.lockedTitle}>This account is private</Text>
-          <Text style={styles.lockedBody}>{requested ? `Your request is with ${user.name.split(' ')[0]}. Once they say yes, their posts, hits and tennis profile show up here.` : `Follow ${user.name.split(' ')[0]} to see their posts, hits and tennis profile.`}</Text>
+          <Text style={styles.lockedBody}>{requested ? `Your request is with ${user.name.split(' ')[0]}. Once they say yes, their posts, instants and tennis profile show up here.` : `Follow ${user.name.split(' ')[0]} to see their posts, instants and tennis profile.`}</Text>
         </View>
       ) : (
         <>
