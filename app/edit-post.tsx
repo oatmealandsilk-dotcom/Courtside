@@ -64,8 +64,8 @@ export default function EditPost() {
         ) : (
           <>
             <Field label="Caption" value={body} onChangeText={setBody} placeholder="Write a caption…" multiline minHeight={80} mentions />
-            <TagPlayers tagged={tagged} onChange={setTagged} />
             <LocationChip value={location} onChange={setLocation} />
+            <TagPlayers tagged={tagged} onChange={setTagged} />
           </>
         )}
         {mine ? <Button label="Save" onPress={save} disabled={!canSave} full /> : null}
