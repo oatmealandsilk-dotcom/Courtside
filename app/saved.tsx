@@ -7,9 +7,12 @@ import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { QuestionCard } from '@/components/QuestionCard';
-import { EmptyState, Screen, SegmentedControl } from '@/components/ui';
+import Reanimated from 'react-native-reanimated';
+
+import { EmptyState, Screen } from '@/components/ui';
+import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { useApp } from '@/store/AppContext';
-import { colors, spacing, typography } from '@/theme';
+import { colors, font, spacing, typography } from '@/theme';
 
 /** Everything the player has bookmarked: clips and posts, plus discussions. */
 export default function Saved() {
@@ -19,6 +22,9 @@ export default function Saved() {
   // drop off as the feed moves on.
   useEffect(() => { void actions.loadSavedPosts(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [tab, setTab] = useState<'videos' | 'discussions'>('videos');
+  // The profile's own tabs: two words, a count beside each, a line that slides.
+  const [tabWidth, setTabWidth] = useState(0);
+  const underline = useTabUnderline(tab === 'videos' ? 0 : 1, 2, tabWidth);
   // The grid is three across, sized from its own measured width, the way the profile grid is.
   const { width: windowWidth } = useWindowDimensions();
   const [gridW, setGridW] = useState(0);
@@ -34,19 +40,13 @@ export default function Saved() {
 
   return (
     <Screen title="Saved" compactTitle onBack={() => goBack()}>
-      <View style={styles.top}>
-        <SegmentedControl
-          segments={[
-            { value: 'videos', label: `Videos${savedPosts.length ? ` (${savedPosts.length})` : ''}` },
-            {
-              value: 'discussions',
-              label: `Discussions${savedQuestions.length ? ` (${savedQuestions.length})` : ''}`,
-            },
-          ]}
-          value={tab}
-          onChange={setTab}
-        />
-        <Text style={styles.note}>Only you can see what you save.</Text>
+      <View style={styles.tabs} onLayout={(e) => setTabWidth(e.nativeEvent.layout.width / 2)}>
+        {([['videos', 'Videos', savedPosts.length], ['discussions', 'Discussions', savedQuestions.length]] as const).map(([value, label, n]) => (
+          <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: tab === value }} accessibilityLabel={`${label}, ${n}`} onPress={() => setTab(value)} style={styles.tab}>
+            <Text style={[typography.body, tab === value ? { ...font('600'), color: colors.text } : { color: colors.textMuted }]}>{label}<Text style={[styles.tabCount, tab === value && { color: colors.brand }]}>  {n}</Text></Text>
+          </Pressable>
+        ))}
+        {tabWidth > 0 ? <Reanimated.View pointerEvents="none" style={[styles.tabIndicator, { width: tabWidth }, underline.style]} /> : null}
       </View>
 
       {tab === 'videos' ? (
@@ -108,8 +108,10 @@ export default function Saved() {
 }
 
 const styleDefinitions = StyleSheet.create({
-  top: { gap: spacing.sm, paddingBottom: spacing.lg },
-  note: { ...typography.small, color: colors.textFaint },
+  tabs: { flexDirection: 'row', marginBottom: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: 14 },
+  tabCount: { ...typography.smallStrong, fontSize: 12, color: colors.textFaint },
+  tabIndicator: { position: 'absolute', left: 0, bottom: -1, height: 2, backgroundColor: colors.brand, borderRadius: 1 },
   list: { gap: spacing.md },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   // The same tile as the profile grid: a hairline of page colour between tiles, no rounding, no wash.
