@@ -225,9 +225,11 @@ export function Screen({
     });
   }, [key]);
 
+  // "Top" is just under the pull-to-refresh strip: landing on the strip by a
+  // tap rather than a pull would show the spinner with nothing to dismiss it.
   useEffect(() => subscribeScrollToTop((tab) => {
-    if (TAB_FOR_KEY[key] === tab || key === tab) scroller.current?.scrollTo({ y: 0, animated: true });
-  }), [key]);
+    if (TAB_FOR_KEY[key] === tab || key === tab) scroller.current?.scrollTo({ y: strip, animated: true });
+  }), [key, strip]);
 
   const showRail = Boolean(rail) && isDesktop;
   // Centred column, like Instagram's 935px container.
