@@ -52,7 +52,9 @@ export function lookFor(p: MapPalette): Look {
   const hidden = { hide: true };
   return {
     background: { fill: ground },
-    landuse_residential: { fill: built },
+    // Detail arrives as you come closer: built-up patches and bigger roads
+    // from a town's distance, small roads and village names only up close.
+    landuse_residential: { fill: built, minZoom: 12 },
     park: { fill: park },
     landcover_wood: { fill: wood },
     landcover_grass: { fill: grass },
@@ -62,8 +64,8 @@ export function lookFor(p: MapPalette): Look {
     highway_path: hidden,
     highway_minor: { line: road, minZoom: 14 },
     highway_major_casing: hidden,
-    highway_major_inner: { line: road },
-    highway_major_subtle: { line: road },
+    highway_major_inner: { line: road, minZoom: 11.5 },
+    highway_major_subtle: { line: road, minZoom: 11.5 },
     highway_motorway_casing: hidden,
     highway_motorway_inner: { line: big },
     highway_motorway_subtle: { line: big },
@@ -78,8 +80,8 @@ export function lookFor(p: MapPalette): Look {
     'highway-shield-non-us': hidden, 'highway-shield-us-interstate': hidden, road_shield_us: hidden,
     airport: hidden,
     label_other: hidden,
-    label_village: { text: p.textMuted, halo: ground },
-    label_town: { text: p.textMuted, halo: ground },
+    label_village: { text: p.textMuted, halo: ground, minZoom: 13 },
+    label_town: { text: p.textMuted, halo: ground, minZoom: 11 },
     label_city: { text: p.text, halo: ground },
     label_city_capital: { text: p.text, halo: ground },
     label_state: hidden,

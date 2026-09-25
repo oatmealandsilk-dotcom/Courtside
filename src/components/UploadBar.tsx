@@ -1,8 +1,9 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Image, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { router } from 'expo-router';
-import Reanimated, { Easing as REasing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Reanimated, { Easing as REasing, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -22,7 +23,9 @@ export function UploadBar() {
   const job = jobs[jobs.length - 1];
   // The strip stays mounted for the exit animation after the job is gone.
   const [shown, setShown] = useState<UploadJob | null>(null);
-  const slide = useRef(new Animated.Value(-110)).current;
+  // The strip's place, kept on the animation thread so a swipe never waits on the busy JS thread.
+  const slide = useSharedValue(-110);
+  const slideStyle = useAnimatedStyle(() => ({ transform: [{ translateY: slide.value }] }));
   const fill = useSharedValue(0);
   const fillStyle = useAnimatedStyle(() => ({ width: `${fill.value * 100}%` }));
   const pop = useRef(new Animated.Value(0)).current;
@@ -31,32 +34,34 @@ export function UploadBar() {
   // lands or fails, so the end is never missed.
   const [away, setAway] = useState<string | null>(null);
   const awayKey = job ? `${job.id}:${job.state}` : null;
-  const swipe = useRef(PanResponder.create({
-    onMoveShouldSetPanResponder: (_, g) => g.dy < -6 && Math.abs(g.dy) > Math.abs(g.dx),
-    onPanResponderMove: (_, g) => { if (g.dy < 0) slide.setValue(g.dy); },
-    onPanResponderRelease: (_, g) => {
-      if (g.dy < -24 || g.vy < -0.5) {
-        Animated.timing(slide, { toValue: -110, duration: 180, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => setAway(awayRef.current));
+  const putAway = () => setAway(awayRef.current);
+  const swipe = Gesture.Pan()
+    .activeOffsetY(-6)
+    .failOffsetX([-14, 14])
+    .onUpdate((e) => { if (e.translationY < 0) slide.value = e.translationY; })
+    .onEnd((e) => {
+      if (e.translationY < -24 || e.velocityY < -500) {
+        slide.value = withTiming(-110, { duration: 180, easing: REasing.in(REasing.cubic) }, (finished) => { if (finished) runOnJS(putAway)(); });
       } else {
-        Animated.spring(slide, { toValue: 0, useNativeDriver: true, speed: 18, bounciness: 6 }).start();
+        slide.value = withSpring(0, { damping: 18, stiffness: 240 });
       }
-    },
-  })).current;
+    });
   const awayRef = useRef<string | null>(null);
   awayRef.current = awayKey;
 
+  const hide = () => setShown(null);
   const [displayed, setDisplayed] = useState(0);
   const target = useRef(0);
   useEffect(() => {
     if (job && awayKey === away) return;
     if (job) {
       if (!shown || away) { setAway(null); }
-      if (!shown || away) { fill.value = 0; pop.setValue(0); setDisplayed(0); Animated.spring(slide, { toValue: 0, useNativeDriver: true, speed: 18, bounciness: 8 }).start(); }
+      if (!shown || away) { fill.value = 0; pop.setValue(0); setDisplayed(0); slide.value = withSpring(0, { damping: 16, stiffness: 220 }); }
       setShown(job);
       target.current = job.state === 'uploading' ? job.fraction : 1;
       if (job.state !== 'uploading') Animated.spring(pop, { toValue: 1, useNativeDriver: true, speed: 22, bounciness: 14 }).start();
     } else if (shown) {
-      Animated.timing(slide, { toValue: -110, duration: 240, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(({ finished }) => { if (finished) setShown(null); });
+      slide.value = withTiming(-110, { duration: 240, easing: REasing.in(REasing.cubic) }, (finished) => { if (finished) runOnJS(hide)(); });
     }
   }, [job, shown, slide, fill, pop, away, awayKey]);
   // The number eases toward the latest report and keeps creeping a touch
@@ -84,7 +89,8 @@ export function UploadBar() {
   const pct = Math.round(displayed * 100);
   const title = shown.state === 'done' ? 'Posted' : shown.state === 'failed' ? 'Could not post' : `Posting… ${pct}%`;
   return (
-    <Animated.View pointerEvents="box-none" {...swipe.panHandlers} style={[styles.wrap, { top: insets.top + spacing.xs, transform: [{ translateY: slide }] }]}>
+    <GestureDetector gesture={swipe}>
+    <Reanimated.View pointerEvents="box-none" style={[styles.wrap, { top: insets.top + spacing.xs }, slideStyle]}>
       <Pressable accessibilityRole={shown.state === 'done' ? 'link' : 'text'} accessibilityLabel={shown.state === 'done' ? 'See it at the top of your feed' : title} disabled={shown.state !== 'done'} onPress={() => { router.navigate('/'); revealPost(shown.id); }} style={styles.card}>
         <View style={styles.row}>
           {shown.thumb ? <Image accessibilityIgnoresInvertColors source={{ uri: shown.thumb }} style={styles.thumb} /> : <View style={[styles.thumb, styles.thumbBlank]}><Ionicons name="tennisball" size={18} color={colors.brand} /></View>}
@@ -100,7 +106,8 @@ export function UploadBar() {
           <Reanimated.View style={[styles.fill, shown.state === 'failed' && { backgroundColor: colors.danger }, fillStyle]} />
         </View>
       </Pressable>
-    </Animated.View>
+    </Reanimated.View>
+    </GestureDetector>
   );
 }
 
