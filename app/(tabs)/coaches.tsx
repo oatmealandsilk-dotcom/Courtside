@@ -6,7 +6,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { Avatar, Button, DottedRule, Screen } from '@/components/ui';
+import { Avatar, Button, Screen } from '@/components/ui';
 import { LiveDot } from '@/components/LiveDot';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { money, relativeTime } from '@/lib/format';
@@ -25,7 +25,12 @@ function Coaching() {
   return (
     <Screen memoryKey="coaches" title="Coaching" subtitle="Real coaches, approved one by one." wash>
       {/* ------------------------------ Ask a coach ----------------------------- */}
-      <Text style={styles.askLabel}>Ask a coach</Text>
+      <View style={[styles.section, styles.sectionFirst]}>
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionTitle}>Ask a coach</Text>
+          <Text style={styles.sectionCount}>free</Text>
+        </View>
+      </View>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Ask a coach a question"
@@ -35,12 +40,14 @@ function Coaching() {
         <Text style={styles.askPlaceholder}>What are you stuck on?</Text>
         <View style={styles.askGo}><Ionicons name="arrow-forward" size={16} color={colors.brandInk} /></View>
       </Pressable>
-      <Text style={styles.askNote}>Free and public. A verified coach answers, usually within a day.</Text>
+      <Text style={styles.askNote}>Public. A verified coach answers, usually within a day.</Text>
       {/* ------------------------------ Coaches ---------------------------------- */}
-      <DottedRule gap={spacing.xxl} />
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Coaches</Text>
-        <Text style={styles.sectionBody}>Every name here was checked by hand.</Text>
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionTitle}>Coaches</Text>
+          <Text style={styles.sectionCount}>{coaches.length}</Text>
+        </View>
+        <Text style={styles.sectionBody}>Checked by hand, one by one.</Text>
       </View>
       {coaches.length === 0 ? (
         <View style={styles.none}>
@@ -89,12 +96,13 @@ function Coaching() {
       {/* ------------------------------ Questions -------------------------------- */}
       {recentQuestions.length ? (
         <>
-          <DottedRule gap={spacing.xxl} />
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Latest questions</Text>
-            <Text style={styles.sectionBody}>{unanswered ? `${unanswered} waiting on a coach` : 'All answered'}</Text>
+            <View style={styles.sectionRow}>
+              <Text style={styles.sectionTitle}>Latest questions</Text>
+              <Text style={styles.sectionCount}>{unanswered ? `${unanswered} waiting` : 'all answered'}</Text>
+            </View>
           </View>
-          <View style={styles.list}>
+          <View style={styles.group}>
             {recentQuestions.map((question, index) => {
               const author = users.find((u) => u.id === question.authorId);
               const waiting = question.replyIds.length === 0;
@@ -125,11 +133,13 @@ function Coaching() {
       {/* ------------------------------ Your requests ---------------------------- */}
       {myRequests.length ? (
         <>
-          <DottedRule gap={spacing.xxl} />
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Your requests</Text>
+            <View style={styles.sectionRow}>
+              <Text style={styles.sectionTitle}>Your requests</Text>
+              <Text style={styles.sectionCount}>{myRequests.length}</Text>
+            </View>
           </View>
-          <View style={styles.list}>
+          <View style={styles.group}>
             {myRequests.map((r, index) => {
               const coach = coaches.find((c) => c.id === r.coachId);
               const coachUser = users.find((u) => u.id === coach?.userId);
@@ -174,7 +184,6 @@ function Coaching() {
 
 const styleDefinitions = StyleSheet.create({
   pressed: { opacity: 0.72 },
-  askLabel: { ...typography.heading, color: colors.text, paddingTop: spacing.md, paddingBottom: spacing.sm },
   askNote: { ...typography.small, color: colors.textMuted, lineHeight: 18, paddingTop: spacing.sm, paddingLeft: 2 },
   // The way in is a question you could start typing, not a card about asking.
   askField: {
@@ -187,19 +196,23 @@ const styleDefinitions = StyleSheet.create({
   askGo: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
   // Everything else is rows on hairlines, not boxes.
   list: { marginTop: spacing.sm },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 15 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14, paddingHorizontal: spacing.lg },
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   rowWords: { flex: 1, gap: 5, minWidth: 0 },
   rowTitle: { ...typography.body, ...font('500'), color: colors.text, lineHeight: 21 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   meta: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
-  section: { gap: 4, paddingBottom: spacing.sm },
-  sectionTitle: { ...typography.title, color: colors.text },
+  section: { gap: 3, paddingTop: spacing.xxl, paddingBottom: spacing.md },
+  sectionFirst: { paddingTop: spacing.sm },
+  sectionRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.md },
+  sectionCount: { ...typography.small, color: colors.textFaint },
+  group: { borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
+  sectionTitle: { ...typography.heading, color: colors.text },
   sectionBody: { ...typography.small, color: colors.textMuted },
   none: { gap: spacing.sm, paddingVertical: spacing.lg, alignItems: 'flex-start' },
   noneTitle: { ...typography.heading, color: colors.text },
   noneBody: { ...typography.small, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.sm },
-  coach: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.lg },
+  coach: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14, paddingHorizontal: spacing.lg },
   rail: { flexGrow: 0, marginHorizontal: -spacing.lg },
   railRow: { gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.xs },
   coachCard: { width: 176, gap: spacing.md, padding: spacing.lg, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
@@ -212,7 +225,7 @@ const styleDefinitions = StyleSheet.create({
   rating: { ...typography.smallStrong, color: colors.text },
   priceCol: { alignItems: 'flex-end', gap: 2 },
   price: { ...typography.bodyStrong, color: colors.text, fontVariant: ['tabular-nums'] },
-  foot: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, marginTop: spacing.xxl, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  foot: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, marginTop: spacing.xl, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   footTitle: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text },
 });
 
