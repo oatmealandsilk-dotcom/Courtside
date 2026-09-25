@@ -962,7 +962,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                           against a rating is the whole point, and this was the
                           one page that left it off. */}
                       <Text style={[styles.authorName, styles.authorFill]} numberOfLines={1}>@{author.handle}<Text style={styles.authorTime}> · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}{post.location ? ` · ${post.location}` : ''}</Text></Text>
-                      <LevelPill profile={author.profile} small />
+                      <LevelPill profile={author.profile} small onMedia />
                     </Pressable>
                     <RichText numberOfLines={3} style={styles.body}>
                       {post.body}
