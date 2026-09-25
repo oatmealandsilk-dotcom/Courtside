@@ -98,9 +98,10 @@ function Coaching() {
         <>
           <View style={styles.section}>
             <View style={styles.sectionRow}>
-              <Text style={styles.sectionTitle}>Latest questions</Text>
+              <Text style={styles.sectionTitle}>Questions to coaches</Text>
               <Text style={styles.sectionCount}>{unanswered ? `${unanswered} waiting` : 'all answered'}</Text>
             </View>
+            <Text style={styles.sectionBody}>Public. Anyone can read the answers.</Text>
           </View>
           <View style={styles.group}>
             {recentQuestions.map((question, index) => {
@@ -135,9 +136,10 @@ function Coaching() {
         <>
           <View style={styles.section}>
             <View style={styles.sectionRow}>
-              <Text style={styles.sectionTitle}>Your requests</Text>
+              <Text style={styles.sectionTitle}>Your private requests</Text>
               <Text style={styles.sectionCount}>{myRequests.length}</Text>
             </View>
+            <Text style={styles.sectionBody}>Between you and one coach: reviews, answers, sessions.</Text>
           </View>
           <View style={styles.group}>
             {myRequests.map((r, index) => {
