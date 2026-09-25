@@ -572,6 +572,17 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   }, []);
   /** The page's picture is in right now, in the player that is actually built. */
   const inNow = (id: string) => readyIds.has(id) && !goneIds.has(id);
+  // Whatever is on screen is shown within a few seconds, ready or not: a
+  // picture that never arrives is the page's problem to explain, not a
+  // reason to hold the reader on a placeholder.
+  useEffect(() => {
+    const item = feed[active];
+    if (!item) return undefined;
+    const id = item.type === 'post' ? item.post.id : item.type === 'question' ? item.question.id : item.type === 'hit' ? item.story.id : null;
+    if (!id || readyIds.has(id)) return undefined;
+    const timer = setTimeout(() => markReady(id, true), 6000);
+    return () => clearTimeout(timer);
+  }, [active, feed, readyIds, markReady]);
   const [warmTimedOut, setWarmTimedOut] = useState(false);
   useEffect(() => {
     if (!ready || !feed.length || !(!isSupabaseConfigured || app.remoteLoaded)) return;
