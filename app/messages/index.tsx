@@ -1,14 +1,14 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
-import { Avatar, EmptyState, Field, Screen, SegmentedControl } from '@/components/ui';
+import { Avatar, Chip, EmptyState, Screen } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
-import { colors, spacing, typography, font } from '@/theme';
+import { colors, spacing, typography, font, radius } from '@/theme';
 
 type Section = 'all' | 'coaches' | 'clients';
 
@@ -76,58 +76,81 @@ export default function Inbox() {
       }
     >
       <View style={styles.searchWrap}>
-        <Field value={search} onChangeText={setSearch} placeholder="Search" autoCapitalize="none" />
+        <Ionicons name="search" size={17} color={colors.textFaint} style={styles.searchIcon} />
+        <TextInput
+          accessibilityLabel="Search messages"
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search"
+          placeholderTextColor={colors.textFaint}
+          autoCapitalize="none"
+          style={styles.search}
+        />
       </View>
       <View style={styles.sections}>
-        <SegmentedControl<Section>
-          value={section}
-          onChange={setSection}
-          segments={[
-            { value: 'all', label: 'All' },
-            isCoach ? { value: 'clients', label: 'Clients' } : { value: 'coaches', label: 'Coaches' },
-          ]}
-        />
+        {([{ value: 'all', label: 'All' }, isCoach ? { value: 'clients', label: 'Clients' } : { value: 'coaches', label: 'Coaches' }] as { value: Section; label: string }[]).map((seg) => (
+          <Chip key={seg.value} label={seg.label} selected={section === seg.value} tint={colors.text} ink={colors.brandInk} onPress={() => setSection(seg.value)} />
+        ))}
       </View>
 
       {threads.length === 0 ? (
         <EmptyState icon="chatbubble-ellipses-outline" title={emptyCopy.title} body={emptyCopy.body} />
       ) : (
-        threads.map(({ conversation, other, last }) => (
-          <Pressable
-            key={conversation.id}
-            accessibilityRole="link"
-            accessibilityLabel={`Open conversation with ${other?.name}`}
-            onPress={() => router.push(`/messages/${conversation.id}`)}
-            style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.surfaceAlt }]}
-          >
-            <Avatar name={other?.name ?? '?'} seed={other?.avatarSeed ?? conversation.id} size={54} />
-            <View style={styles.rowBody}>
-              <Text style={[styles.name, conversation.unreadCount > 0 && styles.unreadName]}>
-                {other?.name}
-              </Text>
-              <Text
-                numberOfLines={1}
-                style={[styles.preview, conversation.unreadCount > 0 && styles.unreadPreview]}
+        <View style={styles.list}>
+          {threads.map(({ conversation, other, last }, index) => {
+            const unread = conversation.unreadCount > 0;
+            return (
+              <Pressable
+                key={conversation.id}
+                accessibilityRole="link"
+                accessibilityLabel={`Open conversation with ${other?.name}`}
+                onPress={() => router.push(`/messages/${conversation.id}`)}
+                style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
               >
-                {preview(last?.kind, last?.body)} · {relativeTime(conversation.updatedAt)}
-              </Text>
-            </View>
-            {conversation.unreadCount > 0 ? <View style={styles.dot} /> : null}
-          </Pressable>
-        ))
+                <Avatar name={other?.name ?? '?'} seed={other?.avatarSeed ?? conversation.id} size={50} />
+                <View style={[styles.rowBody, index > 0 && styles.rowLine]}>
+                  <View style={styles.rowTop}>
+                    <Text style={[styles.name, unread && styles.unreadName]} numberOfLines={1}>{other?.name}</Text>
+                    <Text style={[styles.time, unread && styles.unreadTime]}>{relativeTime(conversation.updatedAt)}</Text>
+                  </View>
+                  <View style={styles.rowBottom}>
+                    <Text numberOfLines={1} style={[styles.preview, unread && styles.unreadPreview]}>
+                      {preview(last?.kind, last?.body)}
+                    </Text>
+                    {unread ? <View style={styles.dot} /> : null}
+                  </View>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
       )}
     </Screen>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
-  searchWrap: { paddingBottom: spacing.md },
-  sections: { paddingBottom: spacing.md },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  rowBody: { flex: 1, gap: 3 },
-  name: { ...typography.body, ...font('500'), color: colors.text },
+  searchWrap: { position: 'relative', justifyContent: 'center', marginBottom: spacing.md },
+  searchIcon: { position: 'absolute', left: 16, zIndex: 1 },
+  search: {
+    ...typography.body, fontSize: 16, color: colors.text,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill,
+    paddingLeft: 42, paddingRight: spacing.lg, paddingVertical: 12,
+  },
+  sections: { flexDirection: 'row', gap: spacing.sm, paddingBottom: spacing.sm },
+  list: { marginHorizontal: -spacing.lg },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingLeft: spacing.lg },
+  rowPressed: { backgroundColor: colors.bgElevated },
+  // The hairline runs from the words, not the picture — the way a phone's own inbox draws it.
+  rowBody: { flex: 1, gap: 4, minWidth: 0, paddingVertical: 15, paddingRight: spacing.lg },
+  rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  rowTop: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.md },
+  rowBottom: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  name: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text, flexShrink: 1 },
   unreadName: { ...font('600') },
-  preview: { ...typography.small, color: colors.textMuted },
+  time: { ...typography.small, color: colors.textFaint, flexShrink: 0 },
+  unreadTime: { color: colors.brand, ...font('500') },
+  preview: { ...typography.small, fontSize: 14, color: colors.textMuted, flex: 1 },
   unreadPreview: { color: colors.text },
-  dot: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.brand },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.brand },
 });

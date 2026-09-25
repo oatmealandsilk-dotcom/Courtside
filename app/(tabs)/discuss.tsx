@@ -18,7 +18,7 @@ import { reportSection, subscribeSectionRequest } from '@/features/navigation/sw
 import { useApp } from '@/store/AppContext';
 import { sourceUserIds } from '@/features/community/importedThreads';
 import type { QuestionTopic } from '@/data/types';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, font } from '@/theme';
 
 const TOPICS: (QuestionTopic | 'all')[] = [
   'all',
@@ -74,15 +74,25 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const slice = visible.slice(0, shownCount);
 
   const content = (section:string) => (section === 'players' ? <View style={{ gap: 16 }}>
-        <TextInput accessibilityLabel="Search players" placeholder="Search by name, handle, or city" placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} style={styles.search} />
+        <View style={styles.searchWrap}>
+          <Ionicons name="search" size={17} color={colors.textFaint} style={styles.searchIcon} />
+          <TextInput accessibilityLabel="Search players" placeholder="Name, handle or city" placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} style={styles.search} />
+        </View>
         {currentUser && !search ? (section === 'players'
           ? <NearbyMap me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} />
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : <View style={styles.mapStandIn} />) : null}
-        {players.map(user => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && { backgroundColor: colors.surfaceAlt }]}>
-          <Avatar name={user.name} seed={user.avatarSeed} size={44} />
-          <View style={{ flex: 1, gap: 4 }}><View style={{flexDirection:"row",alignItems:"center",gap:8,flexWrap:"wrap"}}><Text style={styles.playerName}>{user.name}</Text><LevelPill profile={user.profile} small /></View><Text style={styles.playerMeta}>@{user.handle} · {user.location}</Text></View>
-
+        {players.length ? <View style={styles.playersHead}>
+          <Text style={styles.playersTitle}>Players</Text>
+          <Text style={styles.playersBody}>{search ? `${players.length} ${players.length === 1 ? 'match' : 'matches'}` : 'Your level, your side of town.'}</Text>
+        </View> : null}
+        {players.map((user, index) => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
+          <Avatar name={user.name} seed={user.avatarSeed} size={48} />
+          <View style={[styles.playerBody, index > 0 && styles.playerLine]}>
+            <View style={styles.playerTop}><Text style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
+            <Text style={styles.playerMeta} numberOfLines={1}>@{user.handle} · {user.location}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.textFaint} style={styles.playerChevron} />
         </Pressable>)}
         {!players.length && <EmptyState title="No players found" body="Try another name or city." />}
       </View> : <>
@@ -180,11 +190,21 @@ const styleDefinitions = StyleSheet.create({
   moreText: { ...typography.smallStrong, color: colors.text },
   section: { flex: 1, alignItems: 'center', paddingVertical: 18 },
   sectionUnderline: { position: 'absolute', left: 0, bottom: -1, height: 2, backgroundColor: colors.brand, borderRadius: 1 },
-  search: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 14, fontSize: 14, color: colors.text, backgroundColor: colors.surface },
+  searchWrap: { position: 'relative', justifyContent: 'center' },
+  searchIcon: { position: 'absolute', left: 16, zIndex: 1 },
+  search: { ...typography.body, fontSize: 16, color: colors.text, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingLeft: 42, paddingRight: spacing.lg, paddingVertical: 12 },
   mapStandIn: { height: 306, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  player: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 18, borderBottomWidth: 1, borderBottomColor: colors.border },
-  playerName: { ...typography.bodyStrong, color: colors.text },
-  playerMeta: { fontSize: 12, color: colors.textMuted },
+  playersHead: { gap: 3, paddingTop: spacing.sm },
+  playersTitle: { ...typography.title, color: colors.text },
+  playersBody: { ...typography.small, color: colors.textMuted },
+  player: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginHorizontal: -spacing.lg, paddingLeft: spacing.lg },
+  playerPressed: { backgroundColor: colors.bgElevated },
+  playerBody: { flex: 1, gap: 4, minWidth: 0, paddingVertical: 14 },
+  playerLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  playerTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  playerName: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text, flexShrink: 1 },
+  playerMeta: { ...typography.small, color: colors.textMuted },
+  playerChevron: { marginRight: spacing.lg },
   fab: {
     width: 38,
     height: 38,

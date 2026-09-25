@@ -7,10 +7,10 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar, Button, Screen } from '@/components/ui';
-import { MarkDraw } from '@/components/MarkDraw';
+import { LiveDot } from '@/components/LiveDot';
 import { money, relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, font } from '@/theme';
 
 function Coaching() {
   const styles = useThemedStyles(styleDefinitions);
@@ -24,20 +24,24 @@ function Coaching() {
   return (
     <Screen memoryKey="coaches" title="Coaching" subtitle="Real coaches, approved one by one." wash>
       {/* ------------------------------ Ask a coach ----------------------------- */}
-      <View style={styles.ask}>
-        <View style={styles.askTop}>
-          <View style={styles.tile}><MarkDraw size={30} play={false} /></View>
-          <View style={styles.askWords}>
-            <Text style={styles.askTitle}>What are you stuck on?</Text>
-            <Text style={styles.askBody}>Free and public. A verified coach answers, usually within a day.</Text>
-          </View>
-        </View>
-        <Button label="Ask a coach" onPress={() => router.push('/ask-coach')} />
+      <View style={styles.lead}>
+        <Text style={styles.leadTitle}>Ask a coach.</Text>
+        <Text style={styles.leadBody}>Free and public. A verified coach answers, usually within a day.</Text>
       </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Ask a coach a question"
+        onPress={() => router.push('/ask-coach')}
+        style={({ pressed }) => [styles.askField, pressed && styles.askFieldPressed]}
+      >
+        <Text style={styles.askPlaceholder}>What are you stuck on?</Text>
+        <View style={styles.askGo}><Ionicons name="arrow-forward" size={16} color={colors.brandInk} /></View>
+      </Pressable>
       {recentQuestions.length ? (
         <View style={styles.list}>
           {recentQuestions.map((question, index) => {
             const author = users.find((u) => u.id === question.authorId);
+            const waiting = question.replyIds.length === 0;
             return (
               <Pressable
                 key={question.id}
@@ -47,14 +51,14 @@ function Coaching() {
               >
                 <View style={styles.rowWords}>
                   <Text style={styles.rowTitle} numberOfLines={2}>{question.title}</Text>
-                  <PlayerName userId={author?.id} style={styles.meta}>
-                    @{author?.handle ?? 'player'} · {relativeTime(question.createdAt)} ·{' '}
-                    {question.replyIds.length
-                      ? `${question.replyIds.length} ${question.replyIds.length === 1 ? 'reply' : 'replies'}`
-                      : 'awaiting a coach'}
-                  </PlayerName>
+                  <View style={styles.metaRow}>
+                    {waiting ? <LiveDot size={7} /> : <Ionicons name="checkmark-circle" size={13} color={colors.success} />}
+                    <PlayerName userId={author?.id} style={styles.meta}>
+                      {waiting ? 'Awaiting a coach' : question.resolved ? 'Answered' : `${question.replyIds.length} ${question.replyIds.length === 1 ? 'reply' : 'replies'}`} · @{author?.handle ?? 'player'} · {relativeTime(question.createdAt)}
+                    </PlayerName>
+                  </View>
                 </View>
-                {question.resolved ? <Ionicons name="checkmark-circle" size={18} color={colors.success} /> : <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />}
+                <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
               </Pressable>
             );
           })}
@@ -64,14 +68,12 @@ function Coaching() {
       {/* ------------------------------ Coaches ---------------------------------- */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Coaches</Text>
-        <Text style={styles.sectionBody}>Every name here was checked by hand, so it means something.</Text>
+        <Text style={styles.sectionBody}>Every name here was checked by hand.</Text>
       </View>
       {coaches.length === 0 ? (
         <View style={styles.none}>
           <Text style={styles.noneTitle}>No coaches on CourtSide yet</Text>
-          <Text style={styles.noneBody}>
-            This is the set being played right now. Ask a question above in the meantime — it stays up until a coach answers it.
-          </Text>
+          <Text style={styles.noneBody}>This is the set being played right now. Ask a question above in the meantime — it stays up until a coach answers it.</Text>
           {currentUser?.isCoach ? null : (
             <Button label="Apply to coach" variant="secondary" onPress={() => router.push('/coach-apply')} />
           )}
@@ -88,7 +90,7 @@ function Coaching() {
                 onPress={() => router.push(`/coach/${coach.id}`)}
                 style={({ pressed }) => [styles.coach, index > 0 && styles.rowLine, pressed && styles.pressed]}
               >
-                <Avatar name={user?.name ?? 'Coach'} seed={coach.id} size={46} style={{ backgroundColor: colors.borderStrong }} />
+                <Avatar name={user?.name ?? 'Coach'} seed={coach.id} size={48} style={{ backgroundColor: colors.borderStrong }} />
                 <View style={styles.rowWords}>
                   <PlayerName userId={user?.id} style={styles.name}>{user?.name}</PlayerName>
                   <Text style={styles.meta} numberOfLines={1}>
@@ -135,24 +137,22 @@ function Coaching() {
         </>
       ) : null}
 
-      {/* --------------------------- Apply to be a coach ------------------------ */}
+      {/* --------------------------- Coach on CourtSide -------------------------- */}
       {currentUser?.isCoach ? (
-        <Pressable accessibilityRole="link" onPress={() => router.push('/coach-inbox')} style={({ pressed }) => [styles.apply, pressed && styles.pressed]}>
-          <View style={styles.tileSmall}><Ionicons name="chatbubbles-outline" size={20} color={colors.brand} /></View>
+        <Pressable accessibilityRole="link" onPress={() => router.push('/coach-inbox')} style={({ pressed }) => [styles.foot, pressed && styles.pressed]}>
           <View style={styles.rowWords}>
-            <Text style={styles.applyTitle}>{unanswered} {unanswered === 1 ? 'question needs' : 'questions need'} an answer</Text>
+            <Text style={styles.footTitle}>{unanswered} {unanswered === 1 ? 'question needs' : 'questions need'} an answer</Text>
             <Text style={styles.meta}>Answering publicly is how players find you.</Text>
           </View>
-          <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+          <Ionicons name="arrow-forward" size={18} color={colors.text} />
         </Pressable>
       ) : coaches.length === 0 ? null : (
-        <Pressable accessibilityRole="link" accessibilityLabel="Apply to be a coach" onPress={() => router.push('/coach-apply')} style={({ pressed }) => [styles.apply, pressed && styles.pressed]}>
-          <View style={styles.tileSmall}><Ionicons name="shield-checkmark-outline" size={20} color={colors.brand} /></View>
+        <Pressable accessibilityRole="link" accessibilityLabel="Apply to be a coach" onPress={() => router.push('/coach-apply')} style={({ pressed }) => [styles.foot, pressed && styles.pressed]}>
           <View style={styles.rowWords}>
-            <Text style={styles.applyTitle}>Coach on CourtSide</Text>
-            <Text style={styles.meta}>A coach badge and a listing. Verified by hand.</Text>
+            <Text style={styles.footTitle}>Coach on CourtSide</Text>
+            <Text style={styles.meta}>A badge and a listing, verified by hand.</Text>
           </View>
-          <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+          <Ionicons name="arrow-forward" size={18} color={colors.text} />
         </Pressable>
       )}
     </Screen>
@@ -161,20 +161,25 @@ function Coaching() {
 
 const styleDefinitions = StyleSheet.create({
   pressed: { opacity: 0.72 },
-  // The one card on the page: the way in, set like the waitlist's success card.
-  ask: { gap: spacing.lg, padding: spacing.xl, borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, marginTop: spacing.sm },
-  askTop: { flexDirection: 'row', gap: spacing.lg, alignItems: 'flex-start' },
-  tile: { width: 56, height: 56, borderRadius: radius.lg, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
-  tileSmall: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
-  askWords: { flex: 1, gap: 4, minWidth: 0 },
-  askTitle: { ...typography.title, fontSize: 20, color: colors.text },
-  askBody: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
+  lead: { gap: 4, paddingTop: spacing.sm, paddingBottom: spacing.lg },
+  leadTitle: { ...typography.title, fontSize: 24, color: colors.text },
+  leadBody: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
+  // The way in is a question you could start typing, not a card about asking.
+  askField: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    paddingLeft: spacing.lg, paddingRight: 6, paddingVertical: 6, minHeight: 52,
+    borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
+  },
+  askFieldPressed: { borderColor: colors.borderStrong },
+  askPlaceholder: { ...typography.body, fontSize: 16, color: colors.textFaint, flex: 1 },
+  askGo: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
   // Everything else is rows on hairlines, not boxes.
-  list: { marginTop: spacing.md },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.lg },
+  list: { marginTop: spacing.sm },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 15 },
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  rowWords: { flex: 1, gap: 4, minWidth: 0 },
-  rowTitle: { ...typography.body, color: colors.text, lineHeight: 21 },
+  rowWords: { flex: 1, gap: 5, minWidth: 0 },
+  rowTitle: { ...typography.body, ...font('500'), color: colors.text, lineHeight: 21 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   meta: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
   section: { gap: 4, paddingTop: spacing.xxl, paddingBottom: spacing.sm },
   sectionTitle: { ...typography.title, color: colors.text },
@@ -183,12 +188,12 @@ const styleDefinitions = StyleSheet.create({
   noneTitle: { ...typography.heading, color: colors.text },
   noneBody: { ...typography.small, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.sm },
   coach: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.lg },
-  name: { ...typography.bodyStrong, color: colors.text },
+  name: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text },
   rating: { ...typography.smallStrong, color: colors.text },
   priceCol: { alignItems: 'flex-end', gap: 2 },
   price: { ...typography.bodyStrong, color: colors.text, fontVariant: ['tabular-nums'] },
-  apply: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, marginTop: spacing.xxl, marginBottom: spacing.lg, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  applyTitle: { ...typography.bodyStrong, color: colors.text },
+  foot: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xl, marginTop: spacing.xl, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  footTitle: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text },
 });
 
 export default asTabRoute(Coaching);

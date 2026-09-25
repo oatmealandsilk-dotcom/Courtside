@@ -654,7 +654,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const endPage = (
     <View key="the-end" style={styles.endPage}>
       <View style={styles.endCard}>
-        <Wash height={300} strength={0.9} />
+        <Wash height={300} strength={0.65} />
         <View style={styles.endTop}>
           <View style={styles.endTile}><MarkDraw size={30} /></View>
           <View style={styles.endNo}>
