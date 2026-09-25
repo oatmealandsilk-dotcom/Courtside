@@ -15,6 +15,7 @@ import { cropLayer } from '@/lib/crop';
 import * as haptics from '@/lib/haptics';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import type { MediaCrop } from '@/data/types';
+import { Wash } from '@/components/Wash';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /** What leaves the editor: the media to post and how to play it. */
@@ -57,9 +58,11 @@ const HANDLE_SLOP = { top: 8, bottom: 8, left: 14, right: 14 };
 const SPEEDS = [0.5, 1, 1.5, 2] as const;
 type Speed = (typeof SPEEDS)[number];
 type Tool = 'trim' | 'cover' | 'crop' | 'speed' | 'sound';
-const TOOLS: { key: Tool; label: string }[] = [
-  { key: 'trim', label: 'Trim' }, { key: 'cover', label: 'Cover' }, { key: 'crop', label: 'Crop' }, { key: 'speed', label: 'Speed' }, { key: 'sound', label: 'Sound' },
+const TOOLS: { key: Tool; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'trim', label: 'Trim', icon: 'cut-outline' }, { key: 'cover', label: 'Cover', icon: 'image-outline' }, { key: 'crop', label: 'Crop', icon: 'crop-outline' }, { key: 'speed', label: 'Speed', icon: 'speedometer-outline' }, { key: 'sound', label: 'Sound', icon: 'volume-medium-outline' },
 ];
+/** The deck under the picture: the app's night ground with a green in it, not the stage's plain black. */
+const DECK = '#0C1310';
 const clock = (s: number) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
 /** A length, to the nearest second: 5.9s reads "0:06", not "0:05". The running clock keeps the floor so it never ticks early. */
 const clockRound = (s: number) => clock(Math.round(s));
@@ -1086,7 +1089,8 @@ export function MediaEditor({ media, initial, onBack, onDone, portraitRatio = 9 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]} onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w > 0 && w !== ownWidth) setOwnWidth(w); }}>
       <View style={[styles.bar, column]}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back" hitSlop={10} onPress={onBack}><Ionicons name="chevron-back" size={26} color="white" /></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back" hitSlop={10} onPress={onBack} style={styles.barSide}><Ionicons name="chevron-back" size={26} color="white" /></Pressable>
+        <View style={styles.barTitle}><View style={styles.ball} /><Text style={styles.barTitleText}>{isVideo ? 'Edit clip' : 'Edit photo'}</Text></View>
         <Pressable accessibilityRole="button" accessibilityLabel="Next" accessibilityState={{ disabled: busy }} disabled={busy} onPress={() => { void done(); }} style={({ pressed }) => [styles.next, busy && { opacity: 0.5 }, pressed && !busy && styles.pressed]}><Text style={styles.nextText}>Next</Text></Pressable>
       </View>
 
@@ -1201,6 +1205,7 @@ export function MediaEditor({ media, initial, onBack, onDone, portraitRatio = 9 
 
       {/* Three rows of fixed height under the picture, so the picture never resizes when the tool changes. */}
       <View style={[styles.tools, { paddingBottom: insets.bottom + spacing.sm }, column]}>
+        <Wash height={260} strength={0.55} fade={DECK} />
         <View style={styles.stripZone}>
           <Animated.View key={isVideo ? tool : 'photo'} entering={zoneIn} exiting={zoneOut} style={StyleSheet.absoluteFill}>
             {zone}
@@ -1212,8 +1217,9 @@ export function MediaEditor({ media, initial, onBack, onDone, portraitRatio = 9 
         </View>
         {isVideo ? (
           <View ref={railRef} onLayout={() => placeRef.current(false)} style={[styles.rail, roomy && styles.railDesktop]}>
-            {TOOLS.map(({ key, label }) => (
+            {TOOLS.map(({ key, label, icon }) => (
               <Pressable key={key} ref={(node) => { wordRefs.current[key] = node; }} accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{ selected: tool === key }} onPress={() => switchTool(key)} style={pressable(styles.word)}>
+                <Ionicons name={tool === key ? (icon.replace('-outline', '') as keyof typeof Ionicons.glyphMap) : icon} size={22} color={tool === key ? colors.brand : 'rgba(255,255,255,0.62)'} />
                 <Text style={[styles.wordText, tool === key && styles.wordTextOn]}>{label}</Text>
               </Pressable>
             ))}
@@ -1228,7 +1234,11 @@ export function MediaEditor({ media, initial, onBack, onDone, portraitRatio = 9 
 
 const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
-  bar: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg },
+  bar: { height: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg },
+  barSide: { minWidth: 64 },
+  barTitle: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  ball: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.brand },
+  barTitleText: { ...typography.smallStrong, color: 'white' },
   next: { paddingHorizontal: spacing.lg, paddingVertical: 8, borderRadius: radius.pill, backgroundColor: colors.brand },
   nextText: { ...typography.smallStrong, color: colors.brandInk },
   pressed: { transform: [{ scale: 0.97 }] },
@@ -1255,7 +1265,7 @@ const styleDefinitions = StyleSheet.create({
   corner: { position: 'absolute', width: 36, height: 36, alignItems: 'center', justifyContent: 'center', zIndex: 3 },
   cornerMark: { width: 22, height: 22, borderColor: 'white' },
   gridLine: { position: 'absolute', backgroundColor: 'rgba(255,255,255,0.55)' },
-  tools: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, backgroundColor: '#000' },
+  tools: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, backgroundColor: DECK, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.1)', overflow: 'hidden' },
   stripZone: { height: STRIP_H },
   zoneRow: { height: STRIP_H, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   strip: { height: STRIP_H, marginHorizontal: HANDLE, overflow: 'visible' },
@@ -1265,20 +1275,20 @@ const styleDefinitions = StyleSheet.create({
   reading: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   readingText: { ...typography.small, color: 'rgba(255,255,255,0.6)' },
   dim: { position: 'absolute', top: 0, height: STRIP_H, backgroundColor: 'rgba(0,0,0,0.55)' },
-  bracket: { position: 'absolute', height: 2, backgroundColor: 'white' },
-  playhead: { position: 'absolute', left: 0, top: -4, width: 2, height: STRIP_H + 8, backgroundColor: 'white' },
-  handle: { position: 'absolute', top: 0, width: HANDLE, height: STRIP_H, backgroundColor: 'white', alignItems: 'center', justifyContent: 'center', cursor: 'ew-resize' as never },
+  bracket: { position: 'absolute', height: 2, backgroundColor: colors.brand },
+  playhead: { position: 'absolute', left: 0, top: -4, width: 2, height: STRIP_H + 8, backgroundColor: 'white', borderRadius: 1 },
+  handle: { position: 'absolute', top: 0, width: HANDLE, height: STRIP_H, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', cursor: 'ew-resize' as never },
   handleLeft: { borderTopLeftRadius: 4, borderBottomLeftRadius: 4 },
   handleRight: { borderTopRightRadius: 4, borderBottomRightRadius: 4 },
-  grip: { width: 2, height: 18, borderRadius: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
-  chip: { position: 'absolute', bottom: STRIP_H + 8, paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: 'rgba(0,0,0,0.8)' },
-  chipText: { ...typography.caption, color: 'white', letterSpacing: 0, fontVariant: ['tabular-nums'] },
-  coverWindow: { position: 'absolute', top: 0, height: STRIP_H, borderWidth: 2, borderColor: 'white', borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.12)', cursor: 'ew-resize' as never },
+  grip: { width: 2, height: 18, borderRadius: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
+  chip: { position: 'absolute', bottom: STRIP_H + 8, paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: colors.brand },
+  chipText: { ...typography.caption, color: colors.brandInk, letterSpacing: 0, fontVariant: ['tabular-nums'] },
+  coverWindow: { position: 'absolute', top: 0, height: STRIP_H, borderWidth: 2, borderColor: colors.brand, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.12)', cursor: 'ew-resize' as never },
   words: { flexDirection: 'row', alignItems: 'center', gap: spacing.xl },
-  word: { minWidth: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  wordText: { ...typography.smallStrong, color: 'rgba(255,255,255,0.55)' },
-  wordTextOn: { color: 'white' },
-  wordLine: { position: 'absolute', bottom: 6, width: 20, height: 2, borderRadius: 1, backgroundColor: 'white' },
+  word: { minWidth: 52, height: 52, alignItems: 'center', justifyContent: 'center', gap: 3 },
+  wordText: { ...typography.caption, letterSpacing: 0.2, color: 'rgba(255,255,255,0.62)' },
+  wordTextOn: { color: colors.brand },
+  wordLine: { position: 'absolute', bottom: 6, width: 20, height: 2, borderRadius: 1, backgroundColor: colors.brand },
   action: { minWidth: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   actionText: { ...typography.smallStrong, color: 'white' },
   speedRow: { height: STRIP_H, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly' },
@@ -1286,22 +1296,22 @@ const styleDefinitions = StyleSheet.create({
   speedHit: { height: 44, alignItems: 'center', justifyContent: 'center' },
   // The one chip on the screen: a selector, fully round because it is the pressed one.
   speedPill: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: radius.pill },
-  speedPillOn: { backgroundColor: 'white' },
+  speedPillOn: { backgroundColor: colors.brand },
   speedText: { ...typography.smallStrong, color: 'rgba(255,255,255,0.7)', fontVariant: ['tabular-nums'] },
-  speedTextOn: { color: '#000' },
+  speedTextOn: { color: colors.brandInk },
   soundRow: { height: STRIP_H, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   soundGlyph: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   levelHit: { flex: 1, height: 44, justifyContent: 'center' },
   levelTrack: { height: 2, borderRadius: 1, backgroundColor: 'rgba(255,255,255,0.25)' },
-  levelFill: { height: 2, backgroundColor: 'white' },
-  levelKnob: { position: 'absolute', top: 13, marginLeft: -9, width: 18, height: 18, borderRadius: 9, backgroundColor: 'white' },
+  levelFill: { height: 2, backgroundColor: colors.brand },
+  levelKnob: { position: 'absolute', top: 13, marginLeft: -9, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.brand, borderWidth: 2, borderColor: 'white' },
   levelText: { ...typography.smallStrong, color: 'white', minWidth: 44, textAlign: 'right', fontVariant: ['tabular-nums'] },
   readoutRow: { height: 24, marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   readout: { ...typography.small, color: 'rgba(255,255,255,0.7)', fontVariant: ['tabular-nums'] },
-  readoutStrong: { ...typography.smallStrong, color: 'white', fontVariant: ['tabular-nums'] },
-  rail: { height: 44, marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  readoutStrong: { ...typography.smallStrong, color: colors.brand, fontVariant: ['tabular-nums'] },
+  rail: { height: 56, marginTop: spacing.xs, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   railDesktop: { justifyContent: 'center', gap: spacing.xxl },
-  railLine: { position: 'absolute', left: 0, bottom: 6, width: 20, height: 2, borderRadius: 1, backgroundColor: 'white' },
+  railLine: { position: 'absolute', left: 0, bottom: 0, width: 20, height: 2, borderRadius: 1, backgroundColor: colors.brand },
   // White like everything else on the stage: the theme's red does not read on black.
   error: { ...typography.caption, color: 'white', letterSpacing: 0, marginTop: spacing.sm },
 });
