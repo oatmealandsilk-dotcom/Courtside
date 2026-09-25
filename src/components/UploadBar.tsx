@@ -1,6 +1,6 @@
-import { useTheme } from '@/theme/ThemeProvider';
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Image, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Reanimated, { Easing as REasing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,7 +16,7 @@ import { colors, radius, spacing, typography } from '@/theme';
  * line filling underneath. Turns into a tick when it lands, then lifts away.
  */
 export function UploadBar() {
-  useTheme();
+  const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const jobs = useUploads();
   const job = jobs[jobs.length - 1];
@@ -27,18 +27,38 @@ export function UploadBar() {
   const fillStyle = useAnimatedStyle(() => ({ width: `${fill.value * 100}%` }));
   const pop = useRef(new Animated.Value(0)).current;
 
+  // Swiped away: hidden for this job in this state; it returns once the post
+  // lands or fails, so the end is never missed.
+  const [away, setAway] = useState<string | null>(null);
+  const awayKey = job ? `${job.id}:${job.state}` : null;
+  const swipe = useRef(PanResponder.create({
+    onMoveShouldSetPanResponder: (_, g) => g.dy < -6 && Math.abs(g.dy) > Math.abs(g.dx),
+    onPanResponderMove: (_, g) => { if (g.dy < 0) slide.setValue(g.dy); },
+    onPanResponderRelease: (_, g) => {
+      if (g.dy < -24 || g.vy < -0.5) {
+        Animated.timing(slide, { toValue: -110, duration: 180, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => setAway(awayRef.current));
+      } else {
+        Animated.spring(slide, { toValue: 0, useNativeDriver: true, speed: 18, bounciness: 6 }).start();
+      }
+    },
+  })).current;
+  const awayRef = useRef<string | null>(null);
+  awayRef.current = awayKey;
+
   const [displayed, setDisplayed] = useState(0);
   const target = useRef(0);
   useEffect(() => {
+    if (job && awayKey === away) return;
     if (job) {
-      if (!shown) { fill.value = 0; pop.setValue(0); setDisplayed(0); Animated.spring(slide, { toValue: 0, useNativeDriver: true, speed: 18, bounciness: 8 }).start(); }
+      if (!shown || away) { setAway(null); }
+      if (!shown || away) { fill.value = 0; pop.setValue(0); setDisplayed(0); Animated.spring(slide, { toValue: 0, useNativeDriver: true, speed: 18, bounciness: 8 }).start(); }
       setShown(job);
       target.current = job.state === 'uploading' ? job.fraction : 1;
       if (job.state !== 'uploading') Animated.spring(pop, { toValue: 1, useNativeDriver: true, speed: 22, bounciness: 14 }).start();
     } else if (shown) {
       Animated.timing(slide, { toValue: -110, duration: 240, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(({ finished }) => { if (finished) setShown(null); });
     }
-  }, [job, shown, slide, fill, pop]);
+  }, [job, shown, slide, fill, pop, away, awayKey]);
   // The number eases toward the latest report and keeps creeping a touch
   // ahead of it (never past 97% until it truly lands), so it is always moving.
   useEffect(() => {
@@ -60,11 +80,11 @@ export function UploadBar() {
     return () => clearInterval(tick);
   }, [shown, fill]);
 
-  if (!shown) return null;
+  if (!shown || (job && awayKey === away)) return null;
   const pct = Math.round(displayed * 100);
   const title = shown.state === 'done' ? 'Posted' : shown.state === 'failed' ? 'Could not post' : `Posting… ${pct}%`;
   return (
-    <Animated.View pointerEvents={shown.state === 'done' ? 'box-none' : 'none'} style={[styles.wrap, { top: insets.top + spacing.xs, transform: [{ translateY: slide }] }]}>
+    <Animated.View pointerEvents="box-none" {...swipe.panHandlers} style={[styles.wrap, { top: insets.top + spacing.xs, transform: [{ translateY: slide }] }]}>
       <Pressable accessibilityRole={shown.state === 'done' ? 'link' : 'text'} accessibilityLabel={shown.state === 'done' ? 'See it at the top of your feed' : title} disabled={shown.state !== 'done'} onPress={() => { router.navigate('/'); revealPost(shown.id); }} style={styles.card}>
         <View style={styles.row}>
           {shown.thumb ? <Image accessibilityIgnoresInvertColors source={{ uri: shown.thumb }} style={styles.thumb} /> : <View style={[styles.thumb, styles.thumbBlank]}><Ionicons name="tennisball" size={18} color={colors.brand} /></View>}
@@ -84,7 +104,7 @@ export function UploadBar() {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   wrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center', paddingHorizontal: spacing.md, zIndex: 40 },
   card: { width: '100%', maxWidth: 520, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.sm, paddingRight: spacing.md },

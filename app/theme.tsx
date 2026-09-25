@@ -8,6 +8,7 @@ import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Screen } from '@/components/ui';
+import { Wash } from '@/components/Wash';
 import { useTheme, themeList, themes, type ThemeName } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -45,9 +46,8 @@ const styleDefinitions = StyleSheet.create({
     borderRadius: radius.lg,
   },
   cardActive: { borderColor: colors.brand },
-  // The court as a colour chip: its ground, its colour in the middle, nothing else.
-  swatch: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  swatchDot: { width: 20, height: 20, borderRadius: 10 },
+  // The court as a tiny page: its ground with its wash faintly on it, nothing else.
+  swatch: { width: 56, height: 48, borderRadius: radius.md, borderWidth: 1, overflow: 'hidden' },
   name: { ...typography.bodyStrong, color: colors.text },
   blurb: { ...typography.small, color: colors.textMuted },
   ring: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: colors.borderStrong },
@@ -83,7 +83,7 @@ function ThemeCard({ option, active, onPick, styles }: { option: (typeof themeLi
     <Pressable accessibilityRole="radio" accessibilityState={{ selected: active }} accessibilityLabel={`${option.label} theme`} onPress={onPick}>
       <Animated.View style={[styles.card, cardStyle]}>
         <View style={[styles.swatch, { backgroundColor: palette.bg, borderColor: palette.border }]}>
-          <View style={[styles.swatchDot, { backgroundColor: palette.brand }]} />
+          <Wash theme={option.name} height={48} strength={1.4} fade={palette.bg} />
         </View>
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={styles.name}>{option.label}</Text>

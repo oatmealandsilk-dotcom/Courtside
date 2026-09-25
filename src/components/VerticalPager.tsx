@@ -1,3 +1,4 @@
+import { useTheme } from '@/theme/ThemeProvider';
 import React, { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { CourtSpinner } from '@/components/CourtSpinner';
@@ -36,6 +37,8 @@ function pageKey(child: React.ReactNode, index: number) {
 }
 
 export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.ReactNode[]; onIndex: (index: number) => void; /** The page the scroll came to rest on. */ onSettled?: (index: number) => void; initialIndex?: number; /** Pulling down past the first page fetches what is new. */ onRefresh?: () => Promise<void>; /** Shown in the gap the pull opens, beside the disc. */ pullHeader?: React.ReactNode }>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0, onRefresh, pullHeader }, ref) {
+  // Hears a theme change, so its own colours never lag the page's.
+  useTheme();
   const [height, setHeight] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [scrollLocked, setScrollLocked] = useState(false);

@@ -1,4 +1,4 @@
-import { useTheme } from '@/theme/ThemeProvider';
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -13,7 +13,7 @@ import { colors, spacing, font } from '@/theme';
  * the move from the splash route into the tabs happens underneath it.
  */
 export function WarmCurtain() {
-  useTheme();
+  const styles = useThemedStyles(styleDefinitions);
   const warm = useFeedWarm();
   const [shown, setShown] = useState(!warm);
   const fade = useSharedValue(1);
@@ -36,7 +36,7 @@ export function WarmCurtain() {
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   curtain: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', zIndex: 60 },
   brand: { alignItems: 'center', gap: spacing.md },
   wordmark: { fontSize: 34, ...font('700'), color: colors.brand, letterSpacing: -1 },

@@ -1,3 +1,4 @@
+import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Keyboard, Platform, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Pressable } from 'react-native-gesture-handler';
@@ -34,6 +35,7 @@ export function DragSheet({
   /** Bump this number to close the sheet from outside (a Close button, a finished send). */
   closeSignal?: number;
 }) {
+  const styles = useThemedStyles(styleDefinitions);
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   // A sliver of the page behind stays visible even fully "open" — the depth
@@ -151,7 +153,7 @@ export function DragSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const styleDefinitions = StyleSheet.create({
   sheet: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
     backgroundColor: colors.bg,

@@ -1,3 +1,4 @@
+import { useTheme } from '@/theme/ThemeProvider';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState, memo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,6 +32,8 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   /** A zoom and shift inside the frame, chosen in the editor. */
   crop?: MediaCrop;
 }) {
+  // Hears a theme change, so its own colours never lag the page's.
+  useTheme();
   const insets = useSafeAreaInsets();
   const video = useRef<HTMLVideoElement>(null);
   const bar = useRef<HTMLDivElement>(null);

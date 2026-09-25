@@ -1,3 +1,4 @@
+import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
@@ -16,6 +17,8 @@ type Set = 'own' | 'clips' | 'tagged';
  * and ending when they run out.
  */
 export default function PlayerPosts() {
+  // Hears a theme change, so its own colours never lag the page's.
+  useTheme();
   const { userId, post: start, set = 'own' } = useLocalSearchParams<{ userId: string; post?: string; set?: Set }>();
   const { users, actions } = useApp();
   // The same posts the grid was built from, so this feed does not stop short.

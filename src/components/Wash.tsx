@@ -13,6 +13,8 @@ interface Props {
   style?: StyleProp<ViewStyle>;
   /** What the wash fades into: the page by default, a card's own colour inside a card. */
   fade?: string;
+  /** Draw another court's wash — the theme list shows each court as itself. */
+  theme?: ThemeName;
 }
 
 type Glow = readonly [r: number, g: number, b: number, alpha: number];
@@ -22,7 +24,7 @@ type Glow = readonly [r: number, g: number, b: number, alpha: number];
  * both; each Grand Slam wears its two colours, the pair everyone knows it by.
  * Alpha is the strength at each glow's centre; both fade to nothing.
  */
-const WASHES: Record<ThemeName, readonly [left: Glow, right: Glow]> = {
+export const WASHES: Record<ThemeName, readonly [left: Glow, right: Glow]> = {
   default: [[197, 116, 72, 0.24], [197, 116, 72, 0.19]],
   clean: [[197, 116, 72, 0.18], [197, 116, 72, 0.14]],
   night: [[214, 138, 96, 0.18], [214, 138, 96, 0.14]],
@@ -42,10 +44,14 @@ const rgb = (g: Glow) => `rgb(${g[0]}, ${g[1]}, ${g[2]})`;
  * both feathered to nothing before the bottom edge. It sits behind a screen's
  * opening moment or inside a card. The colours are the court's own.
  */
-export function Wash({ height = 320, strength = 1, style, fade }: Props) {
-  const { theme } = useTheme();
+export function Wash({ height = 320, strength = 1, style, fade, theme: wanted }: Props) {
+  const { theme: current } = useTheme();
+  const theme = wanted ?? current;
   const [l, r] = WASHES[theme] ?? WASHES.default;
-  const id = useId().replace(/[^a-zA-Z0-9]/g, '');
+  // The court's name is part of every gradient's id: iOS keeps a gradient by
+  // its id and would not repaint one whose colours changed under the same
+  // name, which left the old court's glow on the new court's page.
+  const id = `${useId().replace(/[^a-zA-Z0-9]/g, '')}${theme.replace(/-/g, '')}`;
   const to = fade ?? colors.bg;
   return (
     <View pointerEvents="none" style={[styles.wrap, { height }, style]}>
