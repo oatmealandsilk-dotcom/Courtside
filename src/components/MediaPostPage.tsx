@@ -1,4 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { Wash } from '@/components/Wash';
 import React, { useEffect, useRef, useState, memo } from 'react';
 import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -171,6 +172,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
     // Without comments there is nothing to fill the bottom, so the picture and
     // its words sit in the middle of the page instead of leaving a gap below.
     <View style={[styles.page, { paddingTop: topInset }]}>
+      <Wash height={320} strength={0.6} />
      <View style={[styles.column, !thread.length && styles.pageCentred]} onLayout={(e) => { const { width, height } = e.nativeEvent.layout; if (width > 0 && height > 0) setRoom({ w: width, h: height }); }}>
       {/* Who and their level, in the space above the picture. */}
       <View style={[styles.whoRow, lane]}>

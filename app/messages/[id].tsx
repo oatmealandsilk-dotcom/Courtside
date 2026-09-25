@@ -1,4 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { Wash } from '@/components/Wash';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -133,6 +134,7 @@ export default function Thread() {
   if (!conversation || !other) {
     return (
       <View style={styles.root}>
+        <Wash height={320} strength={0.7} />
         <EmptyState title="Conversation not found" body="It may have been removed." />
       </View>
     );

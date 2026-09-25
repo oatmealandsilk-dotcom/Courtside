@@ -63,7 +63,7 @@ interface Props {
   scrollRef?: React.MutableRefObject<ScrollView | null>;
   /** Pull down past the top to run this; a small "Updated" note confirms it. */
   onRefresh?: () => Promise<void> | void;
-  /** The colour wash behind the top of the page — for a screen's opening moment, not a list. */
+  /** The colour wash behind the top of the page. Every page carries it; pass false to go without. */
   wash?: boolean;
 }
 
@@ -81,7 +81,7 @@ export function Screen({
   memoryKey,
   scrollRef,
   onRefresh,
-  wash = false,
+  wash = true,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
