@@ -357,7 +357,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       <View style={styles.actions}>
         {([['heart-outline', 36], ['chatbubble-outline', 33], ['arrow-redo-outline', 32], ['bookmark-outline', 31], ['ellipsis-horizontal', 30]] as const).map(([name, size]) => (
           <View key={name} style={styles.action}>
-            <Ionicons name={name} size={size} color={colors.textMuted} style={styles.actionGlyph} />
+            {/* No shadow here: the shadow lifts white glyphs off a video, and on the plain page it only reads as a smudge. */}
+            <Ionicons name={name} size={size} color={colors.textFaint} />
             <Text style={styles.actionLabel}> </Text>
           </View>
         ))}
