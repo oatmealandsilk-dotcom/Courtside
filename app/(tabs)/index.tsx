@@ -14,6 +14,7 @@ import * as haptics from '@/lib/haptics';
 
 import { Avatar, Button, EmptyState } from '@/components/ui';
 import { LevelPill } from '@/components/LevelPill';
+import { FollowPill } from '@/components/FollowPill';
 import { QuestionCard } from '@/components/QuestionCard';
 import { PostCard } from '@/components/PostCard';
 import { BrandMark } from '@/components/BrandMark';
@@ -485,14 +486,14 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         {suggestions.slice(0, 6).map(({ user, reason }) => (
           <View key={user.id} style={styles.stripCard}>
             <Pressable accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.stripBody}>
-              <Avatar name={user.name} seed={user.avatarSeed} size={56} ring={user.isCoach} />
-              <Text style={styles.stripName} numberOfLines={1}>{user.name}</Text>
+              <Avatar name={user.name} seed={user.avatarSeed} size={52} ring={user.isCoach} />
+              <View style={styles.stripWords}>
+                <Text style={styles.stripName} numberOfLines={1}>{user.name}</Text>
+                <Text style={styles.stripReason} numberOfLines={1}>{reason}</Text>
+              </View>
               <LevelPill profile={user.profile} small />
-              <Text style={styles.stripReason} numberOfLines={2}>{reason}</Text>
             </Pressable>
-            <Tappable accessibilityLabel={`Follow ${user.name}`} onPress={() => actions.toggleFollow(user.id)} style={styles.stripFollow}>
-              <Text style={styles.stripFollowText}>Follow</Text>
-            </Tappable>
+            <FollowPill following={followingIds.includes(user.id)} onPress={() => actions.toggleFollow(user.id)} small />
           </View>
         ))}
       </ScrollView>
@@ -1172,7 +1173,7 @@ const styleDefinitions = StyleSheet.create({
   stripRow: { gap: 10, paddingHorizontal: 20, paddingVertical: 6 },
   // A card per player: the picture first, the name, the level in its colour, why they're here.
   stripCard: {
-    width: 150,
+    width: 148,
     padding: 14,
     gap: 12,
     borderRadius: radius.lg,
@@ -1180,11 +1181,10 @@ const styleDefinitions = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
-  stripBody: { alignItems: 'center', gap: 6 },
+  stripBody: { alignItems: 'center', gap: 8 },
+  stripWords: { alignItems: 'center', gap: 2 },
   stripName: { ...typography.bodyStrong, fontSize: 14, color: colors.text, textAlign: 'center' },
-  stripReason: { ...typography.small, fontSize: 12, lineHeight: 16, color: colors.textMuted, textAlign: 'center', minHeight: 32 },
-  stripFollow: { paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surfaceAlt, alignItems: 'center' },
-  stripFollowText: { ...typography.smallStrong, color: colors.text },
+  stripReason: { ...typography.small, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
   threadArticle: { gap: 8, paddingBottom: 20 },
   eyebrow: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.1 },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

@@ -237,7 +237,7 @@ const styleDefinitions = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   name: { ...typography.bodyStrong, color: colors.text },
   sub: { ...typography.small, color: colors.textFaint },
-  body: { gap: spacing.md, flexShrink: 1, minHeight: 0 },
+  body: { gap: spacing.md, flexShrink: 1, minHeight: 0, overflow: 'hidden' },
   kindRow: {
     flexDirection: 'row',
     alignItems: 'center',

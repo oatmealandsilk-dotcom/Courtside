@@ -2,12 +2,13 @@ import { asTabRoute } from '@/features/navigation/tabFocus';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar, Button, DottedRule, Screen } from '@/components/ui';
 import { LiveDot } from '@/components/LiveDot';
+import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { money, relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font } from '@/theme';
@@ -35,34 +36,6 @@ function Coaching() {
         <View style={styles.askGo}><Ionicons name="arrow-forward" size={16} color={colors.brandInk} /></View>
       </Pressable>
       <Text style={styles.askNote}>Free and public. A verified coach answers, usually within a day.</Text>
-      {recentQuestions.length ? (
-        <View style={styles.list}>
-          {recentQuestions.map((question, index) => {
-            const author = users.find((u) => u.id === question.authorId);
-            const waiting = question.replyIds.length === 0;
-            return (
-              <Pressable
-                key={question.id}
-                accessibilityRole="link"
-                onPress={() => router.push(`/coach-question/${question.id}`)}
-                style={({ pressed }) => [styles.row, index > 0 && styles.rowLine, pressed && styles.pressed]}
-              >
-                <View style={styles.rowWords}>
-                  <Text style={styles.rowTitle} numberOfLines={2}>{question.title}</Text>
-                  <View style={styles.metaRow}>
-                    {waiting ? <LiveDot size={7} /> : <Ionicons name="checkmark-circle" size={13} color={colors.success} />}
-                    <PlayerName userId={author?.id} style={styles.meta}>
-                      {waiting ? 'Awaiting a coach' : question.resolved ? 'Answered' : `${question.replyIds.length} ${question.replyIds.length === 1 ? 'reply' : 'replies'}`} · @{author?.handle ?? 'player'} · {relativeTime(question.createdAt)}
-                    </PlayerName>
-                  </View>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
-
       {/* ------------------------------ Coaches ---------------------------------- */}
       <DottedRule gap={spacing.xxl} />
       <View style={styles.section}>
@@ -78,37 +51,76 @@ function Coaching() {
           )}
         </View>
       ) : (
-        <View style={styles.list}>
-          {coaches.map((coach, index) => {
+        <ScrollView
+          horizontal
+          nativeID="coach-rail"
+          onTouchStart={() => lockPageSwipe(true)}
+          onTouchEnd={() => lockPageSwipe(false)}
+          onTouchCancel={() => lockPageSwipe(false)}
+          showsHorizontalScrollIndicator={false}
+          style={styles.rail}
+          contentContainerStyle={styles.railRow}
+        >
+          {coaches.map((coach) => {
             const user = users.find((u) => u.id === coach.userId);
             const price = Math.min(...coach.services.map((s) => s.priceCents));
             return (
-              <Pressable
-                key={coach.id}
-                accessibilityRole="link"
-                onPress={() => router.push(`/coach/${coach.id}`)}
-                style={({ pressed }) => [styles.coach, index > 0 && styles.rowLine, pressed && styles.pressed]}
-              >
-                <Avatar name={user?.name ?? 'Coach'} seed={coach.id} size={48} style={{ backgroundColor: colors.borderStrong }} />
-                <View style={styles.rowWords}>
-                  <PlayerName userId={user?.id} style={styles.name}>{user?.name}</PlayerName>
-                  <Text style={styles.meta} numberOfLines={1}>
-                    {coach.credentials[0]} · {coach.specialties.slice(0, 2).map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(' & ')}
-                  </Text>
+              <Pressable key={coach.id} accessibilityRole="link" onPress={() => router.push(`/coach/${coach.id}`)} style={({ pressed }) => [styles.coachCard, pressed && styles.pressed]}>
+                <Avatar name={user?.name ?? 'Coach'} seed={coach.id} size={64} style={{ backgroundColor: colors.borderStrong }} />
+                <View style={styles.coachWords}>
+                  <PlayerName userId={user?.id} style={styles.coachName}>{user?.name}</PlayerName>
+                  <Text style={styles.meta} numberOfLines={1}>{coach.credentials[0]}</Text>
+                  <Text style={styles.meta} numberOfLines={1}>{coach.specialties.slice(0, 2).map((x) => x.charAt(0).toUpperCase() + x.slice(1)).join(' & ')}</Text>
+                </View>
+                <View style={styles.coachFoot}>
                   <View style={styles.metaRow}>
                     <Ionicons name="star" size={12} color={colors.text} />
-                    <Text style={styles.meta}><Text style={styles.rating}>{coach.ratingAvg.toFixed(1)}</Text> · {coach.ratingCount} reviews</Text>
+                    <Text style={styles.rating}>{coach.ratingAvg.toFixed(1)}</Text>
+                    <Text style={styles.meta}>· {coach.ratingCount}</Text>
                   </View>
-                </View>
-                <View style={styles.priceCol}>
-                  <Text style={styles.price}>{money(price)}</Text>
-                  <Text style={styles.meta}>from</Text>
+                  <View style={styles.priceTag}><Text style={styles.priceText}>from {money(price)}</Text></View>
                 </View>
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
       )}
+
+      {/* ------------------------------ Questions -------------------------------- */}
+      {recentQuestions.length ? (
+        <>
+          <DottedRule gap={spacing.xxl} />
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Latest questions</Text>
+            <Text style={styles.sectionBody}>{unanswered ? `${unanswered} waiting on a coach` : 'All answered'}</Text>
+          </View>
+          <View style={styles.list}>
+            {recentQuestions.map((question, index) => {
+              const author = users.find((u) => u.id === question.authorId);
+              const waiting = question.replyIds.length === 0;
+              return (
+                <Pressable
+                  key={question.id}
+                  accessibilityRole="link"
+                  onPress={() => router.push(`/coach-question/${question.id}`)}
+                  style={({ pressed }) => [styles.row, index > 0 && styles.rowLine, pressed && styles.pressed]}
+                >
+                  <View style={styles.rowWords}>
+                    <Text style={styles.rowTitle} numberOfLines={2}>{question.title}</Text>
+                    <View style={styles.metaRow}>
+                      {waiting ? <LiveDot size={7} /> : <Ionicons name="checkmark-circle" size={13} color={colors.success} />}
+                      <PlayerName userId={author?.id} style={styles.meta}>
+                        {waiting ? 'Awaiting a coach' : question.resolved ? 'Answered' : `${question.replyIds.length} ${question.replyIds.length === 1 ? 'reply' : 'replies'}`} · @{author?.handle ?? 'player'} · {relativeTime(question.createdAt)}
+                      </PlayerName>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      ) : null}
 
       {/* ------------------------------ Your requests ---------------------------- */}
       {myRequests.length ? (
@@ -188,11 +200,19 @@ const styleDefinitions = StyleSheet.create({
   noneTitle: { ...typography.heading, color: colors.text },
   noneBody: { ...typography.small, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.sm },
   coach: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.lg },
+  rail: { flexGrow: 0, marginHorizontal: -spacing.lg },
+  railRow: { gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.xs },
+  coachCard: { width: 176, gap: spacing.md, padding: spacing.lg, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  coachWords: { gap: 3 },
+  coachName: { ...typography.bodyStrong, color: colors.text },
+  coachFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  priceTag: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.brandDim },
+  priceText: { ...typography.caption, color: colors.brand },
   name: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text },
   rating: { ...typography.smallStrong, color: colors.text },
   priceCol: { alignItems: 'flex-end', gap: 2 },
   price: { ...typography.bodyStrong, color: colors.text, fontVariant: ['tabular-nums'] },
-  foot: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xl, marginTop: spacing.xl, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  foot: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, marginTop: spacing.xxl, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   footTitle: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text },
 });
 

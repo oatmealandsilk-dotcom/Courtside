@@ -3,22 +3,22 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { colors, radius, spacing, typography } from '@/theme';
+import { MarkDraw } from '@/components/MarkDraw';
+import { colors, spacing, typography } from '@/theme';
 
 interface Props {
+  /** An icon for this particular emptiness; without one, the mark. */
   icon?: keyof typeof Ionicons.glyphMap;
   title: string;
   body?: string;
 }
 
-/** Nothing here yet: the icon in a tinted tile, a line on why, and air around it. */
-export function EmptyState({ icon = 'tennisball-outline', title, body }: Props) {
+/** Nothing here yet: a quiet mark, a line on why, and air around it. */
+export function EmptyState({ icon, title, body }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.wrap}>
-      <View style={styles.tile}>
-        <Ionicons name={icon} size={24} color={colors.brand} />
-      </View>
+      {icon ? <Ionicons name={icon} size={26} color={colors.textFaint} /> : <MarkDraw size={30} color={colors.borderStrong} play={false} />}
       <Text style={styles.title}>{title}</Text>
       {body ? <Text style={styles.body}>{body}</Text> : null}
     </View>
@@ -27,7 +27,6 @@ export function EmptyState({ icon = 'tennisball-outline', title, body }: Props) 
 
 const styleDefinitions = StyleSheet.create({
   wrap: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xxxl, paddingHorizontal: spacing.lg },
-  tile: { width: 56, height: 56, borderRadius: radius.lg, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.xs },
-  title: { ...typography.heading, color: colors.text, textAlign: 'center' },
+  title: { ...typography.heading, color: colors.text, textAlign: 'center', marginTop: spacing.xs },
   body: { ...typography.small, color: colors.textMuted, textAlign: 'center', maxWidth: 300, lineHeight: 19 },
 });
