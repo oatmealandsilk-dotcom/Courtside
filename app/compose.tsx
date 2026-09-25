@@ -188,20 +188,15 @@ export default function Compose() {
     <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimStyle]}><SheetBackdrop /></Reanimated.View>
     <Pressable accessibilityRole="button" accessibilityLabel="Close create menu" onPress={closeMenu} style={StyleSheet.absoluteFill}/>
     <Reanimated.View style={[styles.choiceSheet, popStyle]}>
-      {preparing ? (
-        <View style={styles.preparing} accessibilityLiveRegion="polite">
-          <PreparingRing label={preparing === 'video' ? 'Getting your video ready' : 'Getting it ready'} note={preparing === 'video' ? 'Shrinking it so it posts fast and plays everywhere.' : undefined} done={prepDone} />
-        </View>
-      ) : null}
       <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>Create</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeMenu} hitSlop={10}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
       {/* Catches a Photos problem before it turns into the cryptic iOS 3164
           error mid-pick, and links straight to the fix. */}
       <PermissionBanner needs={['photos']} />
       <Reanimated.View entering={arrive(0)}><Pressable accessibilityRole="button" accessibilityLabel="Create a clip" onPress={() => { setMode('clip'); void openDevice('video'); }} style={styles.choiceOption}>
-        <Ionicons name="videocam-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Clip</Text><Text style={styles.note}>Share a video from your device.</Text>
+        {preparing === 'video' ? <PreparingRing size={28} done={prepDone} /> : <Ionicons name="videocam-outline" size={28} color={colors.textMuted}/>}<Text style={styles.choiceLabel}>Clip</Text><Text style={styles.note}>{preparing === 'video' ? 'Getting your video ready — shrinking it so it posts fast.' : 'Share a video from your device.'}</Text>
       </Pressable></Reanimated.View>
       <Reanimated.View entering={arrive(1)}><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => { setMode('post'); void openDevice('all'); }} style={styles.choiceOption}>
-        <Ionicons name="images-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Post</Text><Text style={styles.note}>Choose from your photos and videos.</Text>
+        {preparing === 'all' ? <PreparingRing size={28} done={prepDone} /> : <Ionicons name="images-outline" size={28} color={colors.textMuted}/>}<Text style={styles.choiceLabel}>Post</Text><Text style={styles.note}>{preparing === 'all' ? 'Getting it ready…' : 'Choose from your photos and videos.'}</Text>
       </Pressable></Reanimated.View>
       {pickError ? <Text style={styles.pickError}>{pickError}</Text> : null}
       <Reanimated.View entering={arrive(2)}><Pressable accessibilityRole="button" accessibilityLabel="Take a hit" onPress={() => router.replace('/hit')} style={styles.choiceOption}>
@@ -392,7 +387,6 @@ export default function Compose() {
 const styleDefinitions = StyleSheet.create({
   choiceBackdrop: { flex: 1, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', padding: 20 },
   choiceSheet: { width: '100%', maxWidth: 400, borderRadius: 24, padding: 20, gap: 12, backgroundColor: colors.bg },
-  preparing: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 5, borderRadius: 24, alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: colors.bg },
   choiceHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8 },
   choiceTitle: { fontSize: 22, ...font('700'), color: colors.text },
   choiceOption: { padding: 20, gap: 8, borderRadius: 18, backgroundColor: colors.surface },
