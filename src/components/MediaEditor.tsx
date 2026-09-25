@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated as RNAnimated, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { Easing, FadeIn, FadeInUp, FadeOut, ReduceMotion, useAnimatedStyle, useFrameCallback, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInUp, FadeOut, ReduceMotion, useAnimatedStyle, useFrameCallback, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -155,8 +155,15 @@ export function MediaEditor({ media, initial, onBack, onDone, portraitRatio = 9 
   // Choosing a cover happens on a still: the video holds on whichever frame
   // is picked, and only plays again when you leave Cover.
   const [frozenAt, setFrozenAt] = useState<number | null>(null);
+  // Into or out of Crop the picture changes shape; it does so as a breath —
+  // a small step back and in again — rather than a jump.
+  const stageZoom = useSharedValue(1);
+  const stageZoomStyle = useAnimatedStyle(() => ({ transform: [{ scale: stageZoom.value }] }));
   const switchTool = (next: Tool) => {
     if (next === tool) return;
+    if ((next === 'crop') !== (tool === 'crop') && !reduced) {
+      stageZoom.value = withSequence(withTiming(0.94, { duration: 100, easing: Easing.in(Easing.quad) }), withTiming(1, { duration: 240, easing: Easing.out(Easing.cubic) }));
+    }
     setTool(next);
     if (next === 'crop') { holding.current = false; setFrozenAt(null); startPlayer(); return; }
     if (next === 'cover') {
@@ -1097,11 +1104,11 @@ export function MediaEditor({ media, initial, onBack, onDone, portraitRatio = 9 
       <View ref={stageRoot} style={styles.stage} onLayout={(e) => { const l = e.nativeEvent.layout; setStageSize((st) => (st.w === l.width && st.h === l.height ? st : { w: l.width, h: l.height })); }}>
         {/* A clip is shown in its post's shape; a photo gets the whole stage, so it can be as big as the screen allows. */}
         {/* A post's portrait frame is its own shape (4:5), sized to fit the stage, so what you frame here is what the feed shows. */}
-        <View style={!isVideo ? StyleSheet.absoluteFill : frame === 'landscape' ? styles.wideFrame : postPortrait || desktopWeb ? styles.tallFrame : StyleSheet.absoluteFill}>
+        <Animated.View style={[!isVideo ? StyleSheet.absoluteFill : frame === 'landscape' ? styles.wideFrame : postPortrait || desktopWeb ? styles.tallFrame : StyleSheet.absoluteFill, stageZoomStyle]}>
           <View style={[!isVideo ? StyleSheet.absoluteFill : frame === 'landscape' ? styles.wideBox : postPortrait ? postBox : desktopWeb ? styles.tallBox : StyleSheet.absoluteFill, isVideo && tool === 'crop' && { overflow: 'visible' as const }]} onLayout={(e) => setBox({ w: Math.max(1, e.nativeEvent.layout.width), h: Math.max(1, e.nativeEvent.layout.height) })}>
             {isVideo && media.uri ? (
               <View style={tool === 'crop' ? drawnStyle : cropLayer(crop)}>
-                <VideoSurface ref={player} uri={media.uri} muted={muted} volume={volume} rate={speed} fit={tool === 'crop' ? 'contain' : 'cover'} from={range[0]} to={duration ? range[1] : undefined} paused={frozenAt !== null || userPaused} onTime={onTime} onDuration={onDuration} onSize={onVidSize} />
+                <VideoSurface ref={player} uri={media.uri} muted={muted} volume={volume} rate={speed} fit="cover" from={range[0]} to={duration ? range[1] : undefined} paused={frozenAt !== null || userPaused} onTime={onTime} onDuration={onDuration} onSize={onVidSize} />
               </View>
             ) : media.uri && nat ? (
               // The whole stage takes the drag and the pinch, not only the box;
@@ -1149,7 +1156,7 @@ export function MediaEditor({ media, initial, onBack, onDone, portraitRatio = 9 
               </GestureDetector>
             ) : null}
           </View>
-        </View>
+        </Animated.View>
         {isVideo && (tool === 'trim' || tool === 'speed' || tool === 'sound') ? (
           // A tap anywhere on the picture pauses or plays.
           <Pressable accessibilityRole="button" accessibilityLabel={userPaused ? 'Play' : 'Pause'} onPress={togglePause} style={StyleSheet.absoluteFill} />
