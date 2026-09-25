@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Screen } from '@/components/ui';
 import { useTheme, themeList, themes, type ThemeName } from '@/theme/ThemeProvider';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, font } from '@/theme';
 
 /** Every court, with a swatch and a line on what it is, on its own page. */
 export default function ThemePage() {
@@ -23,8 +23,8 @@ export default function ThemePage() {
     <Screen title="Theme" compactTitle onBack={() => goBack()}>
       <Text style={styles.lead}>Applies everywhere straight away. Pick the court you would rather be on.</Text>
       <View style={styles.list}>
-        {themeList.map((option) => (
-          <ThemeCard key={option.name} option={option} active={(chosen ?? theme) === option.name} onPick={() => { haptics.tap(); setChosen(option.name); setTimeout(() => setTheme(option.name), 16); }} styles={styles} />
+        {themeList.map((option, index) => (
+          <React.Fragment key={option.name}>{index > 0 ? <View style={styles.rule} /> : null}<ThemeCard option={option} active={(chosen ?? theme) === option.name} onPick={() => { haptics.tap(); setChosen(option.name); setTimeout(() => setTheme(option.name), 16); }} styles={styles} /></React.Fragment>
         ))}
       </View>
     </Screen>
@@ -33,32 +33,21 @@ export default function ThemePage() {
 
 const styleDefinitions = StyleSheet.create({
   lead: { ...typography.small, color: colors.textMuted, lineHeight: 20, paddingBottom: spacing.lg },
-  list: { gap: spacing.sm },
+  list: { borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
+    gap: spacing.lg,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.lg,
   },
-  cardActive: { borderColor: colors.brand },
-  swatch: {
-    width: 58,
-    height: 58,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    padding: 8,
-    justifyContent: 'space-between',
-  },
-  swatchBar: { height: 6, borderRadius: 3 },
-  swatchRow: { flexDirection: 'row', gap: 4 },
-  swatchDot: { width: 10, height: 10, borderRadius: 5 },
-  name: { ...typography.bodyStrong, color: colors.text },
+  cardActive: {},
+  swatch: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, overflow: 'hidden' },
+  swatchHalf: { position: 'absolute', top: -10, bottom: -10, left: -6, width: 34, transform: [{ rotate: '18deg' }] },
+  rule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: spacing.lg + 44 + spacing.lg },
+  name: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text },
   blurb: { ...typography.small, color: colors.textMuted },
-  ring: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: colors.borderStrong },
+  ring: { width: 22, height: 22, borderRadius: 11, borderWidth: 1, borderColor: colors.borderStrong },
 });
 
 /**
@@ -91,13 +80,9 @@ function ThemeCard({ option, active, onPick, styles }: { option: (typeof themeLi
   return (
     <Pressable accessibilityRole="radio" accessibilityState={{ selected: active }} accessibilityLabel={`${option.label} theme`} onPress={onPick}>
       <Animated.View style={[styles.card, cardStyle]}>
-        <Animated.View style={[styles.swatch, { backgroundColor: palette.bg, borderColor: palette.border }, swatchStyle]}>
-          <View style={[styles.swatchBar, { backgroundColor: palette.brand }]} />
-          <View style={styles.swatchRow}>
-            <View style={[styles.swatchDot, { backgroundColor: palette.court }]} />
-            <View style={[styles.swatchDot, { backgroundColor: palette.hard }]} />
-            <View style={[styles.swatchDot, { backgroundColor: palette.clay }]} />
-          </View>
+        {/* The palette itself, not a diagram of it: the court's colour on its own paper. */}
+        <Animated.View style={[styles.swatch, { backgroundColor: palette.surfaceAlt, borderColor: palette.borderStrong }, swatchStyle]}>
+          <View style={[styles.swatchHalf, { backgroundColor: palette.brand }]} />
         </Animated.View>
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={styles.name}>{option.label}</Text>
