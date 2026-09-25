@@ -5,7 +5,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { DragSheet } from '@/components/DragSheet';
-import { LocationLink, LocationSearch } from '@/components/LocationChip';
+import { LocationLink } from '@/components/LocationChip';
+import { openPlacePicker } from '@/features/places/picker';
 import { TagPlayers } from '@/components/TagPlayers';
 import { Button, Field } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
@@ -29,7 +30,6 @@ export default function EditPost() {
   const [title, setTitle] = useState(question?.title ?? '');
   const [tagged, setTagged] = useState<string[]>(post?.taggedUserIds ?? []);
   const [location, setLocation] = useState(post?.location ?? '');
-  const [placeOpen, setPlaceOpen] = useState(false);
   const [closeSignal, setCloseSignal] = useState(0);
 
   const canSave = mine && (isQuestion ? title.trim().length >= 3 : true);
@@ -64,8 +64,7 @@ export default function EditPost() {
           </>
         ) : (
           <>
-            <Field label="Caption" labelRight={<LocationLink value={location} onPress={() => setPlaceOpen(true)} onClear={() => setLocation('')} />} value={body} onChangeText={setBody} placeholder="Write a caption…" multiline minHeight={80} mentions />
-            {placeOpen ? <LocationSearch value={location} onChange={(next) => { setLocation(next); setPlaceOpen(false); }} onCancel={() => setPlaceOpen(false)} /> : null}
+            <Field label="Caption" labelRight={<LocationLink value={location} onPress={() => openPlacePicker(setLocation, location)} onClear={() => setLocation('')} />} value={body} onChangeText={setBody} placeholder="Write a caption…" multiline minHeight={80} mentions />
             <TagPlayers tagged={tagged} onChange={setTagged} />
           </>
         )}

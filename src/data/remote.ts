@@ -1145,7 +1145,7 @@ export async function uploadMedia(me: ID, uri: string, kind: 'photo' | 'video', 
     const size = await fetch(uri).then((r) => r.blob()).then((b) => b.size).catch(() => 0);
     if (size > MAX_UPLOAD_BYTES) {
       const mb = Math.round(size / 1024 / 1024);
-      throw new Error(`This ${kind} is ${mb} MB; the limit is ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB. Trim it shorter in the editor.`);
+      throw new Error(`This ${kind} is ${mb} MB; the limit is ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB. Pick a shorter one — about a minute or less.`);
     }
     const contentType = Platform.OS === 'web'
       ? ((await fetch(uri, { method: 'HEAD' }).catch(() => null))?.headers.get('content-type') || guessType(uri, kind)).split(';')[0].trim()
@@ -1168,7 +1168,7 @@ export async function uploadMedia(me: ID, uri: string, kind: 'photo' | 'video', 
   } catch (error) {
     fail('media upload')(error);
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(/exceeded the maximum allowed size/i.test(message) ? `This ${kind} is over the ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB limit. Trim it shorter in the editor.` : message);
+    throw new Error(/exceeded the maximum allowed size/i.test(message) ? `This ${kind} is over the ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB limit. Pick a shorter one — about a minute or less.` : message);
   }
 }
 
