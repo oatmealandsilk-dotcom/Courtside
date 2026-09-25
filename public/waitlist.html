@@ -471,7 +471,10 @@
     .row-2 { grid-template-columns: 1fr; }
     .bar { padding-top: 18px; padding-bottom: 18px; }
     .btn-quiet { padding: 10px 14px; font-size: 14px; }
-    .theme-menu { width: min(272px, calc(100vw - 40px)); }
+    /* On a phone the menu hangs from the whole bar, not the little button. */
+    .theme-pick { position: static; }
+    .theme-menu { left: 20px; right: 20px; width: auto; top: calc(100% + 8px); transform-origin: top center; }
+    .theme-menu button { padding: 8px 10px; }
     .fb-form .btn { width: 100%; }
     .spot { padding: 18px; }
     /* On a phone: mark and place on the first line, the words underneath. */
