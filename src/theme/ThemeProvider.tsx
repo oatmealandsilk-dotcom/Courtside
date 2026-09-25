@@ -96,8 +96,8 @@ export const themes: Record<ThemeName, Palette> = {
 
 export const themeList: { name: ThemeName; label: string; blurb: string }[] = [
   { name: 'default', label: 'CourtSide', blurb: 'Warm neutrals, club green' },
-  { name: 'clean', label: 'Clean', blurb: 'Plain white, black text' },
   { name: 'night', label: 'Night', blurb: 'Dark, for late sessions' },
+  { name: 'clean', label: 'Clean', blurb: 'Plain white, black text' },
   { name: 'ao', label: 'Australian Open', blurb: 'Blue hard court' },
   { name: 'roland-garros', label: 'Roland Garros', blurb: 'Crushed brick clay' },
   { name: 'wimbledon', label: 'Wimbledon', blurb: 'Grass green and purple' },
