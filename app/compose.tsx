@@ -13,7 +13,7 @@ import { PermissionBanner } from '@/components/PermissionRows';
 import { SheetBackdrop } from '@/components/SheetBackdrop';
 import { TOPIC_META } from '@/components/QuestionCard';
 import { Button, Chip, Field, Screen } from '@/components/ui';
-import { LocationChip } from '@/components/LocationChip';
+import { LocationLink, LocationSearch } from '@/components/LocationChip';
 import { TagPlayers } from '@/components/TagPlayers';
 import { addToBank, getBank } from '@/features/compose/mediaBank';
 import { useApp } from '@/store/AppContext';
@@ -88,6 +88,7 @@ export default function Compose() {
   // People tagged in the post: chips under the caption, added from a short search.
   const [tagged, setTagged] = useState<string[]>([]);
   const [location, setLocation] = useState('');
+  const [placeOpen, setPlaceOpen] = useState(false);
   const [questionTitle, setQuestionTitle] = useState('');
   const [topic, setTopic] = useState<QuestionTopic>('gear');
 
@@ -313,6 +314,8 @@ export default function Compose() {
                   </View>
                 ) : null}
                 <Field
+                  label={mode !== 'story' && mode !== 'hit' ? 'Caption' : undefined}
+                  labelRight={mode !== 'story' && mode !== 'hit' ? <LocationLink value={location} onPress={() => setPlaceOpen(true)} onClear={() => setLocation('')} /> : undefined}
                   value={body}
                   onChangeText={setBody}
                   placeholder={mode === 'story' ? 'Add a line (optional)' : mode === 'hit' ? 'How did it go? (optional)' : 'Write a caption…'}
@@ -320,8 +323,7 @@ export default function Compose() {
                   minHeight={64}
                   mentions
                 />
-
-                {mode !== 'story' && mode !== 'hit' ? <LocationChip value={location} onChange={setLocation} /> : null}
+                {placeOpen && mode !== 'story' && mode !== 'hit' ? <LocationSearch value={location} onChange={(next) => { setLocation(next); setPlaceOpen(false); }} onCancel={() => setPlaceOpen(false)} /> : null}
                 {mode !== 'story' && mode !== 'hit' ? <TagPlayers tagged={tagged} onChange={setTagged} /> : null}
 
                 {mode !== 'story' && mode !== 'hit' ? (
