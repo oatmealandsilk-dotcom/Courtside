@@ -776,12 +776,13 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                 const isSaved = saved.questionIds.includes(item.question.id);
                 return (
                   <View key={item.question.id} style={[styles.article, styles.threadArticle, scope && styles.articleScoped]}>
+                    <Wash height={300} strength={0.6} />
                     <View style={styles.eyebrowRow}>
                       <Text style={styles.eyebrow}>FROM THE COMMUNITY</Text>
                       {hiddenMarks.has(item.question.id) ? <View style={{ width: 34, height: 34 }} /> : <TapAway label="Hide the CourtSide logo" onHidden={() => hideMark(item.question.id)} style={styles.threadMark}><BrandMark size={34} /></TapAway>}
                     </View>
                     {strip}
-                    <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: strip ? 'flex-start' : 'center' }}>
+                    <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: 'flex-start' }}>
                       <QuestionCard
                         showBody
                         brandCorner
@@ -844,12 +845,13 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               if (post.kind !== 'clip') {
                 return (
                   <View key={post.id} style={[styles.article, scope && styles.articleScoped, !phone && styles.articleCentred]}>
+                    <Wash height={300} strength={0.6} />
                     {/* Inside one person's posts the feed label means nothing, and the back chevron wants the room. */}
                     {scope ? null : <Text style={styles.eyebrow}>
                       {post.kind === 'match' ? 'SET PLAY' : post.kind.toUpperCase()} · FOR YOU
                     </Text>}
                     {strip}
-                    <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: strip ? 'flex-start' : 'center' }}>
+                    <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: 'flex-start' }}>
                       <PostCard
                         post={post}
                         author={author}
