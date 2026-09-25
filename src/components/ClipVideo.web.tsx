@@ -6,13 +6,27 @@ export interface ClipVideoHandle { seek: (seconds: number) => void; player: null
 export const ClipVideo = forwardRef<ClipVideoHandle, {
   uri: string; poster?: string; active?: boolean; muted?: boolean; paused?: boolean; fit?: 'cover' | 'contain';
   trimStart?: number; trimEnd?: number;
+  /** The author's playback edits, honoured by the element rather than cut into the file: a rate (1 is normal) and a level (0–1). */
+  speed?: number; volume?: number;
   onProgress?: (fraction: number, seconds: number, length: number) => void;
   onReady?: (ready: boolean) => void;
   onSize?: (width: number, height: number) => void;
   /** The clip left the page (or was swapped for another): whatever it had fetched is gone with it. */
   onGone?: () => void;
-}>(function ClipVideo({ uri, poster, active = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, onProgress, onReady, onSize, onGone }, ref) {
+}>(function ClipVideo({ uri, poster, active = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, speed, volume, onProgress, onReady, onSize, onGone }, ref) {
   const el = useRef<HTMLVideoElement>(null);
+  // Rate and level are set on the element, and set again whenever it reloads
+  // its file (Safari does on some seeks), so a half-speed clip stays half speed.
+  const tuning = useRef({ speed, volume });
+  tuning.current = { speed, volume };
+  const applyTuning = (video: HTMLVideoElement) => {
+    const rate = tuning.current.speed ?? 1;
+    video.playbackRate = rate;
+    video.defaultPlaybackRate = rate;
+    video.preservesPitch = true;
+    video.volume = tuning.current.volume ?? 1;
+  };
+  useEffect(() => { if (el.current) applyTuning(el.current); }, [speed, volume]);
   useImperativeHandle(ref, () => ({ seek: (seconds) => { if (el.current) el.current.currentTime = seconds; }, player: null }), []);
   // A trimmed clip starts on its first kept frame. Moved there before it plays
   // (and as soon as the file's length is known), so it never shows a moment
@@ -42,7 +56,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
       latest.current.onProgress?.(Math.max(0, Math.min(1, (video.currentTime - trimStart) / length)), video.currentTime - trimStart, length);
     };
     const ready = () => latest.current.onReady?.(true);
-    const sized = () => { toKeptStart(video); if (video.videoWidth && video.videoHeight) latest.current.onSize?.(video.videoWidth, video.videoHeight); };
+    const sized = () => { toKeptStart(video); applyTuning(video); if (video.videoWidth && video.videoHeight) latest.current.onSize?.(video.videoWidth, video.videoHeight); };
     video.addEventListener('loadedmetadata', sized);
     if (video.videoWidth) sized();
     // The browser reports the time only about four times a second, so the

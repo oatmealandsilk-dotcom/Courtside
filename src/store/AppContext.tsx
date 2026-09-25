@@ -80,6 +80,8 @@ interface NewPostInput {
   trimEnd?: number;
   crop?: MediaCrop;
   muted?: boolean;
+  speed?: number;
+  volume?: number;
   body: string;
   tags: string[];
   match?: MatchResult;

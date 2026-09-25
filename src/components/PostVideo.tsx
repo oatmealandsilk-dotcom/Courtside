@@ -32,8 +32,10 @@ function clock(seconds: number) {
  * middle, a time line with the time along the bottom, sound, and a corner
  * button for full screen. They fade away on their own. Two taps like it.
  */
-export function PostVideo({ uri, poster, active, preload = false, trimStart, trimEnd, silent = false, onDoubleTap, discInk, onReady, onSize, crop }: {
+export function PostVideo({ uri, poster, active, preload = false, trimStart, trimEnd, speed, volume, silent = false, onDoubleTap, discInk, onReady, onSize, crop }: {
   uri: string; poster?: string; active: boolean; preload?: boolean; trimStart?: number; trimEnd?: number; silent?: boolean;
+  /** The author's rate (1 is normal) and level (0–1), honoured at playback. */
+  speed?: number; volume?: number;
   onDoubleTap?: () => void; discInk?: string;
   onReady?: (ready: boolean) => void;
   onSize?: (width: number, height: number) => void;
@@ -236,7 +238,7 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
     <View ref={rootRef} style={StyleSheet.absoluteFill} onPointerEnter={desktopWeb ? hoverIn : undefined} onPointerLeave={desktopWeb ? hoverOut : undefined}>
       <View style={cropLayer(crop)}>
         {/* The page is told only "in" and, when the player is freed, "gone"; a stall mid-play is this player's own spinner. */}
-        <ClipVideo ref={player} uri={uri} poster={poster} active={active && !ownCopy} muted={silent || muted || !active || ownCopy} paused={paused} fit="cover" trimStart={trimStart} trimEnd={trimEnd}
+        <ClipVideo ref={player} uri={uri} poster={poster} active={active && !ownCopy} muted={silent || muted || !active || ownCopy} paused={paused} fit="cover" trimStart={trimStart} trimEnd={trimEnd} speed={speed} volume={volume}
           onProgress={onProgress}
           onReady={(ok) => { setReady(ok); if (ok) onReady?.(true); }} onGone={() => onReady?.(false)} onSize={onSize} />
       </View>
@@ -255,7 +257,7 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
               <View style={cropLayer(crop)}><VideoView player={shared} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} allowsPictureInPicture={false} /></View>
             ) : (
               // In a browser full screen plays its own copy, so the line and the clock follow that copy.
-              <View style={cropLayer(crop)}><ClipVideo uri={uri} poster={poster} active={full} muted={silent || muted} paused={paused} fit="contain" trimStart={trimStart} trimEnd={trimEnd} onProgress={onProgress} /></View>
+              <View style={cropLayer(crop)}><ClipVideo uri={uri} poster={poster} active={full} muted={silent || muted} paused={paused} fit="contain" trimStart={trimStart} trimEnd={trimEnd} speed={speed} volume={volume} onProgress={onProgress} /></View>
             )}
             <Pressable accessibilityRole="button" accessibilityLabel="Show video controls" onPress={(e) => tap(e.nativeEvent.locationX)} style={StyleSheet.absoluteFill} />
             {controls}

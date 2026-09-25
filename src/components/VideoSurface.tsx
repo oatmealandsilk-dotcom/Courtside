@@ -22,11 +22,14 @@ export const VideoSurface = forwardRef<VideoSurfaceHandle, {
   to?: number;
   /** Hold on the current frame; looping and auto-play stand down. */
   paused?: boolean;
+  /** How fast it plays (1 is normal) and how loud its own sound is (0–1), previewed live. */
+  rate?: number;
+  volume?: number;
   onTime?: (seconds: number) => void;
   onDuration?: (seconds: number) => void;
   /** The video's own width and height in pixels, once known. */
   onSize?: (width: number, height: number) => void;
-}>(function VideoSurface({ uri, muted = false, fit = 'contain', from = 0, to, paused = false, onTime, onDuration, onSize }, ref) {
+}>(function VideoSurface({ uri, muted = false, fit = 'contain', from = 0, to, paused = false, rate, volume, onTime, onDuration, onSize }, ref) {
   // Made and freed by hand, the same way the feed's clips are: the toolkit's
   // hook freed a still-playing player when the editor closed, and on iPhone
   // its sound could run on and pop up later. Here it is silenced and stopped
@@ -50,6 +53,10 @@ export const VideoSurface = forwardRef<VideoSurfaceHandle, {
     return () => sub.remove();
   }, [player, from, paused]);
   useEffect(() => { safely(() => { player.muted = muted; }); }, [player, muted]);
+  // Speed and level are settings on the player, kept apart from the listener
+  // effect so changing one never pauses and replays the picture.
+  useEffect(() => { safely(() => { player.playbackRate = rate ?? 1; player.preservesPitch = true; }); }, [player, rate]);
+  useEffect(() => { safely(() => { player.volume = volume ?? 1; }); }, [player, volume]);
   const latestSize = useRef(onSize);
   latestSize.current = onSize;
   useEffect(() => {

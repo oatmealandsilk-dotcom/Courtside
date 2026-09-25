@@ -10,8 +10,10 @@ import type { MediaCrop } from '@/data/types';
 /** Swipe away and back within this long and the clip picks up where it was; longer and it starts over. */
 const RESUME_WINDOW_MS = 3000;
 
-function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop }: {
+function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop }: {
   uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void; fit?: 'cover' | 'contain'; trimStart?: number; trimEnd?: number; silent?: boolean;
+  /** The author's rate (1 is normal) and level (0–1), honoured at playback. */
+  speed?: number; volume?: number;
   /** Nothing over the picture at all: no sound disc, no length line. */
   bare?: boolean;
   /** Colour of the sound icon; with it the disc wears the page colour, like the wordmark pill. */
@@ -76,6 +78,15 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
     }
     return () => el.pause();
   }, [active, paused, trimStart]);
+  // The author's speed and level, on the element; pitch is kept so voices stay voices.
+  useEffect(() => {
+    const el = video.current;
+    if (!el) return;
+    el.playbackRate = speed ?? 1;
+    el.defaultPlaybackRate = speed ?? 1;
+    el.preservesPitch = true;
+    el.volume = volume ?? 1;
+  }, [speed, volume]);
   useEffect(() => { if (!active) setPaused(false); }, [active]);
   // Space bar on a computer: play / pause the clip on screen.
   useEffect(() => { if (!active) return; return onSpaceBar(() => setPaused((p) => !p)); }, [active]);

@@ -80,9 +80,12 @@ export default function Compose() {
   // A post is 4:5 upright, the way the feed shows it; a clip and a story fill a phone screen (9:16).
   const portraitRatio = mode === 'post' ? 4 / 5 : 9 / 16;
   const [media, setMedia] = useState<PickedMedia | null>(isHit ? { uri: shotUri as string, label: 'Instant', kind: 'photo', thumbnailUrl: shotUri as string, orientation: 'portrait' } : null);
+  // The pick as it came off the device. The editor always opens on this, so
+  // a cut photo is never cut twice and a clip's edits can be revisited.
+  const [picked, setPicked] = useState<PickedMedia | null>(null);
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
-  // What the edit step decided: where a clip starts and stops, and whether it has sound.
-  const [edit, setEdit] = useState<Pick<EditedMedia, 'trimStart' | 'trimEnd' | 'muted' | 'crop'>>({});
+  // What the edit step decided: where a clip starts and stops, how fast and how loud it plays, and its crop.
+  const [edit, setEdit] = useState<Pick<EditedMedia, 'trimStart' | 'trimEnd' | 'muted' | 'volume' | 'speed' | 'crop' | 'coverAt'>>({});
   const [body, setBody] = useState('');
   const [minutes, setMinutes] = useState('');
   // People tagged in the post: chips under the caption, added from a short search.
@@ -127,7 +130,8 @@ export default function Compose() {
     actions.addPost({
       kind: mode === 'clip' ? 'clip' : 'note',
       orientation,
-      ...edit,
+      // The cover's moment is the editor's own bookmark, not part of the post.
+      trimStart: edit.trimStart, trimEnd: edit.trimEnd, muted: edit.muted, volume: edit.volume, speed: edit.speed, crop: edit.crop,
       body: body.trim(),
       tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
       taggedUserIds: tagged.length ? tagged : undefined,
@@ -147,6 +151,7 @@ export default function Compose() {
   const pick = (next: PickedMedia | null) => {
     if (!next) return;
     addToBank(next);
+    setPicked(next);
     setMedia(next);
     setOrientation(next.orientation ?? 'portrait');
     setEdit({});
@@ -206,16 +211,25 @@ export default function Compose() {
   </View>;
 
   if (stage === 'edit' && media) {
+    // Back from the caption, the editor reopens on the original pick with
+    // everything it decided last time still in place. A photo's zoom, turn
+    // and drag are not carried back (it reopens uncut); its frame choice is.
+    const source = picked ?? media;
+    const returning = media !== source;
+    const initial = source.kind === 'video'
+      ? { ...edit, orientation: returning ? orientation : undefined, cover: media.thumbnailUrl }
+      : { orientation: returning ? orientation : undefined };
     return (
       <View style={[styles.backdrop, { backgroundColor: '#000' }]}>
         <MediaEditor
-          media={media}
+          media={source}
           portraitRatio={portraitRatio}
+          initial={initial}
           onBack={() => setStage('choose')}
           onDone={(result) => {
             setMedia(result.media);
             setOrientation(result.orientation);
-            setEdit({ trimStart: result.trimStart, trimEnd: result.trimEnd, muted: result.muted, crop: result.crop });
+            setEdit({ trimStart: result.trimStart, trimEnd: result.trimEnd, muted: result.muted, volume: result.volume, speed: result.speed, crop: result.crop, coverAt: result.coverAt });
             setStage('form');
           }}
         />

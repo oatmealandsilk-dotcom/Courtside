@@ -67,6 +67,8 @@ interface PostRow {
   orientation?: string | null;
   trim_start?: number | string | null; trim_end?: number | string | null; muted?: boolean | null; pinned?: boolean | null;
   crop?: { scale: number; x: number; y: number } | null;
+  /** Numeric columns arrive as strings, as trim_start does. */
+  speed?: number | string | null; volume?: number | string | null;
   location?: string | null; edited_at?: string | null;
   post_likes?: { user_id: string }[]; post_saves?: { user_id: string }[]; comments?: { id: string }[];
 }
@@ -137,8 +139,11 @@ const toPost = (row: PostRow): Post => ({
   orientation: (row.orientation as 'portrait' | 'landscape' | null) ?? undefined,
   trimStart: row.trim_start != null ? Number(row.trim_start) : undefined,
   trimEnd: row.trim_end != null ? Number(row.trim_end) : undefined,
-  muted: row.muted || undefined,
-  crop: row.crop && row.crop.scale > 1 ? row.crop : undefined,
+  muted: row.muted || (row.volume != null && Number(row.volume) === 0) || undefined,
+  // A shift with no zoom is still a crop; only an untouched one is dropped.
+  crop: row.crop && (row.crop.scale > 1.001 || !!row.crop.x || !!row.crop.y) ? row.crop : undefined,
+  speed: row.speed != null && Number(row.speed) !== 1 ? Number(row.speed) : undefined,
+  volume: row.volume != null && Number(row.volume) > 0 && Number(row.volume) < 1 ? Number(row.volume) : undefined,
   taggedUserIds: row.tagged_user_ids?.length ? row.tagged_user_ids : undefined,
   match: row.match ?? undefined,
   session: row.session ?? undefined,
@@ -454,6 +459,16 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
 const fail = (what: string) => (error: unknown) => {
   console.warn(`[remote] ${what} failed`, error);
 };
+
+/** The edits a post can carry, and the migration file that adds each one's column. */
+const OPTIONAL_COLUMNS = /trim_|muted|crop|location|speed|volume/;
+const MIGRATION_FOR: Record<string, string> = {
+  trim_start: '20260916000002_post_trim.sql', trim_end: '20260916000002_post_trim.sql', muted: '20260916000002_post_trim.sql',
+  crop: '20260916000003_post_crop.sql', location: '20260916000004_post_edit.sql',
+  speed: '20260925000026_post_speed_volume.sql', volume: '20260925000026_post_speed_volume.sql',
+};
+const missingColumnsNote = (cols: string[]) =>
+  `[remote] The posts table has no "${cols.join('", "')}" column yet, so this post was saved without that edit (it still went up). To keep it next time, open Supabase → SQL Editor → New query, paste the file supabase/migrations/${MIGRATION_FOR[cols[0]] ?? '…'} and press Run. It is safe to run more than once.`;
 
 export const remote = {
   /* ------------------------ discussions and coaching ------------------------ */
@@ -843,31 +858,45 @@ export const remote = {
       video_url: post.videoUrl ?? null,
       thumbnail_url: post.thumbnailUrl ?? null,
       orientation: post.orientation ?? null,
-      // Only sent when set, so a plain post still saves on a database that
-      // has not had the trim columns added yet.
       match: post.match ?? null,
       session: post.session ?? null,
       tags: post.tags,
       tagged_user_ids: post.taggedUserIds ?? [],
       created_at: post.createdAt,
     };
-    const trim = {
+    // The edits a clip carries, only sent when set. Each column came with its
+    // own migration; one the database does not know yet is dropped on its
+    // own and the post still goes up, minus that one edit.
+    const extras: Record<string, unknown> = {
       ...(post.trimStart !== undefined ? { trim_start: post.trimStart, trim_end: post.trimEnd ?? null } : {}),
       ...(post.muted ? { muted: true } : {}),
       ...(post.crop ? { crop: post.crop } : {}),
       ...(post.location ? { location: post.location } : {}),
+      ...(post.speed && post.speed !== 1 ? { speed: post.speed } : {}),
+      ...(post.volume !== undefined && post.volume > 0 && post.volume < 1 ? { volume: post.volume } : {}),
     };
-    const { error } = await need().from('posts').insert({ ...row, ...trim });
-    if (!error) return;
-    // The trim columns arrive with a migration; until it has run, save the
-    // post without them rather than losing it. The clip plays untrimmed.
-    if (Object.keys(trim).length && /trim_|muted|crop|location/.test(error.message)) {
-      console.warn('[remote] trim columns missing; run the pending migration — saving the post untrimmed');
-      const retry = await need().from('posts').insert(row);
-      if (retry.error) fail('post insert')(retry.error);
+    const sending = { ...extras };
+    const dropped: string[] = [];
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const { error } = await need().from('posts').insert({ ...row, ...sending });
+      if (!error) { if (dropped.length) console.warn(missingColumnsNote(dropped)); return; }
+      // PostgREST names the column it does not know: "Could not find the 'speed' column of 'posts' in the schema cache".
+      const named = /'([a-z_]+)' column/.exec(error.message)?.[1] ?? /column "?([a-z_]+)"?/.exec(error.message)?.[1];
+      if (named && named in sending) {
+        delete sending[named];
+        if (named === 'trim_start') delete sending.trim_end;
+        dropped.push(named);
+        continue;
+      }
+      // A message about one of ours that names no column: send the post bare.
+      if (Object.keys(sending).length && OPTIONAL_COLUMNS.test(error.message)) {
+        dropped.push(...Object.keys(sending));
+        for (const key of Object.keys(sending)) delete sending[key];
+        continue;
+      }
+      fail('post insert')(error);
       return;
     }
-    fail('post insert')(error);
   },
 
   async deletePost(postId: ID) {
