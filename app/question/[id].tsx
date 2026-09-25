@@ -153,7 +153,7 @@ export default function QuestionDetail() {
 }
 
 const styleDefinitions = StyleSheet.create({
-  questionCard: { gap: spacing.md, borderWidth: 0, borderRadius: 0, backgroundColor: colors.bg, paddingHorizontal: 0, paddingBottom: 24, borderBottomWidth: 1, borderBottomColor: colors.border },
+  questionCard: { gap: spacing.md, borderWidth: 0, borderRadius: 0, backgroundColor: 'transparent', paddingHorizontal: 0, paddingBottom: 24, borderBottomWidth: 1, borderBottomColor: colors.border },
   askerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   replyButton: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36 },
   inlineComposer: { gap: 8, paddingTop: spacing.xs },
