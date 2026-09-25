@@ -1,520 +1,700 @@
 {
  "schemaVersion": 2,
- "generatedAt": "2026-09-20T04:04:51Z",
+ "generatedAt": "2026-09-25T15:41:45.888Z",
  "title": "Design System: CourtSide",
  "extensions": {
   "colorMeta": {
    "bg": {
     "role": "neutral",
     "displayName": "Ball Can Cream",
-    "canonical": "oklch(97.6% 0.007 97.4)",
+    "canonical": "oklch(96.7% 0.026 355.9)",
     "tonalRamp": [
-     "oklch(15.0% 0.007 97.4)",
-     "oklch(26.4% 0.007 97.4)",
-     "oklch(37.9% 0.007 97.4)",
-     "oklch(49.3% 0.007 97.4)",
-     "oklch(60.7% 0.007 97.4)",
-     "oklch(72.1% 0.007 97.4)",
-     "oklch(83.6% 0.007 97.4)",
-     "oklch(95.0% 0.007 97.4)"
+     "oklch(15.0% 0.026 355.9)",
+     "oklch(26.4% 0.026 355.9)",
+     "oklch(37.9% 0.026 355.9)",
+     "oklch(49.3% 0.026 355.9)",
+     "oklch(60.7% 0.026 355.9)",
+     "oklch(72.1% 0.026 355.9)",
+     "oklch(83.6% 0.026 355.9)",
+     "oklch(95.0% 0.026 355.9)"
     ]
    },
    "bg-elevated": {
     "role": "neutral",
     "displayName": "Raised Cream",
-    "canonical": "oklch(95.1% 0.012 96.4)",
+    "canonical": "oklch(94.3% 0.024 10.0)",
     "tonalRamp": [
-     "oklch(15.0% 0.012 96.4)",
-     "oklch(26.4% 0.012 96.4)",
-     "oklch(37.9% 0.012 96.4)",
-     "oklch(49.3% 0.012 96.4)",
-     "oklch(60.7% 0.012 96.4)",
-     "oklch(72.1% 0.012 96.4)",
-     "oklch(83.6% 0.012 96.4)",
-     "oklch(95.0% 0.012 96.4)"
+     "oklch(15.0% 0.024 10.0)",
+     "oklch(26.4% 0.024 10.0)",
+     "oklch(37.9% 0.024 10.0)",
+     "oklch(49.3% 0.024 10.0)",
+     "oklch(60.7% 0.024 10.0)",
+     "oklch(72.1% 0.024 10.0)",
+     "oklch(83.6% 0.024 10.0)",
+     "oklch(95.0% 0.024 10.0)"
     ]
    },
    "surface": {
     "role": "neutral",
     "displayName": "Warm Sand",
-    "canonical": "oklch(96.0% 0.012 96.4)",
+    "canonical": "oklch(95.2% 0.024 9.6)",
     "tonalRamp": [
-     "oklch(15.0% 0.012 96.4)",
-     "oklch(26.4% 0.012 96.4)",
-     "oklch(37.9% 0.012 96.4)",
-     "oklch(49.3% 0.012 96.4)",
-     "oklch(60.7% 0.012 96.4)",
-     "oklch(72.1% 0.012 96.4)",
-     "oklch(83.6% 0.012 96.4)",
-     "oklch(95.0% 0.012 96.4)"
+     "oklch(15.0% 0.024 9.6)",
+     "oklch(26.4% 0.024 9.6)",
+     "oklch(37.9% 0.024 9.6)",
+     "oklch(49.3% 0.024 9.6)",
+     "oklch(60.7% 0.024 9.6)",
+     "oklch(72.1% 0.024 9.6)",
+     "oklch(83.6% 0.024 9.6)",
+     "oklch(95.0% 0.024 9.6)"
     ]
    },
    "surface-alt": {
     "role": "neutral",
     "displayName": "Warm Sand Deep",
-    "canonical": "oklch(92.4% 0.016 95.2)",
+    "canonical": "oklch(91.6% 0.023 22.1)",
     "tonalRamp": [
-     "oklch(15.0% 0.016 95.2)",
-     "oklch(26.4% 0.016 95.2)",
-     "oklch(37.9% 0.016 95.2)",
-     "oklch(49.3% 0.016 95.2)",
-     "oklch(60.7% 0.016 95.2)",
-     "oklch(72.1% 0.016 95.2)",
-     "oklch(83.6% 0.016 95.2)",
-     "oklch(95.0% 0.016 95.2)"
+     "oklch(15.0% 0.023 22.1)",
+     "oklch(26.4% 0.023 22.1)",
+     "oklch(37.9% 0.023 22.1)",
+     "oklch(49.3% 0.023 22.1)",
+     "oklch(60.7% 0.023 22.1)",
+     "oklch(72.1% 0.023 22.1)",
+     "oklch(83.6% 0.023 22.1)",
+     "oklch(95.0% 0.023 22.1)"
     ]
    },
    "border": {
     "role": "neutral",
     "displayName": "Hairline Tan",
-    "canonical": "oklch(87.7% 0.020 87.5)",
+    "canonical": "oklch(87.0% 0.026 30.8)",
     "tonalRamp": [
-     "oklch(15.0% 0.020 87.5)",
-     "oklch(26.4% 0.020 87.5)",
-     "oklch(37.9% 0.020 87.5)",
-     "oklch(49.3% 0.020 87.5)",
-     "oklch(60.7% 0.020 87.5)",
-     "oklch(72.1% 0.020 87.5)",
-     "oklch(83.6% 0.020 87.5)",
-     "oklch(95.0% 0.020 87.5)"
+     "oklch(15.0% 0.026 30.8)",
+     "oklch(26.4% 0.026 30.8)",
+     "oklch(37.9% 0.026 30.8)",
+     "oklch(49.3% 0.026 30.8)",
+     "oklch(60.7% 0.026 30.8)",
+     "oklch(72.1% 0.026 30.8)",
+     "oklch(83.6% 0.026 30.8)",
+     "oklch(95.0% 0.026 30.8)"
     ]
    },
    "border-strong": {
     "role": "neutral",
     "displayName": "Strong Tan",
-    "canonical": "oklch(75.7% 0.027 84.6)",
+    "canonical": "oklch(75.1% 0.029 48.4)",
     "tonalRamp": [
-     "oklch(15.0% 0.027 84.6)",
-     "oklch(26.4% 0.027 84.6)",
-     "oklch(37.9% 0.027 84.6)",
-     "oklch(49.3% 0.027 84.6)",
-     "oklch(60.7% 0.027 84.6)",
-     "oklch(72.1% 0.027 84.6)",
-     "oklch(83.6% 0.027 84.6)",
-     "oklch(95.0% 0.027 84.6)"
+     "oklch(15.0% 0.029 48.4)",
+     "oklch(26.4% 0.029 48.4)",
+     "oklch(37.9% 0.029 48.4)",
+     "oklch(49.3% 0.029 48.4)",
+     "oklch(60.7% 0.029 48.4)",
+     "oklch(72.1% 0.029 48.4)",
+     "oklch(83.6% 0.029 48.4)",
+     "oklch(95.0% 0.029 48.4)"
     ]
    },
    "text": {
     "role": "neutral",
     "displayName": "Court Ink",
-    "canonical": "oklch(26.1% 0.011 114.8)",
+    "canonical": "oklch(25.9% 0.008 82.7)",
     "tonalRamp": [
-     "oklch(15.0% 0.011 114.8)",
-     "oklch(26.4% 0.011 114.8)",
-     "oklch(37.9% 0.011 114.8)",
-     "oklch(49.3% 0.011 114.8)",
-     "oklch(60.7% 0.011 114.8)",
-     "oklch(72.1% 0.011 114.8)",
-     "oklch(83.6% 0.011 114.8)",
-     "oklch(95.0% 0.011 114.8)"
+     "oklch(15.0% 0.008 82.7)",
+     "oklch(26.4% 0.008 82.7)",
+     "oklch(37.9% 0.008 82.7)",
+     "oklch(49.3% 0.008 82.7)",
+     "oklch(60.7% 0.008 82.7)",
+     "oklch(72.1% 0.008 82.7)",
+     "oklch(83.6% 0.008 82.7)",
+     "oklch(95.0% 0.008 82.7)"
     ]
    },
    "text-muted": {
     "role": "neutral",
     "displayName": "Muted Ink",
-    "canonical": "oklch(56.4% 0.025 87.2)",
+    "canonical": "oklch(45.8% 0.020 58.6)",
     "tonalRamp": [
-     "oklch(15.0% 0.025 87.2)",
-     "oklch(26.4% 0.025 87.2)",
-     "oklch(37.9% 0.025 87.2)",
-     "oklch(49.3% 0.025 87.2)",
-     "oklch(60.7% 0.025 87.2)",
-     "oklch(72.1% 0.025 87.2)",
-     "oklch(83.6% 0.025 87.2)",
-     "oklch(95.0% 0.025 87.2)"
+     "oklch(15.0% 0.020 58.6)",
+     "oklch(26.4% 0.020 58.6)",
+     "oklch(37.9% 0.020 58.6)",
+     "oklch(49.3% 0.020 58.6)",
+     "oklch(60.7% 0.020 58.6)",
+     "oklch(72.1% 0.020 58.6)",
+     "oklch(83.6% 0.020 58.6)",
+     "oklch(95.0% 0.020 58.6)"
     ]
    },
    "text-faint": {
     "role": "neutral",
     "displayName": "Faint Ink",
-    "canonical": "oklch(61.2% 0.025 84.6)",
+    "canonical": "oklch(50.9% 0.021 51.6)",
     "tonalRamp": [
-     "oklch(15.0% 0.025 84.6)",
-     "oklch(26.4% 0.025 84.6)",
-     "oklch(37.9% 0.025 84.6)",
-     "oklch(49.3% 0.025 84.6)",
-     "oklch(60.7% 0.025 84.6)",
-     "oklch(72.1% 0.025 84.6)",
-     "oklch(83.6% 0.025 84.6)",
-     "oklch(95.0% 0.025 84.6)"
+     "oklch(15.0% 0.021 51.6)",
+     "oklch(26.4% 0.021 51.6)",
+     "oklch(37.9% 0.021 51.6)",
+     "oklch(49.3% 0.021 51.6)",
+     "oklch(60.7% 0.021 51.6)",
+     "oklch(72.1% 0.021 51.6)",
+     "oklch(83.6% 0.021 51.6)",
+     "oklch(95.0% 0.021 51.6)"
     ]
    },
    "brand": {
     "role": "primary",
     "displayName": "Club Green",
-    "canonical": "oklch(49.9% 0.082 149.3)",
+    "canonical": "oklch(49.7% 0.074 147.9)",
     "tonalRamp": [
-     "oklch(15.0% 0.082 149.3)",
-     "oklch(26.4% 0.082 149.3)",
-     "oklch(37.9% 0.082 149.3)",
-     "oklch(49.3% 0.082 149.3)",
-     "oklch(60.7% 0.082 149.3)",
-     "oklch(72.1% 0.082 149.3)",
-     "oklch(83.6% 0.082 149.3)",
-     "oklch(95.0% 0.082 149.3)"
+     "oklch(15.0% 0.074 147.9)",
+     "oklch(26.4% 0.074 147.9)",
+     "oklch(37.9% 0.074 147.9)",
+     "oklch(49.3% 0.074 147.9)",
+     "oklch(60.7% 0.074 147.9)",
+     "oklch(72.1% 0.074 147.9)",
+     "oklch(83.6% 0.074 147.9)",
+     "oklch(95.0% 0.074 147.9)"
     ]
    },
    "brand-ink": {
     "role": "primary",
     "displayName": "Green Ink",
-    "canonical": "oklch(97.8% 0.011 95.2)",
+    "canonical": "oklch(97.0% 0.025 5.7)",
     "tonalRamp": [
-     "oklch(15.0% 0.011 95.2)",
-     "oklch(26.4% 0.011 95.2)",
-     "oklch(37.9% 0.011 95.2)",
-     "oklch(49.3% 0.011 95.2)",
-     "oklch(60.7% 0.011 95.2)",
-     "oklch(72.1% 0.011 95.2)",
-     "oklch(83.6% 0.011 95.2)",
-     "oklch(95.0% 0.011 95.2)"
+     "oklch(15.0% 0.025 5.7)",
+     "oklch(26.4% 0.025 5.7)",
+     "oklch(37.9% 0.025 5.7)",
+     "oklch(49.3% 0.025 5.7)",
+     "oklch(60.7% 0.025 5.7)",
+     "oklch(72.1% 0.025 5.7)",
+     "oklch(83.6% 0.025 5.7)",
+     "oklch(95.0% 0.025 5.7)"
     ]
    },
    "brand-dim": {
     "role": "primary",
     "displayName": "Dim Green",
-    "canonical": "oklch(92.1% 0.019 119.8)",
+    "canonical": "oklch(91.4% 0.016 34.2)",
     "tonalRamp": [
-     "oklch(15.0% 0.019 119.8)",
-     "oklch(26.4% 0.019 119.8)",
-     "oklch(37.9% 0.019 119.8)",
-     "oklch(49.3% 0.019 119.8)",
-     "oklch(60.7% 0.019 119.8)",
-     "oklch(72.1% 0.019 119.8)",
-     "oklch(83.6% 0.019 119.8)",
-     "oklch(95.0% 0.019 119.8)"
+     "oklch(15.0% 0.016 34.2)",
+     "oklch(26.4% 0.016 34.2)",
+     "oklch(37.9% 0.016 34.2)",
+     "oklch(49.3% 0.016 34.2)",
+     "oklch(60.7% 0.016 34.2)",
+     "oklch(72.1% 0.016 34.2)",
+     "oklch(83.6% 0.016 34.2)",
+     "oklch(95.0% 0.016 34.2)"
     ]
    },
    "court": {
     "role": "secondary",
     "displayName": "Court",
-    "canonical": "oklch(54.5% 0.075 146.8)",
+    "canonical": "oklch(54.2% 0.066 144.7)",
     "tonalRamp": [
-     "oklch(15.0% 0.075 146.8)",
-     "oklch(26.4% 0.075 146.8)",
-     "oklch(37.9% 0.075 146.8)",
-     "oklch(49.3% 0.075 146.8)",
-     "oklch(60.7% 0.075 146.8)",
-     "oklch(72.1% 0.075 146.8)",
-     "oklch(83.6% 0.075 146.8)",
-     "oklch(95.0% 0.075 146.8)"
+     "oklch(15.0% 0.066 144.7)",
+     "oklch(26.4% 0.066 144.7)",
+     "oklch(37.9% 0.066 144.7)",
+     "oklch(49.3% 0.066 144.7)",
+     "oklch(60.7% 0.066 144.7)",
+     "oklch(72.1% 0.066 144.7)",
+     "oklch(83.6% 0.066 144.7)",
+     "oklch(95.0% 0.066 144.7)"
     ]
    },
    "clay": {
     "role": "secondary",
     "displayName": "Clay",
-    "canonical": "oklch(58.6% 0.075 50.5)",
+    "canonical": "oklch(58.3% 0.078 45.3)",
     "tonalRamp": [
-     "oklch(15.0% 0.075 50.5)",
-     "oklch(26.4% 0.075 50.5)",
-     "oklch(37.9% 0.075 50.5)",
-     "oklch(49.3% 0.075 50.5)",
-     "oklch(60.7% 0.075 50.5)",
-     "oklch(72.1% 0.075 50.5)",
-     "oklch(83.6% 0.075 50.5)",
-     "oklch(95.0% 0.075 50.5)"
+     "oklch(15.0% 0.078 45.3)",
+     "oklch(26.4% 0.078 45.3)",
+     "oklch(37.9% 0.078 45.3)",
+     "oklch(49.3% 0.078 45.3)",
+     "oklch(60.7% 0.078 45.3)",
+     "oklch(72.1% 0.078 45.3)",
+     "oklch(83.6% 0.078 45.3)",
+     "oklch(95.0% 0.078 45.3)"
     ]
    },
    "hard": {
     "role": "secondary",
     "displayName": "Hard",
-    "canonical": "oklch(50.0% 0.062 235.4)",
+    "canonical": "oklch(49.2% 0.060 259.8)",
     "tonalRamp": [
-     "oklch(15.0% 0.062 235.4)",
-     "oklch(26.4% 0.062 235.4)",
-     "oklch(37.9% 0.062 235.4)",
-     "oklch(49.3% 0.062 235.4)",
-     "oklch(60.7% 0.062 235.4)",
-     "oklch(72.1% 0.062 235.4)",
-     "oklch(83.6% 0.062 235.4)",
-     "oklch(95.0% 0.062 235.4)"
+     "oklch(15.0% 0.060 259.8)",
+     "oklch(26.4% 0.060 259.8)",
+     "oklch(37.9% 0.060 259.8)",
+     "oklch(49.3% 0.060 259.8)",
+     "oklch(60.7% 0.060 259.8)",
+     "oklch(72.1% 0.060 259.8)",
+     "oklch(83.6% 0.060 259.8)",
+     "oklch(95.0% 0.060 259.8)"
     ]
    },
    "grass": {
     "role": "secondary",
     "displayName": "Grass",
-    "canonical": "oklch(58.8% 0.054 126.8)",
+    "canonical": "oklch(58.5% 0.046 119.7)",
     "tonalRamp": [
-     "oklch(15.0% 0.054 126.8)",
-     "oklch(26.4% 0.054 126.8)",
-     "oklch(37.9% 0.054 126.8)",
-     "oklch(49.3% 0.054 126.8)",
-     "oklch(60.7% 0.054 126.8)",
-     "oklch(72.1% 0.054 126.8)",
-     "oklch(83.6% 0.054 126.8)",
-     "oklch(95.0% 0.054 126.8)"
+     "oklch(15.0% 0.046 119.7)",
+     "oklch(26.4% 0.046 119.7)",
+     "oklch(37.9% 0.046 119.7)",
+     "oklch(49.3% 0.046 119.7)",
+     "oklch(60.7% 0.046 119.7)",
+     "oklch(72.1% 0.046 119.7)",
+     "oklch(83.6% 0.046 119.7)",
+     "oklch(95.0% 0.046 119.7)"
     ]
    },
    "info": {
-    "role": "secondary",
-    "displayName": "Hard Blue (info)",
-    "canonical": "oklch(50.0% 0.062 235.4)",
+    "role": "tertiary",
+    "displayName": "Info",
+    "canonical": "oklch(49.2% 0.060 259.8)",
     "tonalRamp": [
-     "oklch(15.0% 0.062 235.4)",
-     "oklch(26.4% 0.062 235.4)",
-     "oklch(37.9% 0.062 235.4)",
-     "oklch(49.3% 0.062 235.4)",
-     "oklch(60.7% 0.062 235.4)",
-     "oklch(72.1% 0.062 235.4)",
-     "oklch(83.6% 0.062 235.4)",
-     "oklch(95.0% 0.062 235.4)"
+     "oklch(15.0% 0.060 259.8)",
+     "oklch(26.4% 0.060 259.8)",
+     "oklch(37.9% 0.060 259.8)",
+     "oklch(49.3% 0.060 259.8)",
+     "oklch(60.7% 0.060 259.8)",
+     "oklch(72.1% 0.060 259.8)",
+     "oklch(83.6% 0.060 259.8)",
+     "oklch(95.0% 0.060 259.8)"
     ]
    },
    "success": {
-    "role": "secondary",
-    "displayName": "Court Green (success)",
-    "canonical": "oklch(54.5% 0.075 146.8)",
+    "role": "tertiary",
+    "displayName": "Success",
+    "canonical": "oklch(54.2% 0.066 144.7)",
     "tonalRamp": [
-     "oklch(15.0% 0.075 146.8)",
-     "oklch(26.4% 0.075 146.8)",
-     "oklch(37.9% 0.075 146.8)",
-     "oklch(49.3% 0.075 146.8)",
-     "oklch(60.7% 0.075 146.8)",
-     "oklch(72.1% 0.075 146.8)",
-     "oklch(83.6% 0.075 146.8)",
-     "oklch(95.0% 0.075 146.8)"
+     "oklch(15.0% 0.066 144.7)",
+     "oklch(26.4% 0.066 144.7)",
+     "oklch(37.9% 0.066 144.7)",
+     "oklch(49.3% 0.066 144.7)",
+     "oklch(60.7% 0.066 144.7)",
+     "oklch(72.1% 0.066 144.7)",
+     "oklch(83.6% 0.066 144.7)",
+     "oklch(95.0% 0.066 144.7)"
     ]
    },
    "warning": {
     "role": "tertiary",
-    "displayName": "Line Judge Amber",
-    "canonical": "oklch(57.5% 0.100 83.6)",
+    "displayName": "Warning",
+    "canonical": "oklch(57.4% 0.100 82.6)",
     "tonalRamp": [
-     "oklch(15.0% 0.100 83.6)",
-     "oklch(26.4% 0.100 83.6)",
-     "oklch(37.9% 0.100 83.6)",
-     "oklch(49.3% 0.100 83.6)",
-     "oklch(60.7% 0.100 83.6)",
-     "oklch(72.1% 0.100 83.6)",
-     "oklch(83.6% 0.100 83.6)",
-     "oklch(95.0% 0.100 83.6)"
+     "oklch(15.0% 0.100 82.6)",
+     "oklch(26.4% 0.100 82.6)",
+     "oklch(37.9% 0.100 82.6)",
+     "oklch(49.3% 0.100 82.6)",
+     "oklch(60.7% 0.100 82.6)",
+     "oklch(72.1% 0.100 82.6)",
+     "oklch(83.6% 0.100 82.6)",
+     "oklch(95.0% 0.100 82.6)"
     ]
    },
    "danger": {
     "role": "tertiary",
-    "displayName": "Fault Red",
-    "canonical": "oklch(52.6% 0.117 30.3)",
+    "displayName": "Danger",
+    "canonical": "oklch(52.4% 0.121 28.2)",
     "tonalRamp": [
-     "oklch(15.0% 0.117 30.3)",
-     "oklch(26.4% 0.117 30.3)",
-     "oklch(37.9% 0.117 30.3)",
-     "oklch(49.3% 0.117 30.3)",
-     "oklch(60.7% 0.117 30.3)",
-     "oklch(72.1% 0.117 30.3)",
-     "oklch(83.6% 0.117 30.3)",
-     "oklch(95.0% 0.117 30.3)"
+     "oklch(15.0% 0.121 28.2)",
+     "oklch(26.4% 0.121 28.2)",
+     "oklch(37.9% 0.121 28.2)",
+     "oklch(49.3% 0.121 28.2)",
+     "oklch(60.7% 0.121 28.2)",
+     "oklch(72.1% 0.121 28.2)",
+     "oklch(83.6% 0.121 28.2)",
+     "oklch(95.0% 0.121 28.2)"
     ]
+   },
+   "overlay": {
+    "role": "neutral",
+    "displayName": "Overlay",
+    "canonical": "rgba(24, 32, 27, 0.5)",
+    "tonalRamp": []
+   }
+  },
+  "palettes": {
+   "night": {
+    "bg": "#0F1412",
+    "surface": "#1A221E",
+    "border": "#2C3832",
+    "text": "#EDF1EE",
+    "brand": "#6FB483",
+    "brand-ink": "#0C1710",
+    "brand-dim": "#1F2E25",
+    "clay": "#C98A6A"
+   },
+   "clean": {
+    "bg": "#FFFFFF",
+    "surface": "#FAFAFA",
+    "border": "#E6E7E8",
+    "text": "#0F1419",
+    "brand": "#2C7446",
+    "brand-ink": "#FFFFFF",
+    "brand-dim": "#E8F3EC",
+    "clay": "#B4653A"
+   },
+   "ao": {
+    "bg": "#EBF5FC",
+    "surface": "#E1EFF8",
+    "border": "#AECFE5",
+    "text": "#0D2B43",
+    "brand": "#2E85BF",
+    "brand-ink": "#FFFFFF",
+    "brand-dim": "#CFE4F2",
+    "clay": "#B97753"
+   },
+   "roland-garros": {
+    "bg": "#F8F0E9",
+    "surface": "#F4E7DB",
+    "border": "#D6BCA2",
+    "text": "#33201A",
+    "brand": "#AD4E2E",
+    "brand-ink": "#FFF6F0",
+    "brand-dim": "#ECD9CB",
+    "clay": "#C67443"
+   },
+   "wimbledon": {
+    "bg": "#F2F6EC",
+    "surface": "#ECF2E2",
+    "border": "#C4D5B3",
+    "text": "#18291A",
+    "brand": "#256B3A",
+    "brand-ink": "#FFFFFF",
+    "brand-dim": "#D9E6D4",
+    "clay": "#A9694A"
+   },
+   "us-open": {
+    "bg": "#14283D",
+    "surface": "#1F3A5A",
+    "border": "#32557A",
+    "text": "#E9F0F8",
+    "brand": "#F5D547",
+    "brand-ink": "#1B1A0A",
+    "brand-dim": "#4A4A2C",
+    "clay": "#D08A5E"
    }
   },
   "typographyMeta": {
    "display": {
     "displayName": "Display",
-    "purpose": "A screen's own title, once per screen."
+    "purpose": "A screen’s own title, once per screen, at 30/500 with -1.05px tracking."
    },
    "title": {
     "displayName": "Title",
-    "purpose": "Section heads and sheet titles."
+    "purpose": "Section heads, feature-card titles, sheet titles; 22/500. The Coaching lead is this style at 24px."
    },
    "heading": {
     "displayName": "Heading",
-    "purpose": "The head of a card or grouped list."
+    "purpose": "Head of an empty state or grouped list; 17/600."
    },
    "body": {
     "displayName": "Body",
-    "purpose": "Post text, thread bodies, messages."
+    "purpose": "Reading text, bubbles, posts; 15/400 at 21px line height. Row names are body at 500/16."
    },
    "body-strong": {
     "displayName": "Body Strong",
-    "purpose": "Button labels, names, anything found while scrolling."
+    "purpose": "Pill labels, prices (tabular), anything found while scrolling."
    },
    "small": {
     "displayName": "Small",
-    "purpose": "Metadata, timestamps, handles."
+    "purpose": "Subtitles, previews, card bodies at 19px line height."
    },
    "small-strong": {
     "displayName": "Small Strong",
-    "purpose": "Field labels and emphasised metadata."
+    "purpose": "Chip labels, links inside cards, timestamps that matter."
    },
-   "label": {
-    "displayName": "Label",
-    "purpose": "Eyebrows and pills; the only tracked-out style."
+   "caption": {
+    "displayName": "Caption",
+    "purpose": "Stamps and tile labels; the only tracked-out style. Never an eyebrow above a heading."
    }
   },
+  "fonts": [
+   {
+    "family": "Inter",
+    "source": "@expo-google-fonts/inter, bundled",
+    "faces": [
+     "Inter_400Regular",
+     "Inter_500Medium",
+     "Inter_600SemiBold",
+     "Inter_700Bold"
+    ]
+   }
+  ],
   "shadows": [
    {
-    "name": "floating-card",
-    "value": "0 6px 14px rgba(0,0,0,0.12)",
-    "purpose": "A detached card such as the upload bar."
+    "name": "lift",
+    "value": "0 6px 12px {brand} @ 0.28 (elevation 3)",
+    "purpose": "The primary pill. The one shadow on the page, in the brand colour so it recolours by palette."
    },
    {
-    "name": "sheet",
-    "value": "0 -10px 28px rgba(0,0,0,0.28)",
-    "purpose": "A sheet rising from the bottom edge."
+    "name": "lift-small",
+    "value": "0 5px 10px {brand} @ 0.28 (elevation 3)",
+    "purpose": "Round brand buttons: create, ask arrow, send."
    },
    {
-    "name": "toast",
-    "value": "0 4px 18px rgba(0,0,0,0.18)",
-    "purpose": "A message passing over the page."
-   },
-   {
-    "name": "over-media",
-    "value": "0 3px 7px rgba(0,0,0,0.28)",
-    "purpose": "A control on top of a photo or video, where a border would vanish."
+    "name": "overlay",
+    "value": "0 6px 16px #000 @ 0.18",
+    "purpose": "Long-press menus, sheets, toasts, the upload bar. Overlays, not page elements."
    }
   ],
   "motion": [
    {
+    "name": "ease-draw",
+    "value": "cubic-bezier(0.22, 1, 0.36, 1)",
+    "purpose": "MarkDraw: court 640ms, net +360ms/420ms, post +540ms/420ms. Already drawn under Reduce Motion."
+   },
+   {
+    "name": "live-dot",
+    "value": "1800ms ease-out cubic, repeat",
+    "purpose": "LiveDot ring: scale 1 to 2.8, opacity 0.55 to 0. Still under Reduce Motion."
+   },
+   {
     "name": "press",
-    "value": "scale 0.97 over 60ms (0.94 for small icons)",
-    "purpose": "Every pressable gives under the finger."
+    "value": "scale 0.97 (small icons 0.94), 60ms",
+    "purpose": "Tappable press feedback on pills and round buttons."
    },
    {
-    "name": "hover",
-    "value": "scale 1.04 over 60ms",
-    "purpose": "Pointer only; never fires on a touch screen."
-   },
-   {
-    "name": "page-settle",
-    "value": "cubic-bezier(0.33, 1, 0.68, 1) over 280-320ms",
-    "purpose": "Zoom, sheets and anything coming to rest."
+    "name": "bar-duck",
+    "value": "scale 1 to 0.86 with scroll",
+    "purpose": "The create button shrinks as the tab bar ducks on scroll down."
    }
   ],
+  "wash": {
+   "clay": {
+    "cx": "6%",
+    "cy": "58%",
+    "rx": "62%",
+    "ry": "58%",
+    "opacity": 0.42
+   },
+   "brand": {
+    "cx": "94%",
+    "cy": "12%",
+    "rx": "60%",
+    "ry": "64%",
+    "opacity": 0.26
+   },
+   "fade": "linear to {bg} from 35% to 100% of height",
+   "darkMultiplier": 0.7,
+   "uses": [
+    {
+     "where": "Screen header (wash prop)",
+     "height": 360,
+     "strength": 0.85
+    },
+    {
+     "where": "Feature card (tip, end)",
+     "height": 260,
+     "strength": 0.6
+    }
+   ],
+   "rule": "Behind a screen’s opening moment or inside a card; never under a scrolling list."
+  },
   "breakpoints": [
    {
-    "name": "phone",
-    "value": "<768px"
+    "name": "page-column",
+    "value": "700px"
    },
    {
-    "name": "desktop",
-    "value": ">=768px"
+    "name": "feed-column",
+    "value": "630px"
+   },
+   {
+    "name": "card-max",
+    "value": "520px"
+   },
+   {
+    "name": "sidebar",
+    "value": "220px"
+   },
+   {
+    "name": "sidebar-compact",
+    "value": "76px"
+   },
+   {
+    "name": "rail",
+    "value": "280px"
    }
-  ]
+  ],
+  "origin": "public/waitlist.html — the app shares the waitlist page’s type, ground, washes, pills and dotted rules."
  },
  "components": [
   {
    "name": "Primary Button",
    "kind": "button",
    "refersTo": "button-primary",
-   "description": "The one action worth taking on a screen.",
-   "html": "<button class=\"ds-btn-primary\">Post</button>",
-   "css": ".ds-btn-primary{background:#3F7049;color:#FAF8F0;border-color:transparent;padding:13px 24px;border-radius:999px;border:1px solid;font-family:system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;font-size:15px;font-weight:600;cursor:pointer;transition:transform .06s ease,opacity .15s ease;}.ds-btn-primary:hover{transform:scale(1.04)}.ds-btn-primary:active{transform:scale(.97)}.ds-btn-primary:focus-visible{outline:2px solid #3F7049;outline-offset:2px}"
+   "description": "The one action on a card or screen; the only page element that casts a shadow, in its own colour.",
+   "html": "<button class=\"ds-btn-primary\">Send tip</button>",
+   "css": ".ds-btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 24px;border-radius:999px;border:1px solid transparent;font-family: 'Inter', system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;font-size:15px;font-weight:600;letter-spacing:-0.15px;cursor:pointer;transition:transform 60ms ease,opacity 120ms ease;background:#3F7049;color:#FAF8F0;box-shadow:0 6px 12px rgba(63,112,73,0.28);}.ds-btn-primary:hover{transform:scale(1.04);}.ds-btn-primary:active{transform:scale(0.97);}.ds-btn-primary:focus-visible{outline:2px solid #3F7049;outline-offset:3px;}.ds-btn-primary:disabled{opacity:0.5;cursor:default;}"
   },
   {
    "name": "Secondary Button",
    "kind": "button",
    "refersTo": "button-secondary",
-   "description": "The alternative beside a primary action.",
-   "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
-   "css": ".ds-btn-secondary{background:#E9E6DA;color:#24251F;border-color:#B8AF9D;padding:13px 24px;border-radius:999px;border:1px solid;font-family:system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;font-size:15px;font-weight:600;cursor:pointer;transition:transform .06s ease,opacity .15s ease;}.ds-btn-secondary:hover{transform:scale(1.04)}.ds-btn-secondary:active{transform:scale(.97)}.ds-btn-secondary:focus-visible{outline:2px solid #B8AF9D;outline-offset:2px}"
+   "description": "A second action beside the primary; strong-tan hairline, no shadow.",
+   "html": "<button class=\"ds-btn-secondary\">Not now</button>",
+   "css": ".ds-btn-secondary{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 24px;border-radius:999px;border:1px solid transparent;font-family: 'Inter', system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;font-size:15px;font-weight:600;letter-spacing:-0.15px;cursor:pointer;transition:transform 60ms ease,opacity 120ms ease;background:#E9E6DA;color:#24251F;border-color:#B8AF9D;}.ds-btn-secondary:hover{transform:scale(1.04);}.ds-btn-secondary:active{transform:scale(0.97);}.ds-btn-secondary:focus-visible{outline:2px solid #3F7049;outline-offset:3px;}"
+  },
+  {
+   "name": "Ghost Button",
+   "kind": "button",
+   "refersTo": "button-ghost",
+   "description": "Holds the pill silhouette with no fill; the quiet third choice.",
+   "html": "<button class=\"ds-btn-ghost\">Back to the top</button>",
+   "css": ".ds-btn-ghost{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 24px;border-radius:999px;border:1px solid transparent;font-family: 'Inter', system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;font-size:15px;font-weight:600;letter-spacing:-0.15px;cursor:pointer;transition:transform 60ms ease,opacity 120ms ease;background:transparent;color:#5D584C;}.ds-btn-ghost:hover{color:#24251F;}.ds-btn-ghost:focus-visible{outline:2px solid #3F7049;outline-offset:3px;}"
   },
   {
    "name": "Danger Button",
    "kind": "button",
    "refersTo": "button-danger",
-   "description": "Destructive actions are outlined, never filled.",
-   "html": "<button class=\"ds-btn-danger\">Delete account</button>",
-   "css": ".ds-btn-danger{background:transparent;color:#A34D40;border-color:#A34D40;padding:13px 24px;border-radius:999px;border:1px solid;font-family:system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;font-size:15px;font-weight:600;cursor:pointer;transition:transform .06s ease,opacity .15s ease;}.ds-btn-danger:hover{transform:scale(1.04)}.ds-btn-danger:active{transform:scale(.97)}.ds-btn-danger:focus-visible{outline:2px solid #A34D40;outline-offset:2px}"
+   "description": "Destructive actions are outlined in danger red, never filled.",
+   "html": "<button class=\"ds-btn-danger\">Delete post</button>",
+   "css": ".ds-btn-danger{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 24px;border-radius:999px;border:1px solid transparent;font-family: 'Inter', system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;font-size:15px;font-weight:600;letter-spacing:-0.15px;cursor:pointer;transition:transform 60ms ease,opacity 120ms ease;background:transparent;color:#A34D40;border-color:#A34D40;}.ds-btn-danger:hover{background:rgba(163,77,64,0.06);}.ds-btn-danger:focus-visible{outline:2px solid #A34D40;outline-offset:3px;}"
   },
   {
    "name": "Chip",
    "kind": "chip",
    "refersTo": "chip",
-   "description": "Topic and filter chips; selected takes the accent fill.",
-   "html": "<span class=\"ds-chip\">Gear</span> <span class=\"ds-chip ds-chip-on\">Technique</span>",
-   "css": ".ds-chip{display:inline-block;padding:7px 12px;border-radius:999px;border:1px solid #DCD6C8;background:#E9E6DA;color:#7C7565;font-family:system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;font-size:13px;font-weight:600}.ds-chip-on{background:#3F7049;color:#FAF8F0;border-color:transparent}"
+   "description": "Filter and topic chips; selected fills with brand (or a passed tint) and drops its border.",
+   "html": "<span class=\"ds-chip ds-chip-on\">All</span> <span class=\"ds-chip\">Coaches</span>",
+   "css": ".ds-chip{display:inline-flex;align-items:center;padding:7px 12px;border-radius:999px;border:1px solid #DCD6C8;background:#E9E6DA;color:#5D584C;font-family: 'Inter', system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;font-size:13px;font-weight:600;margin-right:8px;cursor:pointer;}.ds-chip:hover{border-color:#B8AF9D;}.ds-chip-on{background:#3F7049;color:#FAF8F0;border-color:transparent;}.ds-chip:focus-visible{outline:2px solid #3F7049;outline-offset:2px;}"
   },
   {
-   "name": "Card",
-   "kind": "card",
-   "refersTo": "card",
-   "description": "Flat surface, hairline border, never a shadow.",
-   "html": "<div class=\"ds-card\"><div class=\"ds-card-h\">Best string for a Yonex EZONE</div><div class=\"ds-card-b\">Gear &middot; 4 replies</div></div>",
-   "css": ".ds-card{background:#F4F2E9;border:1px solid #DCD6C8;border-radius:16px;padding:16px;font-family:system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;max-width:420px}.ds-card-h{color:#24251F;font-size:17px;font-weight:700;margin-bottom:4px}.ds-card-b{color:#8B8373;font-size:13px}"
+   "name": "Pill Field",
+   "kind": "input",
+   "refersTo": "input-pill",
+   "description": "A question you could start typing: the Coaching ask field and the inbox search. Fully round, with a round brand arrow that carries the small lift.",
+   "html": "<label class=\"ds-ask\"><input class=\"ds-ask-input\" placeholder=\"What are you stuck on?\"/><span class=\"ds-ask-go\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#FAF8F0\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14M13 6l6 6-6 6\"/></svg></span></label>",
+   "css": ".ds-ask{display:flex;align-items:center;gap:12px;min-height:52px;padding:6px 6px 6px 16px;border-radius:999px;border:1px solid #DCD6C8;background:#F4F2E9;max-width:420px;}.ds-ask:hover,.ds-ask:focus-within{border-color:#B8AF9D;}.ds-ask-input{flex:1;min-width:0;border:0;background:transparent;font-family: 'Inter', system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;font-size:16px;color:#24251F;outline:none;}.ds-ask-input::placeholder{color:#6C665A;}.ds-ask-go{width:38px;height:38px;border-radius:19px;background:#3F7049;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 5px 10px rgba(63,112,73,0.28);}"
   },
   {
-   "name": "Text Field",
+   "name": "Field",
    "kind": "input",
    "refersTo": "input",
-   "description": "Label above, hint below, hairline border.",
-   "html": "<label class=\"ds-field\"><span class=\"ds-field-l\">City</span><input class=\"ds-input\" value=\"Kalamazoo, MI\"><span class=\"ds-field-h\">Shown on your profile.</span></label>",
-   "css": ".ds-field{display:flex;flex-direction:column;gap:8px;font-family:system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;max-width:320px}.ds-field-l{color:#7C7565;font-size:13px;font-weight:600}.ds-input{background:#F4F2E9;border:1px solid #DCD6C8;border-radius:12px;padding:12px 16px;color:#24251F;font-size:15px;font-family:inherit}.ds-input:focus{outline:none;border-color:#B8AF9D}.ds-field-h{color:#8B8373;font-size:13px}"
+   "description": "The standard text field: warm sand, hairline tan, 12px corners; the border darkens under focus.",
+   "html": "<textarea class=\"ds-field\" rows=\"3\" placeholder=\"What would make CourtSide better?\"></textarea>",
+   "css": ".ds-field{display:block;width:100%;max-width:420px;box-sizing:border-box;padding:12px 16px;border-radius:12px;border:1px solid #DCD6C8;background:#F4F2E9;color:#24251F;font-family: 'Inter', system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;font-size:15px;resize:vertical;outline:none;}.ds-field::placeholder{color:#6C665A;}.ds-field:focus{border-color:#B8AF9D;}"
   },
   {
-   "name": "Avatar",
+   "name": "Feature Card",
+   "kind": "card",
+   "refersTo": "card-feature",
+   "description": "The waitlist card, in the app: wash inside, mark in a brand-dim tile, title at 22/500, one body, one pill, one link. Used for the tip page, the end of the feed, and success moments.",
+   "html": "<div class=\"ds-fcard\"><div class=\"ds-fcard-wash\"></div><div class=\"ds-fcard-top\"><div class=\"ds-fcard-tile\"><svg width=\"30\" height=\"30\" viewBox=\"0 0 100 100\" fill=\"none\" stroke=\"#3F7049\" stroke-linecap=\"round\"><g transform=\"translate(41 50) skewX(-14) translate(-41 -50)\"><rect x=\"19.75\" y=\"17.75\" width=\"42.5\" height=\"64.5\" stroke-width=\"7.5\"/><line x1=\"23.5\" y1=\"50.45\" x2=\"58.5\" y2=\"50.45\" stroke-width=\"5.5\"/></g><g transform=\"translate(80.75 50) skewX(-14) translate(-80.75 -50)\"><line x1=\"80.75\" y1=\"16\" x2=\"80.75\" y2=\"84\" stroke-width=\"7.5\"/></g></svg></div><div class=\"ds-fcard-words\"><div class=\"ds-fcard-title\">Submit a tip</div><div class=\"ds-fcard-body\">You’re one of the first people on CourtSide, so what you say now counts more than it ever will again.</div></div></div><button class=\"ds-fcard-btn\">Send tip</button><a class=\"ds-fcard-link\" href=\"#\">See everyone’s tips and vote →</a></div>",
+   "css": ".ds-fcard{position:relative;overflow:hidden;max-width:520px;padding:24px;border-radius:20px;border:1px solid #DCD6C8;background:#F4F2E9;display:flex;flex-direction:column;gap:16px;font-family: 'Inter', system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;}.ds-fcard-wash{position:absolute;left:0;right:0;top:0;height:260px;pointer-events:none;background:radial-gradient(62% 58% at 6% 58%,rgba(160,111,83,0.25),transparent 70%),radial-gradient(60% 64% at 94% 12%,rgba(63,112,73,0.16),transparent 70%),linear-gradient(to bottom,rgba(248,247,242,0) 35%,#F8F7F2 100%);}.ds-fcard-top{position:relative;display:flex;gap:16px;align-items:flex-start;}.ds-fcard-tile{width:56px;height:56px;border-radius:16px;background:#E3E7D9;display:flex;align-items:center;justify-content:center;flex:none;}.ds-fcard-words{display:flex;flex-direction:column;gap:6px;min-width:0;}.ds-fcard-title{font-size:22px;font-weight:500;letter-spacing:-0.66px;color:#24251F;}.ds-fcard-body{font-size:13px;line-height:19px;color:#5D584C;}.ds-fcard-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 24px;border-radius:999px;border:1px solid transparent;font-family: 'Inter', system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;font-size:15px;font-weight:600;letter-spacing:-0.15px;cursor:pointer;transition:transform 60ms ease,opacity 120ms ease;background:#3F7049;color:#FAF8F0;box-shadow:0 6px 12px rgba(63,112,73,0.28);align-self:stretch;}.ds-fcard-btn:hover{transform:scale(1.02);}.ds-fcard-btn:active{transform:scale(0.97);}.ds-fcard-link{position:relative;align-self:center;font-size:13px;font-weight:600;color:#3F7049;text-decoration:none;}.ds-fcard-link:hover{text-decoration:underline;}"
+  },
+  {
+   "name": "Hairline Row",
    "kind": "custom",
-   "refersTo": "avatar",
-   "description": "Initials on one of six muted tints, chosen from the handle. No image assets ship.",
-   "html": "<span class=\"ds-avatar\">D</span>",
-   "css": ".ds-avatar{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:999px;background:#667967;color:#FAF8F0;font-family:system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;font-size:17px;font-weight:700}"
+   "refersTo": "card",
+   "description": "A list item: no container, a hairline above that starts at the words, name at 16/500, one small muted line.",
+   "html": "<div class=\"ds-rows\"><div class=\"ds-row\"><div class=\"ds-row-avatar\">JP</div><div class=\"ds-row-body\"><div class=\"ds-row-top\"><span class=\"ds-row-name\">June Park</span><span class=\"ds-row-time ds-row-time-on\">2h</span></div><div class=\"ds-row-meta\">Court 4 is open at 7 tomorrow if you want it.</div></div></div><div class=\"ds-row\"><div class=\"ds-row-avatar\" style=\"background:#667967\">MO</div><div class=\"ds-row-body ds-row-body-line\"><div class=\"ds-row-top\"><span class=\"ds-row-name\">Mira Okafor</span><span class=\"ds-row-time\">Sep 22</span></div><div class=\"ds-row-meta\">Reading it now. My elbow will thank you.</div></div></div></div>",
+   "css": ".ds-rows{max-width:420px;font-family: 'Inter', system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;}.ds-row{display:flex;align-items:center;gap:12px;cursor:pointer;}.ds-row:hover{background:#F1EFE6;}.ds-row-avatar{width:50px;height:50px;border-radius:25px;background:#9B9074;color:#FFFFFF;font-weight:800;font-size:17px;display:flex;align-items:center;justify-content:center;flex:none;}.ds-row-body{flex:1;min-width:0;padding:15px 16px 15px 0;display:flex;flex-direction:column;gap:4px;}.ds-row-body-line{border-top:0.5px solid #DCD6C8;}.ds-row-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;}.ds-row-name{font-size:16px;font-weight:500;color:#24251F;}.ds-row-time{font-size:13px;color:#6C665A;}.ds-row-time-on{color:#3F7049;font-weight:500;}.ds-row-meta{font-size:14px;color:#5D584C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}"
+  },
+  {
+   "name": "Dotted Rule",
+   "kind": "custom",
+   "refersTo": "card",
+   "description": "The section break: a 1px dotted rule in strong tan at 70%, 24px above and below.",
+   "html": "<div class=\"ds-dotted\"></div>",
+   "css": ".ds-dotted{height:0;border-top:1px dotted #B8AF9D;opacity:0.7;margin:24px 0;max-width:420px;}"
+  },
+  {
+   "name": "Tab Bar",
+   "kind": "nav",
+   "refersTo": "card",
+   "description": "Four tabs on cream under a hairline with a 50px round green create button in the centre; the active tab takes its own tint.",
+   "html": "<nav class=\"ds-tabs\"><a class=\"ds-tab ds-tab-on\" href=\"#\"><span class=\"ds-tab-ico\">⌂</span>Home</a><a class=\"ds-tab\" href=\"#\"><span class=\"ds-tab-ico\">◌</span>Community</a><button class=\"ds-tab-create\" aria-label=\"Create a post\"><svg width=\"30\" height=\"30\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#FAF8F0\" stroke-width=\"2.2\" stroke-linecap=\"round\"><path d=\"M12 5v14M5 12h14\"/></svg></button><a class=\"ds-tab\" href=\"#\"><span class=\"ds-tab-ico\">▭</span>Coaching</a><a class=\"ds-tab\" href=\"#\"><span class=\"ds-tab-ico\">○</span>Profile</a></nav>",
+   "css": ".ds-tabs{display:flex;align-items:center;justify-content:space-around;max-width:420px;padding:10px 8px 14px;background:#F8F7F2;border-top:0.5px solid #DCD6C8;font-family: 'Inter', system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;}.ds-tab{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10.5px;font-weight:600;color:#6C665A;text-decoration:none;}.ds-tab-ico{font-size:22px;line-height:1;}.ds-tab-on{color:#3F7049;}.ds-tab:hover{color:#24251F;}.ds-tab-create{width:50px;height:50px;border-radius:25px;border:0;background:#3F7049;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 10px rgba(63,112,73,0.28);cursor:pointer;}.ds-tab-create:active{transform:scale(0.94);}"
   }
  ],
  "narrative": {
-  "northStar": "Courtside Seats",
-  "overview": "You are at the edge of the court and the match is the thing. The interface takes the seat, not the court: a premium, understated surface makes a phone-shot rally look worth watching, where a loud one would compete with it and lose. The material is warm paper rather than glass or neon - cream grounds, soft tan borders, a muted club green at lower chroma than most apps' neutrals. Surfaces are flat and separated by a hairline border. Type is the platform's own; no font ships with the app. The palette is not one world but six, and every screen is authored once and recoloured at draw time, which is why every palette must define every slot.",
+  "northStar": "The Same Magazine",
+  "overview": "The app is the second surface of a world that began on the public waitlist page. It shares the page’s face (Inter, bundled), its cream ground, its clay-and-grass wash, its pills, its dotted rules and its card, so a screen reads like a page from the same magazine as the site people joined on rather than the category’s chrome. The material of the earlier world stayed: six palettes recoloured by slot, the 4px spacing ladder, the radius ladder, hairline tan borders, initials avatars and court placeholders, pill actions. The voice on top changed: display and title at 500 with tight tracking, dotted section breaks, colour as a wash rather than a fill, one shadow on the page in the brand’s own colour, and a mark that draws itself once on success and end cards.",
   "keyCharacteristics": [
-   "Warm paper neutrals, never grey and never white",
-   "Low-chroma accents; club signage, not sports-brand green",
-   "Flat by default - hairline borders separate, shadows only lift",
-   "Platform type only; no brand font, no icon font, no shipped imagery",
-   "Pill-shaped actions against softly-rounded containers",
-   "Six complete palettes, one authored source"
+   "Inter at 400/500/600; display and title at medium weight with tight tracking; no black weights",
+   "Warm paper neutrals; never pure white or pure black in the default palette",
+   "Hairlines separate; boxes only for things that are genuinely a card",
+   "One shadow on the page, in the brand colour, under the primary action only",
+   "The wash at a screen’s opening moment or inside a card, never under a list",
+   "Dotted rules for section breaks",
+   "Six complete palettes, one authored source, no literal hex in a component"
   ],
   "rules": [
    {
-    "name": "The Warm Neutral Rule",
-    "body": "No pure white and no pure black anywhere. Every neutral carries warmth.",
+    "name": "The Every-Slot Rule",
+    "body": "Every palette defines every colour key and no component writes a literal hex; styles are recoloured by slot at draw time.",
     "section": "colors"
    },
    {
-    "name": "The Every-Slot Rule",
-    "body": "Every palette defines every colour key, and no component writes a literal hex. Breakage is silent: correct in the default theme, wrong in a slam theme.",
+    "name": "The Wash Rule",
+    "body": "Colour at scale arrives as a feathered wash behind a screen’s opening moment or inside a card, never as a filled band and never under a scrolling list.",
     "section": "colors"
    },
    {
     "name": "The Surface Vocabulary Rule",
-    "body": "Clay, hard, grass and court classify; they never command. A surface colour on a button is a category error.",
+    "body": "Clay, hard, grass and court classify; they never fill an action.",
     "section": "colors"
    },
    {
+    "name": "The Medium Top Rule",
+    "body": "Nothing above 17px is set heavier than 500.",
+    "section": "typography"
+   },
+   {
     "name": "The Tight Top Rule",
-    "body": "Tracking tightens as size grows and opens only at label size.",
+    "body": "Tracking tightens as size grows and opens only at caption size.",
     "section": "typography"
    },
    {
-    "name": "The Two-Weight Rule",
-    "body": "Hierarchy comes from weight and size; colour reinforces but never carries it alone.",
+    "name": "The No-Kicker Rule",
+    "body": "No all-caps eyebrow above a heading; uppercase caption survives only as a stamp inside content or a tile label.",
     "section": "typography"
    },
    {
-    "name": "The One Column Rule",
-    "body": "Content never spans a large screen. Past the cap the space stays empty or becomes the rail.",
+    "name": "The Rows-Not-Boxes Rule",
+    "body": "A list item is a row on a hairline, never a bordered card.",
     "section": "layout"
    },
    {
-    "name": "The Flat-By-Default Rule",
-    "body": "On the page: a border. Over the page: a shadow. Never both.",
+    "name": "The One Column Rule",
+    "body": "Past the column cap, extra width stays empty or becomes the rail.",
+    "section": "layout"
+   },
+   {
+    "name": "The One Shadow Rule",
+    "body": "On the page only the primary action casts a shadow, in its own colour; everything else gets a hairline.",
     "section": "elevation"
    },
    {
     "name": "The Pill Rule",
-    "body": "Actions are pills; containers are rounded rectangles. If it is fully round, you can press it.",
+    "body": "Actions and action-like fields are pills; containers are rounded rectangles.",
+    "section": "shapes"
+   },
+   {
+    "name": "The Dotted Break Rule",
+    "body": "A break between sections is a dotted rule, never a solid one or a band of surface.",
     "section": "shapes"
    }
   ],
   "dos": [
-   "Do take every colour from the theme, so all six palettes keep working.",
-   "Do separate surfaces with a 1px border and a half-step of warmth.",
-   "Do keep actions pill-shaped and containers rounded-rectangular.",
-   "Do let type weight carry hierarchy, with colour as reinforcement.",
-   "Do give a clip the whole viewport.",
-   "Do outline destructive actions rather than filling them."
+   "Do set weight through font('500') and the typography scale; never a bare fontWeight.",
+   "Do open a screen with its display title and one muted line, with the wash behind it only if it is that screen’s opening moment.",
+   "Do build lists as rows on hairlines with the line starting at the words.",
+   "Do break sections with DottedRule.",
+   "Do keep the lift shadow to the primary action and round brand buttons, in the brand colour.",
+   "Do use the feature card (tile, title, body, one pill, one link, wash inside) for success and end moments.",
+   "Do take every colour from the theme so all six palettes keep working.",
+   "Do give every animated flourish a Reduce Motion path that lands on the finished state."
   ],
   "donts": [
-   "Don't write a literal hex in a component.",
-   "Don't use #FFFFFF or #000000. Every neutral is warm.",
-   "Don't add a shadow to something that sits on the page.",
-   "Don't use a surface colour (clay, hard, grass, court) as an action colour.",
-   "Don't introduce a webfont or an icon font.",
-   "Don't ship placeholder imagery. Initials and court cards are the placeholder system."
+   "Don’t set a title at 700 or 800, or use a display size above 30px on a screen title.",
+   "Don’t put an all-caps kicker or eyebrow above a heading.",
+   "Don’t put the wash under a scrolling list, or on every screen by default.",
+   "Don’t add a neutral or black shadow to anything that sits on the page.",
+   "Don’t stack bordered cards as page structure.",
+   "Don’t write a literal hex in a component outside a black-on-media surface.",
+   "Don’t use a court surface colour as an action colour.",
+   "Don’t ship imagery or an icon font; the mark is drawn, icons are vector, avatars are initials."
   ]
  }
 }
