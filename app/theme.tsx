@@ -83,7 +83,7 @@ function ThemeCard({ option, active, onPick, styles }: { option: (typeof themeLi
     <Pressable accessibilityRole="radio" accessibilityState={{ selected: active }} accessibilityLabel={`${option.label} theme`} onPress={onPick}>
       <Animated.View style={[styles.card, cardStyle]}>
         <View style={[styles.swatch, { backgroundColor: palette.bg, borderColor: palette.border }]}>
-          <Wash theme={option.name} height={48} strength={1.4} fade={palette.bg} />
+          <Wash theme={option.name} height={48} strength={0.7} fade={palette.bg} />
         </View>
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={styles.name}>{option.label}</Text>
