@@ -74,7 +74,7 @@ export async function pickFromDevice(selection: 'video' | 'photo' | 'all'): Prom
 }
 
 /**
- * A picked video is converted by the iPhone itself to standard 1080p H.264
+ * A picked video is converted by the iPhone itself to standard 720p H.264
  * before it is handed over: several times smaller than the raw file (often
  * 4K), quicker to upload and to watch, and playable on every phone and
  * browser (the raw file is often HEVC, which some Android phones and
@@ -83,7 +83,9 @@ export async function pickFromDevice(selection: 'video' | 'photo' | 'all'): Prom
  */
 const AS_IS = {
   preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current,
-  videoExportPreset: ImagePicker.VideoExportPreset.H264_1920x1080,
+  // 720p, not 1080p: about half the bytes and half the wait, and a minute of
+  // it fits under the 50 MB upload cap; on a phone the difference is hard to see.
+  videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
   shouldDownloadFromNetwork: true,
   // Full screen, not a card: a card leaves the composer showing behind it, so
   // the "Preparing video" note was read once while choosing and again while

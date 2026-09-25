@@ -287,6 +287,27 @@ export function MediaEditor({ media, initial, onBack, onDone, portraitRatio = 9 
   const secondsPerPx = duration ? duration / stripWidth : 0;
   const rangeRef = useRef(range);
   rangeRef.current = range;
+  // While a finger moves, the picture is asked for a new moment at most
+  // about ten times a second — a decoder can only show that many anyway,
+  // and one seek per touch event made it stutter. The last moment asked
+  // for always lands. The trim itself is redrawn once per screen frame,
+  // not once per event, and rangeRef sees every move at once.
+  const seekAskedAt = useRef(0);
+  const seekWant = useRef(0);
+  const seekTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const seekSoon = (at: number) => {
+    seekWant.current = at;
+    const wait = 90 - (Date.now() - seekAskedAt.current);
+    if (wait <= 0) { seekAskedAt.current = Date.now(); player.current?.seek(at); return; }
+    if (!seekTimer.current) seekTimer.current = setTimeout(() => { seekTimer.current = null; seekAskedAt.current = Date.now(); player.current?.seek(seekWant.current); }, wait);
+  };
+  const rangeFrame = useRef<number | null>(null);
+  const setRangeSoon = (next: [number, number]) => {
+    rangeRef.current = next;
+    if (rangeFrame.current !== null) return;
+    rangeFrame.current = requestAnimationFrame(() => { rangeFrame.current = null; setRange(rangeRef.current); });
+  };
+  useEffect(() => () => { if (rangeFrame.current !== null) cancelAnimationFrame(rangeFrame.current); if (seekTimer.current) clearTimeout(seekTimer.current); }, []);
   useEffect(() => { keepFrom.value = range[0]; keepTo.value = range[1]; }, [range, keepFrom, keepTo]);
   useEffect(() => { rolling.value = frozenAt === null && !userPaused; }, [frozenAt, userPaused, rolling]);
   // Pause and play: tap the video, or press the space bar on a computer.
@@ -326,13 +347,16 @@ export function MediaEditor({ media, initial, onBack, onDone, portraitRatio = 9 
         if (side === 0) next[0] = 0; else next[1] = duration;
         if (!snapped.current) { snapped.current = true; haptics.tap(); }
       } else snapped.current = false;
-      setRange(next);
+      setRangeSoon(next);
       const at = side === 0 ? next[0] : next[1];
       head.value = at;
-      player.current?.seek(at);
+      seekSoon(at);
     },
     onPanResponderRelease: () => {
       setHeld(null);
+      if (rangeFrame.current !== null) { cancelAnimationFrame(rangeFrame.current); rangeFrame.current = null; }
+      setRange(rangeRef.current);
+      if (seekTimer.current) { clearTimeout(seekTimer.current); seekTimer.current = null; }
       const from = rangeRef.current[0];
       head.value = from;
       player.current?.seek(from);
@@ -357,7 +381,7 @@ export function MediaEditor({ media, initial, onBack, onDone, portraitRatio = 9 
         const [a, b] = rangeRef.current;
         const at = Math.max(a, Math.min(b, (x - stripLeft.current) * secondsPerPx));
         head.value = at;
-        player.current?.seek(at);
+        seekSoon(at);
       };
       stripRef.current?.measureInWindow((x) => { stripLeft.current = x; seekAt(pageX); });
     },
@@ -365,7 +389,7 @@ export function MediaEditor({ media, initial, onBack, onDone, portraitRatio = 9 
       const [a, b] = rangeRef.current;
       const at = Math.max(a, Math.min(b, (e.nativeEvent.pageX - stripLeft.current) * secondsPerPx));
       head.value = at;
-      player.current?.seek(at);
+      seekSoon(at);
     },
     onPanResponderRelease: () => {
       startPlayer();
@@ -395,7 +419,7 @@ export function MediaEditor({ media, initial, onBack, onDone, portraitRatio = 9 
     setCoverAt(at);
     setFrozenAt(at);
     head.value = at;
-    player.current?.seek(at);
+    seekSoon(at);
   };
   // Measured from the window like the trim scrub, so a browser's per-frame
   // positions never make the window jump from cell to cell.
