@@ -94,7 +94,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
               <Chip
                 label={t === 'all' ? 'All' : t === 'injury' ? 'Injuries' : t.charAt(0).toUpperCase() + t.slice(1)}
                 selected={topic === t}
-                tint={colors.warning}
+                tint={colors.text}
                 ink={colors.brandInk}
                 onPress={() => setTopic(t)}
                 small
@@ -158,7 +158,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       }
     >
       <View style={styles.sections} onLayout={e => setTabWidth(e.nativeEvent.layout.width / 2)}>
-        {(['discussions', 'players'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: section === value }} onPress={() => setSection(value)} style={styles.section}><Text style={{ fontSize: 16, fontWeight: '600', color: section === value ? colors.warning : colors.textMuted }}>{value === 'discussions' ? 'Discussions' : 'Find Players'}</Text></Pressable>)}
+        {(['discussions', 'players'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: section === value }} onPress={() => setSection(value)} style={styles.section}><Text style={{ ...typography.bodyStrong, fontSize: 16, color: section === value ? colors.text : colors.textMuted }}>{value === 'discussions' ? 'Discussions' : 'Find Players'}</Text></Pressable>)}
         {tabWidth > 0 && <Reanimated.View pointerEvents="none" style={[styles.sectionUnderline, { width: tabWidth }, underline.style]} />}
       </View>
       <SectionPager
@@ -179,11 +179,11 @@ const styleDefinitions = StyleSheet.create({
   more: { alignSelf: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, marginTop: spacing.md },
   moreText: { ...typography.smallStrong, color: colors.text },
   section: { flex: 1, alignItems: 'center', paddingVertical: 18 },
-  sectionUnderline: { position: 'absolute', left: 0, bottom: -1, height: 3, backgroundColor: colors.warning, borderRadius: 1.5 },
+  sectionUnderline: { position: 'absolute', left: 0, bottom: -1, height: 2, backgroundColor: colors.brand, borderRadius: 1 },
   search: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 14, fontSize: 14, color: colors.text, backgroundColor: colors.surface },
   mapStandIn: { height: 306, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   player: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 18, borderBottomWidth: 1, borderBottomColor: colors.border },
-  playerName: { fontWeight: '600', fontSize: 15, color: colors.text },
+  playerName: { ...typography.bodyStrong, color: colors.text },
   playerMeta: { fontSize: 12, color: colors.textMuted },
   fab: {
     width: 38,

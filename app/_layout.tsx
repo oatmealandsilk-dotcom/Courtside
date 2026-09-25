@@ -5,6 +5,7 @@ import { Stack, type ErrorBoundaryProps } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 
 import { AppProvider } from '@/store/AppContext';
 import { AppShell } from '@/components/AppShell';
@@ -38,6 +39,10 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
 export default function RootLayout() {
   // A browser tab in the background carries on playing; this stops it.
   usePauseWhenHidden();
+  // Inter ships in the bundle, so on a phone this resolves before the splash
+  // has gone; in a browser it is one small fetch, kept after that.
+  const [fontsReady] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
+  if (!fontsReady) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
   return (
     <GestureHandlerRootView style={{ flex: 1 }}><ThemeProvider><SafeAreaProvider>
       <AppProvider>

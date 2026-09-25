@@ -17,6 +17,8 @@ import { LevelPill } from '@/components/LevelPill';
 import { QuestionCard } from '@/components/QuestionCard';
 import { PostCard } from '@/components/PostCard';
 import { BrandMark } from '@/components/BrandMark';
+import { MarkDraw } from '@/components/MarkDraw';
+import { Wash } from '@/components/Wash';
 import { Heart } from '@/components/Heart';
 import { MediaPostPage } from '@/components/MediaPostPage';
 import { Tappable } from '@/components/Tappable';
@@ -40,7 +42,7 @@ import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isDesktopBrowser } from '@/lib/browserDevice';
-import { colors } from '@/theme';
+import { colors, radius, typography, spacing } from '@/theme';
 
 /**
  * The heart that blooms when you double tap a clip.
@@ -652,17 +654,22 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const endPage = (
     <View key="the-end" style={styles.endPage}>
       <View style={styles.endCard}>
-        <Text style={styles.endEyebrow}>YOU FOUND IT</Text>
-        <BrandMark size={40} />
-        <Text style={styles.endTitle}>The bottom of CourtSide.</Text>
-        <Text style={styles.endBody}>Almost nobody scrolls this far. You are one of the first people ever on here.</Text>
-        <View style={styles.endDivider} />
-        <Text style={styles.endSecret}>EARLY · №{String(feed.length).padStart(3, '0')}</Text>
-        <Text style={styles.endHint}>Remember this page. It will mean something later.</Text>
-      </View>
-      <View style={styles.endActions}>
-        <Pressable accessibilityRole="button" onPress={() => router.push('/compose')} style={styles.endButton}><Text style={styles.endButtonText}>Leave something here</Text></Pressable>
-        <Pressable accessibilityRole="button" onPress={() => pager.current?.scrollToTop()} hitSlop={8}><Text style={styles.endBack}>↑ Back to the top</Text></Pressable>
+        <Wash height={300} strength={0.9} />
+        <View style={styles.endTop}>
+          <View style={styles.endTile}><MarkDraw size={30} /></View>
+          <View style={styles.endNo}>
+            <Text style={styles.endNoLabel}>Early</Text>
+            <Text style={styles.endNoValue}>№ {String(feed.length).padStart(3, '0')}</Text>
+          </View>
+        </View>
+        <Text style={styles.endTitle}>You found the bottom of CourtSide.</Text>
+        <Text style={styles.endBody}>Almost nobody scrolls this far. You are one of the first people ever on here — remember this page, it will mean something later.</Text>
+        <View style={styles.endActions}>
+          <Button label="Leave something here" onPress={() => router.push('/compose')} full />
+          <Pressable accessibilityRole="button" onPress={() => pager.current?.scrollToTop()} hitSlop={8} style={styles.endBackWrap}>
+            <Text style={styles.endBack}>↑ Back to the top</Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -1079,7 +1086,7 @@ const styleDefinitions = StyleSheet.create({
   },
   pullGreeting: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   // The mark sits at the far left of the gap, level with the greeting; the greeting and disc in the middle.
-  pullGreetingText: { color: colors.text, fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
+  pullGreetingText: { ...typography.bodyStrong, color: colors.text },
   wordmark: {
     color: colors.brand, fontSize: 23, fontWeight: '800', letterSpacing: -0.3,
   },
@@ -1165,7 +1172,7 @@ const styleDefinitions = StyleSheet.create({
   articleCentred: { width: '100%', maxWidth: 600, alignSelf: 'center' },
   strip: { gap: 6, paddingBottom: 4 },
   stripHead: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
-  stripTitle: { fontSize: 13, fontWeight: '700', color: colors.text },
+  stripTitle: { ...typography.smallStrong, color: colors.text },
   stripSub: { fontSize: 11, color: colors.textFaint },
   stripRow: { gap: 8, paddingHorizontal: 20, paddingVertical: 4 },
   stripCard: {
@@ -1178,28 +1185,28 @@ const styleDefinitions = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   stripBody: { alignItems: 'center', gap: 3 },
-  stripName: { fontSize: 12, fontWeight: '700', color: colors.text },
+  stripName: { ...typography.smallStrong, fontSize: 12, color: colors.text },
   stripReason: { fontSize: 10, color: colors.textMuted },
   stripFollow: { paddingVertical: 5, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center' },
-  stripFollowText: { color: colors.brandInk, fontSize: 12, fontWeight: '700' },
+  stripFollowText: { ...typography.smallStrong, fontSize: 12, color: colors.brandInk },
   threadArticle: { gap: 8, paddingBottom: 20 },
-  eyebrow: { color: colors.warning, fontWeight: '700', letterSpacing: 1.2, fontSize: 11 },
+  eyebrow: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.1 },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   threadMark: { marginRight: 6, marginTop: 6 },
   hint: { color: colors.textMuted, fontSize: 11, textAlign: 'center', paddingBottom: 10 },
   // The theme's own colours, so the page belongs to whichever look is on.
-  endPage: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', gap: 22, padding: 28 },
-  endCard: { alignSelf: 'stretch', alignItems: 'center', gap: 12, padding: 26, borderRadius: 22, borderWidth: 1, borderColor: colors.brand, backgroundColor: colors.surface },
-  endEyebrow: { color: colors.brand, fontSize: 11, fontWeight: '800', letterSpacing: 3 },
-  endTitle: { color: colors.text, fontSize: 22, fontWeight: '800', letterSpacing: -0.3, textAlign: 'center' },
-  endBody: { color: colors.textMuted, fontSize: 14, lineHeight: 21, textAlign: 'center' },
-  endDivider: { alignSelf: 'stretch', height: StyleSheet.hairlineWidth, backgroundColor: colors.borderStrong, marginVertical: 4 },
-  endSecret: { color: colors.brand, fontSize: 13, fontWeight: '700', letterSpacing: 2, fontVariant: ['tabular-nums'] },
-  endHint: { color: colors.textFaint, fontSize: 12, fontStyle: 'italic', textAlign: 'center' },
-  endActions: { alignSelf: 'stretch', alignItems: 'center', gap: 16 },
-  endButton: { alignSelf: 'stretch', paddingVertical: 14, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center' },
-  endButtonText: { color: colors.brandInk, fontWeight: '800', fontSize: 15 },
-  endBack: { color: colors.textMuted, fontSize: 13, fontWeight: '600' },
+  endPage: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
+  endCard: { alignSelf: 'stretch', maxWidth: 520, width: '100%', gap: spacing.lg, padding: spacing.xl, borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
+  endTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  endTile: { width: 56, height: 56, borderRadius: radius.lg, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  endNo: { alignItems: 'flex-end', gap: 2 },
+  endNoLabel: { ...typography.caption, color: colors.textFaint, textTransform: 'uppercase' },
+  endNoValue: { ...typography.title, fontSize: 26, color: colors.brand, fontVariant: ['tabular-nums'] },
+  endTitle: { ...typography.title, color: colors.text },
+  endBody: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
+  endActions: { gap: spacing.md, paddingTop: spacing.xs },
+  endBackWrap: { alignSelf: 'center' },
+  endBack: { ...typography.smallStrong, color: colors.textMuted },
 });
 
 export default asTabRoute<{ previewSection?: string; scope?: FeedScope }>(Home);

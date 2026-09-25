@@ -13,6 +13,7 @@ import Reanimated, { runOnJS, useAnimatedReaction, useAnimatedScrollHandler, use
 import { Ionicons } from '@expo/vector-icons';
 
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
+import { Wash } from '@/components/Wash';
 import { colors, spacing, typography } from '@/theme';
 
 /**
@@ -62,6 +63,8 @@ interface Props {
   scrollRef?: React.MutableRefObject<ScrollView | null>;
   /** Pull down past the top to run this; a small "Updated" note confirms it. */
   onRefresh?: () => Promise<void> | void;
+  /** The colour wash behind the top of the page — for a screen's opening moment, not a list. */
+  wash?: boolean;
 }
 
 export function Screen({
@@ -78,6 +81,7 @@ export function Screen({
   memoryKey,
   scrollRef,
   onRefresh,
+  wash = false,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
@@ -281,6 +285,7 @@ export function Screen({
       behavior={Platform.OS === 'ios' && !scroll ? 'padding' : undefined}
       enabled={Platform.OS === 'ios' && !scroll}
     >
+      {wash ? <Wash height={360} strength={0.85} /> : null}
       {headerWrapper ? headerWrapper(header) : header}
       {scroll ? (
         <View style={styles.flex}>
@@ -353,12 +358,12 @@ const styleDefinitions = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.md,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.lg,
     gap: spacing.md,
   },
-  headerWide: { paddingTop: spacing.xl, paddingBottom: spacing.lg },
-  headerText: { flex: 1, gap: 2 },
+  headerWide: { paddingTop: spacing.xxl, paddingBottom: spacing.xl },
+  headerText: { flex: 1, gap: 4 },
   title: { ...typography.display, color: colors.text },
   titleCompact: { ...typography.title, color: colors.text },
   back: { paddingRight: spacing.xs, paddingVertical: spacing.xs },

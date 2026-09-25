@@ -34,7 +34,7 @@ import { show as showToast } from '@/lib/toast';
 import * as haptics from '@/lib/haptics';
 import type { Message } from '@/data/types';
 import Reanimated, { Easing, FadeIn, FadeInDown, FadeInUp, FadeOut, LinearTransition, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, font } from '@/theme';
 
 /** Two messages from the same person this close together read as one run: tighter, one tail. */
 const GROUP_GAP_MS = 2 * 60_000;
@@ -599,7 +599,7 @@ const styleDefinitions = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   headerUser: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1 },
-  headerName: { ...typography.bodyStrong, color: colors.text },
+  headerName: { ...typography.bodyStrong, ...font('500'), fontSize: 16, color: colors.text },
   headerHandle: { ...typography.small, color: colors.textFaint },
   scroll: { flex: 1 },
   scrollContent: {
@@ -613,12 +613,12 @@ const styleDefinitions = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   bubble: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: radius.xl,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 20,
   },
   mine: { alignSelf: 'flex-end', backgroundColor: colors.brand, borderBottomRightRadius: 6 },
-  theirs: { alignSelf: 'flex-start', backgroundColor: colors.surfaceAlt, borderBottomLeftRadius: 6 },
+  theirs: { alignSelf: 'flex-start', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 6 },
   bubbleText: { ...typography.body, color: colors.text, lineHeight: 21 },
   bubbleWrap: { maxWidth: '78%' },
   row: { width: '100%' },
@@ -718,9 +718,9 @@ const styleDefinitions = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: 11,
     color: colors.text,
-    fontSize: 15,
+    ...typography.body,
   },
   send: {
     width: 38,

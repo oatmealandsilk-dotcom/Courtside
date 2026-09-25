@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Avatar, EmptyState, Field, Screen, SegmentedControl } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
-import { colors, spacing, typography } from '@/theme';
+import { colors, spacing, typography, font } from '@/theme';
 
 type Section = 'all' | 'coaches' | 'clients';
 
@@ -123,11 +123,11 @@ export default function Inbox() {
 const styleDefinitions = StyleSheet.create({
   searchWrap: { paddingBottom: spacing.md },
   sections: { paddingBottom: spacing.md },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   rowBody: { flex: 1, gap: 3 },
-  name: { ...typography.body, color: colors.text },
-  unreadName: { fontWeight: '700' },
-  preview: { ...typography.small, color: colors.textFaint },
+  name: { ...typography.body, ...font('500'), color: colors.text },
+  unreadName: { ...font('600') },
+  preview: { ...typography.small, color: colors.textMuted },
   unreadPreview: { color: colors.text },
   dot: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.brand },
 });

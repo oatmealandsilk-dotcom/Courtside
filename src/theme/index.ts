@@ -29,15 +29,37 @@ export const radius = {
   pill: 999,
 } as const;
 
+/**
+ * Inter, shipped inside the app. React Native picks a face by family name, so
+ * each weight is its own family; `fontWeight` rides along for the web.
+ */
+export const fontFamily = {
+  regular: 'Inter_400Regular',
+  medium: 'Inter_500Medium',
+  semibold: 'Inter_600SemiBold',
+  bold: 'Inter_700Bold',
+} as const;
+
+/** A weight as a style: `{...font('500')}` where a literal fontWeight used to be. */
+export const font = (weight: '400' | '500' | '600' | '700') => ({
+  fontFamily: { '400': fontFamily.regular, '500': fontFamily.medium, '600': fontFamily.semibold, '700': fontFamily.bold }[weight],
+  fontWeight: weight,
+});
+
+/**
+ * Lighter than it was: display and title at medium rather than black, with
+ * tracking that tightens as size grows. Weight still carries hierarchy; it
+ * just does it with less shouting.
+ */
 export const typography = {
-  display: { fontSize: 30, fontWeight: '800' as const, letterSpacing: -0.6 },
-  title: { fontSize: 22, fontWeight: '700' as const, letterSpacing: -0.3 },
-  heading: { fontSize: 17, fontWeight: '700' as const },
-  body: { fontSize: 15, fontWeight: '400' as const },
-  bodyStrong: { fontSize: 15, fontWeight: '600' as const },
-  small: { fontSize: 13, fontWeight: '400' as const },
-  smallStrong: { fontSize: 13, fontWeight: '600' as const },
-  caption: { fontSize: 11, fontWeight: '600' as const, letterSpacing: 0.4 },
+  display: { ...font('500'), fontSize: 30, letterSpacing: -1.05 },
+  title: { ...font('500'), fontSize: 22, letterSpacing: -0.66 },
+  heading: { ...font('600'), fontSize: 17, letterSpacing: -0.3 },
+  body: { ...font('400'), fontSize: 15 },
+  bodyStrong: { ...font('600'), fontSize: 15, letterSpacing: -0.15 },
+  small: { ...font('400'), fontSize: 13 },
+  smallStrong: { ...font('600'), fontSize: 13 },
+  caption: { ...font('600'), fontSize: 11, letterSpacing: 0.4 },
 } as const;
 
 /** Muted avatar tints — deterministic per seed, none of them loud. */
