@@ -17,9 +17,11 @@ import { onSpaceBar } from '@/features/feed/keyboard';
  * one tap pauses, two likes, a small disc top-right toggles the sound, and a
  * hairline along the bottom shows how far through it is.
  */
-function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart, trimEnd, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop }: {
+function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop }: {
   uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void; fit?: 'cover' | 'contain';
   trimStart?: number; trimEnd?: number;
+  /** The author's rate (1 is normal) and level (0–1), honoured at playback. */
+  speed?: number; volume?: number;
   /** Posted without sound: plays muted and offers no way to unmute. */
   silent?: boolean;
   /** Nothing over the picture at all: no sound disc, no length line. */
@@ -105,11 +107,11 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
     <View style={StyleSheet.absoluteFill}>
       {letterbox ? (
         <View style={styles.wideFrame}><View style={cropLayer(crop)}>
-          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent || !active} paused={paused} fit="contain" trimStart={trimStart} trimEnd={trimEnd} onProgress={onProgress} onReady={setReady} onGone={gone} />
+          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent || !active} paused={paused} fit="contain" trimStart={trimStart} trimEnd={trimEnd} speed={speed} volume={volume} onProgress={onProgress} onReady={setReady} onGone={gone} />
         </View></View>
       ) : (
         <View style={cropLayer(crop)}>
-          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent || !active} paused={paused} fit={fit} trimStart={trimStart} trimEnd={trimEnd} onProgress={onProgress} onReady={setReady} onGone={gone} />
+          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent || !active} paused={paused} fit={fit} trimStart={trimStart} trimEnd={trimEnd} speed={speed} volume={volume} onProgress={onProgress} onReady={setReady} onGone={gone} />
         </View>
       )}
       {!ready && active ? <View pointerEvents="none" style={styles.centre}><CourtSpinner ink={discInk ?? 'white'} /></View> : null}

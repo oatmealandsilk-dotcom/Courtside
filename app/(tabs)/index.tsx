@@ -903,6 +903,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                           onDoubleTap={() => likeByTap(post.id, liked)}
                           trimStart={post.trimStart}
                           trimEnd={post.trimEnd}
+                          speed={post.speed}
+                          volume={post.volume}
                           crop={post.crop}
                           silent={post.muted}
                           bare={immersive}

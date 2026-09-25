@@ -324,7 +324,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
               <div style={cropCss(trim?.crop)}><VideoSurface ref={still} uri={value.uri} muted paused fit={orientation === 'landscape' ? 'contain' : 'cover'} from={keepFrom} onDuration={() => still.current?.seek(coverAt ?? keepFrom)} /></div>
             ) : value.kind === 'video' && value.uri ? (
               // Plays the way it will in the feed: looped, muted, edge to edge.
-              <div style={cropCss(trim?.crop)}><ClipVideo uri={value.uri} poster={value.thumbnailUrl} active muted fit={orientation === 'landscape' ? 'contain' : 'cover'} trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} /></div>
+              <div style={cropCss(trim?.crop)}><ClipVideo uri={value.uri} poster={value.thumbnailUrl} active muted fit={orientation === 'landscape' ? 'contain' : 'cover'} trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} speed={trim?.speed} volume={trim?.volume} /></div>
             ) : value.uri ? (
               <img src={value.uri} alt={describe(value)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
             ) : null}
@@ -441,7 +441,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
               // springs back; no browser controls.
               <div onClick={(event) => event.stopPropagation()} style={{ position: 'relative', width: orientation === 'landscape' ? '100%' : `min(100%, calc(88vh * ${portraitRatio}))`, aspectRatio: orientation === 'landscape' ? '16 / 9' : String(portraitRatio), maxHeight: '100%', borderRadius: 12, overflow: 'hidden', background: '#000', cursor: 'default' }}>
                 <ZoomableMedia onDismiss={() => setExpanded(false)}>
-                  <ClipPlayback uri={value.uri} poster={value.thumbnailUrl} active fit={orientation === 'landscape' ? 'contain' : 'cover'} trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} crop={trim?.crop} silent={trim?.muted} />
+                  <ClipPlayback uri={value.uri} poster={value.thumbnailUrl} active fit={orientation === 'landscape' ? 'contain' : 'cover'} trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} speed={trim?.speed} volume={trim?.volume} crop={trim?.crop} silent={trim?.muted} />
                 </ZoomableMedia>
               </div>
             ) : value.uri ? (

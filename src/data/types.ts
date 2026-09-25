@@ -169,6 +169,10 @@ export interface Post {
   crop?: MediaCrop;
   /** Posted without sound. */
   muted?: boolean;
+  /** Playback rate honoured by the player, never cut into the file: 0.5, 1.5 or 2. Absent means normal speed. */
+  speed?: number;
+  /** How loud the clip's own sound plays, 0–1. Absent means full; silence is `muted`, not 0. */
+  volume?: number;
   taggedUserIds?: ID[];
   match?: MatchResult;
   session?: SessionDetail;

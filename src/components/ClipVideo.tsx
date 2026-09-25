@@ -24,14 +24,16 @@ const livePlayers = new Set<VideoPlayer>();
 
 export const ClipVideo = forwardRef<ClipVideoHandle, {
   uri: string; poster?: string; active?: boolean; muted?: boolean; paused?: boolean; fit?: 'cover' | 'contain';
-  trimStart?: number; trimEnd?: number;
+  trimStart?: number; trimEnd?: number; speed?: number; volume?: number;
   onProgress?: (fraction: number, seconds: number, length: number) => void;
   onReady?: (ready: boolean) => void;
   onSize?: (width: number, height: number) => void;
   onGone?: () => void;
-}>(function ClipVideo({ uri, active = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, onProgress, onReady, onSize, onGone }: {
+}>(function ClipVideo({ uri, active = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, speed, volume, onProgress, onReady, onSize, onGone }: {
   uri: string; poster?: string; active?: boolean; muted?: boolean; paused?: boolean; fit?: 'cover' | 'contain';
   trimStart?: number; trimEnd?: number;
+  /** The author's playback edits, honoured by the player rather than cut into the file: a rate (1 is normal) and a level (0–1). */
+  speed?: number; volume?: number;
   /** How far through the clip it is, 0..1, a few times a second. */
   onProgress?: (fraction: number, seconds: number, length: number) => void;
   /** True once the clip has its first frame and can play; false while it fetches. */
@@ -140,6 +142,9 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   useEffect(() => {
     safely(() => { player.muted = muted; });
   }, [player, muted]);
+  // Speed keeps the voice's pitch; a level under full is the author's choice, silence is `muted`.
+  useEffect(() => { safely(() => { player.playbackRate = speed ?? 1; player.preservesPitch = true; }); }, [player, speed]);
+  useEffect(() => { safely(() => { player.volume = volume ?? 1; }); }, [player, volume]);
   // Every clip keeps a few seconds buffered ahead — enough for a page
   // waiting off screen to start the instant it arrives, without pulling whole
   // videos down. Set once: changing it as a page went live made the player

@@ -6,6 +6,7 @@ import * as haptics from '@/lib/haptics';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ClipVideo } from '@/components/ClipVideo';
+import { cropLayer } from '@/lib/crop';
 import { Tappable } from '@/components/Tappable';
 import { useOptimisticToggle } from '@/lib/useOptimisticToggle';
 import { Avatar, Card, Chip } from '@/components/ui';
@@ -122,7 +123,12 @@ function PostCardInner({
       ) : null}
 
       {post.imageUrl && <Image accessibilityLabel={post.mediaLabel ?? "Post photo"} source={{uri:post.imageUrl}} style={{width:"100%",aspectRatio:1,borderRadius:12}} resizeMode="cover"/>}
-      {post.videoUrl ? <ClipVideo uri={post.videoUrl} poster={post.thumbnailUrl} /> : post.kind === 'clip' ? <MediaPlaceholder label={post.mediaLabel ?? 'Clip'} seed={post.id} portrait /> : null}
+      {/* The player fills whatever box it is given, so the card gives it one in the post's own shape. */}
+      {post.videoUrl ? (
+        <View style={{ width: '100%', aspectRatio: post.orientation === 'landscape' ? 16 / 9 : 4 / 5, borderRadius: 12, overflow: 'hidden', backgroundColor: '#000' }}>
+          <View style={cropLayer(post.crop)}><ClipVideo uri={post.videoUrl} poster={post.thumbnailUrl} trimStart={post.trimStart} trimEnd={post.trimEnd} speed={post.speed} volume={post.volume} /></View>
+        </View>
+      ) : post.kind === 'clip' ? <MediaPlaceholder label={post.mediaLabel ?? 'Clip'} seed={post.id} portrait /> : null}
       <Pressable onPress={onPress} style={styles.body}>
         <Tappable
           accessibilityLabel={`${meta.label}: see discussions about this in Community`}

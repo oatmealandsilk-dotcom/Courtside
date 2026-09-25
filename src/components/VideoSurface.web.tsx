@@ -15,10 +15,13 @@ export const VideoSurface = forwardRef<VideoSurfaceHandle, {
   to?: number;
   /** Hold on the current frame; looping and auto-play stand down. */
   paused?: boolean;
+  /** How fast it plays (1 is normal) and how loud its own sound is (0–1), previewed live. */
+  rate?: number;
+  volume?: number;
   onTime?: (seconds: number) => void;
   onDuration?: (seconds: number) => void;
   onSize?: (width: number, height: number) => void;
-}>(function VideoSurface({ uri, muted = true, fit = 'contain', from = 0, to, paused = false, onTime, onDuration, onSize }, ref) {
+}>(function VideoSurface({ uri, muted = true, fit = 'contain', from = 0, to, paused = false, rate, volume, onTime, onDuration, onSize }, ref) {
   const el = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     const video = el.current;
@@ -47,6 +50,16 @@ export const VideoSurface = forwardRef<VideoSurfaceHandle, {
     if (paused) video.pause(); else video.play().catch(() => undefined);
     return () => { cancelAnimationFrame(frame); video.removeEventListener('loadedmetadata', onMeta); video.removeEventListener('timeupdate', onTick); video.pause(); };
   }, [from, to, paused, onTime, onDuration, onSize]);
+  // Speed and level live on the element, in their own effects: the one above
+  // pauses and replays the video whenever it re-runs, and a level change must not.
+  useEffect(() => {
+    const video = el.current;
+    if (!video) return;
+    video.playbackRate = rate ?? 1;
+    video.defaultPlaybackRate = rate ?? 1;
+    video.preservesPitch = true;
+  }, [rate]);
+  useEffect(() => { if (el.current) el.current.volume = volume ?? 1; }, [volume]);
   useImperativeHandle(ref, () => ({
     seek: (seconds) => { if (el.current) el.current.currentTime = seconds; },
     play: () => { el.current?.play().catch(() => undefined); },
