@@ -158,10 +158,15 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       // room, so the next page never peeks in at the bottom; with the bar
       // at full size the last few points sit under it, and pages keep that
       // much clear.
-      const h = e.nativeEvent.layout.height + BAR_DUCK_PX * (1 - barCompact.value);
+      const room = e.nativeEvent.layout.height;
+      const h = room + BAR_DUCK_PX * (1 - barCompact.value);
       if (h <= 0) return;
       setHeight((prev) => {
-        if (prev !== 0 && Math.abs(prev - h) < RESIZE_MIN) return prev;
+        // A page shorter than the room shows the next page's top above the
+        // bar, so more room than the page is always taken, however small the
+        // change; less room (the bar at full size) is only the few points
+        // that sit under it, and is ignored as before.
+        if (prev !== 0 && room <= prev + 1 && Math.abs(prev - h) < RESIZE_MIN) return prev;
         if (prev !== 0) requestAnimationFrame(() => jump(last.current * h, false));
         return h;
       });

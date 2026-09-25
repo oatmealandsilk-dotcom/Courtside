@@ -1189,7 +1189,7 @@ const styleDefinitions = StyleSheet.create({
   stripWords: { alignItems: 'center', gap: 2 },
   stripName: { ...typography.bodyStrong, fontSize: 14, color: colors.text, textAlign: 'center' },
   stripReason: { ...typography.small, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
-  threadArticle: { gap: 8, paddingBottom: 20 },
+  threadArticle: { gap: 8, paddingBottom: BAR_DUCK_PX + 12 },
   eyebrow: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.1 },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   threadMark: { marginRight: 6, marginTop: 6 },
