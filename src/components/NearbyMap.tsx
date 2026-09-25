@@ -5,12 +5,14 @@ import MapView, { Marker, type Region } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar } from '@/components/ui';
+import { LinearGradient } from 'expo-linear-gradient';
+import { levelBadge } from '@/lib/badges';
 import type { User } from '@/data/types';
 import { homeFor, positionFor, type LatLng } from '@/features/players/positions';
 import { useWeather } from '@/features/players/useWeather';
 import { colors, radius, spacing, typography } from '@/theme';
 
-const HEIGHT = 220;
+const HEIGHT = 290;
 /** How much of the world the map shows at first: roughly a city. */
 const CITY = { latitudeDelta: 0.16, longitudeDelta: 0.16 };
 
@@ -75,7 +77,8 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
         accessibilityLabel={`${player.name}, open profile`}
         onPress={() => onOpen(player.id)}
       >
-        <View style={styles.pinRing}>
+        {/* The pin is the player: their picture in a ring of their level's colour. */}
+        <View style={[styles.pinRing, { borderColor: levelBadge(player.profile).tint }]}>
           <Avatar name={player.name} seed={player.avatarSeed} size={30} ring={player.isCoach} />
         </View>
       </Marker>
@@ -83,7 +86,7 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
   });
   const mePin = (
     <Marker coordinate={{ latitude: home.lat, longitude: home.lng }} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false} accessibilityLabel="You">
-      <View style={styles.meDot} />
+      <View style={styles.meHalo}><View style={styles.meDot} /></View>
     </Marker>
   );
 
@@ -99,6 +102,11 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
       pitchEnabled={false}
       showsCompass={false}
       showsPointsOfInterests={false}
+      showsBuildings={false}
+      showsTraffic={false}
+      showsIndoors={false}
+      // Apple's quieter map: fewer labels, softer colour, so it sits with the paper.
+      mapType="mutedStandard"
       toolbarEnabled={false}
       userInterfaceStyle={night ? 'dark' : 'light'}
       pointerEvents={interactive ? 'auto' : 'none'}
@@ -106,6 +114,14 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
       {pins}
       {mePin}
     </MapView>
+  );
+  // A breath of the page's own colour over the map, and a fade into the card
+  // at the bottom, so the map is part of the page rather than a window in it.
+  const veil = (
+    <>
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.veil]} />
+      <LinearGradient pointerEvents="none" colors={['rgba(0,0,0,0)', colors.surface]} style={styles.fade} />
+    </>
   );
 
   if (expanded) {
@@ -183,6 +199,7 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
         style={styles.map}
       >
         {canvas(false)}
+        {veil}
         {weather ? <View pointerEvents="none" style={styles.weather}><Ionicons name={weather.icon as keyof typeof Ionicons.glyphMap} size={14} color={colors.text} /><Text style={styles.weatherText}>{weather.tempF}° · {weather.label}</Text></View> : null}
       </Pressable>
       <Text style={styles.hint}>Tap the map to open it. The badge means coach.</Text>
@@ -192,14 +209,14 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
 
 const styleDefinitions = StyleSheet.create({
   card: {
-    borderRadius: radius.lg,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
     overflow: 'hidden',
   },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md },
-  title: { ...typography.smallStrong, color: colors.text },
+  title: { ...typography.bodyStrong, fontSize: 14, color: colors.text },
   // The count sits right by the words, in the theme colour, so it reads as part of them.
   count: { ...typography.smallStrong, fontSize: 15, color: colors.brand, marginLeft: -2 },
   locPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bg },
@@ -219,7 +236,10 @@ const styleDefinitions = StyleSheet.create({
   locate: { position: 'absolute', right: 10, bottom: 10, width: 38, height: 38, borderRadius: 19, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
   useLocation: { position: 'absolute', left: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.pill, backgroundColor: colors.brand },
   useLocationText: { ...typography.smallStrong, color: colors.brandInk },
-  pinRing: { padding: 2, borderRadius: radius.pill, backgroundColor: colors.bg },
-  meDot: { width: 18, height: 18, borderRadius: 9, backgroundColor: colors.brand, borderWidth: 3, borderColor: colors.bg },
+  pinRing: { padding: 2, borderRadius: radius.pill, backgroundColor: colors.bg, borderWidth: 2, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
+  meDot: { width: 16, height: 16, borderRadius: 8, backgroundColor: colors.brand, borderWidth: 3, borderColor: colors.bg },
+  meHalo: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center', opacity: 0.95 },
+  veil: { backgroundColor: colors.bg, opacity: 0.14 },
+  fade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 56 },
   hint: { ...typography.caption, color: colors.textFaint, letterSpacing: 0, padding: spacing.md, paddingTop: spacing.sm },
 });

@@ -6,12 +6,13 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { Ionicons } from '@expo/vector-icons';
 
 import type { User } from '@/data/types';
+import { levelBadge } from '@/lib/badges';
 import { homeFor, positionFor, type LatLng } from '@/features/players/positions';
 import { useWeather } from '@/features/players/useWeather';
 import { initials } from '@/lib/format';
 import { colors, radius, spacing, surfaceColorFor, typography } from '@/theme';
 
-const HEIGHT = 220;
+const HEIGHT = 290;
 const START_ZOOM = 11.5;
 /**
  * The plainest vector style OpenFreeMap offers (free, no key), recoloured
@@ -181,7 +182,7 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
       const face = player.avatarUrl
         ? `background-image:url('${player.avatarUrl}');background-size:cover;`
         : `background:${surfaceColorFor(player.avatarSeed)};`;
-      const node = pin(`<div style="width:34px;height:34px;border-radius:17px;background:${colors.bg};display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.28);cursor:pointer"><div style="width:30px;height:30px;border-radius:15px;${face}color:#fff;font:600 11px system-ui,sans-serif;display:flex;align-items:center;justify-content:center">${player.avatarUrl ? '' : initials(player.name)}</div></div>`, 34);
+      const node = pin(`<div style="width:36px;height:36px;border-radius:18px;background:${colors.bg};border:2px solid ${levelBadge(player.profile).tint};display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.22);cursor:pointer"><div style="width:30px;height:30px;border-radius:15px;${face}color:#fff;font:600 11px system-ui,sans-serif;display:flex;align-items:center;justify-content:center">${player.avatarUrl ? '' : initials(player.name)}</div></div>`, 34);
       node.setAttribute('role', 'link');
       node.setAttribute('aria-label', `${player.name}, open profile`);
       node.addEventListener('click', (event) => { event.stopPropagation(); latestOpen.current(player.id); });
@@ -307,7 +308,7 @@ export function NearbyMap({ me, players, onOpen, onExpand, expanded = false, ful
 
 const styleDefinitions = StyleSheet.create({
   card: {
-    borderRadius: radius.lg,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
