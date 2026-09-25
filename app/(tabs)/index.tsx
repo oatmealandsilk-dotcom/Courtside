@@ -469,7 +469,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     <View style={styles.strip}>
       <View style={styles.stripHead}>
         <Text style={styles.stripTitle}>Players you might know</Text>
-        <Text style={styles.stripSub}>Contacts, mutuals, interactions</Text>
+        <Text style={styles.stripSub}>From your contacts, mutuals and who you've played.</Text>
       </View>
       {/* Its own sideways bar: nativeID keeps the page swipe off it. */}
       <ScrollView
@@ -485,9 +485,10 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         {suggestions.slice(0, 6).map(({ user, reason }) => (
           <View key={user.id} style={styles.stripCard}>
             <Pressable accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.stripBody}>
-              <Avatar name={user.name} seed={user.avatarSeed} size={40} ring={user.isCoach} />
-              <Text style={styles.stripName} numberOfLines={1}>{user.name.split(' ')[0]}</Text>
-              <Text style={styles.stripReason} numberOfLines={1}>{reason}</Text>
+              <Avatar name={user.name} seed={user.avatarSeed} size={56} ring={user.isCoach} />
+              <Text style={styles.stripName} numberOfLines={1}>{user.name}</Text>
+              <LevelPill profile={user.profile} small />
+              <Text style={styles.stripReason} numberOfLines={2}>{reason}</Text>
             </Pressable>
             <Tappable accessibilityLabel={`Follow ${user.name}`} onPress={() => actions.toggleFollow(user.id)} style={styles.stripFollow}>
               <Text style={styles.stripFollowText}>Follow</Text>
@@ -774,7 +775,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                 const isSaved = saved.questionIds.includes(item.question.id);
                 return (
                   <View key={item.question.id} style={[styles.article, styles.threadArticle, scope && styles.articleScoped]}>
-                    <Wash height={320} strength={0.6} />
                     <View style={styles.eyebrowRow}>
                       <Text style={styles.eyebrow}>FROM THE COMMUNITY</Text>
                       {hiddenMarks.has(item.question.id) ? <View style={{ width: 34, height: 34 }} /> : <TapAway label="Hide the CourtSide logo" onHidden={() => hideMark(item.question.id)} style={styles.threadMark}><BrandMark size={34} /></TapAway>}
@@ -843,7 +843,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               if (post.kind !== 'clip') {
                 return (
                   <View key={post.id} style={[styles.article, scope && styles.articleScoped, !phone && styles.articleCentred]}>
-                    <Wash height={320} strength={0.6} />
                     {/* Inside one person's posts the feed label means nothing, and the back chevron wants the room. */}
                     {scope ? null : <Text style={styles.eyebrow}>
                       {post.kind === 'match' ? 'SET PLAY' : post.kind.toUpperCase()} · FOR YOU
@@ -1166,25 +1165,26 @@ const styleDefinitions = StyleSheet.create({
   // On a computer a written post is a centred column like a photo post, not
   // a card stretched across the whole window with its words at the far left.
   articleCentred: { width: '100%', maxWidth: 600, alignSelf: 'center' },
-  strip: { gap: 6, paddingBottom: 4 },
-  stripHead: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
-  stripTitle: { ...typography.smallStrong, color: colors.text },
-  stripSub: { fontSize: 11, color: colors.textFaint },
-  stripRow: { gap: 8, paddingHorizontal: 20, paddingVertical: 4 },
+  strip: { gap: 10, paddingBottom: 6 },
+  stripHead: { gap: 2 },
+  stripTitle: { ...typography.heading, fontSize: 16, color: colors.text },
+  stripSub: { ...typography.small, color: colors.textMuted },
+  stripRow: { gap: 10, paddingHorizontal: 20, paddingVertical: 6 },
+  // A card per player: the picture first, the name, the level in its colour, why they're here.
   stripCard: {
-    width: 104,
-    padding: 8,
-    gap: 6,
-    borderRadius: 12,
+    width: 150,
+    padding: 14,
+    gap: 12,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
-  stripBody: { alignItems: 'center', gap: 3 },
-  stripName: { ...typography.smallStrong, fontSize: 12, color: colors.text },
-  stripReason: { fontSize: 10, color: colors.textMuted },
-  stripFollow: { paddingVertical: 5, borderRadius: 999, backgroundColor: colors.brand, alignItems: 'center' },
-  stripFollowText: { ...typography.smallStrong, fontSize: 12, color: colors.brandInk },
+  stripBody: { alignItems: 'center', gap: 6 },
+  stripName: { ...typography.bodyStrong, fontSize: 14, color: colors.text, textAlign: 'center' },
+  stripReason: { ...typography.small, fontSize: 12, lineHeight: 16, color: colors.textMuted, textAlign: 'center', minHeight: 32 },
+  stripFollow: { paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surfaceAlt, alignItems: 'center' },
+  stripFollowText: { ...typography.smallStrong, color: colors.text },
   threadArticle: { gap: 8, paddingBottom: 20 },
   eyebrow: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.1 },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

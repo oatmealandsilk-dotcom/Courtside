@@ -24,10 +24,7 @@ function Coaching() {
   return (
     <Screen memoryKey="coaches" title="Coaching" subtitle="Real coaches, approved one by one." wash>
       {/* ------------------------------ Ask a coach ----------------------------- */}
-      <View style={styles.lead}>
-        <Text style={styles.leadTitle}>Ask a coach.</Text>
-        <Text style={styles.leadBody}>Free and public. A verified coach answers, usually within a day.</Text>
-      </View>
+      <Text style={styles.askLabel}>Ask a coach</Text>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Ask a coach a question"
@@ -37,6 +34,7 @@ function Coaching() {
         <Text style={styles.askPlaceholder}>What are you stuck on?</Text>
         <View style={styles.askGo}><Ionicons name="arrow-forward" size={16} color={colors.brandInk} /></View>
       </Pressable>
+      <Text style={styles.askNote}>Free and public. A verified coach answers, usually within a day.</Text>
       {recentQuestions.length ? (
         <View style={styles.list}>
           {recentQuestions.map((question, index) => {
@@ -164,9 +162,8 @@ function Coaching() {
 
 const styleDefinitions = StyleSheet.create({
   pressed: { opacity: 0.72 },
-  lead: { gap: 4, paddingTop: spacing.sm, paddingBottom: spacing.lg },
-  leadTitle: { ...typography.title, fontSize: 24, color: colors.text },
-  leadBody: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
+  askLabel: { ...typography.heading, color: colors.text, paddingTop: spacing.md, paddingBottom: spacing.sm },
+  askNote: { ...typography.small, color: colors.textMuted, lineHeight: 18, paddingTop: spacing.sm, paddingLeft: 2 },
   // The way in is a question you could start typing, not a card about asking.
   askField: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
