@@ -6,9 +6,10 @@ import { fetchCourts, type Court } from '@/features/players/courts';
 import { milesBetween } from '@/features/players/geo';
 import { homeFor, positionFor, type LatLng } from '@/features/players/positions';
 import { levelBadge } from '@/lib/badges';
+import { isOpenToHit } from '@/features/players/openToHit';
 import { show as showToast } from '@/lib/toast';
 
-export type MapFilter = 'all' | 'near' | 'level' | 'coaches';
+export type MapFilter = 'all' | 'open' | 'near' | 'level' | 'coaches';
 /** A player set down on the map, with how far that is from you. */
 export interface Placed { user: User; at: LatLng; miles: number }
 
@@ -35,6 +36,7 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null) {
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return ranked.filter((p) => {
+      if (filter === 'open' && !isOpenToHit(p.user)) return false;
       if (filter === 'near' && p.miles > IN_TOWN_MILES) return false;
       if (filter === 'coaches' && !p.user.isCoach) return false;
       if (filter === 'level' && levelBadge(p.user.profile).tint !== myBand) return false;

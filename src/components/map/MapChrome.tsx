@@ -13,6 +13,10 @@ import { Tappable } from '@/components/Tappable';
 import * as haptics from '@/lib/haptics';
 import type { Court } from '@/features/players/courts';
 import { formatMiles } from '@/features/players/geo';
+import { isOpenToHit } from '@/features/players/openToHit';
+import { LevelPill as Level } from '@/components/LevelPill';
+import type { User } from '@/data/types';
+import { Toggle } from '@/components/ui';
 import type { MapFilter, Placed } from '@/features/players/mapModel';
 import type { Weather } from '@/lib/weather';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -62,13 +66,14 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
 
 const FILTERS: { key: MapFilter; label: string }[] = [
   { key: 'all', label: 'All' },
+  { key: 'open', label: 'Open to hit' },
   { key: 'near', label: 'Near me' },
   { key: 'level', label: 'My level' },
   { key: 'coaches', label: 'Coaches' },
 ];
 
 /** Who to show, plus the courts layer, as one row of chips. */
-export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoading }: { filter: MapFilter; onFilter: (next: MapFilter) => void; courtsOn: boolean; onCourts: () => void; courtsLoading: boolean }) {
+export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoading, weather }: { filter: MapFilter; onFilter: (next: MapFilter) => void; courtsOn: boolean; onCourts: () => void; courtsLoading: boolean; /** Shown at the row's right end: the corner of the map. */ weather?: Weather | null }) {
   const styles = useThemedStyles(styleDefinitions);
   // Where each chip sits, so one filled pill can slide from the old choice to the new, the way a segmented control does.
   const spots = useRef<Partial<Record<MapFilter, { x: number; w: number }>>>({});
@@ -112,6 +117,7 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
         {courtsLoading ? <ActivityIndicator size="small" color={courtsOn ? colors.brandInk : colors.text} /> : <Ionicons name="tennisball-outline" size={14} color={courtsOn ? colors.brandInk : colors.text} />}
         <Text style={[styles.chipText, courtsOn && styles.chipTextOn]}>Courts</Text>
       </Pressable>
+      {weather ? <WeatherChip weather={weather} /> : null}
     </View>
   );
 }
@@ -206,7 +212,7 @@ export function NearbyRail({ items, cityName, selectedId, onSelect }: { items: P
                 // A new filter deals the players again: they shuffle into their new places, newcomers fading in.
                 <Animated.View key={p.user.id} layout={LinearTransition.springify().damping(18)} entering={FadeIn.delay(i * 25).duration(220)} exiting={FadeOut.duration(120)}>
                   <Tappable accessibilityLabel={`${p.user.name}, ${formatMiles(p.miles)}`} onPress={() => onSelect(p.user.id)} scaleTo={0.96} style={[styles.railItem, selectedId === p.user.id && styles.railItemOn]}>
-                    <Avatar name={p.user.name} seed={p.user.avatarSeed} size={46} ring={p.user.isCoach} />
+                    <View style={[styles.railRing, isOpenToHit(p.user) && styles.railRingOn]}><Avatar name={p.user.name} seed={p.user.avatarSeed} size={46} ring={p.user.isCoach} /></View>
                     <Text style={styles.railName} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text>
                     <Text style={styles.railMeta} numberOfLines={1}>{formatMiles(p.miles)}</Text>
                   </Tappable>
@@ -255,6 +261,7 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
             <LevelPill profile={user.profile} small />
           </View>
           <Text style={styles.personMeta} numberOfLines={1}>{[`@${user.handle}`, user.location || null, formatMiles(miles)].filter(Boolean).join(' · ')}</Text>
+          {isOpenToHit(user) ? <View style={styles.openRow}><View style={styles.openDot} /><Text style={styles.openText}>Open to hit today</Text></View> : null}
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
           <Ionicons name="close" size={18} color={colors.textMuted} />
@@ -269,6 +276,46 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
           <Text style={styles.secondaryText}>Profile</Text>
         </Pressable>
         <FollowPill following={following} onPress={onFollow} name={user.name.split(' ')[0]} />
+      </View>
+    </Animated.View>
+    </GestureDetector>
+  );
+}
+
+/** You, tapped on the map: whether you are up for a hit today, and your profile. */
+export function YouSheet({ me, open, onToggle, onProfile, onClose }: { me: User; open: boolean; onToggle: (on: boolean) => void; onProfile: () => void; onClose: () => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const pull = useDragToClose(onClose);
+  return (
+    <GestureDetector gesture={pull.gesture}>
+    <Animated.View style={[styles.sheet, pull.style]}>
+      <View style={styles.grabber} />
+      <View style={styles.personRow}>
+        <View style={[styles.youRing, open && styles.youRingOn]}>
+          <Avatar name={me.name} seed={me.avatarSeed} size={50} />
+        </View>
+        <View style={styles.personWords}>
+          <View style={styles.personTop}>
+            <Text style={styles.personName} numberOfLines={1}>You</Text>
+            <Level profile={me.profile} small />
+          </View>
+          <Text style={styles.personMeta} numberOfLines={1}>@{me.handle}{me.location ? ` · ${me.location}` : ''}</Text>
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
+          <Ionicons name="close" size={18} color={colors.textMuted} />
+        </Pressable>
+      </View>
+      <View style={styles.openCard}>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={styles.openTitle}>Open to hit today</Text>
+          <Text style={styles.openNote}>{open ? 'Players nearby see a green ring around you until midnight.' : 'Put a green ring around you on the map, until midnight.'}</Text>
+        </View>
+        <Toggle value={open} onChange={onToggle} accessibilityLabel="Open to hit today" />
+      </View>
+      <View style={styles.personActions}>
+        <Pressable accessibilityRole="link" accessibilityLabel="Your profile" onPress={onProfile} style={styles.secondary}>
+          <Text style={styles.secondaryText}>Your profile</Text>
+        </Pressable>
       </View>
     </Animated.View>
     </GestureDetector>
@@ -355,7 +402,7 @@ const styleDefinitions = StyleSheet.create({
   chipPill: { position: 'absolute', left: 0, top: 0, height: 32, borderRadius: radius.pill, backgroundColor: colors.brand },
   chipText: { ...typography.smallStrong, color: colors.text },
   chipTextOn: { color: colors.brandInk },
-  weather: { alignSelf: 'flex-end', marginRight: spacing.md, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  weather: { marginLeft: 6, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   weatherText: { ...typography.smallStrong, color: colors.text, fontVariant: ['tabular-nums'] },
   buttonsRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', paddingHorizontal: spacing.md },
   buttons: { alignItems: 'flex-end', gap: spacing.sm },
@@ -376,6 +423,8 @@ const styleDefinitions = StyleSheet.create({
   rail: { paddingHorizontal: spacing.md, gap: 4 },
   railItem: { width: 76, alignItems: 'center', gap: 4, paddingVertical: 6, borderRadius: radius.lg },
   railItemOn: { backgroundColor: colors.brandDim },
+  railRing: { padding: 2, borderRadius: 27, borderWidth: 2, borderColor: 'transparent' },
+  railRingOn: { borderColor: colors.brand },
   railName: { ...typography.smallStrong, color: colors.text },
   railMeta: { ...typography.caption, color: colors.textMuted, letterSpacing: 0 },
   personRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg },
@@ -389,6 +438,14 @@ const styleDefinitions = StyleSheet.create({
   primaryText: { ...typography.smallStrong, color: colors.brandInk },
   secondary: { height: 40, paddingHorizontal: 16, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
   secondaryText: { ...typography.smallStrong, color: colors.text },
+  openRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  openDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.brand },
+  openText: { ...typography.smallStrong, color: colors.brand },
+  youRing: { padding: 2, borderRadius: 30, borderWidth: 1.5, borderColor: colors.borderStrong },
+  youRingOn: { borderWidth: 2.5, borderColor: colors.brand },
+  openCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginHorizontal: spacing.lg, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surfaceAlt },
+  openTitle: { ...typography.bodyStrong, color: colors.text },
+  openNote: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
   courtDisc: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   courtNote: { ...typography.caption, color: colors.textFaint, letterSpacing: 0, marginLeft: 'auto' },
   // The still card's overlay.

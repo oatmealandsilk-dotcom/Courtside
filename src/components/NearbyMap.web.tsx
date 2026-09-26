@@ -1,5 +1,5 @@
 import { themes, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,10 +7,11 @@ import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Ionicons } from '@expo/vector-icons';
 
-import { CourtSheet, FilterChips, MapCredit, MapButtons, MapTopBar, NearbyRail, PlayerSheet, PreviewOverlay, WeatherChip } from '@/components/map/MapChrome';
+import { CourtSheet, FilterChips, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlayerSheet, PreviewOverlay } from '@/components/map/MapChrome';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { milesBetween } from '@/features/players/geo';
 import { useMapModel } from '@/features/players/mapModel';
+import { isOpenToHit } from '@/features/players/openToHit';
 import { useBarInset } from '@/features/navigation/barInset';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -43,14 +44,17 @@ export function NearbyMap(props: NearbyMapProps) {
   const insets = useSafeAreaInsets();
   const barInset = useBarInset();
   const { followingIds, actions } = useApp();
+  // Your own pin, tapped: the card with your open-to-hit switch.
+  const [meOpen, setMeOpen] = useState(false);
+  const openToHit = isOpenToHit(me);
   const model = useMapModel(me, players, at);
   const { home } = model;
   const weather = useWeather(home);
   const cityName = me.location.trim() ? me.location.split(',')[0] : 'you';
   const host = useRef<HTMLDivElement | null>(null);
   const map = useRef<maplibregl.Map | null>(null);
-  const latest = useRef({ onOpen, select: model.select, selectCourt: model.selectCourt, loadCourts: model.loadCourts, courtsOn: model.courtsOn });
-  latest.current = { onOpen, select: model.select, selectCourt: model.selectCourt, loadCourts: model.loadCourts, courtsOn: model.courtsOn };
+  const latest = useRef({ onOpen, select: model.select, selectCourt: model.selectCourt, loadCourts: model.loadCourts, courtsOn: model.courtsOn, openMe: () => undefined as void });
+  latest.current = { onOpen, select: model.select, selectCourt: model.selectCourt, loadCourts: model.loadCourts, courtsOn: model.courtsOn, openMe: () => { if (expanded) { model.select(null); model.selectCourt(null); setMeOpen(true); } else onExpand?.(); } };
 
   // The map itself: made once per look and home, kept across everything else.
   useEffect(() => {
@@ -71,7 +75,7 @@ export function NearbyMap(props: NearbyMapProps) {
     });
     instance.touchZoomRotate.disableRotation();
     instance.on('load', () => applyLook(instance, lookFor(themes[theme])));
-    instance.on('click', () => { latest.current.select(null); latest.current.selectCourt(null); });
+    instance.on('click', () => { latest.current.select(null); latest.current.selectCourt(null); setMeOpen(false); });
     instance.on('moveend', () => { if (latest.current.courtsOn) { const c = instance.getCenter(); void latest.current.loadCourts({ lat: c.lat, lng: c.lng }); } });
     // Trackpad: a pinch arrives as a wheel with Ctrl held and zooms around the
     // pointer; a plain two-finger scroll slides the map. Both are ours.
@@ -119,11 +123,11 @@ export function NearbyMap(props: NearbyMapProps) {
     }
     const meSize = expanded ? 34 : 26;
     markers.push(new maplibregl.Marker({
-      element: pin(mePinHtml(me, meSize)),
+      element: (() => { const node = pin(mePinHtml(me, meSize)); node.setAttribute('role', 'button'); node.setAttribute('aria-label', 'You'); node.addEventListener('click', (event) => { event.stopPropagation(); latest.current.openMe(); }); return node; })(),
       anchor: 'center',
     }).setLngLat([home.lng, home.lat]).addTo(instance));
     return () => { markers.forEach((m) => m.remove()); };
-  }, [shown, selectedId, expanded, home.lat, home.lng, me, night]);
+  }, [shown, selectedId, expanded, home.lat, home.lng, me, night, openToHit]);
 
   // Courts, when that layer is on.
   const selectedCourtId = model.selectedCourt?.id ?? null;
@@ -170,12 +174,13 @@ export function NearbyMap(props: NearbyMapProps) {
       {canvas}
       <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
         <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} />
-        <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
-        <WeatherChip weather={weather} />
+        <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} weather={weather} />
       </View>
       <View pointerEvents="box-none" style={styles.bottom}>
         <MapButtons onRecentre={() => { model.select(null); map.current?.flyTo({ center: [home.lng, home.lat], zoom: START_ZOOM, duration: 600 }); }} onZoomIn={() => map.current?.zoomIn()} onZoomOut={() => map.current?.zoomOut()} />
-        {model.selected ? (
+        {meOpen ? (
+          <YouSheet me={me} open={openToHit} onToggle={actions.setOpenToHit} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} />
+        ) : model.selected ? (
           <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onFollow={() => actions.toggleFollow(model.selected!.user.id)} />
         ) : model.selectedCourt ? (
           <CourtSheet court={model.selectedCourt} miles={milesBetween(home, model.selectedCourt)} onClose={() => model.selectCourt(null)} onDirections={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${model.selectedCourt!.lat},${model.selectedCourt!.lng}`, '_blank', 'noopener')} />

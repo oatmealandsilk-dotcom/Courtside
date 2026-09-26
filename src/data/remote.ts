@@ -52,6 +52,8 @@ interface ProfileRow {
   id: string; handle: string; name: string; bio: string; location: string;
   avatar_url: string | null; is_coach: boolean; profile: Partial<PlayerProfile> | null; created_at: string;
   is_private?: boolean | null;
+  /** Migration 31. */
+  open_to_hit_until?: string | null;
   /** Kept by the database (migration 22); missing on a database without it. */
   followers_count?: number | null;
   /** Moderation (migration 23). */
@@ -96,6 +98,7 @@ const toUser = (row: ProfileRow, followers: number, following: number): User => 
   avatarSeed: row.id,
   avatarUrl: row.avatar_url ?? undefined,
   isPrivate: row.is_private || undefined,
+  openToHitUntil: row.open_to_hit_until ?? undefined,
   ageGroup: row.age_group === 'teen' || row.age_group === 'adult' ? row.age_group : undefined,
   // Off only when its owner turned it off; a database without the setting yet reads as on.
   readReceiptsEnabled: row.read_receipts !== false,
@@ -898,8 +901,9 @@ export const remote = {
   },
   async voteTip(tipId: ID, dir: 1 | -1) { const { error } = await need().rpc('vote_tip', { t: tipId, dir }); if (error) fail('tip vote')(error); },
 
-  async updateProfile(me: ID, patch: { name?: string; bio?: string; location?: string; avatarUrl?: string; profile?: PlayerProfile; isPrivate?: boolean; readReceipts?: boolean }) {
+  async updateProfile(me: ID, patch: { name?: string; bio?: string; location?: string; avatarUrl?: string; profile?: PlayerProfile; isPrivate?: boolean; readReceipts?: boolean; openToHitUntil?: string | null }) {
     const row: Record<string, unknown> = {};
+    if (patch.openToHitUntil !== undefined) row.open_to_hit_until = patch.openToHitUntil;
     if (patch.readReceipts !== undefined) row.read_receipts = patch.readReceipts;
     if (patch.isPrivate !== undefined) row.is_private = patch.isPrivate;
     if (patch.name !== undefined) row.name = patch.name;
