@@ -8,19 +8,21 @@ import { colors, font, radius, spacing, typography } from '@/theme';
 const MAX = 500;
 
 /**
- * The box a tip is written in, on the feed's tip page and at the top of the
- * board: a shade off the page, no outline, and a small Send pill tucked in
- * its corner that wakes up once there is something to send.
+ * A box to write in, with a small Send pill tucked in its corner that wakes
+ * up once there is something to send: a shade off the page, no outline.
+ * Tips use it (the feed's tip page and the board), and so does the AI coach.
  */
-export function TipComposer({ onSubmit, onSent, placeholder = 'What would make CourtSide better?' }: {
+export function TipComposer({ onSubmit, onSent, initial = '', placeholder = 'What would make CourtSide better?' }: {
   onSubmit: (body: string) => Promise<void> | void;
   onSent?: () => void;
+  /** Text to start with (a suggestion tapped above it). */
+  initial?: string;
   placeholder?: string;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const input = useRef<TextInput>(null);
   const reveal = useRevealOnFocus();
-  const [body, setBody] = useState('');
+  const [body, setBody] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const text = body.trim();
@@ -34,8 +36,8 @@ export function TipComposer({ onSubmit, onSent, placeholder = 'What would make C
       setBody('');
       input.current?.blur();
       onSent?.();
-    } catch {
-      setError('That did not send. Check your connection and try again.');
+    } catch (e) {
+      setError(e instanceof Error && e.message ? e.message : 'That did not send. Check your connection and try again.');
     } finally {
       setBusy(false);
     }

@@ -36,7 +36,10 @@ import type {
   Post,
   Question,
   Story,
+  TrainingBlockKind,
+  TrainingPlan,
   User,
+  ID,
 } from './types';
 
 // The stand-in delay that makes loading states real in the demo. With a real
@@ -162,33 +165,81 @@ export async function signIn(handle: string): Promise<User> {
   return delay(clone(match), 500);
 }
 
+/** A human coach the AI coach may suggest, when one would help more than another message. */
+export interface CoachOption { id: ID; name: string; specialties: string[]; fromCents: number }
+export interface AiCoachReply {
+  reply: string;
+  /** Questions left today; the coach answers 20 a day. */
+  remaining?: number;
+  /** A suggestion to take this to a human coach. */
+  handoff?: { id: string | null; coachId: ID; reason: string; line: string } | null;
+}
+
 /**
- * The AI coach. When Supabase is configured this goes through the `ai-coach`
- * Edge Function, which holds the model key and calls Claude with the player's
- * profile as context. Without it, the deterministic reply below stands in.
+ * The AI coach. On a real account this goes through the `ai-coach` Edge
+ * Function, which holds the model key, remembers earlier conversations, and
+ * calls Claude with the player's profile as context. The demo build answers
+ * with a short stand-in instead. Throws with a plain line when it cannot answer.
  */
-export async function askAiCoach(
-  prompt: string,
-  context: string,
-  history: { role: 'user' | 'coach'; body: string }[] = [],
-): Promise<string> {
+export async function askAiCoach(prompt: string, context: string, coaches: CoachOption[] = [], live = true): Promise<AiCoachReply> {
   const trimmed = prompt.trim();
-  if (!trimmed) return 'Ask me anything about your game and I will work from your profile and this week’s plan.';
-  if (supabase) {
-    const { data, error } = await supabase.functions.invoke<{ reply?: string; error?: string }>('ai-coach', {
-      body: { prompt: trimmed, context, history },
+  if (!trimmed) return { reply: 'Ask me anything about your game and I will work from your profile and this week’s plan.' };
+  if (supabase && live) {
+    const { data, error } = await supabase.functions.invoke<AiCoachReply & { error?: string; capped?: boolean }>('ai-coach', {
+      body: { mode: 'chat', prompt: trimmed, context, coaches },
     });
-    if (!error && data?.reply) return data.reply;
-    // Function not deployed yet, or the key is missing: fall through to the stand-in.
+    if (data?.capped) throw new Error('That is all 20 questions for today. The coach is back tomorrow.');
+    if (error || !data?.reply) throw new Error(data?.error ?? 'The coach is unavailable right now. Try again in a minute.');
+    return data;
   }
   await delay(null, 700);
-  return [
-    `Here is how I would think about that, given ${context}:`,
-    '',
-    '• Start from what your last two weeks actually show, not what you feel like today.',
-    '• Change one variable at a time so you can tell what worked.',
-    '• If it touches an injury note on your profile, cap the volume before you change the technique.',
-    '',
-    'TODO(ai): this reply is a deterministic placeholder. Wire this call to the coaching model and pass the player profile, active constraints, tournament calendar and recent recovery data as context.',
-  ].join('\n');
+  return {
+    reply: [
+      'Start from what your last two weeks actually show, not how you feel today.',
+      'Change one thing at a time, so you can tell what worked.',
+      'If it touches an injury note on your profile, cap the volume before you change the technique.',
+      '',
+      '(This is the demo, so this is a sample answer. On a real account the coach answers from your profile.)',
+    ].join('\n'),
+    remaining: DAILY_CAP,
+  };
+}
+
+/** What the coach sends back for a week, before the app gives it ids. */
+interface RawPlan {
+  headline: string; summary: string; focusAreas: string[]; cautions: string[];
+  days: { label: string; restDay: boolean; blocks: { title: string; kind: TrainingBlockKind; minutes: number; detail: string[]; rationale: string }[] }[];
+}
+
+/**
+ * This week's plan, written by the coach and kept for the week. A new one is
+ * written when the profile changes (up to three times a week); otherwise the
+ * same week comes back instantly. Null when it cannot be written.
+ */
+export async function fetchAiPlan(context: string, profileHash: string): Promise<TrainingPlan | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase.functions.invoke<{ plan?: RawPlan; error?: string }>('ai-coach', {
+    body: { mode: 'plan', context, profileHash },
+  });
+  if (error || !data?.plan?.days?.length) return null;
+  const raw = data.plan;
+  const monday = new Date();
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  return {
+    id: `ai-${profileHash}`,
+    generatedAt: new Date().toISOString(),
+    weekOf: monday.toISOString(),
+    headline: raw.headline,
+    summary: raw.summary,
+    focusAreas: raw.focusAreas ?? [],
+    cautions: raw.cautions ?? [],
+    days: raw.days.map((day, dayIndex) => ({
+      id: `ai-d${dayIndex}`,
+      dayIndex,
+      label: day.label,
+      restDay: day.restDay,
+      blocks: (day.blocks ?? []).map((b, i) => ({ ...b, id: `ai-d${dayIndex}-b${i}` })),
+    })),
+  };
 }

@@ -95,7 +95,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const selected = useRef(0);
   if (shown === '/') selected.current = 0;
   else if (shown === '/discuss' || shown.startsWith('/question/') || shown.startsWith('/user/')) selected.current = 1;
-  else if (shown === '/coaches' || shown.startsWith('/coach/')) selected.current = 2;
+  else if (shown === '/coaches' || shown.startsWith('/coach/') || shown.startsWith('/coach-') || shown === '/ai-coach') selected.current = 2;
   else if (shown === '/profile' || ['/settings', '/edit-profile', '/change-handle', '/profile-details'].includes(shown)) selected.current = 3;
   // Pages with their own bottom controls (a composer, an editor, a thread's message box) run without the floating bar.
   const showNav = !!currentUserId && !['/sign-in', '/onboarding', '/agree', '/first-move', '/compose', '/hit', '/edit-post', '/ask', '/ask-coach', '/pick-location', '/invite', '/comments', '/share', '/likes', '/post-menu'].includes(pathname) && !pathname.startsWith('/messages/') && !pathname.startsWith('/story/');

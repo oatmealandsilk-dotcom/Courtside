@@ -1,19 +1,22 @@
 // CourtSide AI coach — a Supabase Edge Function.
 //
-// The app never holds the Anthropic key. Three jobs, chosen by `mode`:
-//   plan   — a week of training from the player's profile (Opus 5), cached
+// The app never holds the Anthropic key. Four jobs, chosen by `mode`:
+//   status — whether the coach is switched on (the key is set); free, no model call
+//   plan   — a week of training from the player's profile (Opus 5.5), cached
 //            per week and per profile so it is built once, not on every open
 //   chat   — a coaching reply with memory of past sessions (Sonnet 5), a
 //            daily cap, and a possible handoff to a human coach
 //   memory — read what the coach remembers (the app clears it directly)
 //
-// Deploy:   supabase functions deploy ai-coach
-// Secret:   supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+// Deploy:   npx supabase functions deploy ai-coach --no-verify-jwt
+// Secret:   set ANTHROPIC_API_KEY in Supabase → Edge Functions → Secrets.
+// The app asks `status` and shows the coach only once the key is there, so
+// adding the key is what switches it on; removing it switches it off.
 // (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / SUPABASE_ANON_KEY are provided.)
 import Anthropic from 'npm:@anthropic-ai/sdk@0.71.0';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-const PLAN_MODEL = 'claude-opus-5';
+const PLAN_MODEL = 'claude-opus-5-5';
 const CHAT_MODEL = 'claude-sonnet-5';
 const DAILY_CAP = 20;
 const REMEMBERED = 10;          // exchanges fed into every chat request
@@ -22,7 +25,8 @@ const HANDOFF_COOLDOWN_DAYS = 7;
 const PLAN_CAP_PER_WEEK = 3;    // regenerations a player gets for one week
 const LIMITS = { prompt: 2000, context: 6000, coaches: 12 };
 
-const anthropic = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') });
+const KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? '';
+const anthropic = new Anthropic({ apiKey: KEY || 'missing' });
 const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
 const cors = {
@@ -90,7 +94,7 @@ function clean(raw: unknown) {
         return [{ id: o.id.slice(0, 64), name: o.name.slice(0, 80), specialties: (o.specialties as unknown[]).filter((x) => typeof x === 'string').slice(0, 6) as string[], fromCents: Number(o.fromCents) }];
       })
     : [];
-  const mode = ['plan', 'chat', 'memory'].includes(String(b.mode)) ? (String(b.mode) as 'plan' | 'chat' | 'memory') : 'chat';
+  const mode = ['status', 'plan', 'chat', 'memory'].includes(String(b.mode)) ? (String(b.mode) as 'status' | 'plan' | 'chat' | 'memory') : 'chat';
   return { mode, prompt: str(b.prompt, LIMITS.prompt), context: str(b.context, LIMITS.context), profileHash: str(b.profileHash, 64), coaches };
 }
 
@@ -106,7 +110,8 @@ const PLAN_SCHEMA = {
     focusAreas: { type: 'array', items: { type: 'string' }, description: 'Two to four short phrases.' },
     cautions: { type: 'array', items: { type: 'string' }, description: 'What the week works around, one sentence each. Empty if nothing.' },
     days: {
-      type: 'array', minItems: 7, maxItems: 7,
+      type: 'array',
+      description: 'Exactly seven days, Mon to Sun, in order.',
       items: {
         type: 'object', additionalProperties: false,
         required: ['label', 'restDay', 'blocks'],
@@ -121,7 +126,7 @@ const PLAN_SCHEMA = {
               properties: {
                 title: { type: 'string' },
                 kind: { type: 'string', enum: ['on-court', 'fitness', 'recovery', 'match-play', 'mental'] },
-                minutes: { type: 'integer', minimum: 5, maximum: 180 },
+                minutes: { type: 'integer', description: 'Between 5 and 180.' },
                 detail: { type: 'array', items: { type: 'string' }, description: 'Two to four concrete instructions.' },
                 rationale: { type: 'string', description: 'One plain sentence: why this block is here for this player.' },
               },
@@ -132,6 +137,26 @@ const PLAN_SCHEMA = {
     },
   },
 } as const;
+
+/**
+ * The schema cannot insist on exactly seven days or on minute bounds, so the
+ * week is settled here: one entry per day, Mon to Sun, a missing day read as
+ * rest, and every block's minutes kept between 5 and 180.
+ */
+const WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
+// deno-lint-ignore no-explicit-any
+function settleWeek(plan: any) {
+  // deno-lint-ignore no-explicit-any
+  const days: any[] = Array.isArray(plan?.days) ? plan.days : [];
+  plan.days = WEEK.map((label) => {
+    const day = days.find((d) => d?.label === label);
+    if (!day) return { label, restDay: true, blocks: [] };
+    // deno-lint-ignore no-explicit-any
+    day.blocks = (Array.isArray(day.blocks) ? day.blocks : []).map((b: any) => ({ ...b, minutes: Math.min(180, Math.max(5, Math.round(Number(b.minutes) || 30))) }));
+    return day;
+  });
+  return plan;
+}
 
 async function buildPlan(userId: string, body: { context: string; profileHash: string }) {
   const weekOf = thisMonday();
@@ -144,8 +169,7 @@ async function buildPlan(userId: string, body: { context: string; profileHash: s
 
   const response = await anthropic.messages.create({
     model: PLAN_MODEL,
-    max_tokens: 6000,
-    thinking: { type: 'adaptive' },
+    max_tokens: 16000,
     output_config: {
       effort: 'medium',
       format: { type: 'json_schema', schema: PLAN_SCHEMA },
@@ -158,7 +182,7 @@ async function buildPlan(userId: string, body: { context: string; profileHash: s
   });
   if (response.stop_reason === 'refusal') throw new Error('The model declined to write a plan.');
   const text = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
-  const plan = JSON.parse(text);
+  const plan = settleWeek(JSON.parse(text));
   await admin.from('training_plans').upsert({ user_id: userId, week_of: weekOf, profile_hash: body.profileHash, plan, model: PLAN_MODEL, generations: generations + 1 });
   return { plan, cached: false };
 }
@@ -214,8 +238,7 @@ async function chat(userId: string, body: { prompt: string; context: string; coa
 
   const response = await anthropic.messages.create({
     model: CHAT_MODEL,
-    max_tokens: 800,
-    thinking: { type: 'adaptive' },
+    max_tokens: 1500,
     output_config: { effort: 'low', format: { type: 'json_schema', schema: CHAT_SCHEMA } },
     system: [
       { type: 'text', text: VOICE, cache_control: { type: 'ephemeral' } },
@@ -285,9 +308,11 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
   try {
+    const body = clean(await req.json().catch(() => null));
+    if (body.mode === 'status') return json({ on: !!KEY });
     const userId = await whoIs(req);
     if (!userId) return json({ error: 'Sign in to talk to the coach.' }, 401);
-    const body = clean(await req.json().catch(() => null));
+    if (!KEY && body.mode !== 'memory') return json({ error: 'The AI coach is not switched on yet.', off: true }, 503);
     switch (body.mode) {
       case 'plan':
         return json(await buildPlan(userId, body));

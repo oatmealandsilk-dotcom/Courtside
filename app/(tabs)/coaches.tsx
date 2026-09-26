@@ -11,11 +11,13 @@ import { LiveDot } from '@/components/LiveDot';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { money, relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
+import { useAiCoachOn } from '@/features/aiCoach/switch';
 import { colors, radius, spacing, typography, font } from '@/theme';
 
 function Coaching() {
   const styles = useThemedStyles(styleDefinitions);
   const { coaches, users, coachingRequests, coachQuestions, currentUserId, currentUser } = useApp();
+  const aiCoachOn = useAiCoachOn();
   const recentQuestions = [...coachQuestions]
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
     .slice(0, 3);
@@ -41,6 +43,17 @@ function Coaching() {
         <View style={styles.askGo}><Ionicons name="arrow-forward" size={16} color={colors.brandInk} /></View>
       </Pressable>
       <Text style={styles.askNote}>Public. A verified coach answers, usually within a day.</Text>
+      {/* The AI coach shows up here once it is switched on (its key added on the server). */}
+      {aiCoachOn ? (
+        <Pressable accessibilityRole="link" accessibilityLabel="AI coach" onPress={() => router.push('/ai-coach')} style={({ pressed }) => [styles.ai, pressed && styles.pressed]}>
+          <View style={styles.aiMark}><Ionicons name="sparkles" size={16} color={colors.brand} /></View>
+          <View style={styles.rowWords}>
+            <Text style={styles.footTitle}>AI coach</Text>
+            <Text style={styles.meta}>A plan for your week, and answers any time.</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+        </Pressable>
+      ) : null}
       {/* ------------------------------ Coaches ---------------------------------- */}
       <View style={styles.section}>
         <View style={styles.sectionRow}>
@@ -226,6 +239,8 @@ const styleDefinitions = StyleSheet.create({
   price: { ...typography.bodyStrong, color: colors.text, fontVariant: ['tabular-nums'] },
   foot: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, marginTop: spacing.xl, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   footTitle: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text },
+  ai: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.lg, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
+  aiMark: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
 });
 
 export default asTabRoute(Coaching);
