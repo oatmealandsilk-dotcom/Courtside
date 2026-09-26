@@ -12,6 +12,7 @@ import { BrandMark } from '@/components/BrandMark';
 import { TermsCheck } from '@/components/TermsCheck';
 import { Avatar, Button, Field } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { remote, type HandleStatus } from '@/data/remote';
 import { SigningInAs } from '@/components/SigningInAs';
 import { useLeave } from '@/components/LeaveCurtain';
 import { useApp } from '@/store/AppContext';
@@ -89,8 +90,18 @@ export default function SignIn() {
   }, []);
 
   const cleanHandle = handle.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  // The live check on a new handle: a beat after typing stops, ask whether it is free.
+  const [handleStatus, setHandleStatus] = useState<HandleStatus | null>(null);
+  useEffect(() => {
+    setHandleStatus(null);
+    if (!isSupabaseConfigured || mode !== 'sign-up' || cleanHandle.length < 2) return;
+    let stale = false;
+    const timer = setTimeout(() => { void remote.handleStatus(cleanHandle).then((s) => { if (!stale) setHandleStatus(s); }); }, 400);
+    return () => { stale = true; clearTimeout(timer); };
+  }, [cleanHandle, mode]);
+  const handleGone = handleStatus === 'taken' || handleStatus === 'held';
   const ready = isSupabaseConfigured
-    ? email.includes('@') && password.length >= 6 && (mode === 'sign-in' || (name.trim().length > 0 && cleanHandle.length >= 2 && !!birthDate && !ageBlocked && agreed))
+    ? email.includes('@') && password.length >= 6 && (mode === 'sign-in' || (name.trim().length > 0 && cleanHandle.length >= 2 && !handleGone && !!birthDate && !ageBlocked && agreed))
     : demoHandle.trim().length > 0;
 
   // Apple's own button, iPhone only, above Google: App Review asks for it wherever another company's sign-in is offered.
@@ -219,7 +230,9 @@ export default function SignIn() {
                     onChangeText={setHandle}
                     placeholder="miraplays"
                     autoCapitalize="none"
-                    hint={cleanHandle && cleanHandle !== handle ? `Will be @${cleanHandle}` : 'Letters, numbers and underscores.'}
+                    hint={handleGone ? `@${cleanHandle} is taken. Try another.`
+                      : handleStatus === 'ok' ? `@${cleanHandle} is free`
+                      : cleanHandle && cleanHandle !== handle ? `Will be @${cleanHandle}` : 'Letters, numbers and underscores.'}
                   />
                   <BirthDateField month={birth.month} day={birth.day} year={birth.year} onChange={setBirth} />
                   {ageBlocked ? <Text style={styles.ageNote}>Sorry, you can't create a CourtSide account.</Text> : null}

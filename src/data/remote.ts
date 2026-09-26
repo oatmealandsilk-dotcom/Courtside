@@ -19,6 +19,9 @@ import type { Answer, DailyHealth, IntegrationProvider, CoachQuestion, CoachRepl
 import { TERMS_VERSION } from '@/lib/legal';
 
 /** What a new player did first, after setup. */
+/** What the live handle check says about a handle. */
+export type HandleStatus = 'ok' | 'yours' | 'invalid' | 'taken' | 'held';
+
 export type FirstMove = 'post' | 'instant' | 'answer' | 'ask' | 'later';
 export interface FirstDayStats { new30: number; moved30: number; cohort: number; movers: number; moversBack: number; othersBack: number; picked: Record<FirstMove, number> }
 
@@ -74,6 +77,8 @@ interface ProfileRow {
   is_private?: boolean | null;
   /** Migration 31. */
   open_to_hit_until?: string | null;
+  /** Migration 34. */
+  handle_changed_at?: string | null;
   /** Kept by the database (migration 22); missing on a database without it. */
   followers_count?: number | null;
   /** Moderation (migration 23). */
@@ -119,6 +124,7 @@ const toUser = (row: ProfileRow, followers: number, following: number): User => 
   avatarUrl: row.avatar_url ?? undefined,
   isPrivate: row.is_private || undefined,
   openToHitUntil: row.open_to_hit_until ?? undefined,
+  handleChangedAt: row.handle_changed_at ?? undefined,
   ageGroup: row.age_group === 'teen' || row.age_group === 'adult' ? row.age_group : undefined,
   // Off only when its owner turned it off; a database without the setting yet reads as on.
   readReceiptsEnabled: row.read_receipts !== false,
@@ -753,6 +759,31 @@ export const remote = {
     if (error) throw new Error('WHOOP is not reachable right now.');
     if (data && (data as { error?: string }).error) throw new Error((data as { error?: string }).error);
     return data as T;
+  },
+
+  /* -------------------------------------------------------------- handles */
+
+  /**
+   * Whether a handle is free, for the live check as you type: ok, yours,
+   * invalid, taken, or held (let go by someone under 14 days ago). Null
+   * when the database has no such check yet (migration 34 not run).
+   */
+  async handleStatus(handle: string): Promise<HandleStatus | null> {
+    const { data, error } = await need().rpc('handle_status', { p_handle: handle });
+    if (error) return null;
+    return data as HandleStatus;
+  },
+
+  /** Changes this account's handle. Throws with the database's own plain-English reason when it cannot. */
+  async changeHandle(handle: string): Promise<string> {
+    const { data, error } = await need().rpc('change_handle', { p_handle: handle });
+    if (error) {
+      if (/change_handle|function .* does not exist|schema cache/i.test(error.message)) {
+        throw new Error('Changing handles is not switched on yet. Run migration 34 in Supabase first.');
+      }
+      throw new Error(error.message);
+    }
+    return String(data);
   },
 
   /* -------------------------------------------------------------- invites */

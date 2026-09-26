@@ -91,6 +91,8 @@ export interface User {
   isPrivate?: boolean;
   /** Up for a hit: shown as a green ring on the map until this moment (the end of the day they set it). */
   openToHitUntil?: string;
+  /** When the handle last changed; it can change again 30 days after. */
+  handleChangedAt?: string;
   /** From the age check: a teen account (13 to 17) or an adult one. The date of birth itself is never shown. */
   ageGroup?: 'teen' | 'adult';
   isCoach: boolean;

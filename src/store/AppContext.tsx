@@ -14,7 +14,7 @@ import { TERMS_VERSION } from '@/lib/legal';
 import { sourceUserIds } from '@/features/community/importedThreads';
 
 import { fetchBootstrap, fetchCommunityThreads, signIn as apiSignIn, type Bootstrap } from '@/data/api';
-import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type AdminReport, type FeedSignal, type SiteFeedback, type WaitlistEntry, type FirstDayStats, type FirstMove } from '@/data/remote';
+import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type AdminReport, type FeedSignal, type SiteFeedback, type WaitlistEntry, type FirstDayStats, type FirstMove, type HandleStatus } from '@/data/remote';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { markMessagesOpened } from '@/features/messaging/readReceipts';
@@ -290,6 +290,10 @@ interface AppActions {
   setPrivateAccount: (enabled: boolean) => void;
   /** Up for a hit today: a green ring around you on the map until midnight. */
   setOpenToHit: (on: boolean) => void;
+  /** Live check while typing a new handle: ok, yours, invalid, taken or held. Null if the check is not available. */
+  checkHandle: (handle: string) => Promise<HandleStatus | null>;
+  /** Changes your handle. Throws with a plain-English reason when it cannot. */
+  changeHandle: (handle: string) => Promise<void>;
   setPref: (key: 'showActivity' | 'pushLikes' | 'pushCoach', value: boolean) => void;
   /** The asker marks the answer that solved it. */
   acceptAnswer: (questionId: ID, answerId: ID) => void;
@@ -1104,6 +1108,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await remote.updateProfile(me!, { ...patch, avatarUrl });
     })();
   }, [patchCurrentUser]);
+  const checkHandle = useCallback(async (raw: string): Promise<HandleStatus | null> => {
+    const wanted = raw.trim().toLowerCase();
+    if (!/^[a-z0-9_]{2,24}$/.test(wanted)) return 'invalid';
+    const me = stateRef.current.currentUserId;
+    if (live(me)) return remote.handleStatus(wanted);
+    // The demo: free unless someone in it already has it.
+    const owner = stateRef.current.users.find((u) => u.handle.toLowerCase() === wanted);
+    return !owner ? 'ok' : owner.id === me ? 'yours' : 'taken';
+  }, []);
+  const changeHandle = useCallback(async (raw: string) => {
+    const me = requireUser();
+    const wanted = raw.trim().toLowerCase();
+    const self = stateRef.current.users.find((u) => u.id === me);
+    if (!self || self.handle === wanted) return;
+    if (!live(me)) {
+      // The demo keeps the same rules the database does.
+      if (!/^[a-z0-9_]{2,24}$/.test(wanted)) throw new Error('Use 2 to 24 letters, numbers or underscores.');
+      const since = self.handleChangedAt ? Date.now() - Date.parse(self.handleChangedAt) : Infinity;
+      if (since < 30 * 86400000) throw new Error('You can change your handle once every 30 days.');
+      if (stateRef.current.users.some((u) => u.id !== me && u.handle.toLowerCase() === wanted)) throw new Error(`@${wanted} is taken.`);
+    }
+    const saved = live(me) ? await remote.changeHandle(wanted) : wanted;
+    haptics.commit();
+    patchCurrentUser((u) => ({ ...u, handle: saved, handleChangedAt: new Date().toISOString() }));
+    rememberAccount({ id: me, handle: saved }).then((savedAccounts) => setState((prev) => ({ ...prev, savedAccounts })));
+  }, [requireUser, patchCurrentUser]);
   const setReadReceiptsEnabled = useCallback((enabled: boolean) => {
     const me = requireUser();
     saveReceiptPreference(me, enabled);
@@ -2708,6 +2738,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       declineFollowRequest,
       setPrivateAccount,
       setOpenToHit,
+      checkHandle,
+      changeHandle,
       toggleMute,
       toggleBlock,
       toggleAlerts,
@@ -2813,6 +2845,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       declineFollowRequest,
       setPrivateAccount,
       setOpenToHit,
+      checkHandle,
+      changeHandle,
       toggleMute,
       toggleBlock,
       toggleAlerts,
