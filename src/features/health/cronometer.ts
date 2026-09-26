@@ -6,15 +6,15 @@ import type { DailyHealth } from '@/data/types';
 export type NutritionDay = Pick<DailyHealth, 'date' | 'calories' | 'proteinGrams' | 'carbGrams' | 'fatGrams'>;
 
 /**
- * Cronometer has no public API, but it exports your days as a spreadsheet
- * (Settings → Data → Export → Daily Nutrition). This reads that file.
+ * A food app's export file: Cronometer's "Daily Nutrition" or MyFitnessPal's
+ * "Nutrition Summary" (Premium → Export). Meals on the same day are summed.
  */
-export async function pickCronometerExport(): Promise<NutritionDay[] | null> {
+export async function pickNutritionExport(app = 'Cronometer'): Promise<NutritionDay[] | null> {
   const picked = await DocumentPicker.getDocumentAsync({ type: ['text/csv', 'text/comma-separated-values', 'text/plain', 'public.comma-separated-values-text'], copyToCacheDirectory: true });
   if (picked.canceled || !picked.assets?.[0]?.uri) return null;
   const text = await (await fetch(picked.assets[0].uri)).text();
   const days = parseCronometerCsv(text);
-  if (!days.length) throw new Error('That file has no daily totals in it. In Cronometer, export "Daily Nutrition" and try again.');
+  if (!days.length) throw new Error(`That file has no daily totals in it. Export your nutrition from ${app} and try again.`);
   return days;
 }
 
@@ -57,3 +57,6 @@ export function parseCronometerCsv(text: string): NutritionDay[] {
   }
   return [...byDate.values()].filter((d) => d.calories > 0).sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 60);
 }
+
+/** Kept for older callers. */
+export const pickCronometerExport = () => pickNutritionExport('Cronometer');

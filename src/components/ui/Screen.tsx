@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
 import { Wash } from '@/components/Wash';
+import { useBarInset } from '@/features/navigation/barInset';
 import { colors, spacing, typography } from '@/theme';
 
 /**
@@ -83,6 +84,8 @@ export function Screen({
   onRefresh,
   wash = true,
 }: Props) {
+  // The floating tab bar covers this much of the bottom; a page's last line stays above it.
+  const barInset = useBarInset();
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
@@ -267,7 +270,7 @@ export function Screen({
     ) : null;
 
   const main = (
-    <View style={[padded && styles.padded, { paddingBottom: scroll ? spacing.xxxl : 0, flex: showRail || !scroll ? 1 : undefined }]}>
+    <View style={[padded && styles.padded, { paddingBottom: (scroll ? spacing.xxxl : 0) + barInset, flex: showRail || !scroll ? 1 : undefined }]}>
       {children}
     </View>
   );

@@ -20,9 +20,9 @@ import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { markMessagesOpened } from '@/features/messaging/readReceipts';
 import { readReceiptPreference, saveReceiptPreference } from '@/features/messaging/preferences';
 import { connectProvider, disconnectProvider } from '@/lib/integrations';
-import { connectAppleHealth, readAppleHealth } from '@/features/health/appleHealth';
+import { appleHealthAvailable, connectAppleHealth, readAppleHealth, readAppleNutrition } from '@/features/health/appleHealth';
 import { takeReferrer } from '@/features/invite/referral';
-import { pickCronometerExport } from '@/features/health/cronometer';
+import { pickNutritionExport } from '@/features/health/cronometer';
 import { nearestPlace } from '@/data/locations';
 import { getPosition } from '@/lib/geo';
 import * as haptics from '@/lib/haptics';
@@ -2603,10 +2603,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await remote.setHealthConnection(me, provider, true);
       return true;
     }
-    if (provider === 'cronometer') {
-      const days = await pickCronometerExport();
+    if (provider === 'cronometer' || provider === 'myfitnesspal') {
+      const app = provider === 'cronometer' ? 'Cronometer' : 'MyFitnessPal';
+      // Through Health when this phone has it — the app writes its meals there — otherwise its export file.
+      const days = appleHealthAvailable() ? await readAppleNutrition(14) : await pickNutritionExport(app);
       if (!days) return false;
-      await remote.upsertHealthDays(me, days, 'cronometer');
+      if (!days.length) throw new Error(`Nothing from ${app} in Health yet. In ${app}, turn on sharing with Apple Health, log a meal, then sync here.`);
+      await remote.upsertHealthDays(me, days, provider);
       await remote.setHealthConnection(me, provider, true);
       return true;
     }
@@ -2638,7 +2641,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const { url } = await remote.whoop<{ url: string }>('start', { back });
       const result = await WebBrowser.openAuthSessionAsync(url, back);
       if (result.type !== 'success') throw new Error('WHOOP was not connected.');
-    } else if (provider === 'cronometer') {
+    } else if (provider === 'cronometer' || provider === 'myfitnesspal') {
+      if (appleHealthAvailable()) await connectAppleHealth();
       if (!(await pullFrom(me!, provider))) return;
     }
     haptics.commit();

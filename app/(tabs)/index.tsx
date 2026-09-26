@@ -31,7 +31,8 @@ import { setFeedWarm, useCurtainDown } from '@/features/feed/warmup';
 import { connectionIsQuick } from '@/lib/netSpeed';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { subscribeFeedRefresh } from '@/features/feed/feedBus';
-import { BAR_DUCK_PX, setBarCompact } from '@/features/navigation/barShrink';
+import { setBarCompact } from '@/features/navigation/barShrink';
+import { BAR_OVERLAY_PX } from '@/features/navigation/barInset';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { TipPage } from '@/components/TipPage';
 import { isLive } from '@/features/stories/stories';
@@ -1122,7 +1123,7 @@ const styleDefinitions = StyleSheet.create({
   holdPage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
   holdWord: { ...typography.display, fontSize: 34, ...font('600'), color: colors.brand, letterSpacing: -1.2 },
   bone: { height: 12, borderRadius: 6, backgroundColor: colors.border },
-  holdPost: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingBottom: 16 + BAR_DUCK_PX, alignItems: 'center' },
+  holdPost: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingBottom: 16 + BAR_OVERLAY_PX, alignItems: 'center' },
   boneFrame: { alignSelf: 'stretch', aspectRatio: 4 / 5, maxHeight: '58%', borderRadius: 16, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   boneRow: { alignSelf: 'stretch', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 12, marginTop: 14 },
   boneAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.border },
@@ -1158,7 +1159,7 @@ const styleDefinitions = StyleSheet.create({
   },
   caption: {
     position: 'absolute',
-    bottom: BAR_DUCK_PX - 4,
+    bottom: BAR_OVERLAY_PX - 4,
     left: 0,
     right: 0,
     padding: 18,
@@ -1176,8 +1177,8 @@ const styleDefinitions = StyleSheet.create({
   body: { color: 'white', fontSize: 13, lineHeight: 19 },
   tags: { color: 'rgba(255,255,255,0.85)', fontSize: 11 },
   swipeHint: { color: 'rgba(255,255,255,0.7)', fontSize: 10 },
-  bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 240 + BAR_DUCK_PX },
-  actions: { position: 'absolute', right: 12, bottom: 82 + BAR_DUCK_PX, gap: 22 },
+  bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 240 + BAR_OVERLAY_PX },
+  actions: { position: 'absolute', right: 12, bottom: 82 + BAR_OVERLAY_PX, gap: 22 },
   action: { alignItems: 'center', gap: 4, minWidth: 48 },
   // Instagram's trick: plain white glyphs made bolder by a soft dark shadow
   // rather than a heavier icon, so they hold up over bright footage.
@@ -1210,7 +1211,7 @@ const styleDefinitions = StyleSheet.create({
   stripWords: { alignItems: 'center', gap: 2 },
   stripName: { ...typography.bodyStrong, fontSize: 14, color: colors.text, textAlign: 'center' },
   stripReason: { ...typography.small, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
-  threadArticle: { gap: 8, paddingBottom: BAR_DUCK_PX + 12 },
+  threadArticle: { gap: 8, paddingBottom: BAR_OVERLAY_PX + 12 },
   eyebrow: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.1 },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   threadMark: { marginRight: 6, marginTop: 6 },

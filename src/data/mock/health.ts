@@ -24,6 +24,12 @@ export const integrations: Integration[] = [
     connected: true,
     lastSyncedAt: isoDaysAgo(0, 2),
     provides: ['Calories', 'Protein', 'Carbs', 'Fat'],
+  },  {
+    provider: 'myfitnesspal',
+    label: 'MyFitnessPal',
+    category: 'nutrition',
+    connected: false,
+    provides: ['Calories', 'Protein', 'Carbs', 'Fat'],
   },
 ];
 

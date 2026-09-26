@@ -4,13 +4,14 @@ import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-nati
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CourtSheet, FilterChips, MapButtons, MapTopBar, NearbyRail, PlayerSheet, PreviewOverlay, WeatherChip } from '@/components/map/MapChrome';
+import { CourtSheet, FilterChips, MapCredit, MapButtons, MapTopBar, NearbyRail, PlayerSheet, PreviewOverlay, WeatherChip } from '@/components/map/MapChrome';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle } from '@/components/map/MapCanvas';
 import { lookFor } from '@/components/map/look';
 import { courtPinHtml, mePinHtml, playerPinHtml } from '@/components/map/markers';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { milesBetween } from '@/features/players/geo';
 import { useMapModel } from '@/features/players/mapModel';
+import { useBarInset } from '@/features/navigation/barInset';
 import { useWeather } from '@/features/players/useWeather';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -40,6 +41,7 @@ export function NearbyMap(props: NearbyMapProps) {
   const { theme } = useTheme();
   const look = useMemo(() => lookFor(themes[theme]), [theme]);
   const insets = useSafeAreaInsets();
+  const barInset = useBarInset();
   const { followingIds, actions } = useApp();
   const model = useMapModel(me, players, at);
   const { home } = model;
@@ -90,7 +92,7 @@ export function NearbyMap(props: NearbyMapProps) {
     return (
       <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of players near you" onPress={onExpand} disabled={!onExpand} style={styles.card}>
         {mapView}
-        <Text style={styles.credit}>© OpenStreetMap</Text>
+        <MapCredit style={{ position: 'absolute', right: 10, bottom: 10 }} />
         <PreviewOverlay cityName={cityName} count={model.inTown.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} />
       </Pressable>
     );
@@ -107,7 +109,6 @@ export function NearbyMap(props: NearbyMapProps) {
   return (
     <View style={styles.fill}>
       {mapView}
-      <Text style={styles.credit}>© OpenStreetMap</Text>
       <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
         <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} />
         <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
@@ -122,6 +123,8 @@ export function NearbyMap(props: NearbyMapProps) {
         ) : (
           <NearbyRail items={model.shown} cityName={model.place ? model.place.name.split(',')[0] : cityName} selectedId={null} onSelect={model.select} />
         )}
+        {/* The tray's own colour runs on beneath the floating tab bar, so no map shows between them. */}
+        {barInset ? <View style={{ height: barInset, backgroundColor: colors.surface, marginTop: -spacing.md - 1 }} /> : null}
       </View>
     </View>
   );
@@ -132,5 +135,4 @@ const styleDefinitions = StyleSheet.create({
   fill: { flex: 1, backgroundColor: colors.bgElevated, overflow: 'hidden' },
   top: { position: 'absolute', left: 0, right: 0, top: 0, gap: 2 },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', gap: spacing.md },
-  credit: { position: 'absolute', left: 8, top: 4, fontSize: 9, color: 'rgba(0,0,0,0.45)', backgroundColor: 'rgba(255,255,255,0.6)', paddingHorizontal: 4, borderRadius: 3 },
 });

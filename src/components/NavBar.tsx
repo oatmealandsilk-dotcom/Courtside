@@ -14,6 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
+import { Glass } from '@/components/ui/Glass';
+import { TAB_BAR_H } from '@/features/navigation/barInset';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font } from '@/theme';
 
@@ -76,71 +78,58 @@ export function NavBar({ state, navigation }: NavBarProps) {
     const t = setTimeout(() => { entrance.value = withTiming(0, { duration: 480, easing: Easing.out(Easing.cubic) }); }, 7000);
     return () => clearTimeout(t);
   }, [behindCurtain, entrance]);
-  // The bar's own height never changes (the feed's pages are sized against
-  // it); ducking moves and shrinks what is on the bar instead.
-  // Ducking makes the bar shorter: its top edge drops and the page behind
-  // gets the room. The padding is a layout change, which the phone applies
-  // reliably only through the plain Animated value below — so the ducking
-  // amount is mirrored into one and the paddings follow it.
-  // Seeded from the shared value, not from zero: the bar can mount (after
-  // sign-in, onboarding, a reload) while the feed already has it ducked, and
-  // the feed sizes its pages from the padding this bar actually has.
-  const padAmount = useRef(new RNAnimated.Value(barCompact.value)).current;
-  const mirror = useCallback((v: number) => { padAmount.setValue(v); }, [padAmount]);
-  // Only a visible change (a couple of hundredths, and always the ends) crosses over — a handful of times per swipe rather than every frame.
-  const mirrored = useSharedValue(barCompact.value);
-  useAnimatedReaction(() => barCompact.value, (v) => {
-    if (v === mirrored.value) return;
-    if (v === 0 || v === 1 || Math.abs(v - mirrored.value) >= 0.04) { mirrored.value = v; runOnJS(mirror)(v); }
-  }, [mirror]);
-  const duckPad = {
-    flexDirection: 'row' as const,
-    paddingTop: padAmount.interpolate({ inputRange: [0, 1], outputRange: [spacing.sm + DUCK, spacing.sm + DUCK - DUCK * 1.5] }),
-    paddingBottom: padAmount.interpolate({ inputRange: [0, 1], outputRange: [bottomPad + DUCK, bottomPad] }),
-  };
+  // Ducking tucks the pill a little toward the edge and shrinks what is on
+  // it; the page beneath never moves, because the bar floats over it.
   const duck = useAnimatedStyle(() => ({ transform: [{ translateY: entrance.value * 96 }] }));
   const shrink = useAnimatedStyle(() => ({
     transform: [{ scale: interpolate(barCompact.value, [0, 1], [1, 0.86]) }],
   }));
   const rowShrink = useAnimatedStyle(() => ({ minHeight: 48 }));
 
+  const tuck = useAnimatedStyle(() => ({
+    transform: [{ translateY: interpolate(barCompact.value, [0, 1], [0, 14]) }, { scale: interpolate(barCompact.value, [0, 1], [1, 0.96]) }],
+  }));
   if (isPhone) {
     return (
-      <Animated.View style={[styles.bottomBar, duck]}>
-       <RNAnimated.View style={duckPad}>
-        <View pointerEvents="none" style={styles.topLine} />
-        {ITEMS.map((item, index) => {
-          const active = item.route === activeRoute;
-          return (
-            <React.Fragment key={item.route}>
-            {index === 2 && <View style={styles.createSlot}><Animated.View style={shrink}><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={styles.createButton}><Ionicons name="add" size={30} color={colors.brandInk} /></Pressable></Animated.View></View>}
-            <Pressable
-              onPress={() => navigation.navigate(item.route)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: active }}
-              accessibilityLabel={item.label}
-              style={styles.bottomItem}
-            >
-              <Animated.View style={[styles.bottomInner, rowShrink, shrink]}>
-              <View>
-                <Ionicons
-                  name={active ? item.activeIcon : item.icon}
-                  size={23}
-                  color={active ? (item.route === 'coaches' ? colors.info : item.route === 'discuss' ? colors.warning : colors.brand) : colors.textFaint}
-                />
-                {item.route === 'profile' && profileAlerts > 0 ? (
-                  <View style={styles.bottomBadge}>
-                    <Text style={styles.bottomBadgeText}>{profileAlerts > 9 ? '9+' : profileAlerts}</Text>
+      <Animated.View pointerEvents="box-none" style={[styles.float, { bottom: Math.max(insets.bottom, 12) }, duck]}>
+        <Animated.View style={[styles.pillWrap, tuck]}>
+          {/* The shadow lives on a rounded layer of its own: on the square wrapper its corners showed past the pill's ends. */}
+          <View style={styles.pillShadow}>
+          <Glass style={styles.pill} radius={TAB_BAR_H / 2} tint={colors.bg}>
+            {ITEMS.map((item, index) => {
+              const active = item.route === activeRoute;
+              return (
+                <React.Fragment key={item.route}>
+                {index === 2 && <View style={styles.createSlot}><Animated.View style={shrink}><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={styles.createButton}><Ionicons name="add" size={28} color={colors.brandInk} /></Pressable></Animated.View></View>}
+                <Pressable
+                  onPress={() => navigation.navigate(item.route)}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={item.label}
+                  style={styles.bottomItem}
+                >
+                  <Animated.View style={[styles.bottomInner, shrink]}>
+                  <View>
+                    <Ionicons
+                      name={active ? item.activeIcon : item.icon}
+                      size={23}
+                      color={active ? (item.route === 'coaches' ? colors.info : item.route === 'discuss' ? colors.warning : colors.brand) : colors.textMuted}
+                    />
+                    {item.route === 'profile' && profileAlerts > 0 ? (
+                      <View style={styles.bottomBadge}>
+                        <Text style={styles.bottomBadgeText}>{profileAlerts > 9 ? '9+' : profileAlerts}</Text>
+                      </View>
+                    ) : null}
                   </View>
-                ) : null}
-              </View>
-              <Text style={[styles.bottomLabel, active && { color: item.route === 'coaches' ? colors.info : item.route === 'discuss' ? colors.warning : colors.brand }]}>{item.label}</Text>
-              </Animated.View>
-            </Pressable>
-            </React.Fragment>
-          );
-        })}
-       </RNAnimated.View>
+                  <Text style={[styles.bottomLabel, active && { color: item.route === 'coaches' ? colors.info : item.route === 'discuss' ? colors.warning : colors.brand }]}>{item.label}</Text>
+                  </Animated.View>
+                </Pressable>
+                </React.Fragment>
+              );
+            })}
+          </Glass>
+          </View>
+        </Animated.View>
       </Animated.View>
     );
   }
@@ -273,21 +262,20 @@ export function NavBar({ state, navigation }: NavBarProps) {
 
 const styleDefinitions = StyleSheet.create({
   createSlot: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  createButton: { width: 50, height: 50, borderRadius: 25, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
-  // No padding of its own: the padded row inside is the whole bar, so the
-  // bar's top edge and its line are the same edge.
-  bottomBar: {
-    backgroundColor: colors.bg,
-  },
-  topLine: { position: 'absolute', top: 0, left: 0, right: 0, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  createButton: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
+  // The bar floats: a glass pill a little above the bottom edge, the page running on beneath it.
+  float: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 30 },
+  pillWrap: { width: '100%', paddingHorizontal: 14 },
+  pillShadow: { borderRadius: TAB_BAR_H / 2, shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
+  pill: { height: TAB_BAR_H, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   bottomItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  bottomInner: { alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 48 },
+  bottomInner: { alignItems: 'center', justifyContent: 'center', gap: 3 },
   bottomBadge: {
     position: 'absolute', top: -4, right: -8,
     minWidth: 17, height: 17, borderRadius: 9, paddingHorizontal: 4,
     backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center',
     // Ringed in the bar colour so it stays legible over the active icon.
-    borderWidth: 2, borderColor: colors.bg,
+    borderWidth: 2, borderColor: colors.surface,
   },
   bottomBadgeText: { color: 'white', fontSize: 9, ...font('700') },
   bottomLabel: { ...typography.smallStrong, fontSize: 10.5, color: colors.textFaint, letterSpacing: 0 },

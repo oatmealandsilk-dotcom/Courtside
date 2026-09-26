@@ -14,7 +14,7 @@ import { CommentRow } from '@/components/CommentRow';
 import { useApp } from '@/store/AppContext';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
-import { BAR_DUCK_PX } from '@/features/navigation/barShrink';
+import { BAR_OVERLAY_PX } from '@/features/navigation/barInset';
 import { allowTurning, stayUpright } from '@/lib/orientation';
 import { Tappable } from '@/components/Tappable';
 import { useOptimisticToggle } from '@/lib/useOptimisticToggle';
@@ -277,7 +277,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
 
 const styleDefinitions = StyleSheet.create({
   // The bottom keeps clear of the bar at its full size (see VerticalPager).
-  page: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: spacing.md, paddingBottom: spacing.md + BAR_DUCK_PX, alignItems: 'center' },
+  page: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: spacing.md, paddingBottom: spacing.md + BAR_OVERLAY_PX, alignItems: 'center' },
   column: { flex: 1, width: '100%', gap: spacing.md },
   pageCentred: { justifyContent: 'center' },
   frame: { borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000' },

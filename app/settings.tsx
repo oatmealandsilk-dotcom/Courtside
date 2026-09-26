@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Avatar, Field, Screen, Toggle } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { useTheme, themeList, themes, type ThemeName } from '@/theme/ThemeProvider';
+import { Wash } from '@/components/Wash';
 import { colors, radius, spacing, typography, font } from '@/theme';
 
 interface Row {
@@ -230,26 +231,19 @@ export default function Settings() {
 }
 
 /**
- * The Theme row's icon: a small tile in the chosen theme's own colours — its
- * ground, a stripe of its main colour, and dots for its three courts — the
- * same picture the Theme page shows for each theme, in miniature.
+ * The Theme row's icon: the chosen court as a tiny page — its ground with its
+ * wash faintly on it — the same picture the Theme page shows for each court.
  */
 function ThemeTile({ name }: { name: ThemeName }) {
   const p = themes[name];
   return (
     <View style={[tile.box, { backgroundColor: p.bg, borderColor: p.borderStrong }]}>
-      <View style={[tile.bar, { backgroundColor: p.brand }]} />
-      <View style={tile.dots}>
-        {[p.court, p.hard, p.clay].map((c, i) => <View key={i} style={[tile.dot, { backgroundColor: c }]} />)}
-      </View>
+      <Wash theme={name} height={26} strength={0.9} fade={p.bg} />
     </View>
   );
 }
 const tile = StyleSheet.create({
-  box: { width: 24, height: 24, borderRadius: 7, borderWidth: 1, padding: 3.5, justifyContent: 'space-between' },
-  bar: { height: 4, borderRadius: 2 },
-  dots: { flexDirection: 'row', gap: 2, justifyContent: 'center' },
-  dot: { width: 4, height: 4, borderRadius: 2 },
+  box: { width: 26, height: 24, borderRadius: 7, borderWidth: 1, overflow: 'hidden' },
 });
 
 const styleDefinitions = StyleSheet.create({
