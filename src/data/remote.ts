@@ -777,6 +777,14 @@ export const remote = {
     return data as FirstDayStats;
   },
 
+  /** One post by id, for a page opened from a link before the feed has it. */
+  async fetchPost(id: ID): Promise<{ posts: Post[]; comments: Comment[] } | null> {
+    if (!UUID_RE.test(id)) return null;
+    const { data, error } = await need().from('posts').select(POST_SELECT).eq('id', id).limit(1);
+    if (error || !data?.length) return null;
+    return toPosts(data as FullPostRow[]);
+  },
+
   /** First posts from the last month, newest first: the founder's list of people to welcome. */
   async fetchFirstPosts(): Promise<{ posts: Post[]; comments: Comment[] } | null> {
     const since = new Date(Date.now() - 30 * 86_400_000).toISOString();

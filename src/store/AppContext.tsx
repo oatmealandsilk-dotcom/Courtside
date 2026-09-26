@@ -405,6 +405,8 @@ interface AppActions {
   loadMorePosts: () => Promise<Post[]>;
   /** One player's own posts, loaded when their profile is opened. */
   loadPostsOf: (userId: ID) => Promise<void>;
+  /** Brings one post into memory (a page opened from a link). Resolves true when it exists. */
+  loadPost: (postId: ID) => Promise<boolean>;
   /** Everything bookmarked, loaded when Saved is opened. */
   loadSavedPosts: () => Promise<void>;
   /** Whether a chat is with someone you are blocked with, either way. */
@@ -1914,6 +1916,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * their counts are whole and not just whatever the feed happened to hold.
    * Asked once per player per session.
    */
+  const loadPost = useCallback(async (postId: ID) => {
+    if (stateRef.current.posts.some((p) => p.id === postId)) return true;
+    if (!live(stateRef.current.currentUserId, postId)) return false;
+    const got = await remote.fetchPost(postId);
+    if (!got?.posts.length) return false;
+    setState((prev) => addPosts(prev, got));
+    return true;
+  }, []);
   const loadPostsOf = useCallback(async (userId: ID) => {
     if (!live(stateRef.current.currentUserId, userId) || loadedProfiles.current.has(userId)) return;
     loadedProfiles.current.add(userId);
@@ -2768,6 +2778,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadThread,
       loadMorePosts,
       loadPostsOf,
+      loadPost,
       loadSavedPosts,
       isChatBlocked,
       loadFollowsOf,
@@ -2866,6 +2877,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadThread,
       loadMorePosts,
       loadPostsOf,
+      loadPost,
       loadSavedPosts,
       isChatBlocked,
       loadFollowsOf,

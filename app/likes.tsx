@@ -1,11 +1,12 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 
 import { LevelPill } from '@/components/LevelPill';
 import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
+import { CourtSpinner } from '@/components/CourtSpinner';
 import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
 
@@ -17,10 +18,17 @@ import { colors, spacing, typography } from '@/theme';
 export default function Likes() {
   const styles = useThemedStyles(styleDefinitions);
   const params = useLocalSearchParams<{ id?: string; kind?: string }>();
-  const { users, posts, stories, currentUserId, followingIds, blockedIds, actions } = useApp();
+  const { users, posts, stories, currentUserId, followingIds, blockedIds, ready, actions } = useApp();
+  // Opened from a link before the app has the post: fetch it, and only then decide it is gone.
+  const [looked, setLooked] = useState(false);
   const [search, setSearch] = useState('');
   const isHit = params.kind === 'hit';
   const item = isHit ? stories.find((s) => s.id === params.id) : posts.find((p) => p.id === params.id);
+  useEffect(() => {
+    if (!ready || item || looked || !params.id) { if (ready && !params.id) setLooked(true); return; }
+    if (isHit) { setLooked(true); return; }
+    void actions.loadPost(params.id).finally(() => setLooked(true));
+  }, [ready, item, looked, params.id, isHit, actions]);
 
   const people = useMemo(() => {
     if (!item) return [];
@@ -36,7 +44,9 @@ export default function Likes() {
 
   return (
     <Screen title="Likes" compactTitle onBack={() => goBack()}>
-      {!item ? (
+      {!item && !looked ? (
+        <View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View>
+      ) : !item ? (
         <EmptyState icon="heart-dislike-outline" title="This post is gone" body="It was deleted, or it is no longer shared with you." />
       ) : (
         <>
