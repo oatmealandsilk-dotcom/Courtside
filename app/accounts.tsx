@@ -6,6 +6,7 @@ import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar, Screen } from '@/components/ui';
+import { SigningInAs } from '@/components/SigningInAs';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -28,12 +29,13 @@ export default function Accounts() {
       router.replace('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not switch accounts.');
-    } finally {
       setBusy(null);
     }
   };
+  const switchingTo = busy ? savedAccounts.find((a) => a.id === busy) ?? null : null;
 
   return (
+    <>
     <Screen title="Accounts" compactTitle onBack={() => goBack()}>
       <Text style={styles.lead}>Logins saved on this device. Tap one to switch — no password needed.</Text>
       <View style={styles.card}>
@@ -73,6 +75,8 @@ export default function Accounts() {
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Text style={styles.note}>Removing a login here only forgets it on this device. Logging out of all devices, in the account center, forgets it everywhere.</Text>
     </Screen>
+    {switchingTo ? <SigningInAs name={switchingTo.name} handle={switchingTo.handle} avatarUrl={switchingTo.avatarUrl} seed={switchingTo.id} /> : null}
+    </>
   );
 }
 

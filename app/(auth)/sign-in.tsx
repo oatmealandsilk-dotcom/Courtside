@@ -12,6 +12,7 @@ import { BrandMark } from '@/components/BrandMark';
 import { TermsCheck } from '@/components/TermsCheck';
 import { Avatar, Button, Field } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { SigningInAs } from '@/components/SigningInAs';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font } from '@/theme';
 
@@ -31,6 +32,7 @@ export default function SignIn() {
   const [useAnother, setUseAnother] = useState(false);
   const remembered = isSupabaseConfigured && !add && !useAnother && mode === 'sign-in' ? savedAccounts.filter((a) => a.id !== currentUserId) : [];
   const [switching, setSwitching] = useState<string | null>(null);
+  const switchingAccount = switching ? savedAccounts.find((a) => a.id === switching) ?? null : null;
   const pick = async (id: string) => {
     if (busy || switching) return;
     setSwitching(id);
@@ -39,8 +41,8 @@ export default function SignIn() {
       await actions.switchAccount(id);
       router.replace('/');
     } catch (err) {
+      // A login that expired on this phone is dropped from the list; the email form takes over.
       setError(err instanceof Error ? err.message : 'Could not switch accounts.');
-    } finally {
       setSwitching(null);
     }
   };
@@ -303,6 +305,7 @@ export default function SignIn() {
           {isSupabaseConfigured ? 'Your posts, stories and follows are saved to your account.' : 'Mock data only. Nothing you do here leaves the device.'}
         </Text>
       </ScrollView>
+      {switchingAccount ? <SigningInAs name={switchingAccount.name} handle={switchingAccount.handle} avatarUrl={switchingAccount.avatarUrl} seed={switchingAccount.id} /> : null}
     </KeyboardAvoidingView>
   );
 }

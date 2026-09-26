@@ -11,6 +11,7 @@ import * as WebBrowser from 'expo-web-browser';
  * discussions board, coaching, health — still comes from the fixtures.
  */
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
@@ -21,6 +22,21 @@ const need = () => {
   if (!supabase) throw new Error('Supabase is not configured');
   return supabase;
 };
+
+/**
+ * Forgets the session on this device only. The login itself stays alive on
+ * the server, so its token (kept for the "pick an account" list) still works.
+ * The auth client reads its session from storage every time, so removing it
+ * there is enough.
+ */
+async function forgetLocalSession() {
+  const client = need();
+  const key = (client.auth as unknown as { storageKey?: string }).storageKey;
+  if (!key) { await client.auth.signOut({ scope: 'local' }).catch(() => undefined); return; }
+  const keys = [key, `${key}-user`, `${key}-code-verifier`];
+  if (Platform.OS === 'web') { try { keys.forEach((k) => window.localStorage.removeItem(k)); } catch { /* private mode */ } }
+  else await AsyncStorage.multiRemove(keys).catch(() => undefined);
+}
 
 /* ------------------------------------------------------------- mappings */
 
@@ -1284,17 +1300,19 @@ export const auth = {
     return data.session;
   },
   async signOut() {
-    // Local only: the account's other logins, and its saved token on this
-    // device, stay valid so switching back is a tap.
-    const { error } = await need().auth.signOut({ scope: 'local' });
-    if (error) fail('sign out')(error);
+    // Leaves this phone signed out without ending the login on the server.
+    // Supabase's own sign-out ends it there too, which threw away the token
+    // the sign-in screen keeps for this account, and tapping the account
+    // then failed with "Invalid Refresh Token".
+    await forgetLocalSession();
   },
   /** Signs in as a remembered account from its refresh token, replacing whoever is signed in now. */
   async resumeAccount(refreshToken: string) {
     const client = need();
-    await client.auth.signOut({ scope: 'local' }).catch(() => undefined);
+    // The account being left stays valid too, so switching back is a tap.
+    await forgetLocalSession();
     const { data, error } = await client.auth.refreshSession({ refresh_token: refreshToken });
-    if (error || !data.session) throw new Error(error?.message ?? 'That login has expired. Sign in again.');
+    if (error || !data.session) throw new Error('That login has expired on this phone. Sign in with your email to add it again.');
     return data.session;
   },
   /**
