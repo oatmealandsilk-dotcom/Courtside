@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { BirthDateField } from '@/components/BirthDateField';
 import { blockDevice, isDeviceBlocked, toBirthDate, yearsOld } from '@/features/age/ageCheck';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -87,6 +88,23 @@ export default function SignIn() {
     ? email.includes('@') && password.length >= 6 && (mode === 'sign-in' || (name.trim().length > 0 && cleanHandle.length >= 2 && !!birthDate && !ageBlocked && agreed))
     : demoHandle.trim().length > 0;
 
+  // Apple's own button, iPhone only, above Google: App Review asks for it wherever another company's sign-in is offered.
+  const [appleReady, setAppleReady] = useState(false);
+  useEffect(() => { if (Platform.OS === 'ios') AppleAuthentication.isAvailableAsync().then(setAppleReady).catch(() => setAppleReady(false)); }, []);
+  const apple = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      if (await actions.signInWithApple()) router.replace('/');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!/cancel/i.test(message)) setError(message);
+    } finally {
+      setBusy(false);
+    }
+  };
   const google = async () => {
     if (busy) return;
     setBusy(true);
@@ -246,6 +264,15 @@ export default function SignIn() {
                 <Text style={styles.dividerText}>or</Text>
                 <View style={styles.rule} />
               </View>
+              {appleReady ? (
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                  cornerRadius={12}
+                  style={styles.apple}
+                  onPress={apple}
+                />
+              ) : null}
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Continue with Google"
@@ -300,6 +327,7 @@ const styleDefinitions = StyleSheet.create({
   divider: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   rule: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.borderStrong },
   dividerText: { ...typography.small, color: colors.textFaint },
+  apple: { height: 48, width: '100%', marginBottom: spacing.sm },
   google: {
     flexDirection: 'row',
     alignItems: 'center',

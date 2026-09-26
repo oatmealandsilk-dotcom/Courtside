@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SheetBackdrop } from '@/components/SheetBackdrop';
 import { useApp } from '@/store/AppContext';
 import { shareOutside } from '@/lib/shareOutside';
+import { downloadMedia } from '@/lib/downloadMedia';
 import { goBack } from '@/lib/goBack';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -32,7 +33,7 @@ export default function PostMenu() {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const { id = '', kind: rawKind } = useLocalSearchParams<{ id?: string; kind?: string }>();
-  const { posts, stories, users, saved, currentUserId, mutedIds, blockedIds, actions } = useApp();
+  const { posts, stories, users, saved, currentUserId, currentUser, mutedIds, blockedIds, actions } = useApp();
   const isHit = rawKind === 'hit';
   const story = isHit ? stories.find((st) => st.id === id) : undefined;
   const post = isHit ? undefined : posts.find((p) => p.id === id);
@@ -67,7 +68,12 @@ export default function PostMenu() {
     rows.push(
       { key: 'archive', icon: 'archive-outline', label: story.archived ? 'Unarchive' : 'Archive', onPress: () => { actions.toggleArchiveStory(story.id); close(); } },
     );
-  } else if (mine && post) {
+  }
+  // The original file, for the owner and for CourtSide's own channels (an admin): one tap to the camera roll, then Instagram.
+  if (post && (mine || currentUser?.isAdmin) && (post.videoUrl || post.imageUrl) && post.featureOk !== false) {
+    rows.push({ key: 'download', icon: 'download-outline', label: 'Download', note: currentUser?.isAdmin && !mine ? 'The author said CourtSide may feature this.' : 'The original, to post elsewhere.', onPress: async () => { try { await downloadMedia(post.videoUrl ?? post.imageUrl!, post.id.slice(0, 8)); close(); } catch (err) { setDone(err instanceof Error ? err.message : 'Could not download.'); } } });
+  }
+  if (mine && post) {
     rows.push(
       { key: 'edit', icon: 'create-outline', label: 'Edit', onPress: () => router.replace({ pathname: '/edit-post', params: { id: post.id, kind: 'post' } }) },
       { key: 'pin', icon: 'pin-outline', label: post.pinned ? 'Unpin from profile' : 'Pin to profile', note: post.pinned ? undefined : 'Shown first on your profile.', onPress: () => { actions.togglePinPost(post.id); close(); } },

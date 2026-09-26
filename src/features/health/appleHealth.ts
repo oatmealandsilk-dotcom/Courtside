@@ -44,7 +44,7 @@ const call = <T,>(fn: (cb: (err: string | null, r: T) => void) => void) => new P
 /** Asks once for read access. Throws when refused or when HealthKit is not in this build. */
 export async function connectAppleHealth(): Promise<void> {
   const h = load();
-  if (!h) throw new Error('Apple Health needs the App Store build of CourtSide — it is not in Expo Go.');
+  if (!h) throw new Error('Apple Health is not available in this version of CourtSide.');
   const P = h.Constants.Permissions;
   await new Promise<void>((res, rej) => h.initHealthKit({ permissions: { read: [P.Steps, P.StepCount, P.ActiveEnergyBurned, P.HeartRateVariability, P.RestingHeartRate, P.SleepAnalysis].filter(Boolean), write: [] } }, (err) => (err ? rej(new Error(err)) : res())));
 }

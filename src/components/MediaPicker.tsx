@@ -52,7 +52,7 @@ function describe(media: PickedMedia): string {
 export async function pickFromDevice(selection: 'video' | 'photo' | 'all'): Promise<PickedMedia | null> {
   const kinds: ImagePicker.MediaType[] = selection === 'video' ? ['videos'] : selection === 'photo' ? ['images'] : ['images', 'videos'];
   const perm = await ImagePicker.requestMediaLibraryPermissionsAsync().catch(() => null);
-  if (perm && !perm.granted && !perm.canAskAgain) throw new Error('Photo access is off. Turn it on in Settings → Expo Go → Photos.');
+  if (perm && !perm.granted && !perm.canAskAgain) throw new Error('Photo access is off. Turn it on in Settings → CourtSide → Photos.');
   const full = !!perm?.granted && perm.accessPrivileges !== 'limited';
   // One picker, once. A failed pick used to open the library a second time
   // with the other picker, which read as the app losing your choice.
@@ -128,7 +128,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
   const open = async (): Promise<ImagePicker.ImagePickerResult> => {
     const kinds: ImagePicker.MediaType[] = selection === 'video' ? ['videos'] : selection === 'photo' ? ['images'] : ['images', 'videos'];
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync().catch(() => null);
-    if (perm && !perm.granted && !perm.canAskAgain) throw new Error('Photo access is off. Turn it on in Settings → Expo Go → Photos.');
+    if (perm && !perm.granted && !perm.canAskAgain) throw new Error('Photo access is off. Turn it on in Settings → CourtSide → Photos.');
     const full = !!perm?.granted && perm.accessPrivileges !== 'limited';
     // Apple's older picker copies the file itself and has proved the reliable
     // one for video; it needs full photo access, which is why that is checked.
@@ -155,7 +155,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
       // Limited photo access is the usual cause of iOS's 3164; name the fix.
       const perm = await ImagePicker.getMediaLibraryPermissionsAsync().catch(() => null);
       if (perm && (perm.accessPrivileges === 'limited' || !perm.granted)) {
-        setError('Photo access is limited. On your phone: Settings → Expo Go → Photos → All Photos, then try again.');
+        setError('Photo access is limited. On your phone: Settings → CourtSide → Photos → All Photos, then try again.');
         return;
       }
       setError(explainPickError(err));
