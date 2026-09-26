@@ -917,6 +917,8 @@
       busy(form, false);
       if (result.kind === 'ok' || result.kind === 'already') {
         msg.textContent = '';
+        // The welcome email goes out now. The server checks this person is on the list and has not had it yet.
+        if (result.kind === 'ok') fetch(`${SUPABASE_URL}/functions/v1/waitlist-welcome`, { method: 'POST', headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ email }), keepalive: true }).catch(() => {});
         if (result.code) showSpot(form, result, email);
         else confirmIn(form, result.kind === 'ok' ? 'You’re on the list.' : 'You’re already on the list.', `We’ll email ${email} when your invite to the iPhone app is ready.`);
         return;
