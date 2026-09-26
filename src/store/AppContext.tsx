@@ -14,7 +14,7 @@ import { TERMS_VERSION } from '@/lib/legal';
 import { sourceUserIds } from '@/features/community/importedThreads';
 
 import { fetchBootstrap, fetchCommunityThreads, signIn as apiSignIn, type Bootstrap } from '@/data/api';
-import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type AdminReport, type FeedSignal, type SiteFeedback, type WaitlistEntry } from '@/data/remote';
+import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type AdminReport, type FeedSignal, type SiteFeedback, type WaitlistEntry, type FirstDayStats, type FirstMove } from '@/data/remote';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { markMessagesOpened } from '@/features/messaging/readReceipts';
@@ -417,6 +417,9 @@ interface AppActions {
   loadWaitlist: () => Promise<WaitlistEntry[]>;
   /** Everyone's first post from the last month, for the founder to welcome. */
   loadFirstPosts: () => Promise<Post[]>;
+  loadFirstDayStats: () => Promise<FirstDayStats | null>;
+  /** Which first move a new player chose, for the numbers behind the setup step. Kept once, the first time. */
+  noteFirstMove: (move: FirstMove) => void;
   loadSiteFeedback: () => Promise<SiteFeedback[]>;
   /** Admins only: take someone off the waitlist (they asked), or clear a feedback note. */
   removeFromWaitlistPage: (table: 'waitlist' | 'site_feedback', id: ID) => Promise<boolean>;
@@ -1830,6 +1833,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Reports, for admins. The database decides who may read and act on them.
   const loadReports = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchReports() : []), []);
   const loadWaitlist = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchWaitlist() : []), []);
+  const loadFirstDayStats = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchFirstDayStats() : null), []);
+  const noteFirstMove = useCallback((move: FirstMove) => {
+    const me = stateRef.current.currentUserId;
+    if (live(me)) void remote.updateProfile(me!, { firstMove: move }).catch(() => undefined);
+  }, []);
   const loadFirstPosts = useCallback(async () => {
     if (!live(stateRef.current.currentUserId)) return stateRef.current.posts.filter((p) => p.isFirst).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
     const got = await remote.fetchFirstPosts();
@@ -2766,6 +2774,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadReports,
       loadWaitlist,
       loadFirstPosts,
+      loadFirstDayStats,
+      noteFirstMove,
       loadSiteFeedback,
       removeFromWaitlistPage,
       loadReportedItem,
@@ -2862,6 +2872,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadReports,
       loadWaitlist,
       loadFirstPosts,
+      loadFirstDayStats,
+      noteFirstMove,
       loadSiteFeedback,
       removeFromWaitlistPage,
       loadReportedItem,

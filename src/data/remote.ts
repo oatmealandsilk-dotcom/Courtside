@@ -18,6 +18,10 @@ import * as Crypto from 'expo-crypto';
 import type { Answer, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, Question, Story, Tip, User, CoachApplication } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
 
+/** What a new player did first, after setup. */
+export type FirstMove = 'post' | 'instant' | 'answer' | 'ask' | 'later';
+export interface FirstDayStats { new30: number; moved30: number; cohort: number; movers: number; moversBack: number; othersBack: number; picked: Record<FirstMove, number> }
+
 const need = () => {
   if (!supabase) throw new Error('Supabase is not configured');
   return supabase;
@@ -766,6 +770,13 @@ export const remote = {
     return count ?? 0;
   },
 
+  /** Whether the first move works: day-one movers, and week-two returns for movers vs everyone else. Null while the function is missing. */
+  async fetchFirstDayStats(): Promise<FirstDayStats | null> {
+    const { data, error } = await need().rpc('first_day_stats');
+    if (error || !data) return null;
+    return data as FirstDayStats;
+  },
+
   /** First posts from the last month, newest first: the founder's list of people to welcome. */
   async fetchFirstPosts(): Promise<{ posts: Post[]; comments: Comment[] } | null> {
     const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
@@ -926,8 +937,9 @@ export const remote = {
   },
   async voteTip(tipId: ID, dir: 1 | -1) { const { error } = await need().rpc('vote_tip', { t: tipId, dir }); if (error) fail('tip vote')(error); },
 
-  async updateProfile(me: ID, patch: { name?: string; bio?: string; location?: string; avatarUrl?: string; profile?: PlayerProfile; isPrivate?: boolean; readReceipts?: boolean; openToHitUntil?: string | null }) {
+  async updateProfile(me: ID, patch: { name?: string; bio?: string; location?: string; avatarUrl?: string; profile?: PlayerProfile; isPrivate?: boolean; readReceipts?: boolean; openToHitUntil?: string | null; firstMove?: FirstMove }) {
     const row: Record<string, unknown> = {};
+    if (patch.firstMove !== undefined) { row.first_move = patch.firstMove; row.first_move_at = new Date().toISOString(); }
     if (patch.openToHitUntil !== undefined) row.open_to_hit_until = patch.openToHitUntil;
     if (patch.readReceipts !== undefined) row.read_receipts = patch.readReceipts;
     if (patch.isPrivate !== undefined) row.is_private = patch.isPrivate;
