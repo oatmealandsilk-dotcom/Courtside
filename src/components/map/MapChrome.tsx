@@ -119,6 +119,7 @@ export function NearbyRail({ items, cityName, selectedId, onSelect }: { items: P
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.sheet}>
+      <View style={styles.grabber} />
       <View style={styles.sheetHead}>
         <Text style={styles.sheetTitle}>Around {cityName}</Text>
         <Text style={styles.sheetCount}>{items.length === 1 ? '1 player' : `${items.length} players`}</Text>
@@ -146,6 +147,7 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
   const { user, miles } = placed;
   return (
     <View style={styles.sheet}>
+      <View style={styles.grabber} />
       <View style={styles.personRow}>
         <Pressable accessibilityRole="link" accessibilityLabel={`${user.name}, open profile`} onPress={onProfile}>
           <Avatar name={user.name} seed={user.avatarSeed} size={56} ring={user.isCoach} />
@@ -181,6 +183,7 @@ export function CourtSheet({ court, miles, onClose, onDirections }: { court: Cou
   const facts = [court.count > 1 ? `${court.count} courts` : '1 court', court.surface ? court.surface.replace(/_/g, ' ') : null, court.lit ? 'lit at night' : null].filter(Boolean).join(' · ');
   return (
     <View style={styles.sheet}>
+      <View style={styles.grabber} />
       <View style={styles.personRow}>
         <View style={styles.courtDisc}><Ionicons name="tennisball" size={22} color={colors.brandInk} /></View>
         <View style={styles.personWords}>
@@ -247,12 +250,14 @@ const styleDefinitions = StyleSheet.create({
   chipTextOn: { color: colors.brandInk },
   weather: { alignSelf: 'flex-start', marginLeft: spacing.md, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   weatherText: { ...typography.caption, color: colors.text, letterSpacing: 0 },
-  buttons: { position: 'absolute', right: spacing.md, alignItems: 'flex-end', gap: spacing.sm },
+  buttons: { alignSelf: 'flex-end', marginRight: spacing.md, alignItems: 'flex-end', gap: spacing.sm },
   zoom: { borderRadius: 21, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
   zoomButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
   zoomRule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   // The bottom panel: the rail of players, or the one that was picked.
-  sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, borderWidth: 1, borderBottomWidth: 0, borderColor: colors.border, paddingTop: spacing.md, gap: spacing.sm, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 18, shadowOffset: { width: 0, height: -6 } },
+  // Flush on the bottom edge, a grabber line on top: a tray, not a card floating on the map.
+  sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingTop: spacing.sm, paddingBottom: spacing.md, gap: spacing.sm, shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 22, shadowOffset: { width: 0, height: -8 } },
+  grabber: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: spacing.xs },
   sheetHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: spacing.lg },
   sheetTitle: { ...typography.heading, color: colors.text },
   sheetCount: { ...typography.small, color: colors.textMuted },
