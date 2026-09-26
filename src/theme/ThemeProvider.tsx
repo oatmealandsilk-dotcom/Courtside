@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { Platform } from 'react-native';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, lightColors } from './index';
 
@@ -147,21 +148,50 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return () => { live = false; };
   }, []);
 
-  const setTheme = (name: ThemeName) => {
+  // A theme change redraws the whole app — every tab, the feed, the map —
+  // and the phone's own layers (blur, glass, gradients, the map's web view)
+  // catch up a moment after the rest. Seen bare, that is a screen repainting
+  // in patches. So the change happens under a veil: the new court's ground
+  // washes over the screen, everything recolours beneath it, and the veil
+  // lifts once the last layer has caught up. The veil runs on the animation
+  // thread, so it stays smooth however busy the redraw is.
+  const [veilColor, setVeilColor] = useState<string | null>(null);
+  const veil = useSharedValue(0);
+  const pending = useRef<ThemeName | null>(null);
+  const apply = (name: ThemeName) => {
     Object.assign(colors, themes[name]);
     updateTheme(name);
+  };
+  const setTheme = (name: ThemeName) => {
+    if (name === theme && !pending.current) return;
     try {
       if (Platform.OS === 'web') localStorage.setItem(STORAGE_KEY, name);
       else void AsyncStorage.setItem(STORAGE_KEY, name);
     } catch {}
+    pending.current = name;
+    setVeilColor(themes[name].bg);
+    veil.value = withTiming(1, { duration: 140, easing: Easing.out(Easing.quad) }, (done) => { if (done) runOnJS(apply)(name); });
   };
+  // After the redraw has landed (and a beat for the native layers), the veil lifts.
+  useEffect(() => {
+    if (pending.current !== theme) return;
+    pending.current = null;
+    const t = setTimeout(() => {
+      veil.value = withTiming(0, { duration: 280, easing: Easing.inOut(Easing.quad) }, (done) => { if (done) runOnJS(setVeilColor)(null); });
+    }, 120);
+    return () => clearTimeout(t);
+  }, [theme, veil]);
+  const veilStyle = useAnimatedStyle(() => ({ opacity: veil.value }));
 
   // Kept so existing callers of the old night-mode switch keep working.
   const setNight = (value: boolean) => setTheme(value ? 'night' : 'default');
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme, night: theme === 'night', setNight }}>
-      {children}
+      <View style={{ flex: 1 }}>
+        {children}
+        {veilColor ? <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: veilColor, zIndex: 9999 }, veilStyle]} /> : null}
+      </View>
     </ThemeContext.Provider>
   );
 }
