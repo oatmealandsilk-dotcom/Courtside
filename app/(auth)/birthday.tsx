@@ -7,6 +7,7 @@ import { BrandMark } from '@/components/BrandMark';
 import { BirthDateField } from '@/components/BirthDateField';
 import { Button } from '@/components/ui';
 import { isDeviceBlocked, toBirthDate } from '@/features/age/ageCheck';
+import { useLeave } from '@/components/LeaveCurtain';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography } from '@/theme';
@@ -17,6 +18,7 @@ import { colors, spacing, typography } from '@/theme';
  * account is removed and this phone will not ask again.
  */
 export default function Birthday() {
+  const { leave, curtain } = useLeave();
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const { currentUserId, actions } = useApp();
@@ -35,7 +37,7 @@ export default function Birthday() {
     try {
       const result = await actions.confirmBirthDate(birthDate);
       if (result === 'under13') { setBlocked(true); return; }
-      router.replace('/');
+      leave(() => router.replace('/'));
     } catch {
       setError('Could not save that. Check your connection and try again.');
     } finally {
@@ -64,6 +66,7 @@ export default function Birthday() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <Button label="Continue" loading={busy} disabled={!date.month || !date.day || date.year.length !== 4} onPress={submit} full />
       </ScrollView>
+      {curtain}
     </KeyboardAvoidingView>
   );
 }
