@@ -1,16 +1,17 @@
 import { themes, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CourtSheet, FilterChips, MapCredit, MapButtons, MapTopBar, NearbyRail, PlayerSheet, PreviewOverlay, WeatherChip } from '@/components/map/MapChrome';
+import { CourtSheet, FilterChips, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlayerSheet, PreviewOverlay } from '@/components/map/MapChrome';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle } from '@/components/map/MapCanvas';
 import { lookFor } from '@/components/map/look';
 import { courtPinHtml, mePinHtml, playerPinHtml } from '@/components/map/markers';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { milesBetween } from '@/features/players/geo';
 import { useMapModel } from '@/features/players/mapModel';
+import { isOpenToHit } from '@/features/players/openToHit';
 import { useBarInset } from '@/features/navigation/barInset';
 import { useWeather } from '@/features/players/useWeather';
 import { show as showToast } from '@/lib/toast';
@@ -43,6 +44,9 @@ export function NearbyMap(props: NearbyMapProps) {
   const insets = useSafeAreaInsets();
   const barInset = useBarInset();
   const { followingIds, actions } = useApp();
+  // Your own pin, tapped: the card with your open-to-hit switch.
+  const [meOpen, setMeOpen] = useState(false);
+  const openToHit = isOpenToHit(me);
   const model = useMapModel(me, players, at);
   const { home } = model;
   const weather = useWeather(home);
@@ -72,7 +76,7 @@ export function NearbyMap(props: NearbyMapProps) {
     }
     list.push({ id: 'me', lat: home.lat, lng: home.lng, html: mePinHtml(me, expanded ? 34 : 26) });
     return list;
-  }, [model.courts, shown, selectedId, selectedCourtId, expanded, home.lat, home.lng, me, theme]);
+  }, [model.courts, shown, selectedId, selectedCourtId, expanded, home.lat, home.lng, me, theme, openToHit]);
 
   const mapView = (
     <MapCanvas
@@ -82,8 +86,8 @@ export function NearbyMap(props: NearbyMapProps) {
       look={look}
       interactive={expanded}
       markers={markers}
-      onTap={(id) => { if (id.startsWith('c:')) model.selectCourt(id.slice(2)); else if (id.startsWith('p:')) (expanded ? model.select(id.slice(2)) : onOpen(id.slice(2))); }}
-      onMapTap={() => { model.select(null); model.selectCourt(null); }}
+      onTap={(id) => { if (id === 'me') { if (expanded) { model.select(null); model.selectCourt(null); setMeOpen(true); } else onExpand?.(); } else if (id.startsWith('c:')) { setMeOpen(false); model.selectCourt(id.slice(2)); } else if (id.startsWith('p:')) { setMeOpen(false); (expanded ? model.select(id.slice(2)) : onOpen(id.slice(2))); } }}
+      onMapTap={() => { model.select(null); model.selectCourt(null); setMeOpen(false); }}
       onMove={(c) => { if (model.courtsOn) void model.loadCourts(c); }}
     />
   );
@@ -111,12 +115,13 @@ export function NearbyMap(props: NearbyMapProps) {
       {mapView}
       <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
         <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} />
-        <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
-        <WeatherChip weather={weather} />
+        <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} weather={weather} />
       </View>
       <View pointerEvents="box-none" style={styles.bottom}>
         <MapButtons onRecentre={() => { model.select(null); canvas.current?.flyTo(home, CITY_ZOOM, 600); }} />
-        {model.selected ? (
+        {meOpen ? (
+          <YouSheet me={me} open={openToHit} onToggle={actions.setOpenToHit} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} />
+        ) : model.selected ? (
           <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onFollow={() => actions.toggleFollow(model.selected!.user.id)} />
         ) : model.selectedCourt ? (
           <CourtSheet court={model.selectedCourt} miles={milesBetween(home, model.selectedCourt)} onClose={() => model.selectCourt(null)} onDirections={() => directions(model.selectedCourt!)} />

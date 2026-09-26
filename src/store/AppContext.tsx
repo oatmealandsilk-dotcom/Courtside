@@ -22,6 +22,7 @@ import { readReceiptPreference, saveReceiptPreference } from '@/features/messagi
 import { connectProvider, disconnectProvider } from '@/lib/integrations';
 import { appleHealthAvailable, connectAppleHealth, readAppleHealth, readAppleNutrition } from '@/features/health/appleHealth';
 import { takeReferrer } from '@/features/invite/referral';
+import { endOfToday } from '@/features/players/openToHit';
 import { pickNutritionExport } from '@/features/health/cronometer';
 import { nearestPlace } from '@/data/locations';
 import { getPosition } from '@/lib/geo';
@@ -287,6 +288,8 @@ interface AppActions {
   acceptFollowRequest: (requesterId: ID) => void;
   declineFollowRequest: (requesterId: ID) => void;
   setPrivateAccount: (enabled: boolean) => void;
+  /** Up for a hit today: a green ring around you on the map until midnight. */
+  setOpenToHit: (on: boolean) => void;
   setPref: (key: 'showActivity' | 'pushLikes' | 'pushCoach', value: boolean) => void;
   /** The asker marks the answer that solved it. */
   acceptAnswer: (questionId: ID, answerId: ID) => void;
@@ -2486,6 +2489,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (live(me)) remote.updateProfile(me, { isPrivate: enabled });
   }, [requireUser, patchCurrentUser]);
 
+  const setOpenToHit = useCallback((on: boolean) => {
+    const me = requireUser();
+    const until = on ? endOfToday() : undefined;
+    on ? haptics.commit() : haptics.untap();
+    patchCurrentUser((u) => ({ ...u, openToHitUntil: until }));
+    if (live(me)) remote.updateProfile(me, { openToHitUntil: until ?? null });
+  }, [requireUser, patchCurrentUser]);
+
   const toggleMute = useCallback((userId: ID) => {
     setState((prev) => {
       prev.mutedIds.includes(userId) ? haptics.untap() : haptics.tap();
@@ -2667,6 +2678,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       acceptFollowRequest,
       declineFollowRequest,
       setPrivateAccount,
+      setOpenToHit,
       toggleMute,
       toggleBlock,
       toggleAlerts,
@@ -2767,6 +2779,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       acceptFollowRequest,
       declineFollowRequest,
       setPrivateAccount,
+      setOpenToHit,
       toggleMute,
       toggleBlock,
       toggleAlerts,
