@@ -23,6 +23,14 @@ const TOPICS: { title: string; body: string }[] = [
     body: 'Coaching → Ask a coach. Describe what you are stuck on and add a clip if you have one. Questions are public, so other players learn from the answer too. Paid one-to-one reviews are booked from a coach\'s own page.',
   },
   {
+    title: 'How does paying for coaching work?',
+    body: 'Pick a service on a coach\'s page, say what you want looked at, and pay on Stripe\'s page. CourtSide never sees your card. Every service says how long the coach has to answer; if they miss it, open the booking and tap Get your money back. Settings → Account center → Payments lists everything you have paid for.',
+  },
+  {
+    title: 'How do I change my handle?',
+    body: 'Edit profile → Handle. You can change it once every 30 days. Your old handle is held for 14 days so nobody can take it, and invite links with it keep working.',
+  },
+  {
     title: 'Is the AI coach medical advice?',
     body: 'No. It builds training weeks from your profile, calendar, and any injury notes you add, and it will cap volume around those notes — but it is general training information, not a diagnosis. See a professional for pain.',
   },

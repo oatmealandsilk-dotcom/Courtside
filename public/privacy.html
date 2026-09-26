@@ -21,7 +21,7 @@
 <body>
 <main>
   <h1>Privacy Policy</h1>
-  <p class="meta">CourtSide · Last updated: September 21, 2026</p>
+  <p class="meta">CourtSide · Last updated: September 26, 2026</p>
 
   <p>CourtSide is a social and coaching app for tennis players. It is new and still in early access. This policy explains what we collect, why, who can see it, and what you can do about it. "We" means the people who run CourtSide. We have tried to write it so anyone can read it.</p>
 
@@ -59,7 +59,7 @@
     <li>We do not show ads. The app has no advertising tools, and no outside analytics or tracking tools built in. The record of what you watch in the feed stays inside CourtSide and is only used to order your feed.</li>
     <li>We do not track you across other apps or websites.</li>
     <li><strong>No health data.</strong> The Health and nutrition screen is a preview with sample numbers. Linking a wearable or nutrition app is not available yet, so nothing is collected from one.</li>
-    <li><strong>No payment details.</strong> CourtSide does not take payments. The Payment methods screen is a preview with sample entries. It only keeps short labels such as "Apple Pay" with your settings. We never ask for or store card numbers or bank details.</li>
+    <li><strong>No card or bank details.</strong> When you pay for coaching, you pay on Stripe's own page, and Stripe keeps the card details. Coaches give their bank details to Stripe, not to us. We keep only what we need to run the booking: the price, CourtSide's fee, when it was paid or refunded, and Stripe's reference for the payment.</li>
     <li>We only use your camera, photos and microphone when you choose to take or pick a photo or video. We only receive the ones you post.</li>
   </ul>
 
@@ -112,9 +112,10 @@
   <h2>Coaching and the AI coach</h2>
   <ul>
     <li><strong>Ask a coach</strong> questions are public, like discussion threads. Replies come from accounts CourtSide has marked as coaches.</li>
-    <li><strong>Coaching requests</strong> you send from a coach's page are saved with your account, and only you can see them in the app. No payment is taken.</li>
+    <li><strong>Bookings</strong> you make from a coach's page are saved with your account: your question, any video you attach, the price, and the coach's answer. Only you and that coach can see them, and the coach sees a booking only once it is paid for. A video you attach is stored like other uploads, at a long unguessable web address.</li>
+    <li>If you <strong>coach on CourtSide</strong>, your listing (headline, credentials, what you coach, services and prices) is public once you list it. Stripe collects the identity, bank and tax details it needs to pay you; we only learn whether your payouts are ready.</li>
     <li>The <strong>Apply to be a coach</strong> form sends us what you enter (your name, email, phone number, ratings, experience, certifications, references and how you coach) and your résumé file if you attach one. Your application and résumé are private: only you can see your own from the app, and only the CourtSide team reviews them. The résumé is kept in private storage, not at a public web address. If you delete your account, your application is deleted with it, but the résumé file itself is not erased automatically yet; email us and we will remove it.</li>
-    <li>The <strong>AI coach</strong> is not open yet. When it opens, it will be powered by Claude, an AI made by Anthropic. When you ask it something, our server will send Anthropic your question, your recent conversation with the coach, and a summary of your tennis profile: rating, play style, goals, current injury and schedule notes, next tournament, your training plan for the week, and any recovery numbers. To remember what you are working on, we will store your recent conversations with the coach, a short summary of them, and how many questions you asked each day. Anthropic's terms for business customers say it does not use this information to train its AI.</li>
+    <li>The <strong>AI coach</strong> is powered by Claude, an AI made by Anthropic. When you ask it something, or it writes your week, our server sends Anthropic your question, your recent conversation with the coach, and a summary of your tennis profile: rating, play style, goals, current injury and schedule notes, next tournament, your training plan for the week, and any recovery numbers. To remember what you are working on, we store your recent conversations with the coach, a short summary of them, and how many questions you asked each day. Anthropic's terms for business customers say it does not use this information to train its AI.</li>
     <li>Training, injury and nutrition content in CourtSide, including anything the AI coach says, is general information, not medical advice. If something hurts, see a doctor or physio.</li>
   </ul>
 
@@ -143,7 +144,8 @@
     <li><strong>GitHub Pages</strong> hosts our website: the web version of the app, these policy pages, and the list of Reddit headlines the app loads.</li>
     <li><strong>Open-Meteo</strong> provides the weather on the map.</li>
     <li><strong>OpenFreeMap</strong>, using <strong>OpenStreetMap</strong> data, draws the map in the web version.</li>
-    <li><strong>Anthropic</strong> will power the AI coach once it opens.</li>
+    <li><strong>Anthropic</strong> powers the AI coach.</li>
+    <li><strong>Stripe</strong> processes payments for coaching and pays coaches out. It receives your email address and card details when you pay (on its own page), and a coach's identity, bank and tax details when they set up payouts.</li>
   </ul>
   <p>Each one only gets what it needs to do its job, and handles it under its own privacy policy.</p>
 

@@ -133,7 +133,7 @@ export default function AccountCentre() {
         {row('download-outline', 'Download your data', 'Profile, posts, questions, instants, messages — as one file', () => { void download(); }, false, 0)}
         {row('sparkles-outline', 'What the coach remembers', 'Notes the AI coach keeps about you', () => (aiCoachOn ? router.push('/coach-memory') : toast.show({ title: 'AI coach is coming soon', body: 'A weekly plan and a coach to ask about your game', icon: 'sparkles' })), false, 1)}
         {row('shield-checkmark-outline', 'Privacy center', 'What we store and who can see it', () => router.push('/privacy'), false, 2)}
-        {row('card-outline', 'Payment methods', undefined, () => router.push('/payments'), false, 3)}
+        {row('card-outline', 'Payments', 'Coaching you have paid for, and refunds', () => router.push('/payments'), false, 3)}
       </View>
 
       <Text style={styles.sectionTitle}>ACCOUNT</Text>
