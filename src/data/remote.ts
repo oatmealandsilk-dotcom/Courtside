@@ -89,7 +89,7 @@ interface PostRow {
   crop?: { scale: number; x: number; y: number } | null;
   /** Numeric columns arrive as strings, as trim_start does. */
   speed?: number | string | null; volume?: number | string | null;
-  location?: string | null; edited_at?: string | null; feature_ok?: boolean | null; referred_by?: string | null;
+  location?: string | null; edited_at?: string | null; feature_ok?: boolean | null; referred_by?: string | null; is_first?: boolean | null;
   post_likes?: { user_id: string }[]; post_saves?: { user_id: string }[]; comments?: { id: string }[];
 }
 interface CommentRow {
@@ -178,6 +178,7 @@ const toPost = (row: PostRow): Post => ({
   pinned: row.pinned || undefined,
   location: row.location ?? undefined,
   featureOk: row.feature_ok === false ? false : undefined,
+  isFirst: row.is_first || undefined,
   editedAt: row.edited_at ?? undefined,
 });
 
@@ -763,6 +764,14 @@ export const remote = {
     const { count, error } = await need().from('profiles').select('id', { count: 'exact', head: true }).eq('referred_by', me);
     if (error) return 0;
     return count ?? 0;
+  },
+
+  /** First posts from the last month, newest first: the founder's list of people to welcome. */
+  async fetchFirstPosts(): Promise<{ posts: Post[]; comments: Comment[] } | null> {
+    const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+    const { data, error } = await need().from('posts').select(POST_SELECT).eq('is_first', true).gte('created_at', since).order('created_at', { ascending: false }).limit(80);
+    if (error) return null;
+    return toPosts((data ?? []) as FullPostRow[]);
   },
 
   async fetchWaitlist(): Promise<WaitlistEntry[]> {

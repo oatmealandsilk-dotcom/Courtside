@@ -415,6 +415,8 @@ interface AppActions {
   loadReports: () => Promise<AdminReport[]>;
   /** Admins only: the waitlist and the waitlist page's feedback. */
   loadWaitlist: () => Promise<WaitlistEntry[]>;
+  /** Everyone's first post from the last month, for the founder to welcome. */
+  loadFirstPosts: () => Promise<Post[]>;
   loadSiteFeedback: () => Promise<SiteFeedback[]>;
   /** Admins only: take someone off the waitlist (they asked), or clear a feedback note. */
   removeFromWaitlistPage: (table: 'waitlist' | 'site_feedback', id: ID) => Promise<boolean>;
@@ -1166,6 +1168,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         likedBy: [],
         commentIds: [],
         ...input,
+        // The server marks it too; this shows the tag before the round trip.
+        isFirst: !stateRef.current.posts.some((p) => p.authorId === me) || undefined,
       };
       const celebration = {
         userId: me, targetId: post.id, targetKind: 'post' as const, preview: snippet(post.body || (post.kind === 'clip' ? 'Clip' : 'Post')),
@@ -1826,6 +1830,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Reports, for admins. The database decides who may read and act on them.
   const loadReports = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchReports() : []), []);
   const loadWaitlist = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchWaitlist() : []), []);
+  const loadFirstPosts = useCallback(async () => {
+    if (!live(stateRef.current.currentUserId)) return stateRef.current.posts.filter((p) => p.isFirst).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    const got = await remote.fetchFirstPosts();
+    if (!got) return [];
+    setState((prev) => addPosts(prev, got));
+    return got.posts;
+  }, []);
   const loadSiteFeedback = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchSiteFeedback() : []), []);
   const removeFromWaitlistPage = useCallback(async (table: 'waitlist' | 'site_feedback', id: ID) => (live(stateRef.current.currentUserId, id) ? remote.removeFromWaitlistPage(table, id) : false), []);
   const loadReportedItem = useCallback(async (kind: 'post' | 'hit', id: ID) => (live(stateRef.current.currentUserId, id) ? remote.fetchReportedItem(kind, id) : null), []);
@@ -2754,6 +2765,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadFollowsOf,
       loadReports,
       loadWaitlist,
+      loadFirstPosts,
       loadSiteFeedback,
       removeFromWaitlistPage,
       loadReportedItem,
@@ -2849,6 +2861,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadFollowsOf,
       loadReports,
       loadWaitlist,
+      loadFirstPosts,
       loadSiteFeedback,
       removeFromWaitlistPage,
       loadReportedItem,

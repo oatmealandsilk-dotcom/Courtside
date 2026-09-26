@@ -17,6 +17,8 @@ import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { BAR_OVERLAY_PX } from '@/features/navigation/barInset';
 import { allowTurning, stayUpright } from '@/lib/orientation';
 import { Tappable } from '@/components/Tappable';
+import { NewHereTag } from '@/components/NewHereTag';
+import { isNewHere } from '@/features/feed/newHere';
 import { useOptimisticToggle } from '@/lib/useOptimisticToggle';
 import { Avatar, Chip } from '@/components/ui';
 import { LevelPill } from '@/components/LevelPill';
@@ -186,6 +188,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
               <Text style={styles.name} numberOfLines={1}>{author.name}</Text>
               {author.isCoach ? <Ionicons name="shield-checkmark" size={14} color={colors.brand} /> : null}
               <LevelPill profile={author.profile} small />
+              {isNewHere(post) ? <NewHereTag /> : null}
             </View>
             <Text style={styles.sub} numberOfLines={1}>@{author.handle} · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}{post.location ? ` · ${post.location}` : ''}</Text>
           </View>

@@ -26,6 +26,8 @@ import { Tappable } from '@/components/Tappable';
 import { VerticalPager, type VerticalPagerHandle } from '@/components/VerticalPager';
 import { subscribeReveal, subscribeScrollToTop } from '@/features/navigation/scrollToTop';
 import { LikeButton } from '@/components/LikeButton';
+import { NewHereTag } from '@/components/NewHereTag';
+import { isNewHere } from '@/features/feed/newHere';
 import { wantsOn } from '@/lib/useOptimisticToggle';
 import { setFeedWarm, useCurtainDown } from '@/features/feed/warmup';
 import { connectionIsQuick } from '@/lib/netSpeed';
@@ -262,6 +264,16 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       const watched = others.filter((k) => seen.current.has(k));
       const rest = [...shuffleFeed(unseen), ...shuffleFeed(watched)];
       const final = [...justMine, ...rest];
+      // New players' first posts, nearby first, are dealt near the top so
+      // they meet people (and likes) on their first day.
+      const me = data.users.find((u) => u.id === data.currentUserId);
+      const cityOf = (location?: string) => (location ?? '').split(',')[0].trim().toLowerCase();
+      const near = (p: { authorId: string }) => (me && cityOf(data.users.find((u) => u.id === p.authorId)?.location) === cityOf(me.location) ? 0 : 1);
+      const welcome = data.posts
+        .filter((p) => p.authorId !== data.currentUserId && !p.archived && isNewHere(p) && reachable(p) && !seen.current.has(`p:${p.id}`))
+        .sort((a, b) => near(a) - near(b) || Date.parse(b.createdAt) - Date.parse(a.createdAt))
+        .slice(0, 2)
+        .map((p) => `p:${p.id}`);
       // The feed always opens on a clip (unless something of yours just
       // landed): the first clip in the order is brought to the front.
       if (!justMine.length) {
@@ -275,6 +287,11 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         if (first < 0) first = final.findIndex(isClip);
         if (first > 0) final.unshift(...final.splice(first, 1));
       }
+      welcome.forEach((key, i) => {
+        const at = final.indexOf(key);
+        if (at >= 0) final.splice(at, 1);
+        final.splice(Math.min(final.length, justMine.length + 1 + i * 2), 0, key);
+      });
       setOrder(final);
       setActive(0);
       if (remount) setVisit((v) => v + 1);
@@ -986,6 +1003,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       <Text style={[styles.authorName, styles.authorFill]} numberOfLines={1}>@{author.handle}<Text style={styles.authorTime}> · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}{post.location ? ` · ${post.location}` : ''}</Text></Text>
                       <LevelPill profile={author.profile} small onMedia />
                     </Pressable>
+                    {isNewHere(post) ? <NewHereTag onMedia /> : null}
                     <RichText numberOfLines={3} style={styles.body}>
                       {post.body}
                     </RichText>
