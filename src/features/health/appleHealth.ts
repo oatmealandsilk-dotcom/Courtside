@@ -19,6 +19,10 @@ type HK = {
   getHeartRateVariabilitySamples: (o: object, cb: (err: string | null, r: Sample[]) => void) => void;
   getRestingHeartRateSamples: (o: object, cb: (err: string | null, r: Sample[]) => void) => void;
   getSleepSamples: (o: object, cb: (err: string | null, r: (Sample & { value: unknown })[]) => void) => void;
+  getEnergyConsumedSamples: (o: object, cb: (err: string | null, r: Sample[]) => void) => void;
+  getProteinSamples: (o: object, cb: (err: string | null, r: Sample[]) => void) => void;
+  getCarbohydratesSamples: (o: object, cb: (err: string | null, r: Sample[]) => void) => void;
+  getTotalFatSamples: (o: object, cb: (err: string | null, r: Sample[]) => void) => void;
   Constants: { Permissions: Record<string, string> };
 };
 
@@ -46,7 +50,7 @@ export async function connectAppleHealth(): Promise<void> {
   const h = load();
   if (!h) throw new Error('Apple Health is not available in this version of CourtSide.');
   const P = h.Constants.Permissions;
-  await new Promise<void>((res, rej) => h.initHealthKit({ permissions: { read: [P.Steps, P.StepCount, P.ActiveEnergyBurned, P.HeartRateVariability, P.RestingHeartRate, P.SleepAnalysis].filter(Boolean), write: [] } }, (err) => (err ? rej(new Error(err)) : res())));
+  await new Promise<void>((res, rej) => h.initHealthKit({ permissions: { read: [P.Steps, P.StepCount, P.ActiveEnergyBurned, P.HeartRateVariability, P.RestingHeartRate, P.SleepAnalysis, P.EnergyConsumed, P.Protein, P.Carbohydrates, P.FatTotal].filter(Boolean), write: [] } }, (err) => (err ? rej(new Error(err)) : res())));
 }
 
 const dayOf = (iso: string) => iso.slice(0, 10);
@@ -81,4 +85,34 @@ export async function readAppleHealth(days = 7): Promise<BodyDay[]> {
     d.sleepHours = Math.round(((d.sleepHours ?? 0) + (Date.parse(s.endDate) - Date.parse(s.startDate)) / 3_600_000) * 10) / 10;
   }
   return [...out.values()].sort((a, b) => (a.date < b.date ? 1 : -1));
+}
+
+/** A day of what was eaten, as a food app wrote it into Health. */
+export type FoodDay = Pick<DailyHealth, 'date'> & Partial<Pick<DailyHealth, 'calories' | 'proteinGrams' | 'carbGrams' | 'fatGrams'>>;
+
+/**
+ * What MyFitnessPal or Cronometer logged, read from Health: both apps write
+ * each meal's calories, protein, carbs and fat there once their own "share
+ * with Apple Health" switch is on. Summed per day, newest first.
+ */
+export async function readAppleNutrition(days = 14): Promise<FoodDay[]> {
+  const h = load();
+  if (!h) return [];
+  const end = new Date();
+  const start = new Date(end.getTime() - days * 86_400_000);
+  const range = { startDate: start.toISOString(), endDate: end.toISOString() };
+  const out = new Map<string, FoodDay>();
+  const settle = async <T,>(p: Promise<T>) => { try { return await p; } catch { return null; } };
+  const add = (rows: Sample[] | null, key: 'calories' | 'proteinGrams' | 'carbGrams' | 'fatGrams') => {
+    for (const r of rows ?? []) {
+      const d = out.get(dayOf(r.startDate)) ?? { date: dayOf(r.startDate) };
+      d[key] = Math.round((d[key] ?? 0) + r.value);
+      out.set(d.date, d);
+    }
+  };
+  add(await settle(call<Sample[]>((cb) => h.getEnergyConsumedSamples(range, cb))), 'calories');
+  add(await settle(call<Sample[]>((cb) => h.getProteinSamples(range, cb))), 'proteinGrams');
+  add(await settle(call<Sample[]>((cb) => h.getCarbohydratesSamples(range, cb))), 'carbGrams');
+  add(await settle(call<Sample[]>((cb) => h.getTotalFatSamples(range, cb))), 'fatGrams');
+  return [...out.values()].filter((d) => (d.calories ?? 0) > 0).sort((a, b) => (a.date < b.date ? 1 : -1));
 }

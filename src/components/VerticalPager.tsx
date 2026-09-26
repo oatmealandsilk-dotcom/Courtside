@@ -4,7 +4,7 @@ import { View } from 'react-native';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { BAR_DUCK_PX, barCompact } from '@/features/navigation/barShrink';
+import { barCompact } from '@/features/navigation/barShrink';
 import * as haptics from '@/lib/haptics';
 import { colors } from '@/theme';
 
@@ -156,13 +156,10 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
 
   return (
     <View style={{ flex: 1 }} onLayout={(e) => {
-      // Pages are sized for the bar at its smallest, whatever the bar is
-      // doing at this moment. A page is then always at least as tall as the
-      // room, so the next page never peeks in at the bottom; with the bar
-      // at full size the last few points sit under it, and pages keep that
-      // much clear.
+      // A page is the room, exactly: the bar floats over the page rather
+      // than taking room from it, so nothing about the bar can leave a gap.
       const room = e.nativeEvent.layout.height;
-      const h = room + BAR_DUCK_PX * (1 - barCompact.value);
+      const h = room;
       if (h <= 0) return;
       setHeight((prev) => {
         // A page shorter than the room shows the next page's top above the

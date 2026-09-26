@@ -17,7 +17,8 @@ import { colors, radius, spacing, typography } from '@/theme';
 const ABOUT: Partial<Record<Integration['provider'], { icon: keyof typeof Ionicons.glyphMap; line: string; how: string }>> = {
   'apple-health': { icon: 'heart-outline', line: 'Sleep, HRV, resting heart rate, steps, active energy.', how: 'Reads the Health app on this phone.' },
   whoop: { icon: 'pulse-outline', line: 'Recovery, strain, HRV, resting heart rate, sleep.', how: 'Signs in to WHOOP once; then it syncs on its own.' },
-  cronometer: { icon: 'nutrition-outline', line: 'Calories, protein, carbs, fat.', how: 'Reads the export file Cronometer gives you (Settings → Data → Export).' },
+  cronometer: { icon: 'nutrition-outline', line: 'Calories, protein, carbs, fat.', how: appleHealthAvailable() ? 'Through Apple Health: in Cronometer, turn on sharing with Health.' : 'Reads the export file Cronometer gives you (Settings → Data → Export).' },
+  myfitnesspal: { icon: 'restaurant-outline', line: 'Calories, protein, carbs, fat.', how: appleHealthAvailable() ? 'Through Apple Health: in MyFitnessPal, Settings → Sharing & Privacy → Apple Health.' : 'Reads MyFitnessPal\'s export file (Premium → Export data).' },
 };
 
 /**
@@ -94,7 +95,7 @@ export default function Health() {
                 {i.connected ? (
                   <View style={styles.actions}>
                     <Pressable accessibilityRole="button" accessibilityLabel={`Sync ${i.label}`} disabled={loading} onPress={() => run(i.provider, 'sync')} style={styles.small}>
-                      <Ionicons name="refresh" size={14} color={colors.text} /><Text style={styles.smallText}>{i.provider === 'cronometer' ? 'Import again' : 'Sync now'}</Text>
+                      <Ionicons name="refresh" size={14} color={colors.text} /><Text style={styles.smallText}>{(i.provider === 'cronometer' || i.provider === 'myfitnesspal') && !appleHealthAvailable() ? 'Import again' : 'Sync now'}</Text>
                     </Pressable>
                     <Pressable accessibilityRole="button" accessibilityLabel={`Disconnect ${i.label}`} disabled={loading} onPress={() => run(i.provider, 'toggle')} style={styles.smallGhost}>
                       <Text style={styles.smallGhostText}>Disconnect</Text>
@@ -106,7 +107,7 @@ export default function Health() {
                 <CourtSpinner size={26} />
               ) : i.connected ? null : (
                 <Pressable accessibilityRole="button" accessibilityLabel={`Connect ${i.label}`} accessibilityState={{ disabled: blocked }} disabled={blocked} onPress={() => run(i.provider, 'toggle')} style={[styles.connect, blocked && styles.connectOff]}>
-                  <Text style={[styles.connectText, blocked && styles.connectTextOff]}>{i.provider === 'cronometer' ? 'Import' : 'Connect'}</Text>
+                  <Text style={[styles.connectText, blocked && styles.connectTextOff]}>{(i.provider === 'cronometer' || i.provider === 'myfitnesspal') && !appleHealthAvailable() ? 'Import' : 'Connect'}</Text>
                 </Pressable>
               )}
             </View>
