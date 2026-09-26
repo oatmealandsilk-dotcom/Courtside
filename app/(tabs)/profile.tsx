@@ -41,6 +41,8 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  // The underline under Posts / Clips / Tagged travels with the finger during a
  // swipe and glides on a tap, instead of jumping once the page changes.
  const TABS = ['Posts', 'Clips', 'Tagged'] as const;
+ // 'Posts' holds everything, clips included, so it is shown as All.
+ const LABEL: Record<(typeof TABS)[number], string> = { Posts: 'All', Clips: 'Clips', Tagged: 'Tagged' };
  const tabIndex = TABS.indexOf(tab);
  const [tabWidth, setTabWidth] = useState(0);
  const underline = useTabUnderline(tabIndex, TABS.length, tabWidth);
@@ -130,7 +132,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    </Pressable>
    <Pressable accessibilityRole="link" accessibilityLabel="Saved videos and discussions" onPress={() => router.push('/saved')} style={styles.health}><Ionicons name="bookmark-outline" size={20} color={colors.brand}/><Text style={[styles.meta,{flex:1}]}>Saved{savedCount ? ` · ${savedCount}` : ''}</Text><Ionicons name="chevron-forward" size={16} color={colors.textMuted}/></Pressable>
    <Pressable accessibilityRole="link" onPress={() => router.push('/health')} style={styles.health}><Ionicons name="flash-outline" size={20} color={colors.warning}/><Text style={[styles.meta,{flex:1}]}>Apple Health · Whoop · Cronometer</Text><Ionicons name="chevron-forward" size={16} color={colors.textMuted}/></Pressable>
-   <View style={styles.tabs} onLayout={e => setTabWidth(e.nativeEvent.layout.width / TABS.length)}>{TABS.map(t => <Pressable key={t} accessibilityRole="tab" accessibilityState={{selected:selected===t}} accessibilityLabel={`${t}, ${counts[t]}`} onPress={() => setTab(t)} style={styles.tab}><Text style={[typography.body, selected===t ? { ...font('600'), color: colors.text } : { color: colors.textMuted }]}>{t}<Text style={[styles.tabCount, selected===t && { color: colors.brand }]}>  {compactNumber(counts[t])}</Text></Text></Pressable>)}
+   <View style={styles.tabs} onLayout={e => setTabWidth(e.nativeEvent.layout.width / TABS.length)}>{TABS.map(t => <Pressable key={t} accessibilityRole="tab" accessibilityState={{selected:selected===t}} accessibilityLabel={`${LABEL[t]}, ${counts[t]}`} onPress={() => setTab(t)} style={styles.tab}><Text style={[typography.body, selected===t ? { ...font('600'), color: colors.text } : { color: colors.textMuted }]}>{LABEL[t]}<Text style={[styles.tabCount, selected===t && { color: colors.brand }]}>  {compactNumber(counts[t])}</Text></Text></Pressable>)}
      {tabWidth > 0 && (live
        ? <Reanimated.View pointerEvents="none" style={[styles.tabIndicator, { width: tabWidth }, underline.style]} />
        : <View pointerEvents="none" style={[styles.tabIndicator, { width: tabWidth, left: index * tabWidth }]} />)}
@@ -188,7 +190,7 @@ function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?:
    </View>
    <View style={styles.health}><Ionicons name="bookmark-outline" size={20} color={colors.brand}/><Text style={[styles.meta,{flex:1}]}>Saved</Text><Ionicons name="chevron-forward" size={16} color={colors.textMuted}/></View>
    <View style={styles.health}><Ionicons name="flash-outline" size={20} color={colors.warning}/><Text style={[styles.meta,{flex:1}]}>Apple Health · Whoop · Cronometer</Text><Ionicons name="chevron-forward" size={16} color={colors.textMuted}/></View>
-   <View style={styles.tabs}>{['Posts', 'Clips', 'Tagged'].map((t, i) => <View key={t} style={styles.tab}><Text style={[typography.body, i === 0 ? { ...font('600'), color: colors.text } : { color: colors.textMuted }]}>{t}</Text></View>)}</View>
+   <View style={styles.tabs}>{['All', 'Clips', 'Tagged'].map((t, i) => <View key={t} style={styles.tab}><Text style={[typography.body, i === 0 ? { ...font('600'), color: colors.text } : { color: colors.textMuted }]}>{t}</Text></View>)}</View>
    <View style={styles.grid}>{[0, 1, 2].map((i) => <Reanimated.View key={i} style={[styles.tile, pulse]} />)}</View>
   </>;
 }
