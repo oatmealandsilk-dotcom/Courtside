@@ -34,6 +34,7 @@ export const posts: Post[] = [
   {
     id: 'p3',
     authorId: 'u-june',
+    isFirst: true,
     kind: 'gear',
     createdAt: isoDaysAgo(1, 2),
     body: 'Switched to a 16x19 pattern after four years on 18x20. More spin, obviously, but the real difference is how much easier the low volley is. Two weeks in and not going back.',

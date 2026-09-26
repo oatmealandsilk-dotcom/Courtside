@@ -195,6 +195,8 @@ export interface Post {
   location?: string;
   /** The author is fine with CourtSide featuring this on its own channels. Kept only when off. */
   featureOk?: boolean;
+  /** The author's first post on CourtSide: welcomed with a tag and a nudge up nearby feeds for its first two weeks. */
+  isFirst?: boolean;
   /** When the author last changed it; shown as "Edited". */
   editedAt?: string;
 }

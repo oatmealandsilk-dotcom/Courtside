@@ -8,6 +8,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { ClipVideo } from '@/components/ClipVideo';
 import { cropLayer } from '@/lib/crop';
 import { Tappable } from '@/components/Tappable';
+import { NewHereTag } from '@/components/NewHereTag';
+import { isNewHere } from '@/features/feed/newHere';
 import { useOptimisticToggle } from '@/lib/useOptimisticToggle';
 import { Avatar, Card, Chip } from '@/components/ui';
 import { LevelPill } from '@/components/LevelPill';
@@ -87,6 +89,7 @@ function PostCardInner({
             {author.isCoach ? (
               <Ionicons name="shield-checkmark" size={14} color={colors.brand} />
             ) : null}
+            {isNewHere(post) ? <NewHereTag /> : null}
           </View>
           <Text style={styles.sub} numberOfLines={1}>
             @{author.handle} · {relativeTime(post.createdAt)}

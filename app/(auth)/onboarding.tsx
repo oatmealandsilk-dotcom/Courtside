@@ -115,7 +115,7 @@ const round = (n: number, decimals: number) => Number(n.toFixed(decimals));
 
 export default function Onboarding() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, currentUserId, actions } = useApp();
+  const { currentUser, currentUserId, posts, questions, answers, actions } = useApp();
   const insets = useSafeAreaInsets();
   // The profile's "finish setting up" card lands straight on the step it names.
   const params = useLocalSearchParams<{ step?: string; from?: string }>();
@@ -213,7 +213,9 @@ export default function Onboarding() {
     actions.completeOnboarding(profile);
     if (currentUserId) void writeSkipped(currentUserId, [...skipped.current]);
     // Came here from the profile's "finish setting up"? Back to the profile, not to the top of the feed.
-    router.replace(params.from === 'profile' ? '/(tabs)/profile' : '/(tabs)');
+    // A new player with nothing posted yet goes on to their first move.
+    const hasPosted = !!currentUserId && (posts.some((p) => p.authorId === currentUserId) || questions.some((q) => q.authorId === currentUserId) || answers.some((a) => a.authorId === currentUserId));
+    router.replace(params.from === 'profile' ? '/(tabs)/profile' : hasPosted ? '/(tabs)' : '/first-move');
   };
 
   const skipStep = () => {

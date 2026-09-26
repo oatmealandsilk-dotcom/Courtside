@@ -13,7 +13,8 @@ import { colors, radius, spacing, typography, font } from '@/theme';
 const COUNTDOWN = 5;
 
 /**
- * A hit: one photo, taken right after a session, no retakes.
+ * An instant: one photo, taken right after you play — the way a Strava
+ * activity closes a run. A five-second count, and a retake if you want one.
  *
  * The camera opens, a five-second count runs, the shutter fires on its own.
  * There is no capture button and no second try — what the camera saw at zero
@@ -193,7 +194,7 @@ export default function Hit() {
         <Pressable accessibilityRole="button" accessibilityLabel="Cancel" onPress={() => router.back()} style={styles.iconButton}>
           <Ionicons name="close" size={24} color="white" />
         </Pressable>
-        <View style={styles.retake}><Ionicons name="tennisball" size={13} color="white" /><Text style={styles.retakeText}>Instant · one take</Text></View>
+        <View style={styles.retake}><Ionicons name="tennisball" size={13} color="white" /><Text style={styles.retakeText}>Instant</Text></View>
       </View>
       <View style={styles.centre} pointerEvents="none">
         {failed ? (
@@ -205,7 +206,7 @@ export default function Hit() {
         ) : null}
       </View>
       <View style={[styles.bottom, { paddingBottom: insets.bottom + spacing.xl }]} pointerEvents="none">
-        <Text style={styles.hint}>{count === null ? '' : 'No retakes. Whatever the camera sees at zero is the instant.'}</Text>
+        <Text style={styles.hint}>{count === null ? '' : 'Snap it at zero. You can retake it after.'}</Text>
       </View>
     </View>
   );
