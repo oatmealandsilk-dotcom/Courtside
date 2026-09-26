@@ -25,7 +25,7 @@ export default function ThemePage() {
       <Text style={styles.lead}>Applies everywhere straight away. Pick the court you would rather be on.</Text>
       <View style={styles.list}>
         {themeList.map((option) => (
-          <ThemeCard key={option.name} option={option} active={(chosen ?? theme) === option.name} onPick={() => { haptics.tap(); setChosen(option.name); setTimeout(() => setTheme(option.name), 16); }} styles={styles} />
+          <ThemeCard key={option.name} option={option} active={(chosen ?? theme) === option.name} onPick={() => { haptics.tap(); setChosen(option.name); setTheme(option.name); }} styles={styles} />
         ))}
       </View>
     </Screen>
