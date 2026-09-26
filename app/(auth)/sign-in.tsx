@@ -13,6 +13,7 @@ import { TermsCheck } from '@/components/TermsCheck';
 import { Avatar, Button, Field } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { SigningInAs } from '@/components/SigningInAs';
+import { useLeave } from '@/components/LeaveCurtain';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font } from '@/theme';
 
@@ -32,6 +33,7 @@ export default function SignIn() {
   const [useAnother, setUseAnother] = useState(false);
   const remembered = isSupabaseConfigured && !add && !useAnother && mode === 'sign-in' ? savedAccounts.filter((a) => a.id !== currentUserId) : [];
   const [switching, setSwitching] = useState<string | null>(null);
+  const { leave, curtain } = useLeave();
   const switchingAccount = switching ? savedAccounts.find((a) => a.id === switching) ?? null : null;
   const pick = async (id: string) => {
     if (busy || switching) return;
@@ -39,7 +41,8 @@ export default function SignIn() {
     setError(null);
     try {
       await actions.switchAccount(id);
-      router.replace('/');
+      // The account's picture settles into the page colour, then the app opens.
+      leave(() => router.replace('/'));
     } catch (err) {
       // A login that expired on this phone is dropped from the list; the email form takes over.
       setError(err instanceof Error ? err.message : 'Could not switch accounts.');
@@ -99,7 +102,7 @@ export default function SignIn() {
     setError(null);
     setNotice(null);
     try {
-      if (await actions.signInWithApple()) router.replace('/');
+      if (await actions.signInWithApple()) leave(() => router.replace('/'));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (!/cancel/i.test(message)) setError(message);
@@ -114,7 +117,7 @@ export default function SignIn() {
     setNotice(null);
     try {
       const done = await actions.signInWithGoogle();
-      if (done && Platform.OS !== 'web') router.replace('/');
+      if (done && Platform.OS !== 'web') leave(() => router.replace('/'));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not sign in with Google.');
       // On the web a success leaves the page; a failure stays, so the form must come back.
@@ -157,7 +160,7 @@ export default function SignIn() {
           return;
         }
       }
-      router.replace('/');
+      leave(() => router.replace('/'));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not sign in.');
     } finally {
@@ -306,6 +309,7 @@ export default function SignIn() {
         </Text>
       </ScrollView>
       {switchingAccount ? <SigningInAs name={switchingAccount.name} handle={switchingAccount.handle} avatarUrl={switchingAccount.avatarUrl} seed={switchingAccount.id} /> : null}
+      {curtain}
     </KeyboardAvoidingView>
   );
 }

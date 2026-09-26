@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar, Screen } from '@/components/ui';
 import { SigningInAs } from '@/components/SigningInAs';
+import { useLeave } from '@/components/LeaveCurtain';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -18,6 +19,7 @@ export default function Accounts() {
   const styles = useThemedStyles(styleDefinitions);
   const { savedAccounts, currentUserId, actions } = useApp();
   const [busy, setBusy] = useState<string | null>(null);
+  const { leave, curtain } = useLeave();
   const [error, setError] = useState('');
 
   const pick = async (id: string) => {
@@ -26,7 +28,7 @@ export default function Accounts() {
     setError('');
     try {
       await actions.switchAccount(id);
-      router.replace('/');
+      leave(() => router.replace('/'));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not switch accounts.');
       setBusy(null);
@@ -76,6 +78,7 @@ export default function Accounts() {
       <Text style={styles.note}>Removing a login here only forgets it on this device. Logging out of all devices, in the account center, forgets it everywhere.</Text>
     </Screen>
     {switchingTo ? <SigningInAs name={switchingTo.name} handle={switchingTo.handle} avatarUrl={switchingTo.avatarUrl} seed={switchingTo.id} /> : null}
+    {curtain}
     </>
   );
 }

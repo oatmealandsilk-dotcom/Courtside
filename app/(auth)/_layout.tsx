@@ -7,6 +7,7 @@ import { colors } from '@/theme';
 export default function AuthLayout() {
   useTheme();
   return (
-    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }} />
+    // The sign-in steps (sign in, birthday, terms, setup) fade into one another rather than sliding like pages.
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg }, animation: 'fade', animationDuration: 280 }} />
   );
 }
