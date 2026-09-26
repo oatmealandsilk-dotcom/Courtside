@@ -936,7 +936,7 @@ export const remote = {
     const { data, error } = await need().rpc('change_handle', { p_handle: handle });
     if (error) {
       if (/change_handle|function .* does not exist|schema cache/i.test(error.message)) {
-        throw new Error('Changing handles is not switched on yet. Run migration 34 in Supabase first.');
+        throw new Error('Changing handles is not open yet. Try again soon.');
       }
       throw new Error(error.message);
     }
