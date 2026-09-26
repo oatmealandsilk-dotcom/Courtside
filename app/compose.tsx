@@ -12,7 +12,7 @@ import { registerCreateClose } from '@/features/compose/createMenu';
 import { PermissionBanner } from '@/components/PermissionRows';
 import { SheetBackdrop } from '@/components/SheetBackdrop';
 import { TOPIC_META } from '@/components/QuestionCard';
-import { Button, Chip, Field, Screen } from '@/components/ui';
+import { Button, Chip, Field, Screen, Toggle } from '@/components/ui';
 import { LocationLink } from '@/components/LocationChip';
 import { openPlacePicker } from '@/features/places/picker';
 import { PreparingRing } from '@/components/PreparingRing';
@@ -93,6 +93,7 @@ export default function Compose() {
   // People tagged in the post: chips under the caption, added from a short search.
   const [tagged, setTagged] = useState<string[]>([]);
   const [location, setLocation] = useState('');
+  const [featureOk, setFeatureOk] = useState(true);
   const [questionTitle, setQuestionTitle] = useState('');
   const [topic, setTopic] = useState<QuestionTopic>('gear');
 
@@ -137,6 +138,7 @@ export default function Compose() {
       tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
       taggedUserIds: tagged.length ? tagged : undefined,
       location: location.trim() || undefined,
+      featureOk: featureOk ? undefined : false,
       imageUrl: media?.kind === 'photo' ? media.uri : undefined,
       videoUrl: media?.kind === 'video' ? media.uri : undefined,
       mediaLabel: media?.label,
@@ -146,7 +148,9 @@ export default function Compose() {
           ? { focus: 'On court', minutes: onCourt, drills: [], intensity: 3 }
           : undefined,
     });
-    router.back();
+    // The first post is the moment to ask who they hit with.
+    const firstPost = !posts.some((p) => p.authorId === currentUserId);
+    if (firstPost) router.replace('/invite'); else router.back();
   };
 
   const pick = (next: PickedMedia | null) => {
@@ -336,6 +340,13 @@ export default function Compose() {
                   mentions
                 />
                 {mode !== 'story' && mode !== 'hit' ? <TagPlayers tagged={tagged} onChange={setTagged} /> : null}
+                {mode !== 'story' && mode !== 'hit' ? (
+                  <View style={styles.inlineRow}>
+                    <Ionicons name="megaphone-outline" size={18} color={colors.textMuted} />
+                    <Text style={styles.inlineLabel}>OK to feature on CourtSide's Instagram</Text>
+                    <Toggle value={featureOk} onChange={setFeatureOk} accessibilityLabel="OK for CourtSide to feature this on its own channels" />
+                  </View>
+                ) : null}
 
                 {mode !== 'story' && mode !== 'hit' ? (
                   <View style={styles.inlineRow}>

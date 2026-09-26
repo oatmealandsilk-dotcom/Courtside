@@ -12,6 +12,8 @@ import * as WebBrowser from 'expo-web-browser';
  */
 
 import { supabase } from '@/lib/supabase';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
 import type { Answer, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, Question, Story, Tip, User, CoachApplication } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
 
@@ -69,7 +71,7 @@ interface PostRow {
   crop?: { scale: number; x: number; y: number } | null;
   /** Numeric columns arrive as strings, as trim_start does. */
   speed?: number | string | null; volume?: number | string | null;
-  location?: string | null; edited_at?: string | null;
+  location?: string | null; edited_at?: string | null; feature_ok?: boolean | null; referred_by?: string | null;
   post_likes?: { user_id: string }[]; post_saves?: { user_id: string }[]; comments?: { id: string }[];
 }
 interface CommentRow {
@@ -156,6 +158,7 @@ const toPost = (row: PostRow): Post => ({
   archived: row.archived || undefined,
   pinned: row.pinned || undefined,
   location: row.location ?? undefined,
+  featureOk: row.feature_ok === false ? false : undefined,
   editedAt: row.edited_at ?? undefined,
 });
 
@@ -461,11 +464,12 @@ const fail = (what: string) => (error: unknown) => {
 };
 
 /** The edits a post can carry, and the migration file that adds each one's column. */
-const OPTIONAL_COLUMNS = /trim_|muted|crop|location|speed|volume/;
+const OPTIONAL_COLUMNS = /trim_|muted|crop|location|speed|volume|feature_ok/;
 const MIGRATION_FOR: Record<string, string> = {
   trim_start: '20260916000002_post_trim.sql', trim_end: '20260916000002_post_trim.sql', muted: '20260916000002_post_trim.sql',
   crop: '20260916000003_post_crop.sql', location: '20260916000004_post_edit.sql',
   speed: '20260925000026_post_speed_volume.sql', volume: '20260925000026_post_speed_volume.sql',
+  feature_ok: '20260926000028_feature_ok_referrals.sql',
 };
 const missingColumnsNote = (cols: string[]) =>
   `[remote] The posts table has no "${cols.join('", "')}" column yet, so this post was saved without that edit (it still went up). To keep it next time, open Supabase → SQL Editor → New query, paste the file supabase/migrations/${MIGRATION_FOR[cols[0]] ?? '…'} and press Run. It is safe to run more than once.`;
@@ -727,6 +731,21 @@ export const remote = {
     return data as T;
   },
 
+  /* -------------------------------------------------------------- invites */
+
+  /** Claims the invite this person joined through; returns who invited them, or null when the handle is unknown or the tables are not there yet. */
+  async claimReferral(handle: string): Promise<ID | null> {
+    const { data, error } = await need().rpc('claim_referral', { p_handle: handle });
+    if (error) return null;
+    return (data as ID | null) ?? null;
+  },
+
+  async countReferrals(me: ID): Promise<number> {
+    const { count, error } = await need().from('profiles').select('id', { count: 'exact', head: true }).eq('referred_by', me);
+    if (error) return 0;
+    return count ?? 0;
+  },
+
   async fetchWaitlist(): Promise<WaitlistEntry[]> {
     const { data, error } = await allRows<{ id: string; email: string; name: string | null; source: string | null; referred_by: string | null; created_at: string }>(
       (from, to) => need().from('waitlist').select('id, email, name, source, referred_by, created_at').order('created_at', { ascending: false }).range(from, to), 20000);
@@ -929,6 +948,7 @@ export const remote = {
       ...(post.location ? { location: post.location } : {}),
       ...(post.speed && post.speed !== 1 ? { speed: post.speed } : {}),
       ...(post.volume !== undefined && post.volume > 0 && post.volume < 1 ? { volume: post.volume } : {}),
+      ...(post.featureOk === false ? { feature_ok: false } : {}),
     };
     const sending = { ...extras };
     const dropped: string[] = [];
@@ -1317,6 +1337,26 @@ export const auth = {
   /* ------------------------------------------------------- account centre */
 
   /** Who is signed in, as the auth system sees them: email, sign-in methods, since when. */
+  /**
+   * Sign in with Apple, the way Apple wants it on iPhone: the phone's own
+   * sheet hands back a signed token, Supabase checks it against the app's
+   * bundle id. Apple gives the person's name once, on the first sign-in.
+   */
+  async signInWithApple() {
+    const client = need();
+    const rawNonce = Crypto.randomUUID();
+    const hashedNonce = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, rawNonce);
+    const cred = await AppleAuthentication.signInAsync({
+      requestedScopes: [AppleAuthentication.AppleAuthenticationScope.FULL_NAME, AppleAuthentication.AppleAuthenticationScope.EMAIL],
+      nonce: hashedNonce,
+    });
+    if (!cred.identityToken) throw new Error('Apple did not finish signing you in.');
+    const { data, error } = await client.auth.signInWithIdToken({ provider: 'apple', token: cred.identityToken, nonce: rawNonce });
+    if (error) throw new Error(error.message);
+    const name = [cred.fullName?.givenName, cred.fullName?.familyName].filter(Boolean).join(' ').trim();
+    if (name && !data.user?.user_metadata?.name) await client.auth.updateUser({ data: { name } }).catch(() => undefined);
+    return data.session;
+  },
   async account() {
     const { data, error } = await need().auth.getUser();
     if (error || !data.user) throw new Error(error?.message ?? 'Not signed in');

@@ -18,6 +18,7 @@ module.exports = {
     newArchEnabled: true,
     ios: {
       supportsTablet: false,
+      usesAppleSignIn: true,
       bundleIdentifier: 'co.courtside.app',
       buildNumber: '1',
       infoPlist: {
@@ -44,6 +45,7 @@ module.exports = {
       'expo-video',
       ['expo-location', { locationWhenInUsePermission: 'CourtSide uses your location to show players near you on the map.' }],
       ['expo-notifications', { color: '#3F7049' }],
+      'expo-apple-authentication',
       // Apple Health, in the App Store build only (Expo Go has no HealthKit).
       ['react-native-health', { healthSharePermission: 'CourtSide reads your sleep, heart rate variability, resting heart rate, steps and active energy so the AI coach can plan around how recovered you are.', healthUpdatePermission: 'CourtSide does not write to Health.' }],
     ],

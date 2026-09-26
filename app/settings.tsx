@@ -134,17 +134,6 @@ export default function Settings() {
       ],
     },
     {
-      title: 'Payments',
-      rows: [
-        {
-          icon: 'card-outline',
-          label: 'Payment methods',
-          detail: defaultPayment ? `${defaultPayment.label} · default` : undefined,
-          onPress: () => router.push('/payments'),
-        },
-      ],
-    },
-    {
       title: 'More info and support',
       rows: [
         { icon: 'help-circle-outline', label: 'Help', onPress: () => router.push('/help') },

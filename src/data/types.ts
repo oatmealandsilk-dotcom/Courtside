@@ -191,6 +191,8 @@ export interface Post {
   pinned?: boolean;
   /** Where it was, in the author's words. */
   location?: string;
+  /** The author is fine with CourtSide featuring this on its own channels. Kept only when off. */
+  featureOk?: boolean;
   /** When the author last changed it; shown as "Edited". */
   editedAt?: string;
 }

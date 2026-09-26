@@ -21,6 +21,7 @@ import { markMessagesOpened } from '@/features/messaging/readReceipts';
 import { readReceiptPreference, saveReceiptPreference } from '@/features/messaging/preferences';
 import { connectProvider, disconnectProvider } from '@/lib/integrations';
 import { connectAppleHealth, readAppleHealth } from '@/features/health/appleHealth';
+import { takeReferrer } from '@/features/invite/referral';
 import { pickCronometerExport } from '@/features/health/cronometer';
 import { nearestPlace } from '@/data/locations';
 import { getPosition } from '@/lib/geo';
@@ -79,6 +80,8 @@ interface NewPostInput {
   kind: PostKind;
   /** Where it was, if they said. */
   location?: string;
+  /** Off when the author would rather CourtSide did not feature it. */
+  featureOk?: boolean;
   /** People tagged in it; each gets a notification. */
   taggedUserIds?: ID[];
   orientation?: 'portrait' | 'landscape';
@@ -307,6 +310,7 @@ interface AppActions {
   signUp: (email: string, password: string, name: string, handle: string) => Promise<'session' | 'confirm'>;
   /** Resolves once the account is loaded, or false if the person backed out. */
   signInWithGoogle: () => Promise<boolean>;
+  signInWithApple: () => Promise<boolean>;
   signOut: () => void;
   /* Account centre */
   accountInfo: () => Promise<{ email: string; providers: string[]; createdAt: string; lastSignInAt: string | null; emailConfirmed: boolean } | null>;
@@ -357,6 +361,9 @@ interface AppActions {
   toggleIntegration: (provider: Integration['provider']) => Promise<void>;
   /** Pull the latest from a connected source (Apple Health reads the phone; WHOOP asks the server; Cronometer asks for a fresh export). */
   syncHealth: (provider: Integration['provider']) => Promise<void>;
+  /** If this person arrived through an invite link, it is claimed now: the two follow each other. */
+  claimPendingReferral: () => Promise<void>;
+  countReferrals: () => Promise<number>;
 
   /* Ask a coach */
   askCoach: (input: NewCoachQuestionInput) => ID;
@@ -965,6 +972,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // On the web the page has left for Google by now; the auth listener
     // finishes the job when it comes back.
     if (!session) return Platform.OS === 'web';
+    await loadRemote(session.user.id, session.user.email);
+    return true;
+  }, [loadRemote]);
+
+  const signInWithApple = useCallback(async () => {
+    const session = await remoteAuth.signInWithApple();
+    if (!session) return false;
     await loadRemote(session.user.id, session.user.email);
     return true;
   }, [loadRemote]);
@@ -2568,6 +2582,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [applyHealth]);
   useEffect(() => { if (live(state.currentUserId)) void reloadHealth(); }, [state.currentUserId, reloadHealth]);
 
+  const claimPendingReferral = useCallback(async () => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me)) return;
+    const handle = await takeReferrer();
+    if (!handle) return;
+    const who = await remote.claimReferral(handle);
+    if (!who) return;
+    setState((prev) => ({ ...prev, followingIds: prev.followingIds.includes(who) ? prev.followingIds : [...prev.followingIds, who] }));
+    const them = stateRef.current.users.find((u) => u.id === who);
+    showToast({ title: `You and @${them?.handle ?? handle} now follow each other`, icon: 'people-outline' });
+  }, []);
+  useEffect(() => { if (live(state.currentUserId)) void claimPendingReferral(); }, [state.currentUserId, claimPendingReferral]);
+  const countReferrals = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.countReferrals(me!) : 0; }, []);
+
   const pullFrom = useCallback(async (me: ID, provider: Integration['provider']): Promise<boolean> => {
     if (provider === 'apple-health') {
       const days = await readAppleHealth(7);
@@ -2650,6 +2678,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       signIn,
       signUp,
       signInWithGoogle,
+      signInWithApple,
       signOut,
       accountInfo,
       changePassword,
@@ -2686,6 +2715,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       submitCoachingRequest,
       toggleIntegration,
       syncHealth,
+      claimPendingReferral,
+      countReferrals,
       askCoach,
       replyToCoachQuestion,
       toggleReplyHelpful,
@@ -2741,6 +2772,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       signIn,
       signUp,
       signInWithGoogle,
+      signInWithApple,
       signOut,
       accountInfo,
       changePassword,
@@ -2777,6 +2809,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       submitCoachingRequest,
       toggleIntegration,
       syncHealth,
+      claimPendingReferral,
+      countReferrals,
       askCoach,
       replyToCoachQuestion,
       toggleReplyHelpful,
