@@ -402,6 +402,11 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
    * (liked or commented on your posts, or messaged you), then coaches, then
    * players from your city. Never anyone you already follow or have blocked.
    */
+  // Someone you follow from the strip stays on it, now saying Following, the
+  // way Instagram does — vanishing the moment you tap read as the tap failing.
+  // The strip forgets them when the feed is dealt again.
+  const [followedHere, setFollowedHere] = useState<string[]>([]);
+  useEffect(() => { setFollowedHere([]); }, [visit]);
   const suggestions = useMemo(() => {
     if (!currentUserId) return [];
     const me = users.find((u) => u.id === currentUserId);
@@ -417,7 +422,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     for (const conversation of conversations) conversation.participantIds.forEach((id) => interacted.add(id));
     const city = (location: string) => location.split(',')[0].trim();
     return users
-      .filter((u) => u.id !== currentUserId && !followingIds.includes(u.id) && !blockedIds.includes(u.id) && !sourceUserIds.includes(u.id))
+      .filter((u) => u.id !== currentUserId && (!followingIds.includes(u.id) || followedHere.includes(u.id)) && !blockedIds.includes(u.id) && !sourceUserIds.includes(u.id))
       .map((user) => {
         const local = !!me && city(user.location) === city(me.location);
         const reason = interacted.has(user.id) ? 'Interacted with you'
@@ -427,7 +432,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         return { user, reason, score: (interacted.has(user.id) ? 2 : 0) + (local ? 1 : 0) + (user.isCoach ? 0.5 : 0) };
       })
       .sort((a, b) => b.score - a.score);
-  }, [users, posts, comments, conversations, currentUserId, followingIds, blockedIds]);
+  }, [users, posts, comments, conversations, currentUserId, followingIds, blockedIds, followedHere]);
 
   // Anything you post after the feed was ranked — a clip, a note, a hit —
   // goes right to the very top and the feed jumps there, so posting reads as
@@ -497,7 +502,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               </View>
               <LevelPill profile={user.profile} small />
             </Pressable>
-            <FollowPill following={followingIds.includes(user.id)} onPress={() => actions.toggleFollow(user.id)} small name={user.name} />
+            <FollowPill following={followingIds.includes(user.id)} onPress={() => { setFollowedHere((h) => (h.includes(user.id) ? h : [...h, user.id])); actions.toggleFollow(user.id); }} small name={user.name} />
           </View>
         ))}
       </ScrollView>
