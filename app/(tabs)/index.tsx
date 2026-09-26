@@ -597,6 +597,14 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     const timer = setTimeout(() => markReady(id, true), 6000);
     return () => clearTimeout(timer);
   }, [active, feed, readyIds, markReady]);
+  // A post whose video only ever existed on the phone that made it will never
+  // report ready: its page is shown at once so it can at least be opened and
+  // deleted, rather than sitting behind the placeholder for good.
+  useEffect(() => {
+    for (const item of feed) {
+      if (item.type === 'post' && !reachable(item.post) && !readyIds.has(item.post.id)) markReady(item.post.id, true);
+    }
+  }, [feed, readyIds, markReady]);
   const [warmTimedOut, setWarmTimedOut] = useState(false);
   useEffect(() => {
     if (!ready || !feed.length || !(!isSupabaseConfigured || app.remoteLoaded)) return;
