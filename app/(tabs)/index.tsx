@@ -57,6 +57,9 @@ import { colors, radius, typography, spacing, font } from '@/theme';
  * Something that can be tapped away: it shrinks and fades in one short move,
  * then tells its page it is gone. The page decides how long to remember that.
  */
+/** Media the internet can reach: a file:// link only ever worked on the phone that made it. */
+const reachable = (p: { imageUrl?: string; videoUrl?: string }) => [p.imageUrl, p.videoUrl].every((u) => !u || /^(https?:|data:|blob:)/.test(u));
+
 function TapAway({ onHidden, label, children, style }: { onHidden: () => void; label: string; children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
   const gone = useSharedValue(0);
   const press = useSharedValue(0);
@@ -240,7 +243,9 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         setVisit((v) => v + 1);
         return;
       }
-      const ranked = rankFeed(data.posts, data.questions.filter((q) => !q.source), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st))).flatMap((i) =>
+      // A post whose picture or video is a link only its author's phone could
+      // open (an upload that never finished) is left out of the deal.
+      const ranked = rankFeed(data.posts.filter(reachable), data.questions.filter((q) => !q.source), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st))).flatMap((i) =>
         i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : [],
       );
       // Something of yours from the last few minutes goes first, so a fresh post is right there.
@@ -296,7 +301,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       const hidden = new Set([...latest.current.blockedIds, ...latest.current.mutedIds]);
       // Shuffled out here, not inside the update: an update has to be able to
       // run twice and come out the same, and a shuffle never would.
-      const dealt = shuffleFeed(fresh.filter((p) => !p.archived && !hidden.has(p.authorId)).map((p) => `p:${p.id}`));
+      const dealt = shuffleFeed(fresh.filter((p) => !p.archived && !hidden.has(p.authorId) && reachable(p)).map((p) => `p:${p.id}`));
       setOrder((prev) => {
         const have = new Set(prev);
         const keys = dealt.filter((k) => !have.has(k));

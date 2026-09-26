@@ -124,7 +124,12 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
           if (Math.abs(player.currentTime - trimStart) > 0.05) player.currentTime = trimStart;
         });
       }
-      const ready = isReady();
+      // A video that cannot load (a link that only ever worked on the phone
+      // that made it) counts as arrived: the page shows, with its poster,
+      // instead of holding the reader on a placeholder for good.
+      let failed = false;
+      try { failed = player.status === 'error'; } catch { /* player already released */ }
+      const ready = isReady() || failed;
       if (ready !== readyRef.current) {
         readyRef.current = ready;
         // How long this one took is the phone's best measure of the connection.
