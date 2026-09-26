@@ -12,6 +12,7 @@ import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { money, relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useAiCoachOn } from '@/features/aiCoach/switch';
+import { statusLabel } from '@/features/coaching/bookings';
 import { colors, radius, spacing, typography, font } from '@/theme';
 
 function Coaching() {
@@ -22,7 +23,12 @@ function Coaching() {
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
     .slice(0, 3);
   const unanswered = coachQuestions.filter((q) => q.replyIds.length === 0).length;
-  const myRequests = coachingRequests.filter((r) => r.userId === currentUserId).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  // Your bookings; one still at Stripe's pay page is not a booking yet.
+  const myRequests = coachingRequests.filter((r) => r.userId === currentUserId && r.status !== 'awaiting-payment').sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  const myCoach = coaches.find((c) => c.userId === currentUserId);
+  const openBookings = myCoach ? coachingRequests.filter((r) => (r.coachId === myCoach.id || r.coachUserId === currentUserId) && (r.status === 'submitted' || r.status === 'in-review')).length : 0;
+  // Everyone sees listed coaches; a coach also sees their own listing before it is listed.
+  const shown = coaches.filter((c) => c.listed !== false);
 
   return (
     <Screen memoryKey="coaches" title="Coaching" subtitle="Real coaches, approved one by one." wash>
@@ -58,11 +64,11 @@ function Coaching() {
       <View style={styles.section}>
         <View style={styles.sectionRow}>
           <Text style={styles.sectionTitle}>Coaches</Text>
-          <Text style={styles.sectionCount}>{coaches.length}</Text>
+          <Text style={styles.sectionCount}>{shown.length}</Text>
         </View>
         <Text style={styles.sectionBody}>Checked by hand, one by one.</Text>
       </View>
-      {coaches.length === 0 ? (
+      {shown.length === 0 ? (
         <View style={styles.none}>
           <Text style={styles.noneTitle}>No coaches on CourtSide yet</Text>
           <Text style={styles.noneBody}>This is the set being played right now. Ask a question above in the meantime — it stays up until a coach answers it.</Text>
@@ -81,12 +87,12 @@ function Coaching() {
           style={styles.rail}
           contentContainerStyle={styles.railRow}
         >
-          {coaches.map((coach) => {
+          {shown.map((coach) => {
             const user = users.find((u) => u.id === coach.userId);
-            const price = Math.min(...coach.services.map((s) => s.priceCents));
+            const price = coach.services.length ? Math.min(...coach.services.map((s) => s.priceCents)) : 0;
             return (
               <Pressable key={coach.id} accessibilityRole="link" onPress={() => router.push(`/coach/${coach.id}`)} style={({ pressed }) => [styles.coachCard, pressed && styles.pressed]}>
-                <Avatar name={user?.name ?? 'Coach'} seed={coach.id} size={64} style={{ backgroundColor: colors.borderStrong }} />
+                <Avatar name={user?.name ?? 'Coach'} seed={coach.id} uri={user?.avatarUrl} size={64} style={{ backgroundColor: colors.borderStrong }} />
                 <View style={styles.coachWords}>
                   {/* The whole card is the coach's page; the name is not a second door. */}
                   <Text style={styles.coachName} numberOfLines={1}>{user?.name}</Text>
@@ -94,12 +100,14 @@ function Coaching() {
                   <Text style={styles.meta} numberOfLines={1}>{coach.specialties.slice(0, 2).map((x) => x.charAt(0).toUpperCase() + x.slice(1)).join(' & ')}</Text>
                 </View>
                 <View style={styles.coachFoot}>
-                  <View style={styles.metaRow}>
-                    <Ionicons name="star" size={12} color={colors.text} />
-                    <Text style={styles.rating}>{coach.ratingAvg.toFixed(1)}</Text>
-                    <Text style={styles.meta}>· {coach.ratingCount}</Text>
-                  </View>
-                  <View style={styles.priceTag}><Text style={styles.priceText}>from {money(price)}</Text></View>
+                  {coach.ratingCount ? (
+                    <View style={styles.metaRow}>
+                      <Ionicons name="star" size={12} color={colors.text} />
+                      <Text style={styles.rating}>{coach.ratingAvg.toFixed(1)}</Text>
+                      <Text style={styles.meta}>· {coach.ratingCount}</Text>
+                    </View>
+                  ) : <Text style={styles.meta}>New</Text>}
+                  {price ? <View style={styles.priceTag}><Text style={styles.priceText}>from {money(price)}</Text></View> : null}
                 </View>
               </Pressable>
             );
@@ -154,13 +162,13 @@ function Coaching() {
                 const service = coach?.services.find((x) => x.id === r.serviceId);
                 const waiting = r.status !== 'answered';
                 return (
-                  <Pressable key={entry.key} accessibilityRole="link" onPress={() => coach && router.push(`/coach/${coach.id}`)} style={({ pressed }) => [styles.row, index > 0 && styles.rowLine, pressed && styles.pressed]}>
+                  <Pressable key={entry.key} accessibilityRole="link" onPress={() => router.push(`/coach-request/${r.id}`)} style={({ pressed }) => [styles.row, index > 0 && styles.rowLine, pressed && styles.pressed]}>
                     <View style={styles.rowWords}>
                       <Text style={styles.rowTitle} numberOfLines={2}>{r.question || service?.title || 'Coaching request'}</Text>
                       <View style={styles.metaRow}>
                         {waiting ? <LiveDot size={7} /> : <Ionicons name="checkmark-circle" size={13} color={colors.success} />}
                         <Text style={styles.meta} numberOfLines={1}>
-                          {r.status === 'answered' ? 'Answered' : r.status === 'in-review' ? 'Being looked at' : 'Sent'} · Private, with {coachUser?.name ?? 'a coach'} · {relativeTime(r.createdAt)}
+                          {statusLabel(r)} · Private, with {coachUser?.name ?? 'a coach'} · {relativeTime(r.createdAt)}
                         </Text>
                       </View>
                     </View>
@@ -173,6 +181,15 @@ function Coaching() {
       ) : null}
 
       {/* --------------------------- Coach on CourtSide -------------------------- */}
+      {myCoach ? (
+        <Pressable accessibilityRole="link" onPress={() => router.push(openBookings ? '/coach-bookings' : '/coach-studio')} style={({ pressed }) => [styles.foot, pressed && styles.pressed]}>
+          <View style={styles.rowWords}>
+            <Text style={styles.footTitle}>{openBookings ? `${openBookings} ${openBookings === 1 ? 'booking needs' : 'bookings need'} an answer` : 'Your coach studio'}</Text>
+            <Text style={styles.meta}>{myCoach.listed ? 'You are listed. Your page, services and payouts.' : 'Finish your page, services and payouts to get listed.'}</Text>
+          </View>
+          <Ionicons name="arrow-forward" size={18} color={colors.text} />
+        </Pressable>
+      ) : null}
       {currentUser?.isCoach ? (
         <Pressable accessibilityRole="link" onPress={() => router.push('/coach-inbox')} style={({ pressed }) => [styles.foot, pressed && styles.pressed]}>
           <View style={styles.rowWords}>
@@ -181,7 +198,7 @@ function Coaching() {
           </View>
           <Ionicons name="arrow-forward" size={18} color={colors.text} />
         </Pressable>
-      ) : coaches.length === 0 ? null : (
+      ) : shown.length === 0 ? null : (
         <Pressable accessibilityRole="link" accessibilityLabel="Apply to be a coach" onPress={() => router.push('/coach-apply')} style={({ pressed }) => [styles.foot, pressed && styles.pressed]}>
           <View style={styles.rowWords}>
             <Text style={styles.footTitle}>Coach on CourtSide</Text>

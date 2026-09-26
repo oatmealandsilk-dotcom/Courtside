@@ -25,8 +25,8 @@ alter table public.handle_history enable row level security;
 create or replace function public.guard_profile_columns()
 returns trigger language plpgsql as $$
 begin
-  if coalesce(current_setting('request.jwt.claim.role', true), '') <> 'service_role' then
-    if new.is_coach is distinct from old.is_coach then
+  if auth.uid() is not null and coalesce(current_setting('request.jwt.claim.role', true), '') <> 'service_role' then
+    if new.is_coach is distinct from old.is_coach and coalesce(current_setting('courtside.coach_system', true), '') <> 'on' then
       raise exception 'is_coach is not editable';
     end if;
     if new.handle is distinct from old.handle and coalesce(current_setting('courtside.handle_change', true), '') <> 'on' then

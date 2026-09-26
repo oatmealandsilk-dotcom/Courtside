@@ -13,7 +13,7 @@
 // The app asks `status` and shows the coach only once the key is there, so
 // adding the key is what switches it on; removing it switches it off.
 // (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / SUPABASE_ANON_KEY are provided.)
-import Anthropic from 'npm:@anthropic-ai/sdk@0.71.0';
+import Anthropic from 'npm:@anthropic-ai/sdk@0.128.0';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const PLAN_MODEL = 'claude-opus-5-5';
@@ -268,11 +268,9 @@ async function chat(userId: string, body: { prompt: string; context: string; coa
   }
 
   const now = new Date().toISOString();
-  const nextExchanges: Exchange[] = [
-    ...exchanges,
-    { role: 'user', body: body.prompt.trim(), topic, created_at: now },
-    { role: 'coach', body: reply, topic, created_at: now },
-  ].slice(-40);
+  const asked: Exchange = { role: 'user', body: body.prompt.trim(), topic, created_at: now };
+  const answered: Exchange = { role: 'coach', body: reply, topic, created_at: now };
+  const nextExchanges: Exchange[] = [...exchanges, asked, answered].slice(-40);
 
   // Every so often, fold the older exchanges into the running summary.
   let nextSummary = summary;

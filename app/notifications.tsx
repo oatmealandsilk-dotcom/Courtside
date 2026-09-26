@@ -38,6 +38,9 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap; tin
   posted: { name: 'checkmark', tint: 'success' },
   'coach-application': { name: 'ribbon', tint: 'brand' },
   report: { name: 'flag', tint: 'warning' },
+  booking: { name: 'calendar', tint: 'brand' },
+  'coach-answer': { name: 'shield-checkmark', tint: 'brand' },
+  refund: { name: 'return-down-back', tint: 'success' },
 };
 
 const VERB: Record<NotificationKind, string> = {
@@ -54,6 +57,9 @@ const VERB: Record<NotificationKind, string> = {
   posted: 'is live',
   'coach-application': 'updated your coach application',
   report: 'sent a report',
+  booking: 'booked you',
+  'coach-answer': 'answered your booking',
+  refund: 'refunded a booking',
 };
 
 interface Group {
@@ -71,6 +77,8 @@ interface Group {
 function routeFor(group: Group): string {
   // A coach application update opens the application, which shows where it stands.
   if (group.kind === 'coach-application') return '/coach-apply';
+  // Anything about a booking opens the booking.
+  if (group.targetKind === 'coaching-request') return `/coach-request/${group.targetId}`;
   // A report opens the admin's Reports screen.
   if (group.kind === 'report') return '/admin-reports';
   // Your own "it's up" note takes you to the feed, where the new thing sits first.
@@ -175,7 +183,7 @@ export default function Notifications() {
             const who =
               group.kind === 'posted'
                 ? (group.preview?.startsWith('Instant') || group.preview?.startsWith('Hit')) ? 'Your instant' : group.targetKind === 'question' ? 'Your question' : 'Your post'
-                : group.kind === 'coach-application' ? 'CourtSide'
+                : group.kind === 'coach-application' || group.kind === 'refund' ? 'CourtSide'
                 : rest.length === 0
                 ? nameOf(first)
                 : rest.length === 1
@@ -194,7 +202,7 @@ export default function Notifications() {
               >
                 <View>
                   {/* Two faces, overlapped, when more than one person did it. */}
-                  {group.kind === 'coach-application' ? (
+                  {group.kind === 'coach-application' || group.kind === 'refund' ? (
                     // From CourtSide itself: the mark, not a person's face.
                     <View style={styles.brandFace}><BrandMark size={24} /></View>
                   ) : rest.length ? (

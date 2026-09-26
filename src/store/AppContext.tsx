@@ -46,6 +46,7 @@ import type {
   CoachQuestion,
   CoachReply,
   CoachResult,
+  CoachService,
   CoachReview,
   CoachSpecialty,
   Comment,
@@ -384,6 +385,32 @@ interface AppActions {
   /* A coach's page */
   addCoachResult: (input: Omit<CoachResult, 'id' | 'coachId'>) => void;
   addCoachReview: (coachId: ID, rating: number, body: string) => void;
+  /**
+   * Books a coach's service. On a real account the player pays through
+   * Stripe first: paid, cancelled, pending (Stripe has not said yet), or
+   * left (in a browser the page itself went to Stripe and comes back later).
+   */
+  bookCoach: (serviceId: ID, question: string, video?: { uri?: string } | null) => Promise<{ outcome: 'paid' | 'cancelled' | 'pending' | 'left'; requestId?: ID }>;
+  /** Reloads coaches, services, reviews and bookings. */
+  refreshCoaching: () => Promise<void>;
+  /** Asks Stripe directly whether a booking has been paid for. */
+  confirmBooking: (requestId: ID) => Promise<boolean>;
+  answerBooking: (requestId: ID, response: string) => Promise<void>;
+  /** The coach has opened a booking: the player sees it is being looked at. */
+  startBooking: (requestId: ID) => void;
+  /** Coach declines, or player is past the deadline: the money goes back. */
+  refundBooking: (requestId: ID) => Promise<void>;
+  saveCoachListing: (patch: Partial<Pick<Coach, 'headline' | 'credentials' | 'specialties' | 'yearsCoaching' | 'responseTimeHours' | 'listed'>>) => Promise<void>;
+  saveCoachService: (service: CoachService & { active?: boolean }) => Promise<void>;
+  removeCoachService: (serviceId: ID) => Promise<void>;
+  /** Opens Stripe's payout setup for a coach, and checks it on return. */
+  setupPayouts: () => Promise<boolean>;
+  checkPayouts: () => Promise<boolean>;
+  openPayoutDashboard: () => Promise<void>;
+  /** Admin: every coach application, and the two answers to one. */
+  loadAllApplications: () => Promise<CoachApplication[]>;
+  approveCoachApplication: (applicationId: ID, note?: string) => Promise<void>;
+  rejectCoachApplication: (applicationId: ID, note?: string) => Promise<void>;
 
   /* Saved */
   toggleSavePost: (postId: ID) => void;
@@ -831,6 +858,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           coachQuestions: [...data.coachQuestions, ...prev.coachQuestions.filter((q) => !data.coachQuestions.some((r) => r.id === q.id))],
           coachReplies: [...data.coachReplies, ...prev.coachReplies.filter((r) => !data.coachReplies.some((x) => x.id === r.id))],
           coachingRequests: [...data.coachingRequests, ...prev.coachingRequests.filter((r) => !data.coachingRequests.some((x) => x.id === r.id))],
+          // Real coaches, with their services, reviews and results.
+          coaches: data.coaches,
+          coachReviews: data.coachReviews,
+          coachResults: data.coachResults,
           notifications: [...data.notifications, ...prev.notifications.filter((n) => !data.notifications.some((x) => x.id === n.id))],
           tips: [...data.tips, ...prev.tips.filter((t) => !data.tips.some((x) => x.id === t.id))],
           coachApplications: [...data.coachApplications, ...prev.coachApplications.filter((a) => !data.coachApplications.some((x) => x.id === a.id))],
@@ -2323,42 +2354,193 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   /** Only the coach who owns the page can add to it; anyone else is ignored. */
   const addCoachResult = useCallback((input: Omit<CoachResult, 'id' | 'coachId'>) => {
-    setState((prev) => {
-      const coach = prev.coaches.find((c) => c.userId === prev.currentUserId);
-      if (!coach) return prev;
-      haptics.commit();
-      const result: CoachResult = { ...input, id: nextId('res'), coachId: coach.id };
-      return { ...prev, coachResults: [result, ...prev.coachResults] };
-    });
+    const me = stateRef.current.currentUserId;
+    const coach = stateRef.current.coaches.find((c) => c.userId === me);
+    if (!coach) return;
+    haptics.commit();
+    const result: CoachResult = { ...input, id: nextId('res'), coachId: coach.id };
+    setState((prev) => ({ ...prev, coachResults: [result, ...prev.coachResults] }));
+    if (live(me, coach.id)) {
+      remote.insertCoachResult(result).catch((e: Error) => {
+        setState((prev) => ({ ...prev, coachResults: prev.coachResults.filter((r) => r.id !== result.id) }));
+        showToast({ title: 'That result did not save', body: e.message, icon: 'alert-circle-outline' });
+      });
+    }
   }, []);
 
   /** One review per player per coach; the coach's average moves with it. */
   const addCoachReview = useCallback((coachId: ID, rating: number, body: string) => {
-    setState((prev) => {
-      const me = prev.currentUserId;
-      const coach = prev.coaches.find((c) => c.id === coachId);
-      if (!me || !coach || coach.userId === me) return prev;
-      if (prev.coachReviews.some((r) => r.coachId === coachId && r.authorId === me)) return prev;
-      haptics.commit();
-      const stars = Math.max(1, Math.min(5, Math.round(rating)));
-      const review: CoachReview = {
-        id: nextId('rev'),
-        coachId,
-        authorId: me,
-        rating: stars,
-        body: body.trim(),
-        createdAt: new Date().toISOString(),
-      };
-      const total = coach.ratingAvg * coach.ratingCount + stars;
-      const count = coach.ratingCount + 1;
-      return {
-        ...prev,
-        coachReviews: [review, ...prev.coachReviews],
-        coaches: prev.coaches.map((c) =>
-          c.id === coachId ? { ...c, ratingCount: count, ratingAvg: Math.round((total / count) * 10) / 10 } : c,
-        ),
-      };
-    });
+    const prev = stateRef.current;
+    const me = prev.currentUserId;
+    const coach = prev.coaches.find((c) => c.id === coachId);
+    if (!me || !coach || coach.userId === me) return;
+    if (prev.coachReviews.some((r) => r.coachId === coachId && r.authorId === me)) return;
+    haptics.commit();
+    const stars = Math.max(1, Math.min(5, Math.round(rating)));
+    const review: CoachReview = { id: nextId('rev'), coachId, authorId: me, rating: stars, body: body.trim(), createdAt: new Date().toISOString() };
+    const before = { avg: coach.ratingAvg, count: coach.ratingCount };
+    const total = coach.ratingAvg * coach.ratingCount + stars;
+    const count = coach.ratingCount + 1;
+    setState((p) => ({
+      ...p,
+      coachReviews: [review, ...p.coachReviews],
+      coaches: p.coaches.map((c) => (c.id === coachId ? { ...c, ratingCount: count, ratingAvg: Math.round((total / count) * 10) / 10 } : c)),
+    }));
+    if (live(me, coachId)) {
+      remote.insertCoachReview(review).catch((e: Error) => {
+        setState((p) => ({
+          ...p,
+          coachReviews: p.coachReviews.filter((r) => r.id !== review.id),
+          coaches: p.coaches.map((c) => (c.id === coachId ? { ...c, ratingAvg: before.avg, ratingCount: before.count } : c)),
+        }));
+        showToast({ title: 'That review did not post', body: e.message, icon: 'alert-circle-outline' });
+      });
+    }
+  }, []);
+
+  /* ------------------------------------------------------ coach marketplace */
+
+  const refreshCoaching = useCallback(async () => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me)) return;
+    const [coaching, requests] = await Promise.all([remote.fetchCoaching(me!), remote.fetchCoachingRequests()]);
+    setState((p) => ({ ...p, ...coaching, coachingRequests: requests }));
+  }, []);
+
+  const confirmBooking = useCallback(async (requestId: ID) => {
+    if (!live(stateRef.current.currentUserId, requestId)) return true;
+    const paid = await remote.confirmPayment(requestId).then((r) => r.paid).catch(() => false);
+    await refreshCoaching();
+    return paid;
+  }, [refreshCoaching]);
+
+  const bookCoach = useCallback(async (serviceId: ID, question: string, video?: { uri?: string } | null) => {
+    const me = requireUser();
+    const coach = stateRef.current.coaches.find((c) => c.services.some((x) => x.id === serviceId));
+    if (!coach) throw new Error('That coach is not taking bookings right now.');
+    if (!live(me, coach.id)) {
+      // The demo: no payment, the request just goes.
+      const requestId = submitCoachingRequest(coach.id, serviceId, question, video?.uri ? 'Video attached' : undefined);
+      return { outcome: 'paid' as const, requestId };
+    }
+    const videoUrl = video?.uri ? (isLocalMedia(video.uri) ? await uploadMedia(me, video.uri, 'video') : video.uri) : undefined;
+    const back = Linking.createURL('booking-done');
+    const { url, requestId } = await remote.checkout(serviceId, question, back, videoUrl);
+    if (Platform.OS === 'web') {
+      // The page goes to Stripe and comes back to /booking-done.
+      window.location.assign(url);
+      return { outcome: 'left' as const, requestId };
+    }
+    const result = await WebBrowser.openAuthSessionAsync(url, back, { preferEphemeralSession: true });
+    const cameBack = result.type === 'success' ? result.url : '';
+    if (/[?&]cancelled=1/.test(cameBack)) { await refreshCoaching(); return { outcome: 'cancelled' as const, requestId }; }
+    // Paid on the way back, or closed early: Stripe itself is asked either way.
+    const paid = /[?&]paid=1/.test(cameBack) || (await confirmBooking(requestId));
+    await refreshCoaching();
+    if (paid) haptics.commit();
+    return { outcome: paid ? ('paid' as const) : result.type === 'success' ? ('pending' as const) : ('cancelled' as const), requestId };
+  }, [requireUser, refreshCoaching, confirmBooking]);
+
+  const answerBooking = useCallback(async (requestId: ID, response: string) => {
+    const me = requireUser();
+    const words = response.trim();
+    if (live(me, requestId)) await remote.answerBooking(requestId, words);
+    haptics.commit();
+    setState((p) => ({ ...p, coachingRequests: p.coachingRequests.map((r) => (r.id === requestId ? { ...r, response: words, respondedAt: new Date().toISOString(), status: 'answered' } : r)) }));
+  }, [requireUser]);
+
+  const startBooking = useCallback((requestId: ID) => {
+    const me = stateRef.current.currentUserId;
+    const request = stateRef.current.coachingRequests.find((r) => r.id === requestId);
+    if (!request || request.status !== 'submitted' || request.coachUserId !== me) return;
+    setState((p) => ({ ...p, coachingRequests: p.coachingRequests.map((r) => (r.id === requestId ? { ...r, status: 'in-review' } : r)) }));
+    if (live(me, requestId)) void remote.startBooking(requestId);
+  }, []);
+
+  const refundBooking = useCallback(async (requestId: ID) => {
+    const me = requireUser();
+    const request = stateRef.current.coachingRequests.find((r) => r.id === requestId);
+    if (live(me, requestId)) await remote.refundBooking(requestId);
+    haptics.commit();
+    const byCoach = request?.coachUserId === me;
+    setState((p) => ({ ...p, coachingRequests: p.coachingRequests.map((r) => (r.id === requestId ? { ...r, status: byCoach ? 'declined' : 'refunded', refundedAt: new Date().toISOString() } : r)) }));
+  }, [requireUser]);
+
+  const ownCoach = () => stateRef.current.coaches.find((c) => c.userId === stateRef.current.currentUserId);
+
+  const saveCoachListing = useCallback(async (patch: Partial<Pick<Coach, 'headline' | 'credentials' | 'specialties' | 'yearsCoaching' | 'responseTimeHours' | 'listed'>>) => {
+    const coach = ownCoach();
+    if (!coach) throw new Error('Only approved coaches have a listing.');
+    const before = coach;
+    setState((p) => ({ ...p, coaches: p.coaches.map((c) => (c.id === coach.id ? { ...c, ...patch } : c)) }));
+    if (!live(stateRef.current.currentUserId, coach.id)) return;
+    try {
+      await remote.updateCoach(coach.id, patch);
+      if (patch.listed !== undefined) await refreshCoaching();
+    } catch (e) {
+      setState((p) => ({ ...p, coaches: p.coaches.map((c) => (c.id === coach.id ? before : c)) }));
+      throw e;
+    }
+  }, [refreshCoaching]);
+
+  const saveCoachService = useCallback(async (service: CoachService & { active?: boolean }) => {
+    const coach = ownCoach();
+    if (!coach) throw new Error('Only approved coaches can offer services.');
+    const at = coach.services.findIndex((x) => x.id === service.id);
+    const position = at >= 0 ? at : coach.services.length;
+    const id = live(stateRef.current.currentUserId, coach.id) ? await remote.saveService(coach.id, service, position) : (at >= 0 ? service.id : nextId('svc'));
+    const saved = { ...service, id };
+    haptics.commit();
+    setState((p) => ({
+      ...p,
+      coaches: p.coaches.map((c) => (c.id !== coach.id ? c : { ...c, services: at >= 0 ? c.services.map((x) => (x.id === service.id ? saved : x)) : [...c.services, saved] })),
+    }));
+  }, []);
+
+  const removeCoachService = useCallback(async (serviceId: ID) => {
+    const coach = ownCoach();
+    if (!coach) return;
+    if (live(stateRef.current.currentUserId, coach.id)) await remote.removeService(serviceId);
+    setState((p) => ({ ...p, coaches: p.coaches.map((c) => (c.id !== coach.id ? c : { ...c, services: c.services.filter((x) => x.id !== serviceId) })) }));
+  }, []);
+
+  const checkPayouts = useCallback(async () => {
+    const coach = ownCoach();
+    if (!coach || !live(stateRef.current.currentUserId, coach.id)) return !!coach?.payoutsReady;
+    const { ready } = await remote.checkPayouts();
+    await refreshCoaching();
+    return ready;
+  }, [refreshCoaching]);
+
+  const setupPayouts = useCallback(async () => {
+    const coach = ownCoach();
+    if (!coach) throw new Error('Only approved coaches can set up payouts.');
+    if (!live(stateRef.current.currentUserId, coach.id)) {
+      setState((p) => ({ ...p, coaches: p.coaches.map((c) => (c.id === coach.id ? { ...c, payoutsStarted: true, payoutsReady: true } : c)) }));
+      return true;
+    }
+    const back = Linking.createURL('coach-studio');
+    const { url } = await remote.connectPayouts(back);
+    if (Platform.OS === 'web') { window.location.assign(url); return false; }
+    await WebBrowser.openAuthSessionAsync(url, back);
+    return checkPayouts();
+  }, [checkPayouts]);
+
+  const openPayoutDashboard = useCallback(async () => {
+    const { url } = await remote.payoutDashboard();
+    if (Platform.OS === 'web') window.open(url, '_blank', 'noopener');
+    else await WebBrowser.openBrowserAsync(url);
+  }, []);
+
+  const loadAllApplications = useCallback(() => remote.fetchAllApplications(), []);
+  const approveCoachApplication = useCallback(async (applicationId: ID, note?: string) => {
+    await remote.approveCoach(applicationId, note);
+    haptics.commit();
+    await refreshCoaching();
+  }, [refreshCoaching]);
+  const rejectCoachApplication = useCallback(async (applicationId: ID, note?: string) => {
+    await remote.rejectCoach(applicationId, note);
+    haptics.tap();
   }, []);
 
   /* ------------------------------- Location ------------------------------- */
@@ -2729,6 +2911,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     () => ({
       addCoachResult,
       addCoachReview,
+      bookCoach,
+      refreshCoaching,
+      confirmBooking,
+      answerBooking,
+      startBooking,
+      refundBooking,
+      saveCoachListing,
+      saveCoachService,
+      removeCoachService,
+      setupPayouts,
+      checkPayouts,
+      openPayoutDashboard,
+      loadAllApplications,
+      approveCoachApplication,
+      rejectCoachApplication,
       setLocationEnabled,
       setDefaultPayment,
       addPaymentMethod,
@@ -2836,6 +3033,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [
       addCoachResult,
       addCoachReview,
+      bookCoach,
+      refreshCoaching,
+      confirmBooking,
+      answerBooking,
+      startBooking,
+      refundBooking,
+      saveCoachListing,
+      saveCoachService,
+      removeCoachService,
+      setupPayouts,
+      checkPayouts,
+      openPayoutDashboard,
+      loadAllApplications,
+      approveCoachApplication,
+      rejectCoachApplication,
       setLocationEnabled,
       setDefaultPayment,
       addPaymentMethod,
