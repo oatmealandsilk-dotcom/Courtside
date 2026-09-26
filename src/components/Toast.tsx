@@ -18,9 +18,10 @@ const OUT = Easing.in(Easing.cubic);
 
 /**
  * The note that appears at the top when something goes through — a post,
- * a follow, a save. A glass capsule that eases down and settles, no bounce;
- * it lifts away on its own, or with a flick up. Tap it to open what it is
- * about.
+ * a follow, a save. Drawn the way the phone draws its own (Silent Mode,
+ * AirPods): a small glass capsule, centred, as wide as its words, a plain
+ * glyph beside them. Eases down, settles, lifts away on its own or with a
+ * flick up. Tap it to open what it is about.
  */
 export function Toast() {
   const styles = useThemedStyles(styleDefinitions);
@@ -83,14 +84,11 @@ export function Toast() {
               }}
               style={styles.row}
             >
-              <View style={styles.icon}>
-                <Ionicons name={icon} size={15} color={colors.brand} />
-              </View>
+              <Ionicons name={icon} size={16} color={colors.text} />
               <View style={styles.words}>
                 <Text style={styles.title} numberOfLines={1}>{toast.title}</Text>
                 {toast.body ? <Text style={styles.body} numberOfLines={1}>{toast.body}</Text> : null}
               </View>
-              {toast.href ? <Ionicons name="chevron-forward" size={14} color={colors.textFaint} /> : null}
             </Pressable>
           </Glass>
         </View>
@@ -102,11 +100,10 @@ export function Toast() {
 const styleDefinitions = StyleSheet.create({
   wrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, zIndex: 50, alignItems: 'center' },
   // The shadow on a rounded layer of its own, so it follows the capsule's corners.
-  shadow: { maxWidth: 420, borderRadius: 22, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 18, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
+  shadow: { maxWidth: 340, borderRadius: 22, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
   card: { borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9, paddingLeft: 9, paddingRight: 14, minHeight: 44 },
-  icon: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
-  words: { flexShrink: 1 },
-  title: { ...typography.smallStrong, color: colors.text },
-  body: { ...typography.caption, letterSpacing: 0, color: colors.textMuted, marginTop: 1 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 10, paddingHorizontal: 16, minHeight: 44 },
+  words: { flexShrink: 1, alignItems: 'flex-start' },
+  title: { ...typography.smallStrong, color: colors.text, letterSpacing: -0.1 },
+  body: { ...typography.caption, fontSize: 12, letterSpacing: 0, color: colors.textMuted, marginTop: 1 },
 });
