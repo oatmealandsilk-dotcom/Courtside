@@ -113,7 +113,7 @@ export function NearbyMap(props: NearbyMapProps) {
         <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
         <WeatherChip weather={weather} />
       </View>
-      <View pointerEvents="box-none" style={[styles.bottom, { paddingBottom: insets.bottom }]}>
+      <View pointerEvents="box-none" style={styles.bottom}>
         <MapButtons onRecentre={() => { model.select(null); canvas.current?.flyTo(home, CITY_ZOOM, 600); }} />
         {model.selected ? (
           <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onFollow={() => actions.toggleFollow(model.selected!.user.id)} />
@@ -131,6 +131,6 @@ const styleDefinitions = StyleSheet.create({
   card: { height: HEIGHT, borderRadius: radius.xl, overflow: 'hidden', backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.border },
   fill: { flex: 1, backgroundColor: colors.bgElevated, overflow: 'hidden' },
   top: { position: 'absolute', left: 0, right: 0, top: 0, gap: 2 },
-  bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', gap: spacing.sm },
-  credit: { position: 'absolute', left: 8, bottom: 4, fontSize: 9, color: 'rgba(0,0,0,0.45)', backgroundColor: 'rgba(255,255,255,0.6)', paddingHorizontal: 4, borderRadius: 3 },
+  bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', gap: spacing.md },
+  credit: { position: 'absolute', left: 8, top: 4, fontSize: 9, color: 'rgba(0,0,0,0.45)', backgroundColor: 'rgba(255,255,255,0.6)', paddingHorizontal: 4, borderRadius: 3 },
 });
