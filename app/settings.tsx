@@ -85,7 +85,9 @@ export default function Settings() {
         { icon: 'pulse-outline', label: 'Health and nutrition', onPress: () => router.push('/health') },
         { icon: 'location-outline', label: 'Location', value: locationEnabled ? detectedLocation?.split(',')[0] ?? 'On' : locationNote || undefined, toggle: { value: locationEnabled, onChange: (next) => { void toggleLocation(next); } } },
         { icon: 'shield-half-outline', label: 'Permissions', onPress: () => router.push('/permissions') },
-        { icon: 'ribbon-outline', label: 'Apply to be a coach', onPress: () => router.push('/coach-apply') },
+        currentUser?.isCoach
+          ? { icon: 'ribbon-outline', label: 'Coach studio', detail: 'Your page, services, payouts and bookings', onPress: () => router.push('/coach-studio') }
+          : { icon: 'ribbon-outline', label: 'Apply to be a coach', onPress: () => router.push('/coach-apply') },
       ],
     },
     // Only admins see this group (and only admins can read what is behind it).
@@ -95,6 +97,7 @@ export default function Settings() {
         { icon: 'hand-left-outline' as const, label: 'Welcome new players', onPress: () => router.push('/admin-welcome') },
         { icon: 'flag-outline' as const, label: 'Reports', onPress: () => router.push('/admin-reports') },
         { icon: 'mail-outline' as const, label: 'Waitlist', onPress: () => router.push('/admin-waitlist') },
+        { icon: 'school-outline' as const, label: 'Coaches and payments', onPress: () => router.push('/admin-coaches') },
       ],
     }] : []),
     {

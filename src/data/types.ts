@@ -91,6 +91,8 @@ export interface User {
   isPrivate?: boolean;
   /** Up for a hit: shown as a green ring on the map until this moment (the end of the day they set it). */
   openToHitUntil?: string;
+  /** When the handle last changed; it can change again 30 days after. */
+  handleChangedAt?: string;
   /** From the age check: a teen account (13 to 17) or an adult one. The date of birth itself is never shown. */
   ageGroup?: 'teen' | 'adult';
   isCoach: boolean;
@@ -319,6 +321,12 @@ export interface Coach {
   services: CoachService[];
   verified: boolean;
   responseTimeHours: number;
+  /** On the Coaching tab for everyone. Off until the coach has services and payouts. */
+  listed?: boolean;
+  /** Stripe says the coach can be paid. */
+  payoutsReady?: boolean;
+  /** The coach has started payout setup with Stripe. */
+  payoutsStarted?: boolean;
 }
 
 /** A before-and-after a coach shows on their page. Numbers are whatever the coach measured. */
@@ -339,13 +347,19 @@ export interface CoachReview {
   id: ID;
   coachId: ID;
   authorId: ID;
-  /** 1–5 */
+  /** 1 to 5 */
   rating: number;
   body: string;
   createdAt: string;
 }
 
-export type CoachingRequestStatus = 'draft' | 'submitted' | 'in-review' | 'answered';
+/**
+ * Where a booking stands. awaiting-payment: the player is at Stripe's pay
+ * page. submitted: paid, with the coach. in-review: the coach has opened it.
+ * answered: done. declined: the coach said no and the money went back.
+ * refunded: not answered in time, money back.
+ */
+export type CoachingRequestStatus = 'draft' | 'awaiting-payment' | 'submitted' | 'in-review' | 'answered' | 'declined' | 'refunded';
 
 export interface CoachingRequest {
   id: ID;
@@ -353,12 +367,23 @@ export interface CoachingRequest {
   userId: ID;
   serviceId: ID;
   question: string;
-  /** Placeholder for uploaded footage; no real upload in the mock build. */
+  /** A short label for attached footage ("Video attached"). */
   videoLabel?: string;
+  /** The footage itself, when the player attached some. */
+  videoUrl?: string;
   status: CoachingRequestStatus;
   createdAt: string;
   response?: string;
   respondedAt?: string;
+  /** The coach's own account, so their inbox can find it. */
+  coachUserId?: ID;
+  /** What was paid, in cents, and CourtSide's share of it. */
+  priceCents?: number;
+  feeCents?: number;
+  paidAt?: string;
+  /** When the coach's answer is due; after this the player can get a refund. */
+  dueAt?: string;
+  refundedAt?: string;
 }
 
 /* --------------------------- Health and nutrition ------------------------ */
@@ -488,6 +513,10 @@ export interface CoachApplication {
   certifications: string;
   /** The résumé's file name, when one was attached (the file itself sits in private storage). */
   resumeLabel?: string;
+  /** Where the résumé sits in private storage; only the applicant and admins can open it. */
+  resumePath?: string;
+  /** What the reviewer wrote when approving or turning it down. */
+  reviewNote?: string;
   currentClients: string;
   specialties: CoachSpecialty[];
   references: string;
@@ -580,9 +609,15 @@ export type NotificationKind =
   /** CourtSide changed the status of your coach application (in review, approved, not approved). */
   | 'coach-application'
   /** Someone sent a report. Only admins get these. */
-  | 'report';
+  | 'report'
+  /** A player paid for one of your services (you are the coach). */
+  | 'booking'
+  /** Your coach answered your booking. */
+  | 'coach-answer'
+  /** Money came back on a booking. */
+  | 'refund';
 
-export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application' | 'report';
+export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application' | 'report' | 'coaching-request';
 
 export interface Notification {
   id: ID;

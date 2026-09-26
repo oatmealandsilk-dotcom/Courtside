@@ -15,10 +15,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, Question, Story, Tip, User, CoachApplication } from './types';
+import type { Answer, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, Question, Story, Tip, User, CoachApplication } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
 
 /** What a new player did first, after setup. */
+/** What the live handle check says about a handle. */
+export type HandleStatus = 'ok' | 'yours' | 'invalid' | 'taken' | 'held';
+
 export type FirstMove = 'post' | 'instant' | 'answer' | 'ask' | 'later';
 export interface FirstDayStats { new30: number; moved30: number; cohort: number; movers: number; moversBack: number; othersBack: number; picked: Record<FirstMove, number> }
 
@@ -74,6 +77,8 @@ interface ProfileRow {
   is_private?: boolean | null;
   /** Migration 31. */
   open_to_hit_until?: string | null;
+  /** Migration 34. */
+  handle_changed_at?: string | null;
   /** Kept by the database (migration 22); missing on a database without it. */
   followers_count?: number | null;
   /** Moderation (migration 23). */
@@ -119,6 +124,7 @@ const toUser = (row: ProfileRow, followers: number, following: number): User => 
   avatarUrl: row.avatar_url ?? undefined,
   isPrivate: row.is_private || undefined,
   openToHitUntil: row.open_to_hit_until ?? undefined,
+  handleChangedAt: row.handle_changed_at ?? undefined,
   ageGroup: row.age_group === 'teen' || row.age_group === 'adult' ? row.age_group : undefined,
   // Off only when its owner turned it off; a database without the setting yet reads as on.
   readReceiptsEnabled: row.read_receipts !== false,
@@ -243,6 +249,10 @@ export interface RemoteData {
   userState: UserState | null;
   tips: Tip[];
   coachApplications: CoachApplication[];
+  /** Real coaches: every listed one, and your own listing if you coach. */
+  coaches: Coach[];
+  coachReviews: CoachReview[];
+  coachResults: CoachResult[];
 }
 
 interface TipRow { id: string; user_id: string; body: string; created_at: string; votes: number | null; voted_by: Record<string, 1 | -1> | null }
@@ -259,7 +269,32 @@ interface QuestionRow { id: string; author_id: string; title: string; body: stri
 interface AnswerRow { id: string; question_id: string; author_id: string; parent_answer_id: string | null; body: string; votes: number; voted_by: Record<string, 1 | -1>; from_coach: boolean; created_at: string }
 interface CoachQuestionRow { id: string; author_id: string; title: string; body: string; specialty: string; video_url: string | null; media_label: string | null; resolved: boolean; created_at: string }
 interface CoachReplyRow { id: string; question_id: string; coach_user_id: string; body: string; helpful_by: string[]; created_at: string }
-interface CoachingRequestRow { id: string; coach_id: string; user_id: string; service_id: string; question: string; video_label: string | null; status: string; response: string | null; responded_at: string | null; created_at: string }
+interface CoachingRequestRow {
+  id: string; coach_id: string; user_id: string; service_id: string; question: string; video_label: string | null; status: string; response: string | null; responded_at: string | null; created_at: string;
+  /** Migration 35. */
+  coach_user_id?: string | null; price_cents?: number | null; fee_cents?: number | null; paid_at?: string | null; due_at?: string | null; refunded_at?: string | null; video_url?: string | null;
+}
+/** The listing columns anyone may read (the Stripe account number is not one of them). */
+const COACH_COLUMNS = 'id, user_id, headline, credentials, specialties, years_coaching, response_time_hours, verified, listed, payouts_ready, payouts_started, rating_avg, rating_count, created_at';
+interface CoachRow {
+  id: string; user_id: string; headline: string; credentials: string[] | null; specialties: string[] | null; years_coaching: number; response_time_hours: number;
+  verified: boolean; listed: boolean; payouts_ready: boolean; payouts_started: boolean; rating_avg: number | string; rating_count: number; created_at: string;
+}
+interface CoachServiceRow { id: string; coach_id: string; title: string; description: string; price_cents: number; turnaround_hours: number; kind: string; active: boolean; position: number }
+interface CoachReviewRow { id: string; coach_id: string; author_id: string; rating: number; body: string; created_at: string }
+interface CoachResultRow { id: string; coach_id: string; client_name: string; focus: string; before: string; after: string; weeks: number; note: string | null; created_at: string }
+const toService = (r: CoachServiceRow): CoachService & { active: boolean } => ({
+  id: r.id, title: r.title, description: r.description ?? '', priceCents: r.price_cents, turnaroundHours: r.turnaround_hours,
+  kind: (['video-review', 'written-qa', 'live-session', 'plan'].includes(r.kind) ? r.kind : 'written-qa') as CoachService['kind'], active: r.active,
+});
+const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
+  id: r.id, userId: r.user_id, headline: r.headline, credentials: r.credentials ?? [], specialties: (r.specialties ?? []) as CoachSpecialty[],
+  yearsCoaching: r.years_coaching, responseTimeHours: r.response_time_hours, verified: r.verified,
+  ratingAvg: Number(r.rating_avg) || 0, ratingCount: r.rating_count,
+  // A coach sees all their own services, switched off ones included; everyone else only the ones on offer.
+  services: services.filter((s) => s.coach_id === r.id && (s.active || r.user_id === me)).sort((a, b) => a.position - b.position).map(toService),
+  listed: r.listed, payoutsReady: r.payouts_ready, payoutsStarted: r.payouts_started,
+});
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
 interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; private_profile?: { constraints?: PlayerProfile['constraints'] } | null }
 
@@ -281,6 +316,8 @@ const toCoachReply = (r: CoachReplyRow): CoachReply => ({ id: r.id, questionId: 
 const toCoachingRequest = (r: CoachingRequestRow): CoachingRequest => ({
   id: r.id, coachId: r.coach_id, userId: r.user_id, serviceId: r.service_id, question: r.question, videoLabel: r.video_label ?? undefined,
   status: r.status as CoachingRequest['status'], createdAt: r.created_at, response: r.response ?? undefined, respondedAt: r.responded_at ?? undefined,
+  coachUserId: r.coach_user_id ?? undefined, priceCents: r.price_cents ?? undefined, feeCents: r.fee_cents ?? undefined, paidAt: r.paid_at ?? undefined,
+  dueAt: r.due_at ?? undefined, refundedAt: r.refunded_at ?? undefined, videoUrl: r.video_url ?? undefined,
 });
 const toNotification = (r: NotificationRow): Notification => ({
   id: r.id, userId: r.user_id, actorId: r.actor_id, kind: r.kind as Notification['kind'], targetId: r.target_id, targetKind: r.target_kind as Notification['targetKind'],
@@ -295,7 +332,7 @@ const toUserState = (r: UserStateRow): UserState => ({
 interface CoachApplicationRow {
   id: string; user_id: string; full_name: string; email: string; phone: string; utr: string | null; ntrp: string | null; utr_link?: string | null; ntrp_link?: string | null;
   years_coaching: number; certifications: string; resume_name: string | null; current_clients: string; specialties: string[] | null;
-  reference_contacts: string; about: string; status: string; created_at: string;
+  reference_contacts: string; about: string; status: string; created_at: string; resume_path?: string | null; review_note?: string | null;
 }
 const toCoachApplication = (r: CoachApplicationRow): CoachApplication => ({
   id: r.id, userId: r.user_id, fullName: r.full_name, email: r.email, phone: r.phone, utr: r.utr ?? undefined, ntrp: r.ntrp ?? undefined,
@@ -303,6 +340,7 @@ const toCoachApplication = (r: CoachApplicationRow): CoachApplication => ({
   yearsCoaching: r.years_coaching, certifications: r.certifications, resumeLabel: r.resume_name ?? undefined, currentClients: r.current_clients,
   specialties: (r.specialties ?? []) as CoachApplication['specialties'], references: r.reference_contacts, about: r.about,
   status: (['submitted', 'in-review', 'approved', 'rejected'].includes(r.status) ? r.status : 'submitted') as CoachApplication['status'], createdAt: r.created_at,
+  resumePath: r.resume_path ?? undefined, reviewNote: r.review_note ?? undefined,
 });
 
 interface ConversationRow { id: string; updated_at: string; conversation_members?: { user_id: string; last_read_at: string | null }[]; messages?: MessageRow[] }
@@ -422,6 +460,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     // Your own coach application, so the form can show where it stands.
     db.from('coach_applications').select('*').eq('user_id', me).order('created_at', { ascending: false }).limit(3),
   ]);
+  const coaching = await fetchCoaching(me);
   if (qs.error) console.warn('[remote] community tables missing; run the pending migrations', qs.error.message);
   const byTime = <T extends { created_at: string }>(a: T, b: T) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0);
   const questionRows = (qs.data ?? []) as (QuestionRow & { answers?: AnswerRow[] })[];
@@ -478,7 +517,44 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     userState: ustate.data ? toUserState(ustate.data as UserStateRow) : null,
     tips: ((tipRows.data ?? []) as TipRow[]).map(toTip),
     coachApplications: ((applicationRows.data ?? []) as CoachApplicationRow[]).map(toCoachApplication),
+    ...coaching,
   };
+}
+
+/**
+ * Coaches, their services, reviews and results. A database without the
+ * coaching tables yet (migration 35) just gives none.
+ */
+export async function fetchCoaching(me: ID): Promise<Pick<RemoteData, 'coaches' | 'coachReviews' | 'coachResults'>> {
+  const db = need();
+  const [coachRows, serviceRows, reviewRows, resultRows] = await Promise.all([
+    db.from('coaches').select(COACH_COLUMNS),
+    db.from('coach_services').select('*'),
+    db.from('coach_reviews').select('*').order('created_at', { ascending: false }).limit(500),
+    db.from('coach_results').select('*').order('created_at', { ascending: false }).limit(300),
+  ]);
+  if (coachRows.error) return { coaches: [], coachReviews: [], coachResults: [] };
+  const services = (serviceRows.data ?? []) as CoachServiceRow[];
+  return {
+    coaches: ((coachRows.data ?? []) as unknown as CoachRow[]).map((r) => toCoach(r, services, me)),
+    coachReviews: ((reviewRows.data ?? []) as CoachReviewRow[]).map((r) => ({ id: r.id, coachId: r.coach_id, authorId: r.author_id, rating: r.rating, body: r.body, createdAt: r.created_at })),
+    coachResults: ((resultRows.data ?? []) as CoachResultRow[]).map((r) => ({ id: r.id, coachId: r.coach_id, clientName: r.client_name, focus: r.focus, before: r.before, after: r.after, weeks: r.weeks, note: r.note ?? undefined })),
+  };
+}
+
+/** What the payments function answers; `error` is a plain sentence to show. */
+type PaymentsReply<T> = T & { error?: string; off?: boolean };
+/** Calls the coach-payments function, and throws its plain-English error when it has one. */
+async function coachPayments<T>(mode: string, body: Record<string, unknown> = {}): Promise<T> {
+  const { data, error } = await need().functions.invoke<PaymentsReply<T>>('coach-payments', { body: { mode, ...body } });
+  if (data?.error) throw new Error(data.error);
+  if (error) {
+    // A refused call still carries the function's own sentence in its body.
+    const context = (error as { context?: Response }).context;
+    const said = context && typeof context.json === 'function' ? await context.json().catch(() => null) as { error?: string } | null : null;
+    throw new Error(said?.error ?? 'Payments are unavailable right now. Try again in a minute.');
+  }
+  return data as T;
 }
 
 /* --------------------------------------------------------------- writes */
@@ -755,6 +831,118 @@ export const remote = {
     return data as T;
   },
 
+  /* ------------------------------------------------------ coach marketplace */
+
+  fetchCoaching,
+  /** Your bookings (as a player) and the paid ones sent to you (as a coach). */
+  async fetchCoachingRequests(): Promise<CoachingRequest[]> {
+    const { data, error } = await need().from('coaching_requests').select('*').order('created_at', { ascending: false });
+    if (error) return [];
+    return ((data ?? []) as CoachingRequestRow[]).map(toCoachingRequest);
+  },
+  /** Is Stripe set up on the server? Null when the payments function is not there yet. */
+  async paymentsStatus(): Promise<{ on: boolean; feePercent: number } | null> {
+    const { data, error } = await need().functions.invoke<{ on: boolean; feePercent: number }>('coach-payments', { body: { mode: 'status' } });
+    return error || !data ? null : data;
+  },
+  checkout: (serviceId: ID, question: string, back: string, videoUrl?: string) => coachPayments<{ url: string; requestId: ID }>('checkout', { serviceId, question, back, videoUrl }),
+  confirmPayment: (requestId: ID) => coachPayments<{ paid: boolean }>('confirm', { requestId }),
+  refundBooking: (requestId: ID) => coachPayments<{ refunded: boolean }>('refund', { requestId }),
+  connectPayouts: (back: string) => coachPayments<{ url: string; ready: boolean }>('connect', { back }),
+  checkPayouts: () => coachPayments<{ ready: boolean; started: boolean; due?: number }>('connect-check'),
+  payoutDashboard: () => coachPayments<{ url: string }>('dashboard'),
+  paymentsAdminStatus: () => coachPayments<{ stripe: boolean; live: boolean; webhook: boolean; feePercent: number }>('admin-status'),
+  setupPaymentsWebhook: () => coachPayments<{ webhook: boolean }>('setup-webhook'),
+
+  async answerBooking(requestId: ID, response: string) {
+    const { error } = await need().rpc('answer_coaching_request', { p_request: requestId, p_response: response });
+    if (error) throw new Error(error.message);
+  },
+  async startBooking(requestId: ID) {
+    await need().rpc('start_coaching_request', { p_request: requestId });
+  },
+  /** Your own listing: the words on it, and whether it is on the Coaching tab. */
+  async updateCoach(coachId: ID, patch: Partial<Pick<Coach, 'headline' | 'credentials' | 'specialties' | 'yearsCoaching' | 'responseTimeHours' | 'listed'>>) {
+    const row: Record<string, unknown> = {};
+    if (patch.headline !== undefined) row.headline = patch.headline;
+    if (patch.credentials !== undefined) row.credentials = patch.credentials;
+    if (patch.specialties !== undefined) row.specialties = patch.specialties;
+    if (patch.yearsCoaching !== undefined) row.years_coaching = patch.yearsCoaching;
+    if (patch.responseTimeHours !== undefined) row.response_time_hours = patch.responseTimeHours;
+    if (patch.listed !== undefined) row.listed = patch.listed;
+    const { error } = await need().from('coaches').update(row).eq('id', coachId);
+    if (error) throw new Error(error.message);
+  },
+  /** Adds a service, or changes one; returns its id. */
+  async saveService(coachId: ID, service: CoachService & { active?: boolean }, position: number): Promise<ID> {
+    const row = {
+      coach_id: coachId, title: service.title, description: service.description, price_cents: service.priceCents,
+      turnaround_hours: service.turnaroundHours, kind: service.kind, active: service.active ?? true, position,
+    };
+    const isNew = !UUID_RE.test(service.id);
+    const { data, error } = isNew
+      ? await need().from('coach_services').insert(row).select('id').single()
+      : await need().from('coach_services').update(row).eq('id', service.id).select('id').single();
+    if (error) throw new Error(/price_cents/.test(error.message) ? 'Prices run from $5 to $1,000.' : error.message);
+    return (data as { id: string }).id;
+  },
+  async removeService(serviceId: ID) {
+    const { error } = await need().from('coach_services').delete().eq('id', serviceId);
+    if (error) throw new Error(error.message);
+  },
+  async insertCoachReview(review: CoachReview) {
+    const { error } = await need().from('coach_reviews').insert({ id: review.id, coach_id: review.coachId, author_id: review.authorId, rating: review.rating, body: review.body });
+    if (error) throw new Error(/row-level security/.test(error.message) ? 'You can review a coach once they have answered one of your bookings.' : error.message);
+  },
+  async insertCoachResult(result: CoachResult) {
+    const { error } = await need().from('coach_results').insert({ id: result.id, coach_id: result.coachId, client_name: result.clientName, focus: result.focus, before: result.before, after: result.after, weeks: result.weeks, note: result.note ?? null });
+    if (error) throw new Error(error.message);
+  },
+  /** Every application, for the admin's review screen. */
+  async fetchAllApplications(): Promise<CoachApplication[]> {
+    const { data, error } = await need().from('coach_applications').select('*').order('created_at', { ascending: false }).limit(200);
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as CoachApplicationRow[]).map(toCoachApplication);
+  },
+  async approveCoach(applicationId: ID, note?: string) {
+    const { error } = await need().rpc('approve_coach', { p_application: applicationId, p_note: note ?? null });
+    if (error) throw new Error(/approve_coach|does not exist|schema cache/.test(error.message) ? 'Run migration 35 in Supabase first.' : error.message);
+  },
+  async rejectCoach(applicationId: ID, note?: string) {
+    const { error } = await need().rpc('reject_coach', { p_application: applicationId, p_note: note ?? null });
+    if (error) throw new Error(error.message);
+  },
+  /** A short-lived link to an applicant's résumé (admins only). */
+  async resumeLink(path: string): Promise<string | null> {
+    const { data } = await need().storage.from('coach-applications').createSignedUrl(path, 600);
+    return data?.signedUrl ?? null;
+  },
+
+  /* -------------------------------------------------------------- handles */
+
+  /**
+   * Whether a handle is free, for the live check as you type: ok, yours,
+   * invalid, taken, or held (let go by someone under 14 days ago). Null
+   * when the database has no such check yet (migration 34 not run).
+   */
+  async handleStatus(handle: string): Promise<HandleStatus | null> {
+    const { data, error } = await need().rpc('handle_status', { p_handle: handle });
+    if (error) return null;
+    return data as HandleStatus;
+  },
+
+  /** Changes this account's handle. Throws with the database's own plain-English reason when it cannot. */
+  async changeHandle(handle: string): Promise<string> {
+    const { data, error } = await need().rpc('change_handle', { p_handle: handle });
+    if (error) {
+      if (/change_handle|function .* does not exist|schema cache/i.test(error.message)) {
+        throw new Error('Changing handles is not open yet. Try again soon.');
+      }
+      throw new Error(error.message);
+    }
+    return String(data);
+  },
+
   /* -------------------------------------------------------------- invites */
 
   /** Claims the invite this person joined through; returns who invited them, or null when the handle is unknown or the tables are not there yet. */
@@ -775,6 +963,14 @@ export const remote = {
     const { data, error } = await need().rpc('first_day_stats');
     if (error || !data) return null;
     return data as FirstDayStats;
+  },
+
+  /** One post by id, for a page opened from a link before the feed has it. */
+  async fetchPost(id: ID): Promise<{ posts: Post[]; comments: Comment[] } | null> {
+    if (!UUID_RE.test(id)) return null;
+    const { data, error } = await need().from('posts').select(POST_SELECT).eq('id', id).limit(1);
+    if (error || !data?.length) return null;
+    return toPosts(data as FullPostRow[]);
   },
 
   /** First posts from the last month, newest first: the founder's list of people to welcome. */

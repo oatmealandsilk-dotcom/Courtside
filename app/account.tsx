@@ -11,6 +11,7 @@ import { shareOutside } from '@/lib/shareOutside';
 import { formatDate } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import * as toast from '@/lib/toast';
+import { useAiCoachOn } from '@/features/aiCoach/switch';
 import { colors, radius, spacing, typography } from '@/theme';
 
 type Sheet = 'password' | 'email' | 'delete' | null;
@@ -24,6 +25,7 @@ export default function AccountCentre() {
   const { reset } = useLocalSearchParams<{ reset?: string }>();
   const styles = useThemedStyles(styleDefinitions);
   const { currentUser, actions } = useApp();
+  const aiCoachOn = useAiCoachOn();
   const [info, setInfo] = useState<Awaited<ReturnType<typeof actions.accountInfo>>>(null);
   const [sheet, setSheet] = useState<Sheet>(null);
   const [busy, setBusy] = useState(false);
@@ -129,9 +131,9 @@ export default function AccountCentre() {
       <Text style={styles.sectionTitle}>YOUR INFORMATION</Text>
       <View style={styles.card}>
         {row('download-outline', 'Download your data', 'Profile, posts, questions, instants, messages — as one file', () => { void download(); }, false, 0)}
-        {row('sparkles-outline', 'What the coach remembers', 'Notes the AI coach keeps about you', () => toast.show({ title: 'AI coach is coming soon', body: 'A weekly plan and a coach to ask, coming soon', icon: 'sparkles' }), false, 1)}
+        {row('sparkles-outline', 'What the coach remembers', 'Notes the AI coach keeps about you', () => (aiCoachOn ? router.push('/coach-memory') : toast.show({ title: 'AI coach is coming soon', body: 'A weekly plan and a coach to ask about your game', icon: 'sparkles' })), false, 1)}
         {row('shield-checkmark-outline', 'Privacy center', 'What we store and who can see it', () => router.push('/privacy'), false, 2)}
-        {row('card-outline', 'Payment methods', undefined, () => router.push('/payments'), false, 3)}
+        {row('card-outline', 'Payments', 'Coaching you have paid for, and refunds', () => router.push('/payments'), false, 3)}
       </View>
 
       <Text style={styles.sectionTitle}>ACCOUNT</Text>
