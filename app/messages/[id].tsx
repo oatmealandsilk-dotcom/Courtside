@@ -813,6 +813,9 @@ const styleDefinitions = StyleSheet.create({
   },
   input: {
     flex: 1,
+    // A browser's text box keeps a width of its own unless told it may shrink,
+    // which pushed the mic off the edge of the smallest phones.
+    minWidth: 0,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
