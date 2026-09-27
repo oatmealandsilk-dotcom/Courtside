@@ -10,6 +10,7 @@ import React, {
 } from 'react';
 import { AppState as DeviceState, Platform } from 'react-native';
 import { randomUUID } from 'expo-crypto';
+import { router } from 'expo-router';
 import { computeStats, localDay, streakAtRisk } from '@/features/practice/stats';
 import { planStreakReminder } from '@/features/practice/reminder';
 import { TERMS_VERSION } from '@/lib/legal';
@@ -479,6 +480,13 @@ interface AppActions {
   /* Messaging */
   openConversationWith: (userId: ID) => ID;
   sendMessage: (conversationId: ID, body: string) => void;
+  /** A group chat with the people picked (two or more others) and an optional name. Returns its id. */
+  openGroup: (memberIds: ID[], title?: string) => ID;
+  addToGroup: (conversationId: ID, memberId: ID) => void;
+  renameGroup: (conversationId: ID, title: string) => void;
+  leaveGroup: (conversationId: ID) => void;
+  /** Send a court in a chat: where to meet. */
+  sendCourt: (conversationId: ID, place: { name: string; lat: number; lng: number }) => void;
   /**
    * The age check: records a date of birth ("2009-04-17") once. Under 13 the
    * account is removed and this phone will not ask again; 13 to 17 becomes a
@@ -2388,6 +2396,59 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [requireUser, appendMessage, makeMessage],
   );
 
+  const sendCourt = useCallback((conversationId: ID, place: { name: string; lat: number; lng: number }) => {
+    haptics.commit();
+    const me = requireUser();
+    const message: Message = { ...makeMessage(conversationId, me, place.name), kind: 'court', place };
+    setState((prev) => appendMessage(prev, message));
+    if (live(me, conversationId)) void remote.insertMessage(message).catch(() => 'failed' as const).then((result) => {
+      if (result === 'failed' || result === 'refused') setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, failed: true } : m)) }));
+    });
+  }, [requireUser, appendMessage, makeMessage]);
+
+  const openGroup = useCallback((memberIds: ID[], title?: string): ID => {
+    const me = requireUser();
+    const others = Array.from(new Set(memberIds.filter((id) => id !== me)));
+    const conversation: Conversation = {
+      id: nextId('cv'), participantIds: [me, ...others], messageIds: [], updatedAt: new Date().toISOString(), unreadCount: 0,
+      isGroup: true, title: title?.trim() || undefined,
+    };
+    haptics.commit();
+    setState((prev) => ({ ...prev, conversations: [conversation, ...prev.conversations] }));
+    if (live(me, conversation.id)) void remote.openGroup(others, conversation.title, conversation.id).then((result) => {
+      if (result === conversation.id) return;
+      setState((prev) => ({ ...prev, conversations: prev.conversations.filter((c) => c.id !== conversation.id) }));
+      showToast({
+        title: result === 'teen' ? 'Someone there can only get messages from people they follow' : result === 'blocked' ? 'You can’t message someone in that group' : 'That group didn’t start. Try again.',
+        icon: 'lock-closed-outline',
+      });
+      if (router.canGoBack()) router.back();
+    });
+    return conversation.id;
+  }, [requireUser]);
+
+  const addToGroup = useCallback((conversationId: ID, memberId: ID) => {
+    const me = requireUser();
+    setState((prev) => ({ ...prev, conversations: prev.conversations.map((c) => (c.id === conversationId && !c.participantIds.includes(memberId) ? { ...c, participantIds: [...c.participantIds, memberId] } : c)) }));
+    if (live(me, conversationId)) void remote.addToGroup(conversationId, memberId).then((result) => {
+      if (result === 'ok') return;
+      setState((prev) => ({ ...prev, conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, participantIds: c.participantIds.filter((p) => p !== memberId) } : c)) }));
+      showToast({ title: result === 'teen' ? 'They can only get messages from people they follow' : result === 'blocked' ? 'You can’t add them' : 'They weren’t added. Try again.', icon: 'lock-closed-outline' });
+    });
+  }, [requireUser]);
+
+  const renameGroup = useCallback((conversationId: ID, title: string) => {
+    const me = requireUser();
+    setState((prev) => ({ ...prev, conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, title: title.trim() || undefined } : c)) }));
+    if (live(me, conversationId)) void remote.renameGroup(conversationId, title.trim());
+  }, [requireUser]);
+
+  const leaveGroup = useCallback((conversationId: ID) => {
+    const me = requireUser();
+    setState((prev) => ({ ...prev, conversations: prev.conversations.filter((c) => c.id !== conversationId), messages: prev.messages.filter((m) => m.conversationId !== conversationId) }));
+    if (live(me, conversationId)) void remote.leaveGroup(conversationId);
+  }, [requireUser]);
+
   /** Sends a message that did not go through, again. */
   const retryMessage = useCallback((messageId: ID) => {
     const me = requireUser();
@@ -3244,6 +3305,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       decideReport,
       openConversationWith,
       sendMessage,
+      sendCourt,
+      openGroup,
+      addToGroup,
+      renameGroup,
+      leaveGroup,
       confirmBirthDate,
       canMessage,
       editMessage,
@@ -3364,6 +3430,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       decideReport,
       openConversationWith,
       sendMessage,
+      sendCourt,
+      openGroup,
+      addToGroup,
+      renameGroup,
+      leaveGroup,
       confirmBirthDate,
       canMessage,
       editMessage,

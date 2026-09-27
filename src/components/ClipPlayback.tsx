@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, memo } from 'react';
 import { useSoundMuted } from '@/features/feed/sound';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import * as haptics from '@/lib/haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -45,6 +46,11 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   const insets = useSafeAreaInsets();
   const styles = useThemedStyles(styleDefinitions);
   const [paused, setPaused] = useState(false);
+  // Hold the right side of a clip and it plays at double speed until you let
+  // go, the way Instagram's Reels do. A hold anywhere else does nothing.
+  const [fast, setFast] = useState(false);
+  const width = useRef(1);
+  const pressX = useRef(0);
   const [ready, setReadyState] = useState(false);
   // Once a clip has been ready it counts as ready: a moment of re-buffering mid-play is not a loading disc.
   const setReady = (ok: boolean) => { setReadyState((was) => was || ok); if (ok) onReady?.(true); };
@@ -109,15 +115,31 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
     <View style={StyleSheet.absoluteFill}>
       {letterbox ? (
         <View style={styles.wideFrame}><View style={cropLayer(crop)}>
-          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent || !active} paused={paused} fit="contain" trimStart={trimStart} trimEnd={trimEnd} speed={speed} volume={volume} onProgress={onProgress} onReady={setReady} onGone={gone} />
+          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent || !active} paused={paused} fit="contain" trimStart={trimStart} trimEnd={trimEnd} speed={(speed ?? 1) * (fast ? 2 : 1)} volume={volume} onProgress={onProgress} onReady={setReady} onGone={gone} />
         </View></View>
       ) : (
         <View style={cropLayer(crop)}>
-          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent || !active} paused={paused} fit={fit} trimStart={trimStart} trimEnd={trimEnd} speed={speed} volume={volume} onProgress={onProgress} onReady={setReady} onGone={gone} />
+          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent || !active} paused={paused} fit={fit} trimStart={trimStart} trimEnd={trimEnd} speed={(speed ?? 1) * (fast ? 2 : 1)} volume={volume} onProgress={onProgress} onReady={setReady} onGone={gone} />
         </View>
       )}
       {!ready && active ? <View pointerEvents="none" style={styles.centre}><CourtSpinner ink={discInk ?? 'white'} /></View> : null}
-      <Pressable accessibilityRole="button" accessibilityLabel={paused ? 'Play clip' : 'Pause clip'} onPress={tap} style={StyleSheet.absoluteFill}>
+      {fast ? (
+        <View pointerEvents="none" style={[styles.fastWrap, { top: insets.top + 24 }]}>
+          <View style={styles.fastPill}><Ionicons name="play-forward" size={13} color="white" /><Text style={styles.fastText}>2×</Text></View>
+        </View>
+      ) : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={paused ? 'Play clip' : 'Pause clip'}
+        accessibilityHint="Hold the right side to play at double speed"
+        onPress={tap}
+        onLayout={(e) => { width.current = e.nativeEvent.layout.width || 1; }}
+        onPressIn={(e) => { pressX.current = e.nativeEvent.locationX; }}
+        delayLongPress={250}
+        onLongPress={() => { if (!paused && pressX.current > width.current * 0.66) { haptics.tap(); setFast(true); } }}
+        onPressOut={() => { if (fast) setFast(false); }}
+        style={StyleSheet.absoluteFill}
+      >
         {paused ? (
           <View style={styles.centre}>
             <View style={styles.playBadge}><Ionicons name="play" size={30} color="white" /></View>
@@ -139,6 +161,9 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
 }
 
 const styleDefinitions = StyleSheet.create({
+  fastWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  fastPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.55)' },
+  fastText: { color: 'white', fontSize: 14, fontWeight: '700' },
   centre: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   wideFrame: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000' },
   playBadge: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#0008', alignItems: 'center', justifyContent: 'center', paddingLeft: 4 },

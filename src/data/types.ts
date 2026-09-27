@@ -559,7 +559,7 @@ export interface Tip {
 
 /* -------------------------------- Messaging ------------------------------ */
 
-export type MessageKind = 'text' | 'post' | 'question' | 'profile';
+export type MessageKind = 'text' | 'post' | 'question' | 'profile' | 'court';
 
 export interface Message {
   openedAtBy?: Record<ID, string>;
@@ -578,12 +578,17 @@ export interface Message {
   editedAt?: string;
   /** It never reached the server (no signal, or a server error); the chat offers a retry. */
   failed?: boolean;
+  /** Set when kind is 'court': where to meet. */
+  place?: { name: string; lat: number; lng: number };
 }
 
 export interface Conversation {
   id: ID;
-  /** Exactly two participants in this build; the shape allows groups later. */
+  /** Two people, or up to 16 in a group (migration 42). */
   participantIds: ID[];
+  /** A group chat, which may have a name; without one it is called by its members. */
+  isGroup?: boolean;
+  title?: string;
   messageIds: ID[];
   updatedAt: string;
   /** Message ids the current user has not opened. */
