@@ -31,16 +31,16 @@
       U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
   }
 
-  /* CourtSide's own palette (src/theme), and every court the app can be set to.
-     The washes are chosen per court, so the page keeps its character in each. */
+  /* CourtSide's own palette (src/theme/ThemeProvider.tsx), and every court the app can be set to.
+     The two washes are the app's own (src/components/Wash.tsx: left glow, right glow). Keep all three in step. */
   :root {
-    --bg: #F8F7F2; --bg-el: #F1EFE6; --surface: #F4F2E9; --surface-alt: #E9E6DA;
+    --bg: #F8F7F2; --bg-el: #F1EFE6; --surface: #FFFEFA; --surface-alt: #E9E6DA;
     --border: #DCD6C8; --border-strong: #B8AF9D;
     --text: #24251F; --muted: #5D584C; --faint: #6C665A;
     --brand: #3F7049; --brand-ink: #FAF8F0; --brand-dim: #E3E7D9;
     --danger: #A34D40; --bezel: #24251F;
     --shadow-float: 0 26px 56px rgba(36, 37, 31, 0.18), 0 6px 14px rgba(36, 37, 31, 0.09);
-    --wash-clay: rgba(197, 116, 72, 0.26); --wash-grass: rgba(63, 112, 73, 0.20); --wash-c: rgba(120, 90, 160, 0);
+    --wash-clay: rgba(197, 116, 72, 0.24); --wash-grass: rgba(197, 116, 72, 0.19); --wash-c: rgba(120, 90, 160, 0);
     color-scheme: light;
     --sans: "Inter var", system-ui, -apple-system, "SF Pro Text", Roboto, "Segoe UI", sans-serif;
   }
@@ -53,7 +53,7 @@
     --brand: #6FB483; --brand-ink: #0C1710; --brand-dim: #1F2E25;
     --danger: #D97F73; --bezel: #2C3832;
     --shadow-float: 0 26px 56px rgba(0, 0, 0, 0.5), 0 6px 14px rgba(0, 0, 0, 0.34);
-    --wash-clay: rgba(214, 138, 96, 0.22); --wash-grass: rgba(111, 180, 131, 0.18); --wash-c: rgba(140, 110, 200, 0.14);
+    --wash-clay: rgba(214, 138, 96, 0.18); --wash-grass: rgba(214, 138, 96, 0.14); --wash-c: rgba(140, 110, 200, 0.14);
     color-scheme: dark;
     }
   }
@@ -64,7 +64,7 @@
     --brand: #2C7446; --brand-ink: #FFFFFF; --brand-dim: #E8F3EC;
     --danger: #B93129; --bezel: #0F1419;
     --shadow-float: 0 26px 56px rgba(36, 37, 31, 0.18), 0 6px 14px rgba(36, 37, 31, 0.09);
-    --wash-clay: rgba(197, 116, 72, 0.22); --wash-grass: rgba(63, 112, 73, 0.18); --wash-c: rgba(120, 90, 160, 0.11);
+    --wash-clay: rgba(197, 116, 72, 0.18); --wash-grass: rgba(197, 116, 72, 0.14); --wash-c: rgba(120, 90, 160, 0.11);
     color-scheme: light;
   }
   :root[data-theme="night"] {
@@ -74,37 +74,37 @@
     --brand: #6FB483; --brand-ink: #0C1710; --brand-dim: #1F2E25;
     --danger: #D97F73; --bezel: #2C3832;
     --shadow-float: 0 26px 56px rgba(0, 0, 0, 0.5), 0 6px 14px rgba(0, 0, 0, 0.34);
-    --wash-clay: rgba(214, 138, 96, 0.22); --wash-grass: rgba(111, 180, 131, 0.18); --wash-c: rgba(140, 110, 200, 0.14);
+    --wash-clay: rgba(214, 138, 96, 0.18); --wash-grass: rgba(214, 138, 96, 0.14); --wash-c: rgba(140, 110, 200, 0.14);
     color-scheme: dark;
   }
   :root[data-theme="ao"] {
-    --bg: #EBF5FC; --bg-el: #D7E9F4; --surface: #E1EFF8; --surface-alt: #C8DEEE;
+    --bg: #EBF5FC; --bg-el: #D7E9F4; --surface: #F8FCFF; --surface-alt: #C8DEEE;
     --border: #AECFE5; --border-strong: #6394BC;
     --text: #0D2B43; --muted: #34566E; --faint: #496273;
     --brand: #2E85BF; --brand-ink: #FFFFFF; --brand-dim: #CFE4F2;
     --danger: #B8463F; --bezel: #0D2B43;
     --shadow-float: 0 26px 56px rgba(36, 37, 31, 0.18), 0 6px 14px rgba(36, 37, 31, 0.09);
-    --wash-clay: rgba(185, 119, 83, 0.26); --wash-grass: rgba(46, 133, 191, 0.24); --wash-c: rgba(120, 90, 170, 0.12);
+    --wash-clay: rgba(46, 133, 191, 0.26); --wash-grass: rgba(236, 140, 84, 0.22); --wash-c: rgba(120, 90, 170, 0.12);
     color-scheme: light;
   }
   :root[data-theme="roland-garros"] {
-    --bg: #F8F0E9; --bg-el: #EFDFD1; --surface: #F4E7DB; --surface-alt: #E6D2C0;
+    --bg: #F8F0E9; --bg-el: #EFDFD1; --surface: #FFFAF5; --surface-alt: #E6D2C0;
     --border: #D6BCA2; --border-strong: #B08A66;
     --text: #33201A; --muted: #664836; --faint: #6D5745;
     --brand: #AD4E2E; --brand-ink: #FFF6F0; --brand-dim: #ECD9CB;
     --danger: #9E432E; --bezel: #33201A;
     --shadow-float: 0 26px 56px rgba(36, 37, 31, 0.18), 0 6px 14px rgba(36, 37, 31, 0.09);
-    --wash-clay: rgba(198, 116, 67, 0.34); --wash-grass: rgba(31, 95, 63, 0.20); --wash-c: rgba(62, 105, 130, 0.14);
+    --wash-clay: rgba(198, 116, 67, 0.34); --wash-grass: rgba(240, 190, 60, 0.24); --wash-c: rgba(62, 105, 130, 0.14);
     color-scheme: light;
   }
   :root[data-theme="wimbledon"] {
-    --bg: #F2F6EC; --bg-el: #E4EDD8; --surface: #ECF2E2; --surface-alt: #D7E3C9;
+    --bg: #F2F6EC; --bg-el: #E4EDD8; --surface: #FBFDF7; --surface-alt: #D7E3C9;
     --border: #C4D5B3; --border-strong: #8CA37B;
     --text: #18291A; --muted: #485943; --faint: #586552;
     --brand: #256B3A; --brand-ink: #FFFFFF; --brand-dim: #D9E6D4;
     --danger: #943634; --bezel: #18291A;
     --shadow-float: 0 26px 56px rgba(36, 37, 31, 0.18), 0 6px 14px rgba(36, 37, 31, 0.09);
-    --wash-clay: rgba(79, 38, 131, 0.16); --wash-grass: rgba(78, 138, 74, 0.26); --wash-c: rgba(169, 105, 74, 0.16);
+    --wash-clay: rgba(78, 138, 74, 0.26); --wash-grass: rgba(79, 38, 131, 0.20); --wash-c: rgba(169, 105, 74, 0.16);
     color-scheme: light;
   }
   :root[data-theme="us-open"] {
@@ -114,7 +114,7 @@
     --brand: #F5D547; --brand-ink: #1B1A0A; --brand-dim: #4A4A2C;
     --danger: #E07E72; --bezel: #32557A;
     --shadow-float: 0 26px 56px rgba(0, 0, 0, 0.5), 0 6px 14px rgba(0, 0, 0, 0.34);
-    --wash-clay: rgba(245, 213, 71, 0.22); --wash-grass: rgba(40, 96, 180, 0.55); --wash-c: rgba(224, 126, 114, 0.16);
+    --wash-clay: rgba(208, 138, 94, 0.42); --wash-grass: rgba(245, 213, 71, 0.26); --wash-c: rgba(224, 126, 114, 0.16);
     color-scheme: dark;
   }
 
@@ -165,7 +165,7 @@
   .theme-pick summary:hover { background: var(--surface-alt); }
   .theme-pick summary:active { transform: scale(0.95); }
   .theme-pick[open] summary { background: var(--surface-alt); }
-  .swatch { width: 18px; height: 18px; border-radius: 50%; background: linear-gradient(135deg, var(--brand) 0 50%, var(--surface-alt) 50% 100%); border: 1px solid var(--border-strong); }
+  .swatch { width: 22px; height: 20px; border-radius: 6px; border: 1px solid var(--border-strong); background: radial-gradient(80% 90% at 6% 62%, var(--wash-clay), transparent 72%), radial-gradient(80% 90% at 94% 10%, var(--wash-grass), transparent 74%), var(--bg); }
   .theme-menu {
     position: absolute; right: 0; top: calc(100% + 10px); z-index: 30; width: 272px; padding: 6px;
     border: 1px solid var(--border); border-radius: 16px; background: var(--bg); box-shadow: var(--shadow-float);
@@ -179,16 +179,16 @@
   }
   .theme-menu button:hover { background: var(--surface-alt); }
   .theme-menu button[aria-checked="true"] { background: var(--brand-dim); }
-  .theme-menu .chip { flex: none; width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--border-strong); padding: 5px; display: grid; gap: 3px; align-content: space-between; }
-  .theme-menu .chip i { display: block; height: 4px; border-radius: 2px; }
-  .theme-menu .chip b { display: flex; gap: 3px; }
-  .theme-menu .chip b i { width: 6px; height: 6px; border-radius: 50%; }
+  /* Each court as the app's theme page shows it: its ground, with its two glows. */
+  .theme-menu .chip { flex: none; width: 40px; height: 34px; border-radius: 9px; border: 1px solid var(--c-edge);
+    background: radial-gradient(75% 85% at 6% 62%, var(--c-l), transparent 72%), radial-gradient(75% 85% at 94% 10%, var(--c-r), transparent 74%), var(--c-bg); }
   .theme-menu .words { display: grid; gap: 1px; min-width: 0; flex: 1; }
   .theme-menu .words strong { font-size: 14px; font-weight: 600; letter-spacing: -0.015em; }
   .theme-menu .words span { font-size: 12px; color: var(--muted); }
   .theme-menu .tick { flex: none; width: 16px; height: 16px; color: var(--brand); opacity: 0; }
   .theme-menu button[aria-checked="true"] .tick { opacity: 1; }
   /* A short crossfade when the court changes. */
+  ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 340ms; animation-timing-function: cubic-bezier(.4, 0, .2, 1); }
   html.theming, html.theming *, html.theming *::before, html.theming *::after { transition: background-color 260ms ease, border-color 260ms ease, color 260ms ease, box-shadow 260ms ease !important; }
 
   /* ---------------------------------------------------------------- shared type */
@@ -521,37 +521,37 @@
         <summary aria-label="Change the theme" title="Theme"><span class="swatch" aria-hidden="true"></span></summary>
         <div class="theme-menu" role="menu" aria-label="Theme">
         <button type="button" role="menuitemradio" aria-checked="false" data-pick="default">
-          <span class="chip" aria-hidden="true" style="background:#F8F7F2"><i style="background:#3F7049"></i><b><i style="background:#E9E6DA"></i><i style="background:#B8AF9D"></i><i style="background:#24251F"></i></b></span>
+          <span class="chip" aria-hidden="true" style="--c-bg:#F8F7F2;--c-edge:#DCD6C8;--c-l:rgba(197, 116, 72, 0.38);--c-r:rgba(197, 116, 72, 0.30)"></span>
           <span class="words"><strong>CourtSide</strong><span>Warm neutrals, club green</span></span>
           <svg class="tick" aria-hidden="true"><use href="#check"/></svg>
         </button>
         <button type="button" role="menuitemradio" aria-checked="false" data-pick="night">
-          <span class="chip" aria-hidden="true" style="background:#0F1412"><i style="background:#6FB483"></i><b><i style="background:#232C27"></i><i style="background:#46554D"></i><i style="background:#EDF1EE"></i></b></span>
+          <span class="chip" aria-hidden="true" style="--c-bg:#0F1412;--c-edge:#2C3832;--c-l:rgba(214, 138, 96, 0.29);--c-r:rgba(214, 138, 96, 0.22)"></span>
           <span class="words"><strong>Night</strong><span>Dark, for late sessions</span></span>
           <svg class="tick" aria-hidden="true"><use href="#check"/></svg>
         </button>
         <button type="button" role="menuitemradio" aria-checked="false" data-pick="clean">
-          <span class="chip" aria-hidden="true" style="background:#FFFFFF"><i style="background:#2C7446"></i><b><i style="background:#F0F1F1"></i><i style="background:#C7CACC"></i><i style="background:#0F1419"></i></b></span>
+          <span class="chip" aria-hidden="true" style="--c-bg:#FFFFFF;--c-edge:#E6E7E8;--c-l:rgba(197, 116, 72, 0.29);--c-r:rgba(197, 116, 72, 0.22)"></span>
           <span class="words"><strong>Clean</strong><span>Plain white, black text</span></span>
           <svg class="tick" aria-hidden="true"><use href="#check"/></svg>
         </button>
         <button type="button" role="menuitemradio" aria-checked="false" data-pick="ao">
-          <span class="chip" aria-hidden="true" style="background:#EBF5FC"><i style="background:#2E85BF"></i><b><i style="background:#C8DEEE"></i><i style="background:#6394BC"></i><i style="background:#0D2B43"></i></b></span>
+          <span class="chip" aria-hidden="true" style="--c-bg:#EBF5FC;--c-edge:#AECFE5;--c-l:rgba(46, 133, 191, 0.42);--c-r:rgba(236, 140, 84, 0.35)"></span>
           <span class="words"><strong>Australian Open</strong><span>Blue hard court</span></span>
           <svg class="tick" aria-hidden="true"><use href="#check"/></svg>
         </button>
         <button type="button" role="menuitemradio" aria-checked="false" data-pick="roland-garros">
-          <span class="chip" aria-hidden="true" style="background:#F8F0E9"><i style="background:#AD4E2E"></i><b><i style="background:#E6D2C0"></i><i style="background:#B08A66"></i><i style="background:#33201A"></i></b></span>
+          <span class="chip" aria-hidden="true" style="--c-bg:#F8F0E9;--c-edge:#D6BCA2;--c-l:rgba(198, 116, 67, 0.54);--c-r:rgba(240, 190, 60, 0.38)"></span>
           <span class="words"><strong>Roland Garros</strong><span>Crushed brick clay</span></span>
           <svg class="tick" aria-hidden="true"><use href="#check"/></svg>
         </button>
         <button type="button" role="menuitemradio" aria-checked="false" data-pick="wimbledon">
-          <span class="chip" aria-hidden="true" style="background:#F2F6EC"><i style="background:#256B3A"></i><b><i style="background:#D7E3C9"></i><i style="background:#8CA37B"></i><i style="background:#18291A"></i></b></span>
+          <span class="chip" aria-hidden="true" style="--c-bg:#F2F6EC;--c-edge:#C4D5B3;--c-l:rgba(78, 138, 74, 0.42);--c-r:rgba(79, 38, 131, 0.32)"></span>
           <span class="words"><strong>Wimbledon</strong><span>Grass green and purple</span></span>
           <svg class="tick" aria-hidden="true"><use href="#check"/></svg>
         </button>
         <button type="button" role="menuitemradio" aria-checked="false" data-pick="us-open">
-          <span class="chip" aria-hidden="true" style="background:#14283D"><i style="background:#F5D547"></i><b><i style="background:#2A4A6E"></i><i style="background:#5C82AC"></i><i style="background:#E9F0F8"></i></b></span>
+          <span class="chip" aria-hidden="true" style="--c-bg:#14283D;--c-edge:#32557A;--c-l:rgba(208, 138, 94, 0.67);--c-r:rgba(245, 213, 71, 0.42)"></span>
           <span class="words"><strong>US Open</strong><span>Flushing night session</span></span>
           <svg class="tick" aria-hidden="true"><use href="#check"/></svg>
         </button>
@@ -941,11 +941,19 @@
       document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', bgOf()));
     };
     buttons.forEach((b) => b.addEventListener('click', () => {
-      if (!stillMotion) { document.documentElement.classList.add('theming'); setTimeout(() => document.documentElement.classList.remove('theming'), 320); }
-      document.documentElement.dataset.theme = b.dataset.pick;
-      try { localStorage.setItem('courtside-theme', b.dataset.pick); } catch {}
-      mark();
-      pick.open = false;
+      const apply = () => {
+        document.documentElement.dataset.theme = b.dataset.pick;
+        try { localStorage.setItem('courtside-theme', b.dataset.pick); } catch {}
+        mark();
+        pick.open = false;
+      };
+      if (stillMotion) { apply(); return; }
+      // The whole page crossfades as one picture, the way the app does it:
+      // text, washes and all, with nothing snapping ahead of the rest.
+      if (document.startViewTransition) { document.startViewTransition(apply); return; }
+      document.documentElement.classList.add('theming');
+      setTimeout(() => document.documentElement.classList.remove('theming'), 320);
+      apply();
     }));
     document.addEventListener('click', (e) => { if (pick.open && !pick.contains(e.target)) pick.open = false; });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && pick.open) { pick.open = false; pick.querySelector('summary').focus(); } });
