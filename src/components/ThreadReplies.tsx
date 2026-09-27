@@ -3,7 +3,7 @@ import { PlayerName } from '@/components/PlayerName';
 import React, { useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { VoteControls } from '@/components/VoteControls';
 import { TOPIC_META } from '@/components/QuestionCard';

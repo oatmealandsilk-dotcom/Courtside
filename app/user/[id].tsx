@@ -5,7 +5,7 @@ import { show as showToast } from '@/lib/toast';
 import { Image, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { LevelPill } from '@/components/LevelPill';
 import { PlayerName } from '@/components/PlayerName';

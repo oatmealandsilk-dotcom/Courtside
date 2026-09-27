@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Button, Field, Screen } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';

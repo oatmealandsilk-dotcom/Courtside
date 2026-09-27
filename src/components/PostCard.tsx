@@ -3,7 +3,7 @@ import React, { useState, memo } from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import * as haptics from '@/lib/haptics';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { ClipVideo } from '@/components/ClipVideo';
 import { cropLayer } from '@/lib/crop';

@@ -4,7 +4,7 @@ import { PlayerName } from '@/components/PlayerName';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Button, Screen } from '@/components/ui';
 import { LiveDot } from '@/components/LiveDot';

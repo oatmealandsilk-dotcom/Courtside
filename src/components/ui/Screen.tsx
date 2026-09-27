@@ -10,7 +10,7 @@ import { KeyboardScrollContext, afterKeyboard, currentKeyboardHeight, type Measu
 import { TAB_FOR_KEY, subscribeScrollToTop } from '@/features/navigation/scrollToTop';
 import { barCompact } from '@/features/navigation/barShrink';
 import Reanimated, { runOnJS, useAnimatedReaction, useAnimatedScrollHandler, useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
 import { Wash } from '@/components/Wash';

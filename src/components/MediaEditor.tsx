@@ -5,7 +5,7 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, FadeIn, FadeInUp, FadeOut, ReduceMotion, useAnimatedStyle, useFrameCallback, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import type { PickedMedia } from '@/components/MediaPicker';
 import { VideoSurface, type VideoSurfaceHandle } from '@/components/VideoSurface';

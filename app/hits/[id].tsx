@@ -5,7 +5,7 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as haptics from '@/lib/haptics';
 import { goBack } from '@/lib/goBack';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { ClipPlayback } from '@/components/ClipPlayback';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';

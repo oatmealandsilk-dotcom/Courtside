@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
 import { pickFromDevice, type PickedMedia } from '@/components/MediaPicker';

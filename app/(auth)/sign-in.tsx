@@ -6,7 +6,7 @@ import { blockDevice, isDeviceBlocked, toBirthDate, yearsOld } from '@/features/
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandMark } from '@/components/BrandMark';
 import { TermsCheck } from '@/components/TermsCheck';

@@ -6,7 +6,7 @@ import { Animated, AppState, Image, Platform, Pressable, ScrollView, StyleSheet,
 import { router, useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { goBack } from '@/lib/goBack';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PinchZone } from '@/components/PinchZone';
 import Reanimated, { runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming } from 'react-native-reanimated';

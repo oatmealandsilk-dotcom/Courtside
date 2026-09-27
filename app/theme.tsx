@@ -5,7 +5,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withS
 import * as haptics from '@/lib/haptics';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Screen } from '@/components/ui';
 import { Wash } from '@/components/Wash';

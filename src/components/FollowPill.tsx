@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { AccessibilityInfo, Pressable, StyleSheet } from 'react-native';
 import Animated, { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import * as haptics from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
