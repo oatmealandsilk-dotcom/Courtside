@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 /** CourtSide: warm neutrals and muted court-green accents. */
 export const lightColors = {
-  bg: '#F8F7F2', bgElevated: '#F1EFE6', surface: '#F4F2E9', surfaceAlt: '#E9E6DA',
+  bg: '#F8F7F2', bgElevated: '#F1EFE6', surface: '#FFFEFA', surfaceAlt: '#E9E6DA',
   border: '#DCD6C8', borderStrong: '#B8AF9D',
   text: '#24251F', textMuted: '#5D584C', textFaint: '#6C665A',
   brand: '#3F7049', brandInk: '#FAF8F0', brandDim: '#E3E7D9',
@@ -11,6 +11,19 @@ export const lightColors = {
 } as const;
 
 export const colors: Record<keyof typeof lightColors, string> = { ...lightColors };
+
+/**
+ * The lift under a grouped list or card: a soft, wide shadow, so a box a
+ * shade lighter than the page reads as sitting on it, not as a smudge.
+ * (On a dark court it all but disappears, which is right.)
+ */
+export const lift = {
+  shadowColor: '#2A2418',
+  shadowOpacity: 0.07,
+  shadowRadius: 16,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 2,
+} as const;
 
 export const spacing = {
   xs: 4,

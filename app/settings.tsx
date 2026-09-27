@@ -11,7 +11,7 @@ import { Glass } from '@/components/ui/Glass';
 import { useApp } from '@/store/AppContext';
 import { useTheme, themeList, themes, type ThemeName } from '@/theme/ThemeProvider';
 import { Wash } from '@/components/Wash';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, lift } from '@/theme';
 
 interface Row {
   icon: keyof typeof Ionicons.glyphMap;
@@ -83,7 +83,7 @@ export default function Settings() {
       rows: [
         { icon: 'tennisball-outline', label: 'Game details and achievements', onPress: () => router.push('/profile-details') },
         { icon: 'pulse-outline', label: 'Health and nutrition', onPress: () => router.push('/health') },
-        { icon: 'location-outline', label: 'Location', value: locationEnabled ? detectedLocation?.split(',')[0] ?? 'On' : locationNote || undefined, toggle: { value: locationEnabled, onChange: (next) => { void toggleLocation(next); } } },
+        { icon: 'location-outline', label: 'Location', detail: locationNote || (locationEnabled ? (detectedLocation ? `Showing players near ${detectedLocation.split(',')[0]}` : 'On') : 'Off. Turn on to see who is near you'), toggle: { value: locationEnabled, onChange: (next) => { void toggleLocation(next); } } },
         { icon: 'shield-half-outline', label: 'Permissions', onPress: () => router.push('/permissions') },
         currentUser?.isCoach
           ? { icon: 'ribbon-outline', label: 'Coach studio', detail: 'Your page, services, payouts and bookings', onPress: () => router.push('/coach-studio') }
@@ -224,7 +224,7 @@ const styleDefinitions = StyleSheet.create({
   section: { gap: spacing.sm, paddingBottom: spacing.xl },
   sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm },
   // Borderless grouped list: the list is a shade off the page, rows are separated by hairlines that start past the icons.
-  card: { borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'stretch', paddingLeft: spacing.lg },
   rowPressed: { backgroundColor: colors.surfaceAlt },
   lead: { width: 26, alignItems: 'center', justifyContent: 'center', marginRight: spacing.md },

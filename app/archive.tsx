@@ -9,7 +9,7 @@ import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { EmptyState, Screen, SegmentedControl } from '@/components/ui';
 import { archivedStories } from '@/features/stories/stories';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, lift } from '@/theme';
 
 type Tab = 'stories' | 'posts';
 const KIND: Record<string, string> = { clip: 'Clip', match: 'Set play', session: 'Session', note: 'Note', gear: 'Gear', milestone: 'Milestone' };
@@ -123,7 +123,7 @@ const styleDefinitions = StyleSheet.create({
   tileDate: { ...typography.caption, color: '#FFFFFF', letterSpacing: 0, textShadowColor: '#0009', textShadowRadius: 3 },
   tileMark: { position: 'absolute', top: 8, right: 8, textShadowColor: '#0009', textShadowRadius: 3 },
   // One grouped list, a shade off the page, hairlines between.
-  list: { borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  list: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   postRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
   postBody: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },

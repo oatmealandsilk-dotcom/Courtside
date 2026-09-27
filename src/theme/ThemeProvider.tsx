@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { crossfade } from './crossfade';
 import { Platform, StyleSheet, View } from 'react-native';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -38,7 +39,7 @@ const cleanColors: Palette = {
  * Ground is the surround, not the court; the court blue is the accent.
  */
 const aoColors: Palette = {
-  bg: '#EBF5FC', bgElevated: '#D7E9F4', surface: '#E1EFF8', surfaceAlt: '#C8DEEE',
+  bg: '#EBF5FC', bgElevated: '#D7E9F4', surface: '#F8FCFF', surfaceAlt: '#C8DEEE',
   border: '#AECFE5', borderStrong: '#6394BC', text: '#0D2B43', textMuted: '#34566E', textFaint: '#496273',
   brand: '#2E85BF', brandInk: '#FFFFFF', brandDim: '#CFE4F2', court: '#4179A8', clay: '#B97753',
   hard: '#2E85BF', grass: '#4E8A57', info: '#3979AF', success: '#2A7F60', warning: '#9C7016', danger: '#B8463F',
@@ -51,7 +52,7 @@ const aoColors: Palette = {
  * full strength; the court orange carries the buttons.
  */
 const rolandGarrosColors: Palette = {
-  bg: '#F8F0E9', bgElevated: '#EFDFD1', surface: '#F4E7DB', surfaceAlt: '#E6D2C0',
+  bg: '#F8F0E9', bgElevated: '#EFDFD1', surface: '#FFFAF5', surfaceAlt: '#E6D2C0',
   border: '#D6BCA2', borderStrong: '#B08A66', text: '#33201A', textMuted: '#664836', textFaint: '#6D5745',
   brand: '#AD4E2E', brandInk: '#FFF6F0', brandDim: '#ECD9CB', court: '#9E432E', clay: '#C67443',
   hard: '#3E6982', grass: '#1F5F3F', info: '#3E6982', success: '#1F5F3F', warning: '#9A6718', danger: '#9E432E',
@@ -63,7 +64,7 @@ const rolandGarrosColors: Palette = {
  * green held back for accents, and the purple kept as the secondary.
  */
 const wimbledonColors: Palette = {
-  bg: '#F2F6EC', bgElevated: '#E4EDD8', surface: '#ECF2E2', surfaceAlt: '#D7E3C9',
+  bg: '#F2F6EC', bgElevated: '#E4EDD8', surface: '#FBFDF7', surfaceAlt: '#D7E3C9',
   border: '#C4D5B3', borderStrong: '#8CA37B', text: '#18291A', textMuted: '#485943', textFaint: '#586552',
   brand: '#256B3A', brandInk: '#FFFFFF', brandDim: '#D9E6D4', court: '#4E8A4A', clay: '#A9694A',
   hard: '#4F2683', grass: '#4E8A4A', info: '#4F2683', success: '#256B3A', warning: '#8A6A19', danger: '#943634',
@@ -168,17 +169,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       if (Platform.OS === 'web') localStorage.setItem(STORAGE_KEY, name);
       else void AsyncStorage.setItem(STORAGE_KEY, name);
     } catch {}
+    // A browser that can cross-fade does it properly: the old look fades straight into the new one.
+    if (crossfade(() => apply(name))) return;
     pending.current = name;
+    // On a phone, a light tint of the new court rather than a solid cover:
+    // the old look fades toward the new one instead of blanking.
     setVeilColor(themes[name].bg);
-    veil.value = withTiming(1, { duration: 140, easing: Easing.out(Easing.quad) }, (done) => { if (done) runOnJS(apply)(name); });
+    veil.value = withTiming(VEIL_PEAK, { duration: 180, easing: Easing.out(Easing.quad) }, (done) => { if (done) runOnJS(apply)(name); });
   };
   // After the redraw has landed (and a beat for the native layers), the veil lifts.
   useEffect(() => {
     if (pending.current !== theme) return;
     pending.current = null;
     const t = setTimeout(() => {
-      veil.value = withTiming(0, { duration: 280, easing: Easing.inOut(Easing.quad) }, (done) => { if (done) runOnJS(setVeilColor)(null); });
-    }, 120);
+      veil.value = withTiming(0, { duration: 360, easing: Easing.inOut(Easing.quad) }, (done) => { if (done) runOnJS(setVeilColor)(null); });
+    }, 90);
     return () => clearTimeout(t);
   }, [theme, veil]);
   const veilStyle = useAnimatedStyle(() => ({ opacity: veil.value }));
@@ -195,6 +200,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     </ThemeContext.Provider>
   );
 }
+
+/** How far the phone's tint rises: enough to soften the repaint, never a blank screen. */
+const VEIL_PEAK = 0.72;
 
 export const useTheme = () => useContext(ThemeContext);
 

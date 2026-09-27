@@ -12,7 +12,7 @@ import { formatDate } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import * as toast from '@/lib/toast';
 import { useAiCoachOn } from '@/features/aiCoach/switch';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, lift } from '@/theme';
 
 type Sheet = 'password' | 'email' | 'delete' | null;
 
@@ -193,7 +193,7 @@ const styleDefinitions = StyleSheet.create({
   // The way Settings reads: sentence-case labels, borderless grouped lists a
   // shade off the page, hairlines that start past the icons.
   sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingTop: spacing.xl, paddingBottom: spacing.sm },
-  card: { borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'stretch', paddingLeft: spacing.lg },
   lead: { width: 26, alignItems: 'center', justifyContent: 'center', marginRight: spacing.md },
   rowBody: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 52, paddingVertical: 11, paddingRight: spacing.lg },

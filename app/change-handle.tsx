@@ -11,7 +11,7 @@ import { goBack } from '@/lib/goBack';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, radius, spacing, typography } from '@/theme';
+import { colors, font, radius, spacing, typography, lift } from '@/theme';
 
 const DAY = 86400000;
 const WAIT_DAYS = 30;
@@ -170,7 +170,7 @@ const styleDefinitions = StyleSheet.create({
   good: { color: colors.success },
   bad: { color: colors.danger },
   // The rules as one quiet list, the way Settings reads.
-  card: { borderRadius: 20, backgroundColor: colors.surface, paddingHorizontal: spacing.lg, marginTop: spacing.sm, marginBottom: spacing.md },
+  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, paddingHorizontal: spacing.lg, marginTop: spacing.sm, marginBottom: spacing.md },
   rule: { flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.md },
   ruleLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   ruleIcon: { marginTop: 1 },

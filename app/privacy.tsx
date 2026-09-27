@@ -9,7 +9,7 @@ import { Screen, Toggle } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { openLegal } from '@/lib/legal';
-import { colors, spacing, typography } from '@/theme';
+import { colors, spacing, typography, lift } from '@/theme';
 
 export default function PrivacyCentre() {
   const styles = useThemedStyles(styleDefinitions);
@@ -96,7 +96,7 @@ const styleDefinitions = StyleSheet.create({
   lead: { ...typography.small, color: colors.textMuted, lineHeight: 20, paddingBottom: spacing.lg },
   // Sentence-case labels over borderless grouped lists, the way Settings reads.
   sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingTop: spacing.md, paddingBottom: spacing.sm },
-  card: { borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden', marginBottom: spacing.lg },
+  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden', marginBottom: spacing.lg },
   item: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: 3 },
   itemTitle: { ...typography.smallStrong, color: colors.text },
   itemBody: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
