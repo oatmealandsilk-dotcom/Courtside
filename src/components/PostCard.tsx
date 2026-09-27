@@ -195,16 +195,21 @@ function PostCardInner({
       </Pressable>
 
       <View style={styles.actions}>
-        <Tappable onPress={like.toggle} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: post.id } }); }} scaleTo={0.8} style={styles.action} accessibilityLabel={like.on ? 'Unlike. Hold to see who liked it' : 'Like. Hold to see who liked it'}>
-          <Ionicons
-            name={like.on ? 'heart' : 'heart-outline'}
-            size={23}
-            color={like.on ? colors.danger : colors.textMuted}
-          />
-          <Text style={[styles.actionText, like.on && { color: colors.danger }]}>
-            {compactNumber(post.likedBy.length + like.delta)}
-          </Text>
-        </Tappable>
+        {/* The heart likes; the number opens who liked it, as on Instagram (holding the heart still works too). */}
+        <View style={styles.action}>
+          <Tappable onPress={like.toggle} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: post.id } }); }} scaleTo={0.8} hitSlop={8} accessibilityLabel={like.on ? 'Unlike' : 'Like'}>
+            <Ionicons
+              name={like.on ? 'heart' : 'heart-outline'}
+              size={23}
+              color={like.on ? colors.danger : colors.textMuted}
+            />
+          </Tappable>
+          <Pressable accessibilityRole="button" accessibilityLabel="See who liked this" hitSlop={8} disabled={post.likedBy.length + like.delta === 0} onPress={() => router.push({ pathname: '/likes', params: { id: post.id } })}>
+            <Text style={[styles.actionText, like.on && { color: colors.danger }]}>
+              {compactNumber(post.likedBy.length + like.delta)}
+            </Text>
+          </Pressable>
+        </View>
         <Tappable onPress={onComment ?? onPress} scaleTo={0.8} style={styles.action} accessibilityLabel="Comments">
           <Ionicons name="chatbubble-outline" size={22} color={colors.textMuted} />
           <Text style={styles.actionText}>{compactNumber(post.commentIds.length)}</Text>
