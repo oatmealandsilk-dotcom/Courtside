@@ -17,7 +17,7 @@ import { Avatar, Chip, EmptyState, Screen } from '@/components/ui';
 import { reportSection, subscribeSectionRequest } from '@/features/navigation/swipeOrder';
 import { useApp } from '@/store/AppContext';
 import type { QuestionTopic } from '@/data/types';
-import { colors, radius, spacing, typography, font } from '@/theme';
+import { colors, radius, spacing, typography, font, lift } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 
 const TOPICS: (QuestionTopic | 'all')[] = [
@@ -30,6 +30,9 @@ const TOPICS: (QuestionTopic | 'all')[] = [
   'rules',
   'mental',
 ];
+
+const SORT_LABEL = { new: 'New', hot: 'Hot', top: 'Top', unanswered: 'Unanswered' } as const;
+const SORT_HINT = { new: 'Newest first', hot: 'Busiest right now', top: 'Most upvoted', unanswered: 'Nobody has replied yet' } as const;
 
 function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
@@ -68,6 +71,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
 
   // How the list is ordered, the way Reddit offers it. New stays the default.
   const [sort, setSort] = useState<'new' | 'hot' | 'top' | 'unanswered'>('new');
+  const [sortOpen, setSortOpen] = useState(false);
   const [shownCount, setShownCount] = useState(25);
   const visible = useMemo(() => {
     // Nobody you have blocked or muted shows up here, the same as in the feed.
@@ -97,7 +101,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : <View style={styles.mapStandIn} />) : null}
         {players.length ? <View style={styles.playersHead}>
-          <Text style={styles.playersTitle}>{search ? 'Players' : 'Players near you'}</Text>
+          {/* Just "Players": the ones near you say so on their own row. */}
+          <Text style={styles.playersTitle}>Players</Text>
           {search ? <Text style={styles.playersBody}>{`${players.length} ${players.length === 1 ? 'match' : 'matches'}`}</Text> : null}
         </View> : null}
         {players.map((user, index) => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
@@ -129,12 +134,29 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             </View>
           ))}
         </ScrollView>
+        {/* One quiet line under the topics: how many threads, and a single Sort button, the way Reddit does it. */}
         <View style={styles.sortRow}>
-          {(['new', 'hot', 'top', 'unanswered'] as const).map((key) => (
-            <Pressable key={key} accessibilityRole="tab" accessibilityState={{ selected: sort === key }} onPress={() => setSort(key)} hitSlop={6} style={[styles.sort, sort === key && styles.sortOn]}>
-              <Text style={[styles.sortText, sort === key && styles.sortTextOn]}>{key === 'new' ? 'New' : key === 'hot' ? 'Hot' : key === 'top' ? 'Top' : 'Unanswered'}</Text>
+          <Text style={styles.sortCount}>{visible.length === 1 ? '1 thread' : `${visible.length} threads`}</Text>
+          <View>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Sort: ${SORT_LABEL[sort]}`} accessibilityState={{ expanded: sortOpen }} onPress={() => setSortOpen((o) => !o)} hitSlop={8} style={({ pressed }) => [styles.sortButton, pressed && { opacity: 0.7 }]}>
+              <Ionicons name="swap-vertical" size={14} color={colors.textMuted} />
+              <Text style={styles.sortButtonText}>{SORT_LABEL[sort]}</Text>
+              <Ionicons name={sortOpen ? 'chevron-up' : 'chevron-down'} size={13} color={colors.textMuted} />
             </Pressable>
-          ))}
+            {sortOpen ? (
+              <View style={styles.sortMenu}>
+                {(['new', 'hot', 'top', 'unanswered'] as const).map((key, i) => (
+                  <Pressable key={key} accessibilityRole="menuitem" accessibilityState={{ selected: sort === key }} onPress={() => { setSort(key); setSortOpen(false); }} style={({ pressed }) => [styles.sortItem, i > 0 && styles.sortItemLine, pressed && { backgroundColor: colors.bgElevated }]}>
+                    <View style={{ flex: 1, gap: 1 }}>
+                      <Text style={[styles.sortItemTitle, sort === key && { color: colors.brand }]}>{SORT_LABEL[key]}</Text>
+                      <Text style={styles.sortItemBody}>{SORT_HINT[key]}</Text>
+                    </View>
+                    {sort === key ? <Ionicons name="checkmark" size={16} color={colors.brand} /> : null}
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+          </View>
         </View>
       </View>
 
@@ -209,11 +231,15 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
 }
 
 const styleDefinitions = StyleSheet.create({
-  sortRow: { flexDirection: 'row', gap: 4, paddingTop: spacing.sm },
-  sort: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14 },
-  sortOn: { backgroundColor: colors.surface },
-  sortText: { ...typography.small, color: colors.textMuted },
-  sortTextOn: { color: colors.text, ...font('600') },
+  sortRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 5 },
+  sortCount: { ...typography.small, color: colors.textFaint },
+  sortButton: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill },
+  sortButtonText: { ...typography.smallStrong, color: colors.textMuted },
+  sortMenu: { ...lift, position: 'absolute', top: 36, right: 0, width: 240, borderRadius: 16, backgroundColor: colors.surface, overflow: 'hidden', zIndex: 10 },
+  sortItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: 14, paddingVertical: 11 },
+  sortItemLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  sortItemTitle: { ...typography.smallStrong, color: colors.text },
+  sortItemBody: { ...typography.caption, letterSpacing: 0, color: colors.textMuted },
   sections: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: 16 },
   more: { alignSelf: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, marginTop: spacing.md },
   moreText: { ...typography.smallStrong, color: colors.text },
@@ -244,7 +270,8 @@ const styleDefinitions = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  controls: { gap: spacing.md, paddingBottom: spacing.lg },
+  // Above the list, so the Sort menu opens over the threads rather than under them.
+  controls: { gap: spacing.md, paddingBottom: spacing.lg, zIndex: 10, elevation: 10 },
   topicRow: { flexDirection: 'row', gap: spacing.sm, paddingVertical: 8 },
   list: { gap: spacing.md },
   end: { ...typography.small, color: colors.textFaint, textAlign: 'center', paddingVertical: spacing.xl },
