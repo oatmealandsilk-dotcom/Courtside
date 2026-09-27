@@ -5,7 +5,8 @@ import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { DragSheet } from '@/components/DragSheet';
-import { Button, Chip, Field } from '@/components/ui';
+import { Field } from '@/components/ui';
+import { Chips, Section, SheetTitle, Submit, formBody } from '@/components/sheet/SheetForm';
 import { TOPIC_META } from '@/components/QuestionCard';
 import { useApp } from '@/store/AppContext';
 import type { QuestionTopic } from '@/data/types';
@@ -49,59 +50,37 @@ export default function Ask() {
     <DragSheet fitContent
       closeSignal={closeSignal}
       onDismissed={() => (posted ? router.replace(`/question/${posted}`) : router.back())}
-      header={
-        <View style={styles.headerRow}>
-          <Text style={styles.heading}>Ask the room</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={() => setCloseSignal((n) => n + 1)}>
-            <Ionicons name="close" size={22} color={colors.textMuted} />
-          </Pressable>
-        </View>
-      }
+      header={<SheetTitle title="Ask the room" line="Players and coaches answer, often within the hour." onClose={() => setCloseSignal((n) => n + 1)} />}
     >
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
-          <Field
-            label="Question"
-            value={title}
-            onChangeText={setTitle}
-            placeholder="What would you like to ask the community?"
-          />
-          <View style={styles.row}>
-            {TOPICS.map((t) => (
-              <Chip key={t} label={TOPIC_META[t].label} selected={topic === t} onPress={() => setTopic(t)} small />
-            ))}
-          </View>
-          <Field
-            label="Details"
-            value={body}
-            onChangeText={setBody}
-            placeholder="Your level, what you have already tried, and what actually happens."
-            multiline
-            minHeight={120}
-            mentions
-          />
+        <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
+          <Section title="Your question">
+            <Field soft value={title} onChangeText={setTitle} placeholder="What do you want to know?" />
+          </Section>
+          <Section title="Topic">
+            <Chips options={TOPICS.map((t) => ({ value: t, label: TOPIC_META[t].label }))} value={topic} onChange={(t) => { if (t) setTopic(t); }} />
+          </Section>
+          <Section title="Details">
+            <Field soft value={body} onChangeText={setBody} placeholder="Your level, what you have tried, what happens (optional)" multiline minHeight={96} mentions />
+          </Section>
           {poll ? (
-            <View style={styles.poll}>
-              <View style={styles.pollHead}>
-                <Text style={styles.pollTitle}>Poll</Text>
-                <Pressable accessibilityRole="button" accessibilityLabel="Remove the poll" hitSlop={8} onPress={() => setPoll(null)}><Text style={styles.pollRemove}>Remove</Text></Pressable>
-              </View>
+            <Section title="Poll" right={<Pressable accessibilityRole="button" accessibilityLabel="Remove the poll" hitSlop={8} onPress={() => setPoll(null)}><Text style={styles.remove}>Remove</Text></Pressable>}>
               {poll.map((option, i) => (
-                <Field key={i} label={`Option ${i + 1}`} value={option} onChangeText={(v) => setPoll((p) => p && p.map((o, j) => (j === i ? v.slice(0, 80) : o)))} placeholder={i === 0 ? 'e.g. Full poly' : i === 1 ? 'e.g. Hybrid' : 'Another option'} />
+                <Field key={i} soft value={option} onChangeText={(v) => setPoll((p) => p && p.map((o, j) => (j === i ? v.slice(0, 80) : o)))} placeholder={i === 0 ? 'Option 1, e.g. Full poly' : i === 1 ? 'Option 2, e.g. Hybrid' : `Option ${i + 1}`} />
               ))}
               {poll.length < 4 ? (
-                <Pressable accessibilityRole="button" onPress={() => setPoll((p) => (p && p.length < 4 ? [...p, ''] : p))} style={styles.addOption}>
-                  <Ionicons name="add" size={18} color={colors.brand} /><Text style={styles.addOptionText}>Add an option</Text>
+                <Pressable accessibilityRole="button" onPress={() => setPoll((p) => (p && p.length < 4 ? [...p, ''] : p))} style={styles.link}>
+                  <Ionicons name="add" size={18} color={colors.brand} /><Text style={styles.linkText}>Add an option</Text>
                 </Pressable>
               ) : null}
-            </View>
+            </Section>
           ) : (
-            <Pressable accessibilityRole="button" onPress={() => setPoll(['', ''])} style={styles.addPoll}>
+            <Pressable accessibilityRole="button" onPress={() => setPoll(['', ''])} style={styles.link}>
               <Ionicons name="stats-chart-outline" size={17} color={colors.brand} />
-              <Text style={styles.addOptionText}>Add a poll</Text>
+              <Text style={styles.linkText}>Add a poll</Text>
             </Pressable>
           )}
-          <Button label="Post to the room" onPress={submit} disabled={!canSubmit} full />
+          <Submit label="Post to the room" onPress={submit} disabled={!canSubmit} waiting={title.trim().length < 3 ? 'Write your question first' : 'Fill in two poll options'} />
         </ScrollView>
       </KeyboardAvoidingView>
     </DragSheet>
@@ -109,15 +88,7 @@ export default function Ask() {
 }
 
 const styleDefinitions = StyleSheet.create({
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-  heading: { ...typography.title, color: colors.text },
-  form: { padding: spacing.lg, paddingTop: spacing.sm, gap: spacing.lg, paddingBottom: spacing.xxl },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  poll: { gap: spacing.md, padding: spacing.md, borderRadius: 16, backgroundColor: colors.bgElevated },
-  pollHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  pollTitle: { ...typography.smallStrong, color: colors.text },
-  pollRemove: { ...typography.smallStrong, color: colors.textMuted },
-  addOption: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 4 },
-  addPoll: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', paddingVertical: 6 },
-  addOptionText: { ...typography.smallStrong, color: colors.brand },
+  remove: { ...typography.smallStrong, color: colors.textMuted },
+  link: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 4, marginTop: -spacing.sm },
+  linkText: { ...typography.smallStrong, color: colors.brand },
 });

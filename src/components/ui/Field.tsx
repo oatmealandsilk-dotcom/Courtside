@@ -2,7 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, TextInput, View, type KeyboardTypeOptions } from 'react-native';
 
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, lift, radius, spacing, typography } from '@/theme';
 import { MentionSuggestions } from '@/components/MentionSuggestions';
 import { useMentionCandidates } from '@/features/mentions/useMentionCandidates';
 import { activeMention, applyMention } from '@/lib/mentions';
@@ -35,6 +35,8 @@ interface Props {
   flush?: boolean;
   /** Typing "@" offers people to mention, following first. */
   mentions?: boolean;
+  /** The soft look of the app's own ask boxes: white, lifted on a shadow, no outline. Used in sheets. */
+  soft?: boolean;
 }
 
 /**
@@ -62,6 +64,7 @@ export function Field({
   autoCorrect,
   flush = false,
   mentions = false,
+  soft = false,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const submits = Boolean(onSubmitEditing) && (submitOnEnter || !multiline);
@@ -116,6 +119,7 @@ export function Field({
         returnKeyType={submits ? 'send' : undefined}
         style={[
           styles.input,
+          soft && (multiline ? styles.softArea : styles.softLine),
           multiline && { minHeight: minHeight ?? 110, textAlignVertical: 'top' },
           flush && { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
         ]}
@@ -141,4 +145,6 @@ const styleDefinitions = StyleSheet.create({
     fontSize: 15,
   },
   hint: { ...typography.small, color: colors.textFaint },
+  softLine: { ...lift, borderWidth: 0, borderRadius: radius.pill, minHeight: 52, paddingVertical: 14, fontSize: 16 },
+  softArea: { ...lift, borderWidth: 0, borderRadius: 20, paddingVertical: 14, fontSize: 16, lineHeight: 22 },
 });

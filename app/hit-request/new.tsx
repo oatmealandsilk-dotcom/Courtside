@@ -4,18 +4,20 @@ import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { DragSheet } from '@/components/DragSheet';
-import { CourtGlyph } from '@/components/map/MapChrome';
-import { SegmentedControl } from '@/components/ui';
+import { Field } from '@/components/ui';
+import { ChipStrip, Chips, Fine, Section, SheetTitle, Submit, Tiles, formBody } from '@/components/sheet/SheetForm';
+import { LinearGradient } from 'expo-linear-gradient';
 import type { HitRequest } from '@/data/types';
 import { fetchCourts, type Court } from '@/features/players/courts';
 import { formatMiles, milesBetween } from '@/features/players/geo';
 import { homeFor } from '@/features/players/positions';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, radius, spacing, typography } from '@/theme';
+import { colors, font, lift, radius, spacing, typography } from '@/theme';
 
 const HOURS = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
 const hourLabel = (h: number) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`;
+const FORMAT_LABEL: Record<HitRequest['format'], string> = { singles: 'Singles', doubles: 'Doubles', hit: 'Just hitting' };
 
 /**
  * Looking for a hit: when (a day and an hour), where (a court near you, or
@@ -54,11 +56,29 @@ export default function NewHit() {
   const past = start.getTime() < Date.now() - 30 * 60_000;
   const where = place ?? (typed.trim() ? { name: typed.trim() } : null);
   const ready = !!where && !past && !saving;
-  const nearby = courts
-    .map((c) => ({ c, miles: home ? milesBetween(home, c) : 0 }))
-    .filter(({ c }) => !typed.trim() || c.name.toLowerCase().includes(typed.trim().toLowerCase()))
-    .sort((a, b) => a.miles - b.miles)
-    .slice(0, 5);
+  // Nearest first. OpenStreetMap leaves most public courts unnamed, and five
+  // rows of "Tennis courts" told you nothing: at most two of those show, as
+  // "Public courts", told apart by distance and size.
+  const nearby = (() => {
+    const q = typed.trim().toLowerCase();
+    const sorted = courts
+      .map((c) => ({ c, miles: home ? milesBetween(home, c) : 0 }))
+      .filter(({ c }) => !q || c.name.toLowerCase().includes(q))
+      .sort((a, b) => a.miles - b.miles);
+    const out: { c: Court; miles: number; label: string }[] = [];
+    let unnamed = 0;
+    for (const x of sorted) {
+      const plain = x.c.name === 'Tennis courts';
+      if (plain && unnamed >= 2) continue;
+      if (plain) unnamed += 1;
+      out.push({ ...x, label: plain ? 'Public courts' : x.c.name });
+      if (out.length === 4) break;
+    }
+    return out;
+  })();
+  // The invite as it will read, updated as you choose.
+  const dayWord = day === 0 ? 'Today' : day === 1 ? 'Tomorrow' : days[day].toLocaleDateString([], { weekday: 'long' });
+  const summary = [FORMAT_LABEL[format], `${dayWord} at ${hourLabel(hour)}`, where?.name].filter(Boolean).join(' · ');
 
   const post = async () => {
     if (!ready || !where) return;
@@ -79,87 +99,87 @@ export default function NewHit() {
   };
 
   return (
-    <DragSheet fitContent closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.86} header={
-      <View style={styles.headerRow}>
-        <Text style={styles.heading}>Looking for a hit</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={() => setCloseSignal((n) => n + 1)}>
-          <Ionicons name="close" size={22} color={colors.textMuted} />
-        </Pressable>
-      </View>
-    }>
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        <Text style={styles.label}>When</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-          {days.map((d, i) => (
-            <Pressable key={i} accessibilityRole="radio" accessibilityState={{ selected: day === i }} onPress={() => setDay(i)} style={[styles.chip, day === i && styles.chipOn]}>
-              <Text style={[styles.chipText, day === i && styles.chipTextOn]}>{i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : d.toLocaleDateString([], { weekday: 'short', day: 'numeric' })}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-          {hours.map((h) => (
-            <Pressable key={h} accessibilityRole="radio" accessibilityState={{ selected: hour === h }} onPress={() => setHour(h)} style={[styles.chip, hour === h && styles.chipOn]}>
-              <Text style={[styles.chipText, hour === h && styles.chipTextOn]}>{hourLabel(h)}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-        {past ? <Text style={styles.error}>That time has passed. Pick a later one.</Text> : null}
+    <DragSheet fitContent closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.86}
+      header={<SheetTitle title="Looking for a hit" line={summary} lineTone="brand" onClose={() => setCloseSignal((n) => n + 1)} />}>
+      <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled">
+        <Section title="When">
+          <Tiles scroll value={day} onChange={setDay} options={days.map((d, i) => ({ value: i, top: i === 0 ? 'Today' : d.toLocaleDateString([], { weekday: 'short' }), main: String(d.getDate()), label: d.toDateString() }))} />
+          <ChipStrip value={hour} onChange={setHour} options={hours.map((h) => ({ value: h, label: hourLabel(h) }))} />
+        </Section>
 
-        <Text style={styles.label}>Where</Text>
-        {place ? (
-          <View style={styles.picked}>
-            <CourtGlyph size={14} color={colors.brand} />
-            <Text style={styles.pickedText} numberOfLines={1}>{place.name}</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Change the court" hitSlop={8} onPress={() => setPlace(null)}><Ionicons name="close-circle" size={18} color={colors.textMuted} /></Pressable>
+        <Section title="Where">
+          <View style={styles.search}>
+            <Ionicons name="search" size={16} color={colors.textFaint} />
+            <TextInput value={place ? '' : typed} onChangeText={(t) => { setTyped(t); setPlace(null); }} placeholder={place ? place.name : 'Search courts, or type a place'} placeholderTextColor={place ? colors.text : colors.textFaint} style={styles.searchInput} accessibilityLabel="Where" />
           </View>
-        ) : (
-          <>
-            <TextInput value={typed} onChangeText={setTyped} placeholder="A court near you, or type a place" placeholderTextColor={colors.textFaint} style={styles.input} accessibilityLabel="Where" />
-            {nearby.map(({ c, miles }) => (
-              <Pressable key={c.id} accessibilityRole="button" onPress={() => { setPlace({ name: c.name, lat: c.lat, lng: c.lng }); setTyped(''); }} style={styles.courtRow}>
-                <CourtGlyph size={13} color={colors.textMuted} />
-                <Text style={styles.courtName} numberOfLines={1}>{c.name}</Text>
-                <Text style={styles.courtMeta}>{formatMiles(miles)}</Text>
-              </Pressable>
-            ))}
-          </>
-        )}
+          {/* The nearest courts, swiped through: one row, not a tall list. */}
+          {nearby.length ? (
+            <View style={{ marginHorizontal: -spacing.lg }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.courts}>
+                {nearby.map(({ c, miles, label }) => {
+                  const chosen = place?.lat === c.lat && place?.lng === c.lng;
+                  return (
+                    <Pressable key={c.id} accessibilityRole="radio" accessibilityState={{ selected: chosen }} accessibilityLabel={`${label}, ${formatMiles(miles)}`} onPress={() => { setPlace(chosen ? null : { name: c.name === 'Tennis courts' ? label : c.name, lat: c.lat, lng: c.lng }); setTyped(''); }} style={({ pressed }) => [styles.court, chosen && styles.courtOn, pressed && !chosen && { opacity: 0.8 }]}>
+                      <Text style={[styles.courtName, chosen && styles.courtInk]} numberOfLines={1}>{label}</Text>
+                      <Text style={[styles.courtMeta, chosen && styles.courtInkSoft]} numberOfLines={1}>{[formatMiles(miles), c.count > 1 ? `${c.count} courts` : null, c.lit ? 'lights' : null].filter(Boolean).join(' · ')}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+              <LinearGradient pointerEvents="none" colors={[`${colors.bg}00`, colors.bg]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.fade} />
+            </View>
+          ) : null}
+        </Section>
 
-        <Text style={styles.label}>Game</Text>
-        <SegmentedControl value={format} onChange={(v) => { const f = v as HitRequest['format']; setFormat(f); setSpots(f === 'doubles' ? 3 : 1); }} segments={[{ value: 'singles', label: 'Singles' }, { value: 'doubles', label: 'Doubles' }, { value: 'hit', label: 'Just hitting' }]} />
-        <Text style={styles.label}>Level</Text>
-        <SegmentedControl value={level} onChange={(v) => setLevel(v as 'any' | 'mine')} segments={[{ value: 'mine', label: rating ? `Around ${rating.toFixed(1)}` : 'Around mine' }, { value: 'any', label: 'Any level' }]} />
-        <Text style={styles.label}>Looking for</Text>
-        <SegmentedControl value={String(spots)} onChange={(v) => setSpots(Number(v))} segments={[{ value: '1', label: '1 player' }, { value: '2', label: '2' }, { value: '3', label: '3' }]} />
-        <TextInput value={note} onChangeText={(v) => setNote(v.slice(0, 280))} placeholder="Anything else (optional): balls, which court, how long" placeholderTextColor={colors.textFaint} style={[styles.input, { minHeight: 64 }]} multiline accessibilityLabel="Note" />
+        <Section title="Game">
+          <Chips value={format} onChange={(f) => { if (!f) return; setFormat(f); setSpots(f === 'doubles' ? 3 : 1); }} options={[{ value: 'singles', label: 'Singles' }, { value: 'doubles', label: 'Doubles' }, { value: 'hit', label: 'Just hitting' }]} />
+        </Section>
+
+        {/* Level and how many, side by side: two small choices, one line. */}
+        <View style={styles.pair}>
+          <View style={{ flex: 1 }}>
+            <Section title="Level">
+              <Chips value={level} onChange={(v) => { if (v) setLevel(v); }} options={[{ value: 'mine', label: rating ? `Around ${rating.toFixed(1)}` : 'My level' }, { value: 'any', label: 'Any' }]} />
+            </Section>
+          </View>
+          <Section title="Players">
+            <View style={styles.stepper}>
+              <Pressable accessibilityRole="button" accessibilityLabel="One fewer" disabled={spots <= 1} onPress={() => setSpots((n) => Math.max(1, n - 1))} style={[styles.step, spots <= 1 && { opacity: 0.35 }]}>
+                <Ionicons name="remove" size={16} color={colors.text} />
+              </Pressable>
+              <Text style={styles.stepValue} accessibilityLiveRegion="polite">{spots}</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="One more" disabled={spots >= 3} onPress={() => setSpots((n) => Math.min(3, n + 1))} style={[styles.step, spots >= 3 && { opacity: 0.35 }]}>
+                <Ionicons name="add" size={16} color={colors.text} />
+              </Pressable>
+            </View>
+          </Section>
+        </View>
+
+        <Field soft value={note} onChangeText={(v) => setNote(v.slice(0, 280))} placeholder="Anything else? (optional)" multiline minHeight={56} />
+        {past ? <Text style={styles.error}>That time has passed. Pick a later one.</Text> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Pressable accessibilityRole="button" disabled={!ready} onPress={post} style={[styles.post, !ready && { opacity: 0.45 }]}>
-          <Text style={styles.postText}>{saving ? 'Posting…' : 'Post'}</Text>
-        </Pressable>
-        <Text style={styles.fine}>Players nearby see it on Find Players. Whoever joins gets a group chat with you.</Text>
+        <Submit label="Post" onPress={post} disabled={!ready} busy={saving} waiting={past ? 'Pick a later time' : 'Choose where to play'} />
+        <Fine>Players nearby see it on Find Players. Whoever joins gets a chat with you.</Fine>
       </ScrollView>
     </DragSheet>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-  heading: { ...typography.title, color: colors.text },
-  body: { padding: spacing.lg, paddingTop: spacing.sm, gap: spacing.md, paddingBottom: spacing.xxl },
-  label: { ...typography.smallStrong, color: colors.textMuted, marginTop: spacing.xs },
-  row: { gap: spacing.sm },
-  chip: { paddingHorizontal: 14, height: 36, borderRadius: radius.pill, backgroundColor: colors.bgElevated, alignItems: 'center', justifyContent: 'center' },
-  chipOn: { backgroundColor: colors.brand },
-  chipText: { ...typography.smallStrong, fontSize: 14, color: colors.text },
-  chipTextOn: { color: colors.brandInk },
-  input: { ...typography.body, color: colors.text, minHeight: 46, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, backgroundColor: colors.bgElevated, outlineStyle: 'none' } as object,
-  picked: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, height: 46, borderRadius: 14, backgroundColor: colors.brandDim },
-  pickedText: { flex: 1, ...typography.bodyStrong, color: colors.brand },
-  courtRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 6, paddingVertical: 8 },
-  courtName: { flex: 1, ...typography.body, ...font('500'), color: colors.text },
-  courtMeta: { ...typography.small, color: colors.textMuted },
   error: { ...typography.small, color: colors.danger },
-  post: { height: 50, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', marginTop: spacing.sm },
-  postText: { ...typography.bodyStrong, color: colors.brandInk },
-  fine: { ...typography.caption, letterSpacing: 0, color: colors.textFaint, textAlign: 'center' },
+  // The same lifted pill as the Coaching page's "What are you stuck on?".
+  search: { ...lift, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: spacing.lg, height: 50, borderRadius: radius.pill, backgroundColor: colors.surface },
+  searchInput: { flex: 1, minWidth: 0, height: 50, fontSize: 16, color: colors.text, outlineStyle: 'none' } as object,
+  courts: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: 6, paddingRight: spacing.xl },
+  court: { ...lift, width: 156, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 16, backgroundColor: colors.surface, gap: 2 },
+  courtOn: { backgroundColor: colors.text },
+  courtName: { ...typography.bodyStrong, color: colors.text },
+  courtMeta: { ...typography.small, color: colors.textMuted },
+  courtInk: { color: colors.bg },
+  courtInkSoft: { color: colors.bg, opacity: 0.75 },
+  fade: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 32 },
+  pair: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.lg },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: 10, height: 34 },
+  step: { ...lift, width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  stepValue: { minWidth: 14, textAlign: 'center', fontSize: 16, ...font('600'), color: colors.text, fontVariant: ['tabular-nums'] },
 });
