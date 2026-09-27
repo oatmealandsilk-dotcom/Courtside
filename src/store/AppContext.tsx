@@ -10,6 +10,8 @@ import React, {
 } from 'react';
 import { AppState as DeviceState, Platform } from 'react-native';
 import { randomUUID } from 'expo-crypto';
+import { computeStats, localDay, streakAtRisk } from '@/features/practice/stats';
+import { planStreakReminder } from '@/features/practice/reminder';
 import { TERMS_VERSION } from '@/lib/legal';
 
 import { fetchBootstrap, signIn as apiSignIn, type Bootstrap } from '@/data/api';
@@ -65,6 +67,7 @@ import type {
   QuestionTopic,
   SavedItems,
   SessionDetail,
+  PracticeSession,
   Story,
   User,
   PlayerProfile,
@@ -118,6 +121,8 @@ interface NewQuestionInput {
   body: string;
   topic: QuestionTopic;
   tags: string[];
+  /** 2 to 4 poll options, when the thread asks the room to vote. */
+  poll?: string[];
 }
 
 /**
@@ -269,6 +274,8 @@ interface AppState extends Bootstrap {
   defaultPaymentId: ID | null;
   /** Early users' suggestions, votes and all. */
   tips: Tip[];
+  /** Your own practice log: where streaks, hours and win rate come from. */
+  sessions: PracticeSession[];
   /** Small switches from Settings, kept with the account. */
   prefs: { showActivity: boolean; pushLikes: boolean; pushCoach: boolean };
   /** Whether the app may ask the device where you are, and the city it found. */
@@ -341,6 +348,9 @@ interface AppActions {
   completeOnboarding: (profile: PlayerProfile) => void;
   updateIdentity: (patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string }) => void;
   updateProfile: (patch: Partial<PlayerProfile>) => void;
+  /** Log a session you played (today unless a day is given). Throws a plain sentence when it cannot be saved. */
+  logSession: (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; opponent?: string; note?: string; day?: string }) => Promise<void>;
+  deleteSession: (id: ID) => void;
 
   toggleLike: (postId: ID) => void;
   addPost: (input: NewPostInput) => ID;
@@ -366,7 +376,10 @@ interface AppActions {
 
   addQuestion: (input: NewQuestionInput) => ID;
   voteQuestion: (questionId: ID, direction: 1 | -1) => void;
-  addAnswer: (questionId: ID, body: string, parentAnswerId?: ID) => void;
+  /** Pick an option in a thread's poll (again to change it). */
+  votePoll: (questionId: ID, option: number) => void;
+  /** A reply to a thread, or to a reply in it; `media` is a photo or clip picked on this device, uploaded here. */
+  addAnswer: (questionId: ID, body: string, parentAnswerId?: ID, media?: Answer['media']) => void;
   voteAnswer: (answerId: ID, direction: 1 | -1) => void;
 
   submitCoachingRequest: (coachId: ID, serviceId: ID, question: string, videoLabel?: string) => ID;
@@ -620,6 +633,7 @@ function snapshotOf(s: AppState, me: ID): RemoteData {
       constraints: self?.profile.constraints,
     },
     tips: s.tips, coachApplications: s.coachApplications, coaches: s.coaches, coachReviews: s.coachReviews, coachResults: s.coachResults,
+    sessions: s.sessions,
   };
 }
 
@@ -694,6 +708,7 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       coaches: data.coaches,
       coachReviews: data.coachReviews,
       coachResults: data.coachResults,
+      sessions: data.sessions ?? prev.sessions,
       notifications: [...data.notifications, ...prev.notifications.filter((n) => !data.notifications.some((x) => x.id === n.id) && !gone(n.id))],
       tips: [...data.tips, ...prev.tips.filter((t) => !data.tips.some((x) => x.id === t.id) && !gone(t.id))],
       coachApplications: [...data.coachApplications, ...prev.coachApplications.filter((a) => !data.coachApplications.some((x) => x.id === a.id))],
@@ -765,6 +780,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     defaultPaymentId: readDefaultPayment(),
     prefs: { showActivity: true, pushLikes: true, pushCoach: true },
     tips: [],
+    sessions: [],
     locationEnabled: readFlag('courtside-location'),
     detectedLocation: null,
     detectedCoords: null,
@@ -1040,6 +1056,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const stateRef = React.useRef(state);
   stateRef.current = state;
 
+  // Your numbers come from what you logged and posted (features/practice/stats),
+  // and a streak with nothing yet today gets its 7pm reminder on the phone.
+  useEffect(() => {
+    const me = state.currentUserId;
+    if (!isSupabaseConfigured || !me || !UUID.test(me) || !(state.remoteLoaded || state.snapshotShown)) return;
+    const stats = computeStats(me, state.sessions, state.posts, state.stories);
+    const self = state.users.find((u) => u.id === me);
+    if (self && JSON.stringify(self.stats) !== JSON.stringify(stats)) {
+      setState((prev) => ({ ...prev, users: prev.users.map((u) => (u.id === me ? { ...u, stats } : u)) }));
+    }
+    if (!state.remoteLoaded) return;
+    const t = setTimeout(() => { void planStreakReminder(streakAtRisk(me, state.sessions, state.posts, state.stories)); }, 1500);
+    return () => clearTimeout(t);
+  }, [state.currentUserId, state.sessions, state.posts, state.stories, state.users, state.remoteLoaded, state.snapshotShown]);
+
   const requireUser = useCallback((): ID => {
     if (!state.currentUserId) throw new Error('Not signed in');
     return state.currentUserId;
@@ -1251,6 +1282,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     [patchCurrentUser],
   );
+
+  const logSession = useCallback(async (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; opponent?: string; note?: string; day?: string }) => {
+    const me = requireUser();
+    const session: PracticeSession = {
+      id: nextId('ses'), userId: me, day: input.day ?? localDay(new Date()), minutes: input.minutes, kind: input.kind,
+      won: input.kind === 'match' ? input.won : undefined, opponent: input.opponent?.trim() || undefined, note: input.note?.trim() || undefined,
+      createdAt: new Date().toISOString(),
+    };
+    haptics.commit();
+    setState((prev) => ({ ...prev, sessions: [session, ...prev.sessions] }));
+    if (!live(me)) return;
+    try { await remote.insertSession(session); } catch (e) {
+      setState((prev) => ({ ...prev, sessions: prev.sessions.filter((x) => x.id !== session.id) }));
+      throw e;
+    }
+  }, [requireUser]);
+
+  const deleteSession = useCallback((id: ID) => {
+    const me = stateRef.current.currentUserId;
+    setState((prev) => ({ ...prev, sessions: prev.sessions.filter((x) => x.id !== id) }));
+    if (live(me)) void remote.deleteSession(id);
+  }, []);
 
   const toggleLike = useCallback(
     (postId: ID) => {
@@ -1649,7 +1702,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addQuestion = useCallback(
     (input: NewQuestionInput): ID => {
+      haptics.commit();
       const me = requireUser();
+      const { poll, ...rest } = input;
+      const options = poll?.map((o) => o.trim()).filter(Boolean).slice(0, 4);
       const question: Question = {
         id: nextId('q'),
         authorId: me,
@@ -1657,18 +1713,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
         votes: 0,
         votedBy: {},
         answerIds: [],
-        ...input,
+        ...rest,
+        poll: options && options.length >= 2 ? { options, counts: options.map(() => 0) } : undefined,
       };
       setState((prev) => celebratePosted({ ...prev, questions: [question, ...prev.questions] }, {
         userId: me, targetId: question.id, targetKind: 'question', preview: snippet(question.title),
         title: 'Question posted', body: 'The community can see it now.',
         href: `/question/${question.id}`, icon: 'chatbubbles',
       }));
-      if (live(me, question.id)) void remote.upsertQuestion(question);
+      // The poll is saved once its thread is, since it hangs off the thread.
+      if (live(me, question.id)) void remote.upsertQuestion(question).then(() => { if (question.poll) void remote.insertPoll(question.id, question.poll.options); });
       return question.id;
     },
     [requireUser],
   );
+
+  const votePoll = useCallback((questionId: ID, option: number) => {
+    const me = requireUser();
+    haptics.tap();
+    setState((prev) => ({
+      ...prev,
+      questions: prev.questions.map((q) => {
+        if (q.id !== questionId || !q.poll || q.poll.myVote === option) return q;
+        const counts = [...q.poll.counts];
+        if (q.poll.myVote !== undefined) counts[q.poll.myVote] = Math.max(0, (counts[q.poll.myVote] ?? 0) - 1);
+        counts[option] = (counts[option] ?? 0) + 1;
+        return { ...q, poll: { ...q.poll, counts, myVote: option } };
+      }),
+    }));
+    if (live(me, questionId)) void remote.votePoll(questionId, option);
+  }, [requireUser]);
 
   const voteQuestion = useCallback(
     (questionId: ID, direction: 1 | -1) => {
@@ -1697,7 +1771,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const addAnswer = useCallback(
-    (questionId: ID, body: string, parentAnswerId?: ID) => {
+    (questionId: ID, body: string, parentAnswerId?: ID, media?: Answer['media']) => {
+      haptics.commit();
       const me = requireUser();
       let made: Answer | null = null;
       setState((prev) => {
@@ -1712,6 +1787,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           votes: 0,
           votedBy: {},
           fromCoach: Boolean(author?.isCoach),
+          media,
         };
         made = answer;
         const question = prev.questions.find((q) => q.id === questionId);
@@ -1746,7 +1822,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         return next;
       });
-      if (made && live(me, questionId)) void remote.upsertAnswer(made);
+      if (made && live(me, questionId)) {
+        const answer: Answer = made;
+        void (async () => {
+          // A picture or clip from this device goes up first; the reply is saved with its web address.
+          let hosted = answer.media;
+          if (hosted && isLocalMedia(hosted.url)) {
+            try {
+              const url = await uploadMedia(me, hosted.url, hosted.kind);
+              const thumb = hosted.thumb && isLocalMedia(hosted.thumb) ? (hosted.kind === 'photo' ? url : await uploadMedia(me, hosted.thumb, 'photo')) : hosted.thumb;
+              hosted = { ...hosted, url, thumb };
+            } catch {
+              hosted = undefined;
+              showToast({ title: 'The photo or video didn’t upload', body: 'Your reply was posted without it.', icon: 'alert-circle-outline' });
+            }
+            const settled = hosted;
+            setState((prev) => ({ ...prev, answers: prev.answers.map((a) => (a.id === answer.id ? { ...a, media: settled } : a)) }));
+          }
+          // A reply that was only a picture, which did not upload, is not saved empty.
+          if (!hosted && !answer.body.trim()) return;
+          await remote.upsertAnswer({ ...answer, media: hosted });
+        })();
+      }
       setState((prev) => notifyMentions(prev, body, me, questionId, 'question', prev.questions.find((q) => q.id === questionId)?.authorId));
     },
     [requireUser],
@@ -3088,6 +3185,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       exportData,
       completeOnboarding,
       updateProfile,
+      logSession,
+      deleteSession,
       updateIdentity,
       toggleLike,
       addPost,
@@ -3106,6 +3205,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addStoryComment,
       addQuestion,
       voteQuestion,
+      votePoll,
       addAnswer,
       voteAnswer,
       submitCoachingRequest,
@@ -3205,6 +3305,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       exportData,
       completeOnboarding,
       updateProfile,
+      logSession,
+      deleteSession,
       updateIdentity,
       toggleLike,
       addPost,
@@ -3223,6 +3325,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addStoryComment,
       addQuestion,
       voteQuestion,
+      votePoll,
       addAnswer,
       voteAnswer,
       submitCoachingRequest,

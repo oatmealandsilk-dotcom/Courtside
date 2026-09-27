@@ -4,9 +4,11 @@ export type FeedItem = { type: 'post'; post: Post } | { type: 'question'; questi
 /** Session-local recommendations: likes, authored posts, comments and question votes. */
 export function rankFeed(posts: Post[], questions: Question[], comments: Comment[], userId: string | null, hits: Story[] = []): FeedItem[] {
   const interests = new Map<string, number>();
+  // Looked up once, not once per post: with thousands of both, scanning every comment for every post was the slow part.
+  const commented = new Set(userId ? comments.filter(c => c.authorId === userId).map(c => c.postId) : []);
   const add = (tags: string[], weight: number) => tags.forEach(tag => interests.set(tag, (interests.get(tag) ?? 0) + weight));
   posts.forEach(p => {
-    const engaged = p.authorId === userId || (!!userId && p.likedBy.includes(userId)) || comments.some(c => c.postId === p.id && c.authorId === userId);
+    const engaged = p.authorId === userId || (!!userId && p.likedBy.includes(userId)) || commented.has(p.id);
     if (engaged) add([p.kind, ...p.tags], 2);
   });
   questions.forEach(q => { if (q.authorId === userId || (!!userId && q.votedBy[userId] === 1)) add([q.topic, ...q.tags], 3); });

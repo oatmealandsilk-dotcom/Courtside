@@ -6,6 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { VoteControls } from './VoteControls';
 import { RichText } from '@/components/RichText';
+import { PollView } from '@/components/PollView';
 import { useApp } from '@/store/AppContext';
 import { LevelPill } from '@/components/LevelPill';
 import { Avatar, Card, Chip } from '@/components/ui';
@@ -74,6 +75,7 @@ function QuestionCardInner({
       </View>
       <Text style={styles.title}>{question.title}</Text>
       {showBody && !!question.body && <RichText style={styles.preview}>{question.body}</RichText>}
+      {question.poll ? <PollView question={question} compact /> : null}
       <View style={styles.metaRow}>
         {/* The topic is a tag in its own colour: a tap shows every thread under it. */}
         <Pressable accessibilityRole="button" accessibilityLabel={`${meta.label} threads`} onPress={() => openTopic(question.topic)} hitSlop={6} style={({ pressed }) => [styles.tag, { borderColor: meta.tint }, pressed && { opacity: 0.7 }]}>

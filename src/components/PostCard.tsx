@@ -1,6 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState, memo } from 'react';
-import { Image, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
 import * as haptics from '@/lib/haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -128,7 +129,7 @@ function PostCardInner({
         </Modal>
       ) : null}
 
-      {post.imageUrl && <Image accessibilityLabel={post.mediaLabel ?? "Post photo"} source={{uri:post.imageUrl}} style={{width:"100%",aspectRatio:1,borderRadius:12}} resizeMode="cover"/>}
+      {post.imageUrl && <ExpoImage accessibilityLabel={post.mediaLabel ?? "Post photo"} source={{uri:post.imageUrl}} style={{width:"100%",aspectRatio:1,borderRadius:12}} contentFit="cover" cachePolicy="memory-disk"/>}
       {/* The player fills whatever box it is given, so the card gives it one in the post's own shape. */}
       {post.videoUrl ? (
         <View style={{ width: '100%', aspectRatio: post.orientation === 'landscape' ? 16 / 9 : 4 / 5, borderRadius: 12, overflow: 'hidden', backgroundColor: '#000' }}>

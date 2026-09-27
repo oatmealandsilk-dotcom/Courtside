@@ -1,4 +1,5 @@
 import { ThreadReply } from '@/components/ThreadReplies';
+import { AttachButton, AttachedPreview, type ReplyAttachment } from '@/components/ReplyMedia';
 import { SwipeSurface } from '@/components/SwipeSurface';
 import { requestSection } from '@/features/navigation/swipeOrder';
 import Discuss from '../(tabs)/discuss';
@@ -17,6 +18,7 @@ import { openTopic } from '@/features/community/openTopic';
 import { Avatar, Card, Chip, EmptyState, Screen } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
 import { RichText } from '@/components/RichText';
+import { PollView } from '@/components/PollView';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useApp } from '@/store/AppContext';
 import type { Answer } from '@/data/types';
@@ -35,6 +37,7 @@ export default function QuestionDetail() {
   const [looked, setLooked] = useState(false);
   useEffect(() => { if (ready) void loadThread(String(id)).finally(() => setLooked(true)); }, [loadThread, id, ready]);
   const [draft, setDraft] = useState('');
+  const [media, setMedia] = useState<ReplyAttachment | null>(null);
   const [replying, setReplying] = useState(false);
   const replyInput = useRef<TextInput>(null);
   const reveal = useRevealOnFocus();
@@ -63,9 +66,10 @@ export default function QuestionDetail() {
 
   const submit = () => {
     const text = draft.trim();
-    if (!text) return;
-    actions.addAnswer(question.id, text);
+    if (!text && !media) return;
+    actions.addAnswer(question.id, text, undefined, media ?? undefined);
     setDraft('');
+    setMedia(null);
     setReplying(false);
   };
 
@@ -85,6 +89,7 @@ export default function QuestionDetail() {
         </View>
         <Text style={styles.title}>{question.title}</Text>
         <RichText style={styles.body}>{question.body}</RichText>
+        {question.poll ? <PollView question={question} /> : null}
         <View style={styles.tagRow}>
           {question.tags.map((tag) => (
             <Chip key={tag} label={`#${tag}`} onPress={() => router.push({pathname:"/search",params:{q:`#${tag}`}})} small />
@@ -118,9 +123,12 @@ export default function QuestionDetail() {
             <TextInput ref={replyInput} autoFocus onFocus={() => reveal(replyInput.current)} accessibilityLabel="Reply to this thread" placeholder="Write a reply…" placeholderTextColor={colors.textFaint} multiline value={draft} onChangeText={setDraft} style={styles.replyInput}
               blurOnSubmit={Platform.OS === 'web' ? true : undefined}
               onSubmitEditing={Platform.OS === 'web' ? submit : undefined} />
+            {media ? <AttachedPreview media={media} onRemove={() => setMedia(null)} /> : null}
             <View style={styles.inlineActions}>
-              <Pressable accessibilityRole="button" onPress={() => { setReplying(false); setDraft(''); }} hitSlop={8}><Text style={styles.time}>Cancel</Text></Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Post reply" disabled={!draft.trim()} onPress={submit} style={[styles.sendPill, !draft.trim() && { opacity: 0.4 }]}><Text style={styles.sendText}>Reply</Text></Pressable>
+              <AttachButton onPick={setMedia} />
+              <View style={{ flex: 1 }} />
+              <Pressable accessibilityRole="button" onPress={() => { setReplying(false); setDraft(''); setMedia(null); }} hitSlop={8}><Text style={styles.time}>Cancel</Text></Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Post reply" disabled={!draft.trim() && !media} onPress={submit} style={[styles.sendPill, !draft.trim() && !media && { opacity: 0.4 }]}><Text style={styles.sendText}>Reply</Text></Pressable>
             </View>
           </View>
         ) : null}

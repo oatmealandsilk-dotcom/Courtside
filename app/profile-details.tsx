@@ -12,6 +12,9 @@ import { LevelPill } from '@/components/LevelPill';
 import { Avatar, EmptyState, Meter, Screen } from '@/components/ui';
 import { evaluateAchievements, fitnessLabel, levelBadge, playStyleLabel, surfaceLabel, winRate } from '@/lib/badges';
 import { formatDate } from '@/lib/format';
+import { confirmAction } from '@/lib/confirm';
+import { localDay } from '@/features/practice/stats';
+import { CourtGlyph } from '@/components/map/MapChrome';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { useApp } from '@/store/AppContext';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
@@ -26,7 +29,7 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
 export default function Profile() {
   const styles = useThemedStyles(styleDefinitions);
   const { userId } = useLocalSearchParams<{ userId?: string }>();
-  const { currentUser, users } = useApp();
+  const { currentUser, users, sessions, actions } = useApp();
   const loading = useStillLoading();
   const user = userId ? users.find((u) => u.id === userId) ?? null : currentUser;
   const isMe = !!user && user.id === currentUser?.id;
@@ -45,6 +48,7 @@ export default function Profile() {
   const unlocked = achievements.filter((a) => a.unlocked);
   const first = user.name.split(' ')[0];
   const s = user.stats;
+  const recent = isMe ? [...sessions].sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : b.createdAt.localeCompare(a.createdAt))).slice(0, 5) : [];
   const hasStats = s.sessionsLogged > 0 || s.hoursOnCourt > 0 || s.matchesPlayed > 0 || s.currentStreakDays > 0;
 
   return (
@@ -67,6 +71,14 @@ export default function Profile() {
         <Meter label="Rating ladder" value={badge.progress} caption={badge.label} tint={badge.tint} />
       </View>
 
+      {/* Your own log: two taps to add today's session; it is what the numbers below are made of. */}
+      {isMe ? (
+        <Pressable accessibilityRole="button" onPress={() => router.push('/log-session')} style={({ pressed }) => [styles.logButton, pressed && { opacity: 0.85 }]}>
+          <Ionicons name="add-circle" size={20} color={colors.brandInk} />
+          <Text style={styles.logText}>Log a session</Text>
+        </Pressable>
+      ) : null}
+
       {hasStats ? (
         <View style={[styles.group, styles.stats]}>
           <Stat label="Sessions" value={String(s.sessionsLogged)} />
@@ -74,6 +86,24 @@ export default function Profile() {
           <Stat label="Win rate" value={s.matchesPlayed ? `${winRate(s)}%` : '—'} />
           <Stat label="Streak" value={`${s.currentStreakDays}d`} tint={colors.brand} />
         </View>
+      ) : null}
+
+      {isMe && recent.length ? (
+        <>
+          <Text style={styles.sectionTitle}>Recent sessions</Text>
+          <View style={styles.group}>
+            {recent.map((s, index) => (
+              <View key={s.id} style={[styles.row, index > 0 && styles.line]}>
+                {s.kind === 'match' ? <Ionicons name="trophy-outline" size={17} color={colors.textMuted} /> : s.kind === 'fitness' ? <Ionicons name="barbell-outline" size={17} color={colors.textMuted} /> : <CourtGlyph size={14} color={colors.textMuted} />}
+                <Text style={styles.rowText}>{SESSION_KIND[s.kind]}{s.kind === 'match' && s.won !== undefined ? (s.won ? ' · won' : ' · lost') : ''}{s.opponent ? ` vs ${s.opponent}` : ''} · {s.minutes < 60 ? `${s.minutes} min` : `${Math.round(s.minutes / 6) / 10} hr`}</Text>
+                <Text style={styles.rowMeta}>{dayLabel(s.day)}</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel="Remove this session" hitSlop={8} onPress={() => confirmAction('Remove this session?', 'It comes off your streak and totals.', 'Remove', () => actions.deleteSession(s.id))}>
+                  <Ionicons name="close" size={16} color={colors.textFaint} />
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        </>
       ) : null}
 
       <Text style={styles.sectionTitle}>{isMe ? 'How you play' : 'How they play'}</Text>
@@ -149,6 +179,13 @@ export default function Profile() {
   );
 }
 
+const SESSION_KIND = { practice: 'Practice', match: 'Match', drills: 'Drills', fitness: 'Fitness' } as const;
+function dayLabel(day: string) {
+  if (day === localDay(new Date())) return 'Today';
+  if (day === localDay(Date.now() - 86_400_000)) return 'Yesterday';
+  return formatDate(`${day}T12:00:00`);
+}
+
 function Stat({ label, value, tint }: { label: string; value: string; tint?: string }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
@@ -171,6 +208,8 @@ function Detail({ label, value, line }: { label: string; value: string; line?: b
 
 const styleDefinitions = StyleSheet.create({
   wait: { paddingVertical: 60, alignItems: 'center' },
+  logButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 48, borderRadius: radius.pill, backgroundColor: colors.brand, marginTop: spacing.md },
+  logText: { ...typography.bodyStrong, color: colors.brandInk },
   edit: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.surface, ...lift },
   editText: { ...typography.smallStrong, color: colors.text },
   identityRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'center', paddingBottom: spacing.lg },

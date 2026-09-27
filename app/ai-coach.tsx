@@ -15,7 +15,7 @@ import { duration, formatDate } from '@/lib/format';
 import { healthSignal } from '@/lib/integrations';
 import { useApp } from '@/store/AppContext';
 import type { AiMessage, PlayerProfile, TrainingBlockKind, TrainingPlan } from '@/data/types';
-import { colors, spacing, typography } from '@/theme';
+import { colors, lift, spacing, typography } from '@/theme';
 
 const BLOCK_META: Record<TrainingBlockKind, { icon: keyof typeof Ionicons.glyphMap; tint: string }> = {
   'on-court': { icon: 'tennisball-outline', tint: colors.brand },
@@ -50,6 +50,8 @@ function aboutYou(p: PlayerProfile, signal: ReturnType<typeof healthSignal>) {
  */
 export default function AiCoachRoute() {
   const on = useAiCoachOn();
+  const { currentUser } = useApp();
+  const [later, setLater] = useState(false);
   if (on === undefined) {
     return <Screen title="AI Coach" compactTitle onBack={() => goBack()}><View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View></Screen>;
   }
@@ -60,8 +62,36 @@ export default function AiCoachRoute() {
       </Screen>
     );
   }
+  // First time in: the coach asks what it needs (fitness, sessions, a goal,
+  // a tournament), which joining no longer does. Skippable; it just plans less well.
+  const p = currentUser?.profile;
+  if (p && !later && p.goals.length === 0 && p.sessionsPerWeek === undefined) {
+    return (
+      <Screen title="AI Coach" compactTitle onBack={() => goBack()}>
+        <View style={introStyles.card}>
+          <View style={introStyles.mark}><Ionicons name="sparkles" size={20} color={colors.brand} /></View>
+          <Text style={introStyles.title}>Two quick questions first</Text>
+          <Text style={introStyles.body}>How fit you are, how often you can play, and what you’re working toward. The coach plans your week around them.</Text>
+          <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/onboarding', params: { from: 'coach', step: '3' } })} style={({ pressed }) => [introStyles.go, pressed && { opacity: 0.85 }]}>
+            <Text style={introStyles.goText}>Start</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" onPress={() => setLater(true)} hitSlop={8}><Text style={introStyles.later}>Skip for now</Text></Pressable>
+        </View>
+      </Screen>
+    );
+  }
   return <Train />;
 }
+
+const introStyles = StyleSheet.create({
+  card: { ...lift, alignItems: 'center', gap: spacing.md, padding: spacing.xl, borderRadius: 20, backgroundColor: colors.surface, marginTop: spacing.lg },
+  mark: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  title: { ...typography.heading, color: colors.text, textAlign: 'center' },
+  body: { ...typography.body, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
+  go: { alignSelf: 'stretch', alignItems: 'center', paddingVertical: 14, borderRadius: 999, backgroundColor: colors.brand, marginTop: spacing.sm },
+  goText: { ...typography.bodyStrong, color: colors.brandInk },
+  later: { ...typography.smallStrong, color: colors.textMuted, paddingVertical: spacing.sm },
+});
 
 type Line = AiMessage & { handoff?: AiCoachReply['handoff'] };
 

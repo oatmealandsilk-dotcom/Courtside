@@ -1,7 +1,8 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
 import { useIsFocused } from '@/lib/useIsFocused';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as haptics from '@/lib/haptics';
 import { goBack } from '@/lib/goBack';
@@ -57,7 +58,7 @@ export default function HitThread() {
         {story.videoUrl ? (
           <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={focused} preload />
         ) : story.imageUrl ? (
-          <Image accessibilityIgnoresInvertColors source={{ uri: story.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          <ExpoImage accessibilityIgnoresInvertColors source={{ uri: story.imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
         ) : (
           <MediaPlaceholder label={story.mediaLabel ?? 'Instant'} seed={story.id} portrait />
         )}

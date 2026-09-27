@@ -26,8 +26,11 @@ export default function Ask() {
   const [topic, setTopic] = useState<QuestionTopic>('gear');
   const [closeSignal, setCloseSignal] = useState(0);
   const [posted, setPosted] = useState<string | null>(null);
+  // A poll: off until asked for, then two options to start, up to four.
+  const [poll, setPoll] = useState<string[] | null>(null);
+  const pollOk = !poll || poll.filter((o) => o.trim()).length >= 2;
 
-  const canSubmit = title.trim().length >= 3;
+  const canSubmit = title.trim().length >= 3 && pollOk;
 
   const submit = () => {
     if (!canSubmit) return;
@@ -36,6 +39,7 @@ export default function Ask() {
       body: body.trim(),
       topic,
       tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map((tag) => tag.slice(1).toLowerCase()))),
+      poll: poll ?? undefined,
     });
     setPosted(id);
     setCloseSignal((n) => n + 1);
@@ -76,6 +80,27 @@ export default function Ask() {
             minHeight={120}
             mentions
           />
+          {poll ? (
+            <View style={styles.poll}>
+              <View style={styles.pollHead}>
+                <Text style={styles.pollTitle}>Poll</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel="Remove the poll" hitSlop={8} onPress={() => setPoll(null)}><Text style={styles.pollRemove}>Remove</Text></Pressable>
+              </View>
+              {poll.map((option, i) => (
+                <Field key={i} label={`Option ${i + 1}`} value={option} onChangeText={(v) => setPoll((p) => p && p.map((o, j) => (j === i ? v.slice(0, 80) : o)))} placeholder={i === 0 ? 'e.g. Full poly' : i === 1 ? 'e.g. Hybrid' : 'Another option'} />
+              ))}
+              {poll.length < 4 ? (
+                <Pressable accessibilityRole="button" onPress={() => setPoll((p) => (p && p.length < 4 ? [...p, ''] : p))} style={styles.addOption}>
+                  <Ionicons name="add" size={18} color={colors.brand} /><Text style={styles.addOptionText}>Add an option</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : (
+            <Pressable accessibilityRole="button" onPress={() => setPoll(['', ''])} style={styles.addPoll}>
+              <Ionicons name="stats-chart-outline" size={17} color={colors.brand} />
+              <Text style={styles.addOptionText}>Add a poll</Text>
+            </Pressable>
+          )}
           <Button label="Post to the room" onPress={submit} disabled={!canSubmit} full />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -88,4 +113,11 @@ const styleDefinitions = StyleSheet.create({
   heading: { ...typography.title, color: colors.text },
   form: { padding: spacing.lg, paddingTop: spacing.sm, gap: spacing.lg, paddingBottom: spacing.xxl },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  poll: { gap: spacing.md, padding: spacing.md, borderRadius: 16, backgroundColor: colors.bgElevated },
+  pollHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  pollTitle: { ...typography.smallStrong, color: colors.text },
+  pollRemove: { ...typography.smallStrong, color: colors.textMuted },
+  addOption: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 4 },
+  addPoll: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', paddingVertical: 6 },
+  addOptionText: { ...typography.smallStrong, color: colors.brand },
 });

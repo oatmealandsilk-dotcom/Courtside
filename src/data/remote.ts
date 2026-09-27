@@ -16,7 +16,7 @@ import { supabase } from '@/lib/supabase';
 import { shrinkPhoto } from '@/lib/shrinkPhoto';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, Question, Story, Tip, User, CoachApplication } from './types';
+import type { Answer, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, Question, Story, Tip, User, CoachApplication } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
 
 /** What a new player did first, after setup. */
@@ -252,7 +252,12 @@ export interface RemoteData {
   coaches: Coach[];
   coachReviews: CoachReview[];
   coachResults: CoachResult[];
+  /** Your own practice log (see migration 39); empty on a database without it. */
+  sessions: PracticeSession[];
 }
+
+interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string }
+const toSession = (r: SessionRow): PracticeSession => ({ id: r.id, userId: r.user_id, day: r.day, minutes: r.minutes, kind: r.kind, won: r.won ?? undefined, opponent: r.opponent ?? undefined, note: r.note ?? undefined, createdAt: r.created_at });
 
 interface TipRow { id: string; user_id: string; body: string; created_at: string; votes: number | null; voted_by: Record<string, 1 | -1> | null }
 const toTip = (r: TipRow): Tip => ({ id: r.id, authorId: r.user_id, body: r.body, createdAt: r.created_at, votes: r.votes ?? 0, votedBy: r.voted_by ?? {} });
@@ -265,7 +270,7 @@ export interface UserState {
 }
 
 interface QuestionRow { id: string; author_id: string; title: string; body: string; topic: string; tags: string[]; votes: number; voted_by: Record<string, 1 | -1>; accepted_answer_id: string | null; edited_at: string | null; created_at: string }
-interface AnswerRow { id: string; question_id: string; author_id: string; parent_answer_id: string | null; body: string; votes: number; voted_by: Record<string, 1 | -1>; from_coach: boolean; created_at: string }
+interface AnswerRow { id: string; question_id: string; author_id: string; parent_answer_id: string | null; body: string; votes: number; voted_by: Record<string, 1 | -1>; from_coach: boolean; created_at: string; media_url?: string | null; media_kind?: 'photo' | 'video' | null; media_thumb?: string | null }
 interface CoachQuestionRow { id: string; author_id: string; title: string; body: string; specialty: string; video_url: string | null; media_label: string | null; resolved: boolean; created_at: string }
 interface CoachReplyRow { id: string; question_id: string; coach_user_id: string; body: string; helpful_by: string[]; created_at: string }
 interface CoachingRequestRow {
@@ -297,6 +302,17 @@ const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
 interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; private_profile?: { constraints?: PlayerProfile['constraints'] } | null }
 
+interface PollRow { question_id: string; options: string[]; counts: number[] | null }
+/** Each thread's poll, with the totals and your own vote, laid onto the threads. */
+function withPolls(questions: Question[], polls: PollRow[], mine: { question_id: string; option: number }[]): Question[] {
+  if (!polls.length) return questions;
+  const byThread = new Map(polls.map((p) => [p.question_id, p]));
+  const myVote = new Map(mine.map((v) => [v.question_id, v.option]));
+  return questions.map((q) => {
+    const p = byThread.get(q.id);
+    return p ? { ...q, poll: { options: p.options, counts: (p.counts ?? []).slice(0, p.options.length), myVote: myVote.get(q.id) } } : q;
+  });
+}
 const toQuestion = (r: QuestionRow, answers: AnswerRow[]): Question => ({
   id: r.id, authorId: r.author_id, title: r.title, body: r.body, topic: r.topic as Question['topic'], tags: r.tags ?? [],
   createdAt: r.created_at, votes: r.votes, votedBy: r.voted_by ?? {}, answerIds: answers.filter((a) => a.question_id === r.id).map((a) => a.id),
@@ -305,6 +321,7 @@ const toQuestion = (r: QuestionRow, answers: AnswerRow[]): Question => ({
 const toAnswer = (r: AnswerRow): Answer => ({
   id: r.id, questionId: r.question_id, authorId: r.author_id, parentAnswerId: r.parent_answer_id ?? undefined, body: r.body,
   createdAt: r.created_at, votes: r.votes, votedBy: r.voted_by ?? {}, fromCoach: r.from_coach,
+  media: r.media_url && r.media_kind ? { kind: r.media_kind, url: r.media_url, thumb: r.media_thumb ?? undefined } : undefined,
 });
 const toCoachQuestion = (r: CoachQuestionRow, replies: CoachReplyRow[]): CoachQuestion => ({
   id: r.id, authorId: r.author_id, title: r.title, body: r.body, specialty: r.specialty as CoachQuestion['specialty'], createdAt: r.created_at,
@@ -428,7 +445,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // Coaches load alongside everything else rather than after it: one round
   // trip to the server fewer on every open. A failure just means no coaches.
   const coachingLoad = fetchCoaching(me).catch(() => ({ coaches: [], coachReviews: [], coachResults: [] }));
-  const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows] = await Promise.all([
+  const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows, sessionRows, pollRows, myPollVotes] = await Promise.all([
     // Every profile, in chunks, so nobody is left out past the first 1,000.
     allRows<ProfileRow>((from, to) => db.from('profiles').select('*').order('created_at', { ascending: true }).range(from, to)),
     db.from('posts').select(POST_SELECT).order('created_at', { ascending: false }).limit(POST_PAGE),
@@ -461,6 +478,11 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     db.from('hidden_messages').select('message_id').eq('user_id', me),
     // Your own coach application, so the form can show where it stands.
     db.from('coach_applications').select('*').eq('user_id', me).order('created_at', { ascending: false }).limit(3),
+    // Your practice log for the last year and a bit: enough for streaks and totals.
+    db.from('practice_sessions').select('*').eq('user_id', me).gte('day', new Date(Date.now() - 400 * 86_400_000).toISOString().slice(0, 10)).order('day', { ascending: false }).limit(1000),
+    // Polls and your own votes in them, asked for on their own so a database without them (migration 41) loses nothing else.
+    db.from('polls').select('question_id, options, counts').order('created_at', { ascending: false }).limit(300),
+    db.from('poll_votes').select('question_id, option').eq('user_id', me),
   ]);
   const coaching = await coachingLoad;
   if (qs.error) console.warn('[remote] community tables missing; run the pending migrations', qs.error.message);
@@ -510,7 +532,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     followRequests: ((requests.data ?? []) as { requester_id: string; target_id: string; created_at: string }[]).map((r) => ({ fromId: r.requester_id, toId: r.target_id, createdAt: r.created_at })),
     conversations: dm.conversations,
     messages: dm.messages,
-    questions: questionRows.map((r) => toQuestion(r, answerRows)),
+    questions: withPolls(questionRows.map((r) => toQuestion(r, answerRows)), (pollRows.data ?? []) as PollRow[], (myPollVotes.data ?? []) as { question_id: string; option: number }[]),
     answers: answerRows.map(toAnswer),
     coachQuestions: coachQuestionRows.map((r) => toCoachQuestion(r, replyRows)),
     coachReplies: replyRows.map(toCoachReply),
@@ -519,6 +541,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     userState: ustate.data ? toUserState(ustate.data as UserStateRow) : null,
     tips: ((tipRows.data ?? []) as TipRow[]).map(toTip),
     coachApplications: ((applicationRows.data ?? []) as CoachApplicationRow[]).map(toCoachApplication),
+    sessions: ((sessionRows.data ?? []) as SessionRow[]).map(toSession),
     ...coaching,
   };
 }
@@ -580,6 +603,14 @@ export const remote = {
   /* ------------------------ discussions and coaching ------------------------ */
 
   /** The words of a thread you wrote; the tally is the server's and is left alone. */
+  async insertPoll(questionId: ID, options: string[]) {
+    const { error } = await need().from('polls').insert({ question_id: questionId, options });
+    if (error) fail('poll')(error);
+  },
+  async votePoll(questionId: ID, option: number) {
+    const { error } = await need().from('poll_votes').upsert({ question_id: questionId, option }, { onConflict: 'question_id,user_id' });
+    if (error) fail('poll vote')(error);
+  },
   async upsertQuestion(q: Question) {
     const { error } = await need().from('questions').upsert({
       id: q.id, author_id: q.authorId, title: q.title, body: q.body, topic: q.topic, tags: q.tags, accepted_answer_id: q.acceptedAnswerId ?? null,
@@ -590,6 +621,8 @@ export const remote = {
   async upsertAnswer(a: Answer) {
     const { error } = await need().from('answers').upsert({
       id: a.id, question_id: a.questionId, author_id: a.authorId, parent_answer_id: a.parentAnswerId ?? null, body: a.body, from_coach: a.fromCoach, created_at: a.createdAt,
+      // Only sent with a picture or clip, so a plain reply still saves on a database without migration 40.
+      ...(a.media ? { media_url: a.media.url, media_kind: a.media.kind, media_thumb: a.media.thumb ?? null } : {}),
     });
     if (error) fail('answer save')(error);
   },
@@ -1138,6 +1171,14 @@ export const remote = {
     return () => { void db.removeChannel(channel); };
   },
 
+  async insertSession(s: PracticeSession) {
+    const { error } = await need().from('practice_sessions').insert({ id: s.id, user_id: s.userId, day: s.day, minutes: s.minutes, kind: s.kind, won: s.won ?? null, opponent: s.opponent ?? null, note: s.note ?? null, created_at: s.createdAt });
+    if (error) { fail('session')(error); throw new Error(error.message.includes('a lot of sessions') ? error.message : 'That session didn’t save. Try again.'); }
+  },
+  async deleteSession(id: ID) {
+    const { error } = await need().from('practice_sessions').delete().eq('id', id);
+    if (error) fail('session delete')(error);
+  },
   async insertTip(tip: Tip) {
     const { error } = await need().from('tips').insert({ id: tip.id, user_id: tip.authorId, body: tip.body, created_at: tip.createdAt });
     if (error) fail('tip')(error);

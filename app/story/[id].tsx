@@ -1,7 +1,8 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useIsFocused } from '@/lib/useIsFocused';
-import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { goBack } from '@/lib/goBack';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as haptics from '@/lib/haptics';
@@ -95,7 +96,7 @@ export default function StoryViewer() {
         {current.videoUrl ? (
           <ClipPlayback uri={current.videoUrl} poster={current.thumbnailUrl} active={focused} preload />
         ) : current.imageUrl ? (
-          <Image accessibilityIgnoresInvertColors source={{ uri: current.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          <ExpoImage accessibilityIgnoresInvertColors source={{ uri: current.imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
         ) : (
           <View style={styles.placeholder}>
             <MediaPlaceholder label={current.mediaLabel ?? 'Instant'} seed={current.id} portrait />

@@ -108,6 +108,20 @@ export interface User {
   stats: PlayerStats;
 }
 
+/** One session you logged: what kind, how long, and for a match whether you won. Private to you. */
+export interface PracticeSession {
+  id: ID;
+  userId: ID;
+  /** The calendar day it was played, in your own time zone (YYYY-MM-DD). */
+  day: string;
+  minutes: number;
+  kind: 'practice' | 'match' | 'drills' | 'fitness';
+  won?: boolean;
+  opponent?: string;
+  note?: string;
+  createdAt: string;
+}
+
 export interface PlayerStats {
   sessionsLogged: number;
   matchesPlayed: number;
@@ -263,6 +277,8 @@ export interface Question {
    * posted here. Replies stay on the original site; `replies` is their count.
    */
   source?: ThreadSource;
+  /** A poll with the thread (migration 41): its options, the totals so far, and your own pick if you voted. */
+  poll?: { options: string[]; counts: number[]; myVote?: number };
 }
 
 export type ThreadSourceName = 'reddit';
@@ -287,6 +303,8 @@ export interface Answer {
   votedBy: Record<ID, 1 | -1>;
   /** True when written by a verified coach — surfaces a badge in the UI. */
   fromCoach: boolean;
+  /** A photo or clip with the reply (see migration 40). */
+  media?: { kind: 'photo' | 'video'; url: string; thumb?: string };
 }
 
 /* --------------------------------- Coaching ------------------------------ */

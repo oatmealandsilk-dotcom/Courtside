@@ -3,6 +3,7 @@ import { ThreadReplies } from '@/components/ThreadReplies';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, AppState, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { goBack } from '@/lib/goBack';
@@ -147,11 +148,11 @@ function HitPicture({ uri }: { uri: string }) {
   if (wide) {
     return (
       <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', backgroundColor: '#000' }]}>
-        <Image accessibilityIgnoresInvertColors source={{ uri }} style={{ width: '100%', aspectRatio: 4 / 3 }} resizeMode="contain" />
+        <ExpoImage accessibilityIgnoresInvertColors source={{ uri }} style={{ width: '100%', aspectRatio: 4 / 3 }} contentFit="contain" cachePolicy="memory-disk" />
       </View>
     );
   }
-  return <Image accessibilityIgnoresInvertColors source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />;
+  return <ExpoImage accessibilityIgnoresInvertColors source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />;
 }
 
 function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
@@ -161,6 +162,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const app = useApp();
   const { posts, questions, comments, stories, users, currentUserId, saved, actions, ready, followingIds, mutedIds, blockedIds, conversations } = app;
   const currentUser = users.find((u) => u.id === currentUserId);
+  // Everyone by id, so each page finds its author in one step rather than scanning every player.
+  const usersById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const [active, setActive] = useState(0);
   const orderRef = useRef<string[]>([]);
   useEffect(() => { const k = orderRef.current[active]; if (k) seenNow.current.add(k); setQuick(connectionIsQuick()); }, [active]);
@@ -288,7 +291,9 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       // The feed always opens on a clip (unless something of yours just
       // landed): the first clip in the order is brought to the front.
       if (!justMine.length) {
-        const isClip = (k: string) => (k.startsWith('p:') && data.posts.find((p) => p.id === k.slice(2))?.kind === 'clip') || (k.startsWith('h:') && !!data.stories.find((st) => st.id === k.slice(2))?.videoUrl);
+        const postKind = new Map(data.posts.map((p) => [`p:${p.id}`, p.kind]));
+        const storyVideo = new Set(data.stories.filter((st) => st.videoUrl).map((st) => `h:${st.id}`));
+        const isClip = (k: string) => postKind.get(k) === 'clip' || storyVideo.has(k);
         // A refresh opens on a different clip from the one just watched: one
         // not yet watched when there is one, otherwise any other clip; only
         // with a single clip in the whole feed does the same one lead again.
@@ -466,19 +471,22 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const suggestions = useMemo(() => {
     if (!currentUserId) return [];
     const me = users.find((u) => u.id === currentUserId);
+    const following = new Set(followingIds);
+    const blocked = new Set(blockedIds);
     const interacted = new Set<string>();
     for (const post of posts) {
       if (post.authorId === currentUserId) post.likedBy.forEach((id) => interacted.add(id));
       else if (post.likedBy.includes(currentUserId)) interacted.add(post.authorId);
     }
+    const postById = new Map(posts.map((p) => [p.id, p]));
     for (const comment of comments) {
-      const post = posts.find((p) => p.id === comment.postId);
+      const post = postById.get(comment.postId);
       if (post?.authorId === currentUserId) interacted.add(comment.authorId);
     }
     for (const conversation of conversations) conversation.participantIds.forEach((id) => interacted.add(id));
     const city = (location: string) => location.split(',')[0].trim();
     return users
-      .filter((u) => u.id !== currentUserId && (!followingIds.includes(u.id) || followedHere.includes(u.id)) && !blockedIds.includes(u.id))
+      .filter((u) => u.id !== currentUserId && (!following.has(u.id) || followedHere.includes(u.id)) && !blocked.has(u.id))
       .map((user) => {
         const local = !!me && city(user.location) === city(me.location);
         const reason = interacted.has(user.id) ? 'Interacted with you'
@@ -497,20 +505,25 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   // Blocked and muted players disappear from the feed entirely.
   const feedItems = useMemo<FeedItem[]>(() => {
     const hidden = new Set([...blockedIds, ...mutedIds]);
+    const following = new Set(followingIds);
     // A private account is only in your feed once they have let you follow.
-    for (const u of users) if (u.isPrivate && u.id !== currentUserId && !followingIds.includes(u.id)) hidden.add(u.id);
+    for (const u of users) if (u.isPrivate && u.id !== currentUserId && !following.has(u.id)) hidden.add(u.id);
+    // Found by id in one step each, not by scanning every post for every page.
+    const postById = new Map(posts.map((p) => [p.id, p]));
+    const storyById = new Map(stories.map((st) => [st.id, st]));
+    const questionById = new Map(questions.map((q) => [q.id, q]));
     return order.flatMap<FeedItem>((key) => {
       const id = key.slice(2);
       if (key.startsWith('p:')) {
-        const post = posts.find((p) => p.id === id);
+        const post = postById.get(id);
         return post && !hidden.has(post.authorId) && !post.archived ? [{ type: 'post' as const, post }] : [];
       }
       if (key.startsWith('h:')) {
         // A hit leaves the feed the moment it expires or is put away.
-        const story = stories.find((st) => st.id === id);
+        const story = storyById.get(id);
         return story && !hidden.has(story.authorId) && isLive(story) ? [{ type: 'hit' as const, story }] : [];
       }
-      const question = questions.find((q) => q.id === id);
+      const question = questionById.get(id);
       return question && !hidden.has(question.authorId) ? [{ type: 'question' as const, question }] : [];
     });
   }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds]);
@@ -790,7 +803,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                 if (kind === 'word' && quickCover && poster) {
                   return (
                     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: wide || !phone ? '#000' : colors.bg }]}>
-                      <Image accessibilityIgnoresInvertColors source={{ uri: poster }} style={StyleSheet.absoluteFill} resizeMode={wide || !phone ? 'contain' : 'cover'} />
+                      <ExpoImage accessibilityIgnoresInvertColors source={{ uri: poster }} style={StyleSheet.absoluteFill} cachePolicy="memory-disk" contentFit={wide || !phone ? 'contain' : 'cover'} />
                       <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}><CourtSpinner ink="white" /></View>
                     </View>
                   );
@@ -808,7 +821,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
 
               if (item.type === 'hit') {
                 const story = item.story;
-                const author = users.find((u) => u.id === story.authorId);
+                const author = usersById.get(story.authorId);
                 if (!author) return <View key={story.id} />;
                 const hitLiked = !!currentUserId && story.likedBy.includes(currentUserId);
                 return (
@@ -874,7 +887,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                         showBody
                         brandCorner
                         question={item.question}
-                        author={users.find((u) => u.id === item.question.authorId)}
+                        author={usersById.get(item.question.authorId)}
                         answered={Boolean(item.question.acceptedAnswerId)}
                         saved={isSaved}
                         onToggleSave={() => actions.toggleSaveQuestion(item.question.id)}
@@ -895,7 +908,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               }
 
               const post = item.post;
-              const author = users.find((u) => u.id === post.authorId);
+              const author = usersById.get(post.authorId);
               if (!author) return <View key={post.id} />;
               const isSaved = saved.postIds.includes(post.id);
 
@@ -997,11 +1010,11 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       onPress={doubleTapFor(post.id, liked)}
                       style={StyleSheet.absoluteFill}
                     >
-                      <Image
+                      <ExpoImage
                         accessibilityIgnoresInvertColors
                         source={{ uri: post.thumbnailUrl }}
                         style={StyleSheet.absoluteFill}
-                        resizeMode="cover"
+                        contentFit="cover" cachePolicy="memory-disk"
                       />
                     </Pressable>
                   ) : (
