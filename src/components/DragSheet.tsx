@@ -36,6 +36,8 @@ export function DragSheet({
   closeSignal?: number;
   /** On a computer the sheet is a box sized to its contents (see the .web twin); a phone ignores it. */
   fitContent?: boolean;
+  /** On a wide computer screen the sheet docks to the right (see the .web twin); a phone ignores it. */
+  side?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { height: windowHeight } = useWindowDimensions();

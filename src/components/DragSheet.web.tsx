@@ -3,6 +3,7 @@ import React, { useEffect, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
+import { setSidePanel } from '@/features/feed/sidePanel';
 
 const EASE = 'cubic-bezier(.22,.61,.36,1)';
 const OPEN_MS = 320;
@@ -24,6 +25,7 @@ export function DragSheet({
   peekFraction = 0.66,
   closeSignal = 0,
   fitContent = false,
+  side = false,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -33,12 +35,77 @@ export function DragSheet({
   closeSignal?: number;
   /** On a computer, size the box to its contents (a short form) rather than a fixed height (a list). */
   fitContent?: boolean;
+  /** On a wide computer screen, dock to the right instead of covering the middle, so what it is about stays in view. */
+  side?: boolean;
 }) {
   // On a computer a bottom sheet stretched across a wide window looks lost;
   // there it is a centred box instead, the way Instagram's dialogs are.
   const dialog = typeof window !== 'undefined' && isDesktopBrowser() && window.innerWidth >= 700;
+  if (dialog && side && window.innerWidth >= SIDE_MIN_WINDOW) return <SidePanel header={header} onDismissed={onDismissed} closeSignal={closeSignal}>{children}</SidePanel>;
   if (dialog) return <DialogBox header={header} onDismissed={onDismissed} closeSignal={closeSignal} fitContent={fitContent}>{children}</DialogBox>;
   return <Sheet header={header} onDismissed={onDismissed} peekFraction={peekFraction} closeSignal={closeSignal}>{children}</Sheet>;
+}
+
+const SIDE_WIDTH = 420;
+const SIDE_GAP = 12;
+/** Below this the clip and a docked panel don't both fit, so the centred box is used instead. */
+const SIDE_MIN_WINDOW = 1100;
+
+/**
+ * Comments on a wide computer screen: a panel docked to the right, like
+ * TikTok's, with nothing dimmed or blurred, so the clip stays in view and
+ * keeps playing. Home hears the panel's width and slides the clip left to
+ * sit beside it. A click anywhere outside the panel, or Escape, closes it.
+ */
+function SidePanel({ header, children, onDismissed, closeSignal }: { header: React.ReactNode; children: React.ReactNode; onDismissed: () => void; closeSignal: number }) {
+  useTheme();
+  const panel = useRef<HTMLDivElement>(null);
+  const done = useRef(false);
+  useEffect(() => {
+    setSidePanel(SIDE_WIDTH + SIDE_GAP);
+    panel.current?.animate([{ opacity: 0, transform: 'translateX(28px)' }, { opacity: 1, transform: 'translateX(0)' }], { duration: 280, easing: EASE });
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    window.addEventListener('keydown', onKey);
+    return () => { window.removeEventListener('keydown', onKey); setSidePanel(0); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const close = () => {
+    if (done.current) return;
+    done.current = true;
+    setSidePanel(0);
+    const out = panel.current?.animate([{ opacity: 1, transform: 'translateX(0)' }, { opacity: 0, transform: 'translateX(28px)' }], { duration: 180, easing: 'ease-in', fill: 'forwards' });
+    if (out) out.onfinish = () => onDismissed(); else onDismissed();
+  };
+  const closeCount = useRef(closeSignal);
+  useEffect(() => {
+    if (closeSignal === closeCount.current) return;
+    closeCount.current = closeSignal;
+    close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [closeSignal]);
+  return (
+    <div style={{ position: 'absolute', inset: 0 }}>
+      <div onClick={close} role="button" aria-label="Close comments" tabIndex={-1} style={{ position: 'absolute', inset: 0 }} />
+      <div
+        ref={panel}
+        role="dialog"
+        aria-modal="false"
+        style={{
+          position: 'absolute', top: SIDE_GAP, bottom: SIDE_GAP, right: SIDE_GAP, width: SIDE_WIDTH,
+          backgroundColor: colors.bg,
+          // The page behind is the same colour, and on a dark court the shadow all but vanishes: a faint edge keeps it a panel.
+          border: `1px solid ${colors.border}`,
+          borderRadius: 22,
+          overflow: 'hidden',
+          boxShadow: '0 18px 50px rgba(0,0,0,0.22), 0 4px 14px rgba(0,0,0,0.10)',
+          display: 'flex', flexDirection: 'column',
+        }}
+      >
+        <div style={{ paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>{header}</div>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{children}</div>
+      </div>
+    </div>
+  );
 }
 
 /** The centred box a sheet becomes on a computer: fades and settles in, dims and blurs what is behind. */

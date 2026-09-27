@@ -57,6 +57,7 @@ export default function CommentsSheet() {
       closeSignal={closeSignal}
       onDismissed={() => router.back()}
       peekFraction={0.7}
+      side
       header={
         <View style={styles.headerRow}>
           <Text style={styles.heading}>Comments{thread.length ? ` · ${thread.length}` : ''}</Text>

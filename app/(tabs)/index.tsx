@@ -48,6 +48,7 @@ import { FoldingCaption } from '@/components/FoldingCaption';
 import { useApp } from '@/store/AppContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isDesktopBrowser } from '@/lib/browserDevice';
+import { useSidePanel } from '@/features/feed/sidePanel';
 import { colors, radius, typography, spacing, font, lift } from '@/theme';
 
 /**
@@ -169,6 +170,17 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   // caption, buttons, wordmark, sound disc; pinch in brings it all back.
   const [immersive, setImmersive] = useState(false);
   const pager = useRef<VerticalPagerHandle>(null);
+  // Comments docked on the right of a computer screen: the clip slides left
+  // by half their width, so it sits centred in the space that is left.
+  const viewer = useRef<View>(null);
+  const sidePanel = useSidePanel();
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const node = viewer.current as unknown as HTMLElement | null;
+    if (!node?.style) return;
+    node.style.transition = 'transform 300ms cubic-bezier(.22,.61,.36,1)';
+    node.style.transform = sidePanel ? `translateX(${-sidePanel / 2}px)` : '';
+  }, [sidePanel]);
   useEffect(() => subscribeScrollToTop((tab) => { if (tab === '/') pager.current?.scrollToTop(); }), []);
   // Locking in has a feel to it: the picture gives a small push and settles
   // with a spring while the overlays sink away; locking out is the reverse.
@@ -730,7 +742,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
           action={!scope && ready ? { label: 'Share something', onPress: () => router.push('/compose') } : undefined}
         />
       ) : (
-        <View style={styles.viewer}>
+        <View ref={viewer} style={styles.viewer}>
           <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onRefresh={scope || isDesktopBrowser() ? undefined : refreshFeed} pullHeader={scope || !currentUser ? undefined : (
             <View style={styles.pullGreeting}>
               <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={28} />
