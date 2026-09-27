@@ -556,6 +556,8 @@ export interface Message {
   reactions?: Record<ID, string>;
   /** When its sender last changed the words; the chat says "Edited" under it. */
   editedAt?: string;
+  /** It never reached the server (no signal, or a server error); the chat offers a retry. */
+  failed?: boolean;
 }
 
 export interface Conversation {

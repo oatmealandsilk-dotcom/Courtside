@@ -224,6 +224,8 @@ function readDefaultPayment(): ID {
 
 interface AppState extends Bootstrap {
   ready: boolean;
+  /** Health came from this account's own connections, not the demo; a reload must keep it. */
+  healthIsReal?: boolean;
   /** The stored session has been checked, so a redirect to sign-in is not premature. */
   authResolved: boolean;
   /** What a double tap leaves on a message. */
@@ -472,6 +474,8 @@ interface AppActions {
   canMessage: (userId: ID) => boolean;
   /** New words for a message of yours; it then shows as edited. */
   editMessage: (messageId: ID, body: string) => void;
+  /** Sends a message that did not go through, again. */
+  retryMessage: (messageId: ID) => void;
   /** Takes a message of yours back, for everyone in the chat. */
   unsendMessage: (messageId: ID) => void;
   /** Hides a message from your own view only. */
@@ -575,10 +579,11 @@ function dropFixtures(state: AppState): AppState {
     // Invented sleep, recovery and calories — not this person's, and health
     // numbers read as fact. They go, and the Health screen simply shows
     // nothing until something real is connected.
-    healthHistory: [],
+    // (Once this account's own health has loaded, it stays through every reload.)
+    healthHistory: state.healthIsReal ? state.healthHistory : [],
     // The list of what can be connected stays; the demo's "already connected,
     // synced two hours ago" does not.
-    integrations: state.integrations.map((i) => (i.connected ? { ...i, connected: false, lastSyncedAt: undefined } : i)),
+    integrations: state.healthIsReal ? state.integrations : state.integrations.map((i) => (i.connected ? { ...i, connected: false, lastSyncedAt: undefined } : i)),
     // The demo's card on file. Nobody should open Payments and find a Visa
     // they never added.
     paymentMethods: [],
@@ -1104,7 +1109,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(() => {
     // This phone stops getting the account's alerts before the session ends (the removal needs it).
     if (isSupabaseConfigured) void forgetPushToken().finally(() => remoteAuth.signOut());
-    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false }));
+    // One account's health never carries over to the next one signed in.
+    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [] }));
   }, []);
 
   const patchCurrentUser = useCallback(
@@ -2177,7 +2183,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!trimmed) return;
       const message = makeMessage(conversationId, me, trimmed);
       setState((prev) => appendMessage(prev, message));
-      if (live(me, conversationId)) void remote.insertMessage(message).then((result) => {
+      if (live(me, conversationId)) void remote.insertMessage(message).catch(() => 'failed' as const).then((result) => {
+        if (result === 'failed') {
+          setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, failed: true } : m)) }));
+          return;
+        }
         if (result !== 'refused') return;
         setState((prev) => ({
           ...prev,
@@ -2189,6 +2199,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     [requireUser, appendMessage, makeMessage],
   );
+
+  /** Sends a message that did not go through, again. */
+  const retryMessage = useCallback((messageId: ID) => {
+    const me = requireUser();
+    const message = stateRef.current.messages.find((m) => m.id === messageId);
+    if (!message?.failed || message.senderId !== me) return;
+    haptics.tap();
+    setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, failed: false } : m)) }));
+    void remote.insertMessage({ ...message, failed: undefined }).catch(() => 'failed' as const).then((result) => {
+      if (result === 'failed') setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, failed: true } : m)) }));
+    });
+  }, [requireUser]);
 
   const editMessage = useCallback((messageId: ID, body: string) => {
     const me = requireUser();
@@ -2823,6 +2845,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({
       ...prev,
       healthHistory: got.days,
+      healthIsReal: true,
       integrations: prev.integrations.map((i) => { const c = got.connections.find((x) => x.provider === i.provider); return { ...i, connected: !!c, lastSyncedAt: c?.lastSyncedAt }; }),
     }));
   }, []);
@@ -3025,6 +3048,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       confirmBirthDate,
       canMessage,
       editMessage,
+      retryMessage,
       unsendMessage,
       deleteMessageForMe,
       shareToUsers,
@@ -3141,6 +3165,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       confirmBirthDate,
       canMessage,
       editMessage,
+      retryMessage,
       unsendMessage,
       deleteMessageForMe,
       shareToUsers,
