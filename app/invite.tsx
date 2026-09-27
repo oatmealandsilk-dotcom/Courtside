@@ -53,6 +53,11 @@ export default function Invite() {
             <Text style={styles.secondaryText}>{copied ? 'Copied' : 'Copy'}</Text>
           </Pressable>
         </View>
+        <Pressable accessibilityRole="link" accessibilityLabel="Print a poster for your club" onPress={() => router.replace('/club-poster')} style={({ pressed }) => [styles.poster, pressed && { opacity: 0.7 }]}>
+          <Ionicons name="print-outline" size={18} color={colors.text} />
+          <Text style={styles.posterText}>Print a poster for your club</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+        </Pressable>
         <Text style={styles.count}>{joined === null ? ' ' : joined === 0 ? 'No one has joined through you yet.' : `${joined} ${joined === 1 ? 'player has' : 'players have'} joined through you.`}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Later" onPress={() => setCloseSignal((n) => n + 1)} style={styles.later}>
           <Text style={styles.laterText}>Later</Text>
@@ -74,6 +79,8 @@ const styleDefinitions = StyleSheet.create({
   primaryText: { ...typography.bodyStrong, color: colors.brandInk },
   secondary: { height: 46, paddingHorizontal: 20, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
   secondaryText: { ...typography.bodyStrong, color: colors.text },
+  poster: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
+  posterText: { ...typography.bodyStrong, color: colors.text, flex: 1 },
   count: { ...typography.small, color: colors.textFaint, textAlign: 'center' },
   later: { alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 12 },
   laterText: { ...typography.smallStrong, color: colors.textMuted },
