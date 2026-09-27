@@ -12,11 +12,11 @@ import { colors, radius, spacing, typography } from '@/theme';
 const TOPICS: { title: string; body: string }[] = [
   {
     title: 'How does the feed decide what I see?',
-    body: 'Newest moments from people you follow come first, then popular clips and unanswered discussions from your level. Muting someone removes their posts without unfollowing.',
+    body: 'Home mixes clips, Instants and Community threads, leaning toward newer ones, and deals them in a fresh order each time you open it. Things you have not seen come before things you have, and new players’ first posts appear near the top so they get a welcome. Muting someone removes their posts without unfollowing.',
   },
   {
     title: 'What is my NTRP or UTR badge?',
-    body: 'It is the rating you set in Edit profile. NTRP runs 1.0–7.0, UTR 1–16. It only changes when you change it — nothing here rates you automatically.',
+    body: 'It is the rating you chose when you joined. To change it, open your profile, tap Tennis profile, then Edit. NTRP runs 1.0–7.0, UTR 1–16. It only changes when you change it; nothing here rates you automatically.',
   },
   {
     title: 'How do I ask a coach?',

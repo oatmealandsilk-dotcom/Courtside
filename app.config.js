@@ -26,7 +26,6 @@ module.exports = {
         ITSAppUsesNonExemptEncryption: false,
         NSCameraUsageDescription: 'CourtSide uses the camera to take an instant — one photo right after your session.',
         NSPhotoLibraryUsageDescription: 'CourtSide needs your photo library to choose clips and photos to post.',
-        NSMicrophoneUsageDescription: 'CourtSide records audio when you capture video for a clip.',
         NSLocationWhenInUseUsageDescription: 'CourtSide uses your location, only while the app is open, to show players near you.',
       },
     },
@@ -40,8 +39,9 @@ module.exports = {
     web: { bundler: 'metro', output: 'single', name: 'CourtSide' },
     plugins: [
       'expo-router',
-      ['expo-camera', { cameraPermission: 'CourtSide uses the camera to take an instant — one photo right after your session.' }],
-      ['expo-image-picker', { photosPermission: 'CourtSide needs your photo library to choose clips and photos to post.' }],
+      // Nothing records sound (an Instant is a photo; clips come from the library), so no microphone request.
+      ['expo-camera', { cameraPermission: 'CourtSide uses the camera to take an instant — one photo right after your session.', microphonePermission: false, recordAudioAndroid: false }],
+      ['expo-image-picker', { photosPermission: 'CourtSide needs your photo library to choose clips and photos to post.', microphonePermission: false }],
       'expo-video',
       ['expo-location', { locationWhenInUsePermission: 'CourtSide uses your location to show players near you on the map.' }],
       ['expo-notifications', { color: '#3F7049' }],

@@ -6,17 +6,15 @@ import type { ID, Question, QuestionTopic, ThreadSourceName, User } from '@/data
  *
  * Reddit only answers registered apps, so a scheduled job —
  * scripts/community-feeds.mjs, run by GitHub Actions — fetches them and saves
- * public/community.json next to the site. That file is the first thing tried
- * here; the live fetch below is the fallback, through a relay set in
- * EXPO_PUBLIC_FEED_PROXY.
+ * public/community.json next to the site, and that file is all this reads.
+ * (Asking Reddit straight from the app was dropped: it refuses every such
+ * request, and browsers block it besides.)
  *
  * Talk Tennis (Tennis Warehouse's forum) used to be carried in too. It no
  * longer is: its threads are dropped even if an older saved file still has
  * them.
  */
 
-const SUBREDDITS = ['10s', 'tennis'];
-const REDDIT_LIMIT = 20;
 const CACHE_KEY = 'courtside-imported-threads-v2';
 const CACHE_TTL_MS = 60 * 60 * 1000;
 const TIMEOUT_MS = 8000;
@@ -75,15 +73,6 @@ function withTimeout<T>(promise: Promise<T>, ms = TIMEOUT_MS): Promise<T> {
 }
 
 /** Turns "&amp;" and friends back into characters; RSS and Reddit both escape. */
-function unescapeHtml(text: string): string {
-  return text
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&nbsp;/g, ' ')
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
-    .replace(/\s+/g, ' ').trim();
-}
-
 function tagsFrom(text: string): string[] {
   const found = new Set<string>();
   for (const [topic, pattern] of TOPIC_WORDS) {
@@ -113,42 +102,6 @@ function makeQuestion(input: {
     answerIds: [],
     source: { name: input.source, label: input.label, url: input.url, author: input.author, replies: input.replies },
   };
-}
-
-interface RedditChild {
-  data: {
-    id: string; title: string; selftext?: string; permalink: string; author: string;
-    created_utc: number; score: number; num_comments: number; stickied?: boolean; over_18?: boolean;
-    is_video?: boolean; url?: string;
-  };
-}
-
-export async function fetchRedditThreads(): Promise<Question[]> {
-  const lists = await Promise.allSettled(
-    SUBREDDITS.map(async (sub) => {
-      const res = await withTimeout(fetch(`https://www.reddit.com/r/${sub}/hot.json?limit=${REDDIT_LIMIT}&raw_json=1`));
-      if (!res.ok) throw new Error(`reddit ${sub} ${res.status}`);
-      const json = (await res.json()) as { data: { children: RedditChild[] } };
-      return json.data.children.map((child) => ({ sub, ...child.data }));
-    }),
-  );
-  return lists
-    .flatMap((result) => (result.status === 'fulfilled' ? result.value : []))
-    .filter((post) => !post.stickied && !post.over_18 && post.title)
-    .map((post) =>
-      makeQuestion({
-        id: `q-reddit-${post.id}`,
-        source: 'reddit',
-        label: `r/${post.sub}`,
-        title: unescapeHtml(post.title).slice(0, 180),
-        body: unescapeHtml(post.selftext ?? '').slice(0, 600),
-        url: `https://www.reddit.com${post.permalink}`,
-        author: `u/${post.author}`,
-        createdAt: new Date(post.created_utc * 1000).toISOString(),
-        votes: post.score,
-        replies: post.num_comments,
-      }),
-    );
 }
 
 /* ------------------------------ Saved file ------------------------------- */
@@ -202,14 +155,7 @@ export async function fetchImportedThreads(): Promise<ImportedBundle> {
   try {
     questions = await fetchSavedThreads();
   } catch {
-    // No saved file (or it is unreachable): try the sources directly.
-  }
-  if (!questions.length) {
-    try {
-      questions = await fetchRedditThreads();
-    } catch {
-      // Reddit is down or refusing: the board just shows people's own threads.
-    }
+    // No saved file (or it is unreachable): the board just shows people's own threads.
   }
   const used = new Set(questions.map((q) => q.authorId));
   const bundle: ImportedBundle = {

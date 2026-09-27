@@ -1495,7 +1495,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ),
         };
         return liking && story && story.authorId !== me
-          ? withNotification(next, { userId: story.authorId, actorId: me, kind: 'like', targetId: story.id, targetKind: 'hit', preview: story.caption ? snippet(story.caption) : 'your hit' })
+          ? withNotification(next, { userId: story.authorId, actorId: me, kind: 'like', targetId: story.id, targetKind: 'hit', preview: story.caption ? snippet(story.caption) : undefined })
           : next;
       });
     },

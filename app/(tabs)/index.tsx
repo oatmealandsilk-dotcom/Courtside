@@ -44,7 +44,7 @@ import { rankFeed, shuffleFeed, type FeedItem } from '@/features/feed/rankFeed';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { relativeTime, timeLeft } from '@/lib/format';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { RichText } from '@/components/RichText';
+import { FoldingCaption } from '@/components/FoldingCaption';
 import { useApp } from '@/store/AppContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isDesktopBrowser } from '@/lib/browserDevice';
@@ -502,7 +502,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     <View style={styles.strip}>
       <View style={styles.stripHead}>
         <Text style={styles.stripTitle}>Players you might know</Text>
-        <Text style={styles.stripSub}>From your contacts, mutuals and who you've played.</Text>
+        <Text style={styles.stripSub}>Based on who you talk to and where you play.</Text>
       </View>
       {/* Its own sideways bar: nativeID keeps the page swipe off it. */}
       <ScrollView
@@ -804,7 +804,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                         <Text style={styles.authorName}>@{author.handle}<Text style={styles.authorTime}> · {relativeTime(story.createdAt)}</Text></Text>
                       </Pressable>
                       <HitClock expiresAt={story.expiresAt} />
-                      {story.caption ? <RichText numberOfLines={3} style={styles.body}>{story.caption}</RichText> : null}
+                      {story.caption ? <FoldingCaption text={story.caption} style={styles.body} moreStyle={styles.more} /> : null}
                       <Text style={styles.swipeHint}>↑ Next moment   ·   ← Community</Text>
                     </View>
                     <View style={styles.actions}>
@@ -1008,9 +1008,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       <LevelPill profile={author.profile} small onMedia />
                     </Pressable>
                     {isNewHere(post) ? <NewHereTag onMedia /> : null}
-                    <RichText numberOfLines={3} style={styles.body}>
-                      {post.body}
-                    </RichText>
+                    {post.body ? <FoldingCaption text={post.body} style={styles.body} moreStyle={styles.more} /> : null}
                     <Text style={styles.tags}>{post.tags.map(t=><Text key={t} accessibilityRole="link" onPress={()=>router.push({pathname:'/search',params:{q:`#${t}`}})}>#{t}{'  '}</Text>)}</Text>
                     <Text style={styles.swipeHint}>↑ Next moment   ·   ← Community</Text>
                   </View>
@@ -1197,6 +1195,7 @@ const styleDefinitions = StyleSheet.create({
   authorName: { color: 'white', fontSize: 14, ...font('700') },
   authorTime: { color: 'rgba(255,255,255,0.75)', fontSize: 12, ...font('500') },
   body: { color: 'white', fontSize: 13, lineHeight: 19 },
+  more: { color: 'white', fontSize: 13, lineHeight: 19, ...font('600') },
   tags: { color: 'rgba(255,255,255,0.85)', fontSize: 11 },
   swipeHint: { color: 'rgba(255,255,255,0.7)', fontSize: 10 },
   bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 240 + BAR_OVERLAY_PX },
