@@ -20,6 +20,7 @@ import { Toggle } from '@/components/ui';
 import type { MapFilter, Placed } from '@/features/players/mapModel';
 import type { Weather } from '@/lib/weather';
 import { colors, radius, spacing, typography } from '@/theme';
+import Svg, { Line, Rect } from 'react-native-svg';
 
 /*
  * Everything laid over the map that is not the map: the same on a phone and
@@ -73,7 +74,7 @@ const FILTERS: { key: MapFilter; label: string }[] = [
 ];
 
 /** Who to show, plus the courts layer, as one row of chips. */
-export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoading, weather }: { filter: MapFilter; onFilter: (next: MapFilter) => void; courtsOn: boolean; onCourts: () => void; courtsLoading: boolean; /** Shown at the row's right end: the corner of the map. */ weather?: Weather | null }) {
+export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoading }: { filter: MapFilter; onFilter: (next: MapFilter) => void; courtsOn: boolean; onCourts: () => void; courtsLoading: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   // Where each chip sits, so one filled pill can slide from the old choice to the new, the way a segmented control does.
   const spots = useRef<Partial<Record<MapFilter, { x: number; w: number }>>>({});
@@ -125,14 +126,27 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
             <Text style={[styles.chipText, active === f.key && styles.chipTextOn]}>{f.label}</Text>
           </Pressable>
         ))}
+        {/* Courts is an on/off switch, not one of the choices: a hairline sets it apart, and it scrolls with the row so nothing is ever tucked behind it. */}
+        <View style={styles.chipGap} />
+        <Pressable accessibilityRole="switch" accessibilityState={{ checked: courtsOn }} accessibilityLabel="Show courts" onPress={() => { haptics.tap(); onCourts(); }} style={[styles.chip, courtsOn && styles.chipOn]}>
+          {courtsLoading ? <ActivityIndicator size="small" color={courtsOn ? colors.brandInk : colors.text} /> : <CourtGlyph size={15} color={courtsOn ? colors.brandInk : colors.text} />}
+          <Text style={[styles.chipText, courtsOn && styles.chipTextOn]}>Courts</Text>
+        </Pressable>
       </ScrollView>
-      {/* Courts stays put at the end, whatever the row scrolls to. */}
-      <Pressable accessibilityRole="switch" accessibilityState={{ checked: courtsOn }} accessibilityLabel="Show courts" onPress={() => { haptics.tap(); onCourts(); }} style={[styles.chip, styles.chipCourts, courtsOn && styles.chipOn]}>
-        {courtsLoading ? <ActivityIndicator size="small" color={courtsOn ? colors.brandInk : colors.text} /> : <Ionicons name="tennisball-outline" size={14} color={courtsOn ? colors.brandInk : colors.text} />}
-        <Text style={[styles.chipText, courtsOn && styles.chipTextOn]}>Courts</Text>
-      </Pressable>
-      {weather ? <WeatherChip weather={weather} /> : null}
     </View>
+  );
+}
+
+/** A tennis court from above: the outline, the net across the middle, the service boxes. */
+export function CourtGlyph({ size = 15, color }: { size?: number; color: string }) {
+  return (
+    <Svg width={size} height={size * 1.25} viewBox="0 0 16 20" fill="none">
+      <Rect x={2} y={1.5} width={12} height={17} rx={1.2} stroke={color} strokeWidth={1.5} />
+      <Line x1={2} y1={10} x2={14} y2={10} stroke={color} strokeWidth={1.5} />
+      <Line x1={2} y1={6} x2={14} y2={6} stroke={color} strokeWidth={1} />
+      <Line x1={2} y1={14} x2={14} y2={14} stroke={color} strokeWidth={1} />
+      <Line x1={8} y1={6} x2={8} y2={14} stroke={color} strokeWidth={1} />
+    </Svg>
   );
 }
 
@@ -183,7 +197,7 @@ export function MapCredit({ style }: { style?: object }) {
 }
 
 /** The strip of players along the bottom, nearest first — tap one and the map goes to them. */
-export function NearbyRail({ items, cityName, selectedId, onSelect }: { items: Placed[]; cityName: string; selectedId: string | null; onSelect: (id: string) => void }) {
+export function NearbyRail({ items, cityName, selectedId, onSelect, weather }: { items: Placed[]; cityName: string; selectedId: string | null; onSelect: (id: string) => void; /** Beside the city's name: what it's like to play there today. */ weather?: Weather | null }) {
   const styles = useThemedStyles(styleDefinitions);
   const [railH, setRailH] = useState(0);
   const railHRef = useRef(0);
@@ -218,7 +232,15 @@ export function NearbyRail({ items, cityName, selectedId, onSelect }: { items: P
         <View accessibilityRole="button" accessibilityLabel={tucked ? 'Show players' : 'Tuck players away'}>
           <View style={styles.grabber} />
           <View style={styles.sheetHead}>
-            <Text style={styles.sheetTitle}>Around {cityName}</Text>
+            <View style={styles.sheetTitleRow}>
+              <Text style={styles.sheetTitle} numberOfLines={1}>Around {cityName}</Text>
+              {weather ? (
+                <View style={styles.sheetWeather} accessibilityLabel={`${weather.tempF} degrees, ${weather.label}`}>
+                  <Ionicons name={weather.icon as keyof typeof Ionicons.glyphMap} size={15} color={colors.textMuted} />
+                  <Text style={styles.sheetWeatherText}>{weather.tempF}°</Text>
+                </View>
+              ) : null}
+            </View>
             <View style={styles.sheetHeadRight}>
               <Text style={styles.sheetCount}>{items.length === 1 ? '1 player' : `${items.length} players`}</Text>
               <Ionicons name={tucked ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textFaint} />
@@ -416,7 +438,7 @@ const styleDefinitions = StyleSheet.create({
   chipsRow: { flexDirection: 'row', alignItems: 'center', paddingRight: spacing.md, paddingVertical: spacing.sm },
   chipsWrap: { flexGrow: 0, flexShrink: 1 },
   chips: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md },
-  chipCourts: { marginLeft: 6 },
+  chipGap: { width: StyleSheet.hairlineWidth, height: 18, marginHorizontal: 4, backgroundColor: colors.borderStrong },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, height: 32, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   chipOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   // Once measured, the chips go clear-backed at their own spots and the sliding pill carries the fill.
@@ -440,7 +462,10 @@ const styleDefinitions = StyleSheet.create({
   sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingBottom: 2 },
   sheetHeadRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   railBody: { overflow: 'hidden' },
-  sheetTitle: { ...typography.heading, color: colors.text },
+  sheetTitle: { ...typography.heading, color: colors.text, flexShrink: 1 },
+  sheetTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
+  sheetWeather: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  sheetWeatherText: { ...typography.smallStrong, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   sheetCount: { ...typography.small, color: colors.textMuted },
   sheetEmpty: { ...typography.small, color: colors.textMuted, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   rail: { paddingHorizontal: spacing.md, gap: 4 },

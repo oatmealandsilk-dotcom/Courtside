@@ -36,11 +36,25 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
   const latest = useRef({ onTap, onMapTap, onMove });
   latest.current = { onTap, onMapTap, onMove };
   const send = (js: string) => { if (ready.current) web.current?.injectJavaScript(`${js};true;`); };
+  // The page takes a moment to start. A move asked for before then (your
+  // location arriving) is kept and made the instant it is ready; dropping
+  // it left the map on the default city until it was opened again.
+  const pendingMove = useRef<{ to: LatLng; zoom?: number } | null>(null);
 
-  useImperativeHandle(ref, () => ({ flyTo: (to, z, ms = 500) => send(`window.__cs.fly(${to.lat},${to.lng},${z ?? 'null'},${ms})`) }), []);
+  useImperativeHandle(ref, () => ({
+    flyTo: (to, z, ms = 500) => {
+      if (!ready.current) { pendingMove.current = { to, zoom: z }; return; }
+      send(`window.__cs.fly(${to.lat},${to.lng},${z ?? 'null'},${ms})`);
+    },
+  }), []);
   const markerJson = JSON.stringify(markers);
+  const markersNow = useRef(markerJson);
+  markersNow.current = markerJson;
   useEffect(() => { send(`window.__cs.set(${markerJson})`); }, [markerJson]);
   const lookJson = JSON.stringify(look);
+  // Same for the theme's colours: whatever is current when the map is ready is what it wears.
+  const lookNow = useRef(lookJson);
+  lookNow.current = lookJson;
   useEffect(() => { send(`window.__cs.look(${lookJson})`); }, [lookJson]);
 
   // The page is built once; everything after arrives as messages.
@@ -81,7 +95,14 @@ window.__cs={
         onMessage={(e) => {
           let msg: { type: string; id?: string; lat?: number; lng?: number };
           try { msg = JSON.parse(e.nativeEvent.data); } catch { return; }
-          if (msg.type === 'ready') { ready.current = true; send(`window.__cs.set(${markerJson})`); }
+          if (msg.type === 'ready') {
+            ready.current = true;
+            send(`window.__cs.look(${lookNow.current})`);
+            send(`window.__cs.set(${markersNow.current})`);
+            const move = pendingMove.current;
+            pendingMove.current = null;
+            if (move) send(`window.__cs.fly(${move.to.lat},${move.to.lng},${move.zoom ?? 'null'},0)`);
+          }
           else if (msg.type === 'tap' && msg.id) latest.current.onTap?.(msg.id);
           else if (msg.type === 'maptap') latest.current.onMapTap?.();
           else if (msg.type === 'move' && msg.lat !== undefined && msg.lng !== undefined) latest.current.onMove?.({ lat: msg.lat, lng: msg.lng });
