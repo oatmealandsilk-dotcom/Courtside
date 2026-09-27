@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -31,7 +31,9 @@ const SPECIALTIES: { value: CoachSpecialty; label: string }[] = [
 export default function AskCoach() {
   const styles = useThemedStyles(styleDefinitions);
   const { actions, coaches } = useApp();
-  const [title, setTitle] = useState('');
+  // Started in the box on the Coaching tab: those words are the headline already.
+  const { title: started } = useLocalSearchParams<{ title?: string }>();
+  const [title, setTitle] = useState(typeof started === 'string' ? started.slice(0, 140) : '');
   const [body, setBody] = useState('');
   const [specialty, setSpecialty] = useState<CoachSpecialty>('serve');
   const [media, setMedia] = useState<PickedMedia | null>(null);

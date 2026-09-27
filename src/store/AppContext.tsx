@@ -2892,9 +2892,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!handle) return;
     const who = await remote.claimReferral(handle);
     if (!who) return;
-    setState((prev) => ({ ...prev, followingIds: prev.followingIds.includes(who) ? prev.followingIds : [...prev.followingIds, who] }));
+    // You follow whoever invited you (or, if their account is private, ask
+    // to); they are never made to follow you back without saying so.
     const them = stateRef.current.users.find((u) => u.id === who);
-    showToast({ title: `You and @${them?.handle ?? handle} now follow each other`, icon: 'people-outline' });
+    if (them?.isPrivate) {
+      setState((prev) => ({ ...prev, followRequests: prev.followRequests.some((r) => r.fromId === me && r.toId === who) ? prev.followRequests : [...prev.followRequests, { fromId: me!, toId: who, createdAt: new Date().toISOString() }] }));
+      showToast({ title: `Asked to follow @${them.handle}`, body: 'They invited you. Once they say yes, you will see their posts.', icon: 'people-outline' });
+    } else {
+      setState((prev) => ({ ...prev, followingIds: prev.followingIds.includes(who) ? prev.followingIds : [...prev.followingIds, who] }));
+      showToast({ title: `You're following @${them?.handle ?? handle}`, body: 'They invited you to CourtSide.', icon: 'people-outline' });
+    }
   }, []);
   useEffect(() => { if (live(state.currentUserId)) void claimPendingReferral(); }, [state.currentUserId, claimPendingReferral]);
   const countReferrals = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.countReferrals(me!) : 0; }, []);

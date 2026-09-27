@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -31,7 +31,25 @@ export default function NewMessage() {
     .filter((u) => u.id !== currentUserId && !SOURCES.has(u.id) && !blockedIds.includes(u.id) && `${u.name} ${u.handle}`.toLowerCase().includes(term))
     .sort((a, b) => (recent.includes(a.id) ? recent.indexOf(a.id) : 999) - (recent.includes(b.id) ? recent.indexOf(b.id) : 999))
     .slice(0, 50);
-  const close = () => goBack('/messages');
+  // On a computer the box arrives on its own (the inbox behind never moves or
+  // flashes): the backdrop darkens and blurs, the box rises and settles.
+  const backdrop = useRef<View>(null);
+  const box = useRef<View>(null);
+  const closing = useRef(false);
+  const node = (r: React.RefObject<View | null>) => r.current as unknown as HTMLElement | null;
+  useEffect(() => {
+    if (isPhone || Platform.OS !== 'web') return;
+    node(backdrop)?.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' });
+    node(box)?.animate?.([{ opacity: 0, transform: 'translateY(8px) scale(0.97)' }, { opacity: 1, transform: 'none' }], { duration: 220, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  }, [isPhone]);
+  const close = () => {
+    if (isPhone || Platform.OS !== 'web') { goBack('/messages'); return; }
+    if (closing.current) return;
+    closing.current = true;
+    node(box)?.animate?.([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(0.97)' }], { duration: 140, easing: 'ease-in', fill: 'forwards' });
+    const out = node(backdrop)?.animate?.([{ opacity: 1 }, { opacity: 0 }], { duration: 150, easing: 'ease-in', fill: 'forwards' });
+    if (out) out.onfinish = () => goBack('/messages'); else goBack('/messages');
+  };
   const open = (id: string, name: string) => {
     if (!actions.canMessage(id)) { showToast({ title: `Only people ${name.split(' ')[0]} follows can message them`, icon: 'lock-closed-outline' }); return; }
     router.replace(`/messages/${actions.openConversationWith(id)}`);
@@ -72,9 +90,9 @@ export default function NewMessage() {
   }
 
   return (
-    <View style={styles.backdrop}>
+    <View ref={backdrop} style={styles.backdrop}>
       <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={close} style={StyleSheet.absoluteFill} />
-      <View style={styles.box} accessibilityViewIsModal>
+      <View ref={box} style={styles.box} accessibilityViewIsModal>
         <View style={styles.head}>
           <View style={styles.headSide} />
           <Text style={styles.title}>New message</Text>
@@ -93,7 +111,8 @@ export default function NewMessage() {
 }
 
 const styleDefinitions = StyleSheet.create({
-  backdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.overlay, padding: spacing.xl },
+  // Dark and blurred behind the box, so the inbox recedes instead of reading as a second copy of the list.
+  backdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.overlay, padding: spacing.xl, backdropFilter: 'blur(10px) saturate(0.8)', WebkitBackdropFilter: 'blur(10px) saturate(0.8)' } as object,
   box: { ...lift, width: '100%', maxWidth: 480, height: '72%', maxHeight: 640, borderRadius: 20, backgroundColor: colors.bg, overflow: 'hidden' },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, height: 52, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   headSide: { width: 32, alignItems: 'flex-end' },

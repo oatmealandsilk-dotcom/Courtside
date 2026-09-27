@@ -2,6 +2,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@/theme';
+import { isDesktopBrowser } from '@/lib/browserDevice';
 
 const EASE = 'cubic-bezier(.22,.61,.36,1)';
 const OPEN_MS = 320;
@@ -22,12 +23,90 @@ export function DragSheet({
   onDismissed,
   peekFraction = 0.66,
   closeSignal = 0,
+  fitContent = false,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
   onDismissed: () => void;
   peekFraction?: number;
   /** Bump this number to close the sheet from outside (a Close button, a finished send). */
+  closeSignal?: number;
+  /** On a computer, size the box to its contents (a short form) rather than a fixed height (a list). */
+  fitContent?: boolean;
+}) {
+  // On a computer a bottom sheet stretched across a wide window looks lost;
+  // there it is a centred box instead, the way Instagram's dialogs are.
+  const dialog = typeof window !== 'undefined' && isDesktopBrowser() && window.innerWidth >= 700;
+  if (dialog) return <DialogBox header={header} onDismissed={onDismissed} closeSignal={closeSignal} fitContent={fitContent}>{children}</DialogBox>;
+  return <Sheet header={header} onDismissed={onDismissed} peekFraction={peekFraction} closeSignal={closeSignal}>{children}</Sheet>;
+}
+
+/** The centred box a sheet becomes on a computer: fades and settles in, dims and blurs what is behind. */
+function DialogBox({ header, children, onDismissed, closeSignal, fitContent }: { header: React.ReactNode; children: React.ReactNode; onDismissed: () => void; closeSignal: number; fitContent: boolean }) {
+  useTheme();
+  const box = useRef<HTMLDivElement>(null);
+  const backdrop = useRef<HTMLDivElement>(null);
+  const done = useRef(false);
+  useEffect(() => {
+    backdrop.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' });
+    box.current?.animate([{ opacity: 0, transform: 'translate(-50%, calc(-50% + 10px)) scale(0.97)' }, { opacity: 1, transform: 'translate(-50%, -50%)' }], { duration: 240, easing: EASE });
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const close = () => {
+    if (done.current) return;
+    done.current = true;
+    box.current?.animate([{ opacity: 1, transform: 'translate(-50%, -50%)' }, { opacity: 0, transform: 'translate(-50%, -50%) scale(0.97)' }], { duration: 150, easing: 'ease-in', fill: 'forwards' });
+    const out = backdrop.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-in', fill: 'forwards' });
+    if (out) out.onfinish = () => onDismissed(); else onDismissed();
+  };
+  const closeCount = useRef(closeSignal);
+  useEffect(() => {
+    if (closeSignal === closeCount.current) return;
+    closeCount.current = closeSignal;
+    close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [closeSignal]);
+  return (
+    <div style={{ position: 'absolute', inset: 0 }}>
+      <div ref={backdrop} onClick={close} role="button" aria-label="Close" tabIndex={-1}
+        style={{ position: 'absolute', inset: 0, backgroundColor: colors.overlay, backdropFilter: 'blur(10px) saturate(0.8)', WebkitBackdropFilter: 'blur(10px) saturate(0.8)' } as React.CSSProperties} />
+      <div
+        ref={box}
+        role="dialog"
+        aria-modal="true"
+        style={{
+          position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+          width: 'min(520px, calc(100% - 48px))',
+          ...(fitContent ? { maxHeight: 'min(80vh, 720px)' } : { height: 'min(78vh, 680px)' }),
+          backgroundColor: colors.bg,
+          borderRadius: 22,
+          overflow: 'hidden',
+          boxShadow: '0 24px 60px rgba(0,0,0,0.28), 0 4px 14px rgba(0,0,0,0.12)',
+          display: 'flex', flexDirection: 'column',
+        }}
+      >
+        <div style={{ paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>{header}</div>
+        <div style={{ flex: fitContent ? '0 1 auto' : 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: fitContent ? 'auto' : undefined }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/** The phone's pull-up sheet. */
+function Sheet({
+  header,
+  children,
+  onDismissed,
+  peekFraction = 0.66,
+  closeSignal = 0,
+}: {
+  header: React.ReactNode;
+  children: React.ReactNode;
+  onDismissed: () => void;
+  peekFraction?: number;
   closeSignal?: number;
 }) {
   // Hears a theme change, so its own colours never lag the page's.

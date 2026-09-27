@@ -64,8 +64,12 @@ Deno.serve(async (req) => {
   if (!RESEND) return json({ sent: false, reason: 'not set up' });
 
   // Claim the send first, so two calls in the same second cannot both send.
+  // Only someone who joined in the last few minutes is welcomed: this is
+  // the page's own follow-up to a sign-up, never a way to mail an old or
+  // made-up row on demand.
+  const recent = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   const { data: row } = await admin.from('waitlist').update({ welcomed_at: new Date().toISOString() })
-    .eq('email', email).is('welcomed_at', null).select('id, name').maybeSingle();
+    .eq('email', email).is('welcomed_at', null).gt('created_at', recent).select('id, name').maybeSingle();
   if (!row) return json({ sent: false });
 
   // Their place and code, the same way the page shows them.
@@ -73,7 +77,8 @@ Deno.serve(async (req) => {
   const s = Array.isArray(spot) ? spot[0] : spot;
   const place = Number(s?.place ?? 0) || 1;
   const link = `${SHARE_BASE}?r=${s?.code ?? String(row.id).replace(/-/g, '').slice(0, 8)}`;
-  const first = row.name ? String(row.name).trim().split(/\s+/)[0].slice(0, 30) : null;
+  // A first name is letters only: nobody can put a link or markup into the greeting.
+  const first = row.name ? (String(row.name).trim().split(/\s+/)[0].replace(/[^\p{L}'-]/gu, '').slice(0, 30) || null) : null;
   const { text, html } = letter(first, place, link);
 
   const res = await fetch('https://api.resend.com/emails', {

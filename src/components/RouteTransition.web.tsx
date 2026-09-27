@@ -1,6 +1,8 @@
 import React, { useLayoutEffect, useRef } from 'react';
 import { usePathname, useGlobalSearchParams } from 'expo-router';
 
+import { isDesktopBrowser } from '@/lib/browserDevice';
+
 /** The four tab roots. Moving between them is a swipe, so they only fade. */
 const TABS = new Set(['/', '/discuss', '/coaches', '/profile']);
 /** Splash → sign-in → home: a fade in and out, never a slide. */
@@ -10,6 +12,8 @@ const AUTH = new Set(['/sign-in', '/onboarding']);
  * so animating the content here would make it flash behind the sheet.
  */
 const SHEETS = new Set(['/compose', '/share', '/ask', '/comments', '/post-menu', '/edit-post']);
+/** On a computer, New message is a box over the inbox too (on a phone it is a page, and slides). */
+if (isDesktopBrowser()) SHEETS.add('/messages/new');
 
 /**
  * Animate the content without remounting the router or moving navigation.

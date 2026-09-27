@@ -49,7 +49,7 @@ async function open(state: string): Promise<{ uid: string; back: string } | null
   return ok ? JSON.parse(new TextDecoder().decode(unb64(body))) : null;
 }
 /** Only the app's own addresses may be returned to. */
-const safeBack = (back: string) => /^(courtside:\/\/|exp:\/\/|exps:\/\/|https:\/\/app\.courtsidebase\.com)/.test(back) ? back : 'courtside://health';
+const safeBack = (back: string) => /^(courtside:\/\/|exps?:\/\/[a-z0-9-]+\.exp\.direct\/|exps?:\/\/(localhost|\d{1,3}(\.\d{1,3}){3}):\d+\/|https:\/\/app\.courtsidebase\.com\/)/.test(back) ? back : 'courtside://health';
 
 async function tokensFor(uid: string): Promise<{ access: string } | null> {
   const { data: row } = await admin.from('whoop_tokens').select('*').eq('user_id', uid).maybeSingle();

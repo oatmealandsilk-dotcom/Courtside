@@ -34,6 +34,8 @@ export function DragSheet({
   peekFraction?: number;
   /** Bump this number to close the sheet from outside (a Close button, a finished send). */
   closeSignal?: number;
+  /** On a computer the sheet is a box sized to its contents (see the .web twin); a phone ignores it. */
+  fitContent?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { height: windowHeight } = useWindowDimensions();

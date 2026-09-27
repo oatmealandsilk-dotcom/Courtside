@@ -24,7 +24,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 const SELF = `${SUPABASE_URL}/functions/v1/coach-payments`;
 /** The only places a browser is ever sent back to: the app, Expo Go while developing, or the web app. */
 const safeBack = (back: string | null | undefined, fallback: string) =>
-  back && /^(courtside:\/\/|exp:\/\/|exps:\/\/|https:\/\/app\.courtsidebase\.com\/|http:\/\/localhost:\d+\/)/.test(back) ? back : fallback;
+  back && /^(courtside:\/\/|exps?:\/\/[a-z0-9-]+\.exp\.direct\/|exps?:\/\/(localhost|\d{1,3}(\.\d{1,3}){3}):\d+\/|https:\/\/app\.courtsidebase\.com\/|http:\/\/localhost:\d+\/)/.test(back) ? back : fallback;
 const withQuery = (base: string, q: Record<string, string>) => `${base}${base.includes('?') ? '&' : '?'}${new URLSearchParams(q)}`;
 const KIND: Record<string, string> = { 'video-review': 'Video review', 'written-qa': 'Written answer', 'live-session': 'Live session', plan: 'Training plan' };
 
@@ -128,8 +128,17 @@ Deno.serve(async (req) => {
         const { data: coachProfile } = await admin.from('profiles').select('name, handle').eq('id', coach.user_id).maybeSingle();
         const price = service.price_cents as number;
         const fee = Math.round((price * FEE_PERCENT) / 100);
-        // Old unpaid attempts for the same thing are cleared, so they never pile up.
-        await admin.from('coaching_requests').delete().eq('user_id', user.id).eq('service_id', service.id).is('paid_at', null);
+        // Old unpaid attempts for the same thing are cleared, so they never
+        // pile up. Their pay pages are closed first: one paid in another tab
+        // after its booking was cleared would take money for nothing.
+        const { data: stale } = await admin.from('coaching_requests').select('id, stripe_session_id').eq('user_id', user.id).eq('service_id', service.id).is('paid_at', null);
+        for (const old of stale ?? []) {
+          if (old.stripe_session_id) {
+            try { await stripe.checkout.sessions.expire(old.stripe_session_id); }
+            catch { const s = await stripe.checkout.sessions.retrieve(old.stripe_session_id).catch(() => null); if (s?.payment_status === 'paid') continue; }
+          }
+          await admin.from('coaching_requests').delete().eq('id', old.id).is('paid_at', null);
+        }
         const { data: request, error } = await admin.from('coaching_requests').insert({
           coach_id: coach.id, coach_user_id: coach.user_id, user_id: user.id, service_id: service.id,
           question, video_url: videoUrl, video_label: videoUrl ? 'Video attached' : null,

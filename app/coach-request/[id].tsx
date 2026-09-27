@@ -153,7 +153,8 @@ const styleDefinitions = StyleSheet.create({
   due: { ...typography.small, color: colors.textMuted, marginTop: spacing.md },
   label: { ...typography.smallStrong, color: colors.textMuted, marginTop: spacing.xl, marginBottom: spacing.sm, paddingHorizontal: spacing.xs },
   card: { gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
-  answer: { backgroundColor: colors.brandDim },
+  // The answer reads as the answer by a stripe of the court's colour down its edge, not a tinted box (which went olive on dark courts).
+  answer: { borderLeftWidth: 3, borderLeftColor: colors.brand, borderTopLeftRadius: 6, borderBottomLeftRadius: 6 },
   body: { ...typography.body, color: colors.text, lineHeight: 23 },
   video: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.bg },
   videoText: { ...typography.smallStrong, color: colors.text },
