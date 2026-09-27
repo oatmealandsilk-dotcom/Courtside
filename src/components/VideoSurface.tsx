@@ -1,6 +1,7 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { VideoView, createVideoPlayer } from 'expo-video';
+import { videoSource } from '@/lib/videoSource';
 
 export interface VideoSurfaceHandle {
   seek: (seconds: number) => void;
@@ -36,7 +37,7 @@ export const VideoSurface = forwardRef<VideoSurfaceHandle, {
   // first, then freed. Looping is by hand too (the built-in loop froze the
   // picture on a first pass).
   const player = useMemo(() => {
-    const p = createVideoPlayer(uri);
+    const p = createVideoPlayer(videoSource(uri));
     p.loop = false;
     p.muted = muted;
     p.timeUpdateEventInterval = 0.1;

@@ -3,6 +3,7 @@ import { ThreadReplies } from '@/components/ThreadReplies';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, AppState, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { goBack } from '@/lib/goBack';
@@ -147,11 +148,11 @@ function HitPicture({ uri }: { uri: string }) {
   if (wide) {
     return (
       <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', backgroundColor: '#000' }]}>
-        <Image accessibilityIgnoresInvertColors source={{ uri }} style={{ width: '100%', aspectRatio: 4 / 3 }} resizeMode="contain" />
+        <ExpoImage accessibilityIgnoresInvertColors source={{ uri }} style={{ width: '100%', aspectRatio: 4 / 3 }} contentFit="contain" cachePolicy="memory-disk" />
       </View>
     );
   }
-  return <Image accessibilityIgnoresInvertColors source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />;
+  return <ExpoImage accessibilityIgnoresInvertColors source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />;
 }
 
 function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
@@ -790,7 +791,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                 if (kind === 'word' && quickCover && poster) {
                   return (
                     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: wide || !phone ? '#000' : colors.bg }]}>
-                      <Image accessibilityIgnoresInvertColors source={{ uri: poster }} style={StyleSheet.absoluteFill} resizeMode={wide || !phone ? 'contain' : 'cover'} />
+                      <ExpoImage accessibilityIgnoresInvertColors source={{ uri: poster }} style={StyleSheet.absoluteFill} cachePolicy="memory-disk" contentFit={wide || !phone ? 'contain' : 'cover'} />
                       <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}><CourtSpinner ink="white" /></View>
                     </View>
                   );
@@ -997,11 +998,11 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       onPress={doubleTapFor(post.id, liked)}
                       style={StyleSheet.absoluteFill}
                     >
-                      <Image
+                      <ExpoImage
                         accessibilityIgnoresInvertColors
                         source={{ uri: post.thumbnailUrl }}
                         style={StyleSheet.absoluteFill}
-                        resizeMode="cover"
+                        contentFit="cover" cachePolicy="memory-disk"
                       />
                     </Pressable>
                   ) : (

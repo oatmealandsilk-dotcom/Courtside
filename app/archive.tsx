@@ -1,6 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -60,7 +61,7 @@ export default function Archive() {
                 style={styles.storyTile}
               >
                 {story.thumbnailUrl || story.imageUrl ? (
-                  <Image accessibilityIgnoresInvertColors source={{ uri: story.thumbnailUrl ?? story.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                  <ExpoImage accessibilityIgnoresInvertColors source={{ uri: story.thumbnailUrl ?? story.imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
                 ) : (
                   <View style={StyleSheet.absoluteFill}>
                     <MediaPlaceholder label={story.mediaLabel ?? 'Instant'} seed={story.id} portrait />
@@ -87,7 +88,7 @@ export default function Archive() {
               >
                 <View style={styles.postThumb}>
                   {post.thumbnailUrl ? (
-                    <Image accessibilityIgnoresInvertColors source={{ uri: post.thumbnailUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                    <ExpoImage accessibilityIgnoresInvertColors source={{ uri: post.thumbnailUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
                   ) : (
                     <Ionicons name={post.kind === 'clip' ? 'play' : 'document-text-outline'} size={18} color={colors.textMuted} />
                   )}

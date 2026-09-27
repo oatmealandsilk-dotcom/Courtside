@@ -1,6 +1,7 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
 import { VideoView, createVideoPlayer, type VideoPlayer } from 'expo-video';
+import { videoSource } from '@/lib/videoSource';
 import { noteClipLoad } from '@/lib/netSpeed';
 
 /** How many seconds of a clip are fetched before it counts as loaded and may start. */
@@ -48,7 +49,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   // its sound could run on after. Here it is silenced and stopped first,
   // then freed.
   const player = useMemo(() => {
-    const p = createVideoPlayer(uri);
+    const p = createVideoPlayer(videoSource(uri));
     // Looping is done by hand below, so a trimmed clip loops back to the
     // start its author kept rather than to the very beginning.
     p.loop = false;
