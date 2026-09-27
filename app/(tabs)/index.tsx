@@ -518,7 +518,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         {suggestions.slice(0, 6).map(({ user, reason }) => (
           <View key={user.id} style={styles.stripCard}>
             <Pressable accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.stripBody}>
-              <Avatar name={user.name} seed={user.avatarSeed} size={44} ring={user.isCoach} />
+              <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={44} ring={user.isCoach} />
               <View style={styles.stripWords}>
                 <Text style={styles.stripName} numberOfLines={1}>{user.name}</Text>
                 <Text style={styles.stripReason} numberOfLines={1}>{reason}</Text>
@@ -726,7 +726,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       {!ready || !feed.length ? (
         <EmptyState
           title={scope ? 'Nothing here yet' : ready ? 'Your court is quiet' : 'Loading your clips'}
-          body={scope ? undefined : 'Use + to share a moment.'}
+          body={scope ? undefined : 'Be the first on it: a clip, a photo, or an instant after you play.'}
+          action={!scope && ready ? { label: 'Share something', onPress: () => router.push('/compose') } : undefined}
         />
       ) : (
         <View style={styles.viewer}>
@@ -799,7 +800,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     <LinearGradient pointerEvents="none" colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)']} style={styles.bottomFade} />
                     <View style={styles.caption}>
                       <Pressable accessibilityRole="link" onPress={() => { tappedAuthor(`h:${story.id}`); router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`); }} style={styles.author}>
-                        <Avatar name={author.name} seed={author.avatarSeed} size={34} />
+                        <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={34} />
                         <Text style={styles.authorName}>@{author.handle}<Text style={styles.authorTime}> · {relativeTime(story.createdAt)}</Text></Text>
                       </Pressable>
                       <HitClock expiresAt={story.expiresAt} />
@@ -829,7 +830,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                   <View key={item.question.id} style={[styles.article, styles.threadArticle, scope && styles.articleScoped]}>
                     <Wash height={300} strength={0.6} />
                     <View style={styles.eyebrowRow}>
-                      <Text style={styles.eyebrow}>FROM THE COMMUNITY</Text>
+                      <Text style={styles.eyebrow}>From the community</Text>
                       {hiddenMarks.has(item.question.id) ? <View style={{ width: 34, height: 34 }} /> : <TapAway label="Hide the CourtSide logo" onHidden={() => hideMark(item.question.id)} style={styles.threadMark}><BrandMark size={34} /></TapAway>}
                     </View>
                     {strip}
@@ -899,7 +900,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     <Wash height={300} strength={0.6} />
                     {/* Inside one person's posts the feed label means nothing, and the back chevron wants the room. */}
                     {scope ? null : <Text style={styles.eyebrow}>
-                      {post.kind === 'match' ? 'SET PLAY' : post.kind.toUpperCase()} · FOR YOU
+                      {post.kind === 'match' ? 'Set play' : post.kind.charAt(0).toUpperCase() + post.kind.slice(1)} · For you
                     </Text>}
                     {strip}
                     <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: 'flex-start' }}>
@@ -982,7 +983,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       <Ionicons name="tennisball-outline" size={54} color={colors.court} />
                       <Text style={styles.previewTitle}>{post.mediaLabel}</Text>
                       <Text style={styles.previewNote}>
-                        Demo preview · add a video link to play your own clip
+                        This clip didn’t finish uploading
                       </Text>
                     </Pressable>
                   )}
@@ -999,7 +1000,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       onPress={() => { tappedAuthor(`p:${post.id}`); router.push(`/user/${author.id}`); }}
                       style={styles.author}
                     >
-                      <Avatar name={author.name} seed={author.avatarSeed} size={34} />
+                      <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={34} />
                       {/* The level belongs on the clip above all: a rally read
                           against a rating is the whole point, and this was the
                           one page that left it off. */}
@@ -1233,7 +1234,7 @@ const styleDefinitions = StyleSheet.create({
   stripName: { ...typography.bodyStrong, fontSize: 14, color: colors.text, textAlign: 'center' },
   stripReason: { ...typography.small, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
   threadArticle: { gap: 8, paddingBottom: BAR_OVERLAY_PX + 12 },
-  eyebrow: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.1 },
+  eyebrow: { ...typography.smallStrong, color: colors.textMuted },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   threadMark: { marginRight: 6, marginTop: 6 },
   hint: { color: colors.textMuted, fontSize: 11, textAlign: 'center', paddingBottom: 10 },

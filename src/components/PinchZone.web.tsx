@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 /**
  * The browser twin of PinchZone: two-finger pinch on a touch screen, or a
@@ -30,6 +30,28 @@ export function PinchZone({ children, onPinchOut, onPinchIn }: {
   };
   const wheelSum = useRef(0);
   const wheelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A trackpad pinch arrives as wheel events with Ctrl held. React's own
+  // wheel listener is passive, so it cannot stop the browser zooming the
+  // whole page as well; this one is added by hand with passive off.
+  const pinch = useRef({ onPinchOut, onPinchIn });
+  pinch.current = { onPinchOut, onPinchIn };
+  useEffect(() => {
+    const node = box.current;
+    if (!node) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      // A pinch is a burst of small wheel events; add them up and decide once the burst ends.
+      wheelSum.current += e.deltaY;
+      if (wheelTimer.current) clearTimeout(wheelTimer.current);
+      wheelTimer.current = setTimeout(() => {
+        if (wheelSum.current < -40) pinch.current.onPinchOut(); else if (wheelSum.current > 40) pinch.current.onPinchIn();
+        wheelSum.current = 0;
+      }, 120);
+    };
+    node.addEventListener('wheel', onWheel, { passive: false });
+    return () => node.removeEventListener('wheel', onWheel);
+  }, []);
   const gap = (t: React.TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
   return (
     <div
@@ -49,18 +71,6 @@ export function PinchZone({ children, onPinchOut, onPinchIn }: {
           if (scale > 1.18) onPinchOut(); else if (scale < 0.85) onPinchIn();
         }
         start.current = null; last.current = null;
-      }}
-      onWheel={(e) => {
-        if (!e.ctrlKey && !e.metaKey) return;
-        e.preventDefault();
-        // A trackpad pinch is a burst of small wheel events; add them up and
-        // decide once the burst ends.
-        wheelSum.current += e.deltaY;
-        if (wheelTimer.current) clearTimeout(wheelTimer.current);
-        wheelTimer.current = setTimeout(() => {
-          if (wheelSum.current < -40) onPinchOut(); else if (wheelSum.current > 40) onPinchIn();
-          wheelSum.current = 0;
-        }, 120);
       }}
     >
       <div ref={inner} style={{ position: 'absolute', inset: 0 }}>{children}</div>

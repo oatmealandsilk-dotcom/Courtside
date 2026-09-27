@@ -9,7 +9,8 @@ import { fetchCoachMemory, clearCoachMemory, type CoachMemory } from '@/data/api
 import { useAiCoachOn } from '@/features/aiCoach/switch';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { relativeTime } from '@/lib/format';
-import { colors, radius, spacing, typography } from '@/theme';
+import { confirmAction } from '@/lib/confirm';
+import { colors, radius, spacing, typography, lift } from '@/theme';
 
 /** Nothing is kept until the coach is switched on, so the screen says so. */
 export default function CoachMemoryRoute() {
@@ -32,19 +33,26 @@ function CoachMemoryScreen() {
   const styles = useThemedStyles(styleDefinitions);
   const [memory, setMemory] = useState<CoachMemory | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    fetchCoachMemory().then(setMemory).catch(() => setMemory(null));
+    fetchCoachMemory().then(setMemory).catch(() => { setMemory(null); setFailed(true); });
   }, []);
 
-  const clear = async () => {
-    setBusy(true);
-    try {
-      await clearCoachMemory();
-      setMemory({ summary: '', exchanges: [], updatedAt: null, remaining: memory?.remaining ?? 20 });
-    } finally {
-      setBusy(false);
-    }
+  const clear = () => {
+    confirmAction('Clear what the coach remembers?', 'Its notes and your recent conversations are deleted. The coach starts fresh next time.', 'Clear', async () => {
+      setBusy(true);
+      setError('');
+      try {
+        await clearCoachMemory();
+        setMemory({ summary: '', exchanges: [], updatedAt: null, remaining: memory?.remaining ?? 20 });
+      } catch {
+        setError('That did not clear. Check your connection and try again.');
+      } finally {
+        setBusy(false);
+      }
+    });
   };
 
   const empty = !memory || (!memory.summary && memory.exchanges.length === 0);
@@ -54,18 +62,20 @@ function CoachMemoryScreen() {
       <Text style={styles.lead}>
         The coach keeps short notes so it does not start from zero each time: what you are working on, what it told you, and whether you said it helped. Only you and the coach can see this.
       </Text>
-      {memory === undefined ? null : empty ? (
+      {memory === undefined ? <View style={{ paddingVertical: 48, alignItems: 'center' }}><CourtSpinner size={28} /></View> : failed ? (
+        <EmptyState icon="cloud-offline-outline" title="Couldn’t load the notes" body="Check your connection and open this again." />
+      ) : empty ? (
         <EmptyState icon="sparkles-outline" title="Nothing remembered yet" body="Ask the coach something and its notes start here." />
       ) : (
         <>
           {memory.summary ? (
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>NOTES</Text>
+              <Text style={styles.cardTitle}>Notes</Text>
               <Text style={styles.summary}>{memory.summary}</Text>
               {memory.updatedAt ? <Text style={styles.meta}>Updated {relativeTime(memory.updatedAt)}</Text> : null}
             </View>
           ) : null}
-          <Text style={styles.cardTitle}>RECENT EXCHANGES</Text>
+          <Text style={styles.cardTitle}>Recent conversation</Text>
           <View style={styles.thread}>
             {memory.exchanges.slice(-10).map((e: CoachMemory['exchanges'][number], i: number) => (
               <View key={i} style={[styles.bubble, e.role === 'user' ? styles.mine : styles.theirs]}>
@@ -73,6 +83,7 @@ function CoachMemoryScreen() {
               </View>
             ))}
           </View>
+          {error ? <Text style={styles.error}>{error}</Text> : null}
           <Button label="Clear everything the coach remembers" variant="danger" loading={busy} onPress={clear} full />
         </>
       )}
@@ -82,8 +93,9 @@ function CoachMemoryScreen() {
 
 const styleDefinitions = StyleSheet.create({
   lead: { ...typography.small, color: colors.textMuted, lineHeight: 20, paddingBottom: spacing.lg },
-  card: { padding: spacing.md, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, gap: spacing.sm, marginBottom: spacing.lg },
-  cardTitle: { ...typography.caption, color: colors.textFaint, letterSpacing: 1, paddingBottom: spacing.xs },
+  card: { ...lift, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface, gap: spacing.sm, marginBottom: spacing.lg },
+  cardTitle: { ...typography.smallStrong, color: colors.textMuted, paddingBottom: spacing.xs },
+  error: { ...typography.small, color: colors.danger, textAlign: 'center', paddingBottom: spacing.sm },
   summary: { ...typography.body, color: colors.text, lineHeight: 22 },
   meta: { ...typography.caption, color: colors.textFaint, letterSpacing: 0 },
   thread: { gap: spacing.sm, paddingBottom: spacing.xl },

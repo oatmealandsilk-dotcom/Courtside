@@ -17,6 +17,8 @@ import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
 import { relativeTime, timeLeft } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font } from '@/theme';
+import { useStillLoading } from '@/lib/useStillLoading';
+import { CourtSpinner } from '@/components/CourtSpinner';
 
 /** One hit with its likes and comments — the same page a post gets. */
 export default function HitThread() {
@@ -24,6 +26,7 @@ export default function HitThread() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { stories, users, comments, currentUserId, actions } = useApp();
+  const loading = useStillLoading();
   const story = stories.find((st) => st.id === id);
   const author = users.find((u) => u.id === story?.authorId);
   const [draft, setDraft] = useState('');
@@ -34,7 +37,7 @@ export default function HitThread() {
   if (!story || !author) {
     return (
       <Screen title="Instant" compactTitle onBack={() => goBack()}>
-        <EmptyState title="This hit has gone" body="It may have expired or been taken down." />
+        {loading ? <View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View> : <EmptyState title="This instant has gone" body="It may have expired or been taken down." />}
       </Screen>
     );
   }

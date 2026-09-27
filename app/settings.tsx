@@ -81,7 +81,7 @@ export default function Settings() {
     {
       title: 'Your tennis',
       rows: [
-        { icon: 'tennisball-outline', label: 'Game details and achievements', onPress: () => router.push('/profile-details') },
+        { icon: 'trophy-outline', label: 'Game details and achievements', onPress: () => router.push('/profile-details') },
         { icon: 'pulse-outline', label: 'Health and nutrition', onPress: () => router.push('/health') },
         { icon: 'location-outline', label: 'Location', detail: locationNote || (locationEnabled ? (detectedLocation ? `Showing players near ${detectedLocation.split(',')[0]}` : 'On') : 'Off. Turn on to see who is near you'), toggle: { value: locationEnabled, onChange: (next) => { void toggleLocation(next); } } },
         { icon: 'shield-half-outline', label: 'Permissions', onPress: () => router.push('/permissions') },
@@ -167,7 +167,7 @@ export default function Settings() {
                 <View style={[styles.rowBody, index > 0 && styles.rowLine]}>
                   <View style={styles.rowText}>
                     <Text style={styles.rowLabel} numberOfLines={1}>{row.label}</Text>
-                    {row.detail ? <Text style={styles.rowDetail} numberOfLines={1}>{row.detail}</Text> : null}
+                    {row.detail ? <Text style={styles.rowDetail}>{row.detail}</Text> : null}
                   </View>
                   {row.value ? <Text style={styles.rowValue} numberOfLines={1}>{row.value}</Text> : null}
                   {row.toggle ? (

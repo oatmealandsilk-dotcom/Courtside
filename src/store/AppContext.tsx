@@ -894,7 +894,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (post.authorId !== me || !isLocalMedia(post.thumbnailUrl) || !post.videoUrl || isLocalMedia(post.videoUrl)) continue;
         (async () => {
           try {
-            const frame = (await framesAt(post.videoUrl!, [post.trimStart ?? 0]))[0]?.uri;
+            const frame = (await framesAt(post.videoUrl!, [post.trimStart ?? 0], 1080))[0]?.uri;
             if (!frame) return;
             const hosted = await uploadMedia(me, frame, 'photo');
             await remote.updatePostThumbnail(post.id, hosted);
@@ -923,7 +923,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           isCoach: false, followers: 0, following: 0, profile: emptyProfile, achievementIds: [],
           stats: { sessionsLogged: 0, matchesPlayed: 0, matchesWon: 0, hoursOnCourt: 0, currentStreakDays: 0, longestStreakDays: 0 },
         }, ...prev.users];
-        return { ...prev, users, currentUserId: me, authResolved: true, remoteLoaded: false, error: err instanceof Error ? err.message : 'Could not load your account.' };
+        // The demo's invented people and coaches never stand in for a real account's data, even when that data failed to load.
+        return dropFixtures({ ...prev, users, currentUserId: me, authResolved: true, remoteLoaded: false, error: err instanceof Error ? err.message : 'Could not load your account.' });
       });
     }
   }, []);
@@ -1421,7 +1422,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // The hit is not in the feed until it has landed: the strip across the
       // top counts the upload up, and a failure says so instead of leaving a
       // hit only this phone can see.
-      startUpload(story.id, 'Posting hit', story.thumbnailUrl ?? story.imageUrl);
+      startUpload(story.id, 'Posting instant', story.thumbnailUrl ?? story.imageUrl);
       (async () => {
         try {
           const local = [isLocalMedia(story.imageUrl), isLocalMedia(story.videoUrl), isLocalMedia(story.thumbnailUrl) && story.thumbnailUrl !== story.imageUrl];
@@ -2615,11 +2616,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!result.ok) {
       remember(false);
       setState((prev) => ({ ...prev, locationEnabled: false, detectedLocation: null, detectedCoords: null }));
+      // Short on purpose: these sit under a settings row and in small notes.
       return result.reason === 'denied'
-        ? 'Location was blocked. Allow it for this site in your browser or phone settings, then try again.'
+        ? (Platform.OS === 'web' ? 'Blocked by your browser' : 'Blocked in your phone’s Settings')
         : result.reason === 'unavailable'
-          ? 'This device cannot share its location with the app yet.'
-          : 'Could not get a location right now. Try again in a moment.';
+          ? 'Not available on this device'
+          : 'Couldn’t find you. Try again';
     }
     const place = nearestPlace(result.lat, result.lng);
     haptics.tap();

@@ -14,7 +14,10 @@ import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
 import { evaluateAchievements, playStyleLabel, surfaceLabel, tierColor } from '@/lib/badges';
 import { compactNumber } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography, font } from '@/theme';
+import { colors, radius, spacing, typography, font, lift } from '@/theme';
+import { useStillLoading } from '@/lib/useStillLoading';
+import { CourtSpinner } from '@/components/CourtSpinner';
+import { isDesktopBrowser } from '@/lib/browserDevice';
 
 const TABS = ['Posts', 'Clips', 'Tagged'] as const;
 
@@ -28,6 +31,7 @@ export default function UserProfile() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { users, posts, coaches, currentUserId, followingIds, followRequests, mutedIds, blockedIds, alertIds, actions } = useApp();
+  const loading = useStillLoading();
   // Their posts come in when their profile is opened, so the grid and the
   // counts are whole however old the posts are.
   useEffect(() => { if (id) void actions.loadPostsOf(id); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -44,7 +48,7 @@ export default function UserProfile() {
   if (!user) {
     return (
       <Screen title="Player" compactTitle onBack={() => goBack()}>
-        <EmptyState icon="person-outline" title="No such player" />
+        {loading ? <View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View> : <EmptyState icon="person-outline" title="No such player" body="They may have deleted their account." />}
       </Screen>
     );
   }
@@ -83,6 +87,7 @@ export default function UserProfile() {
 
   return (
     <Screen
+      onRefresh={isDesktopBrowser() ? undefined : actions.refresh}
       title={`@${user.handle}`}
       compactTitle
       onBack={() => goBack()}
@@ -147,9 +152,9 @@ export default function UserProfile() {
       ) : (
         <>
           <Pressable accessibilityRole="link" accessibilityLabel={`${user.name}'s tennis profile`} onPress={() => router.push({ pathname: '/profile-details', params: { userId: user.id } })} style={styles.tennis}>
-            <View style={styles.eyebrowRow}><Text style={styles.eyebrow}>TENNIS PROFILE</Text><Ionicons name="chevron-forward" size={14} color={colors.textFaint} /></View>
+            <View style={styles.eyebrowRow}><Text style={styles.eyebrow}>Tennis profile</Text><Ionicons name="chevron-forward" size={14} color={colors.textFaint} /></View>
             <View style={styles.details}>
-              {[['Style', playStyleLabel[profile.playStyle]], ['Surface', surfaceLabel[profile.preferredSurface]], ['Sessions', `${user.stats.sessionsLogged} logged`], ['Hours on court', String(user.stats.hoursOnCourt)]].map(([label, value]) => (
+              {[['Style', playStyleLabel[profile.playStyle]], ['Surface', surfaceLabel[profile.preferredSurface]], ['Plays', `${profile.sessionsPerWeek}× a week`], ['Experience', `${profile.yearsPlaying} years`]].map(([label, value]) => (
                 <View key={label} style={styles.detail}><Text style={styles.meta}>{label}</Text><Text style={styles.value}>{value}</Text></View>
               ))}
             </View>
@@ -186,6 +191,7 @@ export default function UserProfile() {
                 <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
                 {p.thumbnailUrl ? <ExpoImage accessibilityIgnoresInvertColors source={{ uri: p.thumbnailUrl }} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120} /> : null}
                 {p.kind === 'clip' && <Ionicons name="play" size={14} color="#FFFFFF" style={styles.tilePlay} />}
+                {(p.videoUrl || p.kind === 'clip') && (p.views ?? 0) > 0 ? <View style={styles.tileViews} pointerEvents="none"><Ionicons name="play-outline" size={12} color="#FFFFFF"/><Text style={styles.tileViewsText}>{compactNumber(p.views ?? 0)}</Text></View> : null}
                 {p.pinned && tab !== 'Tagged' && <Ionicons name="pin" size={13} color="#FFFFFF" style={styles.tilePin} />}
               </Pressable>
             ))}
@@ -240,8 +246,8 @@ const styleDefinitions = StyleSheet.create({
   lockedBox: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xxl, paddingHorizontal: spacing.xl },
   lockedTitle: { ...typography.heading, color: colors.text },
   lockedBody: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
-  tennis: { padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.surface, gap: 8 },
-  eyebrow: { letterSpacing: 1.2, fontSize: 11, ...font('700'), color: colors.textMuted },
+  tennis: { ...lift, padding: 16, borderRadius: 20, backgroundColor: colors.surface, gap: 10 },
+  eyebrow: { ...typography.smallStrong, color: colors.textMuted },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   details: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   detail: { width: '46%', gap: 2 },
@@ -259,6 +265,8 @@ const styleDefinitions = StyleSheet.create({
   tileBlank: { padding: 10, justifyContent: 'center' },
   tileText: { fontSize: 11, lineHeight: 15, color: colors.textMuted },
   tilePlay: { position: 'absolute', top: 6, right: 6, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
+  tileViews: { position: 'absolute', left: 6, bottom: 5, flexDirection: 'row', alignItems: 'center', gap: 3 },
+  tileViewsText: { fontSize: 12, ...font('600'), color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
   tilePin: { position: 'absolute', top: 6, left: 6, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
   backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
   sheet: {

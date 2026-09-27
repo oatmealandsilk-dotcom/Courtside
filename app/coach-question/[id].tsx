@@ -12,6 +12,7 @@ import { Avatar, Button, Chip, EmptyState, Field, Screen } from '@/components/ui
 import { relativeTime } from '@/lib/format';
 import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
+import { SPECIALTY_LABEL } from '@/features/coaching/bookings';
 import { colors, radius, spacing, typography, font } from '@/theme';
 
 /** One Ask-a-Coach thread: the player's question and every coach reply. */
@@ -49,7 +50,7 @@ export default function CoachQuestionDetail() {
               @{author?.handle ?? 'player'} · {relativeTime(question.createdAt)}
             </PlayerName>
           </View>
-          <Chip label={question.specialty} small />
+          <Chip label={SPECIALTY_LABEL[question.specialty] ?? question.specialty} small />
         </View>
 
         <Text style={styles.title}>{question.title}</Text>
@@ -83,7 +84,7 @@ export default function CoachQuestionDetail() {
       </View>
 
       <Text style={styles.sectionTitle}>
-        {replies.length ? 'COACH REPLIES' : 'NO REPLIES YET'}
+        {replies.length ? 'Coach replies' : 'No replies yet'}
       </Text>
 
       {replies.map((reply) => {
@@ -197,7 +198,7 @@ const styleDefinitions = StyleSheet.create({
   title: { ...typography.title, color: colors.text, lineHeight: 29 },
   body: { ...typography.body, color: colors.text, lineHeight: 23 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  sectionTitle: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.3, paddingVertical: spacing.lg },
+  sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingVertical: spacing.lg },
   reply: {
     gap: spacing.md,
     paddingVertical: spacing.lg,

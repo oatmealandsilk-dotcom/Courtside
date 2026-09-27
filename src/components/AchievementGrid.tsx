@@ -38,7 +38,7 @@ export function AchievementGrid({ items }: { items: AchievementProgress[] }) {
                 <View style={[styles.fill, { width: `${Math.round(progress * 100)}%` }]} />
               </View>
             ) : (
-              <Text style={[styles.tier, { color: tint }]}>{achievement.tier.toUpperCase()}</Text>
+              <Text style={[styles.tier, { color: tint }]}>{achievement.tier.charAt(0).toUpperCase() + achievement.tier.slice(1)}</Text>
             )}
           </View>
         );
@@ -67,7 +67,7 @@ const styleDefinitions = StyleSheet.create({
   },
   name: { ...typography.smallStrong, color: colors.text },
   desc: { ...typography.small, color: colors.textFaint, fontSize: 12, lineHeight: 17 },
-  tier: { ...typography.caption, fontSize: 9 },
+  tier: { ...typography.caption, fontSize: 10, letterSpacing: 0 },
   track: { height: 4, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   fill: { height: '100%', backgroundColor: colors.brand },
 });

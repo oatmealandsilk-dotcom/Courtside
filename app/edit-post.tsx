@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -31,8 +31,20 @@ export default function EditPost() {
   const [tagged, setTagged] = useState<string[]>(post?.taggedUserIds ?? []);
   const [location, setLocation] = useState(post?.location ?? '');
   const [closeSignal, setCloseSignal] = useState(0);
+  // Opened before the post had loaded (a reload, a link): the fields fill in
+  // once, when it arrives, and Save stays off until then, so saving can
+  // never write a blank caption over the real one.
+  const [filled, setFilled] = useState(!!(post || question));
+  useEffect(() => {
+    if (filled || !(post || question)) return;
+    setBody(post?.body ?? question?.body ?? '');
+    setTitle(question?.title ?? '');
+    setTagged(post?.taggedUserIds ?? []);
+    setLocation(post?.location ?? '');
+    setFilled(true);
+  }, [filled, post, question]);
 
-  const canSave = mine && (isQuestion ? title.trim().length >= 3 : true);
+  const canSave = filled && mine && (isQuestion ? title.trim().length >= 3 : true);
   const save = () => {
     if (!canSave) return;
     if (post) actions.editPost(post.id, { body: body.trim(), taggedUserIds: tagged, location });

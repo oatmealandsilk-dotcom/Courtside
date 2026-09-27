@@ -353,7 +353,7 @@ export default function CoachApply() {
                 </View>
               ))}
               <Text style={styles.agree}>
-                By applying you agree to identity verification. Paid sessions are not offered yet; if they are later, they will come with their own terms.
+                By applying you agree to identity verification. Once approved you set your own prices, and payments go through Stripe under the Terms of Use.
               </Text>
               {sendError ? <Text style={styles.fieldError}>{sendError}</Text> : null}
             </>

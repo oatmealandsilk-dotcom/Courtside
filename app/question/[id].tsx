@@ -21,6 +21,7 @@ import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useApp } from '@/store/AppContext';
 import type { Answer } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
+import { isDesktopBrowser } from '@/lib/browserDevice';
 
 export default function QuestionDetail() {
   const styles = useThemedStyles(styleDefinitions);
@@ -69,7 +70,7 @@ export default function QuestionDetail() {
   };
 
   return (
-    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); router.navigate('/discuss'); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => goBack()} right={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>{question.authorId === currentUserId ? <Pressable accessibilityRole="button" accessibilityLabel="Edit this thread" hitSlop={10} onPress={() => router.push({ pathname: '/edit-post', params: { id: question.id, kind: 'question' } })}><Ionicons name="create-outline" size={23} color={colors.text} /></Pressable> : null}<Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable></View>}>
+    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); router.navigate('/discuss'); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => goBack()} onRefresh={isDesktopBrowser() ? undefined : () => loadThread(String(id))} right={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>{question.authorId === currentUserId ? <Pressable accessibilityRole="button" accessibilityLabel="Edit this thread" hitSlop={10} onPress={() => router.push({ pathname: '/edit-post', params: { id: question.id, kind: 'question' } })}><Ionicons name="create-outline" size={23} color={colors.text} /></Pressable> : null}<Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable></View>}>
       <Card style={styles.questionCard}>
         {/* Who asked, up top and at full size — the way a reply shows its author. */}
         <View style={styles.askerRow}>

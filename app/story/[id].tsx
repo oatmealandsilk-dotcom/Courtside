@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { goBack } from '@/lib/goBack';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as haptics from '@/lib/haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -14,6 +15,8 @@ import { isLive } from '@/features/stories/stories';
 import { relativeTime, timeLeft } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
+import { useStillLoading } from '@/lib/useStillLoading';
+import { CourtSpinner } from '@/components/CourtSpinner';
 
 /** How long a photo stays up. A video gets longer, and either can be tapped past. */
 const PHOTO_MS = 5000;
@@ -30,6 +33,7 @@ export default function StoryViewer() {
   const insets = useSafeAreaInsets();
   const { id, story: only } = useLocalSearchParams<{ id: string; story?: string }>();
   const { stories, users, currentUserId, actions } = useApp();
+  const loading = useStillLoading();
   const user = users.find((u) => u.id === id);
   const mine = user?.id === currentUserId;
 
@@ -53,7 +57,7 @@ export default function StoryViewer() {
     run.start(({ finished }) => {
       if (!finished) return;
       if (index < list.length - 1) setIndex(index + 1);
-      else router.back();
+      else goBack('/');
     });
     return () => run.stop();
   }, [current?.id, index, list.length, actions, progress]);
@@ -61,10 +65,10 @@ export default function StoryViewer() {
   if (!user || !current) {
     return (
       <View style={[styles.root, { paddingTop: insets.top }]}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => router.back()} style={styles.close}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => goBack('/')} style={styles.close}>
           <Ionicons name="close" size={28} color="#FFFFFF" />
         </Pressable>
-        <EmptyState title="Nothing to show" body="This instant has gone." />
+        {loading ? <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><CourtSpinner size={28} ink="white" /></View> : <EmptyState title="Nothing to show" body="This instant has gone." />}
       </View>
     );
   }
@@ -72,13 +76,13 @@ export default function StoryViewer() {
   const step = (direction: 1 | -1) => {
     const next = index + direction;
     if (next < 0) { progress.setValue(0); return; }
-    if (next >= list.length) { router.back(); return; }
+    if (next >= list.length) { goBack('/'); return; }
     setIndex(next);
   };
 
   const archive = () => {
     actions.toggleArchiveStory(current.id);
-    if (only || list.length === 1) router.back();
+    if (only || list.length === 1) goBack('/');
     else if (index >= list.length - 1) setIndex(Math.max(0, index - 1));
   };
 
@@ -121,7 +125,7 @@ export default function StoryViewer() {
             <Text style={styles.name}>{mine ? 'Your instant' : user.name}</Text>
             <Text style={styles.time}>{relativeTime(current.createdAt)} · {timeLeft(current.expiresAt)}</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => router.back()} hitSlop={10}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => goBack('/')} hitSlop={10}>
             <Ionicons name="close" size={28} color="#FFFFFF" />
           </Pressable>
         </View>

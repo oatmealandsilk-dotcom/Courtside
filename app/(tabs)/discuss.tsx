@@ -19,6 +19,7 @@ import { useApp } from '@/store/AppContext';
 import { sourceUserIds } from '@/features/community/importedThreads';
 import type { QuestionTopic } from '@/data/types';
 import { colors, radius, spacing, typography, font } from '@/theme';
+import { isDesktopBrowser } from '@/lib/browserDevice';
 
 const TOPICS: (QuestionTopic | 'all')[] = [
   'all',
@@ -33,7 +34,7 @@ const TOPICS: (QuestionTopic | 'all')[] = [
 
 function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
-  const { questions, users, currentUserId, currentUser, blockedIds, saved, actions, detectedCoords, locationEnabled } = useApp();
+  const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, saved, actions, detectedCoords, locationEnabled } = useApp();
   // The section lives here, not in the address: listening to the address made
   // this whole tab re-render on every route change anywhere in the app.
   // Other pages ask for a section through requestSection before navigating.
@@ -66,15 +67,24 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   useEffect(() => subscribeSectionRequest('/discuss#topic', (value) => setTopic(value in TOPIC_META ? (value as QuestionTopic) : 'all')), []);
 
 
+  // How the list is ordered, the way Reddit offers it. New stays the default.
+  const [sort, setSort] = useState<'new' | 'hot' | 'top' | 'unanswered'>('new');
   const [shownCount, setShownCount] = useState(25);
   const visible = useMemo(() => {
-    let list = [...questions];
+    // Nobody you have blocked or muted shows up here, the same as in the feed.
+    let list = questions.filter((q) => !blockedIds.includes(q.authorId) && !mutedIds.includes(q.authorId));
     if (topic !== 'all') list = list.filter((q) => q.topic === topic);
 
-    // Newest first, so a fresh question sits at the top rather than under the old ones.
-    list.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    const newest = (a: typeof list[number], b: typeof list[number]) => Date.parse(b.createdAt) - Date.parse(a.createdAt);
+    if (sort === 'unanswered') list = list.filter((q) => q.answerIds.length === 0);
+    if (sort === 'top') list.sort((a, b) => b.votes - a.votes || b.answerIds.length - a.answerIds.length || newest(a, b));
+    else if (sort === 'hot') {
+      // Votes and replies, pulled down by age: a lively thread from today beats a quiet one from last month.
+      const heat = (q: typeof list[number]) => (q.votes + 2 * q.answerIds.length + 1) / Math.pow((Date.now() - Date.parse(q.createdAt)) / 3_600_000 + 2, 1.5);
+      list.sort((a, b) => heat(b) - heat(a));
+    } else list.sort(newest);
     return list;
-  }, [questions, topic]);
+  }, [questions, topic, blockedIds, mutedIds, sort]);
   // A long list is drawn in slices: the first screenfuls at once, the rest on request.
   const slice = visible.slice(0, shownCount);
 
@@ -120,6 +130,13 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             </View>
           ))}
         </ScrollView>
+        <View style={styles.sortRow}>
+          {(['new', 'hot', 'top', 'unanswered'] as const).map((key) => (
+            <Pressable key={key} accessibilityRole="tab" accessibilityState={{ selected: sort === key }} onPress={() => setSort(key)} hitSlop={6} style={[styles.sort, sort === key && styles.sortOn]}>
+              <Text style={[styles.sortText, sort === key && styles.sortTextOn]}>{key === 'new' ? 'New' : key === 'hot' ? 'Hot' : key === 'top' ? 'Top' : 'Unanswered'}</Text>
+            </Pressable>
+          ))}
+        </View>
       </View>
 
       {visible.length === 0 ? (
@@ -155,7 +172,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       </>);
 
   return (
-    <Screen memoryKey="discuss" wash
+    <Screen memoryKey="discuss" wash onRefresh={previewSection === undefined && !isDesktopBrowser() ? actions.refresh : undefined}
       title="Community"
       subtitle="Find your people. Talk about your game."
       right={
@@ -193,6 +210,11 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
 }
 
 const styleDefinitions = StyleSheet.create({
+  sortRow: { flexDirection: 'row', gap: 4, paddingTop: spacing.sm },
+  sort: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14 },
+  sortOn: { backgroundColor: colors.surface },
+  sortText: { ...typography.small, color: colors.textMuted },
+  sortTextOn: { color: colors.text, ...font('600') },
   sections: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: 16 },
   more: { alignSelf: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, marginTop: spacing.md },
   moreText: { ...typography.smallStrong, color: colors.text },
@@ -213,7 +235,7 @@ const styleDefinitions = StyleSheet.create({
   playerName: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text, flexShrink: 1 },
   playerMeta: { ...typography.small, color: colors.textMuted, flexShrink: 1 },
   near: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.brandDim },
-  nearText: { ...typography.caption, fontSize: 10, color: colors.brand, letterSpacing: 0.5, textTransform: 'uppercase' },
+  nearText: { ...typography.caption, fontSize: 11, color: colors.brand, letterSpacing: 0 },
   playerChevron: { marginRight: spacing.lg },
   fab: {
     width: 38,

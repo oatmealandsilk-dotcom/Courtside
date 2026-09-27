@@ -79,7 +79,8 @@ export default function RootLayout() {
               contentStyle: { backgroundColor: 'transparent' },
             }}
           />
-          <Stack.Screen name="ask-coach" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          {/* The question page grows out of the Coaching tab's box itself (see ask-coach), so no stock animation. */}
+          <Stack.Screen name="ask-coach" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           {/* On a computer, New message is a box over the inbox (Instagram's way); on a phone it is a page. */}
           {desktop ? <Stack.Screen name="messages/new" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} /> : null}
           <Stack.Screen name="pick-location" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />

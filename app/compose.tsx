@@ -325,7 +325,7 @@ export default function Compose() {
                 </View>
                 {mode === 'hit' ? (
                   <View style={styles.hitMeta}>
-                    <View style={styles.hitPill}><Ionicons name="time-outline" size={13} color={colors.brand} /><Text style={styles.hitPillText}>24 HOURS</Text></View>
+                    <View style={styles.hitPill}><Ionicons name="time-outline" size={13} color={colors.brand} /><Text style={styles.hitPillText}>24 hours</Text></View>
                     <Text style={styles.hitMetaText}>On the feed for a day, then kept in your archive.</Text>
                   </View>
                 ) : null}
@@ -426,9 +426,9 @@ const styleDefinitions = StyleSheet.create({
   hitFrame: { width: '100%', aspectRatio: 4 / 3, maxHeight: 520, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000', alignSelf: 'center' },
   hitMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   hitPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: colors.brand, backgroundColor: colors.brandDim },
-  hitPillText: { color: colors.brand, fontSize: 11, ...font('700'), letterSpacing: 1.2 },
+  hitPillText: { color: colors.brand, fontSize: 12, ...font('600') },
   hitMetaText: { ...typography.small, color: colors.textMuted, flex: 1 },
-  libraryTitle: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.1, paddingTop: spacing.xl, paddingBottom: spacing.sm },
+  libraryTitle: { ...typography.smallStrong, color: colors.textMuted, paddingTop: spacing.xl, paddingBottom: spacing.sm },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 3 },
   tile: { width: '32.5%', aspectRatio: 9 / 12, borderRadius: radius.sm, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
   tileBadge: { position: 'absolute', right: 6, bottom: 6, textShadowColor: '#0008', textShadowRadius: 3 },

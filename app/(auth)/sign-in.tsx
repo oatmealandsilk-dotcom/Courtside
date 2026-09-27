@@ -318,7 +318,7 @@ export default function SignIn() {
         </View>
 
         <Text style={styles.footnote}>
-          {isSupabaseConfigured ? 'Your posts, stories and follows are saved to your account.' : 'Mock data only. Nothing you do here leaves the device.'}
+          {isSupabaseConfigured ? 'Your posts, instants and follows are saved to your account.' : 'Mock data only. Nothing you do here leaves the device.'}
         </Text>
       </ScrollView>
       {switchingAccount ? <SigningInAs name={switchingAccount.name} handle={switchingAccount.handle} avatarUrl={switchingAccount.avatarUrl} seed={switchingAccount.id} /> : null}

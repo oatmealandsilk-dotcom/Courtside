@@ -37,6 +37,8 @@ interface Props {
    * its page. The feed passes this; a page that scrolls leaves it off.
    */
   clamp?: number;
+  /** False in a list of many (search results): the video shows its cover instead of every one playing at once. */
+  playing?: boolean;
   /** Shown as ••• on your own posts: archive or delete. */
   onArchive?: () => void;
   onDelete?: () => void;
@@ -70,6 +72,7 @@ function PostCardInner({
   clamp,
   onArchive,
   onDelete,
+  playing = true,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -80,7 +83,7 @@ function PostCardInner({
   return (
     <Card style={styles.card}>
       <Pressable accessibilityRole="link" accessibilityLabel={`View ${author.name} profile`} onPress={onPressAuthor ?? (() => router.push(`/user/${author.id}`))} style={styles.header}>
-        <Avatar name={author.name} seed={author.avatarSeed} size={42} />
+        <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={42} />
         <View style={styles.headerText}>
           <View style={styles.nameRow}>
             <Text style={styles.name} numberOfLines={1}>
@@ -129,7 +132,7 @@ function PostCardInner({
       {/* The player fills whatever box it is given, so the card gives it one in the post's own shape. */}
       {post.videoUrl ? (
         <View style={{ width: '100%', aspectRatio: post.orientation === 'landscape' ? 16 / 9 : 4 / 5, borderRadius: 12, overflow: 'hidden', backgroundColor: '#000' }}>
-          <View style={cropLayer(post.crop)}><ClipVideo uri={post.videoUrl} poster={post.thumbnailUrl} trimStart={post.trimStart} trimEnd={post.trimEnd} speed={post.speed} volume={post.volume} /></View>
+          <View style={cropLayer(post.crop)}><ClipVideo uri={post.videoUrl} poster={post.thumbnailUrl} active={playing} trimStart={post.trimStart} trimEnd={post.trimEnd} speed={post.speed} volume={post.volume} /></View>
         </View>
       ) : post.kind === 'clip' ? <MediaPlaceholder label={post.mediaLabel ?? 'Clip'} seed={post.id} portrait /> : null}
       <Pressable onPress={onPress} style={styles.body}>
@@ -139,7 +142,7 @@ function PostCardInner({
           style={[styles.kindRow, { borderColor: `${meta.tint}55` }]}
         >
           <Ionicons name={meta.icon} size={13} color={meta.tint} />
-          <Text style={[styles.kindLabel, { color: meta.tint }]}>{meta.label.toUpperCase()}</Text>
+          <Text style={[styles.kindLabel, { color: meta.tint }]}>{meta.label}</Text>
           <Ionicons name="chevron-forward" size={11} color={meta.tint} />
         </Tappable>
 
@@ -260,7 +263,7 @@ const styleDefinitions = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
   },
-  kindLabel: { ...typography.caption },
+  kindLabel: { ...typography.caption, fontSize: 12, letterSpacing: 0 },
   text: { ...typography.body, color: colors.text, lineHeight: 22 },
   detailBox: {
     backgroundColor: colors.bgElevated,

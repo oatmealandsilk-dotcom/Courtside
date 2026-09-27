@@ -1,8 +1,8 @@
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
-import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useRef } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -14,16 +14,20 @@ import { useApp } from '@/store/AppContext';
 import { useAiCoachOn } from '@/features/aiCoach/switch';
 import { statusLabel } from '@/features/coaching/bookings';
 import { colors, radius, spacing, typography, font } from '@/theme';
+import { isDesktopBrowser } from '@/lib/browserDevice';
 
 function Coaching() {
   const styles = useThemedStyles(styleDefinitions);
-  const { coaches, users, coachingRequests, coachQuestions, currentUserId, currentUser } = useApp();
+  const { coaches, users, coachingRequests, coachQuestions, currentUserId, currentUser, actions } = useApp();
   const aiCoachOn = useAiCoachOn();
-  const [askDraft, setAskDraft] = useState('');
+  // Where the box sits on screen, so the question page can grow out of it.
+  const askPill = useRef<View>(null);
   const openAsk = () => {
-    const words = askDraft.trim();
-    setAskDraft('');
-    router.push(words ? { pathname: '/ask-coach', params: { title: words } } : '/ask-coach');
+    const pill = askPill.current;
+    if (!pill) { router.push('/ask-coach'); return; }
+    pill.measureInWindow((x, y, w, h) => {
+      router.push(w && h ? { pathname: '/ask-coach', params: { from: [x, y, w, h].map(Math.round).join(',') } } : '/ask-coach');
+    });
   };
   const recentQuestions = [...coachQuestions]
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
@@ -37,7 +41,7 @@ function Coaching() {
   const shown = coaches.filter((c) => c.listed !== false);
 
   return (
-    <Screen memoryKey="coaches" title="Coaching" subtitle="Real coaches, approved one by one." wash>
+    <Screen memoryKey="coaches" title="Coaching" subtitle="Real coaches, approved one by one." wash onRefresh={isDesktopBrowser() ? undefined : actions.refresh}>
       {/* ------------------------------ Ask a coach ----------------------------- */}
       <View style={[styles.section, styles.sectionFirst]}>
         <View style={styles.sectionRow}>
@@ -45,22 +49,17 @@ function Coaching() {
           <Text style={styles.sectionCount}>free</Text>
         </View>
       </View>
-      {/* A real box: type the question here, and the arrow opens the rest of it with your words already in. */}
-      <View style={styles.askField}>
-        <TextInput
-          accessibilityLabel="Ask a coach a question"
-          value={askDraft}
-          onChangeText={setAskDraft}
-          placeholder="What are you stuck on?"
-          placeholderTextColor={colors.textFaint}
-          returnKeyType="next"
-          onSubmitEditing={openAsk}
-          style={styles.askInput}
-        />
-        <Pressable accessibilityRole="button" accessibilityLabel="Continue your question" onPress={openAsk} hitSlop={6} style={({ pressed }) => [styles.askGo, pressed && { opacity: 0.85 }]}>
-          <Ionicons name="arrow-forward" size={16} color={colors.brandInk} />
-        </Pressable>
-      </View>
+      {/* Tapped, this box grows and lifts into the full question page (see ask-coach), where you type from the start. */}
+      <Pressable
+        ref={askPill}
+        accessibilityRole="button"
+        accessibilityLabel="Ask a coach a question"
+        onPress={openAsk}
+        style={({ pressed }) => [styles.askField, pressed && styles.askFieldPressed]}
+      >
+        <Text style={styles.askPlaceholder}>What are you stuck on?</Text>
+        <View style={styles.askGo}><Ionicons name="arrow-forward" size={16} color={colors.brandInk} /></View>
+      </Pressable>
       <Text style={styles.askNote}>Public. A verified coach answers, usually within a day.</Text>
       {/* The AI coach shows up here once it is switched on (its key added on the server). */}
       {aiCoachOn ? (
@@ -173,7 +172,7 @@ function Coaching() {
                 const coach = coaches.find((c) => c.id === r.coachId);
                 const coachUser = users.find((u) => u.id === coach?.userId);
                 const service = coach?.services.find((x) => x.id === r.serviceId);
-                const waiting = r.status !== 'answered';
+                const waiting = r.status === 'submitted' || r.status === 'in-review';
                 return (
                   <Pressable key={entry.key} accessibilityRole="link" onPress={() => router.push(`/coach-request/${r.id}`)} style={({ pressed }) => [styles.row, index > 0 && styles.rowLine, pressed && styles.pressed]}>
                     <View style={styles.rowWords}>
@@ -233,7 +232,8 @@ const styleDefinitions = StyleSheet.create({
     paddingLeft: spacing.lg, paddingRight: 6, paddingVertical: 6, minHeight: 52,
     borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
   },
-  askInput: { ...typography.body, fontSize: 16, color: colors.text, flex: 1, paddingVertical: 0, outlineStyle: 'none' } as object,
+  askFieldPressed: { transform: [{ scale: 0.99 }], borderColor: colors.borderStrong },
+  askPlaceholder: { ...typography.body, fontSize: 16, color: colors.textFaint, flex: 1 },
   askGo: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
   // Everything else is rows on hairlines, not boxes.
   list: { marginTop: spacing.sm },

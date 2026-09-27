@@ -56,7 +56,7 @@ function QuestionCardInner({
   return (
     <Card onPress={onPress} style={styles.card}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        {author && <Avatar name={author.name} seed={author.avatarSeed} size={30} />}
+        {author && <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={30} />}
         {/* Who wrote it, the way the feed says it: the name first, the handle
             after it. A thread carried in from outside keeps to the handle —
             the badge beside it already says where it came from. */}
@@ -147,7 +147,7 @@ const styleDefinitions = StyleSheet.create({
   sourceText: { ...typography.caption, color: colors.textMuted, letterSpacing: 0 },
   tag: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border },
   tagDone: { borderColor: colors.brandDim, backgroundColor: colors.brandDim },
-  tagText: { ...typography.caption, fontSize: 10, letterSpacing: 0.6, textTransform: 'uppercase' },
+  tagText: { ...typography.caption, fontSize: 12, letterSpacing: 0 },
   spacer: { flex: 1 },
 });
 
