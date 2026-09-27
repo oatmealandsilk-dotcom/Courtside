@@ -41,6 +41,8 @@ import { TipPage } from '@/components/TipPage';
 import { isLive } from '@/features/stories/stories';
 import { ClipPlayback } from '@/components/ClipPlayback';
 import { rankFeed, shuffleFeed, type FeedItem } from '@/features/feed/rankFeed';
+import { challengeFor, entriesFor } from '@/features/challenge/weekly';
+import { ChallengePage } from '@/components/ChallengePage';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { relativeTime, timeLeft } from '@/lib/format';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -527,11 +529,24 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       return question && !hidden.has(question.authorId) ? [{ type: 'question' as const, question }] : [];
     });
   }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds]);
-  // While the app is young, a page a few swipes in asks early users for a tip.
+  // This week's challenge, and its top clips so far. They are settled once
+  // per visit: a like arriving mid-scroll must not reshuffle the pages.
+  const challenge = useMemo(() => challengeFor(), []);
+  const featured = useRef<string[] | null>(null);
+  if (featured.current === null && feedItems.length) {
+    featured.current = entriesFor(challenge, feedItems.flatMap((i) => (i.type === 'post' ? [i.post] : []))).slice(0, 3).map((p) => p.id);
+  }
+  // While the app is young, a page a few swipes in asks early users for a
+  // tip; a few more in, the challenge, with its top clips straight after it.
   const feed = useMemo<FeedItem[]>(() => {
     if (scope || !feedItems.length) return feedItems;
-    const at = Math.min(3, feedItems.length);
-    return [...feedItems.slice(0, at), { type: 'tip' as const }, ...feedItems.slice(at)];
+    const top = featured.current ?? [];
+    const lead = top.flatMap((id) => feedItems.filter((i) => i.type === 'post' && i.post.id === id));
+    const rest = feedItems.filter((i) => !(i.type === 'post' && top.includes(i.post.id)));
+    const tipAt = Math.min(3, rest.length);
+    const withTip: FeedItem[] = [...rest.slice(0, tipAt), { type: 'tip' as const }, ...rest.slice(tipAt)];
+    const at = Math.min(7, withTip.length);
+    return [...withTip.slice(0, at), { type: 'challenge' as const }, ...lead, ...withTip.slice(at)];
   }, [feedItems, scope]);
 
   /**
@@ -741,7 +756,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   useEffect(() => {
     if (!focused || !showing) return;
     // A hit counts as watched through the story viewer, not here.
-    if (showing.type === 'hit' || showing.type === 'tip') return;
+    if (showing.type === 'hit' || showing.type === 'tip' || showing.type === 'challenge') return;
     actions.recordView(
       showing.type === 'post' ? 'post' : 'question',
       showing.type === 'post' ? showing.post.id : showing.question.id,
@@ -788,7 +803,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
             {[...feed.map((item, index) => {
               const distance = Math.abs(index - active);
               const ahead = index - active;
-              const pageKey = item.type === 'post' ? item.post.id : item.type === 'question' ? item.question.id : item.type === 'hit' ? item.story.id : 'tip';
+              const pageKey = item.type === 'post' ? item.post.id : item.type === 'question' ? item.question.id : item.type === 'hit' ? item.story.id : item.type;
               // Two pages behind and seven ahead stay built; the rest hold their slot.
               if (ahead < -WINDOW || ahead > AHEAD) {
                 // A page not built yet holds its slot with the brand on it, so a
@@ -818,6 +833,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               const strip = index === suggestHost ? suggestStrip : null;
 
               if (item.type === 'tip') return <TipPage key="tip" onSubmit={actions.submitTip} />;
+              if (item.type === 'challenge') return <ChallengePage key="challenge" challenge={challenge} />;
 
               if (item.type === 'hit') {
                 const story = item.story;

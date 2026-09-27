@@ -2,15 +2,17 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CourtSpinner } from '@/components/CourtSpinner';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { Avatar, Chip, EmptyState, Screen, SegmentedControl } from '@/components/ui';
+import { Avatar, Chip, EmptyState, Screen, SegmentedControl, Toggle } from '@/components/ui';
 import { TipComposer } from '@/components/TipComposer';
 import { askAiCoach, fetchAiPlan, type AiCoachReply, type CoachOption } from '@/data/api';
 import { generatePlan } from '@/features/aiCoach/planGenerator';
 import { useAiCoachLive, useAiCoachOn } from '@/features/aiCoach/switch';
+import { planRemindersSupported, readPlanReminders, schedulePlanReminders, setPlanReminders } from '@/features/aiCoach/planReminder';
+import { show as showToast } from '@/lib/toast';
 import { duration, formatDate } from '@/lib/format';
 import { healthSignal } from '@/lib/integrations';
 import { useApp } from '@/store/AppContext';
@@ -105,8 +107,10 @@ function Train() {
   const styles = useThemedStyles(styleDefinitions);
   const live = useAiCoachLive();
   const { currentUser, healthHistory, integrations, coaches, users } = useApp();
-  const [openDay, setOpenDay] = useState<number | null>(null);
-  const [section, setSection] = useState<'ask' | 'plan'>('ask');
+  // A morning reminder opens straight onto that day of the plan.
+  const params = useLocalSearchParams<{ section?: string; day?: string }>();
+  const [openDay, setOpenDay] = useState<number | null>(params.day !== undefined && /^[0-6]$/.test(params.day) ? Number(params.day) : null);
+  const [section, setSection] = useState<'ask' | 'plan'>(params.section === 'plan' ? 'plan' : 'ask');
   const [draft, setDraft] = useState<{ text: string; n: number } | null>(null);
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState('');
@@ -129,6 +133,21 @@ function Train() {
     void fetchAiPlan(about, hash).then(setWritten).catch(() => setWritten(null));
   }, [live, about]);
   const plan = written ?? standIn;
+
+  // Morning reminders: set again from the plan on screen each time it is
+  // opened, so they always match the week you last saw.
+  const [remind, setRemind] = useState(false);
+  useEffect(() => { void readPlanReminders().then(setRemind); }, []);
+  const settled = written !== undefined;
+  useEffect(() => { if (remind && settled && plan) void schedulePlanReminders(plan); }, [remind, settled, plan?.id, plan?.weekOf]); // eslint-disable-line react-hooks/exhaustive-deps
+  const toggleRemind = async (next: boolean) => {
+    setRemind(next);
+    const result = await setPlanReminders(next);
+    if (result === 'denied') {
+      setRemind(false);
+      showToast({ title: 'Alerts are off for CourtSide', body: 'Turn them on in your phone’s Settings to get the morning reminder.', icon: 'notifications-off-outline' });
+    }
+  };
 
   // Coaches the AI may suggest when a person would help more: real ones only.
   const options: CoachOption[] = coaches
@@ -292,6 +311,16 @@ function Train() {
             ))}
             {openDay === null ? <Text style={styles.fine}>Tap a day to see the session.</Text> : null}
           </View>
+          {planRemindersSupported ? (
+            <View style={styles.remind}>
+              <Ionicons name="alarm-outline" size={20} color={colors.textMuted} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={styles.remindTitle}>Morning reminder</Text>
+                <Text style={styles.remindBody}>Today’s session at 8am on training days.</Text>
+              </View>
+              <Toggle value={remind} onChange={(v) => { void toggleRemind(v); }} accessibilityLabel="Morning reminder with today’s session" />
+            </View>
+          ) : null}
         </>
       )}
     </Screen>
@@ -379,6 +408,9 @@ const styleDefinitions = StyleSheet.create({
   error: { ...typography.small, color: colors.danger },
   footRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md },
   fine: { flex: 1, ...typography.caption, color: colors.textFaint, lineHeight: 17 },
+  remind: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface, marginBottom: spacing.xl },
+  remindTitle: { ...typography.bodyStrong, color: colors.text },
+  remindBody: { ...typography.caption, color: colors.textMuted },
   link: { ...typography.smallStrong, color: colors.brand },
   writing: { alignItems: 'center', gap: spacing.sm, paddingVertical: 56, paddingHorizontal: spacing.xl },
   writingTitle: { ...typography.heading, color: colors.text, marginTop: spacing.md },

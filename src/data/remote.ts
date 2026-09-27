@@ -14,9 +14,10 @@ import * as WebBrowser from 'expo-web-browser';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
 import { shrinkPhoto } from '@/lib/shrinkPhoto';
+import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, Question, Story, Tip, User, CoachApplication } from './types';
+import type { Answer, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, Question, Story, Tip, User, CoachApplication } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
 
 /** What a new player did first, after setup. */
@@ -279,6 +280,11 @@ export interface UserState {
   constraints?: PlayerProfile['constraints'];
 }
 
+interface CourtNoteRow { court_id: string; user_id: string; lights: boolean | null; surface: CourtNote['surface'] | null; nets: CourtNote['nets'] | null; busy: CourtNote['busy'] | null; photo_url: string | null; note: string | null; updated_at: string }
+const toCourtNote = (r: CourtNoteRow): CourtNote => ({
+  courtId: r.court_id, userId: r.user_id, lights: r.lights ?? undefined, surface: r.surface ?? undefined, nets: r.nets ?? undefined,
+  busy: r.busy ?? undefined, photoUrl: r.photo_url ?? undefined, note: r.note ?? undefined, updatedAt: r.updated_at,
+});
 interface QuestionRow { id: string; author_id: string; title: string; body: string; topic: string; tags: string[]; votes: number; voted_by: Record<string, 1 | -1>; accepted_answer_id: string | null; edited_at: string | null; created_at: string }
 interface AnswerRow { id: string; question_id: string; author_id: string; parent_answer_id: string | null; body: string; votes: number; voted_by: Record<string, 1 | -1>; from_coach: boolean; created_at: string; media_url?: string | null; media_kind?: 'photo' | 'video' | null; media_thumb?: string | null }
 interface CoachQuestionRow { id: string; author_id: string; title: string; body: string; specialty: string; video_url: string | null; media_label: string | null; resolved: boolean; created_at: string }
@@ -1216,6 +1222,20 @@ export const remote = {
     const { error } = await need().from('practice_sessions').delete().eq('id', id);
     if (error) fail('session delete')(error);
   },
+  /** What players say about one court, newest first. Empty when the table is not there yet. */
+  async fetchCourtNotes(courtId: string): Promise<CourtNote[]> {
+    const { data, error } = await need().from('court_notes').select('*').eq('court_id', courtId).order('updated_at', { ascending: false }).limit(50);
+    if (error) { fail('court notes')(error); return []; }
+    return (data as CourtNoteRow[]).map(toCourtNote);
+  },
+  /** Your own report on a court; saving again replaces it. */
+  async saveCourtNote(n: CourtNote) {
+    const { error } = await need().from('court_notes').upsert({
+      court_id: n.courtId, user_id: n.userId, lights: n.lights ?? null, surface: n.surface ?? null, nets: n.nets ?? null,
+      busy: n.busy ?? null, photo_url: n.photoUrl ?? null, note: n.note ?? null,
+    }, { onConflict: 'court_id,user_id' });
+    if (error) { fail('court note')(error); throw new Error('That didn’t save. Try again.'); }
+  },
   async insertHit(h: HitRequest) {
     const { error } = await need().from('hit_requests').insert({
       id: h.id, author_id: h.authorId, starts_at: h.startsAt, place: h.place, level_min: h.levelMin ?? null, level_max: h.levelMax ?? null,
@@ -1569,25 +1589,30 @@ export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'vid
     // A photo goes up at the size a feed shows it (1440 on its long edge),
     // not the camera's full size: ten times smaller, same on screen.
     const uri = kind === 'photo' ? await shrinkPhoto(original) : original;
+    // A video is shrunk too, when this build can (see shrinkVideo): the first
+    // part of the upload bar is the shrinking, the rest the sending.
+    const shrinking = kind === 'video' && canShrinkVideo();
+    const upload = shrinking ? (f: number) => onProgress?.(0.35 + 0.65 * f) : onProgress;
+    const sent = shrinking ? await shrinkVideo(uri, (f) => onProgress?.(0.35 * f)) : uri;
     // Too big is the usual reason an upload fails, and it is worth saying
     // before the bytes go up rather than after.
-    const size = await fetch(uri).then((r) => r.blob()).then((b) => b.size).catch(() => 0);
+    const size = await fetch(sent).then((r) => r.blob()).then((b) => b.size).catch(() => 0);
     if (size > MAX_UPLOAD_BYTES) {
       const mb = Math.round(size / 1024 / 1024);
       throw new Error(`This ${kind} is ${mb} MB; the limit is ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB. Pick a shorter one — about a minute or less.`);
     }
     const contentType = Platform.OS === 'web'
-      ? ((await fetch(uri, { method: 'HEAD' }).catch(() => null))?.headers.get('content-type') || guessType(uri, kind)).split(';')[0].trim()
-      : guessType(uri, kind);
+      ? ((await fetch(sent, { method: 'HEAD' }).catch(() => null))?.headers.get('content-type') || guessType(sent, kind)).split(';')[0].trim()
+      : guessType(sent, kind);
     // The bucket enforces the same list; checking here gives a readable message.
     if (!ALLOWED_MEDIA.test(contentType)) throw new Error('Only photos and videos can be posted.');
     const ext = contentType.split('/')[1] || (kind === 'video' ? 'mp4' : 'jpg');
     const path = `${me}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     try {
-      await uploadWithProgress(path, uri, contentType, onProgress);
+      await uploadWithProgress(path, sent, contentType, upload);
     } catch (direct) {
       console.warn('[remote] direct upload fell back', direct);
-      const response = await fetch(uri);
+      const response = await fetch(sent);
       const bytes = await response.arrayBuffer();
       const { error } = await db.storage.from('media').upload(path, bytes, { contentType, upsert: false, cacheControl: '31536000' });
       if (error) throw error;

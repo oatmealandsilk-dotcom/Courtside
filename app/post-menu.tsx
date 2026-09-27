@@ -11,6 +11,7 @@ import { shareOutside } from '@/lib/shareOutside';
 import { downloadMedia } from '@/lib/downloadMedia';
 import { goBack } from '@/lib/goBack';
 import { colors, radius, spacing, typography } from '@/theme';
+import { shareLink } from '@/lib/shareLink';
 
 type Row = {
   key: string;
@@ -57,11 +58,12 @@ export default function PostMenu() {
 
   if (!item) return <View style={styles.backdrop}><SheetBackdrop /><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => goBack('/')} style={StyleSheet.absoluteFill} /></View>;
 
-  const url = `https://app.courtsidebase.com/post/${item.id}`;
+  const url = shareLink('post', item.id);
   // A hit is a moment, not a keepsake: nothing to save or send on.
   const rows: Row[] = post ? [
     { key: 'save', icon: isSaved ? 'bookmark' : 'bookmark-outline', label: isSaved ? 'Remove from saved' : 'Save', onPress: () => { actions.toggleSavePost(post.id); close(); } },
     { key: 'send', icon: 'paper-plane-outline', label: 'Send to…', onPress: () => router.replace({ pathname: '/share', params: { kind: 'post', id: post.id } }) },
+    { key: 'card', icon: 'image-outline', label: 'Share as image', onPress: () => router.replace({ pathname: '/share-card', params: { id: post.id } }) },
     { key: 'link', icon: 'link-outline', label: 'Share link', onPress: async () => { try { const note = await shareOutside(post.body || 'A CourtSide post', url); if (note) setDone(note); else close(); } catch { setDone(`Share this link: ${url}`); } } },
   ] : [];
   if (mine && story) {

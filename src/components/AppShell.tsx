@@ -23,7 +23,7 @@ import { colors } from '@/theme';
 const paths = { index: '/', discuss: '/discuss', coaches: '/coaches', profile: '/profile' } as const;
 const routes = Object.keys(paths).map(name => ({ key: name, name }));
 /** The pages that slide up over the app; Escape closes them on a computer. */
-const SHEETS = new Set(['/compose', '/share', '/ask', '/comments', '/post-menu', '/edit-post', '/messages/new', '/log-session', '/hit-request/new']);
+const SHEETS = new Set(['/compose', '/share', '/ask', '/comments', '/post-menu', '/edit-post', '/messages/new', '/log-session', '/hit-request/new', '/court-report']);
 const TAB_ORDER: string[] = [paths.index, paths.discuss, paths.coaches, paths.profile];
 export function AppShell({ children }: { children: React.ReactNode }) {
   useTheme();
@@ -103,7 +103,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // menu sits at the side, out of their way, so it stays, the way
   // Instagram's does behind its Create box. Sign-in, setup and the camera
   // hide it everywhere.
-  const phoneOnlyHide = ['/compose', '/edit-post', '/ask', '/ask-coach', '/pick-location', '/pick-court', '/invite', '/comments', '/share', '/likes', '/post-menu', '/log-session', '/hit-request/new'].includes(pathname) || pathname.startsWith('/messages/');
+  const phoneOnlyHide = ['/compose', '/edit-post', '/ask', '/ask-coach', '/pick-location', '/pick-court', '/invite', '/comments', '/share', '/likes', '/post-menu', '/log-session', '/hit-request/new', '/court-report'].includes(pathname) || pathname.startsWith('/messages/');
   const hideEverywhere = ['/sign-in', '/onboarding', '/agree', '/first-move', '/hit'].includes(pathname) || pathname.startsWith('/story/');
   const showNav = !!currentUserId && !hideEverywhere && !(isPhone && phoneOnlyHide);
   // A shared link opened while signed out goes to sign-in, not to an empty page.
