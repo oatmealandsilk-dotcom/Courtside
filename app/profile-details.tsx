@@ -3,34 +3,38 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { CourtSpinner } from '@/components/CourtSpinner';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { AchievementGrid } from '@/components/AchievementGrid';
 import { LevelPill } from '@/components/LevelPill';
-import { Avatar, Button, Card, Meter, Screen, StatTile } from '@/components/ui';
+import { Avatar, EmptyState, Meter, Screen } from '@/components/ui';
 import { evaluateAchievements, fitnessLabel, levelBadge, playStyleLabel, surfaceLabel, winRate } from '@/lib/badges';
 import { formatDate } from '@/lib/format';
+import { useStillLoading } from '@/lib/useStillLoading';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography, font } from '@/theme';
+import { colors, font, lift, radius, spacing, typography } from '@/theme';
 
 /**
- * The tennis side of a player — yours, or anyone's from their profile: rating
- * ladder, the numbers, how they play, goals, what the coach works around,
- * tournaments, achievements. Their posts live on the profile grid, not here.
+ * The tennis side of a player, yours or anyone's: where they sit on the
+ * rating ladder, how they play, goals, what the coach works around,
+ * tournaments. Numbers and badges appear once there is something real to
+ * show; a row of zeros reads as broken, not as new. Calm grouped lists,
+ * the way Settings reads.
  */
 export default function Profile() {
   const styles = useThemedStyles(styleDefinitions);
   const { userId } = useLocalSearchParams<{ userId?: string }>();
-  const { currentUser, users, actions } = useApp();
+  const { currentUser, users } = useApp();
+  const loading = useStillLoading();
   const user = userId ? users.find((u) => u.id === userId) ?? null : currentUser;
   const isMe = !!user && user.id === currentUser?.id;
 
   if (!user) {
     return (
       <Screen title="Game" compactTitle onBack={() => goBack()}>
-        <CourtSpinner size={28} />
+        {loading ? <View style={styles.wait}><CourtSpinner size={28} /></View> : <EmptyState icon="person-outline" title="No such player" />}
       </Screen>
     );
   }
@@ -40,138 +44,120 @@ export default function Profile() {
   const achievements = evaluateAchievements(user);
   const unlocked = achievements.filter((a) => a.unlocked);
   const first = user.name.split(' ')[0];
+  const s = user.stats;
+  const hasStats = s.sessionsLogged > 0 || s.hoursOnCourt > 0 || s.matchesPlayed > 0 || s.currentStreakDays > 0;
 
   return (
-    <Screen
-      title={isMe ? 'Your game' : `${first}'s game`}
-      compactTitle
-      onBack={() => goBack()}
-      right={isMe ? <Button label="Sign out" variant="ghost" onPress={() => { actions.signOut(); router.replace('/sign-in'); }} /> : undefined}
-    >
-      <Card style={styles.identity}>
-        <View style={styles.identityRow}>
-          <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={56} ring={user.isCoach} />
-          <View style={styles.identityText}>
-            <PlayerName userId={user.id} style={styles.name}>{user.name}</PlayerName>
-            <Text style={styles.handle}>@{user.handle}{user.location ? ` · ${user.location}` : ''} · joined {formatDate(user.joinedAt)}</Text>
-          </View>
-          <LevelPill profile={profile} />
+    <Screen title={isMe ? 'Your game' : `${first}’s game`} compactTitle onBack={() => goBack()}>
+      <View style={styles.identityRow}>
+        <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={56} ring={user.isCoach} />
+        <View style={styles.identityText}>
+          <PlayerName userId={user.id} style={styles.name}>{user.name}</PlayerName>
+          <Text style={styles.handle}>@{user.handle}{user.location ? ` · ${user.location}` : ''} · joined {formatDate(user.joinedAt)}</Text>
         </View>
-        <Meter
-          label="Rating ladder"
-          value={badge.progress}
-          caption={badge.label}
-          tint={badge.tint}
-        />
-      </Card>
-
-      <View style={styles.tileRow}>
-        <View style={styles.tileHalf}><StatTile label="Sessions" value={String(user.stats.sessionsLogged)} /></View>
-        <View style={styles.tileHalf}><StatTile label="Hours" value={String(user.stats.hoursOnCourt)} hint="on court" /></View>
-        <View style={styles.tileHalf}><StatTile label="Win rate" value={`${winRate(user.stats)}%`} hint={`${user.stats.matchesWon}/${user.stats.matchesPlayed}`} /></View>
-        <View style={styles.tileHalf}><StatTile label="Streak" value={`${user.stats.currentStreakDays}d`} hint={`best ${user.stats.longestStreakDays}d`} tint={colors.brand} /></View>
+        <LevelPill profile={profile} />
       </View>
 
-      <Section title="HOW THEY PLAY" me={isMe} mine="HOW YOU PLAY">
-        <Card style={styles.gameCard}>
-          <Detail label="Play style" value={playStyleLabel[profile.playStyle]} />
-          <Detail label="Fitness" value={fitnessLabel[profile.fitnessLevel]} />
-          <Detail
-            label="Hands"
-            value={`${profile.handedness === 'right' ? 'Right' : 'Left'}-handed · ${profile.backhand === 'one-handed' ? 'one' : 'two'}-handed backhand`}
-          />
-          <Detail label="Surface" value={surfaceLabel[profile.preferredSurface]} />
-          <Detail label="Availability" value={`${profile.sessionsPerWeek} sessions a week`} />
-          <Detail label="Experience" value={`${profile.yearsPlaying} years playing`} />
-        </Card>
-      </Section>
+      <View style={[styles.group, styles.ladder]}>
+        <Meter label="Rating ladder" value={badge.progress} caption={badge.label} tint={badge.tint} />
+      </View>
 
-      <Section title="GOALS">
-        <Card style={styles.listCard}>
-          {profile.goals.length === 0 ? (
-            <Text style={styles.muted}>No goals set yet.</Text>
-          ) : (
-            profile.goals.map((goal) => (
-              <View key={goal.id} style={styles.goalRow}>
-                <Ionicons
-                  name={goal.done ? 'checkmark-circle' : 'ellipse-outline'}
-                  size={17}
-                  color={goal.done ? colors.court : colors.textFaint}
-                />
-                <Text style={styles.goalText}>{goal.label}</Text>
-                {goal.targetDate ? (
-                  <Text style={styles.goalDate}>{formatDate(goal.targetDate)}</Text>
-                ) : null}
-              </View>
-            ))
-          )}
-        </Card>
-      </Section>
+      {hasStats ? (
+        <View style={[styles.group, styles.stats]}>
+          <Stat label="Sessions" value={String(s.sessionsLogged)} />
+          <Stat label="Hours" value={String(s.hoursOnCourt)} />
+          <Stat label="Win rate" value={s.matchesPlayed ? `${winRate(s)}%` : '—'} />
+          <Stat label="Streak" value={`${s.currentStreakDays}d`} tint={colors.brand} />
+        </View>
+      ) : null}
+
+      <Text style={styles.sectionTitle}>{isMe ? 'How you play' : 'How they play'}</Text>
+      <View style={styles.group}>
+        <Detail label="Play style" value={playStyleLabel[profile.playStyle]} />
+        <Detail line label="Fitness" value={fitnessLabel[profile.fitnessLevel]} />
+        <Detail line label="Hands" value={`${profile.handedness === 'right' ? 'Right' : 'Left'}-handed · ${profile.backhand === 'one-handed' ? 'one' : 'two'}-handed backhand`} />
+        <Detail line label="Surface" value={surfaceLabel[profile.preferredSurface]} />
+        <Detail line label="Plays" value={`${profile.sessionsPerWeek} times a week`} />
+        <Detail line label="Experience" value={`${profile.yearsPlaying} years`} />
+      </View>
+
+      <Text style={styles.sectionTitle}>Goals</Text>
+      <View style={styles.group}>
+        {profile.goals.length === 0 ? (
+          <Text style={styles.muted}>{isMe ? 'No goals yet. Add one from Edit profile.' : 'No goals shared.'}</Text>
+        ) : (
+          profile.goals.map((goal, index) => (
+            <View key={goal.id} style={[styles.row, index > 0 && styles.line]}>
+              <Ionicons name={goal.done ? 'checkmark-circle' : 'ellipse-outline'} size={18} color={goal.done ? colors.brand : colors.textFaint} />
+              <Text style={styles.rowText}>{goal.label}</Text>
+              {goal.targetDate ? <Text style={styles.rowMeta}>{formatDate(goal.targetDate)}</Text> : null}
+            </View>
+          ))
+        )}
+      </View>
 
       {/* Injuries, schedule and gear notes are private: only their owner ever sees this section. */}
       {isMe && profile.constraints.length > 0 ? (
-        <Section title="THE COACH WORKS AROUND">
-          <Card style={styles.listCard}>
-            {profile.constraints.map((c) => (
-              <View key={c.id} style={styles.constraintRow}>
-                <View style={styles.constraintHead}>
-                  <Ionicons
-                    name={c.kind === 'injury' ? 'medkit-outline' : 'calendar-outline'}
-                    size={15}
-                    color={c.kind === 'injury' ? colors.danger : colors.hard}
-                  />
-                  <Text style={styles.constraintLabel}>{c.label}</Text>
+        <>
+          <Text style={styles.sectionTitle}>The coach works around</Text>
+          <View style={styles.group}>
+            {profile.constraints.map((c, index) => (
+              <View key={c.id} style={[styles.rowTall, index > 0 && styles.line]}>
+                <View style={styles.rowHead}>
+                  <Ionicons name={c.kind === 'injury' ? 'medkit-outline' : 'calendar-outline'} size={16} color={c.kind === 'injury' ? colors.danger : colors.textMuted} />
+                  <Text style={styles.rowStrong}>{c.label}</Text>
                 </View>
-                {c.note ? <Text style={styles.constraintNote}>{c.note}</Text> : null}
+                {c.note ? <Text style={styles.note}>{c.note}</Text> : null}
               </View>
             ))}
-          </Card>
-        </Section>
+          </View>
+          <Text style={styles.fine}>Only you see this.</Text>
+        </>
       ) : null}
 
       {profile.tournaments.length > 0 ? (
-        <Section title="TOURNAMENTS">
-          <Card style={styles.listCard}>
-            {profile.tournaments.map((t) => (
-              <View key={t.id} style={styles.tournamentRow}>
-                <View style={styles.tournamentText}>
-                  <Text style={styles.tournamentName}>{t.name}</Text>
-                  <Text style={styles.tournamentMeta}>
-                    {formatDate(t.startsAt)} · {t.surface.charAt(0).toUpperCase() + t.surface.slice(1)} court · {t.location}
-                  </Text>
+        <>
+          <Text style={styles.sectionTitle}>Tournaments</Text>
+          <View style={styles.group}>
+            {profile.tournaments.map((t, index) => (
+              <View key={t.id} style={[styles.row, index > 0 && styles.line]}>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={styles.rowStrong}>{t.name}</Text>
+                  <Text style={styles.rowMeta}>{formatDate(t.startsAt)} · {t.surface.charAt(0).toUpperCase() + t.surface.slice(1)} court{t.location ? ` · ${t.location}` : ''}</Text>
                 </View>
-                <View style={[styles.regBadge, t.registered && { borderColor: colors.court }]}>
-                  <Text style={[styles.regText, t.registered && { color: colors.court }]}>
-                    {t.registered ? 'ENTERED' : 'WATCHING'}
-                  </Text>
+                <View style={[styles.tag, t.registered && styles.tagOn]}>
+                  <Text style={[styles.tagText, t.registered && styles.tagTextOn]}>{t.registered ? 'Entered' : 'Watching'}</Text>
                 </View>
               </View>
             ))}
-          </Card>
-        </Section>
+          </View>
+        </>
       ) : null}
 
-      <Section title={`ACHIEVEMENTS · ${unlocked.length}/${achievements.length}`}>
-        <AchievementGrid items={achievements} />
-      </Section>
+      {unlocked.length > 0 ? (
+        <>
+          <Text style={styles.sectionTitle}>Achievements · {unlocked.length} of {achievements.length}</Text>
+          <AchievementGrid items={achievements} />
+        </>
+      ) : null}
     </Screen>
   );
 }
 
-function Section({ title, mine, me, children }: { title: string; mine?: string; me?: boolean; children: React.ReactNode }) {
+function Stat({ label, value, tint }: { label: string; value: string; tint?: string }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{me && mine ? mine : title}</Text>
-      {children}
+    <View style={styles.stat}>
+      <Text style={[styles.statValue, tint ? { color: tint } : null]}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
 }
 
-function Detail({ label, value }: { label: string; value: string }) {
+function Detail({ label, value, line }: { label: string; value: string; line?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <View style={styles.detailRow}>
+    <View style={[styles.row, line && styles.line]}>
       <Text style={styles.detailLabel}>{label}</Text>
       <Text style={styles.detailValue}>{value}</Text>
     </View>
@@ -179,38 +165,32 @@ function Detail({ label, value }: { label: string; value: string }) {
 }
 
 const styleDefinitions = StyleSheet.create({
-  identity: { gap: spacing.md },
-  identityRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
-  identityText: { flex: 1, gap: 3 },
+  wait: { paddingVertical: 60, alignItems: 'center' },
+  identityRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'center', paddingBottom: spacing.lg },
+  identityText: { flex: 1, gap: 3, minWidth: 0 },
   name: { ...typography.heading, color: colors.text },
-  handle: { ...typography.small, color: colors.textFaint },
-  pillRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', paddingTop: 2 },
-  bio: { ...typography.small, color: colors.textMuted, lineHeight: 20 },
-  followRow: { flexDirection: 'row', gap: spacing.lg, flexWrap: 'wrap' },
-  followText: { ...typography.small, color: colors.textFaint },
-  followCount: { color: colors.text, ...font('700') },
-  tileRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingVertical: spacing.lg },
-  tileHalf: { width: '48%', flexGrow: 1 },
-  section: { gap: spacing.sm, paddingBottom: spacing.xl },
-  // Quiet eyebrow titles, the way the profile's own cards are labelled.
-  sectionTitle: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.2, paddingLeft: 2 },
-  gameCard: { gap: 0, paddingVertical: spacing.xs },
-  detailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  detailLabel: { ...typography.small, color: colors.textMuted },
-  detailValue: { ...typography.smallStrong, color: colors.text, flexShrink: 1, textAlign: 'right' },
-  listCard: { gap: spacing.md },
-  muted: { ...typography.small, color: colors.textFaint },
-  goalRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  goalText: { ...typography.small, color: colors.text, flex: 1, lineHeight: 20 },
-  goalDate: { ...typography.caption, color: colors.textFaint },
-  constraintRow: { gap: 3 },
-  constraintHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  constraintLabel: { ...typography.smallStrong, color: colors.text },
-  constraintNote: { ...typography.small, color: colors.textMuted, lineHeight: 19, paddingLeft: 21 },
-  tournamentRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  tournamentText: { flex: 1, gap: 2 },
-  tournamentName: { ...typography.smallStrong, color: colors.text },
-  tournamentMeta: { ...typography.small, color: colors.textFaint },
-  regBadge: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 2 },
-  regText: { ...typography.caption, color: colors.textFaint },
+  handle: { ...typography.small, color: colors.textMuted },
+  group: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden', paddingHorizontal: spacing.lg },
+  ladder: { paddingVertical: spacing.lg },
+  stats: { flexDirection: 'row', marginTop: spacing.md, paddingVertical: spacing.lg },
+  stat: { flex: 1, alignItems: 'center', gap: 2 },
+  statValue: { ...typography.title, color: colors.text, fontVariant: ['tabular-nums'] },
+  statLabel: { ...typography.small, color: colors.textMuted },
+  sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingTop: spacing.xl, paddingBottom: spacing.sm },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 50, paddingVertical: 11 },
+  rowTall: { gap: 4, paddingVertical: spacing.md },
+  rowHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  rowText: { flex: 1, ...typography.body, color: colors.text },
+  rowStrong: { ...typography.body, ...font('600'), color: colors.text },
+  rowMeta: { ...typography.small, color: colors.textMuted },
+  note: { ...typography.small, color: colors.textMuted, lineHeight: 19, paddingLeft: 24 },
+  detailLabel: { flex: 1, ...typography.body, color: colors.textMuted },
+  detailValue: { ...typography.body, ...font('500'), color: colors.text, flexShrink: 1, textAlign: 'right' },
+  muted: { ...typography.small, color: colors.textMuted, paddingVertical: spacing.lg },
+  fine: { ...typography.caption, color: colors.textFaint, letterSpacing: 0, paddingHorizontal: spacing.sm, paddingTop: spacing.sm },
+  tag: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: colors.bgElevated },
+  tagOn: { backgroundColor: colors.brand },
+  tagText: { ...typography.caption, ...font('600'), letterSpacing: 0, color: colors.textMuted },
+  tagTextOn: { color: colors.brandInk },
 });

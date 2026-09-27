@@ -923,7 +923,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           isCoach: false, followers: 0, following: 0, profile: emptyProfile, achievementIds: [],
           stats: { sessionsLogged: 0, matchesPlayed: 0, matchesWon: 0, hoursOnCourt: 0, currentStreakDays: 0, longestStreakDays: 0 },
         }, ...prev.users];
-        return { ...prev, users, currentUserId: me, authResolved: true, remoteLoaded: false, error: err instanceof Error ? err.message : 'Could not load your account.' };
+        // The demo's invented people and coaches never stand in for a real account's data, even when that data failed to load.
+        return dropFixtures({ ...prev, users, currentUserId: me, authResolved: true, remoteLoaded: false, error: err instanceof Error ? err.message : 'Could not load your account.' });
       });
     }
   }, []);

@@ -143,7 +143,9 @@ export default function Onboarding() {
   const [sessionsPerWeek, setSessionsPerWeek] = useState(existing?.sessionsPerWeek ?? 3);
   const [goalOne, setGoalOne] = useState(existing?.goals[0]?.label ?? '');
   const [tournamentName, setTournamentName] = useState(existing?.tournaments[0]?.name ?? '');
-  const [tournamentDays, setTournamentDays] = useState(30);
+  // Back in setup with a tournament already saved: count from its real date, not a fresh 30 days.
+  const savedTournament = existing?.tournaments[0];
+  const [tournamentDays, setTournamentDays] = useState(savedTournament ? Math.max(1, Math.round((Date.parse(savedTournament.startsAt) - Date.now()) / 86_400_000)) : 30);
 
   const scale = SCALES[skillSystem];
   const band = scale.bands.find((b) => rating <= b.upTo) ?? scale.bands[scale.bands.length - 1];
@@ -180,11 +182,15 @@ export default function Onboarding() {
   /* -------------------------------- Profile ------------------------------- */
 
   const profile = useMemo<PlayerProfile>(() => {
+    // A goal or tournament that did not change keeps everything it had (done, a target date, its id).
+    const keptGoal = existing?.goals[0];
     const goals = [goalOne]
       .map((label) => label.trim())
       .filter(Boolean)
-      .map((label, i) => ({ id: `g-onboard-${i}`, label, done: false }));
-    const tournaments = tournamentName.trim()
+      .map((label, i) => (i === 0 && keptGoal && keptGoal.label === label ? keptGoal : { id: `g-onboard-${i}`, label, done: false }));
+    const sameTournament = savedTournament && savedTournament.name === tournamentName.trim()
+      && Math.abs(Math.round((Date.parse(savedTournament.startsAt) - Date.now()) / 86_400_000) - tournamentDays) <= 1;
+    const tournaments = sameTournament ? [savedTournament!, ...(existing?.tournaments.slice(1) ?? [])] : tournamentName.trim()
       ? [{
           id: 't-onboard',
           name: tournamentName.trim(),
@@ -203,7 +209,7 @@ export default function Onboarding() {
       constraints: existing?.constraints ?? [],
       tournaments,
     };
-  }, [skillSystem, rating, playStyle, handedness, backhand, fitnessLevel, surface, sessionsPerWeek, yearsPlaying, goalOne, tournamentName, tournamentDays, location, existing?.constraints]);
+  }, [skillSystem, rating, playStyle, handedness, backhand, fitnessLevel, surface, sessionsPerWeek, yearsPlaying, goalOne, tournamentName, tournamentDays, location, existing?.constraints, existing?.goals, existing?.tournaments, savedTournament]);
 
   const finish = () => {
     haptics.commit();

@@ -15,6 +15,8 @@ import { isLive } from '@/features/stories/stories';
 import { relativeTime, timeLeft } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
+import { useStillLoading } from '@/lib/useStillLoading';
+import { CourtSpinner } from '@/components/CourtSpinner';
 
 /** How long a photo stays up. A video gets longer, and either can be tapped past. */
 const PHOTO_MS = 5000;
@@ -31,6 +33,7 @@ export default function StoryViewer() {
   const insets = useSafeAreaInsets();
   const { id, story: only } = useLocalSearchParams<{ id: string; story?: string }>();
   const { stories, users, currentUserId, actions } = useApp();
+  const loading = useStillLoading();
   const user = users.find((u) => u.id === id);
   const mine = user?.id === currentUserId;
 
@@ -65,7 +68,7 @@ export default function StoryViewer() {
         <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => goBack('/')} style={styles.close}>
           <Ionicons name="close" size={28} color="#FFFFFF" />
         </Pressable>
-        <EmptyState title="Nothing to show" body="This instant has gone." />
+        {loading ? <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><CourtSpinner size={28} ink="white" /></View> : <EmptyState title="Nothing to show" body="This instant has gone." />}
       </View>
     );
   }
