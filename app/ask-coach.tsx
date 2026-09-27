@@ -136,7 +136,7 @@ export default function AskCoach() {
     <Reanimated.View ref={contentRef} style={[{ flex: 1 }, content]}>
     <Screen title="Ask a coach" compactTitle scroll={false} padded={false} onBack={close}>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.page}>
-        <Text style={styles.lead}>Free, and public. {watching ? `${watching} verified ${watching === 1 ? 'coach' : 'coaches'} read this board` : 'Verified coaches read this board'} and usually answer within a day.</Text>
+        <Text style={styles.lead}>Free, and public. {watching ? `${watching} verified ${watching === 1 ? 'coach' : 'coaches'} read this board and usually answer within a day.` : 'Coaches are joining now, and your question stays up until one answers.'}</Text>
 
         {/* What it is about: one scrolling row, no heading — the words say it. */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.topics} style={styles.topicsWrap}>

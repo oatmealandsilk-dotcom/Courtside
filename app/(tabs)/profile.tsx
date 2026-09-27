@@ -138,7 +138,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    </View>
    <Pressable accessibilityRole="link" onPress={() => router.push('/profile-details')} style={styles.tennis}>
      <View style={styles.eyebrowRow}><Text style={styles.eyebrow}>Tennis profile</Text><Ionicons name="chevron-forward" size={15} color={colors.textFaint}/></View>
-     <View style={styles.details}>{[['Style',playStyleLabel[profile.playStyle]],['Surface',surfaceLabel[profile.preferredSurface]],['Availability',`${profile.sessionsPerWeek} sessions / week`],['Goal',profile.goals[0]?.label ?? 'Set your next goal']].map(([label,value]) => <View key={label} style={styles.detail}><Text style={styles.meta}>{label}</Text><Text style={styles.value}>{value}</Text></View>)}</View>
+     <View style={styles.details}>{[['Style',playStyleLabel[profile.playStyle]],['Surface',surfaceLabel[profile.preferredSurface]],...(profile.sessionsPerWeek !== undefined ? [['Availability',`${profile.sessionsPerWeek} sessions / week`]] : []),['Goal',profile.goals[0]?.label ?? 'Set your next goal']].map(([label,value]) => <View key={label} style={styles.detail}><Text style={styles.meta}>{label}</Text><Text style={styles.value}>{value}</Text></View>)}</View>
    </Pressable>
    {/* One grouped list, the way Settings reads, instead of three boxes. */}
    <View style={styles.links}>

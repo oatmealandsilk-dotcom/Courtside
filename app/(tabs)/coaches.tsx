@@ -60,7 +60,8 @@ function Coaching() {
         <Text style={styles.askPlaceholder}>What are you stuck on?</Text>
         <View style={styles.askGo}><Ionicons name="arrow-forward" size={16} color={colors.brandInk} /></View>
       </Pressable>
-      <Text style={styles.askNote}>Public. A verified coach answers, usually within a day.</Text>
+      {/* No promise nobody can keep: until coaches are on, the note says what really happens. */}
+      <Text style={styles.askNote}>{shown.length ? 'Public. A verified coach answers, usually within a day.' : 'Public. Coaches are joining now, and your question stays up until one answers.'}</Text>
       {/* The AI coach shows up here once it is switched on (its key added on the server). */}
       {aiCoachOn ? (
         <Pressable accessibilityRole="link" accessibilityLabel="AI coach" onPress={() => router.push('/ai-coach')} style={({ pressed }) => [styles.ai, pressed && styles.pressed]}>
@@ -83,7 +84,7 @@ function Coaching() {
       {shown.length === 0 ? (
         <View style={styles.none}>
           <Text style={styles.noneTitle}>No coaches on CourtSide yet</Text>
-          <Text style={styles.noneBody}>This is the set being played right now. Ask a question above in the meantime — it stays up until a coach answers it.</Text>
+          <Text style={styles.noneBody}>We’re approving the first ones now. You can still ask above, and the question stays up until a coach answers.</Text>
           {currentUser?.isCoach ? null : (
             <Button label="Apply to coach" variant="secondary" onPress={() => router.push('/coach-apply')} />
           )}
@@ -119,7 +120,8 @@ function Coaching() {
                       <Text style={styles.meta}>· {coach.ratingCount}</Text>
                     </View>
                   ) : <Text style={styles.meta}>New</Text>}
-                  {price ? <View style={styles.priceTag}><Text style={styles.priceText}>from {money(price)}</Text></View> : null}
+                  {coach.payoutsReady === false ? <Text style={styles.meta}>Booking soon</Text>
+                    : price ? <View style={styles.priceTag}><Text style={styles.priceText}>from {money(price)}</Text></View> : null}
                 </View>
               </Pressable>
             );

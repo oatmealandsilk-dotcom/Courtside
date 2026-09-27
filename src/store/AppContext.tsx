@@ -11,9 +11,8 @@ import React, {
 import { AppState as DeviceState, Platform } from 'react-native';
 import { randomUUID } from 'expo-crypto';
 import { TERMS_VERSION } from '@/lib/legal';
-import { sourceUserIds } from '@/features/community/importedThreads';
 
-import { fetchBootstrap, fetchCommunityThreads, signIn as apiSignIn, type Bootstrap } from '@/data/api';
+import { fetchBootstrap, signIn as apiSignIn, type Bootstrap } from '@/data/api';
 import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type AdminReport, type FeedSignal, type SiteFeedback, type WaitlistEntry, type FirstDayStats, type FirstMove, type HandleStatus } from '@/data/remote';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
@@ -537,14 +536,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function dropFixtures(state: AppState): AppState {
   if (!isSupabaseConfigured) return state;
   const real = <T extends { id: ID }>(rows: T[]) => rows.filter((row) => UUID.test(row.id));
-  // Threads carried in from Reddit stay. They are not invented:
-  // each one names the forum it came from and the person who wrote it, and
-  // links back to the original. Their two source accounts stay with them, or
-  // the threads would have nobody's name on them.
-  const sources = new Set<ID>(sourceUserIds);
-  const users = state.users.filter((u) => UUID.test(u.id) || sources.has(u.id));
+  const users = state.users.filter((u) => UUID.test(u.id));
   const posts = real(state.posts);
-  const questions = state.questions.filter((q) => UUID.test(q.id) || (!!q.source && sources.has(q.authorId)));
+  const questions = state.questions.filter((q) => UUID.test(q.id));
   const threads = new Set(questions.map((q) => q.id));
   const keep = new Set<ID>([...posts.map((p) => p.id), ...threads]);
   return {
@@ -689,21 +683,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ready: true,
           };
         });
-        // Imported threads arrive on their own clock and slot in when ready.
-        fetchCommunityThreads()
-          .then((imported) => {
-            if (cancelled || !imported.questions.length) return;
-            setState((prev) => {
-              const known = new Set(prev.questions.map((q) => q.id));
-              const knownUsers = new Set(prev.users.map((u) => u.id));
-              return {
-                ...prev,
-                users: [...prev.users, ...imported.users.filter((u) => !knownUsers.has(u.id))],
-                questions: [...prev.questions, ...imported.questions.filter((q) => !known.has(q.id))],
-              };
-            });
-          })
-          .catch(() => { /* The board still works without them. */ });
       })
       .catch((err: unknown) => {
         if (cancelled) return;

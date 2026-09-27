@@ -97,7 +97,8 @@ Deno.serve(async (req) => {
         if (!account) return json({ ready: false, started: false });
         const acct = await stripe.accounts.retrieve(account);
         const ready = !!acct.charges_enabled && !!acct.details_submitted;
-        await admin.from('coaches').update({ payouts_ready: ready, ...(ready ? {} : { listed: false }) }).eq('id', coach.id);
+        // A listed coach stays listed while payouts are unfinished: their page says booking opens soon, and checkout refuses until ready.
+        await admin.from('coaches').update({ payouts_ready: ready }).eq('id', coach.id);
         if (mode === 'connect-check') return json({ ready, started: true, due: acct.requirements?.currently_due?.length ?? 0 });
         if (mode === 'dashboard') {
           if (!acct.details_submitted) throw new Plain('Finish payout setup first.');

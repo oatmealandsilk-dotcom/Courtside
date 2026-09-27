@@ -82,8 +82,8 @@ export default function Profile() {
         <Detail line label="Fitness" value={fitnessLabel[profile.fitnessLevel]} />
         <Detail line label="Hands" value={`${profile.handedness === 'right' ? 'Right' : 'Left'}-handed · ${profile.backhand === 'one-handed' ? 'one' : 'two'}-handed backhand`} />
         <Detail line label="Surface" value={surfaceLabel[profile.preferredSurface]} />
-        <Detail line label="Plays" value={`${profile.sessionsPerWeek} times a week`} />
-        <Detail line label="Experience" value={`${profile.yearsPlaying} years`} />
+        {profile.sessionsPerWeek !== undefined ? <Detail line label="Plays" value={`${profile.sessionsPerWeek} times a week`} /> : null}
+        {profile.yearsPlaying !== undefined ? <Detail line label="Experience" value={`${profile.yearsPlaying} years`} /> : null}
       </View>
 
       <Text style={styles.sectionTitle}>Goals</Text>

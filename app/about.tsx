@@ -26,8 +26,8 @@ export default function About() {
       </View>
 
       <Text style={styles.body}>
-        Social media, discussion, and coaching for tennis players. Log your sessions and matches, ask
-        the questions nobody answers well, and get coaching — human or AI — that actually knows your game.
+        Social media, discussion, and coaching for tennis players. Share your clips, ask the questions
+        nobody answers well, find people to hit with, and learn from real coaches.
       </Text>
 
       <View style={styles.card}>

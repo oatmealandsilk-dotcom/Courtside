@@ -60,7 +60,7 @@ export default function CoachDetail() {
   const reviews = coachReviews.filter((r) => r.coachId === coach.id).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   const myReview = reviews.find((r) => r.authorId === currentUserId);
   const canReview = !isOwner && !!currentUserId && !myReview && mine.some((r) => r.status === 'answered');
-  const bookable = !isOwner && coach.listed !== false && payments.on !== false;
+  const bookable = !isOwner && coach.listed !== false && payments.on !== false && coach.payoutsReady !== false;
 
   const book = async () => {
     if (!service || question.trim().length < 2 || busy) return;
@@ -169,7 +169,7 @@ export default function CoachDetail() {
           })}
         </View>
       )}
-      {!isOwner && payments.on === false ? <Text style={styles.muted}>Booking opens soon. Ask {first} a free question on the Coaching tab in the meantime.</Text> : null}
+      {!isOwner && (payments.on === false || coach.payoutsReady === false) ? <Text style={styles.muted}>Booking opens soon. Ask {first} a free question on the Coaching tab in the meantime.</Text> : null}
 
       {service && bookable ? (
         <View style={styles.form}>

@@ -173,7 +173,7 @@ function PostCardInner({
         {post.session ? (
           <View style={styles.detailBox}>
             <Text style={styles.detailTitle}>
-              {post.session.focus} · {duration(post.session.minutes)} · intensity {post.session.intensity}/5
+              {post.session.focus} · {duration(post.session.minutes)}{post.session.intensity ? ` · intensity ${post.session.intensity}/5` : ''}
             </Text>
             {post.session.drills.map((drill) => (
               <Text key={drill} style={styles.drill}>

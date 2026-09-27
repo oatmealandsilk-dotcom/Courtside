@@ -187,7 +187,7 @@ export default function SignIn() {
           <BrandMark size={56} />
           <Text style={styles.wordmark}>CourtSide</Text>
           <Text style={styles.tagline}>
-            Log your tennis, ask the questions nobody answers well, and get coaching that actually knows your game.
+            Share your clips, ask the questions nobody answers well, find people to hit with, and learn from real coaches.
           </Text>
         </View>
 

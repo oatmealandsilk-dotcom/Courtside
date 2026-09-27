@@ -4,7 +4,6 @@ import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, EmptyState, Screen } from '@/components/ui';
-import { sourceUserIds } from '@/features/community/importedThreads';
 import { goBack } from '@/lib/goBack';
 import { show as showToast } from '@/lib/toast';
 import { useResponsive } from '@/lib/useResponsive';
@@ -12,7 +11,6 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, spacing, typography } from '@/theme';
 
-const SOURCES = new Set<string>(sourceUserIds);
 
 /**
  * Starting a chat. On a computer it is a small box over your inbox, the way
@@ -28,7 +26,7 @@ export default function NewMessage() {
   const term = query.trim().replace(/^@/, '').toLowerCase();
   const recent = [...conversations].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)).flatMap((c) => c.participantIds.filter((id) => id !== currentUserId));
   const matches = users
-    .filter((u) => u.id !== currentUserId && !SOURCES.has(u.id) && !blockedIds.includes(u.id) && `${u.name} ${u.handle}`.toLowerCase().includes(term))
+    .filter((u) => u.id !== currentUserId && !blockedIds.includes(u.id) && `${u.name} ${u.handle}`.toLowerCase().includes(term))
     .sort((a, b) => (recent.includes(a.id) ? recent.indexOf(a.id) : 999) - (recent.includes(b.id) ? recent.indexOf(b.id) : 999))
     .slice(0, 50);
   // On a computer the box arrives on its own (the inbox behind never moves or

@@ -78,7 +78,8 @@ export default function CoachStudio() {
     { done: offered.length > 0, title: 'Services', body: offered.length ? `${offered.length} on offer.` : 'At least one thing players can book.' },
     { done: !!coach.payoutsReady, title: 'Payouts', body: coach.payoutsReady ? 'Stripe pays you out.' : 'Connect a bank account through Stripe.' },
   ];
-  const canList = steps.every((s) => s.done);
+  // Payouts are needed to take bookings, not to be listed: a coach can appear with “booking opens soon” first.
+  const canList = steps[0].done && steps[1].done;
 
   const run = async (key: string, work: () => Promise<unknown>, done?: string) => {
     setBusy(key);
@@ -130,7 +131,7 @@ export default function CoachStudio() {
           <View style={[styles.tick, coach.listed && styles.tickDone]}>{coach.listed ? <Ionicons name="checkmark" size={14} color={colors.brandInk} /> : <Text style={styles.tickNum}>4</Text>}</View>
           <View style={styles.rowWords}>
             <Text style={styles.rowTitle}>Listed</Text>
-            <Text style={styles.meta}>{coach.listed ? 'Players can find and book you.' : canList ? 'Turn on to appear on the Coaching tab.' : 'Opens once the three steps above are done.'}</Text>
+            <Text style={styles.meta}>{coach.listed ? (coach.payoutsReady ? 'Players can find and book you.' : 'Players can find you. Booking opens once payouts are set up.') : canList ? 'Turn on to appear on the Coaching tab.' : 'Opens once your page and a service are done.'}</Text>
           </View>
           <Toggle
             value={!!coach.listed}
