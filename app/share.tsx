@@ -10,6 +10,7 @@ import { Avatar, Button, Field } from '@/components/ui';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
+import { shareLink } from '@/lib/shareLink';
 
 /**
  * Instagram-style send sheet. Pick people, add a note, send — the item lands
@@ -89,7 +90,7 @@ export default function ShareSheet() {
     setTimeout(dismiss, 900);
   };
 
-  const url = `https://app.courtsidebase.com/${kind === 'profile' ? 'user' : kind}/${id}`;
+  const url = shareLink(kind, id);
   const shareOut = async () => {
     try { setFallbackNote(await shareOutside(title, url)); }
     catch { setFallbackNote(`Share this link: ${url}`); }
