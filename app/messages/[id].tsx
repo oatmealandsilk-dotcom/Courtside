@@ -23,6 +23,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 
 import { Avatar, EmptyState } from '@/components/ui';
+import { GroupAvatar, groupName, isGroupChat, othersIn } from '@/features/messages/groups';
+import { openInMaps } from '@/features/players/openInMaps';
 import { Tappable, useDoubleTap } from '@/components/Tappable';
 import { chatStamp } from '@/lib/format';
 import { RichText } from '@/components/RichText';
@@ -74,6 +76,8 @@ export default function Thread() {
   const other = users.find(
     (u) => u.id === conversation?.participantIds.find((p) => p !== currentUserId),
   );
+  const group = !!conversation && isGroupChat(conversation);
+  const people = conversation ? othersIn(conversation, users, currentUserId) : [];
 
   useEffect(() => {
     const mark = () => {
@@ -103,7 +107,7 @@ export default function Thread() {
     if (conversation?.id) void checkBlocked(conversation.id).then((b) => { if (on) setChatBlocked(b); });
     return () => { on = false; };
   }, [conversation?.id, checkBlocked, blockedIds]);
-  const blockedHere = chatBlocked || (!!other && blockedIds.includes(other.id));
+  const blockedHere = chatBlocked || (!group && !!other && blockedIds.includes(other.id));
 
   // Scrolling up to the top loads the page of messages before the oldest
   // here, like Instagram; the view stays on the message you were reading
@@ -172,17 +176,28 @@ export default function Thread() {
         <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back">
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </Pressable>
+        {group ? (
+          // A group: its faces and name; tapping opens who is in it, and the name, add and leave.
+          <Pressable style={styles.headerUser} accessibilityRole="button" accessibilityLabel="Group details" onPress={() => router.push({ pathname: '/messages/group', params: { id: conversation.id } })}>
+            <GroupAvatar people={people} size={36} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.headerName} numberOfLines={1}>{groupName(conversation, users, currentUserId)}</Text>
+              <Text style={styles.headerHandle}>{people.length + 1} people</Text>
+            </View>
+          </Pressable>
+        ) : (
         <Pressable
           style={styles.headerUser}
           accessibilityRole="link"
           onPress={() => router.push(`/user/${other.id}`)}
         >
-          <Avatar name={other.name} seed={other.avatarSeed} size={34} />
+          <Avatar name={other.name} seed={other.avatarSeed} uri={other.avatarUrl} size={34} />
           <View>
             <PlayerName userId={other.id} style={styles.headerName}>{other.name}</PlayerName>
             <PlayerName userId={other.id} style={styles.headerHandle}>@{other.handle}</PlayerName>
           </View>
         </Pressable>
+        )}
       </View>
 
       <ScrollView
@@ -226,6 +241,29 @@ export default function Thread() {
           const lastOfRun = !runsOn(message, next);
           // A new message rises out of the composer and settles with a small spring.
           const arrive = settled.current ? FadeInUp.duration(150).easing(Easing.out(Easing.cubic)) : undefined;
+
+          // In a group, the sender's name over the first of their run of messages.
+          const who = group && !mine && !inRun ? <Text style={styles.sender}>{users.find((u) => u.id === message.senderId)?.name.split(' ')[0] ?? 'Someone'}</Text> : null;
+
+          if (message.kind === 'court' && message.place) {
+            const place = message.place;
+            return (
+              <React.Fragment key={message.id}>
+              {stamp}
+              {who}
+              <Reanimated.View entering={arrive} layout={LinearTransition.duration(120)} style={[styles.row, mine ? styles.rowMine : styles.rowTheirs, inRun && styles.inRun]}>
+                <Tappable accessibilityRole="link" accessibilityLabel={`${place.name}. Open in Maps`} scaleTo={0.97} onPress={() => openInMaps(place)} style={[styles.sharedCard, styles.courtCard]}>
+                  <View style={styles.sharedHead}>
+                    <Ionicons name="location" size={16} color={colors.brand} />
+                    <Text style={styles.sharedKind}>Court</Text>
+                  </View>
+                  <Text numberOfLines={2} style={styles.courtName}>{place.name}</Text>
+                  <Text style={styles.courtOpen}>Open in Maps</Text>
+                </Tappable>
+              </Reanimated.View>
+              </React.Fragment>
+            );
+          }
 
           if (message.kind !== 'text' && message.sharedId) {
             const shared =
@@ -282,6 +320,7 @@ export default function Thread() {
           return (
             <React.Fragment key={message.id}>
             {stamp}
+            {who}
             <Bubble
               message={message}
               mine={mine}
@@ -378,6 +417,9 @@ export default function Thread() {
             size={23}
             color={emojiOpen ? colors.brand : colors.textMuted}
           />
+        </Tappable>
+        <Tappable accessibilityLabel="Send a court" onPress={() => router.push({ pathname: '/pick-court', params: { conversation: conversation.id } })} style={styles.emojiToggle}>
+          <Ionicons name="location-outline" size={23} color={colors.textMuted} />
         </Tappable>
         <TextInput
           ref={inputRef}
@@ -705,6 +747,10 @@ const styleDefinitions = StyleSheet.create({
   sharedHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   sharedKind: { ...typography.caption, color: colors.brand },
   sharedBody: { ...typography.small, color: colors.text, lineHeight: 19 },
+  courtCard: { minWidth: 220 },
+  courtName: { ...typography.bodyStrong, color: colors.text },
+  courtOpen: { ...typography.smallStrong, color: colors.brand },
+  sender: { ...typography.caption, letterSpacing: 0, color: colors.textMuted, marginLeft: spacing.lg, marginTop: spacing.sm, marginBottom: 2 },
   timestamp: { ...typography.caption, color: colors.textFaint, textAlign: 'center', paddingTop: spacing.md },
   stamp: { ...typography.caption, fontSize: 12, letterSpacing: 0, color: colors.textFaint, textAlign: 'center', paddingTop: spacing.xl, paddingBottom: spacing.md },
   mentionTray: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
