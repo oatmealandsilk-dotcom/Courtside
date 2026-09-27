@@ -13,7 +13,7 @@ import { money, relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useAiCoachOn } from '@/features/aiCoach/switch';
 import { statusLabel } from '@/features/coaching/bookings';
-import { colors, radius, spacing, typography, font } from '@/theme';
+import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 
 function Coaching() {
@@ -230,9 +230,9 @@ const styleDefinitions = StyleSheet.create({
   askField: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
     paddingLeft: spacing.lg, paddingRight: 6, paddingVertical: 6, minHeight: 52,
-    borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
+    ...lift, borderRadius: radius.pill, backgroundColor: colors.surface,
   },
-  askFieldPressed: { transform: [{ scale: 0.99 }], borderColor: colors.borderStrong },
+  askFieldPressed: { transform: [{ scale: 0.99 }] },
   askPlaceholder: { ...typography.body, fontSize: 16, color: colors.textFaint, flex: 1 },
   askGo: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
   // Everything else is rows on hairlines, not boxes.
@@ -247,16 +247,17 @@ const styleDefinitions = StyleSheet.create({
   sectionFirst: { paddingTop: spacing.sm },
   sectionRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.md },
   sectionCount: { ...typography.small, color: colors.textFaint },
-  group: { borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
+  group: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   sectionTitle: { ...typography.heading, color: colors.text },
   sectionBody: { ...typography.small, color: colors.textMuted },
   none: { gap: spacing.sm, paddingVertical: spacing.lg, alignItems: 'flex-start' },
   noneTitle: { ...typography.heading, color: colors.text },
   noneBody: { ...typography.small, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.sm },
   coach: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14, paddingHorizontal: spacing.lg },
-  rail: { flexGrow: 0, marginHorizontal: -spacing.lg },
-  railRow: { gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.xs },
-  coachCard: { width: 176, gap: spacing.md, padding: spacing.lg, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  // Room above and below so the cards' shadows are not cut off by the scroller.
+  rail: { flexGrow: 0, marginHorizontal: -spacing.lg, marginVertical: -spacing.md },
+  railRow: { gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.md + spacing.xs, paddingBottom: spacing.lg + spacing.xs },
+  coachCard: { ...lift, width: 176, gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
   coachWords: { gap: 3 },
   coachName: { ...typography.bodyStrong, color: colors.text },
   coachFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
@@ -266,9 +267,9 @@ const styleDefinitions = StyleSheet.create({
   rating: { ...typography.smallStrong, color: colors.text },
   priceCol: { alignItems: 'flex-end', gap: 2 },
   price: { ...typography.bodyStrong, color: colors.text, fontVariant: ['tabular-nums'] },
-  foot: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, marginTop: spacing.xl, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  foot: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, marginTop: spacing.xl, ...lift, borderRadius: 20, backgroundColor: colors.surface },
   footTitle: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text },
-  ai: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.lg, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
+  ai: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.lg, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
   aiMark: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
 });
 

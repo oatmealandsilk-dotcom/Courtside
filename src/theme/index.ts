@@ -18,11 +18,10 @@ export const colors: Record<keyof typeof lightColors, string> = { ...lightColors
  * (On a dark court it all but disappears, which is right.)
  */
 export const lift = {
-  shadowColor: '#2A2418',
-  shadowOpacity: 0.07,
-  shadowRadius: 16,
-  shadowOffset: { width: 0, height: 4 },
-  elevation: 2,
+  // The CSS-style shadow, not shadowColor/shadowOpacity: on iPhone the old
+  // props are cut off by overflow: 'hidden', which every grouped list needs
+  // for its rounded corners, so the lift silently vanished there.
+  boxShadow: '0px 4px 16px rgba(42, 36, 24, 0.07)',
 } as const;
 
 export const spacing = {

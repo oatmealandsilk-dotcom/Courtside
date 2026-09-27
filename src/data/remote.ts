@@ -427,6 +427,9 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // is what left people re-doing the quiz: their profile never arrived.
   const storiesFull = db.from('stories').select('*, story_views(user_id), story_likes(user_id), story_comments(id, story_id, author_id, body, created_at, story_comment_likes(user_id))').order('created_at', { ascending: false }).limit(40);
   const storiesPlain = () => db.from('stories').select('*, story_views(user_id)').order('created_at', { ascending: false }).limit(40);
+  // Coaches load alongside everything else rather than after it: one round
+  // trip to the server fewer on every open. A failure just means no coaches.
+  const coachingLoad = fetchCoaching(me).catch(() => ({ coaches: [], coachReviews: [], coachResults: [] }));
   const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows] = await Promise.all([
     // Every profile, in chunks, so nobody is left out past the first 1,000.
     allRows<ProfileRow>((from, to) => db.from('profiles').select('*').order('created_at', { ascending: true }).range(from, to)),
@@ -461,7 +464,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     // Your own coach application, so the form can show where it stands.
     db.from('coach_applications').select('*').eq('user_id', me).order('created_at', { ascending: false }).limit(3),
   ]);
-  const coaching = await fetchCoaching(me);
+  const coaching = await coachingLoad;
   if (qs.error) console.warn('[remote] community tables missing; run the pending migrations', qs.error.message);
   const byTime = <T extends { created_at: string }>(a: T, b: T) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0);
   const questionRows = (qs.data ?? []) as (QuestionRow & { answers?: AnswerRow[] })[];
