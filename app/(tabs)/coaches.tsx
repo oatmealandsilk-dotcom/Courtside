@@ -14,10 +14,11 @@ import { useApp } from '@/store/AppContext';
 import { useAiCoachOn } from '@/features/aiCoach/switch';
 import { statusLabel } from '@/features/coaching/bookings';
 import { colors, radius, spacing, typography, font } from '@/theme';
+import { isDesktopBrowser } from '@/lib/browserDevice';
 
 function Coaching() {
   const styles = useThemedStyles(styleDefinitions);
-  const { coaches, users, coachingRequests, coachQuestions, currentUserId, currentUser } = useApp();
+  const { coaches, users, coachingRequests, coachQuestions, currentUserId, currentUser, actions } = useApp();
   const aiCoachOn = useAiCoachOn();
   // Where the box sits on screen, so the question page can grow out of it.
   const askPill = useRef<View>(null);
@@ -40,7 +41,7 @@ function Coaching() {
   const shown = coaches.filter((c) => c.listed !== false);
 
   return (
-    <Screen memoryKey="coaches" title="Coaching" subtitle="Real coaches, approved one by one." wash>
+    <Screen memoryKey="coaches" title="Coaching" subtitle="Real coaches, approved one by one." wash onRefresh={isDesktopBrowser() ? undefined : actions.refresh}>
       {/* ------------------------------ Ask a coach ----------------------------- */}
       <View style={[styles.section, styles.sectionFirst]}>
         <View style={styles.sectionRow}>

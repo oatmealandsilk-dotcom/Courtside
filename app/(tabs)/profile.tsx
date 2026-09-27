@@ -83,6 +83,8 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
        <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
        {p.thumbnailUrl ? <ExpoImage accessibilityIgnoresInvertColors source={{uri:p.thumbnailUrl}} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120}/> : null}
        {p.kind==='clip' && <Ionicons name="play" size={14} color="#FFFFFF" style={styles.tilePlay}/>}
+       {/* Views, bottom left, the way Reels and TikTok grids show them. */}
+       {(p.videoUrl || p.kind === 'clip') && (p.views ?? 0) > 0 ? <View style={styles.tileViews} pointerEvents="none"><Ionicons name="play-outline" size={12} color="#FFFFFF"/><Text style={styles.tileViewsText}>{compactNumber(p.views ?? 0)}</Text></View> : null}
        {p.pinned && selected !== 'Tagged' && <Ionicons name="pin" size={13} color="#FFFFFF" style={styles.tilePin}/>}
      </Pressable>)}</View>
      {!items.length && <EmptyState title={selected==='Tagged'?'No tagged posts yet':`No ${selected.toLowerCase()} yet`} body="Your shared moments will appear here."/>}
@@ -217,6 +219,8 @@ const styleDefinitions = StyleSheet.create({
  tileBlank:{padding:10,justifyContent:'center'},
  tileText:{fontSize:11,lineHeight:15,color:colors.textMuted},
  tilePlay:{position:'absolute',top:6,right:6,textShadowColor:'rgba(0,0,0,0.6)',textShadowRadius:3},
+ tileViews:{position:'absolute',left:6,bottom:5,flexDirection:'row',alignItems:'center',gap:3},
+ tileViewsText:{fontSize:12,...font('600'),color:'#FFFFFF',textShadowColor:'rgba(0,0,0,0.6)',textShadowRadius:3},
  tilePin:{position:'absolute',top:6,left:6,textShadowColor:'rgba(0,0,0,0.6)',textShadowRadius:3},
 });
 

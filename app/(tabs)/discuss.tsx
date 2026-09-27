@@ -19,6 +19,7 @@ import { useApp } from '@/store/AppContext';
 import { sourceUserIds } from '@/features/community/importedThreads';
 import type { QuestionTopic } from '@/data/types';
 import { colors, radius, spacing, typography, font } from '@/theme';
+import { isDesktopBrowser } from '@/lib/browserDevice';
 
 const TOPICS: (QuestionTopic | 'all')[] = [
   'all',
@@ -156,7 +157,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       </>);
 
   return (
-    <Screen memoryKey="discuss" wash
+    <Screen memoryKey="discuss" wash onRefresh={previewSection === undefined && !isDesktopBrowser() ? actions.refresh : undefined}
       title="Community"
       subtitle="Find your people. Talk about your game."
       right={

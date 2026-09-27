@@ -13,6 +13,7 @@ import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import type { Notification, NotificationKind } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
+import { isDesktopBrowser } from '@/lib/browserDevice';
 
 /**
  * One row per thing that happened to you, the way Instagram does it.
@@ -184,7 +185,7 @@ export default function Notifications() {
   const photoOf = (id: string) => users.find((u) => u.id === id)?.avatarUrl;
 
   return (
-    <Screen title="Notifications" compactTitle onBack={() => goBack()}>
+    <Screen title="Notifications" compactTitle onBack={() => goBack()} onRefresh={isDesktopBrowser() ? undefined : actions.refresh}>
       {groups.length === 0 ? (
         <EmptyState
           icon="notifications-outline"

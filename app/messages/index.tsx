@@ -9,6 +9,7 @@ import { Avatar, Chip, EmptyState, Screen } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography, font, radius } from '@/theme';
+import { isDesktopBrowser } from '@/lib/browserDevice';
 
 type Section = 'all' | 'coaches' | 'clients';
 
@@ -20,7 +21,7 @@ type Section = 'all' | 'coaches' | 'clients';
  */
 export default function Inbox() {
   const styles = useThemedStyles(styleDefinitions);
-  const { conversations, messages, users, currentUserId, currentUser, blockedIds } = useApp();
+  const { conversations, messages, users, currentUserId, currentUser, blockedIds, actions } = useApp();
   const [search, setSearch] = useState('');
   const [section, setSection] = useState<Section>('all');
   const isCoach = Boolean(currentUser?.isCoach);
@@ -62,6 +63,7 @@ export default function Inbox() {
 
   return (
     <Screen
+      onRefresh={isDesktopBrowser() ? undefined : actions.refresh}
       title="Messages"
       wash
       compactTitle

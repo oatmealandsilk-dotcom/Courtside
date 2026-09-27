@@ -17,6 +17,7 @@ import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font, lift } from '@/theme';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { CourtSpinner } from '@/components/CourtSpinner';
+import { isDesktopBrowser } from '@/lib/browserDevice';
 
 const TABS = ['Posts', 'Clips', 'Tagged'] as const;
 
@@ -86,6 +87,7 @@ export default function UserProfile() {
 
   return (
     <Screen
+      onRefresh={isDesktopBrowser() ? undefined : actions.refresh}
       title={`@${user.handle}`}
       compactTitle
       onBack={() => goBack()}
@@ -189,6 +191,7 @@ export default function UserProfile() {
                 <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
                 {p.thumbnailUrl ? <ExpoImage accessibilityIgnoresInvertColors source={{ uri: p.thumbnailUrl }} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120} /> : null}
                 {p.kind === 'clip' && <Ionicons name="play" size={14} color="#FFFFFF" style={styles.tilePlay} />}
+                {(p.videoUrl || p.kind === 'clip') && (p.views ?? 0) > 0 ? <View style={styles.tileViews} pointerEvents="none"><Ionicons name="play-outline" size={12} color="#FFFFFF"/><Text style={styles.tileViewsText}>{compactNumber(p.views ?? 0)}</Text></View> : null}
                 {p.pinned && tab !== 'Tagged' && <Ionicons name="pin" size={13} color="#FFFFFF" style={styles.tilePin} />}
               </Pressable>
             ))}
@@ -262,6 +265,8 @@ const styleDefinitions = StyleSheet.create({
   tileBlank: { padding: 10, justifyContent: 'center' },
   tileText: { fontSize: 11, lineHeight: 15, color: colors.textMuted },
   tilePlay: { position: 'absolute', top: 6, right: 6, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
+  tileViews: { position: 'absolute', left: 6, bottom: 5, flexDirection: 'row', alignItems: 'center', gap: 3 },
+  tileViewsText: { fontSize: 12, ...font('600'), color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
   tilePin: { position: 'absolute', top: 6, left: 6, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
   backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
   sheet: {
