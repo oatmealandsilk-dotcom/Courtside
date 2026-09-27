@@ -1,10 +1,16 @@
 // Base URL is only set in CI so GitHub Pages can serve the app from /<repo>/.
 // Local dev (expo start --web) leaves it undefined and serves from /.
 const baseUrl = process.env.EXPO_BASE_URL || undefined;
-// A second copy run for previewing (the demo) sets COURTSIDE_LABEL, so Expo
-// Go's list shows "CourtSide Demo" with the icon inside out, never two
-// identical CourtSides. Unset — the real app and every store build — it is plain CourtSide.
-const label = process.env.COURTSIDE_LABEL;
+// How a preview copy looks in Expo Go's list, so the copies are told apart at
+// a glance: a name after "CourtSide" (COURTSIDE_LABEL, e.g. "Demo") and the
+// beige icon (COURTSIDE_ICON=beige). Either can also sit in .courtside-local.json
+// on this Mac, which is never committed and is read afresh each time the phone
+// asks — so the look of a running copy changes without restarting it. With
+// neither, as in every store build, it is plain CourtSide with the green icon.
+let local = {};
+try { local = JSON.parse(require('fs').readFileSync(`${__dirname}/.courtside-local.json`, 'utf8')); } catch { /* none */ }
+const label = process.env.COURTSIDE_LABEL || local.label;
+const beige = (process.env.COURTSIDE_ICON || local.icon) === 'beige';
 
 module.exports = {
   expo: {
@@ -17,7 +23,7 @@ module.exports = {
     backgroundColor: '#F8F7F2',
     // Shown by Expo Go and native builds while the JS loads; matches app/index.tsx
     // so the loader fades straight into the in-app splash.
-    icon: label ? './assets/icon-demo.png' : './assets/icon.png',
+    icon: beige ? './assets/icon-beige.png' : './assets/icon.png',
     splash: { image: './assets/splash.png', resizeMode: 'contain', backgroundColor: '#F8F7F2' },
     newArchEnabled: true,
     ios: {

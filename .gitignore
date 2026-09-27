@@ -18,3 +18,6 @@ expo-env.d.ts
 !.env.example
 google-play-service-account.json
 .claude/
+
+# This Mac's own preview look in Expo Go (see app.config.js)
+.courtside-local.json
