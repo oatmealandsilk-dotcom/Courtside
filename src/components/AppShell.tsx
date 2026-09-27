@@ -4,6 +4,7 @@ import { Platform, View } from 'react-native';
 import { goBack } from '@/lib/goBack';
 import { Redirect, router, usePathname } from 'expo-router';
 import { NavBar } from './NavBar';
+import { setInstantExit } from '@/features/navigation/instantExit';
 import { UploadBar } from '@/components/UploadBar';
 import { WarmCurtain } from '@/components/WarmCurtain';
 import { Toast } from './Toast';
@@ -116,6 +117,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // tab the way the back button would — a pop with its slide, not a jump.
     else if (!Object.values(paths).includes(pathname as (typeof paths)[keyof typeof paths])) {
       const r = router as unknown as { dismissTo?: (href: string) => void; canGoBack?: () => boolean };
+      // Going to a different tab than the one this page belongs to (the map,
+      // under Community, then Coaching): the page leaves without the Back
+      // slide, which would run the opposite way to the tabs' own glide.
+      if (Platform.OS !== 'web' && TAB_ORDER.indexOf(destination) !== selected.current) {
+        setInstantExit(true);
+        // One frame for the stack to take the "no slide" setting before the page is dismissed.
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          if (destination === '/') { if (r.canGoBack?.()) { router.back(); setTimeout(() => router.navigate('/'), 30); } else router.navigate('/'); }
+          else if (r.dismissTo) r.dismissTo(destination);
+          else router.navigate(destination);
+          setTimeout(() => setInstantExit(false), 450);
+        }));
+        return;
+      }
       // Home's address is also the splash screen's, so it cannot be dismissed
       // to directly: step back to the tabs first, then glide across to Home.
       if (destination === '/') {
