@@ -279,14 +279,14 @@ const styleDefinitions = StyleSheet.create({
   pill: { height: TAB_BAR_H, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   bottomItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   bottomInner: { alignItems: 'center', justifyContent: 'center', gap: 3 },
+  // Sits off the icon's shoulder rather than on top of it, so it needs no
+  // ring to stand apart, and the number has room to breathe.
   bottomBadge: {
-    position: 'absolute', top: -4, right: -8,
-    minWidth: 17, height: 17, borderRadius: 9, paddingHorizontal: 4,
+    position: 'absolute', top: -5, left: 14,
+    minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5,
     backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center',
-    // Ringed in the bar colour so it stays legible over the active icon.
-    borderWidth: 2, borderColor: colors.surface,
   },
-  bottomBadgeText: { color: 'white', fontSize: 9, ...font('700') },
+  bottomBadgeText: { color: 'white', fontSize: 11, lineHeight: 13, ...font('700'), fontVariant: ['tabular-nums'], includeFontPadding: false, textAlign: 'center' },
   bottomLabel: { ...typography.smallStrong, fontSize: 10.5, color: colors.textFaint, letterSpacing: 0 },
 
   sidebar: {

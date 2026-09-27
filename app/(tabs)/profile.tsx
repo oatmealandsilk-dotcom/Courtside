@@ -18,6 +18,7 @@ import { LevelPill } from '@/components/LevelPill';
 import { useApp } from '@/store/AppContext';
 import { playStyleLabel, surfaceLabel } from '@/lib/badges';
 import { compactNumber } from '@/lib/format';
+import { TileViews } from '@/components/TileViews';
 import { colors, spacing, typography, font, lift } from '@/theme';
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
@@ -84,7 +85,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
        {p.thumbnailUrl ? <ExpoImage accessibilityIgnoresInvertColors source={{uri:p.thumbnailUrl}} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120}/> : null}
        {p.kind==='clip' && <Ionicons name="play" size={14} color="#FFFFFF" style={styles.tilePlay}/>}
        {/* Views, bottom left, the way Reels and TikTok grids show them. */}
-       {(p.videoUrl || p.kind === 'clip') && (p.views ?? 0) > 0 ? <View style={styles.tileViews} pointerEvents="none"><Ionicons name="play-outline" size={12} color="#FFFFFF"/><Text style={styles.tileViewsText}>{compactNumber(p.views ?? 0)}</Text></View> : null}
+       {(p.videoUrl || p.kind === 'clip') && (p.views ?? 0) > 0 ? <TileViews views={p.views ?? 0} /> : null}
        {p.pinned && selected !== 'Tagged' && <Ionicons name="pin" size={13} color="#FFFFFF" style={styles.tilePin}/>}
      </Pressable>)}</View>
      {!items.length && <EmptyState title={selected==='Tagged'?'No tagged posts yet':`No ${selected.toLowerCase()} yet`} body="Your shared moments will appear here."/>}

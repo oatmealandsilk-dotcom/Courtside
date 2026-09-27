@@ -13,6 +13,7 @@ import { Tappable } from '@/components/Tappable';
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
 import { evaluateAchievements, playStyleLabel, surfaceLabel, tierColor } from '@/lib/badges';
 import { compactNumber } from '@/lib/format';
+import { TileViews } from '@/components/TileViews';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font, lift } from '@/theme';
 import { useStillLoading } from '@/lib/useStillLoading';
@@ -191,7 +192,7 @@ export default function UserProfile() {
                 <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
                 {p.thumbnailUrl ? <ExpoImage accessibilityIgnoresInvertColors source={{ uri: p.thumbnailUrl }} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120} /> : null}
                 {p.kind === 'clip' && <Ionicons name="play" size={14} color="#FFFFFF" style={styles.tilePlay} />}
-                {(p.videoUrl || p.kind === 'clip') && (p.views ?? 0) > 0 ? <View style={styles.tileViews} pointerEvents="none"><Ionicons name="play-outline" size={12} color="#FFFFFF"/><Text style={styles.tileViewsText}>{compactNumber(p.views ?? 0)}</Text></View> : null}
+                {(p.videoUrl || p.kind === 'clip') && (p.views ?? 0) > 0 ? <TileViews views={p.views ?? 0} /> : null}
                 {p.pinned && tab !== 'Tagged' && <Ionicons name="pin" size={13} color="#FFFFFF" style={styles.tilePin} />}
               </Pressable>
             ))}
