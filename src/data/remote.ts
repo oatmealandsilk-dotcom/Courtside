@@ -359,8 +359,8 @@ const toCoachApplication = (r: CoachApplicationRow): CoachApplication => ({
   resumePath: r.resume_path ?? undefined, reviewNote: r.review_note ?? undefined,
 });
 
-interface ConversationRow { id: string; updated_at: string; conversation_members?: { user_id: string; last_read_at: string | null }[]; messages?: MessageRow[] }
-interface MessageRow { id: string; conversation_id: string; sender_id: string; body: string; kind: string; shared_id: string | null; reactions: Record<string, string> | null; created_at: string; edited_at?: string | null }
+interface ConversationRow { id: string; updated_at: string; title?: string | null; is_group?: boolean | null; conversation_members?: { user_id: string; last_read_at: string | null }[]; messages?: MessageRow[] }
+interface MessageRow { id: string; conversation_id: string; sender_id: string; body: string; kind: string; shared_id: string | null; reactions: Record<string, string> | null; created_at: string; edited_at?: string | null; place?: { name: string; lat: number; lng: number } | null }
 
 /** Conversations and messages as the app holds them: who has read what comes from each member's last_read_at. */
 export function toConversations(me: ID, convRows: ConversationRow[], messageRows: MessageRow[]): { conversations: Conversation[]; messages: Message[] } {
@@ -375,6 +375,7 @@ export function toConversations(me: ID, convRows: ConversationRow[], messageRows
       kind: (row.kind as Message['kind']) || 'text', sharedId: row.shared_id ?? undefined,
       reactions: row.reactions && Object.keys(row.reactions).length ? row.reactions : undefined,
       editedAt: row.edited_at ?? undefined,
+      place: row.place && typeof row.place.lat === 'number' && typeof row.place.lng === 'number' ? { name: String(row.place.name ?? 'Court').slice(0, 80), lat: row.place.lat, lng: row.place.lng } : undefined,
       readAtBy: Object.keys(readAtBy).length ? readAtBy : undefined,
       openedAtBy: Object.keys(readAtBy).length ? readAtBy : undefined,
     };
@@ -385,6 +386,8 @@ export function toConversations(me: ID, convRows: ConversationRow[], messageRows
     return {
       id: c.id,
       participantIds: (c.conversation_members ?? []).map((m) => m.user_id),
+      isGroup: c.is_group ?? undefined,
+      title: c.title ?? undefined,
       messageIds: mine.map((m) => m.id),
       updatedAt: c.updated_at,
       unreadCount: mine.filter((m) => m.senderId !== me && m.createdAt > myRead).length,
@@ -457,7 +460,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     // Direct messages: every chat, each with only its newest messages (older
     // ones load as you scroll up in the chat), the way Instagram does it. A
     // database without the tables yet just gives none.
-    db.from('conversations').select('id, updated_at, conversation_members(user_id, last_read_at), messages(*)')
+    db.from('conversations').select('*, conversation_members(user_id, last_read_at), messages(*)')
       .order('updated_at', { ascending: false })
       .order('created_at', { referencedTable: 'messages', ascending: false })
       .limit(MESSAGE_PAGE, { referencedTable: 'messages' }),
@@ -675,11 +678,30 @@ export const remote = {
     return (data as string) || wanted;
   },
 
+  /** A new group chat; the same refusals as a one-to-one chat, for anyone in it. */
+  async openGroup(members: ID[], title: string | undefined, wanted: ID): Promise<ID | 'blocked' | 'teen' | 'failed'> {
+    const { data, error } = await need().rpc('open_group', { members, group_title: title ?? null, wanted });
+    if (error && /teen_closed/.test(error.message)) return 'teen';
+    if (error && /blocked/.test(error.message)) return 'blocked';
+    if (error) { fail('open group')(error); return 'failed'; }
+    return (data as string) || wanted;
+  },
+  async addToGroup(conversationId: ID, member: ID): Promise<'ok' | 'blocked' | 'teen' | 'failed'> {
+    const { error } = await need().rpc('add_to_group', { conv: conversationId, member });
+    if (error && /teen_closed/.test(error.message)) return 'teen';
+    if (error && /blocked/.test(error.message)) return 'blocked';
+    if (error) { fail('add to group')(error); return 'failed'; }
+    return 'ok';
+  },
+  async leaveGroup(conversationId: ID) { const { error } = await need().rpc('leave_group', { conv: conversationId }); if (error) fail('leave group')(error); },
+  async renameGroup(conversationId: ID, title: string) { const { error } = await need().rpc('rename_group', { conv: conversationId, new_title: title }); if (error) fail('rename group')(error); },
+
   /** Resolves 'refused' when the database will not take it (a chat with someone you are blocked with). */
   async insertMessage(message: Message): Promise<'refused' | 'failed' | void> {
     const { error } = await need().from('messages').insert({
       id: message.id, conversation_id: message.conversationId, sender_id: message.senderId, body: message.body,
       kind: message.kind, shared_id: message.sharedId ?? null, created_at: message.createdAt,
+      ...(message.place ? { place: message.place } : {}),
     });
     if (error && error.code === '42501') return 'refused';
     // Sent twice (a retry after a slow first try that did land): it is there.
@@ -767,7 +789,7 @@ export const remote = {
   async fetchConversation(me: ID, conversationId: ID): Promise<{ conversation: Conversation; messages: Message[] } | null> {
     const db = need();
     const [conv, msgs] = await Promise.all([
-      db.from('conversations').select('id, updated_at, conversation_members(user_id, last_read_at)').eq('id', conversationId).maybeSingle(),
+      db.from('conversations').select('*, conversation_members(user_id, last_read_at)').eq('id', conversationId).maybeSingle(),
       db.from('messages').select('*').eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(MESSAGE_PAGE),
     ]);
     if (conv.error || msgs.error || !conv.data) return null;
