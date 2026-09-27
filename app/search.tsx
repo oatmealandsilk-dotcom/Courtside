@@ -12,7 +12,6 @@ import { LevelPill } from '@/components/LevelPill';
 import { QuestionCard } from '@/components/QuestionCard';
 import { Avatar, EmptyState, Field, Screen, SegmentedControl } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
-import { sourceUserIds } from '@/features/community/importedThreads';
 import { colors, spacing, typography } from '@/theme';
 
 type Scope = 'all' | 'clips' | 'posts' | 'threads' | 'players' | 'coaches';
@@ -84,7 +83,7 @@ export default function Search() {
     const iFollow = new Set(followingIds);
     const followersOf = (id: string) => followEdges.filter((e) => e.followingId === id).map((e) => e.followerId);
     return users
-      .filter((user) => user.id !== currentUserId && !sourceUserIds.includes(user.id))
+      .filter((user) => user.id !== currentUserId)
       .map((user) => {
         const name = user.name.toLowerCase();
         const handle = user.handle.toLowerCase();

@@ -15,7 +15,6 @@ import { stories } from './mock/stories';
 import { conversations, messages } from './mock/messages';
 import { healthHistory, integrations } from './mock/health';
 import { users } from './mock/users';
-import { fetchImportedThreads } from '@/features/community/importedThreads';
 import { supabase } from '@/lib/supabase';
 import type {
   Achievement,
@@ -103,16 +102,6 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       achievements,
     }),
   );
-}
-
-/**
- * Threads pulled in from Reddit so the board is never empty.
- * Fetched after the bootstrap so a slow feed never delays the app opening.
- * A real backend does this on a schedule and serves the result from here.
- */
-export async function fetchCommunityThreads(): Promise<{ users: User[]; questions: Question[] }> {
-  const bundle = await fetchImportedThreads();
-  return { users: bundle.users, questions: bundle.questions };
 }
 
 /* ------------------------------- Coach memory ------------------------------ */

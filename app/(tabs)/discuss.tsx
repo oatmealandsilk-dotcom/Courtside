@@ -16,7 +16,6 @@ import { QuestionCard, TOPIC_META } from '@/components/QuestionCard';
 import { Avatar, Chip, EmptyState, Screen } from '@/components/ui';
 import { reportSection, subscribeSectionRequest } from '@/features/navigation/swipeOrder';
 import { useApp } from '@/store/AppContext';
-import { sourceUserIds } from '@/features/community/importedThreads';
 import type { QuestionTopic } from '@/data/types';
 import { colors, radius, spacing, typography, font } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
@@ -56,7 +55,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const sameCity = (u: (typeof users)[number]) => !!myCity && (u.location ?? '').toLowerCase().startsWith(myCity);
   // Your own city first — the people you could actually hit with this week.
   const players = users
-    .filter(u => u.id !== currentUserId && !blockedIds.includes(u.id) && !sourceUserIds.includes(u.id) && `${u.name} ${u.handle} ${u.location}`.toLowerCase().includes(search.toLowerCase()))
+    .filter(u => u.id !== currentUserId && !blockedIds.includes(u.id) && `${u.name} ${u.handle} ${u.location}`.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => Number(sameCity(b)) - Number(sameCity(a)));
   const [topic, setTopic] = useState<QuestionTopic | 'all'>('all');
   // A topic picked from a thread's label may sit off the end of the strip: the strip slides it into view.
