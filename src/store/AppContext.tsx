@@ -2615,11 +2615,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!result.ok) {
       remember(false);
       setState((prev) => ({ ...prev, locationEnabled: false, detectedLocation: null, detectedCoords: null }));
+      // Short on purpose: these sit under a settings row and in small notes.
       return result.reason === 'denied'
-        ? 'Location was blocked. Allow it for this site in your browser or phone settings, then try again.'
+        ? (Platform.OS === 'web' ? 'Blocked by your browser' : 'Blocked in your phone’s Settings')
         : result.reason === 'unavailable'
-          ? 'This device cannot share its location with the app yet.'
-          : 'Could not get a location right now. Try again in a moment.';
+          ? 'Not available on this device'
+          : 'Couldn’t find you. Try again';
     }
     const place = nearestPlace(result.lat, result.lng);
     haptics.tap();
