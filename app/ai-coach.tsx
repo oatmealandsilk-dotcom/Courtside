@@ -36,7 +36,7 @@ function fingerprint(text: string) {
 /** What the coach is told about you: the profile, and recovery when a wearable is connected. */
 function aboutYou(p: PlayerProfile, signal: ReturnType<typeof healthSignal>) {
   return [
-    `Rating: ${p.skillSystem} ${p.rating}. Style: ${p.playStyle}, ${p.handedness}-handed, ${p.backhand} backhand. Prefers ${p.preferredSurface}. Fitness: ${p.fitnessLevel}. ${p.sessionsPerWeek} sessions a week, ${p.yearsPlaying} years playing.`,
+    `Rating: ${p.skillSystem} ${p.rating}. Style: ${p.playStyle}, ${p.handedness}-handed, ${p.backhand} backhand. Prefers ${p.preferredSurface}. Fitness: ${p.fitnessLevel}. ${p.sessionsPerWeek !== undefined ? `${p.sessionsPerWeek} sessions a week` : 'Sessions a week not given'}, ${p.yearsPlaying !== undefined ? `${p.yearsPlaying} years playing` : 'years playing not given'}.`,
     `Goals: ${p.goals.map((g) => g.label).join('; ') || 'none set'}.`,
     `Injury and schedule notes: ${p.constraints.filter((c) => c.active).map((c) => `${c.kind}: ${c.label}`).join('; ') || 'none'}.`,
     p.tournaments[0] ? `Next tournament: ${p.tournaments[0].name} on ${formatDate(p.tournaments[0].startsAt)}.` : 'No tournament scheduled.',

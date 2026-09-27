@@ -145,7 +145,7 @@ export default function Compose() {
       thumbnailUrl: media?.thumbnailUrl ?? (media?.kind === 'photo' ? media.uri : undefined),
       session:
         onCourt > 0
-          ? { focus: 'On court', minutes: onCourt, drills: [], intensity: 3 }
+          ? { focus: 'On court', minutes: onCourt, drills: [] }
           : undefined,
     });
     // The first post is the moment to ask who they hit with.

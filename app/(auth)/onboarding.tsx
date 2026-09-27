@@ -136,7 +136,7 @@ export default function Onboarding() {
   const [skillSystem, setSkillSystem] = useState<'NTRP' | 'UTR'>(existing?.skillSystem === 'UTR' ? 'UTR' : 'NTRP');
   const [rating, setRating] = useState(existing?.rating && existing.skillSystem !== 'ITF' ? existing.rating : 3.5);
   const [ratingText, setRatingText] = useState(String(existing?.rating && existing.skillSystem !== 'ITF' ? existing.rating : '3.5'));
-  const [yearsPlaying, setYearsPlaying] = useState(existing?.yearsPlaying ?? 6);
+  const [yearsPlaying, setYearsPlaying] = useState<number | undefined>(existing?.yearsPlaying);
   const [playStyle, setPlayStyle] = useState<PlayStyle>(existing?.playStyle ?? 'all-court');
   const [styleOpen, setStyleOpen] = useState(false);
   const chevronTurn = useRef(new Animated.Value(0)).current;
@@ -147,7 +147,7 @@ export default function Onboarding() {
   const [backhand, setBackhand] = useState<Backhand>(existing?.backhand ?? 'two-handed');
   const [surface, setSurface] = useState<SurfacePreference>(existing?.preferredSurface ?? 'hard');
   const [fitnessLevel, setFitnessLevel] = useState<FitnessLevel>(existing?.fitnessLevel ?? 'recreational');
-  const [sessionsPerWeek, setSessionsPerWeek] = useState(existing?.sessionsPerWeek ?? 3);
+  const [sessionsPerWeek, setSessionsPerWeek] = useState<number | undefined>(existing?.sessionsPerWeek);
   const [goalOne, setGoalOne] = useState(existing?.goals[0]?.label ?? '');
   const [tournamentName, setTournamentName] = useState(existing?.tournaments[0]?.name ?? '');
   // Back in setup with a tournament already saved: count from its real date, not a fresh 30 days.
@@ -211,8 +211,8 @@ export default function Onboarding() {
     return {
       skillSystem: skillSystem as SkillSystem, rating, playStyle, handedness, backhand, fitnessLevel,
       preferredSurface: surface, sessionsPerWeek, yearsPlaying,
-      // Setup only asks about the first goal; any others you had stay as they were.
-      goals: goals.length > 0 ? [...goals, ...(existing?.goals.slice(1) ?? [])] : [{ id: 'g-default', label: 'Play more consistently', done: false }],
+      // Setup only asks about the first goal; any others you had stay as they were. No goal given means none, not an invented one.
+      goals: [...goals, ...(existing?.goals.slice(1) ?? [])],
       // Injury and schedule notes are added later, from the profile.
       constraints: existing?.constraints ?? [],
       tournaments,
@@ -298,7 +298,7 @@ export default function Onboarding() {
               <Text style={styles.note}>{ratingValid ? band.label : `Enter ${scale.min.toFixed(1)}–${scale.max.toFixed(1)}`}</Text>
               <Group label="Years playing">
                 <SegmentedControl<string>
-                  value={String(yearsPlaying)}
+                  value={yearsPlaying === undefined ? '' : String(yearsPlaying)}
                   onChange={(v) => pick(setYearsPlaying)(Number(v))}
                   segments={YEARS.map((y) => ({ value: String(y.value), label: y.label }))}
                 />
@@ -357,7 +357,7 @@ export default function Onboarding() {
               </Group>
               <Group label="Sessions per week">
                 <SegmentedControl<string>
-                  value={String(sessionsPerWeek)}
+                  value={sessionsPerWeek === undefined ? '' : String(sessionsPerWeek)}
                   onChange={(v) => pick(setSessionsPerWeek)(Number(v))}
                   segments={[1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: String(n), label: String(n) }))}
                 />
@@ -411,12 +411,12 @@ export default function Onboarding() {
                   ['Name', name.trim() || currentUser?.name || ''],
                   ['From', location.trim() || '—'],
                   ['Rating', `${skillSystem} ${rating.toFixed(1)} · ${band.label}`],
-                  ['Experience', `${YEARS.find((y) => y.value === yearsPlaying)?.label ?? yearsPlaying} years`],
+                  ['Experience', yearsPlaying === undefined ? 'Not set' : `${YEARS.find((y) => y.value === yearsPlaying)?.label ?? yearsPlaying} years`],
                   ['Style', PLAY_STYLES.find((p) => p.value === playStyle)?.label ?? ''],
                   ['Hand', `${handedness === 'left' ? 'Left' : 'Right'} · ${backhand === 'one-handed' ? 'one-handed' : 'two-handed'} backhand`],
                   ['Surface', SURFACES.find((s) => s.value === surface)?.label ?? ''],
                   ['Fitness', FITNESS.find((f) => f.value === fitnessLevel)?.label ?? ''],
-                  ['Sessions', `${sessionsPerWeek} per week`],
+                  ['Sessions', sessionsPerWeek === undefined ? 'Not set' : `${sessionsPerWeek} per week`],
                   ['Goal', goalOne.trim() || 'Play more consistently'],
                   tournamentName.trim() ? ['Tournament', `${tournamentName.trim()} · ${tournamentDays} days`] : null,
                 ].filter((r): r is [string, string] => r !== null).map(([label, value], i) => (

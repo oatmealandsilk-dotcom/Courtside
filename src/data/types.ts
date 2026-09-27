@@ -66,9 +66,10 @@ export interface PlayerProfile {
   backhand: Backhand;
   fitnessLevel: FitnessLevel;
   preferredSurface: SurfacePreference;
-  /** Sessions the player can realistically commit to each week. */
-  sessionsPerWeek: number;
-  yearsPlaying: number;
+  /** Sessions the player can realistically commit to each week. Missing when they haven't said. */
+  sessionsPerWeek?: number;
+  /** Missing when they haven't said: a skipped answer is never filled in for them. */
+  yearsPlaying?: number;
   goals: PlayerGoal[];
   constraints: Constraint[];
   tournaments: TournamentEntry[];
@@ -146,7 +147,8 @@ export interface SessionDetail {
   focus: string;
   minutes: number;
   drills: string[];
-  intensity: 1 | 2 | 3 | 4 | 5;
+  /** Missing when the player didn't rate it. */
+  intensity?: 1 | 2 | 3 | 4 | 5;
 }
 
 /** scale ≥ 1; x and y are the picture's centre offset as fractions of the frame's width and height. */

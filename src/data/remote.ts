@@ -56,8 +56,6 @@ export const emptyProfile: PlayerProfile = {
   backhand: 'two-handed',
   fitnessLevel: 'recreational',
   preferredSurface: 'hard',
-  sessionsPerWeek: 2,
-  yearsPlaying: 1,
   goals: [],
   constraints: [],
   tournaments: [],

@@ -101,7 +101,8 @@ export function generatePlan({ profile, health, now = new Date() }: PlanInputs):
   const taper = weeksOut !== undefined && weeksOut <= 1;
   const sharpening = weeksOut !== undefined && weeksOut > 1 && weeksOut <= 4;
 
-  const sessions = Math.max(2, Math.min(6, profile.sessionsPerWeek));
+  // Not given: plan around three a week, a typical club player's rhythm.
+  const sessions = Math.max(2, Math.min(6, profile.sessionsPerWeek ?? 3));
   const focusAreas = STYLE_FOCUS[profile.playStyle].slice(0, sharpening ? 2 : 3);
 
   const cautions: string[] = [];
