@@ -99,3 +99,21 @@ export async function readSnapshot(me: ID): Promise<RemoteData | null> {
 export async function clearSnapshot(me: ID): Promise<void> {
   try { await AsyncStorage.removeItem(key(me)); } catch { /* nothing kept */ }
 }
+
+/*
+ * A guard against a bad copy: opening on it leaves a mark that is taken
+ * away once the app has run a few seconds. A mark still there next time
+ * means that open never got that far, so the copy is thrown away and the
+ * app opens the old way, rather than tripping over the same thing forever.
+ */
+const openingKey = (me: ID) => `courtside-snapshot-opening:${me}`;
+
+export async function snapshotFailedBefore(me: ID): Promise<boolean> {
+  try { return (await AsyncStorage.getItem(openingKey(me))) === '1'; } catch { return false; }
+}
+export async function markSnapshotOpening(me: ID): Promise<void> {
+  try { await AsyncStorage.setItem(openingKey(me), '1'); } catch { /* best effort */ }
+}
+export async function markSnapshotOpened(me: ID): Promise<void> {
+  try { await AsyncStorage.removeItem(openingKey(me)); } catch { /* best effort */ }
+}

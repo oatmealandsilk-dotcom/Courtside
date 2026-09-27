@@ -14,7 +14,7 @@ import { TERMS_VERSION } from '@/lib/legal';
 
 import { fetchBootstrap, signIn as apiSignIn, type Bootstrap } from '@/data/api';
 import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type AdminReport, type FeedSignal, type SiteFeedback, type WaitlistEntry, type FirstDayStats, type FirstMove, type HandleStatus, type RemoteData } from '@/data/remote';
-import { clearSnapshot, readSnapshot, saveSnapshot } from '@/data/snapshot';
+import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { markMessagesOpened } from '@/features/messaging/readReceipts';
@@ -984,7 +984,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const me = data.session.user.id;
         setState((prev) => ({ ...prev, currentUserId: prev.currentUserId ?? me, authResolved: true, termsVersion: termsOf(data.session.user) }));
         // Last time's copy goes up straight after the logo, the fresh load lands on top of it.
-        void readSnapshot(me).then((snapshot) => { if (snapshot && !cancelled) showSnapshot(me, snapshot); });
+        void (async () => {
+          // The last open on the saved copy never finished: throw it away and open the old way.
+          if (await snapshotFailedBefore(me)) { await clearSnapshot(me); await markSnapshotOpened(me); return; }
+          const snapshot = await readSnapshot(me);
+          if (!snapshot || cancelled) return;
+          await markSnapshotOpening(me);
+          showSnapshot(me, snapshot);
+          setTimeout(() => { void markSnapshotOpened(me); }, 8000);
+        })();
         loadRemote(me, data.session.user.email);
       } else setState((prev) => ({ ...prev, authResolved: true }));
     }).catch(() => setState((prev) => ({ ...prev, authResolved: true })));
