@@ -121,6 +121,8 @@ interface NewQuestionInput {
   body: string;
   topic: QuestionTopic;
   tags: string[];
+  /** 2 to 4 poll options, when the thread asks the room to vote. */
+  poll?: string[];
 }
 
 /**
@@ -374,6 +376,8 @@ interface AppActions {
 
   addQuestion: (input: NewQuestionInput) => ID;
   voteQuestion: (questionId: ID, direction: 1 | -1) => void;
+  /** Pick an option in a thread's poll (again to change it). */
+  votePoll: (questionId: ID, option: number) => void;
   /** A reply to a thread, or to a reply in it; `media` is a photo or clip picked on this device, uploaded here. */
   addAnswer: (questionId: ID, body: string, parentAnswerId?: ID, media?: Answer['media']) => void;
   voteAnswer: (answerId: ID, direction: 1 | -1) => void;
@@ -1700,6 +1704,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (input: NewQuestionInput): ID => {
       haptics.commit();
       const me = requireUser();
+      const { poll, ...rest } = input;
+      const options = poll?.map((o) => o.trim()).filter(Boolean).slice(0, 4);
       const question: Question = {
         id: nextId('q'),
         authorId: me,
@@ -1707,18 +1713,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
         votes: 0,
         votedBy: {},
         answerIds: [],
-        ...input,
+        ...rest,
+        poll: options && options.length >= 2 ? { options, counts: options.map(() => 0) } : undefined,
       };
       setState((prev) => celebratePosted({ ...prev, questions: [question, ...prev.questions] }, {
         userId: me, targetId: question.id, targetKind: 'question', preview: snippet(question.title),
         title: 'Question posted', body: 'The community can see it now.',
         href: `/question/${question.id}`, icon: 'chatbubbles',
       }));
-      if (live(me, question.id)) void remote.upsertQuestion(question);
+      // The poll is saved once its thread is, since it hangs off the thread.
+      if (live(me, question.id)) void remote.upsertQuestion(question).then(() => { if (question.poll) void remote.insertPoll(question.id, question.poll.options); });
       return question.id;
     },
     [requireUser],
   );
+
+  const votePoll = useCallback((questionId: ID, option: number) => {
+    const me = requireUser();
+    haptics.tap();
+    setState((prev) => ({
+      ...prev,
+      questions: prev.questions.map((q) => {
+        if (q.id !== questionId || !q.poll || q.poll.myVote === option) return q;
+        const counts = [...q.poll.counts];
+        if (q.poll.myVote !== undefined) counts[q.poll.myVote] = Math.max(0, (counts[q.poll.myVote] ?? 0) - 1);
+        counts[option] = (counts[option] ?? 0) + 1;
+        return { ...q, poll: { ...q.poll, counts, myVote: option } };
+      }),
+    }));
+    if (live(me, questionId)) void remote.votePoll(questionId, option);
+  }, [requireUser]);
 
   const voteQuestion = useCallback(
     (questionId: ID, direction: 1 | -1) => {
@@ -3181,6 +3205,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addStoryComment,
       addQuestion,
       voteQuestion,
+      votePoll,
       addAnswer,
       voteAnswer,
       submitCoachingRequest,
@@ -3300,6 +3325,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addStoryComment,
       addQuestion,
       voteQuestion,
+      votePoll,
       addAnswer,
       voteAnswer,
       submitCoachingRequest,

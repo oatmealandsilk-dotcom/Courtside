@@ -18,6 +18,7 @@ import { openTopic } from '@/features/community/openTopic';
 import { Avatar, Card, Chip, EmptyState, Screen } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
 import { RichText } from '@/components/RichText';
+import { PollView } from '@/components/PollView';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useApp } from '@/store/AppContext';
 import type { Answer } from '@/data/types';
@@ -88,6 +89,7 @@ export default function QuestionDetail() {
         </View>
         <Text style={styles.title}>{question.title}</Text>
         <RichText style={styles.body}>{question.body}</RichText>
+        {question.poll ? <PollView question={question} /> : null}
         <View style={styles.tagRow}>
           {question.tags.map((tag) => (
             <Chip key={tag} label={`#${tag}`} onPress={() => router.push({pathname:"/search",params:{q:`#${tag}`}})} small />

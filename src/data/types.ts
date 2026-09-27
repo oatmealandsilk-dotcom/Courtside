@@ -277,6 +277,8 @@ export interface Question {
    * posted here. Replies stay on the original site; `replies` is their count.
    */
   source?: ThreadSource;
+  /** A poll with the thread (migration 41): its options, the totals so far, and your own pick if you voted. */
+  poll?: { options: string[]; counts: number[]; myVote?: number };
 }
 
 export type ThreadSourceName = 'reddit';
