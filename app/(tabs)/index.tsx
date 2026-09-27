@@ -342,6 +342,28 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     // re-run this on every render for nothing.
   }, [active, order.length, scope, ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Opened on the saved copy from last time: when the fresh load lands, what
+  // is new is dealt in just ahead of where you are. The page in front of you
+  // and the ones you have seen stay exactly where they were.
+  const dealtFromCopy = useRef(false);
+  useEffect(() => { if (app.snapshotShown && !app.remoteLoaded && order.length) dealtFromCopy.current = true; }, [app.snapshotShown, app.remoteLoaded, order.length]);
+  useEffect(() => {
+    if (!app.remoteLoaded || !dealtFromCopy.current || scope) return;
+    dealtFromCopy.current = false;
+    const data = latest.current;
+    const hidden = new Set([...data.blockedIds, ...data.mutedIds]);
+    const have = new Set(orderRef.current);
+    const fresh = rankFeed(data.posts.filter((p) => reachable(p) && !p.archived && !hidden.has(p.authorId)), data.questions, data.comments, data.currentUserId, data.stories.filter((st) => isLive(st)))
+      .flatMap((i) => (i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : []))
+      .filter((k) => !have.has(k));
+    if (!fresh.length) return;
+    const dealt = shuffleFeed(fresh);
+    setOrder((prev) => {
+      const at = Math.min(prev.length, active + 2);
+      return [...prev.slice(0, at), ...dealt.filter((k) => !prev.includes(k)), ...prev.slice(at)];
+    });
+  }, [app.remoteLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // A post of yours that just finished uploading: the feed starts over with it on top.
   useEffect(() => subscribeFeedRefresh(() => { if (!scope) rerank(); }), [scope, rerank]);
   // Pulling down on the first page fetches what is new and starts the feed over from the top.
@@ -636,10 +658,12 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   }, [feed, readyIds, markReady]);
   const [warmTimedOut, setWarmTimedOut] = useState(false);
   useEffect(() => {
-    if (!ready || !feed.length || !(!isSupabaseConfigured || app.remoteLoaded)) return;
-    const t = setTimeout(() => setWarmTimedOut(true), 6000);
+    if (!ready || !feed.length || !(!isSupabaseConfigured || app.remoteLoaded || app.snapshotShown)) return;
+    // On the saved copy the pictures are already on the phone: a clip still
+    // buffering shows its cover rather than holding the logo up for long.
+    const t = setTimeout(() => setWarmTimedOut(true), app.snapshotShown && !app.remoteLoaded ? 1500 : 6000);
     return () => clearTimeout(t);
-  }, [ready, feed.length, app.remoteLoaded]);
+  }, [ready, feed.length, app.remoteLoaded, app.snapshotShown]);
   const warmTargets = useMemo(() => feed.slice(0, FIRST).flatMap((item) => {
     if (item.type === 'hit') return item.story.videoUrl || item.story.imageUrl ? [item.story.id] : [];
     if (item.type === 'post') return item.post.videoUrl || item.post.imageUrl || item.post.thumbnailUrl ? [item.post.id] : [];
@@ -652,7 +676,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   firstReadyRef.current = firstReady;
   // A pull-to-refresh holding the feed down is let go once the new first pages are in.
   useEffect(() => { if (firstReady && warmWaiters.current.length) { const w = warmWaiters.current; warmWaiters.current = []; w.forEach((fn) => fn()); } }, [firstReady]);
-  const dataIn = !isSupabaseConfigured || app.remoteLoaded;
+  const dataIn = !isSupabaseConfigured || app.remoteLoaded || app.snapshotShown;
   const warmed = !!scope || warmTimedOut || (ready && dataIn && feed.length > 0 && warmDone >= warmTargets.length);
   // The shell keeps the splash curtain up until this says the first pages are in.
   useEffect(() => { if (warmed && !scope) setFeedWarm(true); }, [warmed, scope]);

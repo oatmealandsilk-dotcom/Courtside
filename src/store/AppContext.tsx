@@ -13,7 +13,8 @@ import { randomUUID } from 'expo-crypto';
 import { TERMS_VERSION } from '@/lib/legal';
 
 import { fetchBootstrap, signIn as apiSignIn, type Bootstrap } from '@/data/api';
-import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type AdminReport, type FeedSignal, type SiteFeedback, type WaitlistEntry, type FirstDayStats, type FirstMove, type HandleStatus } from '@/data/remote';
+import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type AdminReport, type FeedSignal, type SiteFeedback, type WaitlistEntry, type FirstDayStats, type FirstMove, type HandleStatus, type RemoteData } from '@/data/remote';
+import { clearSnapshot, readSnapshot, saveSnapshot } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { markMessagesOpened } from '@/features/messaging/readReceipts';
@@ -237,6 +238,8 @@ interface AppState extends Bootstrap {
   followingIds: ID[];
   /** True once the signed-in account's data has come down from Supabase. */
   remoteLoaded: boolean;
+  /** The saved copy from last time is on screen (see data/snapshot) while the fresh load is on its way. */
+  snapshotShown: boolean;
   /**
    * Which terms the signed-in account has agreed to: a version, null when it
    * has agreed to none, or undefined while that is not known yet (so nobody
@@ -603,6 +606,115 @@ const oldestOf = (posts: Post[]) => posts.reduce<string | null>((old, p) => (!ol
  * comment made on this phone a moment ago that the database has not caught
  * up with.
  */
+/** What is on screen now, in the shape the saved copy keeps (see data/snapshot). */
+function snapshotOf(s: AppState, me: ID): RemoteData {
+  const self = s.users.find((u) => u.id === me);
+  return {
+    users: s.users, posts: s.posts, comments: s.comments, stories: s.stories,
+    followingIds: s.followingIds, followEdges: s.followEdges, savedPostIds: s.saved.postIds, followRequests: s.followRequests,
+    conversations: s.conversations, messages: s.messages, questions: s.questions, answers: s.answers,
+    coachQuestions: s.coachQuestions, coachReplies: s.coachReplies, coachingRequests: s.coachingRequests, notifications: s.notifications,
+    userState: {
+      mutedIds: s.mutedIds, blockedIds: s.blockedIds, savedQuestionIds: s.saved.questionIds, paymentMethods: s.paymentMethods,
+      defaultPaymentId: s.defaultPaymentId, showActivity: s.prefs.showActivity, pushLikes: s.prefs.pushLikes, pushCoach: s.prefs.pushCoach,
+      constraints: self?.profile.constraints,
+    },
+    tips: s.tips, coachApplications: s.coachApplications, coaches: s.coaches, coachReviews: s.coachReviews, coachResults: s.coachResults,
+  };
+}
+
+/** Every id the saved copy put on screen. */
+function idsIn(data: RemoteData): Set<string> {
+  const ids = new Set<string>();
+  const add = (list: { id: string }[]) => list.forEach((x) => ids.add(x.id));
+  add(data.users); add(data.posts); add(data.comments); add(data.stories); add(data.questions); add(data.answers);
+  add(data.notifications); add(data.tips);
+  return ids;
+}
+
+/**
+ * The signed-in account's data laid over what is on screen. The same merge
+ * serves the fresh load from the server and the saved copy shown before it
+ * (fromSnapshot); `snap` is what that copy put up, so the fresh load can take
+ * off anything the server no longer has.
+ */
+function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | null | undefined, snap: Set<string> | null, fromSnapshot: boolean): AppState {
+    const remoteUsers = new Set(data.users.map((u) => u.id));
+    const remotePosts = new Set(data.posts.map((p) => p.id));
+    const remoteStories = new Set(data.stories.map((s) => s.id));
+    const remoteComments = new Set(data.comments.map((c) => c.id));
+    // Whatever the saved copy put on screen that the server no longer has (a
+    // deleted post, a thread gone) comes off now rather than lingering.
+    const gone = (id: string) => !!snap?.has(id);
+    // Posts and Instants come a page at a time: one of the copy's older than
+    // the fresh page is simply not in this page, not deleted, so it stays
+    // (it may be the very one on screen). Only inside the page does missing mean gone.
+    const floor = (list: { createdAt: string }[]) => list.reduce((min, x) => (x.createdAt < min ? x.createdAt : min), '\uffff');
+    const postFloor = floor(data.posts);
+    const storyFloor = floor(data.stories);
+    let users = [...data.users, ...prev.users.filter((u) => !remoteUsers.has(u.id) && !gone(u.id))];
+    // What the coach works around is private: it comes from your own
+    // settings row and goes back into your profile here, on your phone only.
+    const ownConstraints = data.userState?.constraints;
+    if (ownConstraints) users = users.map((u) => (u.id === me ? { ...u, profile: { ...u.profile, constraints: ownConstraints } } : u));
+    // The profile row is created by a trigger; if it has not landed yet,
+    // stand in for it so the screens have someone to show.
+    if (!remoteUsers.has(me) && !fromSnapshot) {
+      const handle = (email ?? 'player').split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '') || 'player';
+      // And create the real row, so what you do next actually saves.
+      remote.ensureProfile(me, handle, handle);
+      users = [{
+        id: me, handle, name: handle, bio: '', location: '', joinedAt: new Date().toISOString(), avatarSeed: me,
+        isCoach: false, followers: 0, following: 0, profile: emptyProfile, achievementIds: [],
+        stats: { sessionsLogged: 0, matchesPlayed: 0, matchesWon: 0, hoursOnCourt: 0, currentStreakDays: 0, longestStreakDays: 0 },
+      }, ...users];
+    }
+    const self = users.find((u) => u.id === me);
+    return dropFixtures({
+      ...prev,
+      users,
+      posts: [...data.posts, ...prev.posts.filter((p) => !remotePosts.has(p.id) && !(gone(p.id) && p.createdAt >= postFloor))],
+      comments: [...data.comments, ...prev.comments.filter((c) => !remoteComments.has(c.id) && !gone(c.id))],
+      stories: [...data.stories, ...prev.stories.filter((st) => !remoteStories.has(st.id) && !(gone(st.id) && st.createdAt >= storyFloor))],
+      followingIds: data.followingIds,
+      followEdges: data.followEdges,
+      followRequests: data.followRequests,
+      // The feed carries on from the oldest post that came with the open.
+      feed: { cursor: oldestOf(data.posts), more: data.posts.length > 0 },
+      // Your real conversations replace the demo ones once the messages tables exist.
+      conversations: data.conversations.length || data.messages.length ? data.conversations : prev.conversations.filter((c) => c.participantIds.includes(me)),
+      messages: data.conversations.length || data.messages.length ? data.messages : prev.messages,
+      // Saved discussions, coaching and notifications take the place of any local copy with the same id.
+      questions: [...data.questions, ...prev.questions.filter((q) => !data.questions.some((r) => r.id === q.id) && !gone(q.id))],
+      answers: [...data.answers, ...prev.answers.filter((a) => !data.answers.some((r) => r.id === a.id) && !gone(a.id))],
+      coachQuestions: [...data.coachQuestions, ...prev.coachQuestions.filter((q) => !data.coachQuestions.some((r) => r.id === q.id))],
+      coachReplies: [...data.coachReplies, ...prev.coachReplies.filter((r) => !data.coachReplies.some((x) => x.id === r.id))],
+      coachingRequests: [...data.coachingRequests, ...prev.coachingRequests.filter((r) => !data.coachingRequests.some((x) => x.id === r.id))],
+      // Real coaches, with their services, reviews and results.
+      coaches: data.coaches,
+      coachReviews: data.coachReviews,
+      coachResults: data.coachResults,
+      notifications: [...data.notifications, ...prev.notifications.filter((n) => !data.notifications.some((x) => x.id === n.id) && !gone(n.id))],
+      tips: [...data.tips, ...prev.tips.filter((t) => !data.tips.some((x) => x.id === t.id) && !gone(t.id))],
+      coachApplications: [...data.coachApplications, ...prev.coachApplications.filter((a) => !data.coachApplications.some((x) => x.id === a.id))],
+      mutedIds: data.userState ? data.userState.mutedIds : prev.mutedIds,
+      blockedIds: data.userState ? data.userState.blockedIds : prev.blockedIds,
+      paymentMethods: data.userState && data.userState.paymentMethods.length ? data.userState.paymentMethods : prev.paymentMethods,
+      defaultPaymentId: data.userState?.defaultPaymentId ?? prev.defaultPaymentId,
+      prefs: data.userState ? { showActivity: data.userState.showActivity, pushLikes: data.userState.pushLikes, pushCoach: data.userState.pushCoach } : prev.prefs,
+      // The saved copy shows the app; only the server's answer counts as loaded (live updates, settings sync and retries wait for it).
+      remoteLoaded: fromSnapshot ? prev.remoteLoaded : true,
+      snapshotShown: fromSnapshot ? true : prev.snapshotShown,
+      ready: true,
+      saved: { ...prev.saved, postIds: data.savedPostIds, questionIds: data.userState ? data.userState.savedQuestionIds : prev.saved.questionIds },
+      currentUserId: me,
+      // Finished the quiz on any device, or (older accounts) set a goal in it.
+      onboardingComplete: prev.onboardingComplete || !!self?.profile.onboardedAt || (self?.profile.goals.length ?? 0) > 0,
+      authResolved: true,
+      error: null,
+    });
+}
+
 function addPosts(prev: AppState, got: { posts: Post[]; comments: Comment[] }): AppState {
   const havePost = new Set(prev.posts.map((p) => p.id));
   const fresh = got.posts.filter((p) => !havePost.has(p.id));
@@ -643,6 +755,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     followRequests: [],
     feed: { cursor: null, more: false },
     remoteLoaded: false,
+    snapshotShown: false,
     termsVersion: undefined,
     savedAccounts: [],
     mutedIds: [],
@@ -666,6 +779,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // fixtures' artificial delay — so the fixtures slot in underneath
         // whatever is there rather than replacing it.
         setState((prev) => {
+          // A real account's saved copy or data is already up: the demo has no place under it.
+          if (prev.snapshotShown || prev.remoteLoaded) return { ...prev, ready: true };
           const fixtures = { ...data, users: data.users.map(user => ({...user, readReceiptsEnabled: readReceiptPreference(user.id)})) };
           const merge = <T extends { id: string }>(existing: T[], incoming: T[]) => {
             const seen = new Set(existing.map((item) => item.id));
@@ -788,6 +903,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(t);
   }, [settingsNow, remoteLoaded, currentUserForLive]);
 
+  // What the saved copy put on screen, so the fresh load can take back off anything the server no longer has.
+  const snapshotIds = React.useRef<Set<string> | null>(null);
+  const showSnapshot = useCallback((me: ID, data: RemoteData) => {
+    snapshotIds.current = idsIn(data);
+    setState((prev) => (prev.remoteLoaded || (prev.currentUserId && prev.currentUserId !== me) ? prev : mergeRemote(prev, data, me, null, null, true)));
+  }, []);
+
   const loadRemote = useCallback(async (me: ID, email?: string | null) => {
     try {
       // The network can miss on a cold open; the load is tried a few times
@@ -799,70 +921,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           await new Promise((r) => setTimeout(r, 700 * 2 ** attempt));
         }
       }
-      setState((prev) => {
-        const remoteUsers = new Set(data.users.map((u) => u.id));
-        const remotePosts = new Set(data.posts.map((p) => p.id));
-        const remoteStories = new Set(data.stories.map((s) => s.id));
-        const remoteComments = new Set(data.comments.map((c) => c.id));
-        let users = [...data.users, ...prev.users.filter((u) => !remoteUsers.has(u.id))];
-        // What the coach works around is private: it comes from your own
-        // settings row and goes back into your profile here, on your phone only.
-        const ownConstraints = data.userState?.constraints;
-        if (ownConstraints) users = users.map((u) => (u.id === me ? { ...u, profile: { ...u.profile, constraints: ownConstraints } } : u));
-        // The profile row is created by a trigger; if it has not landed yet,
-        // stand in for it so the screens have someone to show.
-        if (!remoteUsers.has(me)) {
-          const handle = (email ?? 'player').split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '') || 'player';
-          // And create the real row, so what you do next actually saves.
-          remote.ensureProfile(me, handle, handle);
-          users = [{
-            id: me, handle, name: handle, bio: '', location: '', joinedAt: new Date().toISOString(), avatarSeed: me,
-            isCoach: false, followers: 0, following: 0, profile: emptyProfile, achievementIds: [],
-            stats: { sessionsLogged: 0, matchesPlayed: 0, matchesWon: 0, hoursOnCourt: 0, currentStreakDays: 0, longestStreakDays: 0 },
-          }, ...users];
-        }
-        const self = users.find((u) => u.id === me);
-        return dropFixtures({
-          ...prev,
-          users,
-          posts: [...data.posts, ...prev.posts.filter((p) => !remotePosts.has(p.id))],
-          comments: [...data.comments, ...prev.comments.filter((c) => !remoteComments.has(c.id))],
-          stories: [...data.stories, ...prev.stories.filter((st) => !remoteStories.has(st.id))],
-          followingIds: data.followingIds,
-          followEdges: data.followEdges,
-          followRequests: data.followRequests,
-          // The feed carries on from the oldest post that came with the open.
-          feed: { cursor: oldestOf(data.posts), more: data.posts.length > 0 },
-          // Your real conversations replace the demo ones once the messages tables exist.
-          conversations: data.conversations.length || data.messages.length ? data.conversations : prev.conversations.filter((c) => c.participantIds.includes(me)),
-          messages: data.conversations.length || data.messages.length ? data.messages : prev.messages,
-          // Saved discussions, coaching and notifications take the place of any local copy with the same id.
-          questions: [...data.questions, ...prev.questions.filter((q) => !data.questions.some((r) => r.id === q.id))],
-          answers: [...data.answers, ...prev.answers.filter((a) => !data.answers.some((r) => r.id === a.id))],
-          coachQuestions: [...data.coachQuestions, ...prev.coachQuestions.filter((q) => !data.coachQuestions.some((r) => r.id === q.id))],
-          coachReplies: [...data.coachReplies, ...prev.coachReplies.filter((r) => !data.coachReplies.some((x) => x.id === r.id))],
-          coachingRequests: [...data.coachingRequests, ...prev.coachingRequests.filter((r) => !data.coachingRequests.some((x) => x.id === r.id))],
-          // Real coaches, with their services, reviews and results.
-          coaches: data.coaches,
-          coachReviews: data.coachReviews,
-          coachResults: data.coachResults,
-          notifications: [...data.notifications, ...prev.notifications.filter((n) => !data.notifications.some((x) => x.id === n.id))],
-          tips: [...data.tips, ...prev.tips.filter((t) => !data.tips.some((x) => x.id === t.id))],
-          coachApplications: [...data.coachApplications, ...prev.coachApplications.filter((a) => !data.coachApplications.some((x) => x.id === a.id))],
-          mutedIds: data.userState ? data.userState.mutedIds : prev.mutedIds,
-          blockedIds: data.userState ? data.userState.blockedIds : prev.blockedIds,
-          paymentMethods: data.userState && data.userState.paymentMethods.length ? data.userState.paymentMethods : prev.paymentMethods,
-          defaultPaymentId: data.userState?.defaultPaymentId ?? prev.defaultPaymentId,
-          prefs: data.userState ? { showActivity: data.userState.showActivity, pushLikes: data.userState.pushLikes, pushCoach: data.userState.pushCoach } : prev.prefs,
-          remoteLoaded: true,
-          saved: { ...prev.saved, postIds: data.savedPostIds, questionIds: data.userState ? data.userState.savedQuestionIds : prev.saved.questionIds },
-          currentUserId: me,
-          // Finished the quiz on any device, or (older accounts) set a goal in it.
-          onboardingComplete: prev.onboardingComplete || !!self?.profile.onboardedAt || (self?.profile.goals.length ?? 0) > 0,
-          authResolved: true,
-          error: null,
-        });
-      });
+      const snap = snapshotIds.current;
+      snapshotIds.current = null;
+      setState((prev) => mergeRemote(prev, data, me, email, snap, false));
+      // The next open starts from this, straight after the logo.
+      setTimeout(() => { const s = stateRef.current; if (s.currentUserId === me && s.remoteLoaded) void saveSnapshot(me, snapshotOf(s, me)); }, 2500);
       // An ask that arrived while the app was closed gets its notification now.
       setState((prev) => data.followRequests
         .filter((r) => r.toId === me && !prev.notifications.some((n) => n.kind === 'follow-request' && n.actorId === r.fromId && n.userId === me))
@@ -905,6 +968,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // The demo's invented people and coaches never stand in for a real account's data, even when that data failed to load.
         return dropFixtures({ ...prev, users, currentUserId: me, authResolved: true, remoteLoaded: false, error: err instanceof Error ? err.message : 'Could not load your account.' });
       });
+      // Opened on the saved copy with no connection: say so, rather than an error page.
+      if (stateRef.current.snapshotShown) showToast({ title: 'Can’t refresh right now', body: 'Showing what you saw last. It updates once the connection is back.', icon: 'cloud-offline-outline' });
     }
   }, []);
 
@@ -918,6 +983,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // when it lands, instead of holding the splash for the whole fetch.
         const me = data.session.user.id;
         setState((prev) => ({ ...prev, currentUserId: prev.currentUserId ?? me, authResolved: true, termsVersion: termsOf(data.session.user) }));
+        // Last time's copy goes up straight after the logo, the fresh load lands on top of it.
+        void readSnapshot(me).then((snapshot) => { if (snapshot && !cancelled) showSnapshot(me, snapshot); });
         loadRemote(me, data.session.user.email);
       } else setState((prev) => ({ ...prev, authResolved: true }));
     }).catch(() => setState((prev) => ({ ...prev, authResolved: true })));
@@ -940,6 +1007,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
     // Tokens only refresh while the app is in front.
     const sub = DeviceState.addEventListener('change', (status) => {
+      const s = stateRef.current;
+      // Leaving the app: keep a copy of what is on screen for the next open.
+      if (status !== 'active' && s.remoteLoaded && s.currentUserId && UUID.test(s.currentUserId)) void saveSnapshot(s.currentUserId, snapshotOf(s, s.currentUserId));
+      // Back, after opening offline on the saved copy: try the real load again.
+      if (status === 'active' && s.currentUserId && s.snapshotShown && !s.remoteLoaded) void loadRemote(s.currentUserId);
       if (Platform.OS === 'web') return;
       if (status === 'active') supabase?.auth.startAutoRefresh();
       else supabase?.auth.stopAutoRefresh();
@@ -949,7 +1021,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       listener.subscription.unsubscribe();
       sub.remove();
     };
-  }, [loadRemote]);
+  }, [loadRemote, showSnapshot]);
 
   const currentUser = useMemo(
     () => state.users.find((u) => u.id === state.currentUserId) ?? null,
@@ -1087,6 +1159,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(() => {
+    // Nothing of this account stays on the device for the next person.
+    const leaving = stateRef.current.currentUserId;
+    if (leaving) void clearSnapshot(leaving);
     // This phone stops getting the account's alerts before the session ends (the removal needs it).
     if (isSupabaseConfigured) void forgetPushToken().finally(() => remoteAuth.signOut());
     // One account's health never carries over to the next one signed in.
