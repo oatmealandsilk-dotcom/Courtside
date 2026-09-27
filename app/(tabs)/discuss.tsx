@@ -229,7 +229,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           >
             <Ionicons name="search" size={23} color={colors.text} />
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Start a discussion" onPress={() => router.push('/ask')} style={styles.fab}>
+          {/* The + makes what the tab is about: a thread on Discussions, a hit on Find Players. */}
+          <Pressable accessibilityRole="button" accessibilityLabel={section === 'players' ? 'Look for someone to play with' : 'Start a discussion'} onPress={() => router.push(section === 'players' ? '/hit-request/new' : '/ask')} style={styles.fab}>
             <Ionicons name="add" size={22} color={colors.brandInk} />
           </Pressable>
         </View>
