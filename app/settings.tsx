@@ -1,13 +1,12 @@
 import { PlayerName } from '@/components/PlayerName';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Screen, Toggle } from '@/components/ui';
-import { Glass } from '@/components/ui/Glass';
 import { useApp } from '@/store/AppContext';
 import { useTheme, themeList, themes, type ThemeName } from '@/theme/ThemeProvider';
 import { Wash } from '@/components/Wash';
@@ -34,7 +33,7 @@ interface Row {
  */
 export default function Settings() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, saved, blockedIds, locationEnabled, detectedLocation, actions, prefs } = useApp();
+  const { currentUser, locationEnabled, detectedLocation, actions, prefs } = useApp();
   const [locationNote, setLocationNote] = useState('');
   const toggleLocation = async (next: boolean) => {
     setLocationNote(next ? 'Asking…' : '');
@@ -42,51 +41,36 @@ export default function Settings() {
     setLocationNote(problem ?? '');
   };
   const { theme } = useTheme();
-  const [search, setSearch] = useState('');
-  const savedCount = saved.postIds.length + saved.questionIds.length;
 
   const sections: { title: string; rows: Row[] }[] = [
     {
       title: 'Account',
       rows: [
-        { icon: 'person-circle-outline', label: 'Account center', detail: 'Password, sign-in and your data', onPress: () => router.push('/account') },
-        { icon: 'swap-horizontal-outline', label: 'Switch account', onPress: () => router.push('/accounts') },
+        { icon: 'person-circle-outline', label: 'Account center', detail: 'Password, sign-in, payments and your data', onPress: () => router.push('/account') },
+        { icon: 'shield-checkmark-outline', label: 'Privacy center', detail: currentUser?.isPrivate ? 'Private account · blocked, muted and read receipts' : 'Private account, blocked, muted and read receipts', onPress: () => router.push('/privacy') },
       ],
     },
-    {
+    // Phone alerts only exist in the app on a phone; a browser can't receive them, so it doesn't offer switches for them.
+    ...(Platform.OS === 'web' ? [] : [{
       title: 'Notifications',
       rows: [
-        { icon: 'heart-outline', label: 'Likes and comments', toggle: { value: prefs.pushLikes, onChange: (v: boolean) => actions.setPref('pushLikes', v) } },
-        { icon: 'chatbubble-ellipses-outline', label: 'Coach replies', toggle: { value: prefs.pushCoach, onChange: (v: boolean) => actions.setPref('pushCoach', v) } },
+        { icon: 'heart-outline' as const, label: 'Likes and comments', toggle: { value: prefs.pushLikes, onChange: (v: boolean) => actions.setPref('pushLikes', v) } },
+        { icon: 'chatbubble-ellipses-outline' as const, label: 'Coach replies', toggle: { value: prefs.pushCoach, onChange: (v: boolean) => actions.setPref('pushCoach', v) } },
       ],
-    },
+    }]),
     {
       title: 'App',
       rows: [
         { icon: 'color-palette-outline', label: 'Theme', leading: <ThemeTile name={theme} />, value: themeList.find((t) => t.name === theme)?.label, onPress: () => router.push('/theme') },
-        { icon: 'bookmark-outline', label: 'Saved', value: savedCount ? String(savedCount) : undefined, onPress: () => router.push('/saved') },
         { icon: 'archive-outline', label: 'Archive', onPress: () => router.push('/archive') },
-        { icon: 'time-outline', label: 'Your activity', onPress: () => router.push('/activity') },
-      ],
-    },
-    {
-      title: 'Privacy',
-      rows: [
-        { icon: 'lock-closed-outline', label: 'Private account', toggle: { value: !!currentUser?.isPrivate, onChange: actions.setPrivateAccount } },
-        { icon: 'checkmark-done-outline', label: 'Read receipts', toggle: { value: currentUser?.readReceiptsEnabled !== false, onChange: actions.setReadReceiptsEnabled } },
-        { icon: 'remove-circle-outline', label: 'Blocked', value: blockedIds.length ? String(blockedIds.length) : undefined, onPress: () => router.push('/blocked') },
       ],
     },
     {
       title: 'Your tennis',
       rows: [
-        { icon: 'trophy-outline', label: 'Game details and achievements', onPress: () => router.push('/profile-details') },
         { icon: 'pulse-outline', label: 'Health and nutrition', onPress: () => router.push('/health') },
         { icon: 'location-outline', label: 'Location', detail: locationNote || (locationEnabled ? (detectedLocation ? `Showing players near ${detectedLocation.split(',')[0]}` : 'On') : 'Off. Turn on to see who is near you'), toggle: { value: locationEnabled, onChange: (next) => { void toggleLocation(next); } } },
         { icon: 'shield-half-outline', label: 'Permissions', onPress: () => router.push('/permissions') },
-        currentUser?.isCoach
-          ? { icon: 'ribbon-outline', label: 'Coach studio', detail: 'Your page, services, payouts and bookings', onPress: () => router.push('/coach-studio') }
-          : { icon: 'ribbon-outline', label: 'Apply to be a coach', onPress: () => router.push('/coach-apply') },
       ],
     },
     // Only admins see this group (and only admins can read what is behind it).
@@ -103,20 +87,15 @@ export default function Settings() {
       title: 'Support',
       rows: [
         { icon: 'help-circle-outline', label: 'Help', onPress: () => router.push('/help') },
-        { icon: 'shield-checkmark-outline', label: 'Privacy center', onPress: () => router.push('/privacy') },
         { icon: 'information-circle-outline', label: 'About', onPress: () => router.push('/about') },
       ],
     },
   ];
 
-  const term = search.trim().toLowerCase();
-  const filtered = sections
-    .map((section) => ({ ...section, rows: term ? section.rows.filter((r) => r.label.toLowerCase().includes(term)) : section.rows }))
-    .filter((section) => section.rows.length > 0);
 
   return (
     <Screen title="Settings" compactTitle onBack={() => goBack()}>
-      {currentUser && !term ? (
+      {currentUser ? (
         <View style={styles.me}>
           <Avatar name={currentUser.name} seed={currentUser.avatarSeed} size={64} />
           <View style={styles.meWords}>
@@ -129,26 +108,8 @@ export default function Settings() {
         </View>
       ) : null}
 
-      <Glass radius={999} tint={colors.surface} style={styles.search}>
-        <Ionicons name="search" size={16} color={colors.textFaint} />
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search settings"
-          placeholderTextColor={colors.textFaint}
-          autoCapitalize="none"
-          autoCorrect={false}
-          accessibilityLabel="Search settings"
-          style={styles.searchInput}
-        />
-        {search ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={8} onPress={() => setSearch('')}>
-            <Ionicons name="close-circle" size={16} color={colors.textFaint} />
-          </Pressable>
-        ) : null}
-      </Glass>
 
-      {filtered.map((section) => (
+      {sections.map((section) => (
         <View key={section.title} style={styles.section}>
           <Text style={styles.sectionTitle}>{section.title}</Text>
           <View style={styles.card}>
@@ -181,14 +142,10 @@ export default function Settings() {
         </View>
       ))}
 
-      {!filtered.length ? <Text style={styles.empty}>Nothing matches “{search}”.</Text> : null}
-
-      {!term ? (
-        // Signing out leaves this page too: it sits above the tabs, so nothing else would send you to sign in.
-        <Pressable accessibilityRole="button" accessibilityLabel="Log out" onPress={() => { actions.signOut(); router.replace('/sign-in'); }} style={({ pressed }) => [styles.card, styles.logout, pressed && styles.rowPressed]}>
-          <Text style={styles.logoutText}>Log out</Text>
-        </Pressable>
-      ) : null}
+      {/* Signing out leaves this page too: it sits above the tabs, so nothing else would send you to sign in. */}
+      <Pressable accessibilityRole="button" accessibilityLabel="Log out" onPress={() => { actions.signOut(); router.replace('/sign-in'); }} style={({ pressed }) => [styles.card, styles.logout, pressed && styles.rowPressed]}>
+        <Text style={styles.logoutText}>Log out</Text>
+      </Pressable>
       <Text style={styles.version}>CourtSide · early access</Text>
     </Screen>
   );
