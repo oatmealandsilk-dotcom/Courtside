@@ -39,13 +39,14 @@ module.exports = {
     web: { bundler: 'metro', output: 'single', name: 'CourtSide' },
     plugins: [
       'expo-router',
-      // Nothing records sound (an Instant is a photo; clips come from the library), so no microphone request.
-      ['expo-camera', { cameraPermission: 'CourtSide uses the camera to take an instant — one photo right after your session.', microphonePermission: false, recordAudioAndroid: false }],
-      ['expo-image-picker', { photosPermission: 'CourtSide needs your photo library to choose clips and photos to post.', microphonePermission: false }],
+      // The microphone is only for voice notes in chats (expo-audio, below); the camera itself never records sound.
+      ['expo-camera', { cameraPermission: 'CourtSide uses the camera to take an instant — one photo right after your session.', microphonePermission: 'CourtSide uses the microphone for voice notes you send in chats.', recordAudioAndroid: false }],
+      ['expo-image-picker', { photosPermission: 'CourtSide needs your photo library to choose clips and photos to post.', microphonePermission: 'CourtSide uses the microphone for voice notes you send in chats.' }],
       'expo-video',
       ['expo-location', { locationWhenInUsePermission: 'CourtSide uses your location to show players near you on the map.' }],
       ['expo-notifications', { color: '#3F7049' }],
       'expo-apple-authentication',
+      ['expo-audio', { microphonePermission: 'CourtSide uses the microphone for voice notes you send in chats.' }],
       // Apple Health, in the App Store build only (Expo Go has no HealthKit).
       ['react-native-health', { healthSharePermission: 'CourtSide reads your sleep, heart rate variability, resting heart rate, steps and active energy so the AI coach can plan around how recovered you are.', healthUpdatePermission: 'CourtSide does not write to Health.' }],
     ],

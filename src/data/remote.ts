@@ -370,7 +370,7 @@ const toCoachApplication = (r: CoachApplicationRow): CoachApplication => ({
 });
 
 interface ConversationRow { id: string; updated_at: string; title?: string | null; is_group?: boolean | null; conversation_members?: { user_id: string; last_read_at: string | null }[]; messages?: MessageRow[] }
-interface MessageRow { id: string; conversation_id: string; sender_id: string; body: string; kind: string; shared_id: string | null; reactions: Record<string, string> | null; created_at: string; edited_at?: string | null; place?: { name: string; lat: number; lng: number } | null }
+interface MessageRow { id: string; conversation_id: string; sender_id: string; body: string; kind: string; shared_id: string | null; reactions: Record<string, string> | null; created_at: string; edited_at?: string | null; place?: { name: string; lat: number; lng: number } | null; audio_url?: string | null; audio_ms?: number | null }
 
 /** Conversations and messages as the app holds them: who has read what comes from each member's last_read_at. */
 export function toConversations(me: ID, convRows: ConversationRow[], messageRows: MessageRow[]): { conversations: Conversation[]; messages: Message[] } {
@@ -385,6 +385,7 @@ export function toConversations(me: ID, convRows: ConversationRow[], messageRows
       kind: (row.kind as Message['kind']) || 'text', sharedId: row.shared_id ?? undefined,
       reactions: row.reactions && Object.keys(row.reactions).length ? row.reactions : undefined,
       editedAt: row.edited_at ?? undefined,
+      audio: row.audio_url ? { url: row.audio_url, ms: row.audio_ms ?? 0 } : undefined,
       place: row.place && typeof row.place.lat === 'number' && typeof row.place.lng === 'number' ? { name: String(row.place.name ?? 'Court').slice(0, 80), lat: row.place.lat, lng: row.place.lng } : undefined,
       readAtBy: Object.keys(readAtBy).length ? readAtBy : undefined,
       openedAtBy: Object.keys(readAtBy).length ? readAtBy : undefined,
@@ -715,6 +716,7 @@ export const remote = {
       id: message.id, conversation_id: message.conversationId, sender_id: message.senderId, body: message.body,
       kind: message.kind, shared_id: message.sharedId ?? null, created_at: message.createdAt,
       ...(message.place ? { place: message.place } : {}),
+      ...(message.audio ? { audio_url: message.audio.url, audio_ms: Math.round(message.audio.ms) } : {}),
     });
     if (error && error.code === '42501') return 'refused';
     // Sent twice (a retry after a slow first try that did land): it is there.
@@ -1504,13 +1506,13 @@ export const isLocalMedia = (uri?: string) =>
  * folder and returns its public URL. Falls back to the original URI on
  * failure so the local post still shows.
  */
-const ALLOWED_MEDIA = /^(image|video)\/[a-z0-9.+-]+$/i;
+const ALLOWED_MEDIA = /^(image|video|audio)\/[a-z0-9.+-]+$/i;
 
 /** The file's type from its name, for a file the phone hands over without one. */
-function guessType(uri: string, kind: 'photo' | 'video'): string {
+function guessType(uri: string, kind: 'photo' | 'video' | 'audio'): string {
   const ext = (uri.split('?')[0].split('.').pop() || '').toLowerCase();
-  const known: Record<string, string> = { mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/mp4', webm: 'video/webm', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif' };
-  return known[ext] ?? (kind === 'video' ? 'video/mp4' : 'image/jpeg');
+  const known: Record<string, string> = { m4a: 'audio/mp4', aac: 'audio/aac', mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/mp4', webm: 'video/webm', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif' , ...(kind === 'audio' ? { mp4: 'audio/mp4', webm: 'audio/webm' } : {}) };
+  return known[ext] ?? (kind === 'video' ? 'video/mp4' : kind === 'audio' ? 'audio/mp4' : 'image/jpeg');
 }
 
 /**
@@ -1561,7 +1563,7 @@ export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
  * with a plain-words message if it cannot — a post must never be saved
  * pointing at a file that only exists on one phone.
  */
-export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'video', onProgress?: (fraction: number) => void): Promise<string> {
+export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'video' | 'audio', onProgress?: (fraction: number) => void): Promise<string> {
   try {
     const db = need();
     // A photo goes up at the size a feed shows it (1440 on its long edge),

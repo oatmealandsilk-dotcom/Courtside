@@ -4,9 +4,9 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 
 /**
- * What the phone has to allow: camera for an Instant, photos for clips, and
- * location for the map. Nothing records sound, so the microphone is never
- * asked for (it is only read, to fill the record). One place to ask,
+ * What the phone has to allow: camera for an Instant, photos for clips, the
+ * microphone for voice notes, and location for the map. Each is asked for the
+ * first time it is needed. One place to ask,
  * one place to read the answer, so the quiz, Settings, and the composer agree.
  */
 export type DevicePermission = 'camera' | 'photos' | 'microphone' | 'location';
@@ -17,11 +17,11 @@ export const PERMISSION_META: Record<DevicePermission, { label: string; why: str
   // "Limited" access looks granted to iOS but breaks handing a video over
   // (error 3164), so the wording says "All Photos" specifically, not just "on".
   photos: { label: 'Photos', why: 'To pick clips and photos to post. Choose All Photos, not a selection, or videos may fail to open.', icon: 'images-outline' },
-  microphone: { label: 'Microphone', why: 'So clips you record have sound.', icon: 'mic-outline' },
+  microphone: { label: 'Microphone', why: 'For voice notes you send in chats.', icon: 'mic-outline' },
   location: { label: 'Location', why: 'To put you on the map and find players near you.', icon: 'navigate-outline' },
 };
 
-export const ALL_PERMISSIONS: DevicePermission[] = ['camera', 'photos', 'location'];
+export const ALL_PERMISSIONS: DevicePermission[] = ['camera', 'photos', 'microphone', 'location'];
 
 const fold = (p: { granted: boolean; canAskAgain?: boolean; accessPrivileges?: string } | null): PermissionState => {
   if (!p) return 'unavailable';
@@ -110,6 +110,6 @@ export const OFF_HINT = Platform.OS === 'web'
   : 'Switching one off opens your phone’s Settings, because only the phone can take a permission away.';
 
 export async function getAllPermissions(): Promise<Record<DevicePermission, PermissionState>> {
-  const [camera, photos, location, microphone] = await Promise.all([...ALL_PERMISSIONS, 'microphone' as const].map(getPermission));
+  const [camera, photos, microphone, location] = await Promise.all(ALL_PERMISSIONS.map(getPermission));
   return { camera, photos, microphone, location };
 }
