@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LocationField } from '@/components/LocationField';
@@ -111,6 +112,9 @@ const STEPS: { title: string; lead: string; skip?: SetupStep }[] = [
   { title: 'Review', lead: 'What the coach works from.' },
 ];
 
+/** Opened from Game details to change your answers: the steps about you and your game, with Save on each. */
+const EDIT_STEPS = [0, 1, 3, 4];
+
 const round = (n: number, decimals: number) => Number(n.toFixed(decimals));
 
 export default function Onboarding() {
@@ -119,8 +123,11 @@ export default function Onboarding() {
   const insets = useSafeAreaInsets();
   // The profile's "finish setting up" card lands straight on the step it names.
   const params = useLocalSearchParams<{ step?: string; from?: string }>();
+  const editing = params.from === 'edit';
+  const order = editing ? EDIT_STEPS : STEPS.map((_, i) => i);
   const startAt = Math.min(STEPS.length - 1, Math.max(0, Number(params.step) || 0));
-  const [step, setStep] = useState(startAt);
+  const [step, setStep] = useState(editing && !EDIT_STEPS.includes(startAt) ? 0 : startAt);
+  const position = Math.max(0, order.indexOf(step));
   const skipped = useRef<Set<SetupStep>>(new Set());
 
   const existing = currentUser?.profile;
@@ -154,11 +161,11 @@ export default function Onboarding() {
 
   /* ------------------------------ Animation ------------------------------ */
 
-  const progress = useRef(new Animated.Value((startAt + 1) / STEPS.length)).current;
+  const progress = useRef(new Animated.Value((position + 1) / order.length)).current;
   const fade = useRef(new Animated.Value(1)).current;
   const scrollRef = useRef<ScrollView>(null);
   useEffect(() => {
-    Animated.timing(progress, { toValue: (step + 1) / STEPS.length, duration: 360, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
+    Animated.timing(progress, { toValue: (position + 1) / order.length, duration: 360, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
     fade.setValue(0);
     scrollRef.current?.scrollTo({ y: 0, animated: false });
     Animated.timing(fade, { toValue: 1, duration: 220, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
@@ -204,7 +211,8 @@ export default function Onboarding() {
     return {
       skillSystem: skillSystem as SkillSystem, rating, playStyle, handedness, backhand, fitnessLevel,
       preferredSurface: surface, sessionsPerWeek, yearsPlaying,
-      goals: goals.length > 0 ? goals : [{ id: 'g-default', label: 'Play more consistently', done: false }],
+      // Setup only asks about the first goal; any others you had stay as they were.
+      goals: goals.length > 0 ? [...goals, ...(existing?.goals.slice(1) ?? [])] : [{ id: 'g-default', label: 'Play more consistently', done: false }],
       // Injury and schedule notes are added later, from the profile.
       constraints: existing?.constraints ?? [],
       tournaments,
@@ -215,6 +223,12 @@ export default function Onboarding() {
     haptics.commit();
     if (currentUser && (name.trim() !== currentUser.name || location.trim() !== currentUser.location)) {
       actions.updateIdentity({ name: name.trim() || currentUser.name, bio: currentUser.bio, location: location.trim() });
+    }
+    if (editing) {
+      // Changing answers later: keep when you first joined, leave the setup reminders alone, and go back.
+      actions.completeOnboarding({ ...profile, onboardedAt: existing?.onboardedAt });
+      goBack('/profile-details');
+      return;
     }
     actions.completeOnboarding(profile);
     if (currentUserId) void writeSkipped(currentUserId, [...skipped.current]);
@@ -232,10 +246,11 @@ export default function Onboarding() {
   const next = () => {
     const key = STEPS[step].skip;
     if (key) skipped.current.delete(key);
-    setStep((s) => s + 1);
+    setStep(order[position + 1] ?? step + 1);
   };
+  const back = () => setStep(order[position - 1] ?? step - 1);
 
-  const last = step === STEPS.length - 1;
+  const last = position === order.length - 1;
   const canContinue = step === 0 ? name.trim().length > 0 && ratingValid : true;
 
   return (
@@ -246,7 +261,7 @@ export default function Onboarding() {
         </View>
         <View style={styles.headRow}>
           <Text style={styles.title}>{STEPS[step].title}</Text>
-          <Text style={styles.stepLabel}>{step + 1} / {STEPS.length}</Text>
+          <Text style={styles.stepLabel}>{position + 1} / {order.length}</Text>
         </View>
         <Text style={styles.lead}>{STEPS[step].lead}</Text>
       </View>
@@ -411,21 +426,30 @@ export default function Onboarding() {
                   </View>
                 ))}
               </View>
-              <Text style={styles.note}>Injuries and schedule limits can be added from your profile.</Text>
             </>
           ) : null}
         </Animated.View>
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
-        {step > 0 ? <Button label="Back" variant="ghost" onPress={() => setStep((s) => s - 1)} /> : <View />}
+        {position > 0 ? <Button label="Back" variant="ghost" onPress={back} />
+          : editing ? <Button label="Cancel" variant="ghost" onPress={() => goBack('/profile-details')} /> : <View />}
         <View style={styles.footerRight}>
-          {STEPS[step].skip ? (
+          {editing ? (
+            <>
+              {!last ? (
+                <Pressable accessibilityRole="button" accessibilityLabel="Next step" onPress={next} style={styles.skip}>
+                  <Text style={styles.skipText}>Next</Text>
+                </Pressable>
+              ) : null}
+              <Button label="Save" disabled={!canContinue} onPress={finish} />
+            </>
+          ) : STEPS[step].skip ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Skip this step" onPress={skipStep} style={styles.skip}>
               <Text style={styles.skipText}>Skip</Text>
             </Pressable>
           ) : null}
-          <Button label={last ? 'Finish' : 'Continue'} disabled={!canContinue} onPress={() => (last ? finish() : next())} />
+          {editing ? null : <Button label={last ? 'Finish' : 'Continue'} disabled={!canContinue} onPress={() => (last ? finish() : next())} />}
         </View>
       </View>
     </View>

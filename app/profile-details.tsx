@@ -1,9 +1,9 @@
 import { PlayerName } from '@/components/PlayerName';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { CourtSpinner } from '@/components/CourtSpinner';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -48,7 +48,12 @@ export default function Profile() {
   const hasStats = s.sessionsLogged > 0 || s.hoursOnCourt > 0 || s.matchesPlayed > 0 || s.currentStreakDays > 0;
 
   return (
-    <Screen title={isMe ? 'Your game' : `${first}’s game`} compactTitle onBack={() => goBack()}>
+    <Screen title={isMe ? 'Your game' : `${first}’s game`} compactTitle onBack={() => goBack()}
+      right={isMe ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Edit your game" hitSlop={10} onPress={() => router.push({ pathname: '/onboarding', params: { from: 'edit', step: '0' } })} style={styles.edit}>
+          <Text style={styles.editText}>Edit</Text>
+        </Pressable>
+      ) : undefined}>
       <View style={styles.identityRow}>
         <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={56} ring={user.isCoach} />
         <View style={styles.identityText}>
@@ -84,7 +89,7 @@ export default function Profile() {
       <Text style={styles.sectionTitle}>Goals</Text>
       <View style={styles.group}>
         {profile.goals.length === 0 ? (
-          <Text style={styles.muted}>{isMe ? 'No goals yet. Add one from Edit profile.' : 'No goals shared.'}</Text>
+          <Text style={styles.muted}>{isMe ? 'No goals yet. Tap Edit to add one.' : 'No goals shared.'}</Text>
         ) : (
           profile.goals.map((goal, index) => (
             <View key={goal.id} style={[styles.row, index > 0 && styles.line]}>
@@ -166,6 +171,8 @@ function Detail({ label, value, line }: { label: string; value: string; line?: b
 
 const styleDefinitions = StyleSheet.create({
   wait: { paddingVertical: 60, alignItems: 'center' },
+  edit: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.surface, ...lift },
+  editText: { ...typography.smallStrong, color: colors.text },
   identityRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'center', paddingBottom: spacing.lg },
   identityText: { flex: 1, gap: 3, minWidth: 0 },
   name: { ...typography.heading, color: colors.text },

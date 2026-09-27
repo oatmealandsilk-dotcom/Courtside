@@ -502,7 +502,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     <View style={styles.strip}>
       <View style={styles.stripHead}>
         <Text style={styles.stripTitle}>Players you might know</Text>
-        <Text style={styles.stripSub}>From your contacts, mutuals and who you've played.</Text>
+        <Text style={styles.stripSub}>People you’ve talked to, coaches, and players in your city.</Text>
       </View>
       {/* Its own sideways bar: nativeID keeps the page swipe off it. */}
       <ScrollView

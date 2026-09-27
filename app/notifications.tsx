@@ -2,6 +2,7 @@ import React, { useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { router } from 'expo-router';
+import { requestSection } from '@/features/navigation/swipeOrder';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -191,7 +192,7 @@ export default function Notifications() {
           icon="notifications-outline"
           title="Nothing yet"
           body="Likes, replies and shares on your posts land here. Following players is the quickest way to get some."
-          action={{ label: 'Find players near you', onPress: () => router.push({ pathname: '/discuss', params: { section: 'players' } }) }}
+          action={{ label: 'Find players near you', onPress: () => { requestSection('/discuss', 'players'); router.push('/discuss'); } }}
         />
       ) : (
         <View style={styles.list}>
