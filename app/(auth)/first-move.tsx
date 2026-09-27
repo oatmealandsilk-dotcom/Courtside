@@ -15,7 +15,7 @@ import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, lift } from '@/theme';
 
 const enter = (i: number) => FadeInDown.delay(80 + i * 80).duration(420).easing(Easing.out(Easing.cubic));
 const STARTER = "What's the one thing in your game you want fixed?";
@@ -165,7 +165,7 @@ const styleDefinitions = StyleSheet.create({
   head: { gap: spacing.sm },
   title: { ...typography.display, color: colors.text },
   lead: { ...typography.body, color: colors.textMuted, lineHeight: 22 },
-  card: { borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   pressed: { backgroundColor: colors.surfaceAlt },
   post: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg },
   postIcon: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },

@@ -308,7 +308,7 @@ export default function Compose() {
           title={mode === 'clip' ? 'New clip' : mode === 'post' ? 'New post' : mode === 'story' ? 'New story' : mode === 'hit' ? 'New instant' : 'Ask the room'}
           compactTitle
           onBack={() => (mode === 'question' ? router.back() : mode === 'hit' ? router.navigate('/hit') : setStage('edit'))}
-          right={<Button label={mode === 'story' ? 'Add to story' : mode === 'hit' ? 'Post instant' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit} />}
+          right={<Button label={mode === 'story' || mode === 'hit' ? 'Post instant' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit} />}
         >
           <View style={styles.form}>
             {mode !== 'question' ? (

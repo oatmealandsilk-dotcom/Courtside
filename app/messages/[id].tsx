@@ -293,11 +293,12 @@ export default function Thread() {
               held={menu?.message.id === message.id}
               onHold={(rect) => setMenu({ message, mine, rect })}
               onReact={(emoji) => actions.reactToMessage(message.id, emoji)}
+              onRetry={() => actions.retryMessage(message.id)}
             />
             </React.Fragment>
           );
         })}
-        {thread.length > 0 && thread[thread.length - 1].senderId === currentUserId && <Text accessibilityLiveRegion="polite" style={styles.timestamp}>
+        {thread.length > 0 && thread[thread.length - 1].senderId === currentUserId && !thread[thread.length - 1].failed && <Text accessibilityLiveRegion="polite" style={styles.timestamp}>
           {other.readReceiptsEnabled !== false && thread[thread.length - 1].readAtBy?.[other.id] ? 'Read' : 'Sent'}
         </Text>}
       </ScrollView>
@@ -406,11 +407,11 @@ export default function Thread() {
  * Double tap leaves your default reaction; a long press opens the picker for a
  * different one. Reactions sit under the bubble and are tappable to remove.
  */
-function Bubble({ message, mine, inRun, tail, arrive, styles, me, held = false, onHold, onReact }: {
+function Bubble({ message, mine, inRun, tail, arrive, styles, me, held = false, onHold, onReact, onRetry }: {
   message: Message; mine: boolean; inRun: boolean; tail: boolean; arrive?: FadeInUp; styles: any; me: string | null;
   /** Its menu is open: the lifted copy stands in for it, so it steps out of sight. */
   held?: boolean;
-  onHold: (rect: Rect) => void; onReact: (emoji?: string) => void;
+  onHold: (rect: Rect) => void; onReact: (emoji?: string) => void; onRetry?: () => void;
 }) {
   const tap = useDoubleTap(() => onReact());
   const reactions = message.reactions ?? {};
@@ -465,6 +466,11 @@ function Bubble({ message, mine, inRun, tail, arrive, styles, me, held = false, 
         )}
       </HoldArea>
       {message.editedAt ? <Text style={styles.edited}>Edited</Text> : null}
+      {message.failed ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Not sent. Tap to try again" onPress={onRetry} hitSlop={8}>
+          <Text style={[styles.edited, { color: colors.danger }]}>Not sent · Tap to retry</Text>
+        </Pressable>
+      ) : null}
     </Reanimated.View>
   );
 }

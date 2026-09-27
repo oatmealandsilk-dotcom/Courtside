@@ -14,6 +14,7 @@ import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 import { colors, font } from '@/theme';
 import { BrandMark } from '@/components/BrandMark';
 import { installCrashReporting, reportError } from '@/lib/crashReporting';
+import { isDesktopBrowser } from '@/lib/browserDevice';
 
 // Any error the app does not catch itself is filed as a crash report.
 installCrashReporting();
@@ -42,6 +43,7 @@ export default function RootLayout() {
   usePauseWhenHidden();
   // Inter ships in the bundle, so on a phone this resolves before the splash
   // has gone; in a browser it is one small fetch, kept after that.
+  const desktop = isDesktopBrowser();
   const [fontsReady] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, ...Ionicons.font });
   if (!fontsReady) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
   return (
@@ -78,6 +80,8 @@ export default function RootLayout() {
             }}
           />
           <Stack.Screen name="ask-coach" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          {/* On a computer, New message is a box over the inbox (Instagram's way); on a phone it is a page. */}
+          {desktop ? <Stack.Screen name="messages/new" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} /> : null}
           <Stack.Screen name="pick-location" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="story/[id]" options={{ presentation: 'fullScreenModal', animation: 'fade' }} />
           <Stack.Screen name="hit" options={{ presentation: 'fullScreenModal', animation: 'fade', contentStyle: { backgroundColor: '#000' } }} />

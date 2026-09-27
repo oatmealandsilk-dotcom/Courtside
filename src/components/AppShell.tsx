@@ -22,7 +22,7 @@ import { colors } from '@/theme';
 const paths = { index: '/', discuss: '/discuss', coaches: '/coaches', profile: '/profile' } as const;
 const routes = Object.keys(paths).map(name => ({ key: name, name }));
 /** The pages that slide up over the app; Escape closes them on a computer. */
-const SHEETS = new Set(['/compose', '/share', '/ask', '/comments', '/post-menu', '/edit-post']);
+const SHEETS = new Set(['/compose', '/share', '/ask', '/comments', '/post-menu', '/edit-post', '/messages/new']);
 const TAB_ORDER: string[] = [paths.index, paths.discuss, paths.coaches, paths.profile];
 export function AppShell({ children }: { children: React.ReactNode }) {
   useTheme();
@@ -97,8 +97,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   else if (shown === '/discuss' || shown.startsWith('/question/') || shown.startsWith('/user/')) selected.current = 1;
   else if (shown === '/coaches' || shown.startsWith('/coach/') || shown.startsWith('/coach-') || shown === '/ai-coach' || shown === '/booking-done') selected.current = 2;
   else if (shown === '/profile' || ['/settings', '/edit-profile', '/change-handle', '/profile-details'].includes(shown)) selected.current = 3;
-  // Pages with their own bottom controls (a composer, an editor, a thread's message box) run without the floating bar.
-  const showNav = !!currentUserId && !['/sign-in', '/onboarding', '/agree', '/first-move', '/compose', '/hit', '/edit-post', '/ask', '/ask-coach', '/pick-location', '/invite', '/comments', '/share', '/likes', '/post-menu'].includes(pathname) && !pathname.startsWith('/messages/') && !pathname.startsWith('/story/');
+  // Pages with their own bottom controls (a composer, an editor, a thread's
+  // message box) run without the phone's floating bar. On a computer the
+  // menu sits at the side, out of their way, so it stays, the way
+  // Instagram's does behind its Create box. Sign-in, setup and the camera
+  // hide it everywhere.
+  const phoneOnlyHide = ['/compose', '/edit-post', '/ask', '/ask-coach', '/pick-location', '/invite', '/comments', '/share', '/likes', '/post-menu'].includes(pathname) || pathname.startsWith('/messages/');
+  const hideEverywhere = ['/sign-in', '/onboarding', '/agree', '/first-move', '/hit'].includes(pathname) || pathname.startsWith('/story/');
+  const showNav = !!currentUserId && !hideEverywhere && !(isPhone && phoneOnlyHide);
   // A shared link opened while signed out goes to sign-in, not to an empty page.
   const mustSignIn = ready && authResolved && !currentUserId && !['/', '/index', '/sign-in', '/onboarding', '/birthday'].includes(pathname);
   const nav = <NavBar state={{ index: selected.current, routes }} navigation={{ navigate: name => {

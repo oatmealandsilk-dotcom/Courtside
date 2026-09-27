@@ -11,7 +11,7 @@ import type { FirstDayStats } from '@/data/remote';
 import { goBack } from '@/lib/goBack';
 import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, lift } from '@/theme';
 
 /**
  * Everyone's first post from the last month, newest first, and whether you
@@ -109,7 +109,7 @@ const styleDefinitions = StyleSheet.create({
   numLabel: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
   numFoot: { ...typography.caption, letterSpacing: 0, color: colors.textFaint, marginTop: 2 },
   picks: { ...typography.small, color: colors.textMuted, paddingHorizontal: spacing.xs },
-  card: { borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   words: { flex: 1, gap: 1 },

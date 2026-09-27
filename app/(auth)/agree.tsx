@@ -11,7 +11,7 @@ import { Wash } from '@/components/Wash';
 import { openLegal, TERMS_VERSION } from '@/lib/legal';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, spacing, typography, font } from '@/theme';
+import { colors, spacing, typography, font, lift } from '@/theme';
 
 /**
  * The short version of the terms. Each rule is a plain headline and the
@@ -103,7 +103,7 @@ const styleDefinitions = StyleSheet.create({
   title: { ...typography.display, color: colors.text },
   lead: { ...typography.body, color: colors.textMuted, lineHeight: 22 },
   // One quiet list, the way Settings reads: a shade off the page, hairlines between.
-  card: { borderRadius: 20, backgroundColor: colors.surface, paddingHorizontal: spacing.lg },
+  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, paddingHorizontal: spacing.lg },
   rule: { gap: 4, paddingVertical: spacing.lg },
   ruleLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   ruleHead: { ...typography.bodyStrong, color: colors.text },

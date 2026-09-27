@@ -641,13 +641,15 @@ export const remote = {
   },
 
   /** Resolves 'refused' when the database will not take it (a chat with someone you are blocked with). */
-  async insertMessage(message: Message): Promise<'refused' | void> {
+  async insertMessage(message: Message): Promise<'refused' | 'failed' | void> {
     const { error } = await need().from('messages').insert({
       id: message.id, conversation_id: message.conversationId, sender_id: message.senderId, body: message.body,
       kind: message.kind, shared_id: message.sharedId ?? null, created_at: message.createdAt,
     });
     if (error && error.code === '42501') return 'refused';
-    if (error) fail('message send')(error);
+    // Sent twice (a retry after a slow first try that did land): it is there.
+    if (error && error.code === '23505') return;
+    if (error) { fail('message send')(error); return 'failed'; }
   },
 
   /** Whether a chat is with someone you are blocked with, either way (so it cannot be written in). */
@@ -1088,6 +1090,13 @@ export const remote = {
     // Newest save first, and one an admin removed is no longer saved for anyone.
     const live = new Set(rows.filter((row) => !row.removed_at).map((row) => row.id));
     return { ...toPosts(rows), ids: ids.filter((id) => live.has(id)) };
+  },
+
+  /** One thread by its id, for a link to one older than the first load brought. */
+  async fetchQuestion(questionId: ID): Promise<Question | null> {
+    const { data, error } = await need().from('questions').select('*').eq('id', questionId).maybeSingle();
+    if (error || !data) return null;
+    return toQuestion(data as QuestionRow, []);
   },
 
   /** Every reply in one thread, oldest first: the whole conversation when it is opened. */

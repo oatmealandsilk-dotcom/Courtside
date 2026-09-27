@@ -11,7 +11,7 @@ import { money } from '@/lib/format';
 import { isOpen, KIND_LABEL, SPECIALTY_LABEL, turnaround, usePayments } from '@/features/coaching/bookings';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, radius, spacing, typography } from '@/theme';
+import { colors, font, radius, spacing, typography, lift } from '@/theme';
 
 const KINDS = Object.keys(KIND_LABEL) as CoachService['kind'][];
 const SPECIALTIES = Object.keys(SPECIALTY_LABEL) as CoachSpecialty[];
@@ -259,7 +259,7 @@ export default function CoachStudio() {
 }
 
 const styleDefinitions = StyleSheet.create({
-  group: { borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  group: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   step: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
   tick: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },

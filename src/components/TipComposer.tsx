@@ -3,7 +3,7 @@ import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
-import { colors, font, radius, spacing, typography } from '@/theme';
+import { colors, font, radius, spacing, typography, lift } from '@/theme';
 
 const MAX = 500;
 
@@ -79,7 +79,7 @@ export function TipComposer({ onSubmit, onSent, initial = '', placeholder = 'Wha
 
 const styleDefinitions = StyleSheet.create({
   wrap: { gap: spacing.sm },
-  box: { borderRadius: 20, backgroundColor: colors.surface, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
+  box: { ...lift, borderRadius: 20, backgroundColor: colors.surface, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
   input: { ...typography.body, color: colors.text, minHeight: 72, maxHeight: 180, paddingTop: 0, paddingBottom: 0, textAlignVertical: 'top' },
   foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: spacing.xs },
   left: { ...typography.caption, color: colors.textFaint },

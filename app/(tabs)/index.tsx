@@ -730,7 +730,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         />
       ) : (
         <View style={styles.viewer}>
-          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onRefresh={scope ? undefined : refreshFeed} pullHeader={scope || !currentUser ? undefined : (
+          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onRefresh={scope || isDesktopBrowser() ? undefined : refreshFeed} pullHeader={scope || !currentUser ? undefined : (
             <View style={styles.pullGreeting}>
               <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={28} />
               <Text style={styles.pullGreetingText}>{`${currentUser.name.split(' ')[0]}'s homepage`}</Text>

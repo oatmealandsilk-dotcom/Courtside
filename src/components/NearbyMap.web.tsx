@@ -76,19 +76,45 @@ export function NearbyMap(props: NearbyMapProps) {
     instance.touchZoomRotate.disableRotation();
     instance.on('load', () => applyLook(instance, lookFor(themes[theme])));
     instance.on('click', () => { latest.current.select(null); latest.current.selectCourt(null); setMeOpen(false); });
-    instance.on('moveend', () => { if (latest.current.courtsOn) { const c = instance.getCenter(); void latest.current.loadCourts({ lat: c.lat, lng: c.lng }); } });
+    // Courts for where the map came to rest: asked once it has been still a
+    // moment, not on every frame of a scroll.
+    let courtsTimer: ReturnType<typeof setTimeout> | null = null;
+    instance.on('moveend', () => {
+      if (!latest.current.courtsOn) return;
+      if (courtsTimer) clearTimeout(courtsTimer);
+      courtsTimer = setTimeout(() => { const c = instance.getCenter(); void latest.current.loadCourts({ lat: c.lat, lng: c.lng }); }, 250);
+    });
     // Trackpad: a pinch arrives as a wheel with Ctrl held and zooms around the
-    // pointer; a plain two-finger scroll slides the map. Both are ours.
+    // pointer; a plain two-finger scroll slides the map. Both are ours. A
+    // trackpad sends several wheel events per screen frame, so they are added
+    // up and the map moves once per frame: smooth, and no wasted redraws.
+    let dx = 0, dy = 0, dz = 0, frame = 0;
+    let pointer: [number, number] = [0, 0];
+    const flush = () => {
+      frame = 0;
+      if (dz) {
+        instance.zoomTo(instance.getZoom() - dz, { around: instance.unproject(pointer), animate: false });
+        dz = 0;
+      }
+      if (dx || dy) {
+        instance.panBy([dx, dy], { animate: false });
+        dx = 0; dy = 0;
+      }
+    };
     const onWheel = (event: WheelEvent) => {
       if (!expanded) return;
       event.preventDefault();
+      // A mouse wheel can report in lines rather than pixels.
+      const scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? el.clientHeight : 1;
       if (event.ctrlKey || event.metaKey) {
         const rect = el.getBoundingClientRect();
-        const around = instance.unproject([event.clientX - rect.left, event.clientY - rect.top]);
-        instance.zoomTo(instance.getZoom() - event.deltaY * 0.01, { around, animate: false });
+        pointer = [event.clientX - rect.left, event.clientY - rect.top];
+        dz += event.deltaY * scale * 0.01;
       } else {
-        instance.panBy([event.deltaX, event.deltaY], { animate: false });
+        dx += event.deltaX * scale;
+        dy += event.deltaY * scale;
       }
+      if (!frame) frame = requestAnimationFrame(flush);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     map.current = instance;
@@ -97,6 +123,8 @@ export function NearbyMap(props: NearbyMapProps) {
     watcher?.observe(el);
     return () => {
       clearTimeout(settle);
+      if (courtsTimer) clearTimeout(courtsTimer);
+      if (frame) cancelAnimationFrame(frame);
       watcher?.disconnect();
       el.removeEventListener('wheel', onWheel);
       instance.remove();
@@ -107,27 +135,62 @@ export function NearbyMap(props: NearbyMapProps) {
   // Pins: rebuilt when who is shown or who is picked changes.
   const shown = expanded ? model.shown : model.inTown.length ? model.inTown : model.ranked.slice(0, 12);
   const selectedId = model.selected?.user.id ?? null;
+  // Players' pins persist between changes: a new filter fades out the ones
+  // that leave and fades in the ones that arrive, and the rest never flicker.
+  const pins = useRef(new Map<string, { marker: maplibregl.Marker; html: string; node: HTMLDivElement; leaving?: ReturnType<typeof setTimeout> }>());
+  useEffect(() => () => { pins.current.forEach((p) => p.marker.remove()); pins.current.clear(); }, [expanded, theme]);
+  useEffect(() => {
+    const instance = map.current;
+    if (!instance) return;
+    const seen = new Set<string>();
+    for (const p of shown) {
+      const on = p.user.id === selectedId;
+      const size = on ? 38 : 30;
+      const html = playerPinHtml(p.user, { size, on, label: expanded });
+      seen.add(p.user.id);
+      const kept = pins.current.get(p.user.id);
+      if (kept) {
+        if (kept.leaving) { clearTimeout(kept.leaving); kept.leaving = undefined; kept.node.style.opacity = '1'; }
+        if (kept.html !== html) {
+          kept.node.innerHTML = html;
+          kept.html = html;
+          kept.marker.setOffset(expanded ? [0, -(size + 8) / 2] : [0, 0]);
+        }
+        kept.marker.setLngLat([p.at.lng, p.at.lat]);
+        continue;
+      }
+      const node = document.createElement('div');
+      node.innerHTML = html;
+      node.style.opacity = '0';
+      node.style.transition = 'opacity 180ms ease-out';
+      node.setAttribute('role', expanded ? 'button' : 'link');
+      node.setAttribute('aria-label', expanded ? p.user.name : `${p.user.name}, open profile`);
+      const id = p.user.id;
+      node.addEventListener('click', (event) => { event.stopPropagation(); if (expanded) latest.current.select(id); else latest.current.onOpen(id); });
+      const marker = new maplibregl.Marker({ element: node, anchor: expanded ? 'top' : 'center', offset: expanded ? [0, -(size + 8) / 2] : [0, 0] }).setLngLat([p.at.lng, p.at.lat]).addTo(instance);
+      pins.current.set(id, { marker, html, node });
+      requestAnimationFrame(() => { node.style.opacity = '1'; });
+    }
+    for (const [id, pin] of pins.current) {
+      if (seen.has(id) || pin.leaving) continue;
+      pin.node.style.opacity = '0';
+      pin.leaving = setTimeout(() => { pin.marker.remove(); pins.current.delete(id); }, 180);
+    }
+  }, [shown, selectedId, expanded, night, openToHit]);
+
+  // You: one pin, rebuilt only when you or where you are changes.
   useEffect(() => {
     const instance = map.current;
     if (!instance) return;
     const markers: maplibregl.Marker[] = [];
     const pin = (html: string) => { const node = document.createElement('div'); node.innerHTML = html; return node; };
-    for (const p of shown) {
-      const on = p.user.id === selectedId;
-      const size = on ? 38 : 30;
-      const node = pin(playerPinHtml(p.user, { size, on, label: expanded }));
-      node.setAttribute('role', expanded ? 'button' : 'link');
-      node.setAttribute('aria-label', expanded ? p.user.name : `${p.user.name}, open profile`);
-      node.addEventListener('click', (event) => { event.stopPropagation(); if (expanded) latest.current.select(p.user.id); else latest.current.onOpen(p.user.id); });
-      markers.push(new maplibregl.Marker({ element: node, anchor: expanded ? 'top' : 'center', offset: expanded ? [0, -(size + 8) / 2] : [0, 0] }).setLngLat([p.at.lng, p.at.lat]).addTo(instance));
-    }
     const meSize = expanded ? 34 : 26;
     markers.push(new maplibregl.Marker({
       element: (() => { const node = pin(mePinHtml(me, meSize)); node.setAttribute('role', 'button'); node.setAttribute('aria-label', 'You'); node.addEventListener('click', (event) => { event.stopPropagation(); latest.current.openMe(); }); return node; })(),
       anchor: 'center',
     }).setLngLat([home.lng, home.lat]).addTo(instance));
     return () => { markers.forEach((m) => m.remove()); };
-  }, [shown, selectedId, expanded, home.lat, home.lng, me, night, openToHit]);
+  }, [expanded, home.lat, home.lng, me, night, openToHit]);
 
   // Courts, when that layer is on.
   const selectedCourtId = model.selectedCourt?.id ?? null;

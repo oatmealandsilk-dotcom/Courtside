@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, memo } from 'react';
+import { useSoundMuted } from '@/features/feed/sound';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -50,7 +51,8 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   // Its player was freed: a new one starts its fetch from nothing.
   const gone = () => { setReadyState(false); onReady?.(false); };
   // Sound on, the way a feed on a phone should be; a tap on the disc mutes it.
-  const [muted, setMuted] = useState(silent);
+  // Sound is one switch for every clip; a clip posted without sound stays silent regardless.
+  const [muted, setMuted] = useSoundMuted();
   const lastTap = useRef(0);
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => { if (!active) setPaused(false); }, [active]);

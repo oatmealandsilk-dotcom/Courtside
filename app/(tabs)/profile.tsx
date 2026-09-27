@@ -1,4 +1,5 @@
 import { asTabRoute } from '@/features/navigation/tabFocus';
+import { isDesktopBrowser } from '@/lib/browserDevice';
 import { PlayerName } from '@/components/PlayerName';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { Image as ExpoImage } from 'expo-image';
@@ -155,7 +156,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
   // the tab row's (Profile to Coaching). Only the grid below the line changes.
   return body;
  };
- return <Screen memoryKey="profile" title="Profile" wash subtitle={`@${user.handle}`} onRefresh={previewSection === undefined ? actions.refresh : undefined} right={<View style={styles.headerActions}>
+ return <Screen memoryKey="profile" title="Profile" wash subtitle={`@${user.handle}`} onRefresh={previewSection === undefined && !isDesktopBrowser() ? actions.refresh : undefined} right={<View style={styles.headerActions}>
    <Tappable accessibilityRole="link" accessibilityLabel={unseen ? `Notifications, ${unseen} new` : 'Notifications'} onPress={() => router.push('/notifications')} hitSlop={10} style={styles.headerButton}>
      <Ionicons name={unseen ? 'notifications' : 'notifications-outline'} size={27} color={colors.text}/>
      {unseen > 0 && <View style={styles.headerBadge}><Text style={styles.headerBadgeText}>{unseen > 9 ? '9+' : unseen}</Text></View>}

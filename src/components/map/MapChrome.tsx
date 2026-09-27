@@ -1,9 +1,9 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { FadeIn, FadeOut, LinearTransition, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
 import { Avatar } from '@/components/ui';
 import { Glass } from '@/components/ui/Glass';
@@ -80,16 +80,30 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
   const x = useSharedValue(0);
   const w = useSharedValue(0);
   const [measured, setMeasured] = useState(false);
+  // The chip lights up the moment it is tapped; the map (the heavy part)
+  // follows a beat later, so the sliding pill never waits on it.
+  const [active, setActive] = useState(filter);
+  const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
   const moveTo = (key: MapFilter, animate: boolean) => {
     const spot = spots.current[key];
     if (!spot) return;
-    const spring = { damping: 18, stiffness: 220, mass: 0.7 };
-    x.value = animate ? withSpring(spot.x, spring) : spot.x;
-    w.value = animate ? withSpring(spot.w, spring) : spot.w;
+    const ease = { duration: 240, easing: Easing.bezier(0.2, 0.8, 0.2, 1) };
+    x.value = animate ? withTiming(spot.x, ease) : spot.x;
+    w.value = animate ? withTiming(spot.w, ease) : spot.w;
   };
-  useEffect(() => { moveTo(filter, true); }, [filter]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A filter set from outside (a search clearing it, say) moves the pill too.
+  useEffect(() => { if (filter !== active) { setActive(filter); moveTo(filter, true); } }, [filter]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { if (pending.current) clearTimeout(pending.current); }, []);
   const pill = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }], width: w.value }));
-  const pick = (key: MapFilter) => { if (key !== filter) { haptics.tap(); onFilter(key); } };
+  const pick = (key: MapFilter) => {
+    if (key === active) return;
+    haptics.tap();
+    setActive(key);
+    moveTo(key, true);
+    if (pending.current) clearTimeout(pending.current);
+    // In a browser the animation shares the page's one thread with the map, so the map waits for the pill to land.
+    pending.current = setTimeout(() => { pending.current = null; onFilter(key); }, Platform.OS === 'web' ? 200 : 16);
+  };
   return (
     <View style={styles.chipsRow}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={styles.chipsWrap}>
@@ -99,16 +113,16 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
           <Pressable
             key={f.key}
             accessibilityRole="tab"
-            accessibilityState={{ selected: filter === f.key }}
+            accessibilityState={{ selected: active === f.key }}
             onPress={() => pick(f.key)}
             onLayout={(e) => {
               const { x: cx, width } = e.nativeEvent.layout;
               spots.current[f.key] = { x: cx, w: width };
-              if (f.key === filter) { moveTo(f.key, false); if (!measured) setMeasured(true); }
+              if (f.key === active) { moveTo(f.key, false); if (!measured) setMeasured(true); }
             }}
-            style={[styles.chip, measured ? styles.chipClear : filter === f.key && styles.chipOn]}
+            style={[styles.chip, measured ? styles.chipClear : active === f.key && styles.chipOn]}
           >
-            <Text style={[styles.chipText, filter === f.key && styles.chipTextOn]}>{f.label}</Text>
+            <Text style={[styles.chipText, active === f.key && styles.chipTextOn]}>{f.label}</Text>
           </Pressable>
         ))}
       </ScrollView>
@@ -173,23 +187,31 @@ export function NearbyRail({ items, cityName, selectedId, onSelect }: { items: P
   const styles = useThemedStyles(styleDefinitions);
   const [railH, setRailH] = useState(0);
   const railHRef = useRef(0);
+  // The tray's height lives on the animation thread too, so a drag and its
+  // settle never wait for the JavaScript side (which may be busy with pins).
+  const railHUI = useSharedValue(0);
   const drop = useSharedValue(0);
   const start = useSharedValue(0);
+  const tuckedUI = useSharedValue(0);
   const [tucked, setTucked] = useState(false);
-  const settle = (down: boolean) => {
-    drop.value = withSpring(down ? railHRef.current : 0, { damping: 20, stiffness: 240 });
-    setTucked(down);
+  const settleUI = (down: boolean, velocity = 0) => {
+    'worklet';
+    drop.value = withSpring(down ? railHUI.value : 0, { damping: 26, stiffness: 260, mass: 0.9, velocity, overshootClamping: true });
+    tuckedUI.value = down ? 1 : 0;
+    runOnJS(setTucked)(down);
   };
   const drag = Gesture.Pan()
     .activeOffsetY([-6, 6])
     .onBegin(() => { start.value = drop.value; })
-    .onUpdate((e) => { drop.value = Math.max(0, Math.min(railHRef.current, start.value + e.translationY)); })
+    .onUpdate((e) => { drop.value = Math.max(0, Math.min(railHUI.value, start.value + e.translationY)); })
     .onEnd((e) => {
-      const down = e.velocityY > 500 || (e.velocityY > -500 && drop.value > railHRef.current / 2);
-      runOnJS(settle)(down);
+      const down = e.velocityY > 500 || (e.velocityY > -500 && drop.value > railHUI.value / 2);
+      settleUI(down, e.velocityY);
     });
-  const tap = Gesture.Tap().onEnd(() => { runOnJS(settle)(!tucked); });
+  const tap = Gesture.Tap().onEnd(() => { settleUI(tuckedUI.value === 0); });
   const body = useAnimatedStyle(() => (railH ? { height: Math.max(0, railH - drop.value), opacity: 1 - (drop.value / Math.max(1, railH)) * 0.6 } : {}));
+  // A new filter deals a new set: the row fades in as one, rather than thirty avatars springing about.
+  const dealt = items.slice(0, 30).map((p) => p.user.id).join(',');
   return (
     <View style={styles.sheet}>
       <GestureDetector gesture={Gesture.Exclusive(drag, tap)}>
@@ -205,20 +227,21 @@ export function NearbyRail({ items, cityName, selectedId, onSelect }: { items: P
         </View>
       </GestureDetector>
       <Animated.View style={[styles.railBody, body]}>
-        <View onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h && h !== railHRef.current) { railHRef.current = h; setRailH(h); } }}>
+        <View onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h && h !== railHRef.current) { railHRef.current = h; railHUI.value = h; setRailH(h); } }}>
           {items.length ? (
+            <Animated.View key={dealt} entering={FadeIn.duration(200).easing(Easing.out(Easing.cubic))}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
-              {items.slice(0, 30).map((p, i) => (
-                // A new filter deals the players again: they shuffle into their new places, newcomers fading in.
-                <Animated.View key={p.user.id} layout={LinearTransition.springify().damping(18)} entering={FadeIn.delay(i * 25).duration(220)} exiting={FadeOut.duration(120)}>
+              {items.slice(0, 30).map((p) => (
+                <View key={p.user.id}>
                   <Tappable accessibilityLabel={`${p.user.name}, ${formatMiles(p.miles)}`} onPress={() => onSelect(p.user.id)} scaleTo={0.96} style={[styles.railItem, selectedId === p.user.id && styles.railItemOn]}>
                     <View style={[styles.railRing, isOpenToHit(p.user) && styles.railRingOn]}><Avatar name={p.user.name} seed={p.user.avatarSeed} size={46} ring={p.user.isCoach} /></View>
                     <Text style={styles.railName} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text>
                     <Text style={styles.railMeta} numberOfLines={1}>{formatMiles(p.miles)}</Text>
                   </Tappable>
-                </Animated.View>
+                </View>
               ))}
             </ScrollView>
+            </Animated.View>
           ) : (
             <Animated.Text entering={FadeIn.duration(180)} style={styles.sheetEmpty}>No one matches. Try another filter.</Animated.Text>
           )}

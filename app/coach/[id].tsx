@@ -11,7 +11,7 @@ import { pickFromDevice, type PickedMedia } from '@/components/MediaPicker';
 import { KIND_LABEL, SPECIALTY_LABEL, statusLabel, turnaround, usePayments } from '@/features/coaching/bookings';
 import { money, relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
-import { colors, font, radius, spacing, typography } from '@/theme';
+import { colors, font, radius, spacing, typography, lift } from '@/theme';
 
 /**
  * A coach's page: who they are, what they offer, and booking one of their
@@ -332,7 +332,7 @@ const styleDefinitions = StyleSheet.create({
   link: { ...typography.smallStrong, color: colors.brand },
   muted: { ...typography.small, color: colors.textMuted, lineHeight: 19, marginTop: spacing.sm },
   // One grouped list: a shade off the page, hairlines between, no outline.
-  group: { borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  group: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   service: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
   radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center', marginTop: 2 },

@@ -1,4 +1,5 @@
 import { useTheme } from '@/theme/ThemeProvider';
+import { useSoundMuted } from '@/features/feed/sound';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState, memo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,7 +42,8 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
   const left = useRef<{ time: number; at: number } | null>(null);
   const [paused, setPaused] = useState(false);
-  const [muted, setMuted] = useState(silent);
+  // Sound is one switch for every clip; a clip posted without sound stays silent regardless.
+  const [muted, setMuted] = useSoundMuted();
   const [ready, setReadyState] = useState(false);
   const setReady = (ok: boolean) => { setReadyState(ok); if (ok) onReady?.(true); };
   // A video that cannot load is a fact, not a wait: the page shows its poster
