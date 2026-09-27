@@ -166,6 +166,13 @@ async function buildPlan(userId: string, body: { context: string; profileHash: s
   // cache key comes from the client, and this is what keeps that honest.
   const generations: number = cached.data?.generations ?? 0;
   if (cached.data && generations >= PLAN_CAP_PER_WEEK) return { plan: cached.data.plan, cached: true, capped: true };
+  // Same atomic count for plans, so parallel requests cannot each write a week.
+  const slot = await admin.rpc('take_plan', { p_user: userId, p_week: weekOf, p_cap: PLAN_CAP_PER_WEEK + 1 });
+  if (slot.error) throw slot.error;
+  if (slot.data == null) {
+    if (cached.data) return { plan: cached.data.plan, cached: true, capped: true };
+    throw new Error('Plan limit reached for this week.');
+  }
 
   const response = await anthropic.messages.create({
     model: PLAN_MODEL,
@@ -214,10 +221,13 @@ const CHAT_SCHEMA = {
 } as const;
 
 async function chat(userId: string, body: { prompt: string; context: string; coaches: CoachOption[] }) {
-  const day = today();
-  const usage = await admin.from('coach_usage').select('messages').eq('user_id', userId).eq('day', day).maybeSingle();
-  const used = usage.data?.messages ?? 0;
-  if (used >= DAILY_CAP) return { capped: true, remaining: 0 };
+  // The question takes its place in today's count before the model is
+  // called, in one step the database does atomically: a burst of questions
+  // sent at once cannot all slip past the cap.
+  const taken = await admin.rpc('take_coach_message', { p_user: userId, p_cap: DAILY_CAP });
+  if (taken.error) throw taken.error;
+  if (taken.data == null) return { capped: true, remaining: 0 };
+  const used = Number(taken.data) - 1;
 
   const memoryRow = await admin.from('coach_memory').select('summary, exchanges').eq('user_id', userId).maybeSingle();
   const summary: string = memoryRow.data?.summary ?? '';
@@ -288,7 +298,6 @@ async function chat(userId: string, body: { prompt: string; context: string; coa
 
   await Promise.all([
     admin.from('coach_memory').upsert({ user_id: userId, summary: nextSummary, exchanges: nextExchanges, updated_at: now }),
-    admin.from('coach_usage').upsert({ user_id: userId, day, messages: used + 1 }),
   ]);
 
   let handoffId: string | null = null;
