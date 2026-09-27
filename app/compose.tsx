@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { show as showToast } from '@/lib/toast';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import Reanimated, { Easing, FadeInDown, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
@@ -148,9 +149,11 @@ export default function Compose() {
           ? { focus: 'On court', minutes: onCourt, drills: [] }
           : undefined,
     });
-    // The first post is the moment to ask who they hit with.
+    // The first post is the moment to ask who they hit with, but only after
+    // they have seen it go up: a light nudge on the feed, not a whole screen.
     const firstPost = !posts.some((p) => p.authorId === currentUserId);
-    if (firstPost) router.replace('/invite'); else router.back();
+    router.back();
+    if (firstPost) setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800);
   };
 
   const pick = (next: PickedMedia | null) => {
