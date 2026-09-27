@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { show as showToast } from '@/lib/toast';
@@ -22,6 +22,7 @@ import { addToBank, getBank } from '@/features/compose/mediaBank';
 import { useApp } from '@/store/AppContext';
 import type { QuestionTopic } from '@/data/types';
 import { colors, radius, spacing, typography, font } from '@/theme';
+import { challengeFor } from '@/features/challenge/weekly';
 
 type Mode = 'clip' | 'post' | 'story' | 'hit' | 'question';
 
@@ -41,7 +42,10 @@ export default function Compose() {
   const { actions, posts, currentUserId } = useApp();
 
   // The story rail opens this straight at the library with ?mode=story.
-  const params = useLocalSearchParams<{ mode?: string; shot?: string }>();
+  const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string }>();
+  // Opened from the weekly challenge: its tag starts the caption, which is what makes the clip an entry.
+  const challenge = useMemo(() => challengeFor(), []);
+  const entering = params.challenge === challenge.tag;
   useEffect(() => { if (params.mode === 'story') router.replace('/hit'); }, [params.mode]);
   // A hit arrives here with its photo already taken: straight to the form.
   // The camera's photo travels in memory; the address only says one is waiting.
@@ -89,7 +93,8 @@ export default function Compose() {
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
   // What the edit step decided: where a clip starts and stops, how fast and how loud it plays, and its crop.
   const [edit, setEdit] = useState<Pick<EditedMedia, 'trimStart' | 'trimEnd' | 'muted' | 'volume' | 'speed' | 'crop' | 'coverAt'>>({});
-  const [body, setBody] = useState('');
+  const [body, setBody] = useState(entering ? `#${challenge.tag} ` : '');
+  const inChallenge = mode === 'clip' && new RegExp(`#${challenge.tag}\\b`, 'i').test(body);
   const [minutes, setMinutes] = useState('');
   // People tagged in the post: chips under the caption, added from a short search.
   const [tagged, setTagged] = useState<string[]>([]);
@@ -199,8 +204,8 @@ export default function Compose() {
       {/* Catches a Photos problem before it turns into the cryptic iOS 3164
           error mid-pick, and links straight to the fix. */}
       <PermissionBanner needs={['photos']} />
-      <Reanimated.View entering={arrive(0)}><Pressable accessibilityRole="button" accessibilityLabel="Create a clip" onPress={() => { setMode('clip'); void openDevice('video'); }} style={styles.choiceOption}>
-        {preparing === 'video' ? <PreparingRing size={28} done={prepDone} /> : <Ionicons name="videocam-outline" size={28} color={colors.textMuted}/>}<Text style={styles.choiceLabel}>Clip</Text><Text style={styles.note}>{preparing === 'video' ? 'Getting your video ready — shrinking it so it posts fast.' : 'Share a video from your device.'}</Text>
+      <Reanimated.View entering={arrive(0)}><Pressable accessibilityRole="button" accessibilityLabel={entering ? `Create a clip for the ${challenge.title} challenge` : 'Create a clip'} onPress={() => { setMode('clip'); void openDevice('video'); }} style={[styles.choiceOption, entering && styles.choiceChallenge]}>
+        {preparing === 'video' ? <PreparingRing size={28} done={prepDone} /> : <Ionicons name={entering ? 'trophy-outline' : 'videocam-outline'} size={28} color={entering ? colors.brand : colors.textMuted}/>}<Text style={styles.choiceLabel}>{entering ? 'Clip for the challenge' : 'Clip'}</Text><Text style={styles.note}>{preparing === 'video' ? 'Getting your video ready — shrinking it so it posts fast.' : entering ? `${challenge.title}. #${challenge.tag} is already in the caption.` : 'Share a video from your device.'}</Text>
       </Pressable></Reanimated.View>
       <Reanimated.View entering={arrive(1)}><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => { setMode('post'); void openDevice('all'); }} style={styles.choiceOption}>
         {preparing === 'all' ? <PreparingRing size={28} done={prepDone} /> : <Ionicons name="images-outline" size={28} color={colors.textMuted}/>}<Text style={styles.choiceLabel}>Post</Text><Text style={styles.note}>{preparing === 'all' ? 'Getting it ready…' : 'Choose from your photos and videos.'}</Text>
@@ -345,6 +350,12 @@ export default function Compose() {
                   minHeight={64}
                   mentions
                 />
+                {inChallenge ? (
+                  <View style={styles.inlineRow}>
+                    <Ionicons name="trophy-outline" size={18} color={colors.brand} />
+                    <Text style={styles.inlineLabel}>Entering this week’s challenge: {challenge.title}</Text>
+                  </View>
+                ) : null}
                 {mode !== 'story' && mode !== 'hit' ? <TagPlayers tagged={tagged} onChange={setTagged} /> : null}
                 {mode !== 'story' && mode !== 'hit' ? (
                   <View style={styles.inlineRow}>
@@ -407,6 +418,7 @@ const styleDefinitions = StyleSheet.create({
   choiceHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8 },
   choiceTitle: { fontSize: 22, ...font('700'), color: colors.text },
   choiceOption: { padding: 20, gap: 8, borderRadius: 18, backgroundColor: colors.surface },
+  choiceChallenge: { borderWidth: 1, borderColor: colors.brand },
   choiceLabel: { fontSize: 16, ...font('600'), color: colors.text },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' },
   sheet: {
