@@ -761,8 +761,11 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                 }
                 return <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.holdPage]}>{kind === 'mark' ? skeletonPost : skeletonClip}</View>;
               };
-              // The page behind and the seven ahead keep their video buffered, ready to play.
-              const near = distance <= 1 || (ahead > 0 && ahead <= AHEAD);
+              // On a phone, the page behind and two ahead keep their video buffered.
+              // In a browser (where every video decodes on the same machine as the
+              // scroll) only the next page does: the one you are most likely to
+              // land on starts instantly, and scrolling stays smooth.
+              const near = Platform.OS === 'web' ? ahead === 1 : distance <= 1 || (ahead > 0 && ahead <= AHEAD);
               const strip = index === suggestHost ? suggestStrip : null;
 
               if (item.type === 'tip') return <TipPage key="tip" onSubmit={actions.submitTip} />;

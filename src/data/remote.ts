@@ -13,6 +13,7 @@ import * as WebBrowser from 'expo-web-browser';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
+import { shrinkPhoto } from '@/lib/shrinkPhoto';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import type { Answer, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, Question, Story, Tip, User, CoachApplication } from './types';
@@ -1430,6 +1431,8 @@ async function uploadWithProgress(path: string, uri: string, contentType: string
   if (!base || !apikey || !token || typeof XMLHttpRequest === 'undefined') throw new Error('no direct upload');
   const form = new FormData();
   const name = path.split('/').pop() ?? 'upload';
+  // How long phones and browsers may keep it (a year; names are never reused). Must come before the file.
+  form.append('cacheControl', '31536000');
   if (Platform.OS === 'web') {
     const blob = await (await fetch(uri)).blob();
     form.append('', blob, name);
@@ -1443,6 +1446,9 @@ async function uploadWithProgress(path: string, uri: string, contentType: string
     xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     xhr.setRequestHeader('apikey', apikey);
     xhr.setRequestHeader('x-upsert', 'false');
+    // Every upload has its own name and is never replaced, so it can be kept
+    // by phones and browsers for a year instead of re-checked on every view.
+    xhr.setRequestHeader('cache-control', 'max-age=31536000');
     xhr.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total); };
     xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`upload ${xhr.status}: ${xhr.responseText.slice(0, 200)}`)));
     xhr.onerror = () => reject(new Error('upload failed'));
@@ -1458,9 +1464,12 @@ export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
  * with a plain-words message if it cannot — a post must never be saved
  * pointing at a file that only exists on one phone.
  */
-export async function uploadMedia(me: ID, uri: string, kind: 'photo' | 'video', onProgress?: (fraction: number) => void): Promise<string> {
+export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'video', onProgress?: (fraction: number) => void): Promise<string> {
   try {
     const db = need();
+    // A photo goes up at the size a feed shows it (1440 on its long edge),
+    // not the camera's full size: ten times smaller, same on screen.
+    const uri = kind === 'photo' ? await shrinkPhoto(original) : original;
     // Too big is the usual reason an upload fails, and it is worth saying
     // before the bytes go up rather than after.
     const size = await fetch(uri).then((r) => r.blob()).then((b) => b.size).catch(() => 0);
@@ -1481,7 +1490,7 @@ export async function uploadMedia(me: ID, uri: string, kind: 'photo' | 'video', 
       console.warn('[remote] direct upload fell back', direct);
       const response = await fetch(uri);
       const bytes = await response.arrayBuffer();
-      const { error } = await db.storage.from('media').upload(path, bytes, { contentType, upsert: false });
+      const { error } = await db.storage.from('media').upload(path, bytes, { contentType, upsert: false, cacheControl: '31536000' });
       if (error) throw error;
     }
     onProgress?.(1);
