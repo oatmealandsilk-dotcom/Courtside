@@ -650,9 +650,30 @@ export type NotificationKind =
   /** Your post passed a view count (10, 25, 50, 100...). Actor is you. */
   | 'milestone'
   /** A new player near you just joined. Actor is them. */
-  | 'joined';
+  | 'joined'
+  /** Someone said "I'm in" to your Looking-for-a-hit post. */
+  | 'hit-join';
 
-export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application' | 'report' | 'coaching-request' | 'profile';
+export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application' | 'report' | 'coaching-request' | 'profile' | 'hit-request';
+
+/** "Looking for a hit": someone wants a game, and says when, where and at what level (migration 43). */
+export interface HitRequest {
+  id: ID;
+  authorId: ID;
+  startsAt: string;
+  place: { name: string; lat?: number; lng?: number };
+  levelMin?: number;
+  levelMax?: number;
+  format: 'singles' | 'doubles' | 'hit';
+  /** How many people the poster is looking for. */
+  spots: number;
+  note?: string;
+  /** The group chat the joiners land in, once someone has joined. */
+  conversationId?: ID;
+  cancelled?: boolean;
+  createdAt: string;
+  joinedIds: ID[];
+}
 
 export interface Notification {
   id: ID;

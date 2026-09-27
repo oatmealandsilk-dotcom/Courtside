@@ -209,7 +209,10 @@ export default function Compose() {
       <Reanimated.View entering={arrive(2)}><Pressable accessibilityRole="button" accessibilityLabel="Take an instant" onPress={() => router.replace('/hit')} style={styles.choiceOption}>
         <Ionicons name="camera-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Instant</Text><Text style={styles.note}>A photo after you play. Up on the feed for a day.</Text>
       </Pressable></Reanimated.View>
-      <Reanimated.View entering={arrive(3)}><Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={styles.choiceOption}>
+      <Reanimated.View entering={arrive(3)}><Pressable accessibilityRole="button" accessibilityLabel="Look for someone to play with" onPress={() => router.replace('/hit-request/new')} style={styles.choiceOption}>
+        <Ionicons name="people-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Looking for a hit</Text><Text style={styles.note}>Say when and where. Players nearby can join.</Text>
+      </Pressable></Reanimated.View>
+      <Reanimated.View entering={arrive(4)}><Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={styles.choiceOption}>
         <Ionicons name="chatbubbles-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Thread or question</Text><Text style={styles.note}>Ask the community or start a conversation.</Text>
       </Pressable></Reanimated.View>
     </Reanimated.View>

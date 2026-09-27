@@ -1,0 +1,101 @@
+import React, { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
+
+import { Avatar } from '@/components/ui';
+import { CourtGlyph } from '@/components/map/MapChrome';
+import type { HitRequest } from '@/data/types';
+import { FORMAT_LABEL, hitWhen, levelText } from '@/features/hits/format';
+import { openInMaps } from '@/features/players/openInMaps';
+import { confirmAction } from '@/lib/confirm';
+import { show as showToast } from '@/lib/toast';
+import { useApp } from '@/store/AppContext';
+import { useThemedStyles } from '@/theme/ThemeProvider';
+import { colors, font, lift, radius, spacing, typography } from '@/theme';
+
+/**
+ * A "Looking for a hit" post: who, when, where, what level and format, and
+ * how many spots are left. "I'm in" joins and opens the hit's group chat,
+ * where the details get sorted. The poster sees who is in and can call it off.
+ */
+export function HitCard({ hit }: { hit: HitRequest }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const { users, currentUserId, actions } = useApp();
+  const [busy, setBusy] = useState(false);
+  const author = users.find((u) => u.id === hit.authorId);
+  const joined = hit.joinedIds.map((id) => users.find((u) => u.id === id)).filter((u): u is NonNullable<typeof u> => !!u);
+  const mine = hit.authorId === currentUserId;
+  const inIt = !!currentUserId && hit.joinedIds.includes(currentUserId);
+  const left = Math.max(0, hit.spots - hit.joinedIds.length);
+  const openChat = () => { if (hit.conversationId) router.push(`/messages/${hit.conversationId}`); };
+  const join = async () => {
+    if (busy) return;
+    setBusy(true);
+    const result = await actions.joinHit(hit.id);
+    setBusy(false);
+    if (result.error) { showToast({ title: result.error, icon: 'alert-circle-outline' }); return; }
+    if (result.conversationId) router.push(`/messages/${result.conversationId}`);
+    else showToast({ title: 'You’re in', body: `${author?.name.split(' ')[0] ?? 'They'} will see it.`, icon: 'checkmark-circle-outline' });
+  };
+  return (
+    <Pressable accessibilityRole="link" onPress={() => router.push(`/hit-request/${hit.id}`)} style={({ pressed }) => [styles.card, pressed && { opacity: 0.92 }]}>
+      <View style={styles.head}>
+        <Avatar name={author?.name ?? '?'} seed={author?.avatarSeed ?? hit.id} uri={author?.avatarUrl} size={36} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.who} numberOfLines={1}>{mine ? 'You' : author?.name ?? 'A player'} <Text style={styles.wants}>{mine ? 'are looking for a hit' : 'is looking for a hit'}</Text></Text>
+          <Text style={styles.when}>{hitWhen(hit.startsAt)}</Text>
+        </View>
+      </View>
+      <Pressable accessibilityRole="link" accessibilityLabel={`${hit.place.name}. Open in Maps`} disabled={hit.place.lat === undefined} onPress={(e) => { e.stopPropagation?.(); if (hit.place.lat !== undefined && hit.place.lng !== undefined) openInMaps({ name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={styles.place}>
+        <CourtGlyph size={13} color={colors.brand} />
+        <Text style={styles.placeText} numberOfLines={1}>{hit.place.name}</Text>
+      </Pressable>
+      <View style={styles.tags}>
+        <View style={styles.tag}><Text style={styles.tagText}>{FORMAT_LABEL[hit.format]}</Text></View>
+        <View style={styles.tag}><Text style={styles.tagText}>{levelText(hit)}</Text></View>
+        <View style={styles.tag}><Text style={styles.tagText}>{left ? `${left} ${left === 1 ? 'spot' : 'spots'} left` : 'Full'}</Text></View>
+      </View>
+      {hit.note ? <Text style={styles.note} numberOfLines={3}>{hit.note}</Text> : null}
+      <View style={styles.foot}>
+        <View style={styles.joined}>
+          {joined.slice(0, 4).map((u, i) => <Avatar key={u.id} name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={24} style={[styles.face, { marginLeft: i ? -8 : 0 }]} />)}
+          <Text style={styles.joinedText}>{joined.length ? `${joined.length} in` : 'Nobody yet'}</Text>
+        </View>
+        {mine ? (
+          <View style={styles.actions}>
+            {hit.conversationId ? <Pressable accessibilityRole="button" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={styles.secondary}><Text style={styles.secondaryText}>Chat</Text></Pressable> : null}
+            <Pressable accessibilityRole="button" onPress={(e) => { e.stopPropagation?.(); confirmAction('Call off this hit?', 'It comes off Find Players. Anyone who joined still has the chat.', 'Call it off', () => actions.cancelHit(hit.id)); }} style={styles.secondary}><Text style={[styles.secondaryText, { color: colors.danger }]}>Call off</Text></Pressable>
+          </View>
+        ) : inIt ? (
+          <Pressable accessibilityRole="button" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={styles.secondary}><Ionicons name="chatbubble-ellipses-outline" size={15} color={colors.text} /><Text style={styles.secondaryText}>You’re in · Chat</Text></Pressable>
+        ) : (
+          <Pressable accessibilityRole="button" disabled={!left || busy} onPress={(e) => { e.stopPropagation?.(); void join(); }} style={[styles.primary, (!left || busy) && { opacity: 0.45 }]}><Text style={styles.primaryText}>{busy ? 'Joining…' : 'I’m in'}</Text></Pressable>
+        )}
+      </View>
+    </Pressable>
+  );
+}
+
+const styleDefinitions = StyleSheet.create({
+  card: { ...lift, gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
+  head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  who: { ...typography.bodyStrong, color: colors.text },
+  wants: { ...typography.body, color: colors.textMuted },
+  when: { ...typography.title, fontSize: 20, color: colors.text, marginTop: 2 },
+  place: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.brandDim, maxWidth: '100%' },
+  placeText: { ...typography.smallStrong, color: colors.brand, flexShrink: 1 },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  tag: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: colors.bgElevated },
+  tagText: { ...typography.small, ...font('600'), color: colors.textMuted },
+  note: { ...typography.body, color: colors.text, lineHeight: 21 },
+  foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  joined: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
+  face: { borderWidth: 2, borderColor: colors.surface, borderRadius: 14 },
+  joinedText: { ...typography.small, color: colors.textMuted },
+  actions: { flexDirection: 'row', gap: spacing.sm },
+  primary: { height: 38, paddingHorizontal: 20, borderRadius: 19, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  primaryText: { ...typography.bodyStrong, fontSize: 15, color: colors.brandInk },
+  secondary: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 38, paddingHorizontal: 14, borderRadius: 19, backgroundColor: colors.bgElevated, justifyContent: 'center' },
+  secondaryText: { ...typography.smallStrong, color: colors.text },
+});
