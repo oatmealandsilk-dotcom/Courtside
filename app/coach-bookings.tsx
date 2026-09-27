@@ -9,13 +9,24 @@ import { money, relativeTime } from '@/lib/format';
 import { dueText, isOpen, isOverdue, statusLabel } from '@/features/coaching/bookings';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, spacing, typography } from '@/theme';
+import { colors, font, lift, spacing, typography } from '@/theme';
 
 /**
  * A coach's bookings: the open ones first, soonest due at the top, then the
  * answered and refunded ones. Pull down to check for new ones.
  */
 export default function CoachBookings() {
+  const { actions } = useApp();
+  const refresh = useCallback(() => actions.refreshCoaching(), [actions]);
+  return (
+    <Screen title="Bookings" compactTitle onBack={() => goBack('/coach-studio')} onRefresh={refresh}>
+      <BookingsPanel />
+    </Screen>
+  );
+}
+
+/** The bookings themselves, for this page and for the studio's Bookings tab. */
+export function BookingsPanel() {
   const styles = useThemedStyles(styleDefinitions);
   const { coaches, coachingRequests, users, currentUserId, ready, actions } = useApp();
   const [tab, setTab] = useState<'open' | 'done'>('open');
@@ -30,7 +41,7 @@ export default function CoachBookings() {
   const earned = mine.filter((r) => r.status === 'answered').reduce((sum, r) => sum + (r.priceCents ?? 0) - (r.feeCents ?? 0), 0);
 
   return (
-    <Screen title="Bookings" compactTitle onBack={() => goBack('/coach-studio')} onRefresh={refresh}>
+    <>
       <SegmentedControl segments={[{ value: 'open', label: open.length ? `Open · ${open.length}` : 'Open' }, { value: 'done', label: 'Done' }]} value={tab} onChange={setTab} />
       {earned ? <Text style={styles.earned}>{money(earned)} earned from answered bookings, before Stripe’s card fee.</Text> : null}
       {list.length === 0 ? (
@@ -56,13 +67,13 @@ export default function CoachBookings() {
           })}
         </View>
       )}
-    </Screen>
+    </>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
   earned: { ...typography.small, color: colors.textMuted, marginTop: spacing.md },
-  group: { marginTop: spacing.lg, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  group: { ...lift, marginTop: spacing.lg, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
   words: { flex: 1, gap: 3, minWidth: 0 },
