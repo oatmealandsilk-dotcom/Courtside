@@ -270,7 +270,7 @@ export interface UserState {
 }
 
 interface QuestionRow { id: string; author_id: string; title: string; body: string; topic: string; tags: string[]; votes: number; voted_by: Record<string, 1 | -1>; accepted_answer_id: string | null; edited_at: string | null; created_at: string }
-interface AnswerRow { id: string; question_id: string; author_id: string; parent_answer_id: string | null; body: string; votes: number; voted_by: Record<string, 1 | -1>; from_coach: boolean; created_at: string }
+interface AnswerRow { id: string; question_id: string; author_id: string; parent_answer_id: string | null; body: string; votes: number; voted_by: Record<string, 1 | -1>; from_coach: boolean; created_at: string; media_url?: string | null; media_kind?: 'photo' | 'video' | null; media_thumb?: string | null }
 interface CoachQuestionRow { id: string; author_id: string; title: string; body: string; specialty: string; video_url: string | null; media_label: string | null; resolved: boolean; created_at: string }
 interface CoachReplyRow { id: string; question_id: string; coach_user_id: string; body: string; helpful_by: string[]; created_at: string }
 interface CoachingRequestRow {
@@ -310,6 +310,7 @@ const toQuestion = (r: QuestionRow, answers: AnswerRow[]): Question => ({
 const toAnswer = (r: AnswerRow): Answer => ({
   id: r.id, questionId: r.question_id, authorId: r.author_id, parentAnswerId: r.parent_answer_id ?? undefined, body: r.body,
   createdAt: r.created_at, votes: r.votes, votedBy: r.voted_by ?? {}, fromCoach: r.from_coach,
+  media: r.media_url && r.media_kind ? { kind: r.media_kind, url: r.media_url, thumb: r.media_thumb ?? undefined } : undefined,
 });
 const toCoachQuestion = (r: CoachQuestionRow, replies: CoachReplyRow[]): CoachQuestion => ({
   id: r.id, authorId: r.author_id, title: r.title, body: r.body, specialty: r.specialty as CoachQuestion['specialty'], createdAt: r.created_at,
@@ -598,6 +599,8 @@ export const remote = {
   async upsertAnswer(a: Answer) {
     const { error } = await need().from('answers').upsert({
       id: a.id, question_id: a.questionId, author_id: a.authorId, parent_answer_id: a.parentAnswerId ?? null, body: a.body, from_coach: a.fromCoach, created_at: a.createdAt,
+      // Only sent with a picture or clip, so a plain reply still saves on a database without migration 40.
+      ...(a.media ? { media_url: a.media.url, media_kind: a.media.kind, media_thumb: a.media.thumb ?? null } : {}),
     });
     if (error) fail('answer save')(error);
   },

@@ -374,7 +374,8 @@ interface AppActions {
 
   addQuestion: (input: NewQuestionInput) => ID;
   voteQuestion: (questionId: ID, direction: 1 | -1) => void;
-  addAnswer: (questionId: ID, body: string, parentAnswerId?: ID) => void;
+  /** A reply to a thread, or to a reply in it; `media` is a photo or clip picked on this device, uploaded here. */
+  addAnswer: (questionId: ID, body: string, parentAnswerId?: ID, media?: Answer['media']) => void;
   voteAnswer: (answerId: ID, direction: 1 | -1) => void;
 
   submitCoachingRequest: (coachId: ID, serviceId: ID, question: string, videoLabel?: string) => ID;
@@ -1746,7 +1747,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const addAnswer = useCallback(
-    (questionId: ID, body: string, parentAnswerId?: ID) => {
+    (questionId: ID, body: string, parentAnswerId?: ID, media?: Answer['media']) => {
       haptics.commit();
       const me = requireUser();
       let made: Answer | null = null;
@@ -1762,6 +1763,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           votes: 0,
           votedBy: {},
           fromCoach: Boolean(author?.isCoach),
+          media,
         };
         made = answer;
         const question = prev.questions.find((q) => q.id === questionId);
@@ -1796,7 +1798,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         return next;
       });
-      if (made && live(me, questionId)) void remote.upsertAnswer(made);
+      if (made && live(me, questionId)) {
+        const answer: Answer = made;
+        void (async () => {
+          // A picture or clip from this device goes up first; the reply is saved with its web address.
+          let hosted = answer.media;
+          if (hosted && isLocalMedia(hosted.url)) {
+            try {
+              const url = await uploadMedia(me, hosted.url, hosted.kind);
+              const thumb = hosted.thumb && isLocalMedia(hosted.thumb) ? (hosted.kind === 'photo' ? url : await uploadMedia(me, hosted.thumb, 'photo')) : hosted.thumb;
+              hosted = { ...hosted, url, thumb };
+            } catch {
+              hosted = undefined;
+              showToast({ title: 'The photo or video didn’t upload', body: 'Your reply was posted without it.', icon: 'alert-circle-outline' });
+            }
+            const settled = hosted;
+            setState((prev) => ({ ...prev, answers: prev.answers.map((a) => (a.id === answer.id ? { ...a, media: settled } : a)) }));
+          }
+          // A reply that was only a picture, which did not upload, is not saved empty.
+          if (!hosted && !answer.body.trim()) return;
+          await remote.upsertAnswer({ ...answer, media: hosted });
+        })();
+      }
       setState((prev) => notifyMentions(prev, body, me, questionId, 'question', prev.questions.find((q) => q.id === questionId)?.authorId));
     },
     [requireUser],

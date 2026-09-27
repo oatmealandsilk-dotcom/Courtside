@@ -301,6 +301,8 @@ export interface Answer {
   votedBy: Record<ID, 1 | -1>;
   /** True when written by a verified coach — surfaces a badge in the UI. */
   fromCoach: boolean;
+  /** A photo or clip with the reply (see migration 40). */
+  media?: { kind: 'photo' | 'video'; url: string; thumb?: string };
 }
 
 /* --------------------------------- Coaching ------------------------------ */

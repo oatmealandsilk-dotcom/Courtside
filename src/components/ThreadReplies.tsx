@@ -10,6 +10,7 @@ import { TOPIC_META } from '@/components/QuestionCard';
 import { Avatar, Button, Card, Chip, EmptyState, Field, Screen } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
 import { RichText } from '@/components/RichText';
+import { AttachButton, AttachedPreview, ReplyMediaView, type ReplyAttachment } from '@/components/ReplyMedia';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useApp } from '@/store/AppContext';
 import type { Answer } from '@/data/types';
@@ -29,6 +30,9 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
   const { users, currentUserId, actions } = useApp();
   const [replying, setReplying] = useState(false);
   const [draft, setDraft] = useState('');
+  const [media, setMedia] = useState<ReplyAttachment | null>(null);
+  const canSend = !!draft.trim() || !!media;
+  const post = () => { if (!canSend) return; actions.addAnswer(answer.questionId, draft.trim(), answer.id, media ?? undefined); setDraft(''); setMedia(null); setReplying(false); };
   const [collapsed, setCollapsed] = useState(false);
   const reveal = useRevealOnFocus();
   const lineRef = useRef<TextInput>(null);
@@ -48,7 +52,8 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
       </Pressable>
       {!collapsed && <>
         {acceptedId === answer.id && <Text style={styles.acceptedText}>Accepted by the asker</Text>}
-        <RichText style={styles.replyBody}>{answer.body}</RichText>
+        {answer.body ? <RichText style={styles.replyBody}>{answer.body}</RichText> : null}
+        {answer.media ? <View style={{ paddingLeft: 42 }}><ReplyMediaView media={answer.media} /></View> : null}
         {!preview && <View style={styles.replyActions}>
           <Pressable accessibilityRole="button" accessibilityLabel={`Collapse reply by ${responder?.name ?? 'player'}`} onPress={()=>setCollapsed(true)} style={styles.collapse}><Ionicons name="remove-circle-outline" size={20} color={colors.textMuted}/></Pressable>
           <VoteControls item={answer} userId={currentUserId} onVote={direction => actions.voteAnswer(answer.id, direction)}/>
@@ -64,12 +69,13 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
           <TextInput ref={lineRef} autoFocus onFocus={() => reveal(lineRef.current)} accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} placeholder={`Reply to ${responder?.name?.split(' ')[0] ?? 'this'}…`} placeholderTextColor={colors.textFaint} multiline value={draft} onChangeText={setDraft} style={styles.replyInput}
             // Enter sends on a computer; the web toolkit needs blurOnSubmit to do that in a multiline box.
             blurOnSubmit={Platform.OS === 'web' ? true : undefined}
-            onSubmitEditing={Platform.OS === 'web' ? () => { if (!draft.trim()) return; actions.addAnswer(answer.questionId, draft.trim(), answer.id); setDraft(''); setReplying(false); } : undefined}/>
+            onSubmitEditing={Platform.OS === 'web' ? post : undefined}/>
+          {media ? <AttachedPreview media={media} onRemove={() => setMedia(null)} /> : null}
           <View style={styles.inlineActions}>
-            <Pressable accessibilityRole="button" onPress={() => { setReplying(false); setDraft(''); }} hitSlop={8}><Text style={styles.time}>Cancel</Text></Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Post reply" disabled={!draft.trim()} onPress={() => {
-              actions.addAnswer(answer.questionId, draft.trim(), answer.id); setDraft(''); setReplying(false);
-            }} style={[styles.sendPill, !draft.trim() && { opacity: 0.4 }]}><Text style={styles.sendText}>Reply</Text></Pressable>
+            <AttachButton onPick={setMedia} />
+            <View style={{ flex: 1 }} />
+            <Pressable accessibilityRole="button" onPress={() => { setReplying(false); setDraft(''); setMedia(null); }} hitSlop={8}><Text style={styles.time}>Cancel</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Post reply" disabled={!canSend} onPress={post} style={[styles.sendPill, !canSend && { opacity: 0.4 }]}><Text style={styles.sendText}>Reply</Text></Pressable>
           </View>
         </View>}
       </>}
