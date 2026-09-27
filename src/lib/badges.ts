@@ -58,16 +58,22 @@ function tintFor(progress: number): { tint: string; ink: string } {
   return { tint: colors.borderStrong, ink: colors.text };
 }
 
+/**
+ * A tier's colour, from the theme on screen rather than fixed metals: fixed
+ * silver and gold were near-white on the light courts and a loud yellow on
+ * all of them. Bronze is the court's clay, silver its muted ink, gold its
+ * ochre, platinum its hard-court blue — each readable on its own ground.
+ */
 export function tierColor(tier: AchievementTier): string {
   switch (tier) {
     case 'platinum':
-      return '#BFD4E8';
+      return colors.hard;
     case 'gold':
-      return '#F2C14E';
+      return colors.warning;
     case 'silver':
-      return '#C3CCDA';
+      return colors.textMuted;
     default:
-      return '#C08457';
+      return colors.clay;
   }
 }
 

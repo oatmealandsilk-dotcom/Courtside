@@ -167,7 +167,6 @@ export function Screen({
     onScroll: (event) => {
       const y = event.contentOffset.y;
       scrollY.value = y;
-      runOnJS(remember)(y);
       pullY.value = y < strip ? strip - y : 0;
       if (strip > 0) {
         const past = pullY.value >= PULL_LINE;
@@ -184,9 +183,14 @@ export function Screen({
     },
     onEndDrag: (event) => {
       const y = event.contentOffset.y;
+      // Where the page was left is kept once the finger lifts and once the
+      // glide ends, not on every frame: a message across to the app's logic
+      // 120 times a second, only to be overwritten, was stealing time from the scroll.
+      runOnJS(remember)(y);
       if (strip > 0 && y < strip - PULL_LINE) runOnJS(beginPull)();
       else if (strip > 0 && y < strip) runOnJS(springBack)();
     },
+    onMomentumEnd: (event) => { runOnJS(remember)(event.contentOffset.y); },
   });
 
   // One fetch at a time, but the finger is never locked out: a pull during

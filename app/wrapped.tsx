@@ -190,7 +190,8 @@ export default function Wrapped() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0B120E' },
+  // Clipped: the court behind the slides is bigger than the screen on purpose, and must not widen the page.
+  root: { flex: 1, backgroundColor: '#0B120E', overflow: 'hidden' },
   top: { position: 'absolute', left: 0, right: 0, top: 0, paddingHorizontal: 14, gap: 12 },
   bars: { flexDirection: 'row', gap: 4 },
   bar: { flex: 1, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)', overflow: 'hidden' },
