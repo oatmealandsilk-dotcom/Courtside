@@ -42,6 +42,15 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
   const left = useRef<{ time: number; at: number } | null>(null);
   const [paused, setPaused] = useState(false);
+  // Hold the right side of a clip and it plays at double speed until you let
+  // go, the way Instagram's Reels do. A drag (the feed scrolling) cancels it.
+  const [fast, setFast] = useState(false);
+  const hold = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
+  const swallowClick = useRef(false);
+  const endHold = () => {
+    if (hold.current) { clearTimeout(hold.current.timer); hold.current = null; }
+    if (fast) setFast(false);
+  };
   // Sound is one switch for every clip; a clip posted without sound stays silent regardless.
   const [muted, setMuted] = useSoundMuted();
   const [ready, setReadyState] = useState(false);
@@ -87,11 +96,11 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   useEffect(() => {
     const el = video.current;
     if (!el) return;
-    el.playbackRate = speed ?? 1;
+    el.playbackRate = (speed ?? 1) * (fast ? 2 : 1);
     el.defaultPlaybackRate = speed ?? 1;
     el.preservesPitch = true;
     el.volume = volume ?? 1;
-  }, [speed, volume]);
+  }, [speed, volume, fast]);
   useEffect(() => { if (!active) setPaused(false); }, [active]);
   // Space bar on a computer: play / pause the clip on screen.
   useEffect(() => { if (!active) return; return onSpaceBar(() => setPaused((p) => !p)); }, [active]);
@@ -119,7 +128,21 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
       <video ref={video} src={uri} poster={poster} loop muted={muted || silent} playsInline preload={active || preload ? 'auto' : 'none'} onError={fail} onLoadedData={() => setReady(true)} onCanPlay={() => setReady(true)} onWaiting={() => setReady(false)} onPlaying={() => setReady(true)} style={{ width: '100%', height: '100%', objectFit: letterbox ? 'contain' : fit, pointerEvents: 'none' }} />
       {failed ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><span style={{ padding: '8px 14px', borderRadius: 999, background: 'rgba(0,0,0,0.55)', color: 'white', font: '600 13px Inter_600SemiBold, system-ui, sans-serif' }}>This video didn’t load</span></div> : null}
     </div>
-    <button aria-label={paused ? 'Play clip' : 'Pause clip'} onClick={() => {
+    <button aria-label={paused ? 'Play clip' : 'Pause clip'}
+      onPointerDown={(e) => {
+        const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        if (paused || e.clientX - box.left < box.width * 0.66) return;
+        const start = { x: e.clientX, y: e.clientY };
+        hold.current = { ...start, timer: setTimeout(() => { swallowClick.current = true; setFast(true); }, 250) };
+      }}
+      onPointerMove={(e) => { if (hold.current && Math.hypot(e.clientX - hold.current.x, e.clientY - hold.current.y) > 10) endHold(); }}
+      onPointerUp={endHold}
+      onPointerCancel={endHold}
+      onPointerLeave={endHold}
+      onContextMenu={(e) => { if (fast || hold.current) e.preventDefault(); }}
+      onClick={() => {
+      // The click that ends a hold is not a tap.
+      if (swallowClick.current) { swallowClick.current = false; return; }
       // One tap plays or pauses, two likes. The pause is held back until the
       // double-tap window closes, or every like would also stop the video.
       const now = Date.now();
@@ -135,6 +158,9 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
       <div ref={bar} style={{ height: 2, width: '0%', background: 'rgba(255,255,255,0.9)' }} />
     </div>}
     {!ready && active ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><CourtSpinner ink={discInk ?? 'white'} /></div> : null}
+    {fast ? <div aria-live="polite" style={{ position: 'absolute', left: 0, right: 0, top: insets.top + 24, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 999, background: 'rgba(0,0,0,0.55)', color: 'white', font: '700 14px Inter_700Bold, system-ui, sans-serif' }}><Ionicons name="play-forward" size={13} color="white" />2×</span>
+    </div> : null}
   </div>;
 }
 
