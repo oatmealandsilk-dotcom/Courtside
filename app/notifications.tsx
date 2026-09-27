@@ -122,7 +122,7 @@ export default function Notifications() {
     if (group.kind === 'milestone') return `just passed ${group.preview ?? 'a milestone'}`;
     if (group.kind !== 'like' && group.kind !== 'comment' && group.kind !== 'share') return VERB[group.kind];
     const act = group.kind === 'like' ? 'liked' : group.kind === 'comment' ? 'commented on' : 'shared';
-    if (group.targetKind === 'hit') return `${act} your hit`;
+    if (group.targetKind === 'hit') return `${act} your instant`;
     if (group.targetKind === 'question') return `${act} your thread`;
     const post = posts.find((p) => p.id === group.targetId);
     const thing = !post ? 'post' : post.kind === 'clip' ? 'clip' : post.videoUrl ? 'video' : post.imageUrl ? 'photo' : 'post';

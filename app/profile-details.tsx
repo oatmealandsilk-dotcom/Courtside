@@ -137,7 +137,7 @@ export default function Profile() {
                 <View style={styles.tournamentText}>
                   <Text style={styles.tournamentName}>{t.name}</Text>
                   <Text style={styles.tournamentMeta}>
-                    {formatDate(t.startsAt)} · {t.surface} · {t.location}
+                    {formatDate(t.startsAt)} · {t.surface.charAt(0).toUpperCase() + t.surface.slice(1)} court · {t.location}
                   </Text>
                 </View>
                 <View style={[styles.regBadge, t.registered && { borderColor: colors.court }]}>

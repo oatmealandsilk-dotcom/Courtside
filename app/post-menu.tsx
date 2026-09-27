@@ -70,7 +70,7 @@ export default function PostMenu() {
     );
   }
   // The original file, for the owner and for CourtSide's own channels (an admin): one tap to the camera roll, then Instagram.
-  if (post && (mine || currentUser?.isAdmin) && (post.videoUrl || post.imageUrl) && post.featureOk !== false) {
+  if (post && (post.videoUrl || post.imageUrl) && (mine || (currentUser?.isAdmin && post.featureOk !== false))) {
     rows.push({ key: 'download', icon: 'download-outline', label: 'Download', note: currentUser?.isAdmin && !mine ? 'The author said CourtSide may feature this.' : 'The original, to post elsewhere.', onPress: async () => { try { await downloadMedia(post.videoUrl ?? post.imageUrl!, post.id.slice(0, 8)); close(); } catch (err) { setDone(err instanceof Error ? err.message : 'Could not download.'); } } });
   }
   if (mine && post) {

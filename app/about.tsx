@@ -1,6 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -11,7 +12,8 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { openLegal } from '@/lib/legal';
 import { colors, radius, spacing, typography, font } from '@/theme';
 
-const VERSION = '0.1.0';
+// The real version, from the app's own settings, so this never goes stale.
+const VERSION = Constants.expoConfig?.version ?? '0.1.0';
 
 export default function About() {
   const styles = useThemedStyles(styleDefinitions);
@@ -33,6 +35,8 @@ export default function About() {
           { icon: 'help-circle-outline', label: 'Help', open: () => router.push('/help') },
           { icon: 'shield-checkmark-outline', label: 'Privacy center', open: () => router.push('/privacy') },
           { icon: 'ribbon-outline', label: 'Apply to be a coach', open: () => router.push('/coach-apply') },
+          // A way to reach a person, which Help promises is here.
+          { icon: 'mail-outline', label: 'Contact us', open: () => { void Linking.openURL('mailto:support@courtsidebase.com?subject=CourtSide'); }, external: true },
           // The documents themselves, a tap away whenever someone wants them,
           // not only at the moment of signing up.
           { icon: 'document-text-outline', label: 'Terms of Use', open: () => openLegal('terms'), external: true },

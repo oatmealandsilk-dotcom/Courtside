@@ -80,7 +80,9 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
     video.addEventListener('loadeddata', ready);
     video.addEventListener('playing', ready);
     video.addEventListener('waiting', busy);
-    return () => { stopWatch(); video.removeEventListener('play', startWatch); video.removeEventListener('pause', stopWatch); video.removeEventListener('ended', ended); video.removeEventListener('timeupdate', tick); video.removeEventListener('loadedmetadata', sized); video.removeEventListener('loadeddata', ready); video.removeEventListener('playing', ready); video.removeEventListener('waiting', busy); };
+    // A file that fails to load counts as arrived, as it does on a phone: a spinner never waits forever.
+    video.addEventListener('error', ready);
+    return () => { video.removeEventListener('error', ready); stopWatch(); video.removeEventListener('play', startWatch); video.removeEventListener('pause', stopWatch); video.removeEventListener('ended', ended); video.removeEventListener('timeupdate', tick); video.removeEventListener('loadedmetadata', sized); video.removeEventListener('loadeddata', ready); video.removeEventListener('playing', ready); video.removeEventListener('waiting', busy); };
   }, [trimStart, trimEnd]);
   // The file's own loop only when nothing is trimmed off its start; otherwise the loop is done above.
   return <video ref={el} src={uri} poster={poster} loop={trimStart <= 0} muted={muted} playsInline preload="metadata" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: fit, background: '#000' }} />;

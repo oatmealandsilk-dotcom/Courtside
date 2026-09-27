@@ -518,7 +518,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         {suggestions.slice(0, 6).map(({ user, reason }) => (
           <View key={user.id} style={styles.stripCard}>
             <Pressable accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.stripBody}>
-              <Avatar name={user.name} seed={user.avatarSeed} size={44} ring={user.isCoach} />
+              <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={44} ring={user.isCoach} />
               <View style={styles.stripWords}>
                 <Text style={styles.stripName} numberOfLines={1}>{user.name}</Text>
                 <Text style={styles.stripReason} numberOfLines={1}>{reason}</Text>
@@ -799,7 +799,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     <LinearGradient pointerEvents="none" colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)']} style={styles.bottomFade} />
                     <View style={styles.caption}>
                       <Pressable accessibilityRole="link" onPress={() => { tappedAuthor(`h:${story.id}`); router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`); }} style={styles.author}>
-                        <Avatar name={author.name} seed={author.avatarSeed} size={34} />
+                        <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={34} />
                         <Text style={styles.authorName}>@{author.handle}<Text style={styles.authorTime}> · {relativeTime(story.createdAt)}</Text></Text>
                       </Pressable>
                       <HitClock expiresAt={story.expiresAt} />
@@ -982,7 +982,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       <Ionicons name="tennisball-outline" size={54} color={colors.court} />
                       <Text style={styles.previewTitle}>{post.mediaLabel}</Text>
                       <Text style={styles.previewNote}>
-                        Demo preview · add a video link to play your own clip
+                        This clip didn’t finish uploading
                       </Text>
                     </Pressable>
                   )}
@@ -999,7 +999,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       onPress={() => { tappedAuthor(`p:${post.id}`); router.push(`/user/${author.id}`); }}
                       style={styles.author}
                     >
-                      <Avatar name={author.name} seed={author.avatarSeed} size={34} />
+                      <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={34} />
                       {/* The level belongs on the clip above all: a rally read
                           against a rating is the whole point, and this was the
                           one page that left it off. */}

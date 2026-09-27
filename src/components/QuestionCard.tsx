@@ -56,7 +56,7 @@ function QuestionCardInner({
   return (
     <Card onPress={onPress} style={styles.card}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        {author && <Avatar name={author.name} seed={author.avatarSeed} size={30} />}
+        {author && <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={30} />}
         {/* Who wrote it, the way the feed says it: the name first, the handle
             after it. A thread carried in from outside keeps to the handle —
             the badge beside it already says where it came from. */}

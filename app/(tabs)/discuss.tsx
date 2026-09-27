@@ -33,7 +33,7 @@ const TOPICS: (QuestionTopic | 'all')[] = [
 
 function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
-  const { questions, users, currentUserId, currentUser, blockedIds, saved, actions, detectedCoords, locationEnabled } = useApp();
+  const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, saved, actions, detectedCoords, locationEnabled } = useApp();
   // The section lives here, not in the address: listening to the address made
   // this whole tab re-render on every route change anywhere in the app.
   // Other pages ask for a section through requestSection before navigating.
@@ -68,13 +68,14 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
 
   const [shownCount, setShownCount] = useState(25);
   const visible = useMemo(() => {
-    let list = [...questions];
+    // Nobody you have blocked or muted shows up here, the same as in the feed.
+    let list = questions.filter((q) => !blockedIds.includes(q.authorId) && !mutedIds.includes(q.authorId));
     if (topic !== 'all') list = list.filter((q) => q.topic === topic);
 
     // Newest first, so a fresh question sits at the top rather than under the old ones.
     list.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
     return list;
-  }, [questions, topic]);
+  }, [questions, topic, blockedIds, mutedIds]);
   // A long list is drawn in slices: the first screenfuls at once, the rest on request.
   const slice = visible.slice(0, shownCount);
 

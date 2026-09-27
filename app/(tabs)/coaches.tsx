@@ -171,7 +171,7 @@ function Coaching() {
                 const coach = coaches.find((c) => c.id === r.coachId);
                 const coachUser = users.find((u) => u.id === coach?.userId);
                 const service = coach?.services.find((x) => x.id === r.serviceId);
-                const waiting = r.status !== 'answered';
+                const waiting = r.status === 'submitted' || r.status === 'in-review';
                 return (
                   <Pressable key={entry.key} accessibilityRole="link" onPress={() => router.push(`/coach-request/${r.id}`)} style={({ pressed }) => [styles.row, index > 0 && styles.rowLine, pressed && styles.pressed]}>
                     <View style={styles.rowWords}>

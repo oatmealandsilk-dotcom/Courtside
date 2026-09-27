@@ -34,7 +34,7 @@ export default function HitThread() {
   if (!story || !author) {
     return (
       <Screen title="Instant" compactTitle onBack={() => goBack()}>
-        <EmptyState title="This hit has gone" body="It may have expired or been taken down." />
+        <EmptyState title="This instant has gone" body="It may have expired or been taken down." />
       </Screen>
     );
   }

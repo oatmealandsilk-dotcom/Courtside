@@ -80,7 +80,7 @@ function PostCardInner({
   return (
     <Card style={styles.card}>
       <Pressable accessibilityRole="link" accessibilityLabel={`View ${author.name} profile`} onPress={onPressAuthor ?? (() => router.push(`/user/${author.id}`))} style={styles.header}>
-        <Avatar name={author.name} seed={author.avatarSeed} size={42} />
+        <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={42} />
         <View style={styles.headerText}>
           <View style={styles.nameRow}>
             <Text style={styles.name} numberOfLines={1}>

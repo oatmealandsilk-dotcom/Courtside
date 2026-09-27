@@ -894,7 +894,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (post.authorId !== me || !isLocalMedia(post.thumbnailUrl) || !post.videoUrl || isLocalMedia(post.videoUrl)) continue;
         (async () => {
           try {
-            const frame = (await framesAt(post.videoUrl!, [post.trimStart ?? 0]))[0]?.uri;
+            const frame = (await framesAt(post.videoUrl!, [post.trimStart ?? 0], 1080))[0]?.uri;
             if (!frame) return;
             const hosted = await uploadMedia(me, frame, 'photo');
             await remote.updatePostThumbnail(post.id, hosted);
@@ -1421,7 +1421,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // The hit is not in the feed until it has landed: the strip across the
       // top counts the upload up, and a failure says so instead of leaving a
       // hit only this phone can see.
-      startUpload(story.id, 'Posting hit', story.thumbnailUrl ?? story.imageUrl);
+      startUpload(story.id, 'Posting instant', story.thumbnailUrl ?? story.imageUrl);
       (async () => {
         try {
           const local = [isLocalMedia(story.imageUrl), isLocalMedia(story.videoUrl), isLocalMedia(story.thumbnailUrl) && story.thumbnailUrl !== story.imageUrl];
