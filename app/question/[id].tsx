@@ -8,6 +8,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
+import { CourtSpinner } from '@/components/CourtSpinner';
 import { Ionicons } from '@expo/vector-icons';
 
 import { VoteControls } from '@/components/VoteControls';
@@ -29,7 +30,9 @@ export default function QuestionDetail() {
   useEffect(() => { view('question', String(id)); }, [view, id]);
   // The app arrives with each thread's newest replies; opening one brings them all.
   const loadThread = actions.loadThread;
-  useEffect(() => { void loadThread(String(id)); }, [loadThread, id]);
+  const { ready } = useApp();
+  const [looked, setLooked] = useState(false);
+  useEffect(() => { if (ready) void loadThread(String(id)).finally(() => setLooked(true)); }, [loadThread, id, ready]);
   const [draft, setDraft] = useState('');
   const [replying, setReplying] = useState(false);
   const replyInput = useRef<TextInput>(null);
@@ -41,7 +44,7 @@ export default function QuestionDetail() {
   if (!question) {
     return (
       <Screen title="Question" compactTitle onBack={() => goBack()}>
-        <EmptyState icon="alert-circle-outline" title="This thread is gone" />
+        {looked ? <EmptyState icon="alert-circle-outline" title="This thread is gone" body="Whoever started it may have deleted it." /> : <View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View>}
       </Screen>
     );
   }

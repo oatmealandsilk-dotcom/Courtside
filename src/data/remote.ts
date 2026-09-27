@@ -1092,6 +1092,13 @@ export const remote = {
     return { ...toPosts(rows), ids: ids.filter((id) => live.has(id)) };
   },
 
+  /** One thread by its id, for a link to one older than the first load brought. */
+  async fetchQuestion(questionId: ID): Promise<Question | null> {
+    const { data, error } = await need().from('questions').select('*').eq('id', questionId).maybeSingle();
+    if (error || !data) return null;
+    return toQuestion(data as QuestionRow, []);
+  },
+
   /** Every reply in one thread, oldest first: the whole conversation when it is opened. */
   async fetchThreadAnswers(questionId: ID): Promise<Answer[] | null> {
     const { data, error } = await need().from('answers').select('*').eq('question_id', questionId).order('created_at', { ascending: true }).limit(1000);

@@ -1723,7 +1723,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...input,
       };
       setState((prev) => ({ ...prev, coachQuestions: [question, ...prev.coachQuestions] }));
-      if (live(me, question.id)) void remote.upsertCoachQuestion(question);
+      if (live(me, question.id)) {
+        // A clip still on this phone goes up first; the question is saved
+        // pointing at the uploaded copy, so coaches can actually watch it.
+        const local = question.videoUrl && isLocalMedia(question.videoUrl) ? question.videoUrl : null;
+        if (!local) void remote.upsertCoachQuestion(question);
+        else {
+          startUpload(question.id, 'Uploading your clip');
+          void uploadMedia(me, local, 'video', (f) => setUploadProgress(question.id, f))
+            .then((videoUrl) => {
+              finishUpload(question.id);
+              const saved = { ...question, videoUrl };
+              setState((prev) => ({ ...prev, coachQuestions: prev.coachQuestions.map((q) => (q.id === question.id ? saved : q)) }));
+              return remote.upsertCoachQuestion(saved);
+            })
+            .catch((e: Error) => {
+              // The question still goes up, without the clip, rather than not at all.
+              finishUpload(question.id, false, e.message);
+              const saved = { ...question, videoUrl: undefined, mediaLabel: undefined };
+              setState((prev) => ({ ...prev, coachQuestions: prev.coachQuestions.map((q) => (q.id === question.id ? saved : q)) }));
+              void remote.upsertCoachQuestion(saved);
+              showToast({ title: 'Your clip did not upload', body: `The question is up without it. ${e.message}`, icon: 'alert-circle-outline' });
+            });
+        }
+      }
       return question.id;
     },
     [requireUser],
@@ -2014,6 +2037,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Opening a thread: all of its replies, not only the newest that came with the app.
   const loadThread = useCallback(async (questionId: ID) => {
     if (!live(stateRef.current.currentUserId, questionId)) return;
+    // A thread older than the first load's 300 is fetched on its own first.
+    if (!stateRef.current.questions.some((q) => q.id === questionId)) {
+      const found = await remote.fetchQuestion(questionId);
+      if (found) setState((prev) => (prev.questions.some((q) => q.id === questionId) ? prev : { ...prev, questions: [found, ...prev.questions] }));
+    }
     const replies = await remote.fetchThreadAnswers(questionId);
     if (!replies) return;
     setState((prev) => {
