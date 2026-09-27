@@ -74,7 +74,6 @@ export default function Settings() {
       rows: [
         { icon: 'lock-closed-outline', label: 'Private account', toggle: { value: !!currentUser?.isPrivate, onChange: actions.setPrivateAccount } },
         { icon: 'checkmark-done-outline', label: 'Read receipts', toggle: { value: currentUser?.readReceiptsEnabled !== false, onChange: actions.setReadReceiptsEnabled } },
-        { icon: 'radio-button-on-outline', label: 'Show activity status', toggle: { value: prefs.showActivity, onChange: (v: boolean) => actions.setPref('showActivity', v) } },
         { icon: 'remove-circle-outline', label: 'Blocked', value: blockedIds.length ? String(blockedIds.length) : undefined, onPress: () => router.push('/blocked') },
       ],
     },

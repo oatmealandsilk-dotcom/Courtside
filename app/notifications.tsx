@@ -168,7 +168,8 @@ export default function Notifications() {
         targetKind: n.targetKind,
         actorIds: [n.actorId],
         createdAt: n.createdAt,
-        preview: n.preview,
+        // The server's stand-in for an Instant with no caption; the row already says what it was.
+        preview: n.preview === 'your hit' ? undefined : n.preview,
         unread: !n.read,
       });
     }
