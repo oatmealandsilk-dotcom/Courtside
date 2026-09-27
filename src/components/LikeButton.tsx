@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
+import { Platform, Pressable, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { router } from 'expo-router';
 
 import { Heart } from '@/components/Heart';
@@ -48,9 +48,12 @@ export function LikeButton({ ledgerKey, liked, count, onToggle, likesRoute, pop 
       >
         <Heart liked={like.on} pop={pop} size={size} ink={ink} style={glyphStyle} />
       </Tappable>
-      <Pressable accessibilityRole="button" accessibilityLabel={`See who liked this${thing}`} hitSlop={8} disabled={total === 0} onPress={() => router.push(likesRoute)}>
-        <Text style={labelStyle}>{total}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel={`See who liked this${thing}`} hitSlop={8} disabled={total === 0} onPress={() => router.push(likesRoute)} style={countHit}>
+        {(state) => <Text style={[labelStyle, (state as { hovered?: boolean }).hovered && { textDecorationLine: 'underline' }]}>{total}</Text>}
       </Pressable>
     </View>
   );
 }
+
+// Browsers ignore hitSlop, so on a computer the number gets a real, bigger click area without moving anything.
+const countHit = Platform.OS === 'web' ? ({ paddingHorizontal: 12, paddingVertical: 6, marginHorizontal: -12, marginVertical: -6, cursor: 'pointer' } as object) : undefined;

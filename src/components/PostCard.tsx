@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState, memo } from 'react';
-import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import * as haptics from '@/lib/haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -204,10 +204,12 @@ function PostCardInner({
               color={like.on ? colors.danger : colors.textMuted}
             />
           </Tappable>
-          <Pressable accessibilityRole="button" accessibilityLabel="See who liked this" hitSlop={8} disabled={post.likedBy.length + like.delta === 0} onPress={() => router.push({ pathname: '/likes', params: { id: post.id } })}>
-            <Text style={[styles.actionText, like.on && { color: colors.danger }]}>
-              {compactNumber(post.likedBy.length + like.delta)}
-            </Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="See who liked this" hitSlop={8} disabled={post.likedBy.length + like.delta === 0} onPress={() => router.push({ pathname: '/likes', params: { id: post.id } })} style={styles.countHit}>
+            {(state) => (
+              <Text style={[styles.actionText, like.on && { color: colors.danger }, (state as { hovered?: boolean }).hovered && styles.countHover]}>
+                {compactNumber(post.likedBy.length + like.delta)}
+              </Text>
+            )}
           </Pressable>
         </View>
         <Tappable onPress={onComment ?? onPress} scaleTo={0.8} style={styles.action} accessibilityLabel="Comments">
@@ -297,6 +299,9 @@ const styleDefinitions = StyleSheet.create({
   },
   action: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2 },
   actionText: { ...typography.bodyStrong, fontSize: 14, color: colors.textMuted },
+  // Browsers ignore hitSlop, so on a computer the number gets a real, bigger click area (without moving anything) and underlines on hover.
+  countHit: Platform.OS === 'web' ? ({ padding: 8, margin: -8, cursor: 'pointer' } as object) : {},
+  countHover: { textDecorationLine: 'underline' },
 });
 
 /** Re-renders only when a shown value changes; the handlers passed in read fresh values through their own props, so a new function alone is no reason to rebuild. */
