@@ -37,6 +37,8 @@ interface Props {
    * its page. The feed passes this; a page that scrolls leaves it off.
    */
   clamp?: number;
+  /** False in a list of many (search results): the video shows its cover instead of every one playing at once. */
+  playing?: boolean;
   /** Shown as ••• on your own posts: archive or delete. */
   onArchive?: () => void;
   onDelete?: () => void;
@@ -70,6 +72,7 @@ function PostCardInner({
   clamp,
   onArchive,
   onDelete,
+  playing = true,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -129,7 +132,7 @@ function PostCardInner({
       {/* The player fills whatever box it is given, so the card gives it one in the post's own shape. */}
       {post.videoUrl ? (
         <View style={{ width: '100%', aspectRatio: post.orientation === 'landscape' ? 16 / 9 : 4 / 5, borderRadius: 12, overflow: 'hidden', backgroundColor: '#000' }}>
-          <View style={cropLayer(post.crop)}><ClipVideo uri={post.videoUrl} poster={post.thumbnailUrl} trimStart={post.trimStart} trimEnd={post.trimEnd} speed={post.speed} volume={post.volume} /></View>
+          <View style={cropLayer(post.crop)}><ClipVideo uri={post.videoUrl} poster={post.thumbnailUrl} active={playing} trimStart={post.trimStart} trimEnd={post.trimEnd} speed={post.speed} volume={post.volume} /></View>
         </View>
       ) : post.kind === 'clip' ? <MediaPlaceholder label={post.mediaLabel ?? 'Clip'} seed={post.id} portrait /> : null}
       <Pressable onPress={onPress} style={styles.body}>

@@ -60,7 +60,8 @@ export default function Follows() {
         <EmptyState
           icon="people-outline"
           title={tab === 'followers' ? 'No followers yet' : 'Not following anyone yet'}
-          body={tab === 'followers' ? 'Post a clip or answer a thread — that is how players find you.' : 'Follow players from Community or their profile.'}
+          body={tab === 'followers' ? 'Post a clip or answer a thread. That is how players find you.' : 'Follow players from Community or their profile.'}
+          action={tab === 'followers' ? { label: 'Post a clip', onPress: () => router.push('/compose') } : { label: 'Find players', onPress: () => router.push({ pathname: '/discuss', params: { section: 'players' } }) }}
         />
       ) : (
         list.map((user) => {

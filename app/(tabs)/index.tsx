@@ -726,7 +726,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       {!ready || !feed.length ? (
         <EmptyState
           title={scope ? 'Nothing here yet' : ready ? 'Your court is quiet' : 'Loading your clips'}
-          body={scope ? undefined : 'Use + to share a moment.'}
+          body={scope ? undefined : 'Be the first on it: a clip, a photo, or an instant after you play.'}
+          action={!scope && ready ? { label: 'Share something', onPress: () => router.push('/compose') } : undefined}
         />
       ) : (
         <View style={styles.viewer}>

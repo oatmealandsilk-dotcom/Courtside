@@ -1,8 +1,9 @@
 import { PostCard } from '@/components/PostCard';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
-import React, { useEffect, useMemo, useState } from 'react';
-import { ScrollView, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ScrollView, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -15,6 +16,8 @@ import { sourceUserIds } from '@/features/community/importedThreads';
 import { colors, spacing, typography } from '@/theme';
 
 type Scope = 'all' | 'clips' | 'posts' | 'threads' | 'players' | 'coaches';
+const RECENT_KEY = 'courtside-recent-searches';
+const RECENT_MAX = 10;
 
 /** One search box across discussions, players, and coaches. */
 export default function Search() {
@@ -26,6 +29,31 @@ export default function Search() {
   useEffect(()=>{setTerm(params.q ?? '');setScope(startScope(params.scope));},[params.q, params.scope]);
   const [scope, setScope] = useState<Scope>(startScope(params.scope));
 
+  // The box is ready to type in the moment the page opens.
+  const box = useRef<TextInput>(null);
+  useEffect(() => { const t = setTimeout(() => box.current?.focus(), 250); return () => clearTimeout(t); }, []);
+  // Recent searches, kept on this device, the way Instagram keeps them.
+  const [recent, setRecent] = useState<string[]>([]);
+  useEffect(() => { void AsyncStorage.getItem(RECENT_KEY).then((raw) => { try { const list = JSON.parse(raw ?? '[]'); if (Array.isArray(list)) setRecent(list.filter((x) => typeof x === 'string').slice(0, RECENT_MAX)); } catch { /* nothing kept */ } }); }, []);
+  const remember = (words: string) => {
+    const w = words.trim();
+    if (w.length < 2) return;
+    setRecent((cur) => {
+      const next = [w, ...cur.filter((x) => x.toLowerCase() !== w.toLowerCase())].slice(0, RECENT_MAX);
+      void AsyncStorage.setItem(RECENT_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+  const forgetAll = () => { setRecent([]); void AsyncStorage.removeItem(RECENT_KEY); };
+  // Trending: the tags used most on posts and threads this past week.
+  const trending = useMemo(() => {
+    const since = Date.now() - 7 * 86_400_000;
+    const counts = new Map<string, number>();
+    const add = (tag: string) => { const t = tag.replace(/^#/, '').toLowerCase(); if (t.length >= 2) counts.set(t, (counts.get(t) ?? 0) + 1); };
+    for (const p of posts) if (Date.parse(p.createdAt) >= since) p.tags.forEach(add);
+    for (const qn of questions) if (Date.parse(qn.createdAt) >= since) qn.tags.forEach(add);
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t]) => t);
+  }, [posts, questions]);
   const q = term.trim().toLowerCase();
   const matches=(text:string,tags:string[])=>q.startsWith('#') ? tags.some(t=>t.replace(/^#/,'').toLowerCase()===q.slice(1)) || text.toLowerCase().split(/[^#\p{L}\p{N}_]+/u).includes(q) : `${text} ${tags.join(' ')}`.toLowerCase().includes(q);
   const matchedPosts = posts.filter(p=>q && !p.archived && matches(p.body,p.tags) && (scope==='clips' ? p.kind==='clip' : scope==='posts' ? p.kind!=='clip' : true));
@@ -104,10 +132,12 @@ export default function Search() {
     <Screen title="Search" compactTitle onBack={() => goBack()}>
       <View style={styles.top}>
         <Field
+          inputRef={box}
           value={term}
           onChangeText={setTerm}
           placeholder="Search"
           autoCapitalize="none"
+          onSubmitEditing={() => remember(term)}
         />
         <SegmentedControl
           scrollable
@@ -125,24 +155,58 @@ export default function Search() {
       </View>
 
       {!q ? (
-        <EmptyState
-          icon="search-outline"
-          title="Search CourtSide"
-          body="Find a thread about strings, a player near you, or a coach who fixes serves."
-        />
+        recent.length || trending.length ? (
+          <View style={{ gap: spacing.xl, paddingTop: spacing.sm }}>
+            {recent.length ? (
+              <View style={styles.section}>
+                <View style={styles.sectionHead}>
+                  <Text style={styles.sectionTitle}>Recent</Text>
+                  <Pressable accessibilityRole="button" onPress={forgetAll} hitSlop={8}><Text style={styles.clear}>Clear</Text></Pressable>
+                </View>
+                <View style={styles.chips}>
+                  {recent.map((r) => (
+                    <Pressable key={r} accessibilityRole="button" accessibilityLabel={`Search ${r}`} onPress={() => setTerm(r)} style={({ pressed }) => [styles.chip, pressed && { opacity: 0.7 }]}>
+                      <Ionicons name="time-outline" size={14} color={colors.textMuted} />
+                      <Text style={styles.chipText}>{r}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+            {trending.length ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Trending this week</Text>
+                <View style={styles.chips}>
+                  {trending.map((t) => (
+                    <Pressable key={t} accessibilityRole="button" accessibilityLabel={`Search #${t}`} onPress={() => { setTerm(`#${t}`); remember(`#${t}`); }} style={({ pressed }) => [styles.chip, pressed && { opacity: 0.7 }]}>
+                      <Text style={styles.chipHash}>#</Text>
+                      <Text style={styles.chipText}>{t}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+          </View>
+        ) : (
+          <EmptyState
+            icon="search-outline"
+            title="Search CourtSide"
+            body="Find a thread about strings, a player near you, or a coach who fixes serves."
+          />
+        )
       ) : total === 0 ? (
         <EmptyState icon="search-outline" title={`No results for “${term}”`} body="Try a different word." />
       ) : (
         <View style={{ gap: spacing.xl }}>
-          {showPosts && matchedPosts.map(post=>{const author=users.find(u=>u.id===post.authorId);return author ? <PostCard key={post.id} post={post} author={author} liked={post.likedBy.includes(currentUserId ?? '')} onToggleLike={()=>actions.toggleLike(post.id)} onPress={()=>router.push(`/post/${post.id}`)} saved={saved.postIds.includes(post.id)} onToggleSave={()=>actions.toggleSavePost(post.id)} onShare={()=>router.push(`/share?kind=post&id=${post.id}`)}/> : null;})}
+          {showPosts && matchedPosts.slice(0, 30).map(post=>{const author=users.find(u=>u.id===post.authorId);return author ? <PostCard key={post.id} playing={false} post={post} author={author} liked={post.likedBy.includes(currentUserId ?? '')} onToggleLike={()=>actions.toggleLike(post.id)} onPress={()=>{ remember(term); router.push(`/post/${post.id}`); }} saved={saved.postIds.includes(post.id)} onToggleSave={()=>actions.toggleSavePost(post.id)} onShare={()=>router.push(`/share?kind=post&id=${post.id}`)}/> : null;})}
           {showPlayers && matchedPlayers.length ? (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>PLAYERS</Text>
+              <Text style={styles.sectionTitle}>Players</Text>
               {matchedPlayers.map(({ user, reason }) => (
                 <Pressable
                   key={user.id}
                   accessibilityRole="link"
-                  onPress={() => router.push(`/user/${user.id}`)}
+                  onPress={() => { remember(term); router.push(`/user/${user.id}`); }}
                   style={styles.person}
                 >
                   <Avatar name={user.name} seed={user.avatarSeed} size={44} />
@@ -160,14 +224,14 @@ export default function Search() {
 
           {showCoaches && matchedCoaches.length ? (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>COACHES</Text>
+              <Text style={styles.sectionTitle}>Coaches</Text>
               {matchedCoaches.map((coach) => {
                 const user = users.find((u) => u.id === coach.userId);
                 return (
                   <Pressable
                     key={coach.id}
                     accessibilityRole="link"
-                    onPress={() => router.push(`/coach/${coach.id}`)}
+                    onPress={() => { remember(term); router.push(`/coach/${coach.id}`); }}
                     style={styles.person}
                   >
                     <Avatar
@@ -194,7 +258,7 @@ export default function Search() {
 
           {showThreads && matchedQuestions.length ? (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>DISCUSSIONS</Text>
+              <Text style={styles.sectionTitle}>Discussions</Text>
               {matchedQuestions.map((question) => (
                 <QuestionCard
                   key={question.id}
@@ -204,7 +268,7 @@ export default function Search() {
                   saved={saved.questionIds.includes(question.id)}
                   onToggleSave={() => actions.toggleSaveQuestion(question.id)}
                   onShare={() => router.push(`/share?kind=question&id=${question.id}`)}
-                  onPress={() => router.push(`/question/${question.id}`)}
+                  onPress={() => { remember(term); router.push(`/question/${question.id}`); }}
                 />
               ))}
             </View>
@@ -218,7 +282,13 @@ export default function Search() {
 const styleDefinitions = StyleSheet.create({
   top: { gap: spacing.md, paddingBottom: spacing.lg },
   section: { gap: spacing.xs },
-  sectionTitle: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.3, paddingBottom: spacing.sm },
+  sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingBottom: spacing.sm },
+  sectionHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  clear: { ...typography.smallStrong, color: colors.brand },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 14, borderRadius: 18, backgroundColor: colors.surface },
+  chipText: { ...typography.small, color: colors.text },
+  chipHash: { ...typography.smallStrong, color: colors.brand },
   person: {
     flexDirection: 'row',
     alignItems: 'center',

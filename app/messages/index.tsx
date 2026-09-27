@@ -97,7 +97,7 @@ export default function Inbox() {
       </View>
 
       {threads.length === 0 ? (
-        <EmptyState icon="chatbubble-ellipses-outline" title={emptyCopy.title} body={emptyCopy.body} />
+        <EmptyState icon="chatbubble-ellipses-outline" title={emptyCopy.title} body={emptyCopy.body} action={{ label: 'New message', onPress: () => router.push('/messages/new') }} />
       ) : (
         <View style={styles.list}>
           {threads.map(({ conversation, other, last }, index) => {

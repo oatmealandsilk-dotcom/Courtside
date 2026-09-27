@@ -80,6 +80,7 @@ export default function Saved() {
             icon="bookmark-outline"
             title="Nothing saved yet"
             body="Tap the bookmark on any clip or post to keep it here."
+            action={{ label: 'Browse the feed', onPress: () => router.navigate('/') }}
           />
         )
       ) : savedQuestions.length ? (
@@ -101,6 +102,7 @@ export default function Saved() {
           icon="bookmark-outline"
           title="No saved discussions"
           body="Bookmark a thread and it will wait for you here."
+          action={{ label: 'Browse Community', onPress: () => router.navigate('/discuss') }}
         />
       )}
     </Screen>

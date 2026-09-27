@@ -190,7 +190,8 @@ export default function Notifications() {
         <EmptyState
           icon="notifications-outline"
           title="Nothing yet"
-          body="Likes, replies and shares on your posts land here."
+          body="Likes, replies and shares on your posts land here. Following players is the quickest way to get some."
+          action={{ label: 'Find players near you', onPress: () => router.push({ pathname: '/discuss', params: { section: 'players' } }) }}
         />
       ) : (
         <View style={styles.list}>
