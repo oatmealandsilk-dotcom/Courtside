@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { colors, radius } from '@/theme';
+import { Wash } from '@/components/Wash';
 
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
 const FLICK_PX_PER_S = 700;
@@ -145,6 +146,8 @@ export function DragSheet({
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }, backdropStyle]} />
       <Pressable accessibilityRole="button" accessibilityLabel="Close" style={StyleSheet.absoluteFill} onPress={dismiss} />
       <Animated.View ref={sheetRef} style={[styles.sheet, sheetStyle]}>
+        {/* The same warm glow the pages open with, so a sheet reads as part of the app. */}
+        <Wash height={300} strength={0.85} />
         <GestureDetector gesture={pan}>
           <View style={styles.handle}>
             <View style={styles.grabber} />

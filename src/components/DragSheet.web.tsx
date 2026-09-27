@@ -2,6 +2,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@/theme';
+import { Wash } from '@/components/Wash';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { setSidePanel } from '@/features/feed/sidePanel';
 
@@ -101,8 +102,9 @@ function SidePanel({ header, children, onDismissed, closeSignal }: { header: Rea
           display: 'flex', flexDirection: 'column',
         }}
       >
-        <div style={{ paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>{header}</div>
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{children}</div>
+        <Wash height={300} strength={0.85} />
+        <div style={{ position: 'relative', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>{header}</div>
+        <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{children}</div>
       </div>
     </div>
   );
@@ -155,8 +157,9 @@ function DialogBox({ header, children, onDismissed, closeSignal, fitContent }: {
           display: 'flex', flexDirection: 'column',
         }}
       >
-        <div style={{ paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>{header}</div>
-        <div style={{ flex: fitContent ? '0 1 auto' : 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: fitContent ? 'auto' : undefined }}>{children}</div>
+        <Wash height={300} strength={0.85} />
+        <div style={{ position: 'relative', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>{header}</div>
+        <div style={{ position: 'relative', flex: fitContent ? '0 1 auto' : 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: fitContent ? 'auto' : undefined }}>{children}</div>
       </div>
     </div>
   );
@@ -302,17 +305,18 @@ function Sheet({
           height: 0,
         }}
       >
+        <Wash height={300} strength={0.85} />
         <div
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          style={{ paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 10, touchAction: 'none', cursor: 'grab', userSelect: 'none' }}
+          style={{ position: 'relative', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 10, touchAction: 'none', cursor: 'grab', userSelect: 'none' }}
         >
           <div style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, alignSelf: 'center' }} />
           {header}
         </div>
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{children}</div>
+        <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{children}</div>
       </div>
     </div>
   );
