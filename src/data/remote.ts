@@ -16,7 +16,7 @@ import { supabase } from '@/lib/supabase';
 import { shrinkPhoto } from '@/lib/shrinkPhoto';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, Question, Story, Tip, User, CoachApplication } from './types';
+import type { Answer, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, Question, Story, Tip, User, CoachApplication } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
 
 /** What a new player did first, after setup. */
@@ -254,10 +254,20 @@ export interface RemoteData {
   coachResults: CoachResult[];
   /** Your own practice log (see migration 39); empty on a database without it. */
   sessions: PracticeSession[];
+  /** Open "Looking for a hit" posts (migration 43). */
+  hitRequests: HitRequest[];
 }
 
 interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string }
 const toSession = (r: SessionRow): PracticeSession => ({ id: r.id, userId: r.user_id, day: r.day, minutes: r.minutes, kind: r.kind, won: r.won ?? undefined, opponent: r.opponent ?? undefined, note: r.note ?? undefined, createdAt: r.created_at });
+
+interface HitRow { id: string; author_id: string; starts_at: string; place: { name?: string; lat?: number; lng?: number } | null; level_min: number | null; level_max: number | null; format: HitRequest['format']; spots: number; note: string | null; conversation_id: string | null; cancelled: boolean; created_at: string; hit_joins?: { user_id: string }[] }
+const toHit = (r: HitRow): HitRequest => ({
+  id: r.id, authorId: r.author_id, startsAt: r.starts_at,
+  place: { name: String(r.place?.name ?? 'A court').slice(0, 120), lat: typeof r.place?.lat === 'number' ? r.place.lat : undefined, lng: typeof r.place?.lng === 'number' ? r.place.lng : undefined },
+  levelMin: r.level_min ?? undefined, levelMax: r.level_max ?? undefined, format: r.format, spots: r.spots, note: r.note ?? undefined,
+  conversationId: r.conversation_id ?? undefined, cancelled: r.cancelled, createdAt: r.created_at, joinedIds: (r.hit_joins ?? []).map((j) => j.user_id),
+});
 
 interface TipRow { id: string; user_id: string; body: string; created_at: string; votes: number | null; voted_by: Record<string, 1 | -1> | null }
 const toTip = (r: TipRow): Tip => ({ id: r.id, authorId: r.user_id, body: r.body, createdAt: r.created_at, votes: r.votes ?? 0, votedBy: r.voted_by ?? {} });
@@ -448,7 +458,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // Coaches load alongside everything else rather than after it: one round
   // trip to the server fewer on every open. A failure just means no coaches.
   const coachingLoad = fetchCoaching(me).catch(() => ({ coaches: [], coachReviews: [], coachResults: [] }));
-  const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows, sessionRows, pollRows, myPollVotes] = await Promise.all([
+  const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows, sessionRows, pollRows, myPollVotes, hitRows] = await Promise.all([
     // Every profile, in chunks, so nobody is left out past the first 1,000.
     allRows<ProfileRow>((from, to) => db.from('profiles').select('*').order('created_at', { ascending: true }).range(from, to)),
     db.from('posts').select(POST_SELECT).order('created_at', { ascending: false }).limit(POST_PAGE),
@@ -486,6 +496,8 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     // Polls and your own votes in them, asked for on their own so a database without them (migration 41) loses nothing else.
     db.from('polls').select('question_id, options, counts').order('created_at', { ascending: false }).limit(300),
     db.from('poll_votes').select('question_id, option').eq('user_id', me),
+    // Hits still ahead (or just started), with who is in.
+    db.from('hit_requests').select('*, hit_joins(user_id)').eq('cancelled', false).gte('starts_at', new Date(Date.now() - 3_600_000).toISOString()).order('starts_at', { ascending: true }).limit(100),
   ]);
   const coaching = await coachingLoad;
   if (qs.error) console.warn('[remote] community tables missing; run the pending migrations', qs.error.message);
@@ -545,6 +557,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     tips: ((tipRows.data ?? []) as TipRow[]).map(toTip),
     coachApplications: ((applicationRows.data ?? []) as CoachApplicationRow[]).map(toCoachApplication),
     sessions: ((sessionRows.data ?? []) as SessionRow[]).map(toSession),
+    hitRequests: ((hitRows.data ?? []) as HitRow[]).map(toHit),
     ...coaching,
   };
 }
@@ -1201,6 +1214,26 @@ export const remote = {
     const { error } = await need().from('practice_sessions').delete().eq('id', id);
     if (error) fail('session delete')(error);
   },
+  async insertHit(h: HitRequest) {
+    const { error } = await need().from('hit_requests').insert({
+      id: h.id, author_id: h.authorId, starts_at: h.startsAt, place: h.place, level_min: h.levelMin ?? null, level_max: h.levelMax ?? null,
+      format: h.format, spots: h.spots, note: h.note ?? null,
+    });
+    if (error) { fail('hit request')(error); throw new Error('That didn’t post. Try again.'); }
+  },
+  /** "I'm in": the hit's group chat comes back, or a plain sentence saying why not. */
+  async joinHit(hitId: ID): Promise<{ conversationId?: ID; error?: string }> {
+    const { data, error } = await need().rpc('join_hit', { hit: hitId });
+    if (error) {
+      if (/teen_closed/.test(error.message)) return { error: 'You can join once you follow each other.' };
+      if (/blocked/.test(error.message)) return { error: 'You can’t join this one.' };
+      const plain = error.message.match(/That hit[^.]*\.|That is your own hit\./);
+      return { error: plain ? plain[0] : 'That didn’t go through. Try again.' };
+    }
+    return { conversationId: (data as string) || undefined };
+  },
+  async leaveHit(hitId: ID) { const { error } = await need().rpc('leave_hit', { hit: hitId }); if (error) fail('leave hit')(error); },
+  async cancelHit(hitId: ID) { const { error } = await need().from('hit_requests').update({ cancelled: true }).eq('id', hitId); if (error) fail('cancel hit')(error); },
   async insertTip(tip: Tip) {
     const { error } = await need().from('tips').insert({ id: tip.id, user_id: tip.authorId, body: tip.body, created_at: tip.createdAt });
     if (error) fail('tip')(error);

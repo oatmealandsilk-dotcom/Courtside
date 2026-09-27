@@ -48,6 +48,7 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap; tin
   'upvote-reply': { name: 'arrow-up', tint: 'brand' },
   milestone: { name: 'flame', tint: 'warning' },
   joined: { name: 'hand-right', tint: 'court' },
+  'hit-join': { name: 'tennisball', tint: 'brand' },
 };
 
 const VERB: Record<NotificationKind, string> = {
@@ -71,6 +72,7 @@ const VERB: Record<NotificationKind, string> = {
   'upvote-reply': 'upvoted your reply',
   milestone: 'just passed',
   joined: 'just joined CourtSide near you',
+  'hit-join': 'is in for your hit',
 };
 
 interface Group {
@@ -98,6 +100,7 @@ function routeFor(group: Group): string {
   if (group.kind === 'follow' || group.kind === 'follow-request' || group.kind === 'follow-accepted' || group.kind === 'joined') return `/user/${group.actorIds[0]}`;
   if (group.targetKind === 'post') return `/post/${group.targetId}`;
   if (group.targetKind === 'hit') return `/hits/${group.targetId}`;
+  if (group.targetKind === 'hit-request') return `/hit-request/${group.targetId}`;
   if (group.targetKind === 'question') return `/question/${group.targetId}`;
   return `/coach-question/${group.targetId}`;
 }

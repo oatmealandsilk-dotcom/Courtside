@@ -13,11 +13,12 @@ import { LevelPill } from '@/components/LevelPill';
 import { NearbyMap } from '@/components/NearbyMap';
 import { useLocationToggle } from '@/features/players/useLocationToggle';
 import { QuestionCard, TOPIC_META } from '@/components/QuestionCard';
+import { HitCard } from '@/components/HitCard';
 import { Avatar, Chip, EmptyState, Screen } from '@/components/ui';
 import { reportSection, subscribeSectionRequest } from '@/features/navigation/swipeOrder';
 import { useApp } from '@/store/AppContext';
 import type { QuestionTopic } from '@/data/types';
-import { colors, radius, spacing, typography, font } from '@/theme';
+import { colors, radius, spacing, typography, font, lift } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 
 const TOPICS: (QuestionTopic | 'all')[] = [
@@ -33,7 +34,7 @@ const TOPICS: (QuestionTopic | 'all')[] = [
 
 function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
-  const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, saved, actions, detectedCoords, locationEnabled } = useApp();
+  const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, saved, actions, detectedCoords, locationEnabled, hitRequests } = useApp();
   // The section lives here, not in the address: listening to the address made
   // this whole tab re-render on every route change anywhere in the app.
   // Other pages ask for a section through requestSection before navigating.
@@ -68,6 +69,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
 
   // How the list is ordered, the way Reddit offers it. New stays the default.
   const [sort, setSort] = useState<'new' | 'hot' | 'top' | 'unanswered'>('new');
+  // Hits still ahead (or just started), not called off, not from anyone blocked or muted.
+  const openHits = hitRequests.filter((h) => !h.cancelled && Date.parse(h.startsAt) > Date.now() - 3_600_000 && !blockedIds.includes(h.authorId) && !mutedIds.includes(h.authorId)).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   const [shownCount, setShownCount] = useState(25);
   const visible = useMemo(() => {
     // Nobody you have blocked or muted shows up here, the same as in the feed.
@@ -96,6 +99,25 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           ? <NearbyMap me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} />
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : <View style={styles.mapStandIn} />) : null}
+        {/* Hits: someone wants a game, soonest first. Posting one is right here. */}
+        {!search ? (
+          <View style={styles.hits}>
+            <View style={styles.hitsHead}>
+              <Text style={styles.playersTitle}>Open hits</Text>
+              <Pressable accessibilityRole="button" onPress={() => router.push('/hit-request/new')} hitSlop={8}><Text style={styles.postHit}>Post one</Text></Pressable>
+            </View>
+            {openHits.length ? openHits.slice(0, 5).map((h) => <HitCard key={h.id} hit={h} />) : (
+              <Pressable accessibilityRole="button" onPress={() => router.push('/hit-request/new')} style={styles.hitPrompt}>
+                <Ionicons name="tennisball-outline" size={20} color={colors.brand} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.hitPromptTitle}>Looking for someone to play?</Text>
+                  <Text style={styles.hitPromptBody}>Say when and where. Players nearby can join.</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+              </Pressable>
+            )}
+          </View>
+        ) : null}
         {players.length ? <View style={styles.playersHead}>
           <Text style={styles.playersTitle}>{search ? 'Players' : 'Players near you'}</Text>
           {search ? <Text style={styles.playersBody}>{`${players.length} ${players.length === 1 ? 'match' : 'matches'}`}</Text> : null}
@@ -209,6 +231,12 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
 }
 
 const styleDefinitions = StyleSheet.create({
+  hits: { gap: spacing.md },
+  hitsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: spacing.sm },
+  postHit: { ...typography.smallStrong, color: colors.brand },
+  hitPrompt: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
+  hitPromptTitle: { ...typography.bodyStrong, color: colors.text },
+  hitPromptBody: { ...typography.small, color: colors.textMuted },
   sortRow: { flexDirection: 'row', gap: 4, paddingTop: spacing.sm },
   sort: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14 },
   sortOn: { backgroundColor: colors.surface },

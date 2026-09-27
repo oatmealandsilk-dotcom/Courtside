@@ -69,6 +69,7 @@ import type {
   SavedItems,
   SessionDetail,
   PracticeSession,
+  HitRequest,
   Story,
   User,
   PlayerProfile,
@@ -277,6 +278,8 @@ interface AppState extends Bootstrap {
   tips: Tip[];
   /** Your own practice log: where streaks, hours and win rate come from. */
   sessions: PracticeSession[];
+  /** Open "Looking for a hit" posts. */
+  hitRequests: HitRequest[];
   /** Small switches from Settings, kept with the account. */
   prefs: { showActivity: boolean; pushLikes: boolean; pushCoach: boolean };
   /** Whether the app may ask the device where you are, and the city it found. */
@@ -352,6 +355,12 @@ interface AppActions {
   /** Log a session you played (today unless a day is given). Throws a plain sentence when it cannot be saved. */
   logSession: (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; opponent?: string; note?: string; day?: string }) => Promise<void>;
   deleteSession: (id: ID) => void;
+  /** Post a "Looking for a hit". Throws a plain sentence if it cannot be posted. */
+  postHit: (input: Omit<HitRequest, 'id' | 'authorId' | 'createdAt' | 'joinedIds' | 'conversationId' | 'cancelled'>) => Promise<ID>;
+  /** "I'm in": joins, and resolves the group chat to open (or a sentence saying why not). */
+  joinHit: (hitId: ID) => Promise<{ conversationId?: ID; error?: string }>;
+  leaveHit: (hitId: ID) => void;
+  cancelHit: (hitId: ID) => void;
 
   toggleLike: (postId: ID) => void;
   addPost: (input: NewPostInput) => ID;
@@ -642,6 +651,7 @@ function snapshotOf(s: AppState, me: ID): RemoteData {
     },
     tips: s.tips, coachApplications: s.coachApplications, coaches: s.coaches, coachReviews: s.coachReviews, coachResults: s.coachResults,
     sessions: s.sessions,
+    hitRequests: s.hitRequests,
   };
 }
 
@@ -717,6 +727,7 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       coachReviews: data.coachReviews,
       coachResults: data.coachResults,
       sessions: data.sessions ?? prev.sessions,
+      hitRequests: data.hitRequests ?? prev.hitRequests,
       notifications: [...data.notifications, ...prev.notifications.filter((n) => !data.notifications.some((x) => x.id === n.id) && !gone(n.id))],
       tips: [...data.tips, ...prev.tips.filter((t) => !data.tips.some((x) => x.id === t.id) && !gone(t.id))],
       coachApplications: [...data.coachApplications, ...prev.coachApplications.filter((a) => !data.coachApplications.some((x) => x.id === a.id))],
@@ -789,6 +800,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     prefs: { showActivity: true, pushLikes: true, pushCoach: true },
     tips: [],
     sessions: [],
+    hitRequests: [],
     locationEnabled: readFlag('courtside-location'),
     detectedLocation: null,
     detectedCoords: null,
@@ -1312,6 +1324,56 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, sessions: prev.sessions.filter((x) => x.id !== id) }));
     if (live(me)) void remote.deleteSession(id);
   }, []);
+
+  const postHit = useCallback(async (input: Omit<HitRequest, 'id' | 'authorId' | 'createdAt' | 'joinedIds' | 'conversationId' | 'cancelled'>): Promise<ID> => {
+    const me = requireUser();
+    const hit: HitRequest = { ...input, id: nextId('hitreq'), authorId: me, createdAt: new Date().toISOString(), joinedIds: [] };
+    haptics.commit();
+    setState((prev) => ({ ...prev, hitRequests: [...prev.hitRequests, hit].sort((a, b) => a.startsAt.localeCompare(b.startsAt)) }));
+    if (live(me)) {
+      try { await remote.insertHit(hit); } catch (e) {
+        setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.filter((h) => h.id !== hit.id) }));
+        throw e;
+      }
+    }
+    return hit.id;
+  }, [requireUser]);
+
+  const joinHit = useCallback(async (hitId: ID) => {
+    const me = requireUser();
+    haptics.commit();
+    setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.map((h) => (h.id === hitId && !h.joinedIds.includes(me) ? { ...h, joinedIds: [...h.joinedIds, me] } : h)) }));
+    if (!live(me, hitId)) return {};
+    const result = await remote.joinHit(hitId);
+    if (result.error) {
+      setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.map((h) => (h.id === hitId ? { ...h, joinedIds: h.joinedIds.filter((x) => x !== me) } : h)) }));
+      return result;
+    }
+    const conversationId = result.conversationId;
+    if (conversationId) {
+      setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.map((h) => (h.id === hitId ? { ...h, conversationId } : h)) }));
+      // The hit's chat was just made (or joined) on the server: bring it in so it can open.
+      const got = await remote.fetchConversation(me, conversationId);
+      if (got) setState((prev) => ({
+        ...prev,
+        conversations: [got.conversation, ...prev.conversations.filter((c) => c.id !== conversationId)],
+        messages: [...prev.messages.filter((m) => m.conversationId !== conversationId), ...got.messages],
+      }));
+    }
+    return result;
+  }, [requireUser]);
+
+  const leaveHit = useCallback((hitId: ID) => {
+    const me = requireUser();
+    setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.map((h) => (h.id === hitId ? { ...h, joinedIds: h.joinedIds.filter((x) => x !== me) } : h)) }));
+    if (live(me, hitId)) void remote.leaveHit(hitId);
+  }, [requireUser]);
+
+  const cancelHit = useCallback((hitId: ID) => {
+    const me = requireUser();
+    setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.filter((h) => h.id !== hitId) }));
+    if (live(me, hitId)) void remote.cancelHit(hitId);
+  }, [requireUser]);
 
   const toggleLike = useCallback(
     (postId: ID) => {
@@ -3248,6 +3310,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateProfile,
       logSession,
       deleteSession,
+      postHit,
+      joinHit,
+      leaveHit,
+      cancelHit,
       updateIdentity,
       toggleLike,
       addPost,
@@ -3373,6 +3439,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateProfile,
       logSession,
       deleteSession,
+      postHit,
+      joinHit,
+      leaveHit,
+      cancelHit,
       updateIdentity,
       toggleLike,
       addPost,
