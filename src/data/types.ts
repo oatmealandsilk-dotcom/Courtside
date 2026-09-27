@@ -108,6 +108,20 @@ export interface User {
   stats: PlayerStats;
 }
 
+/** One session you logged: what kind, how long, and for a match whether you won. Private to you. */
+export interface PracticeSession {
+  id: ID;
+  userId: ID;
+  /** The calendar day it was played, in your own time zone (YYYY-MM-DD). */
+  day: string;
+  minutes: number;
+  kind: 'practice' | 'match' | 'drills' | 'fitness';
+  won?: boolean;
+  opponent?: string;
+  note?: string;
+  createdAt: string;
+}
+
 export interface PlayerStats {
   sessionsLogged: number;
   matchesPlayed: number;

@@ -11,7 +11,7 @@ const AUTH = new Set(['/sign-in', '/onboarding']);
  * See-through sheets over the current page. The page underneath stays put,
  * so animating the content here would make it flash behind the sheet.
  */
-const SHEETS = new Set(['/compose', '/share', '/ask', '/ask-coach', '/comments', '/post-menu', '/edit-post']);
+const SHEETS = new Set(['/compose', '/share', '/ask', '/ask-coach', '/comments', '/post-menu', '/edit-post', '/log-session']);
 /** On a computer, New message is a box over the inbox too (on a phone it is a page, and slides). */
 if (isDesktopBrowser()) SHEETS.add('/messages/new');
 

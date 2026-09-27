@@ -16,7 +16,7 @@ import { supabase } from '@/lib/supabase';
 import { shrinkPhoto } from '@/lib/shrinkPhoto';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, Question, Story, Tip, User, CoachApplication } from './types';
+import type { Answer, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, Question, Story, Tip, User, CoachApplication } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
 
 /** What a new player did first, after setup. */
@@ -252,7 +252,12 @@ export interface RemoteData {
   coaches: Coach[];
   coachReviews: CoachReview[];
   coachResults: CoachResult[];
+  /** Your own practice log (see migration 39); empty on a database without it. */
+  sessions: PracticeSession[];
 }
+
+interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string }
+const toSession = (r: SessionRow): PracticeSession => ({ id: r.id, userId: r.user_id, day: r.day, minutes: r.minutes, kind: r.kind, won: r.won ?? undefined, opponent: r.opponent ?? undefined, note: r.note ?? undefined, createdAt: r.created_at });
 
 interface TipRow { id: string; user_id: string; body: string; created_at: string; votes: number | null; voted_by: Record<string, 1 | -1> | null }
 const toTip = (r: TipRow): Tip => ({ id: r.id, authorId: r.user_id, body: r.body, createdAt: r.created_at, votes: r.votes ?? 0, votedBy: r.voted_by ?? {} });
@@ -428,7 +433,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // Coaches load alongside everything else rather than after it: one round
   // trip to the server fewer on every open. A failure just means no coaches.
   const coachingLoad = fetchCoaching(me).catch(() => ({ coaches: [], coachReviews: [], coachResults: [] }));
-  const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows] = await Promise.all([
+  const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows, sessionRows] = await Promise.all([
     // Every profile, in chunks, so nobody is left out past the first 1,000.
     allRows<ProfileRow>((from, to) => db.from('profiles').select('*').order('created_at', { ascending: true }).range(from, to)),
     db.from('posts').select(POST_SELECT).order('created_at', { ascending: false }).limit(POST_PAGE),
@@ -461,6 +466,8 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     db.from('hidden_messages').select('message_id').eq('user_id', me),
     // Your own coach application, so the form can show where it stands.
     db.from('coach_applications').select('*').eq('user_id', me).order('created_at', { ascending: false }).limit(3),
+    // Your practice log for the last year and a bit: enough for streaks and totals.
+    db.from('practice_sessions').select('*').eq('user_id', me).gte('day', new Date(Date.now() - 400 * 86_400_000).toISOString().slice(0, 10)).order('day', { ascending: false }).limit(1000),
   ]);
   const coaching = await coachingLoad;
   if (qs.error) console.warn('[remote] community tables missing; run the pending migrations', qs.error.message);
@@ -519,6 +526,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     userState: ustate.data ? toUserState(ustate.data as UserStateRow) : null,
     tips: ((tipRows.data ?? []) as TipRow[]).map(toTip),
     coachApplications: ((applicationRows.data ?? []) as CoachApplicationRow[]).map(toCoachApplication),
+    sessions: ((sessionRows.data ?? []) as SessionRow[]).map(toSession),
     ...coaching,
   };
 }
@@ -1138,6 +1146,14 @@ export const remote = {
     return () => { void db.removeChannel(channel); };
   },
 
+  async insertSession(s: PracticeSession) {
+    const { error } = await need().from('practice_sessions').insert({ id: s.id, user_id: s.userId, day: s.day, minutes: s.minutes, kind: s.kind, won: s.won ?? null, opponent: s.opponent ?? null, note: s.note ?? null, created_at: s.createdAt });
+    if (error) { fail('session')(error); throw new Error(error.message.includes('a lot of sessions') ? error.message : 'That session didn’t save. Try again.'); }
+  },
+  async deleteSession(id: ID) {
+    const { error } = await need().from('practice_sessions').delete().eq('id', id);
+    if (error) fail('session delete')(error);
+  },
   async insertTip(tip: Tip) {
     const { error } = await need().from('tips').insert({ id: tip.id, user_id: tip.authorId, body: tip.body, created_at: tip.createdAt });
     if (error) fail('tip')(error);
