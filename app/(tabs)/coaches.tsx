@@ -1,8 +1,8 @@
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
-import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -19,6 +19,12 @@ function Coaching() {
   const styles = useThemedStyles(styleDefinitions);
   const { coaches, users, coachingRequests, coachQuestions, currentUserId, currentUser } = useApp();
   const aiCoachOn = useAiCoachOn();
+  const [askDraft, setAskDraft] = useState('');
+  const openAsk = () => {
+    const words = askDraft.trim();
+    setAskDraft('');
+    router.push(words ? { pathname: '/ask-coach', params: { title: words } } : '/ask-coach');
+  };
   const recentQuestions = [...coachQuestions]
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
     .slice(0, 3);
@@ -39,15 +45,22 @@ function Coaching() {
           <Text style={styles.sectionCount}>free</Text>
         </View>
       </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Ask a coach a question"
-        onPress={() => router.push('/ask-coach')}
-        style={({ pressed }) => [styles.askField, pressed && styles.askFieldPressed]}
-      >
-        <Text style={styles.askPlaceholder}>What are you stuck on?</Text>
-        <View style={styles.askGo}><Ionicons name="arrow-forward" size={16} color={colors.brandInk} /></View>
-      </Pressable>
+      {/* A real box: type the question here, and the arrow opens the rest of it with your words already in. */}
+      <View style={styles.askField}>
+        <TextInput
+          accessibilityLabel="Ask a coach a question"
+          value={askDraft}
+          onChangeText={setAskDraft}
+          placeholder="What are you stuck on?"
+          placeholderTextColor={colors.textFaint}
+          returnKeyType="next"
+          onSubmitEditing={openAsk}
+          style={styles.askInput}
+        />
+        <Pressable accessibilityRole="button" accessibilityLabel="Continue your question" onPress={openAsk} hitSlop={6} style={({ pressed }) => [styles.askGo, pressed && { opacity: 0.85 }]}>
+          <Ionicons name="arrow-forward" size={16} color={colors.brandInk} />
+        </Pressable>
+      </View>
       <Text style={styles.askNote}>Public. A verified coach answers, usually within a day.</Text>
       {/* The AI coach shows up here once it is switched on (its key added on the server). */}
       {aiCoachOn ? (
@@ -220,8 +233,7 @@ const styleDefinitions = StyleSheet.create({
     paddingLeft: spacing.lg, paddingRight: 6, paddingVertical: 6, minHeight: 52,
     borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
   },
-  askFieldPressed: { borderColor: colors.borderStrong },
-  askPlaceholder: { ...typography.body, fontSize: 16, color: colors.textFaint, flex: 1 },
+  askInput: { ...typography.body, fontSize: 16, color: colors.text, flex: 1, paddingVertical: 0, outlineStyle: 'none' } as object,
   askGo: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
   // Everything else is rows on hairlines, not boxes.
   list: { marginTop: spacing.sm },

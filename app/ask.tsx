@@ -42,7 +42,7 @@ export default function Ask() {
   };
 
   return (
-    <DragSheet
+    <DragSheet fitContent
       closeSignal={closeSignal}
       onDismissed={() => (posted ? router.replace(`/question/${posted}`) : router.back())}
       header={

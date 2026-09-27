@@ -48,7 +48,7 @@ import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isDesktopBrowser } from '@/lib/browserDevice';
-import { colors, radius, typography, spacing, font } from '@/theme';
+import { colors, radius, typography, spacing, font, lift } from '@/theme';
 
 /**
  * The heart that blooms when you double tap a clip.
@@ -1236,7 +1236,8 @@ const styleDefinitions = StyleSheet.create({
   hint: { color: colors.textMuted, fontSize: 11, textAlign: 'center', paddingBottom: 10 },
   // The theme's own colours, so the page belongs to whichever look is on.
   endPage: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
-  endCard: { alignSelf: 'stretch', maxWidth: 520, width: '100%', gap: spacing.lg, padding: spacing.xl, borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
+  // Centred in its page on every screen size (it sat to the left on a wide computer window).
+  endCard: { ...lift, alignSelf: 'center', maxWidth: 520, width: '100%', gap: spacing.lg, padding: spacing.xl, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   endTile: { width: 56, height: 56, borderRadius: radius.lg, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   endTitle: { ...typography.title, color: colors.text },
   endBody: { ...typography.small, color: colors.textMuted, lineHeight: 19 },

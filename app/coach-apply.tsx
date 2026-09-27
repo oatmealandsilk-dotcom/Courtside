@@ -8,6 +8,7 @@ import * as DocumentPicker from 'expo-document-picker';
 
 import { goBack } from '@/lib/goBack';
 import { Button, Field, Screen } from '@/components/ui';
+import { ApplicationStatus } from '@/components/ApplicationStatus';
 import { useApp } from '@/store/AppContext';
 import type { CoachApplication, CoachSpecialty } from '@/data/types';
 import * as haptics from '@/lib/haptics';
@@ -46,12 +47,6 @@ const asLink = (raw: string) => {
 const isUtrLink = (raw: string) => /^https?:\/\/([a-z0-9-]+\.)*utrsports\.net\/\S+/i.test(asLink(raw));
 const isUstaLink = (raw: string) => /^https?:\/\/([a-z0-9-]+\.)*usta\.com\/\S*/i.test(asLink(raw));
 
-const STATUS_TEXT: Record<CoachApplication['status'], { title: string; body: string; icon: keyof typeof Ionicons.glyphMap }> = {
-  submitted: { title: 'Application received', body: 'We review credentials, ratings and references by hand. You will get a notification here when there is news, and we will email or call if we need anything more.', icon: 'checkmark' },
-  'in-review': { title: 'Being reviewed', body: 'Someone is going through your application now. You will get a notification here when it is decided.', icon: 'time-outline' },
-  approved: { title: 'You are approved', body: 'Welcome to CourtSide coaching. Your coach badge and listing are on their way.', icon: 'ribbon' },
-  rejected: { title: 'Not approved this time', body: 'Thanks for applying. The notification we sent explains why, and you are welcome to apply again later.', icon: 'close' },
-};
 
 /**
  * Applying to coach, one step at a time, the way the setup quiz works: a
@@ -87,6 +82,7 @@ export default function CoachApply() {
   const [busy, setBusy] = useState(false);
   const [sendError, setSendError] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [reapplying, setReapplying] = useState(false);
 
   const scrollRef = useRef<ScrollView>(null);
   const progress = useRef(new Animated.Value(1 / STEPS.length)).current;
@@ -182,34 +178,10 @@ export default function CoachApply() {
     if (file) setResume({ uri: file.uri, name: file.name, mimeType: file.mimeType ?? undefined });
   };
 
-  // Already applied (or just did): where it stands, instead of the form.
-  if (submitted || existing) {
-    const status = STATUS_TEXT[existing?.status ?? 'submitted'];
-    const stage = ({ submitted: 0, 'in-review': 1, approved: 3, rejected: -1 } as const)[existing?.status ?? 'submitted'];
-    return (
-      <Screen title="Your application" compactTitle onBack={() => goBack()}>
-        <View style={styles.done}>
-          <View style={[styles.doneIcon, existing?.status === 'rejected' && { backgroundColor: colors.textMuted }]}>
-            <Ionicons name={status.icon} size={32} color={colors.brandInk} />
-          </View>
-          <Text style={styles.doneTitle}>{status.title}</Text>
-          <Text style={styles.doneBody}>{status.body}</Text>
-          {stage >= 0 ? (
-            <View style={styles.stepsCard}>
-              {['Identity and credential check', 'Rating check (UTR / NTRP)', 'Reference call', 'Listed as a coach on CourtSide'].map((label, index) => (
-                <View key={label} style={styles.stepRow}>
-                  <View style={[styles.stepDot, index <= stage && styles.stepDotOn]}>
-                    {index < stage ? <Ionicons name="checkmark" size={14} color={colors.brandInk} /> : <Text style={[styles.stepNum, index <= stage && { color: colors.brandInk }]}>{index + 1}</Text>}
-                  </View>
-                  <Text style={styles.stepLabel}>{label}</Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
-          <Button label="Back to coaching" onPress={() => router.replace('/(tabs)/coaches')} full />
-        </View>
-      </Screen>
-    );
+  // Already applied (or just did): where it stands, instead of the form. A
+  // turned-down applicant can start a fresh one.
+  if ((submitted || existing) && !reapplying) {
+    return <ApplicationStatus application={existing} me={currentUser} onApplyAgain={() => { setReapplying(true); setSubmitted(false); setStep(0); }} />;
   }
 
   const last = step === STEPS.length - 1;

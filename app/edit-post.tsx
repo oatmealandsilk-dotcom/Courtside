@@ -41,7 +41,7 @@ export default function EditPost() {
   };
 
   return (
-    <DragSheet
+    <DragSheet fitContent
       closeSignal={closeSignal}
       onDismissed={() => router.back()}
       peekFraction={0.72}
