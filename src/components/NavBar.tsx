@@ -65,6 +65,8 @@ export function NavBar({ state, navigation }: NavBarProps) {
   // it never waits more than a few seconds, whatever the feed is doing.
   const warm = useFeedWarm();
   const pathname = usePathname();
+  // The sidebar's own pages (not tabs): when on one, its row is the lit one.
+  const extra = pathname.startsWith('/search') ? 'search' : pathname.startsWith('/notifications') ? 'notifications' : pathname.startsWith('/messages') ? 'messages' : null;
   // The + is a toggle: a second tap closes the Create box with its own
   // animation. Mid-post (the box already gone) a tap there does nothing.
   const openCreate = () => {
@@ -153,7 +155,8 @@ export function NavBar({ state, navigation }: NavBarProps) {
 
       <View style={styles.sidebarItems}>
         {ITEMS.map((item) => {
-          const active = item.route === activeRoute;
+          // On Search, Notifications or Messages, that row is the lit one, not the tab you came from.
+          const active = item.route === activeRoute && !extra;
           return (
             <Pressable
               key={item.route}
@@ -186,56 +189,62 @@ export function NavBar({ state, navigation }: NavBarProps) {
           onPress={() => router.push('/search')}
           accessibilityRole="button"
           accessibilityLabel="Search"
+          accessibilityState={{ selected: extra === 'search' }}
           style={({ pressed }) => [
             styles.sidebarItem,
             compact && styles.sidebarItemCompact,
+            extra === 'search' && styles.sidebarItemActive,
             pressed && { backgroundColor: colors.surfaceAlt },
           ]}
         >
-          <Ionicons name="search-outline" size={23} color={colors.textMuted} />
-          {compact ? null : <Text style={styles.sidebarLabel}>Search</Text>}
+          <Ionicons name={extra === 'search' ? 'search' : 'search-outline'} size={23} color={extra === 'search' ? colors.text : colors.textMuted} />
+          {compact ? null : <Text style={[styles.sidebarLabel, extra === 'search' && styles.sidebarLabelActive]}>Search</Text>}
         </Pressable>
 
         <Pressable
           onPress={() => router.push('/notifications')}
           accessibilityRole="button"
           accessibilityLabel={unseen ? `Notifications, ${unseen} new` : 'Notifications'}
+          accessibilityState={{ selected: extra === 'notifications' }}
           style={({ pressed }) => [
             styles.sidebarItem,
             compact && styles.sidebarItemCompact,
+            extra === 'notifications' && styles.sidebarItemActive,
             pressed && { backgroundColor: colors.surfaceAlt },
           ]}
         >
           <View>
-            <Ionicons name={unseen ? 'notifications' : 'notifications-outline'} size={23} color={colors.textMuted} />
+            <Ionicons name={unseen || extra === 'notifications' ? 'notifications' : 'notifications-outline'} size={23} color={extra === 'notifications' ? colors.text : colors.textMuted} />
             {unseen > 0 ? (
               <View style={styles.sidebarBadge}>
                 <Text style={styles.sidebarBadgeText}>{unseen > 9 ? '9+' : unseen}</Text>
               </View>
             ) : null}
           </View>
-          {compact ? null : <Text style={styles.sidebarLabel}>Notifications</Text>}
+          {compact ? null : <Text style={[styles.sidebarLabel, extra === 'notifications' && styles.sidebarLabelActive]}>Notifications</Text>}
         </Pressable>
 
         <Pressable
           onPress={() => router.push('/messages')}
           accessibilityRole="button"
           accessibilityLabel={unread ? `Messages, ${unread} unread` : 'Messages'}
+          accessibilityState={{ selected: extra === 'messages' }}
           style={({ pressed }) => [
             styles.sidebarItem,
             compact && styles.sidebarItemCompact,
+            extra === 'messages' && styles.sidebarItemActive,
             pressed && { backgroundColor: colors.surfaceAlt },
           ]}
         >
           <View>
-            <Ionicons name="paper-plane-outline" size={23} color={colors.textMuted} />
+            <Ionicons name={extra === 'messages' ? 'paper-plane' : 'paper-plane-outline'} size={23} color={extra === 'messages' ? colors.text : colors.textMuted} />
             {unread > 0 ? (
               <View style={styles.sidebarBadge}>
                 <Text style={styles.sidebarBadgeText}>{unread > 9 ? '9+' : unread}</Text>
               </View>
             ) : null}
           </View>
-          {compact ? null : <Text style={styles.sidebarLabel}>Messages</Text>}
+          {compact ? null : <Text style={[styles.sidebarLabel, extra === 'messages' && styles.sidebarLabelActive]}>Messages</Text>}
         </Pressable>
 
         <Pressable

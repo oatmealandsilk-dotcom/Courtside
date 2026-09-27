@@ -106,7 +106,7 @@ export default function Search() {
         <Field
           value={term}
           onChangeText={setTerm}
-          placeholder="People, @handles, threads, coaches, gear…"
+          placeholder="Search"
           autoCapitalize="none"
         />
         <SegmentedControl
