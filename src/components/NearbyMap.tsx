@@ -115,7 +115,7 @@ export function NearbyMap(props: NearbyMapProps) {
       {mapView}
       <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
         <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} />
-        <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} weather={weather} />
+        <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
       </View>
       <View pointerEvents="box-none" style={styles.bottom}>
         <MapButtons onRecentre={() => { model.select(null); canvas.current?.flyTo(home, CITY_ZOOM, 600); }} />
@@ -126,7 +126,7 @@ export function NearbyMap(props: NearbyMapProps) {
         ) : model.selectedCourt ? (
           <CourtSheet court={model.selectedCourt} miles={milesBetween(home, model.selectedCourt)} onClose={() => model.selectCourt(null)} onDirections={() => directions(model.selectedCourt!)} />
         ) : (
-          <NearbyRail items={model.shown} cityName={model.place ? model.place.name.split(',')[0] : cityName} selectedId={null} onSelect={model.select} />
+          <NearbyRail items={model.shown} cityName={model.place ? model.place.name.split(',')[0] : cityName} selectedId={null} onSelect={model.select} weather={weather} />
         )}
         {/* The tray's own colour runs on beneath the floating tab bar, so no map shows between them. */}
         {barInset ? <View style={{ height: barInset, backgroundColor: colors.surface, marginTop: -spacing.md - 1 }} /> : null}

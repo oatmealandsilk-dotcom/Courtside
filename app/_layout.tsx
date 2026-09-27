@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { usePauseWhenHidden } from '@/features/feed/pauseWhenHidden';
 import { Pressable, Text, View } from 'react-native';
 import { Stack, type ErrorBoundaryProps } from 'expo-router';
+import { useInstantExit } from '@/features/navigation/instantExit';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -44,6 +45,7 @@ export default function RootLayout() {
   // Inter ships in the bundle, so on a phone this resolves before the splash
   // has gone; in a browser it is one small fetch, kept after that.
   const desktop = isDesktopBrowser();
+  const instantExit = useInstantExit();
   const [fontsReady] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, ...Ionicons.font });
   if (!fontsReady) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
   return (
@@ -54,7 +56,8 @@ export default function RootLayout() {
           screenOptions={{
             headerShown: false,
             contentStyle: { backgroundColor: colors.bg },
-            animation: 'slide_from_right',
+            // A tab tapped from a page that belongs to another tab: the page just goes (see instantExit).
+            animation: instantExit ? 'none' : 'slide_from_right',
           }}
         >
           {/* Splash and sign-in fade; the feed opens behind a curtain that is

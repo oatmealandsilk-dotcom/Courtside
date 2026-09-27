@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { router } from 'expo-router';
-import Reanimated, { Easing as REasing, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Reanimated, { Easing as REasing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -43,7 +43,7 @@ export function UploadBar() {
       if (e.translationY < -24 || e.velocityY < -500) {
         slide.value = withTiming(-110, { duration: 180, easing: REasing.in(REasing.cubic) }, (finished) => { if (finished) runOnJS(putAway)(); });
       } else {
-        slide.value = withSpring(0, { damping: 18, stiffness: 240 });
+        slide.value = withTiming(0, { duration: 220, easing: REasing.out(REasing.cubic) });
       }
     });
   const awayRef = useRef<string | null>(null);
@@ -56,10 +56,10 @@ export function UploadBar() {
     if (job && awayKey === away) return;
     if (job) {
       if (!shown || away) { setAway(null); }
-      if (!shown || away) { fill.value = 0; pop.setValue(0); setDisplayed(0); slide.value = withSpring(0, { damping: 16, stiffness: 220 }); }
+      if (!shown || away) { fill.value = 0; pop.setValue(0); setDisplayed(0); slide.value = withTiming(0, { duration: 340, easing: REasing.out(REasing.cubic) }); }
       setShown(job);
       target.current = job.state === 'uploading' ? job.fraction : 1;
-      if (job.state !== 'uploading') Animated.spring(pop, { toValue: 1, useNativeDriver: true, speed: 22, bounciness: 14 }).start();
+      if (job.state !== 'uploading') Animated.spring(pop, { toValue: 1, useNativeDriver: true, speed: 16, bounciness: 3 }).start();
     } else if (shown) {
       slide.value = withTiming(-110, { duration: 240, easing: REasing.in(REasing.cubic) }, (finished) => { if (finished) runOnJS(hide)(); });
     }
