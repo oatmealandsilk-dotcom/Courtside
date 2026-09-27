@@ -13,17 +13,17 @@ import { RichText } from '@/components/RichText';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useApp } from '@/store/AppContext';
 import type { Answer } from '@/data/types';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, font, radius, spacing, typography } from '@/theme';
 
 export function ThreadReplies({questionId, preview = false}:{questionId:string; preview?:boolean}) {
   const {questions,answers,currentUserId,actions}=useApp();
   const question=questions.find(q=>q.id===questionId);
   const thread=answers.filter(a=>a.questionId===questionId).sort((a,b)=>Number(b.id===question?.acceptedAnswerId)-Number(a.id===question?.acceptedAnswerId)||b.votes-a.votes);
   const canAccept = !!question && question.authorId === currentUserId && !preview;
-  return <View>{thread.filter(a=>!a.parentAnswerId||!thread.some(p=>p.id===a.parentAnswerId)).map(a=><ThreadReply key={a.id} answer={a} thread={thread} acceptedId={question?.acceptedAnswerId} preview={preview} onAccept={canAccept ? (id) => actions.acceptAnswer(questionId, id) : undefined}/>)}</View>;
+  return <View>{thread.filter(a=>!a.parentAnswerId||!thread.some(p=>p.id===a.parentAnswerId)).map(a=><ThreadReply key={a.id} answer={a} thread={thread} acceptedId={question?.acceptedAnswerId} askerId={question?.authorId} preview={preview} onAccept={canAccept ? (id) => actions.acceptAnswer(questionId, id) : undefined}/>)}</View>;
 }
-export function ThreadReply({ answer, thread, acceptedId, depth = 0, preview = false, onAccept }: {
-  answer: Answer; thread: Answer[]; acceptedId?: string; depth?: number; preview?:boolean; /** The asker's: marks this as the answer that solved it. */ onAccept?: (answerId: string) => void;
+export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, preview = false, onAccept }: {
+  answer: Answer; thread: Answer[]; acceptedId?: string; /** Who started the thread: their replies carry OP, Reddit's mark. */ askerId?: string; depth?: number; preview?:boolean; /** The asker's: marks this as the answer that solved it. */ onAccept?: (answerId: string) => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { users, currentUserId, actions } = useApp();
@@ -43,6 +43,7 @@ export function ThreadReply({ answer, thread, acceptedId, depth = 0, preview = f
         <Avatar name={responder?.name ?? '?'} seed={responder?.avatarSeed ?? answer.authorId} size={30}/>
         <PlayerName userId={responder?.id} style={styles.answerName}>{responder?.name ?? 'Unknown'}</PlayerName>
         <Text style={styles.time}>{relativeTime(answer.createdAt)}</Text>
+        {askerId && answer.authorId === askerId ? <View style={styles.op}><Text style={styles.opText}>OP</Text></View> : null}
         {answer.fromCoach && <Ionicons name="shield-checkmark" size={14} color={colors.brand}/>}
       </Pressable>
       {!collapsed && <>
@@ -79,7 +80,7 @@ export function ThreadReply({ answer, thread, acceptedId, depth = 0, preview = f
             ending at the last child's elbow, never at a grandchild. */}
         <View pointerEvents="none" style={[styles.rail, index === children.length - 1 ? {height:16} : {bottom:0}]} />
         <View pointerEvents="none" style={styles.elbow}/>
-        <ThreadReply answer={child} thread={thread} acceptedId={acceptedId} depth={depth + 1} preview={preview} onAccept={onAccept}/>
+        <ThreadReply answer={child} thread={thread} acceptedId={acceptedId} askerId={askerId} depth={depth + 1} preview={preview} onAccept={onAccept}/>
       </View>
     ))}
   </View>;
@@ -89,6 +90,8 @@ const styleDefinitions = StyleSheet.create({
   questionCard: { gap: spacing.md, borderWidth: 0, borderRadius: 0, backgroundColor: colors.bg, paddingHorizontal: 0, paddingBottom: 24, borderBottomWidth: 1, borderBottomColor: colors.border },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   time: { ...typography.small, color: colors.textFaint },
+  op: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6, backgroundColor: colors.brandDim },
+  opText: { fontSize: 10, ...font('700'), letterSpacing: 0.4, color: colors.brand },
   title: { ...typography.title, color: colors.text, lineHeight: 28 },
   body: { ...typography.body, color: colors.textMuted, lineHeight: 22 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
