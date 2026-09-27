@@ -496,6 +496,8 @@ interface AppActions {
   leaveGroup: (conversationId: ID) => void;
   /** Send a court in a chat: where to meet. */
   sendCourt: (conversationId: ID, place: { name: string; lat: number; lng: number }) => void;
+  /** Send a voice note recorded on this device (uploaded first). */
+  sendVoice: (conversationId: ID, recording: { uri: string; ms: number }) => void;
   /**
    * The age check: records a date of birth ("2009-04-17") once. Under 13 the
    * account is removed and this phone will not ask again; 13 to 17 becomes a
@@ -2468,6 +2470,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, [requireUser, appendMessage, makeMessage]);
 
+  const sendVoice = useCallback((conversationId: ID, recording: { uri: string; ms: number }) => {
+    haptics.commit();
+    const me = requireUser();
+    const message: Message = { ...makeMessage(conversationId, me, 'Voice note'), kind: 'voice', audio: { url: recording.uri, ms: recording.ms } };
+    setState((prev) => appendMessage(prev, message));
+    if (!live(me, conversationId)) return;
+    void (async () => {
+      let url: string;
+      try { url = await uploadMedia(me, recording.uri, 'audio'); } catch {
+        setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, failed: true } : m)) }));
+        return;
+      }
+      const hosted: Message = { ...message, audio: { url, ms: recording.ms } };
+      setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? hosted : m)) }));
+      const result = await remote.insertMessage(hosted).catch(() => 'failed' as const);
+      if (result === 'failed' || result === 'refused') setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, failed: true } : m)) }));
+    })();
+  }, [requireUser, appendMessage, makeMessage]);
+
   const openGroup = useCallback((memberIds: ID[], title?: string): ID => {
     const me = requireUser();
     const others = Array.from(new Set(memberIds.filter((id) => id !== me)));
@@ -3372,6 +3393,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       openConversationWith,
       sendMessage,
       sendCourt,
+      sendVoice,
       openGroup,
       addToGroup,
       renameGroup,
@@ -3501,6 +3523,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       openConversationWith,
       sendMessage,
       sendCourt,
+      sendVoice,
       openGroup,
       addToGroup,
       renameGroup,

@@ -559,7 +559,7 @@ export interface Tip {
 
 /* -------------------------------- Messaging ------------------------------ */
 
-export type MessageKind = 'text' | 'post' | 'question' | 'profile' | 'court';
+export type MessageKind = 'text' | 'post' | 'question' | 'profile' | 'court' | 'voice';
 
 export interface Message {
   openedAtBy?: Record<ID, string>;
@@ -580,6 +580,8 @@ export interface Message {
   failed?: boolean;
   /** Set when kind is 'court': where to meet. */
   place?: { name: string; lat: number; lng: number };
+  /** Set when kind is 'voice': the recording and how long it runs. */
+  audio?: { url: string; ms: number };
 }
 
 export interface Conversation {

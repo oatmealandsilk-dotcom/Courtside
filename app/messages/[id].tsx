@@ -24,6 +24,8 @@ import * as Clipboard from 'expo-clipboard';
 
 import { Avatar, EmptyState } from '@/components/ui';
 import { GroupAvatar, groupName, isGroupChat, othersIn } from '@/features/messages/groups';
+import { VoiceNote } from '@/components/VoiceNote';
+import { VOICE_LIMIT_MS, clock, useVoiceRecorder } from '@/features/voice/useVoiceRecorder';
 import { openInMaps } from '@/features/players/openInMaps';
 import { Tappable, useDoubleTap } from '@/components/Tappable';
 import { chatStamp } from '@/lib/format';
@@ -134,6 +136,18 @@ export default function Thread() {
   // moment after the page would otherwise change the hook count and crash.)
   const [caret, setCaret] = useState(0);
   const candidatesFor = useMentionCandidates();
+  // Voice notes: the mic sits where Send is while the box is empty.
+  const voice = useVoiceRecorder();
+  const sendRecording = async () => {
+    const got = await voice.finish();
+    if (got && conversation) { actions.sendVoice(conversation.id, got); requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true })); }
+  };
+  const startRecording = async () => {
+    const result = await voice.start();
+    if (result === 'denied') showToast({ title: 'Microphone is off for CourtSide', body: 'Turn it on in your phone’s Settings to send voice notes.', icon: 'mic-off-outline' });
+    else if (result === 'failed') showToast({ title: 'Couldn’t start recording', body: 'Try again in a moment.', icon: 'alert-circle-outline' });
+  };
+  useEffect(() => { if (voice.recording && voice.elapsed >= VOICE_LIMIT_MS) void sendRecording(); }, [voice.elapsed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!conversation || !other) {
     return (
@@ -244,6 +258,19 @@ export default function Thread() {
 
           // In a group, the sender's name over the first of their run of messages.
           const who = group && !mine && !inRun ? <Text style={styles.sender}>{users.find((u) => u.id === message.senderId)?.name.split(' ')[0] ?? 'Someone'}</Text> : null;
+
+          if (message.kind === 'voice' && message.audio) {
+            return (
+              <React.Fragment key={message.id}>
+              {stamp}
+              {who}
+              <Reanimated.View entering={arrive} layout={LinearTransition.duration(120)} style={[styles.row, mine ? styles.rowMine : styles.rowTheirs, inRun && styles.inRun]}>
+                <View style={{ opacity: message.failed ? 0.5 : 1 }}><VoiceNote url={message.audio.url} ms={message.audio.ms} mine={mine} /></View>
+              </Reanimated.View>
+              {message.failed ? <Text style={[styles.sender, { alignSelf: 'flex-end', marginRight: spacing.lg, color: colors.danger }]}>Not sent</Text> : null}
+              </React.Fragment>
+            );
+          }
 
           if (message.kind === 'court' && message.place) {
             const place = message.place;
@@ -406,6 +433,20 @@ export default function Thread() {
           <Text style={styles.blockedNoteText}>You can't message this account.</Text>
         </View>
       ) : (
+      voice.recording ? (
+      <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, spacing.md) + keyboardInset }]}>
+        <Tappable accessibilityLabel="Throw the recording away" onPress={() => { void voice.finish(); }} style={styles.emojiToggle}>
+          <Ionicons name="trash-outline" size={22} color={colors.danger} />
+        </Tappable>
+        <View style={styles.recording}>
+          <View style={styles.recDot} />
+          <Text style={styles.recText}>Recording · {clock(voice.elapsed)}</Text>
+        </View>
+        <Tappable immediate onPress={() => { void sendRecording(); }} accessibilityLabel="Send voice note" style={styles.send}>
+          <Ionicons name="arrow-up" size={19} color={colors.brandInk} />
+        </Tappable>
+      </View>
+      ) : (
       <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, spacing.md) + keyboardInset }]}>
         <Tappable
           accessibilityLabel={emojiOpen ? 'Hide emoji' : 'Add an emoji'}
@@ -436,9 +477,13 @@ export default function Thread() {
           returnKeyType="send"
           accessibilityLabel="Message text"
         />
-        <SendButton ready={!!draft.trim() && (!editing || draft.trim() !== editing.body)} editing={!!editing} onPress={send} styles={styles} />
+        {!draft.trim() && !editing ? (
+          <Tappable immediate onPress={() => { void startRecording(); }} accessibilityLabel="Record a voice note" style={styles.mic}>
+            <Ionicons name="mic-outline" size={21} color={colors.text} />
+          </Tappable>
+        ) : <SendButton ready={!!draft.trim() && (!editing || draft.trim() !== editing.body)} editing={!!editing} onPress={send} styles={styles} />}
       </View>
-      )}
+      ))}
     </KeyboardAvoidingView>
   );
 }
@@ -777,6 +822,10 @@ const styleDefinitions = StyleSheet.create({
     color: colors.text,
     ...typography.body,
   },
+  mic: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border },
+  recording: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, height: 44, paddingHorizontal: spacing.lg, borderRadius: 22, backgroundColor: colors.surface },
+  recDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.danger },
+  recText: { ...typography.body, ...font('600'), color: colors.text, fontVariant: ['tabular-nums'] },
   send: {
     width: 40,
     height: 40,
