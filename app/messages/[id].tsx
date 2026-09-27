@@ -4,6 +4,7 @@ import { PlayerName } from '@/components/PlayerName';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -19,12 +20,15 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { useIsFocused } from '@/lib/useIsFocused';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 
 import { Avatar, EmptyState } from '@/components/ui';
 import { GroupAvatar, groupName, isGroupChat, othersIn } from '@/features/messages/groups';
 import { VoiceNote } from '@/components/VoiceNote';
+import { EmojiKeyboard } from '@/components/EmojiKeyboard';
+import { isDesktopBrowser } from '@/lib/browserDevice';
 import { VOICE_LIMIT_MS, clock, useVoiceRecorder } from '@/features/voice/useVoiceRecorder';
 import { openInMaps } from '@/features/players/openInMaps';
 import { Tappable, useDoubleTap } from '@/components/Tappable';
@@ -67,6 +71,14 @@ export default function Thread() {
     vv.addEventListener('resize', update); vv.addEventListener('scroll', update);
     return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
   }, []);
+  // The emoji keyboard takes the phone keyboard's place at the phone keyboard's
+  // height, so switching between them leaves the typing bar where it was.
+  const keyboardHeight = useRef(Platform.OS === 'web' ? 260 : 300);
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const sub = Keyboard.addListener('keyboardDidShow', (e) => { keyboardHeight.current = Math.max(220, e.endCoordinates.height - insets.bottom); });
+    return () => sub.remove();
+  }, [insets.bottom]);
   const scrollRef = useRef<ScrollView | null>(null);
   // Only messages that arrive after the first paint rise in; the history just appears.
   const settled = useRef(false);
@@ -157,6 +169,26 @@ export default function Thread() {
       </View>
     );
   }
+  // An emoji goes in where the cursor is, and the cursor moves past it.
+  const placeCaret = (at: number) => { setCaret(at); setTimeout(() => inputRef.current?.setNativeProps?.({ selection: { start: at, end: at } }), 0); };
+  const insertEmoji = (emoji: string) => {
+    const at = Math.min(caret, draft.length);
+    setDraft(draft.slice(0, at) + emoji + draft.slice(at));
+    placeCaret(at + emoji.length);
+  };
+  const deleteBack = () => {
+    const at = Math.min(caret, draft.length);
+    if (at === 0) return;
+    const before = dropLastCharacter(draft.slice(0, at));
+    setDraft(before + draft.slice(at));
+    placeCaret(before.length);
+  };
+  // The emoji button swaps the phone keyboard for the emoji one and back.
+  const toggleEmoji = () => {
+    if (emojiOpen) { setEmojiOpen(false); inputRef.current?.focus(); return; }
+    Keyboard.dismiss();
+    setEmojiOpen(true);
+  };
   const mention = activeMention(draft, caret);
   const mentionRows = mention ? candidatesFor(mention.query, 5) : [];
   const pickMention = (handle: string) => {
@@ -369,23 +401,6 @@ export default function Thread() {
         </Text>}
       </ScrollView>
 
-      {emojiOpen ? (
-        <Reanimated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.emojiTray}>
-          {/* Just the emoji, in even rows of eight: tap one and it goes into the message. */}
-          {EMOJI.map((emoji) => (
-            <Pressable
-              key={emoji}
-              accessibilityRole="button"
-              accessibilityLabel={`Add ${emoji}`}
-              onPress={() => { haptics.tap(); setDraft((d) => d + emoji); inputRef.current?.focus(); }}
-              style={({ pressed }) => [styles.emojiKey, pressed && styles.emojiKeyPressed]}
-            >
-              <Text style={styles.emojiGlyph}>{emoji}</Text>
-            </Pressable>
-          ))}
-        </Reanimated.View>
-      ) : null}
-
       {menu ? (
         <MessageMenu
           target={menu}
@@ -437,17 +452,16 @@ export default function Thread() {
         </Tappable>
       </View>
       ) : (
-      <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, spacing.md) + keyboardInset }]}>
+      <>
+      <View style={[styles.composer, { paddingBottom: emojiOpen ? spacing.sm : Math.max(insets.bottom, spacing.md) + keyboardInset }]}>
         <Tappable
-          accessibilityLabel={emojiOpen ? 'Hide emoji' : 'Add an emoji'}
-          onPress={() => setEmojiOpen((open) => !open)}
+          accessibilityLabel={emojiOpen ? 'Show the keyboard' : 'Add an emoji'}
+          onPress={toggleEmoji}
           style={styles.emojiToggle}
         >
-          <Ionicons
-            name={emojiOpen ? 'happy' : 'happy-outline'}
-            size={23}
-            color={emojiOpen ? colors.brand : colors.textMuted}
-          />
+          {emojiOpen && !desktopWeb
+            ? <MaterialCommunityIcons name="keyboard-outline" size={24} color={colors.textMuted} />
+            : <Ionicons name={emojiOpen ? 'happy' : 'happy-outline'} size={23} color={emojiOpen ? colors.brand : colors.textMuted} />}
         </Tappable>
         <Tappable accessibilityLabel="Send a court" onPress={() => router.push({ pathname: '/pick-court', params: { conversation: conversation.id } })} style={styles.emojiToggle}>
           <Ionicons name="location-outline" size={23} color={colors.textMuted} />
@@ -457,6 +471,8 @@ export default function Thread() {
           value={draft}
           onChangeText={(text) => { setDraft(text); setCaret((c) => c + (text.length - draft.length)); }}
           onSelectionChange={(e) => setCaret(e.nativeEvent.selection.end)}
+          // Tapping into the words brings the phone keyboard back in the emoji keyboard's place.
+          onFocus={() => { if (emojiOpen && !desktopWeb) setEmojiOpen(false); }}
           placeholder="Message…"
           placeholderTextColor={colors.textFaint}
           style={styles.input}
@@ -473,6 +489,8 @@ export default function Thread() {
           </Tappable>
         ) : <SendButton ready={!!draft.trim() && (!editing || draft.trim() !== editing.body)} editing={!!editing} onPress={send} styles={styles} />}
       </View>
+      {emojiOpen ? <EmojiKeyboard height={keyboardHeight.current} bottomInset={insets.bottom} onPick={insertEmoji} onDelete={deleteBack} /> : null}
+      </>
       ))}
     </KeyboardAvoidingView>
   );
@@ -647,15 +665,28 @@ function MessageMenu({ target, me, styles, onClose, onReact, onCopy, onEdit, onU
   );
 }
 
+const desktopWeb = Platform.OS === 'web' && isDesktopBrowser();
+
+/**
+ * The text with its last visible character taken off: an emoji can be several
+ * code points (a heart and its colour mark, a thumb and its skin tone, a
+ * family joined up), and deleting half of one leaves a broken glyph.
+ */
+function dropLastCharacter(text: string): string {
+  const chars = Array.from(text);
+  while (chars.length) {
+    const cp = chars.pop()!.codePointAt(0) ?? 0;
+    const glued = cp === 0xfe0f || cp === 0x200d || cp === 0x20e3 || (cp >= 0x1f3fb && cp <= 0x1f3ff);
+    if (glued) continue;
+    if (chars.length && chars[chars.length - 1] === '\u200d') { chars.pop(); continue; }
+    break;
+  }
+  return chars.join('');
+}
+
 /** Offered on a long press. Small on purpose — a wall of emoji slows the choice. */
 const REACTIONS = ['❤️', '😂', '🔥', '👏', '😮', '😢', '👍', '🎾'];
 
-/** For the composer. Tennis first, then the ones people actually reach for. */
-const EMOJI = [
-  '🎾', '🔥', '💪', '🏆', '⚡️', '🎯', '👏', '🙌',
-  '❤️', '😂', '😅', '😮', '😭', '🫡', '👍', '👎',
-  '🤝', '😤', '🥵', '🧊', '✅', '❌', '⏱️', '🙏',
-];
 
 /** The send arrow: dim and small with nothing to send, springing up to full size as you type. */
 function SendButton({ ready, editing = false, onPress, styles }: { ready: boolean; editing?: boolean; onPress: () => void; styles: any }) {
@@ -760,19 +791,6 @@ const styleDefinitions = StyleSheet.create({
     borderColor: colors.bg,
   },
   chipMine: { backgroundColor: colors.brandDim },
-  // Eight to a row, each key an equal share of the width: even rows, nothing ragged.
-  emojiTray: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    backgroundColor: colors.bgElevated,
-  },
-  emojiKey: { width: '12.5%', height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md },
-  emojiKeyPressed: { backgroundColor: colors.surfaceAlt },
-  emojiGlyph: { fontSize: 26, lineHeight: 32 },
   emojiToggle: { padding: 4 },
   mineAlign: { alignSelf: 'flex-end' },
   // Bubbles in one run sit closer than the list's usual gap.
