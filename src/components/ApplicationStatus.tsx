@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Reanimated, { Easing, FadeInDown } from 'react-native-reanimated';
 
 import { LiveDot } from '@/components/LiveDot';

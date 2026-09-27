@@ -617,9 +617,17 @@ export type NotificationKind =
   /** Your coach answered your booking. */
   | 'coach-answer'
   /** Money came back on a booking. */
-  | 'refund';
+  | 'refund'
+  /** Someone upvoted your thread. */
+  | 'upvote'
+  /** Someone upvoted your reply in a thread. */
+  | 'upvote-reply'
+  /** Your post passed a view count (10, 25, 50, 100...). Actor is you. */
+  | 'milestone'
+  /** A new player near you just joined. Actor is them. */
+  | 'joined';
 
-export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application' | 'report' | 'coaching-request';
+export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application' | 'report' | 'coaching-request' | 'profile';
 
 export interface Notification {
   id: ID;

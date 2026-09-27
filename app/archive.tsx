@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { EmptyState, Screen, SegmentedControl } from '@/components/ui';

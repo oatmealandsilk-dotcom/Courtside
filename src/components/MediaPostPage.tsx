@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ZoomableMedia, type HomeRect, type ZoomableMediaHandle } from '@/components/ZoomableMedia';
 import { router } from 'expo-router';
 import * as haptics from '@/lib/haptics';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Heart } from '@/components/Heart';
 
 import { PostVideo } from '@/components/PostVideo';

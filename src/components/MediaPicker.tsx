@@ -2,7 +2,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 import React, { useRef, useState } from 'react';
 import { Image, Modal, Pressable, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { ZoomableMedia } from './ZoomableMedia';
 import { cropLayer } from '@/lib/crop';
 import type { MediaCrop } from '@/data/types';

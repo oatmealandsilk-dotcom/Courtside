@@ -1,6 +1,6 @@
 import { useTheme } from '@/theme/ThemeProvider';
 import { useSoundMuted } from '@/features/feed/sound';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useEffect, useRef, useState, memo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@/theme';

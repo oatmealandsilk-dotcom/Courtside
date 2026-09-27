@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import Reanimated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 /** The heart's red: bright and warm, the one that gets a reaction. */
 export const LIKE_RED = '#FF3B5C';

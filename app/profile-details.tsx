@@ -5,7 +5,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { useLocalSearchParams, router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { AchievementGrid } from '@/components/AchievementGrid';
 import { LevelPill } from '@/components/LevelPill';

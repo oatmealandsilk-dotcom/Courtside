@@ -4,7 +4,7 @@ import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-n
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Chip, EmptyState, Screen, SegmentedControl } from '@/components/ui';
 import { TipComposer } from '@/components/TipComposer';
