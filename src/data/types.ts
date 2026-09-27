@@ -658,6 +658,21 @@ export type NotificationKind =
 
 export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application' | 'report' | 'coaching-request' | 'profile' | 'hit-request';
 
+/** What one player says about a public court on the map. Unsaid is left out. */
+export interface CourtNote {
+  /** The court's OpenStreetMap id, as the map knows it: "way123456". */
+  courtId: string;
+  userId: ID;
+  lights?: boolean;
+  surface?: 'hard' | 'clay' | 'grass' | 'other';
+  nets?: 'good' | 'worn' | 'missing';
+  /** How busy it usually is: walk on, sometimes a wait, usually busy. */
+  busy?: 'quiet' | 'wait' | 'busy';
+  photoUrl?: string;
+  note?: string;
+  updatedAt: string;
+}
+
 /** "Looking for a hit": someone wants a game, and says when, where and at what level (migration 43). */
 export interface HitRequest {
   id: ID;

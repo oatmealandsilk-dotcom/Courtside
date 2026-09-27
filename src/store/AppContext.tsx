@@ -69,6 +69,7 @@ import type {
   SavedItems,
   SessionDetail,
   PracticeSession,
+  CourtNote,
   HitRequest,
   Story,
   User,
@@ -278,6 +279,8 @@ interface AppState extends Bootstrap {
   tips: Tip[];
   /** Your own practice log: where streaks, hours and win rate come from. */
   sessions: PracticeSession[];
+  /** What players say about the courts opened on the map, by court id; loaded when a court is opened. */
+  courtNotes: Record<string, CourtNote[]>;
   /** Open "Looking for a hit" posts. */
   hitRequests: HitRequest[];
   /** Small switches from Settings, kept with the account. */
@@ -353,6 +356,10 @@ interface AppActions {
   updateIdentity: (patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string }) => void;
   updateProfile: (patch: Partial<PlayerProfile>) => void;
   /** Log a session you played (today unless a day is given). Throws a plain sentence when it cannot be saved. */
+  /** Fetches what players say about a court (on opening it on the map). */
+  loadCourtNotes: (courtId: string) => Promise<void>;
+  /** Saves your report on a court, replacing any earlier one; a photo on the phone is uploaded first. */
+  saveCourtNote: (input: Omit<CourtNote, 'userId' | 'updatedAt'>) => Promise<void>;
   logSession: (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; opponent?: string; note?: string; day?: string }) => Promise<void>;
   deleteSession: (id: ID) => void;
   /** Post a "Looking for a hit". Throws a plain sentence if it cannot be posted. */
@@ -802,6 +809,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     prefs: { showActivity: true, pushLikes: true, pushCoach: true },
     tips: [],
     sessions: [],
+    courtNotes: {},
     hitRequests: [],
     locationEnabled: readFlag('courtside-location'),
     detectedLocation: null,
@@ -1326,6 +1334,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, sessions: prev.sessions.filter((x) => x.id !== id) }));
     if (live(me)) void remote.deleteSession(id);
   }, []);
+
+  const loadCourtNotes = useCallback(async (courtId: string) => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me)) return;
+    const notes = await remote.fetchCourtNotes(courtId);
+    setState((prev) => ({ ...prev, courtNotes: { ...prev.courtNotes, [courtId]: notes } }));
+  }, []);
+
+  const saveCourtNote = useCallback(async (input: Omit<CourtNote, 'userId' | 'updatedAt'>) => {
+    const me = requireUser();
+    const note: CourtNote = { ...input, note: input.note?.trim() || undefined, userId: me, updatedAt: new Date().toISOString() };
+    const put = (n: CourtNote) => setState((prev) => ({
+      ...prev,
+      courtNotes: { ...prev.courtNotes, [n.courtId]: [n, ...(prev.courtNotes[n.courtId] ?? []).filter((x) => x.userId !== me)] },
+    }));
+    const before = stateRef.current.courtNotes[input.courtId];
+    haptics.commit();
+    put(note);
+    if (!live(me)) return;
+    try {
+      const photoUrl = isLocalMedia(note.photoUrl) ? await uploadMedia(me, note.photoUrl!, 'photo') : note.photoUrl;
+      const saved = { ...note, photoUrl };
+      await remote.saveCourtNote(saved);
+      put(saved);
+    } catch (e) {
+      setState((prev) => ({ ...prev, courtNotes: { ...prev.courtNotes, [input.courtId]: before ?? [] } }));
+      throw e;
+    }
+  }, [requireUser]);
 
   const postHit = useCallback(async (input: Omit<HitRequest, 'id' | 'authorId' | 'createdAt' | 'joinedIds' | 'conversationId' | 'cancelled'>): Promise<ID> => {
     const me = requireUser();
@@ -3331,6 +3368,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateProfile,
       logSession,
       deleteSession,
+      loadCourtNotes,
+      saveCourtNote,
       postHit,
       joinHit,
       leaveHit,
@@ -3461,6 +3500,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateProfile,
       logSession,
       deleteSession,
+      loadCourtNotes,
+      saveCourtNote,
       postHit,
       joinHit,
       leaveHit,

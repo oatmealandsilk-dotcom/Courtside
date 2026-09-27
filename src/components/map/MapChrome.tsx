@@ -12,6 +12,10 @@ import { LevelPill } from '@/components/LevelPill';
 import { Tappable } from '@/components/Tappable';
 import * as haptics from '@/lib/haptics';
 import type { Court } from '@/features/players/courts';
+import { summarizeCourt } from '@/features/players/courtSummary';
+import { useApp } from '@/store/AppContext';
+import { router } from 'expo-router';
+import { Image as ExpoImage } from 'expo-image';
 import { formatMiles } from '@/features/players/geo';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { LevelPill as Level } from '@/components/LevelPill';
@@ -367,10 +371,15 @@ export function YouSheet({ me, open, onToggle, onProfile, onClose }: { me: User;
   );
 }
 
-/** A court, picked on the map. */
+/** A court, picked on the map: what OpenStreetMap knows, then what players say, and a way to add to it. */
 export function CourtSheet({ court, miles, onClose, onDirections }: { court: Court; miles: number; onClose: () => void; onDirections: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const pull = useDragToClose(onClose);
+  const { courtNotes, currentUserId, actions } = useApp();
+  useEffect(() => { void actions.loadCourtNotes(court.id).catch(() => undefined); }, [court.id, actions]);
+  const notes = courtNotes[court.id] ?? [];
+  const said = summarizeCourt(notes);
+  const mine = notes.some((n) => n.userId === currentUserId);
   const facts = [court.count > 1 ? `${court.count} courts` : '1 court', court.surface ? court.surface.replace(/_/g, ' ') : null, court.lit ? 'lit at night' : null].filter(Boolean).join(' · ');
   return (
     <GestureDetector gesture={pull.gesture}>
@@ -386,13 +395,36 @@ export function CourtSheet({ court, miles, onClose, onDirections }: { court: Cou
           <Ionicons name="close" size={18} color={colors.textMuted} />
         </Pressable>
       </View>
+      {said.players ? (
+        <View style={styles.says}>
+          {said.facts.length ? (
+            <View style={styles.saysFacts}>
+              {said.facts.map((f) => (
+                <View key={f.label} style={styles.saysFact}>
+                  <Ionicons name={f.icon} size={13} color={colors.textMuted} />
+                  <Text style={styles.saysFactText}>{f.label}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+          {said.photos.length ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.saysPhotos}>
+              {said.photos.map((uri) => <ExpoImage key={uri} source={{ uri }} style={styles.saysPhoto} contentFit="cover" cachePolicy="memory-disk" accessibilityLabel="A player's photo of the court" />)}
+            </ScrollView>
+          ) : null}
+          {said.latest ? <Text style={styles.saysQuote} numberOfLines={2}>“{said.latest}”</Text> : null}
+        </View>
+      ) : null}
       <View style={styles.personActions}>
         <Pressable accessibilityRole="link" accessibilityLabel="Directions" onPress={onDirections} style={styles.primary}>
           <Ionicons name="navigate-outline" size={16} color={colors.brandInk} />
           <Text style={styles.primaryText}>Directions</Text>
         </Pressable>
-        <Text style={styles.courtNote}>From OpenStreetMap</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={mine ? 'Update what you said about this court' : 'Add what you know about this court'} onPress={() => router.push({ pathname: '/court-report', params: { id: court.id, name: court.name } })} style={styles.secondary}>
+          <Text style={styles.secondaryText}>{mine ? 'Update yours' : 'Add what you know'}</Text>
+        </Pressable>
       </View>
+      <Text style={styles.courtSource}>{said.players ? `From ${said.players} ${said.players === 1 ? 'player' : 'players'} and OpenStreetMap` : 'From OpenStreetMap. Know it? Add the lights, nets and how busy it gets.'}</Text>
     </Animated.View>
     </GestureDetector>
   );
@@ -495,7 +527,14 @@ const styleDefinitions = StyleSheet.create({
   openTitle: { ...typography.bodyStrong, color: colors.text },
   openNote: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
   courtDisc: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
-  courtNote: { ...typography.caption, color: colors.textFaint, letterSpacing: 0, marginLeft: 'auto' },
+  courtSource: { ...typography.caption, color: colors.textFaint, letterSpacing: 0, paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
+  says: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
+  saysFacts: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  saysFact: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, height: 28, borderRadius: radius.pill, backgroundColor: colors.bgElevated },
+  saysFactText: { ...typography.smallStrong, color: colors.text },
+  saysPhotos: { gap: spacing.sm },
+  saysPhoto: { width: 96, height: 72, borderRadius: 12, backgroundColor: colors.surfaceAlt },
+  saysQuote: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   // The still card's overlay.
   previewTitle: { position: 'absolute', left: 12, top: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   previewTitleText: { ...typography.smallStrong, color: colors.text },

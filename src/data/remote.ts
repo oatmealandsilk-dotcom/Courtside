@@ -17,7 +17,7 @@ import { shrinkPhoto } from '@/lib/shrinkPhoto';
 import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, Question, Story, Tip, User, CoachApplication } from './types';
+import type { Answer, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, Question, Story, Tip, User, CoachApplication } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
 
 /** What a new player did first, after setup. */
@@ -280,6 +280,11 @@ export interface UserState {
   constraints?: PlayerProfile['constraints'];
 }
 
+interface CourtNoteRow { court_id: string; user_id: string; lights: boolean | null; surface: CourtNote['surface'] | null; nets: CourtNote['nets'] | null; busy: CourtNote['busy'] | null; photo_url: string | null; note: string | null; updated_at: string }
+const toCourtNote = (r: CourtNoteRow): CourtNote => ({
+  courtId: r.court_id, userId: r.user_id, lights: r.lights ?? undefined, surface: r.surface ?? undefined, nets: r.nets ?? undefined,
+  busy: r.busy ?? undefined, photoUrl: r.photo_url ?? undefined, note: r.note ?? undefined, updatedAt: r.updated_at,
+});
 interface QuestionRow { id: string; author_id: string; title: string; body: string; topic: string; tags: string[]; votes: number; voted_by: Record<string, 1 | -1>; accepted_answer_id: string | null; edited_at: string | null; created_at: string }
 interface AnswerRow { id: string; question_id: string; author_id: string; parent_answer_id: string | null; body: string; votes: number; voted_by: Record<string, 1 | -1>; from_coach: boolean; created_at: string; media_url?: string | null; media_kind?: 'photo' | 'video' | null; media_thumb?: string | null }
 interface CoachQuestionRow { id: string; author_id: string; title: string; body: string; specialty: string; video_url: string | null; media_label: string | null; resolved: boolean; created_at: string }
@@ -1216,6 +1221,20 @@ export const remote = {
   async deleteSession(id: ID) {
     const { error } = await need().from('practice_sessions').delete().eq('id', id);
     if (error) fail('session delete')(error);
+  },
+  /** What players say about one court, newest first. Empty when the table is not there yet. */
+  async fetchCourtNotes(courtId: string): Promise<CourtNote[]> {
+    const { data, error } = await need().from('court_notes').select('*').eq('court_id', courtId).order('updated_at', { ascending: false }).limit(50);
+    if (error) { fail('court notes')(error); return []; }
+    return (data as CourtNoteRow[]).map(toCourtNote);
+  },
+  /** Your own report on a court; saving again replaces it. */
+  async saveCourtNote(n: CourtNote) {
+    const { error } = await need().from('court_notes').upsert({
+      court_id: n.courtId, user_id: n.userId, lights: n.lights ?? null, surface: n.surface ?? null, nets: n.nets ?? null,
+      busy: n.busy ?? null, photo_url: n.photoUrl ?? null, note: n.note ?? null,
+    }, { onConflict: 'court_id,user_id' });
+    if (error) { fail('court note')(error); throw new Error('That didn’t save. Try again.'); }
   },
   async insertHit(h: HitRequest) {
     const { error } = await need().from('hit_requests').insert({
