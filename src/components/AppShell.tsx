@@ -103,7 +103,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // menu sits at the side, out of their way, so it stays, the way
   // Instagram's does behind its Create box. Sign-in, setup and the camera
   // hide it everywhere.
-  const phoneOnlyHide = ['/compose', '/edit-post', '/ask', '/ask-coach', '/pick-location', '/pick-court', '/invite', '/comments', '/share', '/likes', '/post-menu', '/log-session', '/hit-request/new', '/court-report'].includes(pathname) || pathname.startsWith('/messages/');
+  const phoneOnlyHide = ['/compose', '/edit-post', '/ask', '/ask-coach', '/pick-location', '/pick-court', '/invite', '/comments', '/share', '/likes', '/post-menu', '/log-session', '/hit-request/new', '/court-report', '/wrapped'].includes(pathname) || pathname.startsWith('/messages/');
   const hideEverywhere = ['/sign-in', '/onboarding', '/agree', '/first-move', '/hit'].includes(pathname) || pathname.startsWith('/story/');
   const showNav = !!currentUserId && !hideEverywhere && !(isPhone && phoneOnlyHide);
   // A shared link opened while signed out goes to sign-in, not to an empty page.

@@ -20,8 +20,11 @@ import { playStyleLabel, surfaceLabel } from '@/lib/badges';
 import { compactNumber } from '@/lib/format';
 import { TileViews } from '@/components/TileViews';
 import { colors, spacing, typography, font, lift } from '@/theme';
+import { wrappedYear } from '@/features/wrapped/yearInTennis';
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
+ // December to mid-January: the year's recap sits at the top of your links.
+ const wrapped = wrappedYear();
   const styles = useThemedStyles(styleDefinitions);
  const { currentUser: user, posts, questions, answers, saved, conversations, notifications, currentUserId, savedAccounts, actions } = useApp();
  // Nothing posted, asked or answered yet: the profile offers the first move.
@@ -144,6 +147,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    {/* One grouped list, the way Settings reads, instead of three boxes. */}
    <View style={styles.links}>
      <Pressable accessibilityRole="link" accessibilityLabel="Saved videos and discussions" onPress={() => router.push('/saved')} style={({ pressed }) => [styles.linkRow, pressed && styles.linkPressed]}><Ionicons name="bookmark-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Saved</Text>{savedCount ? <Text style={styles.linkValue}>{savedCount}</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
+     {wrapped ? <Pressable accessibilityRole="link" accessibilityLabel={`Your ${wrapped} in tennis`} onPress={() => router.push('/wrapped')} style={({ pressed }) => [styles.linkRow, styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="sparkles-outline" size={20} color={colors.brand}/><Text style={styles.linkText}>Your {wrapped} in tennis</Text><Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable> : null}
      <Pressable accessibilityRole="link" accessibilityLabel="Invite your hitting partners" onPress={() => router.push('/invite')} style={({ pressed }) => [styles.linkRow, styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="person-add-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Invite your hitting partners</Text><Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
      <Pressable accessibilityRole="link" accessibilityLabel="Health and nutrition" onPress={() => router.push('/health')} style={({ pressed }) => [styles.linkRow, styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="pulse-outline" size={20} color={colors.text}/><View style={{ flex: 1, gap: 1 }}><Text style={styles.linkText}>Health and nutrition</Text><Text style={styles.linkDetail}>Apple Health, WHOOP, Cronometer, MyFitnessPal</Text></View><Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
    </View>
