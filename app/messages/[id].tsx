@@ -371,29 +371,17 @@ export default function Thread() {
 
       {emojiOpen ? (
         <Reanimated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.emojiTray}>
-          <View style={styles.defaultRow}>
-            <Text style={styles.defaultHint}>Double tap a message to leave</Text>
-            {REACTIONS.map((emoji) => (
-              <Tappable
-                key={emoji}
-                accessibilityLabel={`Use ${emoji} when you double tap a message`}
-                accessibilityState={{ selected: defaultReaction === emoji }}
-                onPress={() => actions.setDefaultReaction(emoji)}
-                style={[styles.defaultKey, defaultReaction === emoji && styles.defaultKeyOn]}
-              >
-                <Text style={{ fontSize: 17 }}>{emoji}</Text>
-              </Tappable>
-            ))}
-          </View>
+          {/* Just the emoji, in even rows of eight: tap one and it goes into the message. */}
           {EMOJI.map((emoji) => (
-            <Tappable
+            <Pressable
               key={emoji}
+              accessibilityRole="button"
               accessibilityLabel={`Add ${emoji}`}
-              onPress={() => { setDraft((d) => d + emoji); inputRef.current?.focus(); }}
-              style={styles.emojiKey}
+              onPress={() => { haptics.tap(); setDraft((d) => d + emoji); inputRef.current?.focus(); }}
+              style={({ pressed }) => [styles.emojiKey, pressed && styles.emojiKeyPressed]}
             >
-              <Text style={{ fontSize: 22 }}>{emoji}</Text>
-            </Tappable>
+              <Text style={styles.emojiGlyph}>{emoji}</Text>
+            </Pressable>
           ))}
         </Reanimated.View>
       ) : null}
@@ -409,6 +397,8 @@ export default function Thread() {
           onEdit={() => { setEditing(menu.message); setDraft(menu.message.body); setCaret(menu.message.body.length); setTimeout(() => inputRef.current?.focus(), 60); }}
           onUnsend={() => actions.unsendMessage(menu.message.id)}
           onDelete={() => actions.deleteMessageForMe(menu.message.id)}
+          doubleTap={defaultReaction}
+          onDoubleTap={(emoji) => { actions.setDefaultReaction(emoji); showToast({ title: `Double tap now leaves ${emoji}`, icon: 'heart-outline' }); }}
         />
       ) : null}
 
@@ -581,10 +571,13 @@ function HoldArea({ onHold, style, children }: { onHold: (rect: Rect) => void; s
  * it and the actions below. Your own message: Copy, Edit, Unsend, Delete.
  * Theirs: Copy and Delete. Delete only takes it out of your own view.
  */
-function MessageMenu({ target, me, styles, onClose, onReact, onCopy, onEdit, onUnsend, onDelete }: {
+function MessageMenu({ target, me, styles, onClose, onReact, onCopy, onEdit, onUnsend, onDelete, doubleTap, onDoubleTap }: {
   target: MenuTarget; me: string | null; styles: any;
   onClose: () => void; onReact: (emoji: string) => void; onCopy: () => void; onEdit: () => void; onUnsend: () => void; onDelete: () => void;
+  /** The reaction a double tap leaves, and how to change it: the last row turns the reactions above into that choice. */
+  doubleTap: string; onDoubleTap: (emoji: string) => void;
 }) {
+  const [choosing, setChoosing] = useState(false);
   const { width: W, height: H } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { message, mine, rect } = target;
@@ -595,8 +588,9 @@ function MessageMenu({ target, me, styles, onClose, onReact, onCopy, onEdit, onU
     ...(mine ? [{ key: 'unsend', label: 'Unsend', icon: 'arrow-undo-outline' as const, run: onUnsend }] : []),
     { key: 'delete', label: mine ? 'Delete for you' : 'Delete', icon: 'trash-outline' as const, run: onDelete, danger: true },
   ];
+  const rows = actions.length + 1;
   const ROW = 46, CARD_W = 220, BAR_H = 46, GAP = 8;
-  const cardH = actions.length * ROW;
+  const cardH = rows * ROW;
   // Reactions above, the message, the actions below; the group slides up or
   // down as one if it would run off the screen, the way iMessage does.
   const top = rect.y - BAR_H - GAP;
@@ -620,11 +614,22 @@ function MessageMenu({ target, me, styles, onClose, onReact, onCopy, onEdit, onU
         ) : null}
         <Reanimated.View entering={FadeInDown.duration(160).easing(Easing.out(Easing.cubic))} style={[styles.menuReactions, { top: top - shift, height: BAR_H }, side(REACTIONS.length * 38 + 12)]}>
           {REACTIONS.map((emoji) => (
-            <Pressable key={emoji} accessibilityRole="button" accessibilityLabel={`React with ${emoji}`} onPress={() => pick(() => onReact(emoji))} style={[styles.menuReaction, mark === emoji && styles.menuReactionOn]}>
+            <Pressable
+              key={emoji}
+              accessibilityRole="button"
+              accessibilityLabel={choosing ? `Double tap leaves ${emoji}` : `React with ${emoji}`}
+              onPress={() => pick(() => (choosing ? onDoubleTap(emoji) : onReact(emoji)))}
+              style={[styles.menuReaction, (choosing ? doubleTap === emoji : mark === emoji) && styles.menuReactionOn]}
+            >
               <Text style={{ fontSize: 22 }}>{emoji}</Text>
             </Pressable>
           ))}
         </Reanimated.View>
+        {choosing ? (
+          <Reanimated.View entering={FadeIn.duration(140)} pointerEvents="none" style={[styles.menuHint, { top: top - shift - 30 }, side(REACTIONS.length * 38 + 12)]}>
+            <Text style={styles.menuHintText}>Pick what a double tap leaves</Text>
+          </Reanimated.View>
+        ) : null}
         <Reanimated.View entering={FadeInUp.duration(160).easing(Easing.out(Easing.cubic))} style={[styles.menuCard, { top: rect.y + rect.h + GAP - shift, width: CARD_W }, side(CARD_W)]}>
           {actions.map((a, i) => (
             <Pressable key={a.key} accessibilityRole="button" onPress={() => pick(a.run)} style={({ pressed }) => [styles.menuRow, i > 0 && styles.menuRowRule, pressed && styles.menuRowPressed]}>
@@ -632,6 +637,10 @@ function MessageMenu({ target, me, styles, onClose, onReact, onCopy, onEdit, onU
               <Ionicons name={a.icon} size={19} color={a.danger ? colors.danger : colors.text} />
             </Pressable>
           ))}
+          <Pressable accessibilityRole="button" accessibilityLabel={`Double tap leaves ${doubleTap}. Change it`} accessibilityState={{ selected: choosing }} onPress={() => { haptics.tap(); setChoosing((c) => !c); }} style={({ pressed }) => [styles.menuRow, styles.menuRowRule, (pressed || choosing) && styles.menuRowPressed]}>
+            <Text style={styles.menuLabel}>Double tap</Text>
+            <Text style={{ fontSize: 19 }}>{doubleTap}</Text>
+          </Pressable>
         </Reanimated.View>
       </Reanimated.View>
     </Modal>
@@ -727,6 +736,8 @@ const styleDefinitions = StyleSheet.create({
   menuReactions: { position: 'absolute', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, borderRadius: radius.pill, backgroundColor: colors.bgElevated, shadowColor: '#000', shadowOpacity: 0.16, shadowRadius: 14, shadowOffset: { width: 0, height: 4 } },
   menuReaction: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
   menuReactionOn: { backgroundColor: colors.brandDim },
+  menuHint: { position: 'absolute', alignItems: 'center' },
+  menuHintText: { ...typography.smallStrong, color: 'white', paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: 'rgba(0,0,0,0.55)', overflow: 'hidden' },
   menuCard: { position: 'absolute', borderRadius: radius.lg, backgroundColor: colors.bgElevated, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 16, shadowOffset: { width: 0, height: 6 } },
   menuRow: { height: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg },
   menuRowRule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
@@ -749,31 +760,19 @@ const styleDefinitions = StyleSheet.create({
     borderColor: colors.bg,
   },
   chipMine: { backgroundColor: colors.brandDim },
+  // Eight to a row, each key an equal share of the width: even rows, nothing ragged.
   emojiTray: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 2,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
     backgroundColor: colors.bgElevated,
   },
-  emojiKey: { padding: 6, borderRadius: radius.sm },
-  defaultRow: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 2,
-    paddingBottom: spacing.sm,
-    marginBottom: spacing.xs,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  defaultHint: { ...typography.caption, color: colors.textFaint, letterSpacing: 0, marginRight: spacing.xs },
-  defaultKey: { paddingHorizontal: 5, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1, borderColor: 'transparent' },
-  defaultKeyOn: { borderColor: colors.brand, backgroundColor: colors.brandDim },
+  emojiKey: { width: '12.5%', height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md },
+  emojiKeyPressed: { backgroundColor: colors.surfaceAlt },
+  emojiGlyph: { fontSize: 26, lineHeight: 32 },
   emojiToggle: { padding: 4 },
   mineAlign: { alignSelf: 'flex-end' },
   // Bubbles in one run sit closer than the list's usual gap.
