@@ -3,7 +3,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { Button, Chip, EmptyState, Field, Screen, Toggle } from '@/components/ui';
+import { Button, Chip, EmptyState, Field, Screen, Toggle, SegmentedControl } from '@/components/ui';
+import { BookingsPanel } from './coach-bookings';
+import { QuestionsPanel } from './coach-inbox';
 import type { CoachService, CoachSpecialty } from '@/data/types';
 import { confirmAction } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
@@ -28,7 +30,7 @@ const blank = (): Draft => ({ id: `new-${Date.now()}`, kind: 'video-review', tit
 export default function CoachStudio() {
   const styles = useThemedStyles(styleDefinitions);
   const { stripe: cameBack } = useLocalSearchParams<{ stripe?: string }>();
-  const { coaches, coachingRequests, currentUserId, currentUser, actions } = useApp();
+  const { coaches, coachingRequests, coachQuestions, currentUserId, currentUser, actions } = useApp();
   const payments = usePayments();
   const coach = coaches.find((c) => c.userId === currentUserId);
 
@@ -48,6 +50,8 @@ export default function CoachStudio() {
     setReply(coach.responseTimeHours);
   }, [coach]);
 
+  // One place for a coach: what is waiting (paid bookings, free questions) and their page.
+  const [tab, setTab] = useState<'bookings' | 'questions' | 'page' | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -114,8 +118,24 @@ export default function CoachStudio() {
     });
   };
 
+  const openCount = coachingRequests.filter((r) => (r.paidAt || !r.priceCents) && (r.coachId === coach.id || r.coachUserId === currentUserId) && isOpen(r)).length;
+  const waitingCount = coachQuestions.filter((q) => !q.resolved && q.replyIds.length === 0).length;
+  // Opens on whatever is waiting; with nothing waiting, on the page itself.
+  const shownTab = tab ?? (openCount ? 'bookings' : waitingCount ? 'questions' : 'page');
+
   return (
     <Screen title="Coach studio" compactTitle onBack={() => goBack()}>
+      <SegmentedControl
+        value={shownTab}
+        onChange={setTab}
+        segments={[
+          { value: 'bookings', label: openCount ? `Bookings · ${openCount}` : 'Bookings' },
+          { value: 'questions', label: waitingCount ? `Questions · ${waitingCount}` : 'Questions' },
+          { value: 'page', label: 'Your page' },
+        ]}
+      />
+      <View style={{ height: spacing.lg }} />
+      {shownTab === 'bookings' ? <BookingsPanel /> : shownTab === 'questions' ? <QuestionsPanel /> : <>
       {/* --------------------------------------------------------- steps */}
       <View style={styles.group}>
         {steps.map((s, index) => (
@@ -142,10 +162,6 @@ export default function CoachStudio() {
         </View>
       </View>
       <View style={styles.links}>
-        <Pressable accessibilityRole="link" onPress={() => router.push('/coach-bookings')} style={({ pressed }) => [styles.linkRow, pressed && { opacity: 0.7 }]}>
-          <Ionicons name="file-tray-full-outline" size={18} color={colors.text} />
-          <Text style={styles.linkText}>Bookings{open ? ` · ${open} open` : ''}</Text>
-        </Pressable>
         <Pressable accessibilityRole="link" onPress={() => router.push(`/coach/${coach.id}`)} style={({ pressed }) => [styles.linkRow, pressed && { opacity: 0.7 }]}>
           <Ionicons name="eye-outline" size={18} color={colors.text} />
           <Text style={styles.linkText}>See your page</Text>
@@ -255,6 +271,7 @@ export default function CoachStudio() {
           />
         </View>
       )}
+      </>}
     </Screen>
   );
 }
