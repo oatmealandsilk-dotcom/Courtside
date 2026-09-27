@@ -18,6 +18,8 @@ import { onSpaceBar } from '@/features/feed/keyboard';
 import { allowTurning, stayUpright } from '@/lib/orientation';
 
 const HIDE_AFTER_MS = 3000;
+// On a computer, how long the mouse rests before the controls (and in full screen the pointer) go.
+const IDLE_MS = 2200;
 // A phone's browser is a phone: no hover, no click-to-play. Only a computer gets those.
 const desktopWeb = Platform.OS === 'web' && isDesktopBrowser();
 const SKIP_S = 5;
@@ -203,7 +205,7 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
     <Animated.View pointerEvents={shown ? 'box-none' : 'none'} style={[StyleSheet.absoluteFill, { opacity: fade }]}>
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.scrim]} />
       {!paused ? bigButton : null}
-      <View style={styles.bottom}>
+      <View style={styles.bottom} onPointerEnter={desktopWeb ? () => { onControls.current = true; } : undefined} onPointerLeave={desktopWeb ? () => { onControls.current = false; } : undefined}>
         <View style={styles.timeRow}>
           <Text style={styles.time}>{clock(time.at)} <Text style={styles.timeDim}>/ {clock(time.length)}</Text></Text>
           <View style={{ flex: 1 }} />
@@ -232,19 +234,32 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
   // keeps running and it is the sound. Only in a browser does full screen
   // play a copy of its own, and then the one on the page stands aside.
   const ownCopy = full && !shared;
-  // Hover is judged on the whole player, so crossing a button is not "leaving".
+  // On a computer, the way YouTube does it: moving the mouse brings the
+  // controls up, and once it rests they fade (in full screen the pointer goes
+  // too), unless the video is paused or the mouse is resting on the controls.
+  // Hovering alone used to keep them up — and in full screen the mouse never
+  // leaves, so they never went.
   const hovering = useRef(false);
-  const hoverIn = () => { hovering.current = true; if (hideTimer.current) clearTimeout(hideTimer.current); if (!shown) show(true); };
-  const hoverOut = () => { hovering.current = false; if (hideTimer.current) clearTimeout(hideTimer.current); hideTimer.current = setTimeout(() => { if (!hovering.current) show(false); }, 40); };
+  const onControls = useRef(false);
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+  const nudge = () => {
+    hovering.current = true;
+    if (!shownRef.current) show(true);
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    hideTimer.current = setTimeout(() => { if (!pausedRef.current && !onControls.current) show(false); }, IDLE_MS);
+  };
+  const hoverOut = () => { hovering.current = false; if (hideTimer.current) clearTimeout(hideTimer.current); hideTimer.current = setTimeout(() => { if (!hovering.current && !pausedRef.current) show(false); }, 40); };
+  const idleCursor = desktopWeb && !shown && !paused ? ({ cursor: 'none' } as object) : null;
   return (
-    <View ref={rootRef} style={StyleSheet.absoluteFill} onPointerEnter={desktopWeb ? hoverIn : undefined} onPointerLeave={desktopWeb ? hoverOut : undefined}>
+    <View ref={rootRef} style={[StyleSheet.absoluteFill, !full && idleCursor]} onPointerMove={desktopWeb ? nudge : undefined} onPointerLeave={desktopWeb ? hoverOut : undefined}>
       <View style={cropLayer(crop)}>
         {/* The page is told only "in" and, when the player is freed, "gone"; a stall mid-play is this player's own spinner. */}
         <ClipVideo ref={player} uri={uri} poster={poster} active={active && !ownCopy} muted={silent || muted || !active || ownCopy} paused={paused} fit="cover" trimStart={trimStart} trimEnd={trimEnd} speed={speed} volume={volume}
           onProgress={onProgress}
           onReady={(ok) => { setReady(ok); if (ok) onReady?.(true); }} onGone={() => onReady?.(false)} onSize={onSize} />
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel="Show video controls" onPress={(e) => tap(e.nativeEvent.locationX)} onLayout={(e) => { width.current = Math.max(1, e.nativeEvent.layout.width); }} style={StyleSheet.absoluteFill} />
+      <Pressable accessibilityRole="button" accessibilityLabel="Show video controls" onPress={(e) => tap(e.nativeEvent.locationX)} onLayout={(e) => { width.current = Math.max(1, e.nativeEvent.layout.width); }} style={[StyleSheet.absoluteFill, idleCursor]} />
       {!ready && active && !paused ? <View pointerEvents="none" style={styles.centre}><CourtSpinner ink={discInk ?? 'white'} /></View> : null}
       {controls}
       {paused ? bigButton : null}
@@ -253,22 +268,29 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
       {/* Full screen: the same player, the whole screen (turns with the phone),
           the same buttons — a tap brings them up, a tap puts them away. */}
       <Modal visible={full} transparent animationType="none" statusBarTranslucent supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']} onRequestClose={closeFull}>
-        <View style={styles.fullRoot}>
+        {/* Full screen sits in its own layer, so it listens for the mouse itself. */}
+        <View style={[styles.fullRoot, idleCursor]} onPointerMove={desktopWeb ? nudge : undefined}>
           <ZoomableMedia ref={zoom} home={home} onDismiss={() => { setFull(false); setHome(undefined); }}>
-            {shared ? (
-              <View style={cropLayer(crop)}><VideoView player={shared} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} allowsPictureInPicture={false} /></View>
-            ) : (
-              // In a browser full screen plays its own copy, so the line and the clock follow that copy.
-              <View style={cropLayer(crop)}><ClipVideo uri={uri} poster={poster} active={full} muted={silent || muted} paused={paused} fit="contain" trimStart={trimStart} trimEnd={trimEnd} speed={speed} volume={volume} onProgress={onProgress} /></View>
-            )}
-            <Pressable accessibilityRole="button" accessibilityLabel="Show video controls" onPress={(e) => tap(e.nativeEvent.locationX)} style={StyleSheet.absoluteFill} />
-            {controls}
-            {paused ? bigButton : null}
-            {skip ? <View pointerEvents="none" style={[styles.skip, skip.side === 'left' ? { left: 40 } : { right: 40 }]}><Ionicons name={skip.side === 'left' ? 'play-back' : 'play-forward'} size={18} color="white" /><Text style={styles.skipText}>{skip.side === 'left' ? '−' : '+'}{SKIP_S * skip.n}s</Text></View> : null}
+            {/* The zoom layer keeps mouse moves to itself (it drags), so the controls listen from inside it. */}
+            <View style={StyleSheet.absoluteFill} onPointerMove={desktopWeb ? nudge : undefined}>
+              {shared ? (
+                <View style={cropLayer(crop)}><VideoView player={shared} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} allowsPictureInPicture={false} /></View>
+              ) : (
+                // In a browser full screen plays its own copy, so the line and the clock follow that copy.
+                <View style={cropLayer(crop)}><ClipVideo uri={uri} poster={poster} active={full} muted={silent || muted} paused={paused} fit="contain" trimStart={trimStart} trimEnd={trimEnd} speed={speed} volume={volume} onProgress={onProgress} /></View>
+              )}
+              <Pressable accessibilityRole="button" accessibilityLabel="Show video controls" onPress={(e) => tap(e.nativeEvent.locationX)} style={[StyleSheet.absoluteFill, idleCursor]} />
+              {controls}
+              {paused ? bigButton : null}
+              {skip ? <View pointerEvents="none" style={[styles.skip, skip.side === 'left' ? { left: 40 } : { right: 40 }]}><Ionicons name={skip.side === 'left' ? 'play-back' : 'play-forward'} size={18} color="white" /><Text style={styles.skipText}>{skip.side === 'left' ? '−' : '+'}{SKIP_S * skip.n}s</Text></View> : null}
+            </View>
           </ZoomableMedia>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close full screen" onPress={closeFull} style={[styles.close, { top: insets.top + 12 }]}>
-            <Ionicons name="close" size={22} color="white" />
-          </Pressable>
+          {/* On a computer the close button comes and goes with the controls; a phone keeps it, always a way out. */}
+          <Animated.View pointerEvents={desktopWeb && !shown ? 'none' : 'box-none'} style={[styles.close, { top: insets.top + 12 }, desktopWeb ? { opacity: fade } : null]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close full screen" onPress={closeFull} style={styles.closeHit}>
+              <Ionicons name="close" size={22} color="white" />
+            </Pressable>
+          </Animated.View>
         </View>
       </Modal>
     </View>
@@ -293,5 +315,6 @@ const styles = StyleSheet.create({
   fullRoot: { flex: 1, backgroundColor: 'transparent' },
   skip: { position: 'absolute', top: '50%', marginTop: -22, width: 64, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
   skipText: { color: 'white', fontSize: 11, ...font('700'), marginTop: 1 },
-  close: { position: 'absolute', right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
+  close: { position: 'absolute', right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.55)' },
+  closeHit: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 });
