@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
+import { GroupAvatar, groupName, isGroupChat, othersIn } from '@/features/messages/groups';
 import { Avatar, Chip, EmptyState, Screen } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
@@ -35,16 +36,17 @@ export default function Inbox() {
           .reverse()
           .map((id) => messages.find((m) => m.id === id))
           .find(Boolean);
-        return { conversation, other, last };
+        const group = isGroupChat(conversation);
+        return { conversation, other, last, group, name: group ? groupName(conversation, users, currentUserId) : other?.name ?? '', people: othersIn(conversation, users, currentUserId) };
       })
-      .filter((t) => Boolean(t.other) && !blockedIds.includes(t.other!.id))
+      .filter((t) => Boolean(t.other) && (t.group || !blockedIds.includes(t.other!.id)))
       .filter((t) =>
         section === 'coaches' ? Boolean(t.other?.isCoach)
         : section === 'clients' ? !t.other?.isCoach
         : true,
       )
       .filter((t) =>
-        `${t.other?.name} ${t.other?.handle}`.toLowerCase().includes(search.trim().toLowerCase()),
+        `${t.name} ${t.group ? t.people.map((p) => p.name).join(' ') : t.other?.handle}`.toLowerCase().includes(search.trim().toLowerCase()),
       )
       .sort((a, b) => Date.parse(b.conversation.updatedAt) - Date.parse(a.conversation.updatedAt));
   }, [conversations, messages, users, currentUserId, search, section, blockedIds]);
@@ -55,6 +57,7 @@ export default function Inbox() {
     : { title: 'No messages yet', body: 'Find a player in Community and start a conversation.' };
 
   const preview = (kind?: string, body?: string) => {
+    if (kind === 'court') return 'Sent a court';
     if (kind === 'post') return 'Sent a clip';
     if (kind === 'question') return 'Sent a discussion';
     if (kind === 'profile') return 'Shared a profile';
@@ -100,25 +103,26 @@ export default function Inbox() {
         <EmptyState icon="chatbubble-ellipses-outline" title={emptyCopy.title} body={emptyCopy.body} action={{ label: 'New message', onPress: () => router.push('/messages/new') }} />
       ) : (
         <View style={styles.list}>
-          {threads.map(({ conversation, other, last }, index) => {
+          {threads.map(({ conversation, other, last, group, name, people }, index) => {
             const unread = conversation.unreadCount > 0;
             return (
               <Pressable
                 key={conversation.id}
                 accessibilityRole="link"
-                accessibilityLabel={`Open conversation with ${other?.name}`}
+                accessibilityLabel={`Open conversation with ${name}`}
                 onPress={() => router.push(`/messages/${conversation.id}`)}
                 style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
               >
-                <Avatar name={other?.name ?? '?'} seed={other?.avatarSeed ?? conversation.id} size={50} />
+                {group ? <GroupAvatar people={people} size={50} /> : <Avatar name={other?.name ?? '?'} seed={other?.avatarSeed ?? conversation.id} uri={other?.avatarUrl} size={50} />}
                 <View style={[styles.rowBody, index > 0 && styles.rowLine]}>
                   <View style={styles.rowTop}>
-                    <Text style={[styles.name, unread && styles.unreadName]} numberOfLines={1}>{other?.name}</Text>
+                    <Text style={[styles.name, unread && styles.unreadName]} numberOfLines={1}>{name}</Text>
                     <Text style={[styles.time, unread && styles.unreadTime]}>{relativeTime(conversation.updatedAt)}</Text>
                   </View>
                   <View style={styles.rowBottom}>
                     <Text numberOfLines={1} style={[styles.preview, unread && styles.unreadPreview]}>
-                      {preview(last?.kind, last?.body)}
+                      {/* In a group, whose message it was: "Mira: see you at 9". */}
+                      {group && last && last.senderId !== currentUserId ? `${users.find((u) => u.id === last.senderId)?.name.split(' ')[0] ?? 'Someone'}: ` : ''}{preview(last?.kind, last?.body)}
                     </Text>
                     {unread ? <View style={styles.dot} /> : null}
                   </View>
