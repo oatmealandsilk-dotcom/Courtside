@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeInDown, cancelAnimation, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { Avatar } from '@/components/ui';
 import { WrappedCard } from '@/components/WrappedCard';
@@ -16,8 +16,32 @@ import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { lightColors as brand, fontFamily } from '@/theme';
 
-type Slide = { key: string; tint: string; big?: string; title: string; sub?: string; extra?: React.ReactNode };
+type Slide = { key: string; tint: string; big?: string; title: string; sub?: string; extra?: React.ReactNode; /** Replaces the number, title and line for a slide with its own layout. */ content?: React.ReactNode };
 const SLIDE_MS = 5200;
+
+/**
+ * A tennis court in faint lines behind each slide, larger than the screen so
+ * only part of it shows, and in a new place on every slide: the same court,
+ * seen from somewhere else as the story moves on.
+ */
+function CourtLines({ index, width, height }: { index: number; width: number; height: number }) {
+  const W = Math.max(width, 380) * 1.15;
+  const H = W * 2.17;
+  // Chosen so the net (the brightest line) sits near the top or the bottom, never through the words.
+  const spots = [[0.35, -0.5], [-0.5, 0.3], [0.3, -0.48], [-0.25, 0.28], [0.45, -0.52]];
+  const [x, y] = spots[index % spots.length];
+  const line = 'rgba(255,255,255,0.08)';
+  const alley = W * 0.125;
+  const service = H * 0.23;
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', left: width * x, top: height * y, width: W, height: H, borderWidth: 2, borderColor: line }}>
+      <View style={{ position: 'absolute', top: 0, bottom: 0, left: alley, right: alley, borderLeftWidth: 2, borderRightWidth: 2, borderColor: line }} />
+      <View style={{ position: 'absolute', left: alley, right: alley, top: service, bottom: service, borderTopWidth: 2, borderBottomWidth: 2, borderColor: line }} />
+      <View style={{ position: 'absolute', left: W / 2 - 1, width: 2, top: service, bottom: service, backgroundColor: line }} />
+      <View style={{ position: 'absolute', left: -20, right: -20, top: H / 2 - 2, height: 4, backgroundColor: 'rgba(255,255,255,0.12)' }} />
+    </View>
+  );
+}
 
 /**
  * Your year in tennis, told a slide at a time like a story: tap the right of
@@ -43,10 +67,31 @@ export default function Wrapped() {
     if (data.hours) out.push({ key: 'hours', tint: brand.court, big: String(data.hours), title: data.hours === 1 ? 'hour on court' : 'hours on court', sub: `Across ${data.sessions} ${data.sessions === 1 ? 'session' : 'sessions'} you logged.` });
     if (data.clips) out.push({ key: 'clips', tint: brand.clay, big: String(data.clips), title: data.clips === 1 ? 'clip posted' : 'clips posted', sub: data.views ? `Watched ${compactNumber(data.views)} times.` : data.likes ? `${compactNumber(data.likes)} likes along the way.` : undefined });
     if (data.topPost) {
-      const cover = data.topPost.thumbnailUrl || data.topPost.imageUrl;
+      const post = data.topPost;
+      const cover = post.thumbnailUrl || post.imageUrl;
+      const likes = `${post.likedBy.length} ${post.likedBy.length === 1 ? 'like' : 'likes'}`;
+      const shot = post.kind === 'clip' || !!post.videoUrl;
       out.push({
-        key: 'top', tint: brand.grass, title: data.topPost.kind === 'clip' || data.topPost.videoUrl ? 'Your most-liked shot' : 'Your most-liked post', sub: `${data.topPost.likedBy.length} ${data.topPost.likedBy.length === 1 ? 'like' : 'likes'}`,
-        extra: cover ? <Image source={{ uri: cover }} style={styles.topCover} resizeMode="cover" /> : <View style={[styles.topCover, styles.topBlank]}><Text style={styles.topBlankText} numberOfLines={6}>{data.topPost.body}</Text></View>,
+        key: 'top', tint: brand.grass, title: shot ? 'Your most-liked shot' : 'Your most-liked post',
+        // A picture is a print laid on the page, a little askew, its likes pinned to the corner;
+        // words are the words themselves, set large like a pull quote.
+        content: cover ? (
+          <View style={styles.topWrap}>
+            <Text style={styles.eyebrow}>{shot ? 'Your most-liked shot' : 'Your most-liked post'}</Text>
+            <View style={styles.print}>
+              <Image source={{ uri: cover }} style={styles.printImage} resizeMode="cover" />
+              <View style={styles.likePill}><Ionicons name="heart" size={15} color="white" /><Text style={styles.likePillText}>{post.likedBy.length}</Text></View>
+            </View>
+            {post.body ? <Text style={styles.printCaption} numberOfLines={2}>{post.body}</Text> : null}
+          </View>
+        ) : (
+          <View style={styles.topWrap}>
+            <Text style={styles.eyebrow}>Your most-liked post</Text>
+            <Text style={styles.quoteMark}>“</Text>
+            <Text style={[styles.quote, post.body.length > 140 && styles.quoteLong]} numberOfLines={7}>{post.body}</Text>
+            <View style={styles.likeRow}><Ionicons name="heart" size={20} color="white" /><Text style={styles.likeRowText}>{likes}</Text></View>
+          </View>
+        ),
       });
     }
     if (data.matchesPlayed) out.push({ key: 'matches', tint: brand.hard, big: `${data.matchesWon}–${data.matchesPlayed - data.matchesWon}`, title: 'your match record', sub: `${data.matchesPlayed} ${data.matchesPlayed === 1 ? 'match' : 'matches'} played.` });
@@ -93,6 +138,7 @@ export default function Wrapped() {
   return (
     <View style={styles.root}>
       <LinearGradient colors={[slide.tint, '#0B120E']} start={{ x: 0.1, y: 0 }} end={{ x: 0.6, y: 1 }} style={StyleSheet.absoluteFill} />
+      {last ? null : <CourtLines index={index} width={width} height={height} />}
       {last ? null : (
         <Pressable accessibilityRole="button" accessibilityLabel="Next" onPress={(e) => go(e.nativeEvent.locationX < width / 3 ? -1 : 1)} style={StyleSheet.absoluteFill} />
       )}
@@ -128,12 +174,16 @@ export default function Wrapped() {
           </Pressable>
         </View>
       ) : (
-        <View pointerEvents="none" style={[styles.body, { paddingBottom: insets.bottom + 80 }]}>
-          {slide.extra}
-          {slide.big ? <Text style={[styles.big, slide.big.length > 4 && { fontSize: 88, lineHeight: 92 }]} adjustsFontSizeToFit numberOfLines={1}>{slide.big}</Text> : null}
-          <Text style={styles.title}>{slide.title}</Text>
-          {slide.sub ? <Text style={styles.sub}>{slide.sub}</Text> : null}
-        </View>
+        <Animated.View key={slide.key} entering={FadeInDown.duration(420).easing(Easing.out(Easing.cubic))} pointerEvents="none" style={[styles.body, { paddingTop: insets.top + 70, paddingBottom: insets.bottom + 70 }]}>
+          {slide.content ?? (
+            <>
+              {slide.extra}
+              {slide.big ? <Text style={[styles.big, slide.big.length > 4 && { fontSize: 88, lineHeight: 92 }]} adjustsFontSizeToFit numberOfLines={1}>{slide.big}</Text> : null}
+              <Text style={styles.title}>{slide.title}</Text>
+              {slide.sub ? <Text style={styles.sub}>{slide.sub}</Text> : null}
+            </>
+          )}
+        </Animated.View>
       )}
     </View>
   );
@@ -151,9 +201,18 @@ const styles = StyleSheet.create({
   big: { fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 120, lineHeight: 124, letterSpacing: -5, color: 'white', fontVariant: ['tabular-nums'] },
   title: { fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 32, lineHeight: 36, letterSpacing: -0.8, color: 'white' },
   sub: { fontFamily: fontFamily.medium, fontSize: 18, lineHeight: 25, color: 'rgba(255,255,255,0.78)', marginTop: 6, maxWidth: 420 },
-  topCover: { width: 190, height: 250, borderRadius: 20, marginBottom: 20, backgroundColor: 'rgba(255,255,255,0.1)' },
-  topBlank: { padding: 16, justifyContent: 'flex-end' },
-  topBlankText: { fontFamily: fontFamily.semibold, fontSize: 15, lineHeight: 20, color: 'white' },
+  topWrap: { gap: 14, maxWidth: 440 },
+  eyebrow: { fontFamily: fontFamily.semibold, fontWeight: '600', fontSize: 17, color: 'rgba(255,255,255,0.78)' },
+  quoteMark: { fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 110, lineHeight: 96, height: 62, color: 'rgba(255,255,255,0.35)', marginTop: 8 },
+  quote: { fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 31, lineHeight: 37, letterSpacing: -0.7, color: 'white' },
+  quoteLong: { fontSize: 25, lineHeight: 31, letterSpacing: -0.4 },
+  likeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, alignSelf: 'flex-start', paddingHorizontal: 16, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.14)' },
+  likeRowText: { fontFamily: fontFamily.semibold, fontWeight: '600', fontSize: 17, color: 'white' },
+  print: { marginTop: 8, alignSelf: 'flex-start', padding: 7, borderRadius: 22, backgroundColor: 'white', transform: [{ rotate: '-3deg' }], boxShadow: '0px 18px 40px rgba(0, 0, 0, 0.45)' },
+  printImage: { width: 220, height: 290, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.2)' },
+  likePill: { position: 'absolute', right: -14, bottom: 22, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 38, borderRadius: 19, backgroundColor: brand.clay, boxShadow: '0px 6px 16px rgba(0, 0, 0, 0.35)' },
+  likePillText: { fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 17, color: 'white', fontVariant: ['tabular-nums'] },
+  printCaption: { fontFamily: fontFamily.medium, fontSize: 17, lineHeight: 24, color: 'rgba(255,255,255,0.8)', marginTop: 10 },
   people: { flexDirection: 'row', gap: 12, marginBottom: 20 },
   finale: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: 14, paddingHorizontal: 24 },
   cardFrame: { borderRadius: 18, overflow: 'hidden', boxShadow: '0px 10px 36px rgba(0, 0, 0, 0.45)' },
