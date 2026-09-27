@@ -9,6 +9,7 @@ import { Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { CourtSpinner } from '@/components/CourtSpinner';
+import { ThreadSkeleton } from '@/components/Skeleton';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { VoteControls } from '@/components/VoteControls';
@@ -45,7 +46,7 @@ export default function QuestionDetail() {
   if (!question) {
     return (
       <Screen title="Question" compactTitle onBack={() => goBack()}>
-        {looked ? <EmptyState icon="alert-circle-outline" title="This thread is gone" body="Whoever started it may have deleted it." /> : <View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View>}
+        {looked ? <EmptyState icon="alert-circle-outline" title="This thread is gone" body="Whoever started it may have deleted it." /> : <ThreadSkeleton />}
       </Screen>
     );
   }
