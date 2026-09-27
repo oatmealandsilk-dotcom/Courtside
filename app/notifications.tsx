@@ -6,6 +6,7 @@ import { goBack } from '@/lib/goBack';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Avatar, EmptyState, Screen } from '@/components/ui';
+import { FollowPill } from '@/components/FollowPill';
 import { BrandMark } from '@/components/BrandMark';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { relativeTime } from '@/lib/format';
@@ -41,6 +42,10 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap; tin
   booking: { name: 'calendar', tint: 'brand' },
   'coach-answer': { name: 'shield-checkmark', tint: 'brand' },
   refund: { name: 'return-down-back', tint: 'success' },
+  upvote: { name: 'arrow-up', tint: 'brand' },
+  'upvote-reply': { name: 'arrow-up', tint: 'brand' },
+  milestone: { name: 'flame', tint: 'warning' },
+  joined: { name: 'hand-right', tint: 'court' },
 };
 
 const VERB: Record<NotificationKind, string> = {
@@ -60,6 +65,10 @@ const VERB: Record<NotificationKind, string> = {
   booking: 'booked you',
   'coach-answer': 'answered your booking',
   refund: 'refunded a booking',
+  upvote: 'upvoted your thread',
+  'upvote-reply': 'upvoted your reply',
+  milestone: 'just passed',
+  joined: 'just joined CourtSide near you',
 };
 
 interface Group {
@@ -84,7 +93,7 @@ function routeFor(group: Group): string {
   // Your own "it's up" note takes you to the feed, where the new thing sits first.
   if (group.kind === 'posted') return group.targetKind === 'question' ? `/question/${group.targetId}` : '/';
   // A follow of any kind opens the person, not a post.
-  if (group.kind === 'follow' || group.kind === 'follow-request' || group.kind === 'follow-accepted') return `/user/${group.actorIds[0]}`;
+  if (group.kind === 'follow' || group.kind === 'follow-request' || group.kind === 'follow-accepted' || group.kind === 'joined') return `/user/${group.actorIds[0]}`;
   if (group.targetKind === 'post') return `/post/${group.targetId}`;
   if (group.targetKind === 'hit') return `/hits/${group.targetId}`;
   if (group.targetKind === 'question') return `/question/${group.targetId}`;
@@ -107,9 +116,10 @@ const SECTIONS = ['New', 'Today', 'This week', 'This month', 'Earlier'];
 
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
-  const { notifications, users, posts, currentUserId, followRequests, actions } = useApp();
+  const { notifications, users, posts, currentUserId, followRequests, followingIds, actions } = useApp();
   // "liked your clip", "liked your photo": the verb names what was liked, not just "post".
   const verbFor = (group: Group) => {
+    if (group.kind === 'milestone') return `just passed ${group.preview ?? 'a milestone'}`;
     if (group.kind !== 'like' && group.kind !== 'comment' && group.kind !== 'share') return VERB[group.kind];
     const act = group.kind === 'like' ? 'liked' : group.kind === 'comment' ? 'commented on' : 'shared';
     if (group.targetKind === 'hit') return `${act} your hit`;
@@ -132,11 +142,16 @@ export default function Notifications() {
     )) {
       // Follows are one row per person, never bundled. A like not yet seen is
       // its own row too; once seen it folds in with the other likes on that thing.
+      // The way Instagram's inbox reads: every comment, reply, mention and
+      // answer is its own row, with its words; likes (and upvotes and views)
+      // on one thing fold together, but only within the same day, so a post
+      // still getting likes keeps turning up fresh.
+      const day = new Date(n.createdAt).toDateString();
       const key = n.kind === 'follow' || n.kind === 'follow-request' || n.kind === 'follow-accepted'
         ? `${n.kind}:${n.actorId}`
-        : n.kind === 'like' && !n.read
-          ? `like-new:${n.id}`
-          : `${n.kind}:${n.targetKind}:${n.targetId}:${n.read ? 'seen' : 'new'}`;
+        : n.kind === 'like' || n.kind === 'upvote' || n.kind === 'share' || n.kind === 'helpful'
+          ? (!n.read ? `${n.kind}-new:${n.targetKind}:${n.targetId}:${day}` : `${n.kind}:${n.targetKind}:${n.targetId}:${day}`)
+          : `one:${n.id}`;
       const existing = byTarget.get(key);
       if (existing) {
         if (!existing.actorIds.includes(n.actorId)) existing.actorIds.push(n.actorId);
@@ -166,6 +181,7 @@ export default function Notifications() {
   }, [actions]);
 
   const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? 'Someone';
+  const photoOf = (id: string) => users.find((u) => u.id === id)?.avatarUrl;
 
   return (
     <Screen title="Notifications" compactTitle onBack={() => goBack()}>
@@ -181,7 +197,9 @@ export default function Notifications() {
             const icon = ICON[group.kind];
             const [first, ...rest] = group.actorIds;
             const who =
-              group.kind === 'posted'
+              group.kind === 'milestone'
+                ? (posts.find((p) => p.id === group.targetId)?.kind === 'clip' ? 'Your clip' : 'Your post')
+                : group.kind === 'posted'
                 ? (group.preview?.startsWith('Instant') || group.preview?.startsWith('Hit')) ? 'Your instant' : group.targetKind === 'question' ? 'Your question' : 'Your post'
                 : group.kind === 'coach-application' || group.kind === 'refund' ? 'CourtSide'
                 : rest.length === 0
@@ -207,10 +225,10 @@ export default function Notifications() {
                     <View style={styles.brandFace}><BrandMark size={24} /></View>
                   ) : rest.length ? (
                     <View style={styles.pair}>
-                      <View style={styles.pairBack}><Avatar name={nameOf(rest[0])} seed={rest[0]} size={32} /></View>
-                      <View style={styles.pairFront}><Avatar name={nameOf(first)} seed={first} size={32} /></View>
+                      <View style={styles.pairBack}><Avatar name={nameOf(rest[0])} seed={rest[0]} uri={photoOf(rest[0])} size={32} /></View>
+                      <View style={styles.pairFront}><Avatar name={nameOf(first)} seed={first} uri={photoOf(first)} size={32} /></View>
                     </View>
-                  ) : <Avatar name={nameOf(first)} seed={first} size={44} />}
+                  ) : <Avatar name={nameOf(first)} seed={first} uri={photoOf(first)} size={44} />}
                   <View style={[styles.badge, { backgroundColor: colors[icon.tint] }]}>
                     <Ionicons name={icon.name} size={11} color={colors.brandInk} />
                   </View>
@@ -221,7 +239,7 @@ export default function Notifications() {
                     <Text style={styles.who}>{who}</Text>
                     <Text> {verbFor(group)}</Text>
                   </Text>
-                  {group.preview ? (
+                  {group.preview && group.kind !== 'milestone' ? (
                     <Text style={styles.preview} numberOfLines={1}>
                       {group.preview}
                     </Text>
@@ -235,7 +253,10 @@ export default function Notifications() {
                   ) : null}
                 </View>
 
-                {group.unread ? <View style={styles.dot} /> : null}
+                {/* Follow back, right from the row, the way Instagram's inbox does it. */}
+                {(group.kind === 'follow' || group.kind === 'joined') && first && first !== currentUserId ? (
+                  <FollowPill small following={followingIds.includes(first)} onPress={() => actions.toggleFollow(first)} name={nameOf(first).split(' ')[0]} />
+                ) : group.unread ? <View style={styles.dot} /> : null}
               </Pressable>
               </React.Fragment>
             );
