@@ -11,6 +11,7 @@ import { framesAt } from '@/features/compose/frames';
 import { CoverScrubber } from '@/components/CoverScrubber';
 import { VideoSurface, type VideoSurfaceHandle } from '@/components/VideoSurface';
 import { colors, typography, font } from '@/theme';
+import { canShrinkVideo } from '@/lib/shrinkVideo';
 
 export interface PickedMedia {
   uri?: string;
@@ -74,18 +75,22 @@ export async function pickFromDevice(selection: 'video' | 'photo' | 'all'): Prom
 }
 
 /**
- * A picked video is converted by the iPhone itself to standard 720p H.264
- * before it is handed over: several times smaller than the raw file (often
- * 4K), quicker to upload and to watch, and playable on every phone and
- * browser (the raw file is often HEVC, which some Android phones and
- * browsers cannot play). A video the phone has offloaded to iCloud is
+ * In Expo Go a picked video is converted by the iPhone itself to standard
+ * 720p H.264 before it is handed over: several times smaller than the raw
+ * file (often 4K), quicker to upload and to watch, and playable on every
+ * phone and browser (the raw file is often HEVC, which some Android phones
+ * and browsers cannot play). A video the phone has offloaded to iCloud is
  * fetched automatically when converting. Photos are handed over as they are.
+ *
+ * The App Store build carries its own compressor (see shrinkVideo), which
+ * shrinks the video while it uploads, the way Instagram does — so there the
+ * picker hands the video over as it is, with no "Preparing video" wait.
  */
 const AS_IS = {
   preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current,
   // 720p, not 1080p: about half the bytes and half the wait, and a minute of
   // it fits under the 50 MB upload cap; on a phone the difference is hard to see.
-  videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
+  videoExportPreset: canShrinkVideo() ? ImagePicker.VideoExportPreset.Passthrough : ImagePicker.VideoExportPreset.H264_1280x720,
   shouldDownloadFromNetwork: true,
   // Full screen, not a card: a card leaves the composer showing behind it, so
   // the "Preparing video" note was read once while choosing and again while

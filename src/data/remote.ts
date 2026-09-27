@@ -14,6 +14,7 @@ import * as WebBrowser from 'expo-web-browser';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
 import { shrinkPhoto } from '@/lib/shrinkPhoto';
+import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import type { Answer, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, Question, Story, Tip, User, CoachApplication } from './types';
@@ -1569,25 +1570,30 @@ export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'vid
     // A photo goes up at the size a feed shows it (1440 on its long edge),
     // not the camera's full size: ten times smaller, same on screen.
     const uri = kind === 'photo' ? await shrinkPhoto(original) : original;
+    // A video is shrunk too, when this build can (see shrinkVideo): the first
+    // part of the upload bar is the shrinking, the rest the sending.
+    const shrinking = kind === 'video' && canShrinkVideo();
+    const upload = shrinking ? (f: number) => onProgress?.(0.35 + 0.65 * f) : onProgress;
+    const sent = shrinking ? await shrinkVideo(uri, (f) => onProgress?.(0.35 * f)) : uri;
     // Too big is the usual reason an upload fails, and it is worth saying
     // before the bytes go up rather than after.
-    const size = await fetch(uri).then((r) => r.blob()).then((b) => b.size).catch(() => 0);
+    const size = await fetch(sent).then((r) => r.blob()).then((b) => b.size).catch(() => 0);
     if (size > MAX_UPLOAD_BYTES) {
       const mb = Math.round(size / 1024 / 1024);
       throw new Error(`This ${kind} is ${mb} MB; the limit is ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB. Pick a shorter one — about a minute or less.`);
     }
     const contentType = Platform.OS === 'web'
-      ? ((await fetch(uri, { method: 'HEAD' }).catch(() => null))?.headers.get('content-type') || guessType(uri, kind)).split(';')[0].trim()
-      : guessType(uri, kind);
+      ? ((await fetch(sent, { method: 'HEAD' }).catch(() => null))?.headers.get('content-type') || guessType(sent, kind)).split(';')[0].trim()
+      : guessType(sent, kind);
     // The bucket enforces the same list; checking here gives a readable message.
     if (!ALLOWED_MEDIA.test(contentType)) throw new Error('Only photos and videos can be posted.');
     const ext = contentType.split('/')[1] || (kind === 'video' ? 'mp4' : 'jpg');
     const path = `${me}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     try {
-      await uploadWithProgress(path, uri, contentType, onProgress);
+      await uploadWithProgress(path, sent, contentType, upload);
     } catch (direct) {
       console.warn('[remote] direct upload fell back', direct);
-      const response = await fetch(uri);
+      const response = await fetch(sent);
       const bytes = await response.arrayBuffer();
       const { error } = await db.storage.from('media').upload(path, bytes, { contentType, upsert: false, cacheControl: '31536000' });
       if (error) throw error;
