@@ -1649,6 +1649,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addQuestion = useCallback(
     (input: NewQuestionInput): ID => {
+      haptics.commit();
       const me = requireUser();
       const question: Question = {
         id: nextId('q'),
@@ -1698,6 +1699,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addAnswer = useCallback(
     (questionId: ID, body: string, parentAnswerId?: ID) => {
+      haptics.commit();
       const me = requireUser();
       let made: Answer | null = null;
       setState((prev) => {
