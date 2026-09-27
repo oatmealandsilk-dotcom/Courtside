@@ -114,6 +114,13 @@ const STEPS: { title: string; lead: string; skip?: SetupStep }[] = [
 
 /** Opened from Game details to change your answers: the steps about you and your game, with Save on each. */
 const EDIT_STEPS = [0, 1, 3, 4];
+/**
+ * Joining asks only who you are and how you play. Body, goals and calendar
+ * only feed the AI coach, so the coach asks them the first time it is opened
+ * (COACH_STEPS); camera, photos and location are asked for when first used.
+ */
+const JOIN_STEPS = [0, 1];
+const COACH_STEPS = [3, 4];
 
 const round = (n: number, decimals: number) => Number(n.toFixed(decimals));
 
@@ -124,9 +131,11 @@ export default function Onboarding() {
   // The profile's "finish setting up" card lands straight on the step it names.
   const params = useLocalSearchParams<{ step?: string; from?: string }>();
   const editing = params.from === 'edit';
-  const order = editing ? EDIT_STEPS : STEPS.map((_, i) => i);
+  const forCoach = params.from === 'coach';
+  // Finishing a skipped step from the profile's reminder card: the old full list, so that step is reachable.
+  const order = editing ? EDIT_STEPS : forCoach ? COACH_STEPS : params.from === 'profile' ? STEPS.map((_, i) => i) : JOIN_STEPS;
   const startAt = Math.min(STEPS.length - 1, Math.max(0, Number(params.step) || 0));
-  const [step, setStep] = useState(editing && !EDIT_STEPS.includes(startAt) ? 0 : startAt);
+  const [step, setStep] = useState(order.includes(startAt) ? startAt : order[0]);
   const position = Math.max(0, order.indexOf(step));
   const skipped = useRef<Set<SetupStep>>(new Set());
 
@@ -228,6 +237,12 @@ export default function Onboarding() {
       // Changing answers later: keep when you first joined, leave the setup reminders alone, and go back.
       actions.completeOnboarding({ ...profile, onboardedAt: existing?.onboardedAt });
       goBack('/profile-details');
+      return;
+    }
+    if (forCoach) {
+      // The coach's own questions, answered: straight into the coach.
+      actions.completeOnboarding({ ...profile, onboardedAt: existing?.onboardedAt });
+      router.replace('/ai-coach');
       return;
     }
     actions.completeOnboarding(profile);
