@@ -8,7 +8,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Screen, Toggle } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { colors, radius, spacing, typography } from '@/theme';
+import { openLegal } from '@/lib/legal';
+import { colors, spacing, typography } from '@/theme';
 
 export default function PrivacyCentre() {
   const styles = useThemedStyles(styleDefinitions);
@@ -21,13 +22,14 @@ export default function PrivacyCentre() {
         What CourtSide keeps, who can see it, and the switches that change that.
       </Text>
 
-      <Text style={styles.sectionTitle}>WHAT WE STORE</Text>
+      <Text style={styles.sectionTitle}>What we store</Text>
       <View style={styles.card}>
         {[
           ['Your profile', 'Name, handle, city, rating, play style, goals, injury notes.'],
           ['What you post', 'Clips, posts, discussions, answers, and questions to coaches.'],
           ['Health data', 'Only what you connect in Health and nutrition. It feeds the AI coach and never appears on your profile.'],
           ['Messages', 'Kept so both people can read them. Blocking someone removes the conversation for you.'],
+          ['Coaching bookings', 'Your question, any video, the price and the answer. Only you and that coach see them. Stripe holds your card, never us.'],
         ].map(([title, body], index) => (
           <View key={title} style={[styles.item, index > 0 && styles.rowBorder]}>
             <Text style={styles.itemTitle}>{title}</Text>
@@ -36,7 +38,7 @@ export default function PrivacyCentre() {
         ))}
       </View>
 
-      <Text style={styles.sectionTitle}>YOUR CONTROLS</Text>
+      <Text style={styles.sectionTitle}>Your controls</Text>
       <View style={styles.card}>
         <View style={styles.row}>
           <Ionicons name="lock-closed-outline" size={20} color={colors.text} />
@@ -73,13 +75,18 @@ export default function PrivacyCentre() {
         </Pressable>
       </View>
 
-      <Text style={styles.sectionTitle}>THIS BUILD</Text>
+      <Text style={styles.sectionTitle}>This build</Text>
       <View style={styles.card}>
         <View style={styles.item}>
           <Text style={styles.itemBody}>
-            {isSupabaseConfigured ? 'Your posts, follows, messages and settings are saved to your account so they are there on any device. Health links and payments are not live yet, so nothing from those leaves this device.' : 'This is a demo running on sample data. Nothing you type, post, or connect leaves your device, and it is gone when you close the app.'}
+            {isSupabaseConfigured ? 'Your posts, follows, messages and settings are saved to your account, so they are there on any device. Health data comes only from sources you connect, and you can disconnect any of them in Health.' : 'This is a demo running on sample data. Nothing you type, post, or connect leaves your device, and it is gone when you close the app.'}
           </Text>
         </View>
+        <Pressable accessibilityRole="link" onPress={() => openLegal('privacy')} style={({ pressed }) => [styles.row, styles.rowBorder, pressed && { backgroundColor: colors.surfaceAlt }]}>
+          <Ionicons name="document-text-outline" size={20} color={colors.text} />
+          <Text style={styles.rowLabel}>Read the full privacy policy</Text>
+          <Ionicons name="open-outline" size={16} color={colors.textFaint} />
+        </Pressable>
       </View>
     </Screen>
   );
@@ -87,15 +94,9 @@ export default function PrivacyCentre() {
 
 const styleDefinitions = StyleSheet.create({
   lead: { ...typography.small, color: colors.textMuted, lineHeight: 20, paddingBottom: spacing.lg },
-  sectionTitle: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.1, paddingTop: spacing.md, paddingBottom: spacing.sm },
-  card: {
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    overflow: 'hidden',
-    marginBottom: spacing.md,
-  },
+  // Sentence-case labels over borderless grouped lists, the way Settings reads.
+  sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingTop: spacing.md, paddingBottom: spacing.sm },
+  card: { borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden', marginBottom: spacing.lg },
   item: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: 3 },
   itemTitle: { ...typography.smallStrong, color: colors.text },
   itemBody: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
