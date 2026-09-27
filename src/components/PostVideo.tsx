@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useSoundMuted } from '@/features/feed/sound';
 import { Animated, Modal, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -46,7 +47,8 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
   const player = useRef<ClipVideoHandle>(null);
   // A post's video waits with its play button up; it does not start on its own.
   const [paused, setPaused] = useState(true);
-  const [muted, setMuted] = useState(silent);
+  // Sound is one switch for every clip; a clip posted without sound stays silent regardless.
+  const [muted, setMuted] = useSoundMuted();
   const [ready, setReady] = useState(false);
   const [full, setFull] = useState(false);
   // Full screen shows the very same player (no second download, no pause):
