@@ -20,11 +20,12 @@ const FADE_MS = 260;
  */
 export default function Index() {
   const styles = useThemedStyles(styleDefinitions);
-  const { ready, currentUserId, onboardingComplete, remoteLoaded, error, actions } = useApp();
+  const { ready, currentUserId, onboardingComplete, remoteLoaded, snapshotShown, error, actions } = useApp();
   const [retrying, setRetrying] = useState(false);
   // Signed in but the profile has not come down yet: the answer to "has this
   // person done the quiz" is not known, so hold the splash rather than guess.
-  const settled = ready && (!currentUserId || !isSupabaseConfigured || remoteLoaded || !!error);
+  // Last time's saved copy is enough to open on (see data/snapshot); the fresh load lands on top.
+  const settled = ready && (!currentUserId || !isSupabaseConfigured || remoteLoaded || snapshotShown || !!error);
   const [held, setHeld] = useState(false);
   const [gone, setGone] = useState(false);
   const [settledCode, setSettledCode] = useState(false);
@@ -63,7 +64,7 @@ export default function Index() {
   // Signed in, but the account never came down even after retries: the app
   // does not open on a guess (the quiz would overwrite what is saved). It
   // says so and offers another try.
-  if (gone && currentUserId && isSupabaseConfigured && !remoteLoaded && error) {
+  if (gone && currentUserId && isSupabaseConfigured && !remoteLoaded && !snapshotShown && error) {
     return (
       <View style={[styles.splash, { padding: spacing.xl, gap: spacing.md }]}>
         <BrandMark size={56} />
