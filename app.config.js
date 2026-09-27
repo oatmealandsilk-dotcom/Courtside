@@ -1,10 +1,14 @@
 // Base URL is only set in CI so GitHub Pages can serve the app from /<repo>/.
 // Local dev (expo start --web) leaves it undefined and serves from /.
 const baseUrl = process.env.EXPO_BASE_URL || undefined;
+// A second copy run for previewing (the demo) sets COURTSIDE_LABEL, so Expo
+// Go's list shows "CourtSide Demo" with the icon inside out, never two
+// identical CourtSides. Unset — the real app and every store build — it is plain CourtSide.
+const label = process.env.COURTSIDE_LABEL;
 
 module.exports = {
   expo: {
-    name: 'CourtSide',
+    name: label ? `CourtSide ${label}` : 'CourtSide',
     slug: 'courtside',
     version: '1.0.0',
     orientation: 'portrait',
@@ -13,7 +17,7 @@ module.exports = {
     backgroundColor: '#F8F7F2',
     // Shown by Expo Go and native builds while the JS loads; matches app/index.tsx
     // so the loader fades straight into the in-app splash.
-    icon: './assets/icon.png',
+    icon: label ? './assets/icon-demo.png' : './assets/icon.png',
     splash: { image: './assets/splash.png', resizeMode: 'contain', backgroundColor: '#F8F7F2' },
     newArchEnabled: true,
     ios: {
