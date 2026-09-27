@@ -18,6 +18,7 @@ import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font, lift } from '@/theme';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { CourtSpinner } from '@/components/CourtSpinner';
+import { ProfileSkeleton } from '@/components/Skeleton';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 
 const TABS = ['Posts', 'Clips', 'Tagged'] as const;
@@ -49,7 +50,7 @@ export default function UserProfile() {
   if (!user) {
     return (
       <Screen title="Player" compactTitle onBack={() => goBack()}>
-        {loading ? <View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View> : <EmptyState icon="person-outline" title="No such player" body="They may have deleted their account." />}
+        {loading ? <ProfileSkeleton /> : <EmptyState icon="person-outline" title="No such player" body="They may have deleted their account." />}
       </Screen>
     );
   }

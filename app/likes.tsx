@@ -7,6 +7,7 @@ import { goBack } from '@/lib/goBack';
 import { LevelPill } from '@/components/LevelPill';
 import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
 import { CourtSpinner } from '@/components/CourtSpinner';
+import { PeopleSkeleton } from '@/components/Skeleton';
 import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
 
@@ -45,7 +46,7 @@ export default function Likes() {
   return (
     <Screen title="Likes" compactTitle onBack={() => goBack()}>
       {!item && !looked ? (
-        <View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View>
+        <PeopleSkeleton />
       ) : !item ? (
         <EmptyState icon="heart-dislike-outline" title="This post is gone" body="It was deleted, or it is no longer shared with you." />
       ) : (
