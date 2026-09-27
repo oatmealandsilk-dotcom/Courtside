@@ -257,7 +257,7 @@ export default function Onboarding() {
             <>
               <Field label="Name" value={name} onChangeText={setName} placeholder="Your name" autoCapitalize="words" />
               <View style={styles.group}>
-                <Text style={styles.groupLabel}>WHERE YOU PLAY</Text>
+                <Text style={styles.groupLabel}>Where you play</Text>
                 <LocationField value={location} onChange={setLocation} />
               </View>
               <View style={styles.twoCol}>
@@ -438,7 +438,7 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.group}>
-      <Text style={styles.groupLabel}>{label.toUpperCase()}</Text>
+      <Text style={styles.groupLabel}>{label}</Text>
       {children}
     </View>
   );
@@ -475,7 +475,7 @@ const styleDefinitions = StyleSheet.create({
   lead: { ...typography.small, color: colors.textMuted },
   body: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.lg, maxWidth: 560, width: '100%', alignSelf: 'center' },
   group: { gap: spacing.sm },
-  groupLabel: { ...typography.caption, color: colors.textFaint, letterSpacing: 1 },
+  groupLabel: { ...typography.smallStrong, color: colors.textMuted },
   note: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
   twoCol: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-end' },
 

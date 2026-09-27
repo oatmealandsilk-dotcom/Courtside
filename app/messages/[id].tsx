@@ -706,7 +706,7 @@ const styleDefinitions = StyleSheet.create({
   sharedKind: { ...typography.caption, color: colors.brand },
   sharedBody: { ...typography.small, color: colors.text, lineHeight: 19 },
   timestamp: { ...typography.caption, color: colors.textFaint, textAlign: 'center', paddingTop: spacing.md },
-  stamp: { ...typography.caption, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', color: colors.textFaint, textAlign: 'center', paddingTop: spacing.xl, paddingBottom: spacing.md },
+  stamp: { ...typography.caption, fontSize: 12, letterSpacing: 0, color: colors.textFaint, textAlign: 'center', paddingTop: spacing.xl, paddingBottom: spacing.md },
   mentionTray: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
   composer: {
     flexDirection: 'row',

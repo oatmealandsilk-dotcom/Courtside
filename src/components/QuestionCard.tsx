@@ -147,7 +147,7 @@ const styleDefinitions = StyleSheet.create({
   sourceText: { ...typography.caption, color: colors.textMuted, letterSpacing: 0 },
   tag: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border },
   tagDone: { borderColor: colors.brandDim, backgroundColor: colors.brandDim },
-  tagText: { ...typography.caption, fontSize: 10, letterSpacing: 0.6, textTransform: 'uppercase' },
+  tagText: { ...typography.caption, fontSize: 12, letterSpacing: 0 },
   spacer: { flex: 1 },
 });
 

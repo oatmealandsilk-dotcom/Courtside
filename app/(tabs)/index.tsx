@@ -830,7 +830,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                   <View key={item.question.id} style={[styles.article, styles.threadArticle, scope && styles.articleScoped]}>
                     <Wash height={300} strength={0.6} />
                     <View style={styles.eyebrowRow}>
-                      <Text style={styles.eyebrow}>FROM THE COMMUNITY</Text>
+                      <Text style={styles.eyebrow}>From the community</Text>
                       {hiddenMarks.has(item.question.id) ? <View style={{ width: 34, height: 34 }} /> : <TapAway label="Hide the CourtSide logo" onHidden={() => hideMark(item.question.id)} style={styles.threadMark}><BrandMark size={34} /></TapAway>}
                     </View>
                     {strip}
@@ -900,7 +900,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     <Wash height={300} strength={0.6} />
                     {/* Inside one person's posts the feed label means nothing, and the back chevron wants the room. */}
                     {scope ? null : <Text style={styles.eyebrow}>
-                      {post.kind === 'match' ? 'SET PLAY' : post.kind.toUpperCase()} · FOR YOU
+                      {post.kind === 'match' ? 'Set play' : post.kind.charAt(0).toUpperCase() + post.kind.slice(1)} · For you
                     </Text>}
                     {strip}
                     <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: 'flex-start' }}>
@@ -1234,7 +1234,7 @@ const styleDefinitions = StyleSheet.create({
   stripName: { ...typography.bodyStrong, fontSize: 14, color: colors.text, textAlign: 'center' },
   stripReason: { ...typography.small, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
   threadArticle: { gap: 8, paddingBottom: BAR_OVERLAY_PX + 12 },
-  eyebrow: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.1 },
+  eyebrow: { ...typography.smallStrong, color: colors.textMuted },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   threadMark: { marginRight: 6, marginTop: 6 },
   hint: { color: colors.textMuted, fontSize: 11, textAlign: 'center', paddingBottom: 10 },

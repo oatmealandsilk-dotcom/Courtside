@@ -50,7 +50,7 @@ export default function About() {
         ))}
       </View>
 
-      <Text style={styles.sectionTitle}>GOOD TO KNOW</Text>
+      <Text style={styles.sectionTitle}>Good to know</Text>
       <View style={styles.card}>
         {[
           'Training, injury, and nutrition content is general information, not medical advice.',
@@ -73,7 +73,7 @@ const styleDefinitions = StyleSheet.create({
   name: { fontSize: 26, ...font('700'), color: colors.text, letterSpacing: -0.5 },
   version: { ...typography.small, color: colors.textFaint },
   body: { ...typography.body, color: colors.textMuted, lineHeight: 22, textAlign: 'center', paddingBottom: spacing.xl },
-  sectionTitle: { ...typography.caption, color: colors.textMuted, letterSpacing: 1.1, paddingTop: spacing.lg, paddingBottom: spacing.sm },
+  sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingTop: spacing.lg, paddingBottom: spacing.sm },
   card: {
     borderRadius: radius.lg,
     borderWidth: 1,

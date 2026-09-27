@@ -142,7 +142,7 @@ function PostCardInner({
           style={[styles.kindRow, { borderColor: `${meta.tint}55` }]}
         >
           <Ionicons name={meta.icon} size={13} color={meta.tint} />
-          <Text style={[styles.kindLabel, { color: meta.tint }]}>{meta.label.toUpperCase()}</Text>
+          <Text style={[styles.kindLabel, { color: meta.tint }]}>{meta.label}</Text>
           <Ionicons name="chevron-forward" size={11} color={meta.tint} />
         </Tappable>
 
@@ -263,7 +263,7 @@ const styleDefinitions = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
   },
-  kindLabel: { ...typography.caption },
+  kindLabel: { ...typography.caption, fontSize: 12, letterSpacing: 0 },
   text: { ...typography.body, color: colors.text, lineHeight: 22 },
   detailBox: {
     backgroundColor: colors.bgElevated,

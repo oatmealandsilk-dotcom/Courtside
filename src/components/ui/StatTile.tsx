@@ -15,7 +15,7 @@ export function StatTile({ label, value, hint, tint }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.tile}>
-      <Text style={styles.label}>{label.toUpperCase()}</Text>
+      <Text style={styles.label}>{label}</Text>
       <Text style={[styles.value, tint ? { color: tint } : null]}>{value}</Text>
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
     </View>
@@ -34,7 +34,7 @@ const styleDefinitions = StyleSheet.create({
     paddingHorizontal: spacing.md,
     gap: 2,
   },
-  label: { ...typography.caption, color: colors.textFaint },
+  label: { ...typography.small, color: colors.textMuted },
   value: { ...typography.title, color: colors.text },
   hint: { ...typography.small, color: colors.textMuted },
 });

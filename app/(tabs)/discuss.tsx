@@ -235,7 +235,7 @@ const styleDefinitions = StyleSheet.create({
   playerName: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text, flexShrink: 1 },
   playerMeta: { ...typography.small, color: colors.textMuted, flexShrink: 1 },
   near: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.brandDim },
-  nearText: { ...typography.caption, fontSize: 10, color: colors.brand, letterSpacing: 0.5, textTransform: 'uppercase' },
+  nearText: { ...typography.caption, fontSize: 11, color: colors.brand, letterSpacing: 0 },
   playerChevron: { marginRight: spacing.lg },
   fab: {
     width: 38,
