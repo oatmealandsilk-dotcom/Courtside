@@ -71,6 +71,7 @@ import type {
   SessionDetail,
   PracticeSession,
   CourtNote,
+  LastSeen,
   HitRequest,
   Story,
   User,
@@ -282,6 +283,8 @@ interface AppState extends Bootstrap {
   sessions: PracticeSession[];
   /** What players say about the courts opened on the map, by court id; loaded when a court is opened. */
   courtNotes: Record<string, CourtNote[]>;
+  /** Last spots for the map, by id, your own included (migration 46). */
+  lastSeen: Record<ID, LastSeen>;
   /** Open "Looking for a hit" posts. */
   hitRequests: HitRequest[];
   /** Small switches from Settings, kept with the account. */
@@ -359,6 +362,8 @@ interface AppActions {
   /** Log a session you played (today unless a day is given). Throws a plain sentence when it cannot be saved. */
   /** Fetches what players say about a court (on opening it on the map). */
   loadCourtNotes: (courtId: string) => Promise<void>;
+  /** Fetches the spots the map may show; the map asks each time it opens. */
+  loadLastSeen: () => Promise<void>;
   /** Saves your report on a court, replacing any earlier one; a photo on the phone is uploaded first. */
   saveCourtNote: (input: Omit<CourtNote, 'userId' | 'updatedAt'>) => Promise<void>;
   logSession: (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; opponent?: string; note?: string; day?: string }) => Promise<void>;
@@ -811,6 +816,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     tips: [],
     sessions: [],
     courtNotes: {},
+    lastSeen: {},
     hitRequests: [],
     locationEnabled: readFlag('courtside-location'),
     detectedLocation: null,
@@ -1334,6 +1340,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = stateRef.current.currentUserId;
     setState((prev) => ({ ...prev, sessions: prev.sessions.filter((x) => x.id !== id) }));
     if (live(me)) void remote.deleteSession(id);
+  }, []);
+
+  const loadLastSeen = useCallback(async () => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me)) return;
+    const rows = await remote.fetchLastSeen();
+    setState((prev) => ({ ...prev, lastSeen: Object.fromEntries(rows.map((r) => [r.userId, r])) }));
   }, []);
 
   const loadCourtNotes = useCallback(async (courtId: string) => {
@@ -2942,6 +2955,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * keeps only the nearest city name. Resolves with a message for the screen
    * to show, or null when everything went fine.
    */
+  /** When and where your spot was last sent (see the effect below). */
+  const markedAt = useRef<{ lat: number; lng: number; at: number } | null>(null);
   const setLocationEnabled = useCallback(async (enabled: boolean): Promise<string | null> => {
     const remember = (on: boolean) => {
       try {
@@ -2952,6 +2967,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!enabled) {
       remember(false);
       setState((prev) => ({ ...prev, locationEnabled: false, detectedLocation: null, detectedCoords: null }));
+      // Location off means off: the spot others saw goes too.
+      if (live(stateRef.current.currentUserId)) void remote.forgetLastSeen();
+      markedAt.current = null;
       return null;
     }
     const result = await getPosition();
@@ -2971,6 +2989,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, locationEnabled: true, detectedLocation: place.name, detectedCoords: { lat: result.lat, lng: result.lng } }));
     return null;
   }, []);
+
+  // Where you are, for other players' maps: kept to about a kilometre by the
+  // database, and sent again only after a real move or a quarter of an hour.
+  useEffect(() => {
+    const me = state.currentUserId;
+    const at = state.detectedCoords;
+    if (!state.locationEnabled || !at || !live(me)) return;
+    const last = markedAt.current;
+    const moved = !last || Math.abs(last.lat - at.lat) > 0.01 || Math.abs(last.lng - at.lng) > 0.01;
+    if (!moved && Date.now() - last!.at < 15 * 60 * 1000) return;
+    markedAt.current = { lat: at.lat, lng: at.lng, at: Date.now() };
+    void remote.markLastSeen(at.lat, at.lng, state.detectedLocation ?? undefined);
+  }, [state.currentUserId, state.detectedCoords, state.detectedLocation, state.locationEnabled]);
 
   // The phone keeps the Location switch too (the browser reads it at start),
   // so the map opens where you are instead of forgetting on every launch.
@@ -3383,6 +3414,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       logSession,
       deleteSession,
       loadCourtNotes,
+      loadLastSeen,
       saveCourtNote,
       postHit,
       joinHit,
@@ -3515,6 +3547,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       logSession,
       deleteSession,
       loadCourtNotes,
+      loadLastSeen,
       saveCourtNote,
       postHit,
       joinHit,

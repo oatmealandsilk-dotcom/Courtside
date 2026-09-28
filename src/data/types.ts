@@ -675,6 +675,19 @@ export interface CourtNote {
   updatedAt: string;
 }
 
+/**
+ * Where a player last had Location on, to about a kilometre, and when
+ * (migration 46). Only adults see adults' spots; seenAt is left out for
+ * someone who hides their activity status.
+ */
+export interface LastSeen {
+  userId: ID;
+  lat: number;
+  lng: number;
+  city?: string;
+  seenAt?: string;
+}
+
 /** "Looking for a hit": someone wants a game, and says when, where and at what level (migration 43). */
 export interface HitRequest {
   id: ID;

@@ -17,7 +17,7 @@ import { shrinkPhoto } from '@/lib/shrinkPhoto';
 import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, Question, Story, Tip, User, CoachApplication } from './types';
+import type { Answer, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, Question, Story, Tip, User, CoachApplication } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
 
 /** What a new player did first, after setup. */
@@ -1221,6 +1221,22 @@ export const remote = {
   async deleteSession(id: ID) {
     const { error } = await need().from('practice_sessions').delete().eq('id', id);
     if (error) fail('session delete')(error);
+  },
+  /** Everyone's last spot you are allowed to see. Empty when the table is not there yet. */
+  async fetchLastSeen(): Promise<LastSeen[]> {
+    const { data, error } = await need().from('last_seen').select('user_id, lat, lng, city, seen_at, show_activity').limit(2000);
+    if (error) { fail('last seen')(error); return []; }
+    return (data as { user_id: ID; lat: number; lng: number; city: string | null; seen_at: string; show_activity: boolean }[])
+      .map((r) => ({ userId: r.user_id, lat: r.lat, lng: r.lng, city: r.city ?? undefined, seenAt: r.show_activity ? r.seen_at : undefined }));
+  },
+  /** Your own spot; the database rounds it to about a kilometre. */
+  async markLastSeen(lat: number, lng: number, city?: string) {
+    const { error } = await need().rpc('mark_last_seen', { p_lat: lat, p_lng: lng, p_city: city ?? null });
+    if (error) fail('mark last seen')(error);
+  },
+  async forgetLastSeen() {
+    const { error } = await need().rpc('forget_last_seen');
+    if (error) fail('forget last seen')(error);
   },
   /** What players say about one court, newest first. Empty when the table is not there yet. */
   async fetchCourtNotes(courtId: string): Promise<CourtNote[]> {

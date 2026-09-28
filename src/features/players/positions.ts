@@ -1,5 +1,5 @@
 import { PLACES, type Place } from '@/data/locations';
-import type { User } from '@/data/types';
+import type { LastSeen, User } from '@/data/types';
 
 export interface LatLng { lat: number; lng: number; }
 
@@ -72,16 +72,25 @@ function placeForTimeZone(): Place | undefined {
 }
 
 /**
- * Where to draw someone. Profiles only say a city, so each player is set down
- * at a fixed spot a few streets from that city's centre — the same spot every
- * time — rather than tracked. Someone whose city we do not know is placed
- * near you.
+ * Where to draw someone: near where they last had Location on, or else a
+ * few streets from their profile city's centre — the same spot every time,
+ * never tracked. Someone we know neither for is left off the map rather
+ * than set down beside you, where they are not.
  */
-export function positionFor(user: User, home: LatLng): LatLng {
-  const centre = placeFor(user.location) ?? home;
+export function positionFor(user: User, seen?: LastSeen): LatLng | null {
+  const centre = seen ?? placeFor(user.location);
+  if (!centre) return null;
   const { x, y } = spread(user.avatarSeed);
-  // About ±3 km, shrunk east–west so the scatter stays round on the map.
-  return { lat: centre.lat + y * 0.05, lng: centre.lng + (x * 0.05) / Math.max(0.2, Math.cos((centre.lat * Math.PI) / 180)) };
+  // A last spot is already rounded to about a kilometre, so it only needs
+  // nudging apart from its neighbours; a city centre spreads about ±3 km.
+  // East–west is shrunk so the scatter stays round on the map.
+  const reach = seen ? 0.008 : 0.05;
+  return { lat: centre.lat + y * reach, lng: centre.lng + (x * reach) / Math.max(0.2, Math.cos((centre.lat * Math.PI) / 180)) };
+}
+
+/** Whether the map knows where you are, or would only be guessing from the time zone. */
+export function homeIsKnown(me: User, fix?: LatLng | null): boolean {
+  return !!fix || !!placeFor(me.location) || !!regionFor(me.location);
 }
 
 /**

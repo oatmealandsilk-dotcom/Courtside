@@ -17,6 +17,7 @@ import { useApp } from '@/store/AppContext';
 import { router } from 'expo-router';
 import { Image as ExpoImage } from 'expo-image';
 import { formatMiles } from '@/features/players/geo';
+import { relativeTime } from '@/lib/format';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { LevelPill as Level } from '@/components/LevelPill';
 import type { User } from '@/data/types';
@@ -291,11 +292,43 @@ function useDragToClose(onClose: () => void) {
   return { gesture, style };
 }
 
+/** "Active 2h ago", or "Last active Sep 25" once it is more than a day. */
+function activeLabel(iso: string): string {
+  const r = relativeTime(iso);
+  if (r === 'just now') return 'Active just now';
+  return /^\d+[mh]$/.test(r) ? `Active ${r} ago` : `Last active ${r}`;
+}
+
+/**
+ * The map on a first visit, when it does not know where you are: rather
+ * than guess a city and fill it with people who are not there, it asks.
+ */
+export function WhereCard({ locating, onLocation }: { locating?: boolean; onLocation?: () => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={[styles.sheet, { paddingTop: spacing.lg }]}>
+      <View style={[styles.personWords, { paddingHorizontal: spacing.lg }]}>
+        <Text style={styles.personName}>Where do you play?</Text>
+        <Text style={styles.openNote}>Turn on location or add your city, and the map shows the players and courts near you.</Text>
+      </View>
+      <View style={[styles.personActions, { marginTop: spacing.xs }]}>
+        <Pressable accessibilityRole="button" onPress={onLocation} disabled={locating} style={styles.primary}>
+          {locating ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name="navigate" size={16} color={colors.brandInk} />}
+          <Text style={styles.primaryText}>Use my location</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} style={styles.secondary}>
+          <Text style={styles.secondaryText}>Add my city</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 /** One player, picked on the map: who they are, how far, and what to do about it. */
 export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, onFollow }: { placed: Placed; following: boolean; onClose: () => void; onProfile: () => void; onMessage: () => void; onFollow: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const pull = useDragToClose(onClose);
-  const { user, miles } = placed;
+  const { user, miles, seenAt, seenCity } = placed;
   return (
     <GestureDetector gesture={pull.gesture}>
     <Animated.View style={[styles.sheet, pull.style]}>
@@ -309,7 +342,8 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
             <Text style={styles.personName} numberOfLines={1}>{user.name}</Text>
             <LevelPill profile={user.profile} small />
           </View>
-          <Text style={styles.personMeta} numberOfLines={1}>{[`@${user.handle}`, user.location || null, formatMiles(miles)].filter(Boolean).join(' · ')}</Text>
+          <Text style={styles.personMeta} numberOfLines={1}>{[`@${user.handle}`, seenCity || user.location || null, formatMiles(miles)].filter(Boolean).join(' · ')}</Text>
+          {seenAt ? <Text style={styles.personMeta} numberOfLines={1}>{activeLabel(seenAt)}</Text> : null}
           {isOpenToHit(user) ? <View style={styles.openRow}><View style={styles.openDot} /><Text style={styles.openText}>Open to hit today</Text></View> : null}
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
