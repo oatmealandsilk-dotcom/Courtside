@@ -1,8 +1,31 @@
 import type { Post, Question, Comment, Story } from '@/data/types';
 export type FeedItem = { type: 'post'; post: Post } | { type: 'question'; question: Question } | { type: 'hit'; story: Story } | { type: 'tip' } | { type: 'challenge' };
 
+/**
+ * While CourtSide has only a few posts, the feed is simply newest first:
+ * a new post is at the top for everyone the next time they refresh, and
+ * the shuffle below stands aside. Turn this off once there is enough to
+ * rank and deal.
+ */
+export const NEWEST_FIRST = true;
+
+const newest = <T extends { createdAt: string }>(list: T[]) => [...list].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+
 /** Session-local recommendations: likes, authored posts, comments and question votes. */
 export function rankFeed(posts: Post[], questions: Question[], comments: Comment[], userId: string | null, hits: Story[] = []): FeedItem[] {
+  if (NEWEST_FIRST) {
+    // Posts in the order they were made; a thread and a hit after every two.
+    const all = newest(posts);
+    const forum = newest(questions);
+    const moments = [...hits].sort((a, b) => (a.authorId === userId ? -1 : b.authorId === userId ? 1 : Date.parse(b.createdAt) - Date.parse(a.createdAt)));
+    const result: FeedItem[] = [];
+    while (all.length || forum.length || moments.length) {
+      for (const post of all.splice(0, 2)) result.push({ type: 'post', post });
+      const question = forum.shift(); if (question) result.push({ type: 'question', question });
+      const hit = moments.shift(); if (hit) result.push({ type: 'hit', story: hit });
+    }
+    return result;
+  }
   const interests = new Map<string, number>();
   // Looked up once, not once per post: with thousands of both, scanning every comment for every post was the slow part.
   const commented = new Set(userId ? comments.filter(c => c.authorId === userId).map(c => c.postId) : []);
@@ -39,6 +62,7 @@ export function rankFeed(posts: Post[], questions: Question[], comments: Comment
  * spreads across the whole list, the ranking only leans on it.
  */
 export function shuffleFeed(keys: string[]): string[] {
+  if (NEWEST_FIRST) return keys;
   const lean = 0.35;
   return keys
     .map((key, rank) => ({ key, at: Math.random() * keys.length + rank * lean }))
