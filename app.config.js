@@ -30,7 +30,6 @@ module.exports = {
       supportsTablet: false,
       usesAppleSignIn: true,
       bundleIdentifier: 'co.courtside.app',
-      buildNumber: '1',
       infoPlist: {
         // No custom encryption: skips the export-compliance question on every upload.
         ITSAppUsesNonExemptEncryption: false,
