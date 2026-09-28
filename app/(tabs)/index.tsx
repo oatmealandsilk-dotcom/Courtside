@@ -40,7 +40,7 @@ import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { TipPage } from '@/components/TipPage';
 import { isLive } from '@/features/stories/stories';
 import { ClipPlayback } from '@/components/ClipPlayback';
-import { rankFeed, shuffleFeed, type FeedItem } from '@/features/feed/rankFeed';
+import { NEWEST_FIRST, rankFeed, shuffleFeed, type FeedItem } from '@/features/feed/rankFeed';
 import { challengeFor, entriesFor } from '@/features/challenge/weekly';
 import { ChallengePage } from '@/components/ChallengePage';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
@@ -292,7 +292,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         .map((p) => `p:${p.id}`);
       // The feed always opens on a clip (unless something of yours just
       // landed): the first clip in the order is brought to the front.
-      if (!justMine.length) {
+      // Newest first, the newest post leads whatever it is.
+      if (!justMine.length && !NEWEST_FIRST) {
         const postKind = new Map(data.posts.map((p) => [`p:${p.id}`, p.kind]));
         const storyVideo = new Set(data.stories.filter((st) => st.videoUrl).map((st) => `h:${st.id}`));
         const isClip = (k: string) => postKind.get(k) === 'clip' || storyVideo.has(k);
@@ -305,7 +306,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         if (first < 0) first = final.findIndex(isClip);
         if (first > 0) final.unshift(...final.splice(first, 1));
       }
-      welcome.forEach((key, i) => {
+      if (!NEWEST_FIRST) welcome.forEach((key, i) => {
         const at = final.indexOf(key);
         if (at >= 0) final.splice(at, 1);
         final.splice(Math.min(final.length, justMine.length + 1 + i * 2), 0, key);
