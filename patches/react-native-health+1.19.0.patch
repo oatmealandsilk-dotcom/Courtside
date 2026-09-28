@@ -1,0 +1,15 @@
+diff --git a/node_modules/react-native-health/RCTAppleHealthKit/RCTAppleHealthKit.m b/node_modules/react-native-health/RCTAppleHealthKit/RCTAppleHealthKit.m
+index e8ddce1..38d0146 100644
+--- a/node_modules/react-native-health/RCTAppleHealthKit/RCTAppleHealthKit.m
++++ b/node_modules/react-native-health/RCTAppleHealthKit/RCTAppleHealthKit.m
+@@ -840,8 +840,8 @@ -(void)startObserving {
+ 
+ - (void)emitEventInternal:(NSNotification *)notification {
+   if (self.hasListeners) {
+-    self.callableJSModules = [RCTAppleHealthKit sharedJsModule];
+-    [self.callableJSModules setBridge:self.bridge];
++    // React Native now hands every event module its own JS channel, and
++    // RCTCallableJSModules no longer takes a bridge: send through that.
+     [self sendEventWithName:notification.name
+                    body:notification.userInfo];
+   }
