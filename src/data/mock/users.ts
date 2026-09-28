@@ -36,6 +36,7 @@ export const users: User[] = [
       skillSystem: 'NTRP',
       rating: 4.0,
       playStyle: 'aggressive-baseliner',
+      gear: { racket: 'Babolat Pure Aero 98', strings: 'RPM Blast 17 / VS Gut hybrid', tension: '52 lbs', shoes: 'Asics Gel-Resolution 9' },
       handedness: 'right',
       backhand: 'two-handed',
       fitnessLevel: 'competitive',

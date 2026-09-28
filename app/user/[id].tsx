@@ -156,7 +156,7 @@ export default function UserProfile() {
           <Pressable accessibilityRole="link" accessibilityLabel={`${user.name}'s tennis profile`} onPress={() => router.push({ pathname: '/profile-details', params: { userId: user.id } })} style={styles.tennis}>
             <View style={styles.eyebrowRow}><Text style={styles.eyebrow}>Tennis profile</Text><Ionicons name="chevron-forward" size={14} color={colors.textFaint} /></View>
             <View style={styles.details}>
-              {([['Style', playStyleLabel[profile.playStyle]], ['Surface', surfaceLabel[profile.preferredSurface]], profile.sessionsPerWeek !== undefined ? ['Plays', `${profile.sessionsPerWeek}× a week`] : null, profile.yearsPlaying !== undefined ? ['Experience', `${profile.yearsPlaying} years`] : null].filter(Boolean) as string[][]).map(([label, value]) => (
+              {([['Style', playStyleLabel[profile.playStyle]], ['Surface', surfaceLabel[profile.preferredSurface]], profile.sessionsPerWeek !== undefined ? ['Plays', `${profile.sessionsPerWeek}× a week`] : null, profile.yearsPlaying !== undefined ? ['Experience', `${profile.yearsPlaying} years`] : null, profile.gear?.racket ? ['Racket', profile.gear.racket] : null].filter(Boolean) as string[][]).map(([label, value]) => (
                 <View key={label} style={styles.detail}><Text style={styles.meta}>{label}</Text><Text style={styles.value}>{value}</Text></View>
               ))}
             </View>

@@ -43,6 +43,13 @@ export default function Profile() {
   }
 
   const profile = user.profile;
+  const gear = profile?.gear;
+  const gearRows = ([
+    gear?.racket ? ['Racket', gear.racket] : null,
+    gear?.strings ? ['Strings', gear.strings] : null,
+    gear?.tension ? ['Tension', gear.tension] : null,
+    gear?.shoes ? ['Shoes', gear.shoes] : null,
+  ].filter(Boolean) as [string, string][]);
   const badge = levelBadge(profile);
   const achievements = evaluateAchievements(user);
   const unlocked = achievements.filter((a) => a.unlocked);
@@ -115,6 +122,28 @@ export default function Profile() {
         {profile.sessionsPerWeek !== undefined ? <Detail line label="Plays" value={`${profile.sessionsPerWeek} times a week`} /> : null}
         {profile.yearsPlaying !== undefined ? <Detail line label="Experience" value={`${profile.yearsPlaying} years`} /> : null}
       </View>
+
+      {/* The gear bag: what they play with, one of the first things players ask each other. */}
+      {gearRows.length || isMe ? (
+        <>
+          <View style={styles.sectionHead}>
+            <Text style={[styles.sectionTitle, { flex: 1 }]}>Gear bag</Text>
+            {isMe && gearRows.length ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Edit your gear" hitSlop={10} onPress={() => router.push('/edit-gear')}>
+                <Text style={styles.sectionLink}>Edit</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          <View style={styles.group}>
+            {gearRows.length ? gearRows.map(([label, value], i) => <Detail key={label} line={i > 0} label={label} value={value} />) : (
+              <Pressable accessibilityRole="button" onPress={() => router.push('/edit-gear')} style={({ pressed }) => [styles.row, styles.addGear, pressed && { opacity: 0.7 }]}>
+                <Ionicons name="add-circle-outline" size={18} color={colors.brand} />
+                <Text style={styles.addGearText}>Add your racket, strings and shoes</Text>
+              </Pressable>
+            )}
+          </View>
+        </>
+      ) : null}
 
       <Text style={styles.sectionTitle}>Goals</Text>
       <View style={styles.group}>
@@ -223,6 +252,10 @@ const styleDefinitions = StyleSheet.create({
   statValue: { ...typography.title, color: colors.text, fontVariant: ['tabular-nums'] },
   statLabel: { ...typography.small, color: colors.textMuted },
   sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingTop: spacing.xl, paddingBottom: spacing.sm },
+  sectionHead: { flexDirection: 'row', alignItems: 'flex-end' },
+  sectionLink: { ...typography.smallStrong, color: colors.brand, paddingHorizontal: spacing.sm, paddingBottom: spacing.sm },
+  addGear: { gap: spacing.sm, justifyContent: 'flex-start' },
+  addGearText: { ...typography.smallStrong, color: colors.brand },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 50, paddingVertical: 11 },
   rowTall: { gap: 4, paddingVertical: spacing.md },
   rowHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
