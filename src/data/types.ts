@@ -71,6 +71,8 @@ export interface PlayerProfile {
   /** Missing when they haven't said: a skipped answer is never filled in for them. */
   yearsPlaying?: number;
   goals: PlayerGoal[];
+  /** What is in the bag, in the player's own words. Every part optional; nothing shown until something is filled in. */
+  gear?: { racket?: string; strings?: string; tension?: string; shoes?: string };
   constraints: Constraint[];
   tournaments: TournamentEntry[];
 }
