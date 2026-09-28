@@ -827,9 +827,11 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               };
               // On a phone, the page behind and two ahead keep their video buffered.
               // In a browser (where every video decodes on the same machine as the
-              // scroll) only the next page does: the one you are most likely to
-              // land on starts instantly, and scrolling stays smooth.
-              const near = Platform.OS === 'web' ? ahead === 1 : distance <= 1 || (ahead > 0 && ahead <= AHEAD);
+              // scroll) only the page on screen and the next one do: the first clip
+              // buffers while the feed is still warming up instead of waiting for
+              // it, the one you are most likely to land on starts instantly, and
+              // scrolling stays smooth.
+              const near = Platform.OS === 'web' ? ahead === 0 || ahead === 1 : distance <= 1 || (ahead > 0 && ahead <= AHEAD);
               const strip = index === suggestHost ? suggestStrip : null;
 
               if (item.type === 'tip') return <TipPage key="tip" onSubmit={actions.submitTip} />;

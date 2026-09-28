@@ -4,14 +4,15 @@ import { searchPlaces, type Place } from '@/data/locations';
 import type { User } from '@/data/types';
 import { fetchCourts, type Court } from '@/features/players/courts';
 import { milesBetween } from '@/features/players/geo';
-import { homeFor, positionFor, type LatLng } from '@/features/players/positions';
+import { homeFor, homeIsKnown, positionFor, type LatLng } from '@/features/players/positions';
+import { useApp } from '@/store/AppContext';
 import { levelBadge } from '@/lib/badges';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { show as showToast } from '@/lib/toast';
 
 export type MapFilter = 'all' | 'open' | 'near' | 'level' | 'coaches';
-/** A player set down on the map, with how far that is from you. */
-export interface Placed { user: User; at: LatLng; miles: number }
+/** A player set down on the map, with how far that is from you, and when they were last there. */
+export interface Placed { user: User; at: LatLng; miles: number; seenAt?: string; seenCity?: string }
 
 /** Inside this many miles someone counts as in your town. */
 export const IN_TOWN_MILES = 30;
@@ -23,10 +24,24 @@ export const IN_TOWN_MILES = 30;
  * (phone, browser) draw from this and hand back taps.
  */
 export function useMapModel(me: User, players: User[], fix?: LatLng | null) {
-  const home = useMemo(() => homeFor(me, fix), [me, fix]);
+  const { lastSeen, actions } = useApp();
+  // Without a fix here (a computer that was never asked), your own last spot
+  // from the phone is the next best thing to where you are.
+  const mine = lastSeen[me.id];
+  const where = useMemo(() => fix ?? (mine ? { lat: mine.lat, lng: mine.lng } : null), [fix, mine]);
+  const home = useMemo(() => homeFor(me, where), [me, where]);
+  const homeKnown = useMemo(() => homeIsKnown(me, where), [me, where]);
+  // Each opening fetches where people were last seen, so the map is never a day old.
+  useEffect(() => { void actions.loadLastSeen(); }, [actions.loadLastSeen]);
   const ranked = useMemo<Placed[]>(
-    () => players.map((user) => { const at = positionFor(user, home); return { user, at, miles: milesBetween(home, at) }; }).sort((a, b) => a.miles - b.miles),
-    [players, home],
+    () => players
+      .flatMap((user) => {
+        const seen = lastSeen[user.id];
+        const at = positionFor(user, seen);
+        return at ? [{ user, at, miles: milesBetween(home, at), seenAt: seen?.seenAt, seenCity: seen?.city }] : [];
+      })
+      .sort((a, b) => a.miles - b.miles),
+    [players, home, lastSeen],
   );
   const inTown = useMemo(() => ranked.filter((p) => p.miles <= IN_TOWN_MILES), [ranked]);
 
@@ -75,7 +90,7 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null) {
   useEffect(() => { if (courtsOn) void loadCourts(home); }, [courtsOn, home, loadCourts]);
   const toggleCourts = useCallback(() => { setCourtsOn((on) => { if (on) setSelectedCourtId(null); return !on; }); }, []);
 
-  return { home, ranked, inTown, filter, setFilter, query, setQuery, place, shown, selected, select, courtsOn, toggleCourts, courts: courtsOn ? courts : [], courtsLoading, loadCourts, selectedCourt, selectCourt };
+  return { home, homeKnown, ranked, inTown, filter, setFilter, query, setQuery, place, shown, selected, select, courtsOn, toggleCourts, courts: courtsOn ? courts : [], courtsLoading, loadCourts, selectedCourt, selectCourt };
 }
 
 export type MapModel = ReturnType<typeof useMapModel>;
