@@ -3,7 +3,9 @@ import { Wash } from '@/components/Wash';
 import React, { useEffect, useState } from 'react';
 import { BirthDateField } from '@/components/BirthDateField';
 import { blockDevice, isDeviceBlocked, toBirthDate, yearsOld } from '@/features/age/ageCheck';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import { Submit } from '@/components/sheet/SheetForm';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -16,7 +18,7 @@ import { remote, type HandleStatus } from '@/data/remote';
 import { SigningInAs } from '@/components/SigningInAs';
 import { useLeave } from '@/components/LeaveCurtain';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography, font } from '@/theme';
+import { colors, lift, radius, spacing, typography, font } from '@/theme';
 
 type Mode = 'sign-in' | 'sign-up';
 
@@ -34,6 +36,8 @@ export default function SignIn() {
   const [useAnother, setUseAnother] = useState(false);
   const remembered = isSupabaseConfigured && !add && !useAnother && mode === 'sign-in' ? savedAccounts.filter((a) => a.id !== currentUserId) : [];
   const [switching, setSwitching] = useState<string | null>(null);
+  // A link sent by email: the form gives way to a panel saying where it went.
+  const [sent, setSent] = useState<{ kind: 'reset' | 'confirm'; to: string } | null>(null);
   const { leave, curtain } = useLeave();
   const switchingAccount = switching ? savedAccounts.find((a) => a.id === switching) ?? null : null;
   const pick = async (id: string) => {
@@ -143,7 +147,7 @@ export default function SignIn() {
     setBusy(true); setError(null); setNotice(null);
     try {
       await actions.requestPasswordReset(email);
-      setNotice('Check your email for a link. It signs you in so you can set a new password.');
+      setSent({ kind: 'reset', to: email.trim() });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not send the reset email.');
     } finally { setBusy(false); }
@@ -166,7 +170,7 @@ export default function SignIn() {
         const result = await actions.signUp(email, password, name, cleanHandle);
         if (result !== 'confirm') await actions.confirmBirthDate(birthDate);
         if (result === 'confirm') {
-          setNotice('Check your email for a confirmation link, then sign in.');
+          setSent({ kind: 'confirm', to: email.trim() });
           setMode('sign-in');
           return;
         }
@@ -179,56 +183,90 @@ export default function SignIn() {
     }
   };
 
+  const chooser = remembered.length > 0 && !sent;
+  const title = chooser ? 'Welcome back' : mode === 'sign-up' ? 'Create your account' : 'Sign in';
+  const line = chooser ? 'Pick an account to carry on.' : mode === 'sign-up' ? 'Free, and it takes a minute.' : 'Tennis clips, people to hit with, and real coaches.';
+
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Wash height={420} strength={0.85} />
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <View style={styles.hero}>
-          <BrandMark size={56} />
-          <Text style={styles.wordmark}>CourtSide</Text>
-          <Text style={styles.tagline}>
-            Share your clips, ask the questions nobody answers well, find people to hit with, and learn from real coaches.
-          </Text>
-        </View>
-
-        {remembered.length ? (
-          <View style={styles.accounts}>
-            {remembered.map((account, index) => (
-              <Pressable
-                key={account.id}
-                accessibilityRole="button"
-                accessibilityLabel={`Sign in as ${account.name || account.handle}`}
-                onPress={() => pick(account.id)}
-                disabled={!!switching}
-                style={({ pressed }) => [styles.account, index > 0 && styles.accountBorder, pressed && { backgroundColor: colors.surfaceAlt }]}
-              >
-                <Avatar name={account.name || account.handle || '?'} seed={account.id} uri={account.avatarUrl} size={40} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.accountName}>{account.name || account.handle || account.email || 'Account'}</Text>
-                  <Text style={styles.accountMeta}>{account.handle ? `@${account.handle}` : account.email ?? ''}</Text>
-                </View>
-                {switching === account.id ? <Text style={styles.accountMeta}>Signing in…</Text> : <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />}
-              </Pressable>
-            ))}
-            <Pressable accessibilityRole="button" onPress={() => setUseAnother(true)} style={[styles.account, styles.accountBorder]}>
-              <View style={styles.plus}><Ionicons name="add" size={20} color={colors.brand} /></View>
-              <Text style={[styles.accountName, { flex: 1 }]}>Use another account</Text>
-            </Pressable>
-            {error ? <Text style={[styles.error, { paddingHorizontal: spacing.lg, paddingBottom: spacing.md }]}>{error}</Text> : null}
-          </View>
-        ) : null}
-
-        <View style={[styles.form, remembered.length > 0 && { display: 'none' }]}>
-          {isSupabaseConfigured ? (
+        <Animated.View entering={FadeIn.duration(360)} style={styles.column}>
+          {sent ? (
+            // Where the link went, and what to do with it: a panel, not a line of green text.
+            <View style={styles.inbox}>
+              <View style={styles.inboxIcon}><Ionicons name="mail-open-outline" size={28} color={colors.brand} /></View>
+              <Text style={styles.title}>Check your inbox</Text>
+              <Text style={styles.inboxBody}>
+                We sent a {sent.kind === 'reset' ? 'password reset link' : 'confirmation link'} to <Text style={styles.inboxTo}>{sent.to}</Text>.{' '}
+                {sent.kind === 'reset' ? 'Follow the link to create a new password. It expires in one hour.' : 'Follow the link to confirm your email, then sign in here.'}
+              </Text>
+              <Text style={styles.inboxHint}>Didn’t get it? Check your spam folder{sent.kind === 'reset' ? ', or resend the email.' : '.'}</Text>
+              {error ? <Text style={styles.error}>{error}</Text> : null}
+              <View style={styles.inboxActions}>
+                <Pressable accessibilityRole="button" onPress={() => { setSent(null); setError(null); }} style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>
+                  <Text style={styles.secondaryText}>Back to sign in</Text>
+                </Pressable>
+                {sent.kind === 'reset' ? (
+                  <Pressable accessibilityRole="button" disabled={busy} onPress={() => { void forgot(); }} hitSlop={8} style={styles.linkButton}>
+                    <Text style={styles.link}>{busy ? 'Sending…' : 'Resend email'}</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          ) : (
             <>
+              <View style={styles.hero}>
+                <BrandMark size={42} />
+                <View style={{ gap: 6 }}>
+                  <Text style={styles.title}>{title}</Text>
+                  <Text style={styles.line}>{line}</Text>
+                </View>
+              </View>
+
+              {chooser ? (
+                <View style={styles.accounts}>
+                  {remembered.map((account, index) => (
+                    <Animated.View key={account.id} entering={FadeInDown.delay(80 + index * 60).duration(340)}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Sign in as ${account.name || account.handle}`}
+                        onPress={() => pick(account.id)}
+                        disabled={!!switching}
+                        style={({ pressed }) => [styles.account, pressed && styles.pressed]}
+                      >
+                        <Avatar name={account.name || account.handle || '?'} seed={account.id} uri={account.avatarUrl} size={48} />
+                        <View style={{ flex: 1, gap: 2 }}>
+                          <Text style={styles.accountName} numberOfLines={1}>{account.name || account.handle || account.email || 'Account'}</Text>
+                          <Text style={styles.accountMeta} numberOfLines={1}>{account.handle ? `@${account.handle}` : account.email ?? ''}</Text>
+                        </View>
+                        {switching === account.id
+                          ? <ActivityIndicator size="small" color={colors.brand} />
+                          : <View style={styles.go}><Ionicons name="arrow-forward" size={16} color={colors.textMuted} /></View>}
+                      </Pressable>
+                    </Animated.View>
+                  ))}
+                  {error ? <Text style={styles.error}>{error}</Text> : null}
+                  <Pressable accessibilityRole="button" onPress={() => setUseAnother(true)} style={({ pressed }) => [styles.secondary, { marginTop: spacing.sm }, pressed && styles.pressed]}>
+                    <Ionicons name="add" size={18} color={colors.text} />
+                    <Text style={styles.secondaryText}>Use another account</Text>
+                  </Pressable>
+                  <Pressable accessibilityRole="button" onPress={() => { setUseAnother(true); setMode('sign-up'); }} style={styles.switch}>
+                    <Text style={styles.switchText}>New here? <Text style={styles.switchLink}>Create an account</Text></Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <View style={styles.form}>
+                  {isSupabaseConfigured ? (
+                    <>
               {mode === 'sign-up' ? (
                 <>
-                  <Field label="Name" value={name} onChangeText={setName} placeholder="Mira Okafor" autoCapitalize="words" />
+                  <Field soft value={name} onChangeText={setName} placeholder="Your name" autoCapitalize="words" />
                   <Field
-                    label="Handle"
+                    soft
                     value={handle}
                     onChangeText={setHandle}
-                    placeholder="miraplays"
+                    placeholder="Handle, e.g. miraplays"
                     autoCapitalize="none"
                     hint={handleGone ? `@${cleanHandle} is taken. Try another.`
                       : handleStatus === 'ok' ? `@${cleanHandle} is free`
@@ -238,25 +276,17 @@ export default function SignIn() {
                   {ageBlocked ? <Text style={styles.ageNote}>Sorry, you can't create a CourtSide account.</Text> : null}
                 </>
               ) : null}
-              <Field label="Email" value={email} onChangeText={setEmail} placeholder="you@example.com" autoCapitalize="none" keyboardType="email-address" />
-              <Field
-                label="Password"
-                value={password}
-                onChangeText={setPassword}
-                placeholder={mode === 'sign-up' ? 'At least 6 characters' : '••••••••'}
-                autoCapitalize="none"
-                secureTextEntry
-                onSubmitEditing={submit}
-              />
-              {mode === 'sign-in' ? (
-                <Pressable accessibilityRole="button" accessibilityLabel="Forgot password" onPress={forgot} hitSlop={8} style={{ alignSelf: 'flex-end' }}>
-                  <Text style={styles.forgot}>Forgot password?</Text>
-                </Pressable>
-              ) : (
-                <TermsCheck checked={agreed} onChange={setAgreed} />
-              )}
-            </>
-          ) : (
+                      <Field soft value={email} onChangeText={setEmail} placeholder="Email" autoCapitalize="none" keyboardType="email-address" />
+                      <Field soft value={password} onChangeText={setPassword} placeholder={mode === 'sign-up' ? 'Password, at least 6 characters' : 'Password'} autoCapitalize="none" secureTextEntry onSubmitEditing={submit} />
+                      {mode === 'sign-in' ? (
+                        <Pressable accessibilityRole="button" accessibilityLabel="Forgot password" onPress={forgot} hitSlop={8} style={styles.forgot}>
+                          <Text style={styles.link}>Forgot password?</Text>
+                        </Pressable>
+                      ) : (
+                        <TermsCheck checked={agreed} onChange={setAgreed} />
+                      )}
+                    </>
+                  ) : (
             <Field
               label="Handle"
               value={demoHandle}
@@ -265,23 +295,13 @@ export default function SignIn() {
               autoCapitalize="none"
               hint='Demo build — no accounts, no database. Try "you", "miraplays", "devbackhand" or "tomascoach".'
             />
-          )}
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-          {notice ? <Text style={styles.notice}>{notice}</Text> : null}
-          <Button
-            label={!isSupabaseConfigured ? 'Enter' : mode === 'sign-in' ? 'Sign in' : 'Create account'}
-            onPress={submit}
-            loading={busy}
-            disabled={!ready}
-            full
-          />
-          {isSupabaseConfigured ? (
-            <>
-              <View style={styles.divider}>
-                <View style={styles.rule} />
-                <Text style={styles.dividerText}>or</Text>
-                <View style={styles.rule} />
-              </View>
+                  )}
+                  {error ? <Text style={styles.error}>{error}</Text> : null}
+                  {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+                  <Submit label={!isSupabaseConfigured ? 'Enter' : mode === 'sign-in' ? 'Sign in' : 'Create account'} onPress={() => { void submit(); }} disabled={!ready} busy={busy} />
+                  {isSupabaseConfigured ? (
+                    <>
+                      <Text style={styles.or}>or</Text>
               {appleReady ? (
                 <AppleAuthentication.AppleAuthenticationButton
                   buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
@@ -291,35 +311,35 @@ export default function SignIn() {
                   onPress={apple}
                 />
               ) : null}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Continue with Google"
-                onPress={google}
-                disabled={busy}
-                style={({ pressed }) => [styles.google, pressed && { backgroundColor: colors.surfaceAlt }, busy && { opacity: 0.6 }]}
-              >
-                <Ionicons name="logo-google" size={19} color={colors.text} />
-                <Text style={styles.googleText}>Continue with Google</Text>
-              </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Continue with Google"
+                        onPress={google}
+                        disabled={busy}
+                        style={({ pressed }) => [styles.secondary, pressed && styles.pressed, busy && { opacity: 0.6 }]}
+                      >
+                        <Ionicons name="logo-google" size={18} color={colors.text} />
+                        <Text style={styles.secondaryText}>Continue with Google</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => { setMode(mode === 'sign-in' ? 'sign-up' : 'sign-in'); setError(null); setNotice(null); }}
+                        style={styles.switch}
+                      >
+                        <Text style={styles.switchText}>
+                          {mode === 'sign-in' ? 'New here? ' : 'Already have an account? '}
+                          <Text style={styles.switchLink}>{mode === 'sign-in' ? 'Create an account' : 'Sign in'}</Text>
+                        </Text>
+                      </Pressable>
+                    </>
+                  ) : (
+                    <Text style={styles.footnote}>Mock data only. Nothing you do here leaves the device.</Text>
+                  )}
+                </View>
+              )}
             </>
-          ) : null}
-          {isSupabaseConfigured ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => { setMode(mode === 'sign-in' ? 'sign-up' : 'sign-in'); setError(null); setNotice(null); }}
-              style={styles.switch}
-            >
-              <Text style={styles.switchText}>
-                {mode === 'sign-in' ? 'New here? ' : 'Already have an account? '}
-                <Text style={styles.switchLink}>{mode === 'sign-in' ? 'Create an account' : 'Sign in'}</Text>
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
-
-        <Text style={styles.footnote}>
-          {isSupabaseConfigured ? 'Your posts, instants and follows are saved to your account.' : 'Mock data only. Nothing you do here leaves the device.'}
-        </Text>
+          )}
+        </Animated.View>
       </ScrollView>
       {switchingAccount ? <SigningInAs name={switchingAccount.name} handle={switchingAccount.handle} avatarUrl={switchingAccount.avatarUrl} seed={switchingAccount.id} /> : null}
       {curtain}
@@ -330,38 +350,37 @@ export default function SignIn() {
 const styleDefinitions = StyleSheet.create({
   ageNote: { ...typography.small, color: colors.danger },
   root: { flex: 1, backgroundColor: colors.bg },
-  scroll: { flexGrow: 1, padding: spacing.xl, justifyContent: 'center', gap: spacing.xxl, maxWidth: 520, width: '100%', alignSelf: 'center' },
-  hero: { gap: spacing.md },
-  wordmark: { fontSize: 44, ...font('700'), color: colors.brand, letterSpacing: -1.4 },
-  tagline: { ...typography.body, color: colors.textMuted, lineHeight: 23, maxWidth: 380 },
-  form: { gap: spacing.lg },
-  accounts: { borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden', marginBottom: spacing.lg },
-  account: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, minHeight: 60 },
-  accountBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  accountName: { ...typography.bodyStrong, color: colors.text },
-  accountMeta: { ...typography.small, color: colors.textFaint },
-  plus: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  scroll: { flexGrow: 1, paddingHorizontal: spacing.xl, paddingVertical: spacing.xxl, justifyContent: 'center' },
+  column: { width: '100%', maxWidth: 420, alignSelf: 'center', gap: spacing.xxl },
+  hero: { gap: spacing.lg },
+  title: { ...typography.display, fontSize: 32, letterSpacing: -1.1, color: colors.text },
+  line: { ...typography.body, fontSize: 16, color: colors.textMuted, lineHeight: 23 },
+  // Each remembered account is its own soft card, like the app's own cards.
+  accounts: { gap: spacing.md },
+  account: { ...lift, flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: spacing.lg, paddingVertical: 14, borderRadius: 20, backgroundColor: colors.surface },
+  accountName: { ...typography.bodyStrong, fontSize: 16, color: colors.text },
+  accountMeta: { ...typography.small, color: colors.textMuted },
+  go: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.bgElevated, alignItems: 'center', justifyContent: 'center' },
+  pressed: { transform: [{ scale: 0.99 }], opacity: 0.9 },
+  secondary: { ...lift, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, height: 52, borderRadius: radius.pill, backgroundColor: colors.surface },
+  secondaryText: { ...typography.bodyStrong, fontSize: 16, color: colors.text },
+  form: { gap: spacing.md },
+  forgot: { alignSelf: 'flex-end', paddingVertical: 2 },
+  link: { ...typography.smallStrong, fontSize: 14, color: colors.brand },
+  linkButton: { alignSelf: 'center', paddingVertical: spacing.sm },
+  or: { ...typography.small, color: colors.textFaint, textAlign: 'center' },
   error: { ...typography.small, color: colors.danger },
-  forgot: { ...typography.small, color: colors.brand, fontWeight: '600' },
   notice: { ...typography.small, color: colors.success },
-  divider: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  rule: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.borderStrong },
-  dividerText: { ...typography.small, color: colors.textFaint },
-  apple: { height: 48, width: '100%', marginBottom: spacing.sm },
-  google: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    minHeight: 50,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-    backgroundColor: colors.surface,
-  },
-  googleText: { ...typography.bodyStrong, color: colors.text },
+  apple: { height: 52, width: '100%' },
   switch: { alignSelf: 'center', paddingVertical: spacing.sm },
-  switchText: { ...typography.small, color: colors.textMuted },
-  switchLink: { ...typography.smallStrong, color: colors.brand },
+  switchText: { ...typography.small, fontSize: 14, color: colors.textMuted },
+  switchLink: { ...typography.smallStrong, fontSize: 14, color: colors.brand },
   footnote: { ...typography.small, color: colors.textFaint, textAlign: 'center' },
+  // The inbox panel: an envelope, where it went, what to do next.
+  inbox: { gap: spacing.lg, alignItems: 'flex-start' },
+  inboxIcon: { width: 60, height: 60, borderRadius: 30, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  inboxBody: { ...typography.body, fontSize: 16, lineHeight: 24, color: colors.textMuted },
+  inboxTo: { ...font('600'), color: colors.text },
+  inboxHint: { ...typography.small, color: colors.textFaint },
+  inboxActions: { alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.sm },
 });

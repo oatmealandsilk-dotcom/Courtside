@@ -8,6 +8,7 @@ import { BrandMark } from '@/components/BrandMark';
 import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography, font } from '@/theme';
 import { Button } from '@/components/ui';
+import { leaveGently } from '@/components/SignOutCurtain';
 
 /** How long the mark stays up even when the data is instant — a beat, not a wait. */
 const HOLD_MS = 450;
@@ -71,7 +72,7 @@ export default function Index() {
         <Text style={styles.failTitle}>Could not load your account</Text>
         <Text style={styles.failBody}>Check your connection and try again. Nothing you have saved is lost.</Text>
         <Button label={retrying ? 'Trying…' : 'Try again'} loading={retrying} onPress={async () => { setRetrying(true); try { await actions.retryLoad(); } finally { setRetrying(false); } }} />
-        <Button label="Sign out" variant="ghost" onPress={() => actions.signOut()} />
+        <Button label="Sign out" variant="ghost" onPress={() => leaveGently(() => actions.signOut())} />
       </View>
     );
   }

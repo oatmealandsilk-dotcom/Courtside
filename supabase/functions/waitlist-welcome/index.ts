@@ -7,16 +7,18 @@
 //
 // Deploy:   supabase functions deploy waitlist-welcome --no-verify-jwt
 // Secrets:  RESEND_API_KEY            (required — nothing sends without it)
-//           WAITLIST_FROM             (optional, default "William at CourtSide <william@courtsidebase.com>";
+//           WAITLIST_FROM             (optional, default "Robert at CourtSide <robert@courtsidebase.com>";
 //                                      must be on a domain verified in Resend)
 //           WAITLIST_REPLY_TO         (optional — the inbox replies should reach)
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 const RESEND = Deno.env.get('RESEND_API_KEY') ?? '';
-const FROM = Deno.env.get('WAITLIST_FROM') ?? 'William at CourtSide <william@courtsidebase.com>';
+const FROM = Deno.env.get('WAITLIST_FROM') ?? 'Robert at CourtSide <robert@courtsidebase.com>';
 const REPLY_TO = Deno.env.get('WAITLIST_REPLY_TO') ?? '';
 const HERO = 'https://app.courtsidebase.com/waitlist/email-hero.png';
+const HEADER = 'https://app.courtsidebase.com/email/header.png';
+const FONT = "Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
 const SHARE_BASE = 'https://courtsidebase.com/';
 
 const cors = {
@@ -28,30 +30,44 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 
 function letter(first: string | null, place: number, link: string) {
   const hey = first ? `Hey ${first}` : 'Hey';
-  const text = `${hey} — thanks for joining. You're #${place}.
+  const text = `${hey}, thanks for joining. You're #${place} on the list.
 
-CourtSide is a tennis app I'm building: post your clips, find players at your level nearby, ask real coaches. Here's where it is today: day 1 on the left, now on the right — ${HERO}
+CourtSide is the tennis app I'm building: post your clips, find players at your level nearby, and ask real coaches. Here's how far it has come, day 1 on the left and today on the right: ${HERO}
 
 The iPhone beta opens soon, and you'll get the link before anyone else.
 
-Want in sooner? Every friend who joins through your link moves you up:
+Want in sooner? Every friend who joins through your link moves you up the list:
 ${link}
 
-One question: what's your level, and where do you play? Just hit reply. I read every one.
+One question while you're here: who's really the GOAT of the Big 3? Mine's Federer, but I don't judge. Just hit reply. I read every one.
 
-— William
-CourtSide`;
-  // Written like a personal note, not a newsletter: plain type, one picture, one link.
-  const html = `<!doctype html><html><body style="margin:0;background:#ffffff">
-<div style="max-width:560px;margin:0 auto;padding:28px 22px;font:16px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#1f241f">
-<p style="margin:0 0 16px">${esc(hey)} — thanks for joining. You're <b>#${place}</b>.</p>
-<p style="margin:0 0 16px">CourtSide is a tennis app I'm building: post your clips, find players at your level nearby, ask real coaches. Here's where it is today — day 1 on the left, now on the right:</p>
-<p style="margin:0 0 20px"><img src="${HERO}" width="516" alt="CourtSide on day 1 and today" style="display:block;width:100%;max-width:516px;height:auto;border-radius:14px;border:1px solid #e6e2d8"></p>
-<p style="margin:0 0 16px">The iPhone beta opens soon, and you'll get the link before anyone else.</p>
-<p style="margin:0 0 16px">Want in sooner? Every friend who joins through your link moves you up:<br><a href="${link}" style="color:#3f7049">${link.replace('https://', '')}</a></p>
-<p style="margin:0 0 16px">One question: what's your level, and where do you play? Just hit reply. I read every one.</p>
-<p style="margin:0">— William<br><span style="color:#6b6f66">CourtSide</span></p>
-</div></body></html>`;
+Robert
+Founder, CourtSide`;
+  // A personal note in the app's own look: the cream page, the warm glow and
+  // the name across the top, the words straight on the page, one picture, one link.
+  const p = (inner: string) => `<p style="margin:0 0 18px;font-size:16px;line-height:1.6;color:#3A3A33">${inner}</p>`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light only">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet"></head>
+<body style="margin:0;padding:0;background:#F8F7F2">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F8F7F2"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">
+<tr><td><img src="${HEADER}" width="560" alt="CourtSide" style="display:block;width:100%;max-width:560px;height:auto;border:0"></td></tr>
+<tr><td style="padding:8px 28px 8px;font-family:${FONT}">
+${p(`${esc(hey)}, thanks for joining. You&rsquo;re <b style="color:#24251F">#${place}</b> on the list.`)}
+${p('CourtSide is the tennis app I&rsquo;m building: post your clips, find players at your level nearby, and ask real coaches. Here&rsquo;s how far it has come, day 1 on the left and today on the right:')}
+<p style="margin:4px 0 22px"><img src="${HERO}" width="504" alt="CourtSide on day 1 and today" style="display:block;width:100%;max-width:504px;height:auto;border:0"></p>
+${p('The iPhone beta opens soon, and you&rsquo;ll get the link before anyone else.')}
+${p('Want in sooner? Every friend who joins through your link moves you up the list:')}
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:2px 0 10px"><tr><td style="border-radius:999px;background:#3F7049">
+<a href="${link}" style="display:inline-block;padding:14px 26px;font-family:${FONT};font-size:15px;font-weight:600;color:#FAF8F0;text-decoration:none;border-radius:999px">Share your link</a>
+</td></tr></table>
+<p style="margin:0 0 26px;font-size:13px;color:#6C665A"><a href="${link}" style="color:#3F7049">${link.replace('https://', '')}</a></p>
+${p('One question while you&rsquo;re here: who&rsquo;s really the GOAT of the Big 3? Mine&rsquo;s Federer, but I don&rsquo;t judge. Just hit reply. I read every one.')}
+<p style="margin:26px 0 0;font-size:16px;line-height:1.5;color:#24251F">Robert<br><span style="font-size:14px;color:#6C665A">Founder, CourtSide</span></p>
+</td></tr>
+<tr><td style="padding:36px 28px 40px;font-family:${FONT};font-size:12px;line-height:1.6;color:#8A8577">You&rsquo;re getting this because you joined the CourtSide waitlist at courtsidebase.com.</td></tr>
+</table></td></tr></table>
+</body></html>`;
   return { text, html };
 }
 

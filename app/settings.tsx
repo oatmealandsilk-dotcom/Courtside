@@ -11,6 +11,7 @@ import { useApp } from '@/store/AppContext';
 import { useTheme, themeList, themes, type ThemeName } from '@/theme/ThemeProvider';
 import { Wash } from '@/components/Wash';
 import { colors, radius, spacing, typography, lift } from '@/theme';
+import { leaveGently } from '@/components/SignOutCurtain';
 
 interface Row {
   icon: keyof typeof Ionicons.glyphMap;
@@ -143,7 +144,7 @@ export default function Settings() {
       ))}
 
       {/* Signing out leaves this page too: it sits above the tabs, so nothing else would send you to sign in. */}
-      <Pressable accessibilityRole="button" accessibilityLabel="Log out" onPress={() => { actions.signOut(); router.replace('/sign-in'); }} style={({ pressed }) => [styles.card, styles.logout, pressed && styles.rowPressed]}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Log out" onPress={() => leaveGently(() => { actions.signOut(); router.replace('/sign-in'); })} style={({ pressed }) => [styles.card, styles.logout, pressed && styles.rowPressed]}>
         <Text style={styles.logoutText}>Log out</Text>
       </Pressable>
       <Text style={styles.version}>CourtSide · early access</Text>

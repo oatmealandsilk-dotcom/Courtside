@@ -18,6 +18,7 @@ import { colors, font } from '@/theme';
 import { BrandMark } from '@/components/BrandMark';
 import { installCrashReporting, reportError } from '@/lib/crashReporting';
 import { isDesktopBrowser } from '@/lib/browserDevice';
+import { SignOutCurtainHost } from '@/components/SignOutCurtain';
 
 // Any error the app does not catch itself is filed as a crash report.
 installCrashReporting();
@@ -95,6 +96,7 @@ export default function RootLayout() {
           <Stack.Screen name="story/[id]" options={{ presentation: 'fullScreenModal', animation: 'fade' }} />
           <Stack.Screen name="hit" options={{ presentation: 'fullScreenModal', animation: 'fade', contentStyle: { backgroundColor: '#000' } }} />
         </Stack></AppShell>
+        <SignOutCurtainHost />
       </AppProvider>
     </SafeAreaProvider></ThemeProvider></GestureHandlerRootView>
   );

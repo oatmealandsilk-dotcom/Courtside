@@ -2,7 +2,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Platform, View } from 'react-native';
 import { goBack } from '@/lib/goBack';
-import { Redirect, router, usePathname } from 'expo-router';
+import { Redirect, router, useGlobalSearchParams, usePathname } from 'expo-router';
 import { NavBar } from './NavBar';
 import { setInstantExit } from '@/features/navigation/instantExit';
 import { UploadBar } from '@/components/UploadBar';
@@ -104,7 +104,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Instagram's does behind its Create box. Sign-in, setup and the camera
   // hide it everywhere.
   const phoneOnlyHide = ['/compose', '/edit-post', '/ask', '/ask-coach', '/pick-location', '/pick-court', '/invite', '/comments', '/share', '/likes', '/post-menu', '/log-session', '/hit-request/new', '/court-report', '/wrapped'].includes(pathname) || pathname.startsWith('/messages/');
-  const hideEverywhere = ['/sign-in', '/onboarding', '/agree', '/first-move', '/hit'].includes(pathname) || pathname.startsWith('/story/');
+  // Arriving from the password-reset email is its own calm page, with no app around it yet.
+  const { reset } = useGlobalSearchParams<{ reset?: string }>();
+  const hideEverywhere = ['/sign-in', '/onboarding', '/agree', '/first-move', '/hit'].includes(pathname) || pathname.startsWith('/story/') || (pathname === '/account' && !!reset);
   const showNav = !!currentUserId && !hideEverywhere && !(isPhone && phoneOnlyHide);
   // A shared link opened while signed out goes to sign-in, not to an empty page.
   const mustSignIn = ready && authResolved && !currentUserId && !['/', '/index', '/sign-in', '/onboarding', '/birthday'].includes(pathname);
