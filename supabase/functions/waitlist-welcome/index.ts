@@ -10,6 +10,13 @@
 //           WAITLIST_FROM             (optional, default "Robert at CourtSide <robert@courtsidebase.com>";
 //                                      must be on a domain verified in Resend)
 //           WAITLIST_REPLY_TO         (optional — the inbox replies should reach)
+//           WAITLIST_BACKFILL_TOKEN   (optional — set only while catching up on people
+//                                      who joined before the email existed; unset it after)
+//
+// Catch-up: POST {"backfill": true, "token": "<WAITLIST_BACKFILL_TOKEN>", "dry": true}
+// counts who is still waiting for a welcome; without "dry" it welcomes up to
+// "limit" of them (oldest first, at most 80 a call to stay inside the daily
+// sending allowance) and says how many are left.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -71,25 +78,10 @@ ${p('One question while you&rsquo;re here: who&rsquo;s really the GOAT of the Bi
   return { text, html };
 }
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
-  if (req.method !== 'POST') return json({ error: 'post only' }, 405);
-  const body = await req.json().catch(() => ({})) as { email?: string };
-  const email = String(body.email ?? '').trim().toLowerCase();
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) return json({ sent: false });
-  if (!RESEND) return json({ sent: false, reason: 'not set up' });
-
-  // Claim the send first, so two calls in the same second cannot both send.
-  // Only someone who joined in the last few minutes is welcomed: this is
-  // the page's own follow-up to a sign-up, never a way to mail an old or
-  // made-up row on demand.
-  const recent = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-  const { data: row } = await admin.from('waitlist').update({ welcomed_at: new Date().toISOString() })
-    .eq('email', email).is('welcomed_at', null).gt('created_at', recent).select('id, name').maybeSingle();
-  if (!row) return json({ sent: false });
-
+/** Welcomes one claimed row; gives the claim back if the send fails. */
+async function welcome(row: { id: string; email: string; name: string | null }) {
   // Their place and code, the same way the page shows them.
-  const { data: spot } = await admin.rpc('join_waitlist', { p_email: email });
+  const { data: spot } = await admin.rpc('join_waitlist', { p_email: row.email });
   const s = Array.isArray(spot) ? spot[0] : spot;
   const place = Number(s?.place ?? 0) || 1;
   const link = `${SHARE_BASE}?r=${s?.code ?? String(row.id).replace(/-/g, '').slice(0, 8)}`;
@@ -100,12 +92,57 @@ Deno.serve(async (req) => {
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { authorization: `Bearer ${RESEND}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ from: FROM, to: [email], subject: `you're #${place} on CourtSide`, text, html, ...(REPLY_TO ? { reply_to: REPLY_TO } : {}) }),
+    body: JSON.stringify({ from: FROM, to: [row.email], subject: `you're #${place} on CourtSide`, text, html, ...(REPLY_TO ? { reply_to: REPLY_TO } : {}) }),
   });
   if (!res.ok) {
     // Give the send back, so a fixed key or domain can try again for this person.
     await admin.from('waitlist').update({ welcomed_at: null }).eq('id', row.id);
-    return json({ sent: false, reason: `resend ${res.status}` }, 502);
+    return `resend ${res.status}`;
   }
-  return json({ sent: true });
+  return null;
+}
+
+/** Everyone who joined before the email existed, a batch at a time. */
+async function backfill(body: { token?: string; dry?: boolean; limit?: number }) {
+  const token = Deno.env.get('WAITLIST_BACKFILL_TOKEN') ?? '';
+  if (!token || body.token !== token) return json({ error: 'not allowed' }, 403);
+  const waiting = async () => (await admin.from('waitlist').select('id', { count: 'exact', head: true }).is('welcomed_at', null)).count ?? 0;
+  if (body.dry) return json({ waiting: await waiting() });
+
+  const limit = Math.max(1, Math.min(80, Number(body.limit) || 20));
+  const { data: rows } = await admin.from('waitlist').select('id').is('welcomed_at', null).order('created_at').limit(limit);
+  let sent = 0;
+  const failed: string[] = [];
+  for (const { id } of rows ?? []) {
+    // The same claim as a live sign-up, so nobody is ever sent two.
+    const { data: row } = await admin.from('waitlist').update({ welcomed_at: new Date().toISOString() })
+      .eq('id', id).is('welcomed_at', null).select('id, email, name').maybeSingle();
+    if (!row) continue;
+    const problem = await welcome(row);
+    if (problem) { failed.push(problem); if (problem === 'resend 429') break; } else sent++;
+    await new Promise((r) => setTimeout(r, 600)); // Resend takes two a second
+  }
+  return json({ sent, failed, waiting: await waiting() });
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
+  if (req.method !== 'POST') return json({ error: 'post only' }, 405);
+  const body = await req.json().catch(() => ({})) as { email?: string; backfill?: boolean; token?: string; dry?: boolean; limit?: number };
+  if (!RESEND) return json({ sent: false, reason: 'not set up' });
+  if (body.backfill) return backfill(body);
+  const email = String(body.email ?? '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) return json({ sent: false });
+
+  // Claim the send first, so two calls in the same second cannot both send.
+  // Only someone who joined in the last few minutes is welcomed: this is
+  // the page's own follow-up to a sign-up, never a way to mail an old or
+  // made-up row on demand.
+  const recent = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const { data: row } = await admin.from('waitlist').update({ welcomed_at: new Date().toISOString() })
+    .eq('email', email).is('welcomed_at', null).gt('created_at', recent).select('id, email, name').maybeSingle();
+  if (!row) return json({ sent: false });
+
+  const problem = await welcome(row);
+  return problem ? json({ sent: false, reason: problem }, 502) : json({ sent: true });
 });
