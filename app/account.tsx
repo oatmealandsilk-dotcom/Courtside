@@ -1,6 +1,10 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
-import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
+import { BrandMark } from '@/components/BrandMark';
+import { Wash } from '@/components/Wash';
+import { SheetTitle, Submit } from '@/components/sheet/SheetForm';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -40,10 +44,7 @@ export default function AccountCentre() {
     actions.accountInfo().then(setInfo).catch(() => setInfo(null));
   }, [actions]);
 
-  // Straight off the reset email: setting the new password is the whole
-  // reason for the trip, so the sheet is already open rather than waiting to
-  // be found on a screen full of other rows.
-  useEffect(() => { if (reset) { setPassword(''); setPassword2(''); setSheet('password'); } }, [reset]);
+
 
   const say = (text: string) => { setNotice(text); setError(''); setTimeout(() => setNotice(''), 3000); };
   const run = async (work: () => Promise<void>, done: string) => {
@@ -99,6 +100,9 @@ export default function AccountCentre() {
     </Pressable>
   );
 
+  // Straight off the reset email: a page of its own, not a sheet over settings.
+  if (reset) return <ResetPage email={info?.email} onSave={(pw) => actions.changePassword(pw)} />;
+
   return (
     <Screen title="Account center" compactTitle onBack={() => goBack()}>
       {currentUser ? (
@@ -147,35 +151,38 @@ export default function AccountCentre() {
       <Modal visible={sheet !== null} transparent animationType="fade" onRequestClose={() => setSheet(null)}>
         <Pressable accessibilityLabel="Close" onPress={() => !busy && setSheet(null)} style={styles.backdrop}>
           <View style={styles.sheet} onStartShouldSetResponder={() => true}>
+            <Wash height={240} strength={0.8} />
             {sheet === 'password' ? (
               <>
-                <Text style={styles.sheetTitle}>Change password</Text>
-                {reset ? <Text style={styles.resetNote}>You came from the reset email. Set your new password here.</Text> : null}
-                <Field label="New password" value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" placeholder="At least 6 characters" />
-                <Field label="Again" value={password2} onChangeText={setPassword2} secureTextEntry autoCapitalize="none" placeholder="Same again" />
-                {error ? <Text style={styles.error}>{error}</Text> : null}
-                <Button label="Save password" loading={busy} disabled={password.length < 6 || password !== password2} onPress={() => run(() => actions.changePassword(password), 'Password changed.')} full />
+                <SheetTitle title="Change password" line={info?.email ? `Create a new password for ${info.email}.` : undefined} onClose={() => setSheet(null)} />
+                <View style={styles.sheetBody}>
+                  <PasswordFields password={password} again={password2} onPassword={setPassword} onAgain={setPassword2} onSubmit={() => { if (password.length >= 6 && password === password2) void run(() => actions.changePassword(password), 'Password updated.'); }} />
+                  {error ? <Text style={styles.error}>{error}</Text> : null}
+                  <Submit label="Update password" busy={busy} disabled={password.length < 6 || password !== password2} onPress={() => { void run(() => actions.changePassword(password), 'Password updated.'); }} />
+                </View>
               </>
             ) : null}
             {sheet === 'email' ? (
               <>
-                <Text style={styles.sheetTitle}>Change email</Text>
-                <Text style={styles.sheetNote}>We send a confirmation to the new address. The change lands when you tap the link.</Text>
-                <Field label="New email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholder="you@example.com" />
-                {error ? <Text style={styles.error}>{error}</Text> : null}
-                <Button label="Send confirmation" loading={busy} disabled={!email.includes('@') || email.trim() === info?.email} onPress={() => run(() => actions.changeEmail(email), 'Check the new address for a confirmation link.')} full />
+                <SheetTitle title="Change email" line="We send a link to the new address; the change lands when you tap it." onClose={() => setSheet(null)} />
+                <View style={styles.sheetBody}>
+                  <Field soft value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholder="New email" />
+                  {error ? <Text style={styles.error}>{error}</Text> : null}
+                  <Submit label="Send the link" busy={busy} disabled={!email.includes('@') || email.trim() === info?.email} onPress={() => { void run(() => actions.changeEmail(email), 'Check the new address for a confirmation link.'); }} />
+                </View>
               </>
             ) : null}
             {sheet === 'delete' ? (
               <>
-                <Text style={[styles.sheetTitle, { color: colors.danger }]}>Delete your account?</Text>
-                <Text style={styles.sheetNote}>Your profile, posts, clips, instants, questions and messages are removed for good. Coaches keep records of paid sessions. Type DELETE to confirm.</Text>
-                <Field value={confirmWord} onChangeText={setConfirmWord} autoCapitalize="none" placeholder="DELETE" />
-                {error ? <Text style={styles.error}>{error}</Text> : null}
-                <Button label="Delete my account" variant="danger" loading={busy} disabled={confirmWord.trim() !== 'DELETE'} onPress={() => run(async () => { await actions.deleteAccount(); router.replace('/'); }, 'Account deleted.')} full />
+                <SheetTitle title="Delete your account?" line="This can't be undone." onClose={() => setSheet(null)} />
+                <View style={styles.sheetBody}>
+                  <Text style={styles.sheetNote}>Your profile, posts, clips, instants, questions and messages are removed for good. Coaches keep records of paid sessions. Type DELETE to confirm.</Text>
+                  <Field soft value={confirmWord} onChangeText={setConfirmWord} autoCapitalize="none" placeholder="DELETE" />
+                  {error ? <Text style={styles.error}>{error}</Text> : null}
+                  <Button label="Delete my account" variant="danger" loading={busy} disabled={confirmWord.trim() !== 'DELETE'} onPress={() => run(async () => { await actions.deleteAccount(); router.replace('/'); }, 'Account deleted.')} full />
+                </View>
               </>
             ) : null}
-            <Button label="Cancel" variant="ghost" onPress={() => setSheet(null)} disabled={busy} full />
           </View>
         </Pressable>
       </Modal>
@@ -183,8 +190,96 @@ export default function AccountCentre() {
   );
 }
 
+/** Two soft fields and two live ticks, so it is plain when the password will do. */
+function PasswordFields({ password, again, onPassword, onAgain, onSubmit }: { password: string; again: string; onPassword: (v: string) => void; onAgain: (v: string) => void; onSubmit: () => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const [show, setShow] = useState(false);
+  const long = password.length >= 6;
+  const same = password.length > 0 && password === again;
+  const tick = (ok: boolean, label: string) => (
+    <View style={styles.tick}>
+      <Ionicons name={ok ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={ok ? colors.brand : colors.textFaint} />
+      <Text style={[styles.tickText, ok && styles.tickTextOn]}>{label}</Text>
+    </View>
+  );
+  return (
+    <View style={{ gap: spacing.md }}>
+      <Field soft value={password} onChangeText={onPassword} secureTextEntry={!show} autoCapitalize="none" placeholder="New password" />
+      <Field soft value={again} onChangeText={onAgain} secureTextEntry={!show} autoCapitalize="none" placeholder="Confirm new password" onSubmitEditing={onSubmit} />
+      <View style={styles.ticks}>
+        <View style={{ gap: 6 }}>
+          {tick(long, 'At least 6 characters')}
+          {tick(same, 'Passwords match')}
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel={show ? 'Hide passwords' : 'Show passwords'} hitSlop={8} onPress={() => setShow((v) => !v)} style={styles.show}>
+          <Ionicons name={show ? 'eye-off-outline' : 'eye-outline'} size={17} color={colors.textMuted} />
+          <Text style={styles.showText}>{show ? 'Hide' : 'Show'}</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Where the reset email lands: one calm page in the sign-in page's look, the
+ * mark, two fields, and then a clear "saved" with the way into the app.
+ */
+function ResetPage({ email, onSave }: { email?: string; onSave: (password: string) => Promise<void> }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const [password, setPassword] = useState('');
+  const [again, setAgain] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState(false);
+  const ok = password.length >= 6 && password === again;
+  const save = async () => {
+    if (!ok || busy) return;
+    setBusy(true);
+    setError('');
+    try { await onSave(password); setDone(true); }
+    catch (err) { setError(err instanceof Error ? err.message : 'That didn’t save. Try again.'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <View style={styles.page}>
+      <Wash height={420} strength={0.85} />
+      <ScrollView contentContainerStyle={styles.pageScroll} keyboardShouldPersistTaps="handled">
+        <Animated.View key={done ? 'done' : 'form'} entering={FadeIn.duration(320)} style={styles.column}>
+          {done ? (
+            <>
+              <View style={styles.doneIcon}><Ionicons name="checkmark" size={30} color={colors.brand} /></View>
+              <View style={{ gap: 6 }}>
+                <Text style={styles.pageTitle}>Password updated</Text>
+                <Text style={styles.pageLine}>You’re all set. Use your new password the next time you sign in{email ? ` with ${email}` : ''}.</Text>
+              </View>
+              <Submit label="Continue to CourtSide" onPress={() => router.replace('/')} />
+            </>
+          ) : (
+            <>
+              <View style={{ gap: spacing.lg }}>
+                <BrandMark size={42} />
+                <View style={{ gap: 6 }}>
+                  <Text style={styles.pageTitle}>Reset your password</Text>
+                  <Text style={styles.pageLine}>{email ? `Create a new password for ${email}.` : 'Create a new password for your CourtSide account.'}</Text>
+                </View>
+              </View>
+              <View style={{ gap: spacing.lg }}>
+                <PasswordFields password={password} again={again} onPassword={setPassword} onAgain={setAgain} onSubmit={() => { void save(); }} />
+                {error ? <Text style={styles.error}>{error}</Text> : null}
+                <Submit label="Update password" busy={busy} disabled={!ok} onPress={() => { void save(); }} />
+                <Pressable accessibilityRole="button" onPress={() => router.replace('/')} hitSlop={8} style={{ alignSelf: 'center' }}>
+                  <Text style={styles.notNow}>Cancel</Text>
+                </Pressable>
+              </View>
+            </>
+          )}
+        </Animated.View>
+      </ScrollView>
+    </View>
+  );
+}
+
 const styleDefinitions = StyleSheet.create({
-  resetNote: { ...typography.smallStrong, color: colors.brand },
   hero: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingBottom: spacing.lg },
   heroName: { ...typography.heading, color: colors.text },
   heroMeta: { ...typography.small, color: colors.textMuted },
@@ -201,8 +296,21 @@ const styleDefinitions = StyleSheet.create({
   rowLabel: { ...typography.body, color: colors.text },
   rowDetail: { ...typography.small, color: colors.textFaint },
   backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
-  sheet: { backgroundColor: colors.bg, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.md, maxWidth: 520, width: '100%', alignSelf: 'center' },
-  sheetTitle: { ...typography.heading, color: colors.text },
+  sheet: { backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: spacing.lg, paddingBottom: spacing.xxl, maxWidth: 520, width: '100%', alignSelf: 'center', overflow: 'hidden' },
+  sheetBody: { padding: spacing.lg, gap: spacing.lg },
+  ticks: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', paddingHorizontal: 4 },
+  tick: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  tickText: { ...typography.small, color: colors.textFaint },
+  tickTextOn: { color: colors.text },
+  show: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 2 },
+  showText: { ...typography.smallStrong, color: colors.textMuted },
+  page: { flex: 1, backgroundColor: colors.bg },
+  pageScroll: { flexGrow: 1, paddingHorizontal: spacing.xl, paddingVertical: spacing.xxl, justifyContent: 'center' },
+  column: { width: '100%', maxWidth: 420, alignSelf: 'center', gap: spacing.xxl },
+  pageTitle: { ...typography.display, fontSize: 32, letterSpacing: -1.1, color: colors.text },
+  pageLine: { ...typography.body, fontSize: 16, lineHeight: 23, color: colors.textMuted },
+  doneIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  notNow: { ...typography.smallStrong, fontSize: 14, color: colors.textMuted },
   sheetNote: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   error: { ...typography.small, color: colors.danger },
 });
