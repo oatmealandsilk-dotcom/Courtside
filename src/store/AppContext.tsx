@@ -28,6 +28,7 @@ import { takeReferrer } from '@/features/invite/referral';
 import { endOfToday } from '@/features/players/openToHit';
 import { pickNutritionExport } from '@/features/health/cronometer';
 import { nearestPlace } from '@/data/locations';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getPosition } from '@/lib/geo';
 import * as haptics from '@/lib/haptics';
 import * as Linking from 'expo-linking';
@@ -2945,6 +2946,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const remember = (on: boolean) => {
       try {
         if (Platform.OS === 'web') localStorage.setItem('courtside-location', on ? 'on' : 'off');
+        else void AsyncStorage.setItem('courtside-location', on ? 'on' : 'off').catch(() => {});
       } catch {}
     };
     if (!enabled) {
@@ -2970,6 +2972,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return null;
   }, []);
 
+  // The phone keeps the Location switch too (the browser reads it at start),
+  // so the map opens where you are instead of forgetting on every launch.
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    AsyncStorage.getItem('courtside-location')
+      .then((flag) => { if (flag === 'on') setState((prev) => (prev.locationEnabled ? prev : { ...prev, locationEnabled: true })); })
+      .catch(() => {});
+  }, []);
+
   // Someone who left Location on last time gets the city refreshed quietly.
   useEffect(() => {
     if (!state.locationEnabled || state.detectedLocation) return;
@@ -2977,6 +2988,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (result.ok) {
         const place = nearestPlace(result.lat, result.lng);
         setState((prev) => ({ ...prev, detectedLocation: place.name, detectedCoords: { lat: result.lat, lng: result.lng } }));
+      } else if (result.reason === 'denied') {
+        // Taken away in the device's settings since: the switch says so.
+        setState((prev) => ({ ...prev, locationEnabled: false }));
       }
     });
   }, [state.locationEnabled, state.detectedLocation]);
