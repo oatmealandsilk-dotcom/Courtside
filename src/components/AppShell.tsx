@@ -2,7 +2,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Platform, View } from 'react-native';
 import { goBack } from '@/lib/goBack';
-import { Redirect, router, useGlobalSearchParams, usePathname } from 'expo-router';
+import { router, useGlobalSearchParams, usePathname } from 'expo-router';
 import { NavBar } from './NavBar';
 import { setInstantExit } from '@/features/navigation/instantExit';
 import { UploadBar } from '@/components/UploadBar';
@@ -106,10 +106,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const phoneOnlyHide = ['/compose', '/edit-post', '/ask', '/ask-coach', '/pick-location', '/pick-court', '/invite', '/comments', '/share', '/likes', '/post-menu', '/log-session', '/hit-request/new', '/court-report', '/wrapped'].includes(pathname) || pathname.startsWith('/messages/');
   // Arriving from the password-reset email is its own calm page, with no app around it yet.
   const { reset } = useGlobalSearchParams<{ reset?: string }>();
-  const hideEverywhere = ['/sign-in', '/onboarding', '/agree', '/first-move', '/hit'].includes(pathname) || pathname.startsWith('/story/') || (pathname === '/account' && !!reset);
+  const hideEverywhere = ['/sign-in', '/onboarding', '/agree', '/birthday', '/first-move', '/hit'].includes(pathname) || pathname.startsWith('/story/') || (pathname === '/account' && !!reset);
   const showNav = !!currentUserId && !hideEverywhere && !(isPhone && phoneOnlyHide);
   // A shared link opened while signed out goes to sign-in, not to an empty page.
   const mustSignIn = ready && authResolved && !currentUserId && !['/', '/index', '/sign-in', '/onboarding', '/birthday'].includes(pathname);
+  // The gates — sign in, birthday, terms — are reached by one replace each,
+  // with the app left mounted underneath. Swapping the whole app for a
+  // redirect unmounted the navigator; when it came back on the page it had
+  // left, the gate fired again, and the two bounced until React gave up.
+  const detour = mustSignIn ? '/sign-in' : needsBirthday ? '/birthday' : needsTerms ? '/agree' : null;
+  const sentTo = useRef<string | null>(null);
+  useEffect(() => {
+    if (!detour) { sentTo.current = null; return; }
+    if (sentTo.current === detour) return;
+    sentTo.current = detour;
+    router.replace(detour);
+  }, [detour]);
   const nav = <NavBar state={{ index: selected.current, routes }} navigation={{ navigate: name => {
     const destination = paths[name as keyof typeof paths];
     if (!destination) return;
@@ -143,13 +155,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
     else router.navigate(destination);
   } }} />;
-  if (mustSignIn) return <Redirect href="/sign-in" />;
-  if (needsBirthday) return <Redirect href="/birthday" />;
-  if (needsTerms) return <Redirect href="/agree" />;
   return <View style={{ flex: 1, minHeight: 0, backgroundColor: colors.bg, flexDirection: isPhone ? 'column' : 'row' }}>
     {showNav && !isPhone && nav}
     <View style={{ flex: 1, minWidth: 0, minHeight: 0 }}><RouteTransition>{children}</RouteTransition><Toast /><UploadBar /></View>
     {showNav && isPhone && nav}
     {showNav && (pathname === '/' || pathname === '/index') ? <WarmCurtain /> : null}
+    {/* On its way to a gate (sign-in, birthday, terms): the page underneath is covered for the moment it takes. */}
+    {detour ? <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.bg }} /> : null}
   </View>;
 }

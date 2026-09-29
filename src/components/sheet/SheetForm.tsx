@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -94,13 +94,24 @@ export function ChipStrip<T extends string | number>({ options, value, onChange,
   );
 }
 
-/** The one green thing on the sheet. Until the form is ready it waits quietly in grey, saying what is missing. */
-export function Submit({ label, onPress, disabled = false, busy = false, waiting }: { label: string; onPress: () => void; disabled?: boolean; busy?: boolean; waiting?: string }) {
+/**
+ * The one green thing on the sheet. Until the form is ready it waits quietly
+ * in grey, saying what is missing; once pressed it stays green and turns a
+ * small wheel while it works, saying what it is doing ("Signing in…").
+ */
+export function Submit({ label, onPress, disabled = false, busy = false, waiting, busyLabel }: { label: string; onPress: () => void; disabled?: boolean; busy?: boolean; waiting?: string; busyLabel?: string }) {
   const styles = useThemedStyles(styleDefinitions);
   const off = disabled || busy;
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ disabled: off }} disabled={off} onPress={onPress} style={({ pressed }) => [styles.submit, off ? styles.submitOff : styles.submitOn, pressed && !off && { transform: [{ scale: 0.99 }] }]}>
-      <Text style={[styles.submitText, off && styles.submitTextOff]}>{busy ? 'One moment…' : disabled && waiting ? waiting : label}</Text>
+    <Pressable accessibilityRole="button" accessibilityState={{ disabled: off, busy }} disabled={off} onPress={onPress} style={({ pressed }) => [styles.submit, busy ? [styles.submitOn, styles.submitBusy] : off ? styles.submitOff : styles.submitOn, pressed && !off && { transform: [{ scale: 0.99 }] }]}>
+      {busy ? (
+        <View style={styles.submitRow}>
+          <ActivityIndicator size="small" color={colors.brandInk} />
+          <Text style={styles.submitText}>{busyLabel ?? label}</Text>
+        </View>
+      ) : (
+        <Text style={[styles.submitText, off && styles.submitTextOff]}>{disabled && waiting ? waiting : label}</Text>
+      )}
     </Pressable>
   );
 }
@@ -138,6 +149,8 @@ const styleDefinitions = StyleSheet.create({
   submit: { height: 54, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   submitOn: { backgroundColor: colors.brand, boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.16)' },
   submitOff: { backgroundColor: colors.surfaceAlt },
+  submitBusy: { opacity: 0.92 },
+  submitRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   submitText: { ...typography.bodyStrong, fontSize: 16, color: colors.brandInk },
   submitTextOff: { color: colors.textMuted },
   fine: { ...typography.small, color: colors.textFaint, textAlign: 'center', marginTop: -spacing.md },
