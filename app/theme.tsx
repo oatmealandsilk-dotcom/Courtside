@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import * as haptics from '@/lib/haptics';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
@@ -9,23 +9,25 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Screen } from '@/components/ui';
 import { Wash } from '@/components/Wash';
-import { useTheme, themeList, themes, type ThemeName } from '@/theme/ThemeProvider';
+import { useTheme, themeList, themes } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /** Every court, with a swatch and a line on what it is, on its own page. */
 export default function ThemePage() {
   const styles = useThemedStyles(styleDefinitions);
   const { theme, setTheme } = useTheme();
-  // The check moves the instant a card is tapped; the recolour follows a frame later.
-  const [chosen, setChosen] = useState<ThemeName | null>(null);
-  useEffect(() => { setChosen(null); }, [theme]);
+  // The check follows the theme itself, not the tap. On a phone the screen is
+  // photographed first and the new colours land under the photo; a check that
+  // moved on the tap would be caught half-way in that photo and then seem to
+  // jump back and forth as it faded. Moving with the colours, it fades across
+  // with everything else.
 
   return (
     <Screen title="Theme" compactTitle onBack={() => goBack()}>
       <Text style={styles.lead}>Applies everywhere straight away. Pick the court you would rather be on.</Text>
       <View style={styles.list}>
         {themeList.map((option) => (
-          <ThemeCard key={option.name} option={option} active={(chosen ?? theme) === option.name} onPick={() => { haptics.tap(); setChosen(option.name); setTheme(option.name); }} styles={styles} />
+          <ThemeCard key={option.name} option={option} active={theme === option.name} onPick={() => { haptics.tap(); setTheme(option.name); }} styles={styles} />
         ))}
       </View>
     </Screen>
@@ -63,12 +65,14 @@ function ThemeCard({ option, active, onPick, styles }: { option: (typeof themeLi
   const palette = themes[option.name];
   const on = useSharedValue(active ? 1 : 0);
   const push = useSharedValue(1);
-  // The card answers the tap itself, before the rest of the app has recoloured.
-  const settle = (next: boolean) => {
-    on.value = withTiming(next ? 1 : 0, { duration: 140, easing: Easing.out(Easing.quad) });
-    if (next) push.value = withSequence(withTiming(0.992, { duration: 50 }), withTiming(1, { duration: 120, easing: Easing.out(Easing.quad) }));
+  useEffect(() => {
+    on.value = withTiming(active ? 1 : 0, { duration: 140, easing: Easing.out(Easing.quad) });
+  }, [active, on]);
+  // The card answers the tap itself with a little push, before the rest of the app has recoloured.
+  const pick = () => {
+    if (!active) push.value = withSequence(withTiming(0.992, { duration: 50 }), withTiming(1, { duration: 120, easing: Easing.out(Easing.quad) }));
+    onPick();
   };
-  useEffect(() => { settle(active); }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
   // The edge and the check take this theme's own colour, not the one the app is wearing now.
   // No outline change at all: the check alone says which one is on.
   const cardStyle = useAnimatedStyle(() => ({
@@ -80,7 +84,7 @@ function ThemeCard({ option, active, onPick, styles }: { option: (typeof themeLi
   }));
   const ringStyle = useAnimatedStyle(() => ({ opacity: 1 - on.value }));
   return (
-    <Pressable accessibilityRole="radio" accessibilityState={{ selected: active }} accessibilityLabel={`${option.label} theme`} onPress={onPick}>
+    <Pressable accessibilityRole="radio" accessibilityState={{ selected: active }} accessibilityLabel={`${option.label} theme`} onPress={pick}>
       <Animated.View style={[styles.card, cardStyle]}>
         <View style={[styles.swatch, { backgroundColor: palette.bg, borderColor: palette.border }]}>
           <Wash theme={option.name} height={48} strength={0.7} fade={palette.bg} />
