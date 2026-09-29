@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { crossfade } from './crossfade';
-import { Platform, StyleSheet, View } from 'react-native';
+import { snapshotScreen } from './snapshot';
+import { Image, Platform, StyleSheet, View } from 'react-native';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, lightColors } from './index';
@@ -152,13 +153,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // A theme change redraws the whole app — every tab, the feed, the map —
   // and the phone's own layers (blur, glass, gradients, the map's web view)
   // catch up a moment after the rest. Seen bare, that is a screen repainting
-  // in patches. So the change happens under a veil: the new court's ground
-  // washes over the screen, everything recolours beneath it, and the veil
-  // lifts once the last layer has caught up. The veil runs on the animation
-  // thread, so it stays smooth however busy the redraw is.
+  // in patches. So on a phone the screen is photographed first; the photo
+  // covers the screen, everything recolours beneath it, and the photo fades
+  // away once the last layer has caught up — a true cross-fade. Tapping
+  // themes one after another just photographs the half-faded screen again,
+  // so it blends from wherever it is instead of stacking tints. If the phone
+  // cannot take the photo, a light veil of the new court does the covering.
+  // Both run on the animation thread, so they stay smooth however busy the redraw is.
   const [veilColor, setVeilColor] = useState<string | null>(null);
   const veil = useSharedValue(0);
   const pending = useRef<ThemeName | null>(null);
+  const [shot, setShot] = useState<string | null>(null);
+  const shotOpacity = useSharedValue(0);
+  // What to redraw once the photo is on screen, and which tap it belongs to.
+  const afterShot = useRef<(() => void) | null>(null);
+  const tap = useRef(0);
   const apply = (name: ThemeName) => {
     Object.assign(colors, themes[name]);
     updateTheme(name);
@@ -172,21 +181,42 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // A browser that can cross-fade does it properly: the old look fades straight into the new one.
     if (crossfade(() => apply(name))) return;
     pending.current = name;
+    if (Platform.OS !== 'web') {
+      const mine = ++tap.current;
+      void snapshotScreen().then((uri) => {
+        if (mine !== tap.current) return; // a later tap has its own photo coming
+        if (uri) {
+          afterShot.current = () => apply(name);
+          shotOpacity.value = 1;
+          setShot(uri);
+        } else {
+          veilTo(name);
+        }
+      });
+      return;
+    }
+    veilTo(name);
+  };
+  const veilTo = (name: ThemeName) => {
     // On a phone, a light tint of the new court rather than a solid cover:
     // the old look fades toward the new one instead of blanking.
     setVeilColor(themes[name].bg);
     veil.value = withTiming(VEIL_PEAK, { duration: 180, easing: Easing.out(Easing.quad) }, (done) => { if (done) runOnJS(apply)(name); });
   };
-  // After the redraw has landed (and a beat for the native layers), the veil lifts.
+  // After the redraw has landed (and a beat for the native layers), the photo fades or the veil lifts.
   useEffect(() => {
     if (pending.current !== theme) return;
     pending.current = null;
     const t = setTimeout(() => {
+      shotOpacity.value = withTiming(0, { duration: 300, easing: Easing.inOut(Easing.quad) }, (done) => { if (done) runOnJS(setShot)(null); });
       veil.value = withTiming(0, { duration: 360, easing: Easing.inOut(Easing.quad) }, (done) => { if (done) runOnJS(setVeilColor)(null); });
     }, 90);
     return () => clearTimeout(t);
-  }, [theme, veil]);
+  }, [theme, veil, shotOpacity]);
   const veilStyle = useAnimatedStyle(() => ({ opacity: veil.value }));
+  const shotStyle = useAnimatedStyle(() => ({ opacity: shotOpacity.value }));
+  // The photo is up: now it is safe to redraw beneath it.
+  const shotShown = () => { const run = afterShot.current; afterShot.current = null; run?.(); };
 
   // Kept so existing callers of the old night-mode switch keep working.
   const setNight = (value: boolean) => setTheme(value ? 'night' : 'default');
@@ -195,6 +225,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     <ThemeContext.Provider value={{ theme, setTheme, night: theme === 'night', setNight }}>
       <View style={{ flex: 1 }}>
         {children}
+        {shot ? (
+          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 9999 }, shotStyle]}>
+            <Image source={{ uri: shot }} onLoad={shotShown} onError={shotShown} fadeDuration={0} resizeMode="cover" style={StyleSheet.absoluteFill} />
+          </Animated.View>
+        ) : null}
         {veilColor ? <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: veilColor, zIndex: 9999 }, veilStyle]} /> : null}
       </View>
     </ThemeContext.Provider>
