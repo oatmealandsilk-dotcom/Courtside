@@ -48,3 +48,44 @@ export async function searchPlacesRemote(query: string, near?: LatLng | null, si
 export function searchPlacesLocal(query: string): PlaceHit[] {
   return searchPlaces(query, 6).map((p) => ({ value: p.name, title: p.name.split(',')[0], sub: p.name.split(',').slice(1).join(',').trim() }));
 }
+
+const US_STATES: Record<string, string> = {
+  Alabama: 'AL', Alaska: 'AK', Arizona: 'AZ', Arkansas: 'AR', California: 'CA', Colorado: 'CO', Connecticut: 'CT', Delaware: 'DE',
+  'District of Columbia': 'DC', Florida: 'FL', Georgia: 'GA', Hawaii: 'HI', Idaho: 'ID', Illinois: 'IL', Indiana: 'IN', Iowa: 'IA',
+  Kansas: 'KS', Kentucky: 'KY', Louisiana: 'LA', Maine: 'ME', Maryland: 'MD', Massachusetts: 'MA', Michigan: 'MI', Minnesota: 'MN',
+  Mississippi: 'MS', Missouri: 'MO', Montana: 'MT', Nebraska: 'NE', Nevada: 'NV', 'New Hampshire': 'NH', 'New Jersey': 'NJ',
+  'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC', 'North Dakota': 'ND', Ohio: 'OH', Oklahoma: 'OK', Oregon: 'OR',
+  Pennsylvania: 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC', 'South Dakota': 'SD', Tennessee: 'TN', Texas: 'TX', Utah: 'UT',
+  Vermont: 'VT', Virginia: 'VA', Washington: 'WA', 'West Virginia': 'WV', Wisconsin: 'WI', Wyoming: 'WY',
+};
+
+/** A town anywhere, with where it is: what a profile's city is. */
+export interface CityHit { name: string; lat: number; lng: number }
+
+/**
+ * Cities, towns and villages from Photon, so a profile can say Cary, NC or
+ * any other town, not only the built-in list of big cities. US places read
+ * "Town, ST"; elsewhere "Town, Country". Biased toward where you are.
+ */
+export async function searchCitiesRemote(query: string, near?: LatLng | null, signal?: AbortSignal): Promise<CityHit[]> {
+  const q = query.split(',')[0].trim();
+  if (q.length < 2) return [];
+  const bias = near ? `&lat=${near.lat.toFixed(3)}&lon=${near.lng.toFixed(3)}` : '';
+  const tags = ['place:city', 'place:town', 'place:village', 'place:suburb'].map((t) => `&osm_tag=${t}`).join('');
+  const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=8&lang=en${tags}${bias}`, { signal });
+  if (!res.ok) throw new Error(`cities ${res.status}`);
+  const json = (await res.json()) as { features?: { properties: PhotonProps; geometry?: { coordinates?: [number, number] } }[] };
+  const seen = new Set<string>();
+  const out: CityHit[] = [];
+  for (const f of json.features ?? []) {
+    const p = f.properties;
+    const at = f.geometry?.coordinates;
+    if (!p.name || !at) continue;
+    const region = p.countrycode === 'US' ? (p.state ? US_STATES[p.state] ?? p.state : null) : p.country;
+    const name = region ? `${p.name}, ${region}` : p.name;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    out.push({ name, lat: at[1], lng: at[0] });
+  }
+  return out;
+}

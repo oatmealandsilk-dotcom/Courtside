@@ -47,7 +47,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const [meOpen, setMeOpen] = useState(false);
   const openToHit = isOpenToHit(me);
   const model = useMapModel(me, players, at);
-  const { home } = model;
+  const { home, start } = model;
+  const startZoom = start.zoom ?? START_ZOOM;
   const weather = useWeather(home);
   const cityName = me.location.trim() ? me.location.split(',')[0] : 'you';
   const host = useRef<HTMLDivElement | null>(null);
@@ -62,8 +63,8 @@ export function NearbyMap(props: NearbyMapProps) {
     const instance = new maplibregl.Map({
       container: el,
       style: STYLE,
-      center: [home.lng, home.lat],
-      zoom: START_ZOOM,
+      center: [start.center.lng, start.center.lat],
+      zoom: startZoom,
       interactive: expanded,
       attributionControl: false,
       // Handled below, so a two-finger scroll pans and a pinch zooms.
@@ -117,7 +118,7 @@ export function NearbyMap(props: NearbyMapProps) {
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     map.current = instance;
-    const settle = setTimeout(() => { instance.resize(); instance.jumpTo({ center: [home.lng, home.lat] }); }, 60);
+    const settle = setTimeout(() => { instance.resize(); instance.jumpTo({ center: [start.center.lng, start.center.lat] }); }, 60);
     const watcher = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => instance.resize()) : null;
     watcher?.observe(el);
     return () => {
@@ -129,7 +130,7 @@ export function NearbyMap(props: NearbyMapProps) {
       instance.remove();
       map.current = null;
     };
-  }, [expanded, theme, home.lat, home.lng]);
+  }, [expanded, theme, start.center.lat, start.center.lng, startZoom]);
 
   // Pins: rebuilt when who is shown or who is picked changes.
   const shown = expanded ? model.shown : model.inTown.length ? model.inTown : model.ranked.slice(0, 12);
@@ -180,7 +181,8 @@ export function NearbyMap(props: NearbyMapProps) {
   // You: one pin, rebuilt only when you or where you are changes.
   useEffect(() => {
     const instance = map.current;
-    if (!instance) return;
+    // Your pin only where the map actually knows you are.
+    if (!instance || !model.homeKnown) return;
     const markers: maplibregl.Marker[] = [];
     const pin = (html: string) => { const node = document.createElement('div'); node.innerHTML = html; return node; };
     const meSize = expanded ? 34 : 26;
@@ -189,7 +191,7 @@ export function NearbyMap(props: NearbyMapProps) {
       anchor: 'center',
     }).setLngLat([home.lng, home.lat]).addTo(instance));
     return () => { markers.forEach((m) => m.remove()); };
-  }, [expanded, home.lat, home.lng, me, night, openToHit]);
+  }, [expanded, home.lat, home.lng, me, night, openToHit, model.homeKnown]);
 
   // Courts, when that layer is on.
   const selectedCourtId = model.selectedCourt?.id ?? null;
@@ -239,7 +241,7 @@ export function NearbyMap(props: NearbyMapProps) {
         <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
       </View>
       <View pointerEvents="box-none" style={styles.bottom}>
-        <MapButtons onRecentre={() => { model.select(null); map.current?.flyTo({ center: [home.lng, home.lat], zoom: START_ZOOM, duration: 600 }); }} onZoomIn={() => map.current?.zoomIn()} onZoomOut={() => map.current?.zoomOut()} />
+        <MapButtons onRecentre={() => { model.select(null); map.current?.flyTo({ center: [start.center.lng, start.center.lat], zoom: startZoom, duration: 600 }); }} onZoomIn={() => map.current?.zoomIn()} onZoomOut={() => map.current?.zoomOut()} />
         {meOpen ? (
           <YouSheet me={me} open={openToHit} onToggle={actions.setOpenToHit} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} />
         ) : model.selected ? (

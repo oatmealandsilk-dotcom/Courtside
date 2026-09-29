@@ -358,7 +358,7 @@ interface AppActions {
   /** Everything of yours, as one object, for "download your data". */
   exportData: () => Record<string, unknown>;
   completeOnboarding: (profile: PlayerProfile) => void;
-  updateIdentity: (patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string }) => void;
+  updateIdentity: (patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string; cityAt?: { lat: number; lng: number } | null }) => void;
   updateProfile: (patch: Partial<PlayerProfile>) => void;
   /** Log a session you played (today unless a day is given). Throws a plain sentence when it cannot be saved. */
   /** Fetches what players say about a court (on opening it on the map). */
@@ -1277,8 +1277,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [patchCurrentUser],
   );
 
-  const updateIdentity = useCallback((patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string }) => {
-    patchCurrentUser(u => ({ ...u, ...patch }));
+  const updateIdentity = useCallback((patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string; cityAt?: { lat: number; lng: number } | null }) => {
+    patchCurrentUser(u => ({ ...u, ...patch, cityAt: patch.cityAt === null ? undefined : patch.cityAt ?? u.cityAt }));
     const me = stateRef.current.currentUserId;
     if (!live(me)) return;
     (async () => {

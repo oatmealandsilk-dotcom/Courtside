@@ -4,7 +4,8 @@ import { searchPlaces, type Place } from '@/data/locations';
 import type { User } from '@/data/types';
 import { fetchCourts, type Court } from '@/features/players/courts';
 import { milesBetween } from '@/features/players/geo';
-import { homeFor, homeIsKnown, positionFor, type LatLng } from '@/features/players/positions';
+import { homeFor, homeIsKnown, placeFor, positionFor, wideView, type LatLng } from '@/features/players/positions';
+import { searchCitiesRemote } from '@/features/places/search';
 import { useApp } from '@/store/AppContext';
 import { levelBadge } from '@/lib/badges';
 import { isOpenToHit } from '@/features/players/openToHit';
@@ -13,6 +14,14 @@ import { show as showToast } from '@/lib/toast';
 export type MapFilter = 'all' | 'open' | 'near' | 'level' | 'coaches';
 /** A player set down on the map, with how far that is from you, and when they were last there. */
 export interface Placed { user: User; at: LatLng; miles: number; seenAt?: string; seenCity?: string }
+
+/**
+ * Towns typed on profiles that aren't in the built-in list, looked up once
+ * each per visit ("Cary, NC" → where Cary is). Null means looked up and
+ * not found, so it isn't asked again.
+ */
+const townCache = new Map<string, LatLng | null>();
+const townKey = (location: string) => location.trim().toLowerCase();
 
 /** Inside this many miles someone counts as in your town. */
 export const IN_TOWN_MILES = 30;
@@ -25,23 +34,46 @@ export const IN_TOWN_MILES = 30;
  */
 export function useMapModel(me: User, players: User[], fix?: LatLng | null) {
   const { lastSeen, actions } = useApp();
+  // Profile towns outside the built-in list, found by name, so nobody from a
+  // smaller town lands in the wrong city (or off the map).
+  const [towns, setTowns] = useState(0);
+  useEffect(() => {
+    const wanted = [...new Set([me, ...players]
+      .filter((u) => u.location?.trim() && !u.cityAt && !placeFor(u.location) && !townCache.has(townKey(u.location)))
+      .map((u) => u.location.trim()))].slice(0, 25);
+    if (!wanted.length) return;
+    let live = true;
+    (async () => {
+      for (const location of wanted) {
+        try {
+          const [hit] = await searchCitiesRemote(location);
+          townCache.set(townKey(location), hit ? { lat: hit.lat, lng: hit.lng } : null);
+        } catch { /* offline: try again next time the map opens */ }
+      }
+      if (live) setTowns((n) => n + 1);
+    })();
+    return () => { live = false; };
+  }, [me, players]);
+  const townOf = useCallback((u: User) => (u.location ? townCache.get(townKey(u.location)) ?? null : null), [towns]); // eslint-disable-line react-hooks/exhaustive-deps
   // Without a fix here (a computer that was never asked), your own last spot
   // from the phone is the next best thing to where you are.
   const mine = lastSeen[me.id];
   const where = useMemo(() => fix ?? (mine ? { lat: mine.lat, lng: mine.lng } : null), [fix, mine]);
-  const home = useMemo(() => homeFor(me, where), [me, where]);
-  const homeKnown = useMemo(() => homeIsKnown(me, where), [me, where]);
+  const home = useMemo(() => homeFor(me, where, townOf(me)), [me, where, townOf]);
+  const homeKnown = useMemo(() => homeIsKnown(me, where, townOf(me)), [me, where, townOf]);
+  /** Where the map opens: your town close up, or zoomed out on your part of the world when it doesn't know it. */
+  const start = useMemo(() => (homeKnown ? { center: home, zoom: null as number | null } : wideView()), [homeKnown, home]);
   // Each opening fetches where people were last seen, so the map is never a day old.
   useEffect(() => { void actions.loadLastSeen(); }, [actions.loadLastSeen]);
   const ranked = useMemo<Placed[]>(
     () => players
       .flatMap((user) => {
         const seen = lastSeen[user.id];
-        const at = positionFor(user, seen);
+        const at = positionFor(user, seen, townOf(user));
         return at ? [{ user, at, miles: milesBetween(home, at), seenAt: seen?.seenAt, seenCity: seen?.city }] : [];
       })
       .sort((a, b) => a.miles - b.miles),
-    [players, home, lastSeen],
+    [players, home, lastSeen, townOf],
   );
   const inTown = useMemo(() => ranked.filter((p) => p.miles <= IN_TOWN_MILES), [ranked]);
 
@@ -90,7 +122,7 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null) {
   useEffect(() => { if (courtsOn) void loadCourts(home); }, [courtsOn, home, loadCourts]);
   const toggleCourts = useCallback(() => { setCourtsOn((on) => { if (on) setSelectedCourtId(null); return !on; }); }, []);
 
-  return { home, homeKnown, ranked, inTown, filter, setFilter, query, setQuery, place, shown, selected, select, courtsOn, toggleCourts, courts: courtsOn ? courts : [], courtsLoading, loadCourts, selectedCourt, selectCourt };
+  return { home, homeKnown, start, ranked, inTown, filter, setFilter, query, setQuery, place, shown, selected, select, courtsOn, toggleCourts, courts: courtsOn ? courts : [], courtsLoading, loadCourts, selectedCourt, selectCourt };
 }
 
 export type MapModel = ReturnType<typeof useMapModel>;

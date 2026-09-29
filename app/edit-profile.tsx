@@ -18,6 +18,7 @@ export default function EditProfile() {
   const [name, setName] = useState(currentUser?.name ?? '');
   const [bio, setBio] = useState(currentUser?.bio ?? '');
   const [location, setLocation] = useState(currentUser?.location ?? '');
+  const [cityAt, setCityAt] = useState(currentUser?.cityAt ?? null);
   // The first time your account is here, its details fill the fields — once, so typing is never overwritten.
   const filled = useRef(!!currentUser);
   useEffect(() => {
@@ -46,8 +47,8 @@ export default function EditProfile() {
             </Pressable>
           </View>
           <Field label="Bio" value={bio} onChangeText={setBio} multiline />
-          <LocationField value={location} onChange={setLocation} />
-          <Button label="Save changes" disabled={!name.trim()} onPress={() => { actions.updateIdentity({ avatarUrl, name: name.trim(), bio: bio.trim(), location: location.trim() }); router.back(); }} />
+          <LocationField value={location} onChange={(next, at) => { setLocation(next); setCityAt(at); }} />
+          <Button label="Save changes" disabled={!name.trim()} onPress={() => { actions.updateIdentity({ avatarUrl, name: name.trim(), bio: bio.trim(), location: location.trim(), cityAt: location.trim() ? cityAt : null }); router.back(); }} />
         </View>
       )}
     </Screen>
