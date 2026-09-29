@@ -19,9 +19,9 @@ import { colors, spacing, typography, font, lift } from '@/theme';
  * objectionable content and abusive users.
  */
 const RULES = [
-  { head: 'Respect everyone', body: 'No harassment, hate, threats or sexual content. There is no tolerance for objectionable content or abusive users.' },
-  { head: 'Report what is wrong', body: 'Tap ••• on any post or profile. Every report is read within 24 hours.' },
-  { head: 'Breaking them has consequences', body: 'Posts that break these come down, and accounts can be suspended.' },
+  { head: 'Be respectful', body: 'No harassment, hate speech, threats or sexual content. CourtSide has zero tolerance for objectionable content or abusive users.' },
+  { head: 'Report problems', body: 'Tap ••• on any post or profile to report it. We review every report within 24 hours.' },
+  { head: 'Enforcement', body: 'Content that breaks these rules is removed, and accounts that break them may be suspended.' },
 ];
 
 /** Each part arrives a beat after the one above it. */
@@ -63,8 +63,8 @@ export default function Agree() {
       <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: insets.top + spacing.xxl }]}>
         <Animated.View entering={enter(0)}><BrandMark size={40} /></Animated.View>
         <Animated.View entering={enter(1)} style={styles.head}>
-          <Text style={styles.title}>Before you play</Text>
-          <Text style={styles.lead}>Three rules keep CourtSide a good place to talk tennis. You agree to them once.</Text>
+          <Text style={styles.title}>Community guidelines</Text>
+          <Text style={styles.lead}>Please read and agree to these before you continue. You only need to do this once.</Text>
         </Animated.View>
 
         <Animated.View entering={enter(2)} style={styles.card}>
