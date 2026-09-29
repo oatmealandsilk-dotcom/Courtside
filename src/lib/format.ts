@@ -81,3 +81,16 @@ export function timeLeft(expiresIso: string, now: Date = new Date()): string {
   if (diff < 3_600_000) return `${Math.ceil(diff / 60_000)}m left`;
   return `${Math.ceil(diff / 3_600_000)}h left`;
 }
+
+/**
+ * Years playing, as the setup quiz asked it: a range, not a number. The quiz
+ * stores each range as one number (under 1 → 0, 1–3 → 2, 4–9 → 6, 10+ → 12),
+ * so those read back as the range picked; any other number is shown as is.
+ */
+export function experienceLabel(years: number): string {
+  if (years === 0) return 'Under a year';
+  if (years === 2) return '1–3 years';
+  if (years === 6) return '4–9 years';
+  if (years === 12) return '10+ years';
+  return years === 1 ? '1 year' : `${years} years`;
+}

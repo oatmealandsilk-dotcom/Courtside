@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LocationField } from '@/components/LocationField';
 import { PermissionRows } from '@/components/PermissionRows';
-import { Button, Collapse, Field, SegmentedControl } from '@/components/ui';
+import { Button, Collapse, Field, SegmentedControl, Toggle } from '@/components/ui';
 import { writeSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
@@ -291,6 +291,16 @@ export default function Onboarding() {
                 <Text style={styles.groupLabel}>Where you play</Text>
                 <LocationField value={location} onChange={(next, at) => { setLocation(next); setCityAt(at); }} />
               </View>
+              {currentUser?.ageGroup === 'teen' ? (
+                // Under 18 starts private; the choice is right here, not buried in Settings.
+                <View style={styles.privacyRow}>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={styles.privacyTitle}>Private account</Text>
+                    <Text style={styles.privacyNote}>{currentUser.isPrivate ? 'Only people you approve can see your posts. Turn off to let anyone see them.' : 'Anyone can see your posts. You can make your account private any time in Settings.'}</Text>
+                  </View>
+                  <Toggle value={!!currentUser.isPrivate} onChange={actions.setPrivateAccount} accessibilityLabel="Private account" />
+                </View>
+              ) : null}
               <View style={styles.twoCol}>
                 <View style={{ flex: 1 }}>
                   <Group label="Rating system">
@@ -506,6 +516,9 @@ function Row({ label, detail, selected, first, onPress }: { label: string; detai
 }
 
 const styleDefinitions = StyleSheet.create({
+  privacyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  privacyTitle: { ...typography.bodyStrong, color: colors.text },
+  privacyNote: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   root: { flex: 1, backgroundColor: colors.bg },
   head: { paddingHorizontal: spacing.xl, gap: spacing.xs, paddingBottom: spacing.sm, maxWidth: 560, width: '100%', alignSelf: 'center' },
   track: { height: 2, backgroundColor: colors.surfaceAlt, marginBottom: spacing.md },
