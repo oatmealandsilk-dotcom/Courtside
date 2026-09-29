@@ -48,7 +48,7 @@ export default function Likes() {
       {!item && !looked ? (
         <PeopleSkeleton />
       ) : !item ? (
-        <EmptyState icon="heart-dislike-outline" title="This post is gone" body="It was deleted, or it is no longer shared with you." />
+        <EmptyState icon="lock-closed-outline" title="This post isn't available" body="It was deleted, or it's from a private account you don't follow." />
       ) : (
         <>
           <Text style={styles.count}>{count === 1 ? '1 like' : `${count.toLocaleString()} likes`}</Text>

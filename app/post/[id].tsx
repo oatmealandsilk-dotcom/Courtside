@@ -28,7 +28,7 @@ export default function PostDetail() {
   if (!post) {
     return (
       <Screen title="Post" compactTitle onBack={() => goBack()}>
-        {looked ? <EmptyState icon="alert-circle-outline" title="This post is gone" body="Its author may have deleted or archived it." /> : <View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View>}
+        {looked ? <EmptyState icon="lock-closed-outline" title="This post isn't available" body="It was deleted, or it's from a private account you don't follow." /> : <View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View>}
       </Screen>
     );
   }
