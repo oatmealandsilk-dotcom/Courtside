@@ -113,9 +113,15 @@ Deno.serve(async (req) => {
     }
   }
 
-  const { data, error } = await admin.from('courts').select('id, name, lat, lng, lit, surface')
-    .gte('lat', lat - dLat).lte('lat', lat + dLat).gte('lng', lng - dLng).lte('lng', lng + dLng)
-    .order('id').limit(1500);
-  if (error) return json({ error: 'courts unavailable' }, 503);
-  return json({ courts: data ?? [], synced, ...(problems.length ? { problems } : {}), ...(mayFetch ? {} : { stored: true }) });
+  // The database hands back a thousand rows at a time; a big city has more.
+  const courts: unknown[] = [];
+  for (let from = 0; from < 4000; from += 1000) {
+    const { data, error } = await admin.from('courts').select('id, name, lat, lng, lit, surface')
+      .gte('lat', lat - dLat).lte('lat', lat + dLat).gte('lng', lng - dLng).lte('lng', lng + dLng)
+      .order('id').range(from, from + 999);
+    if (error) return json({ error: 'courts unavailable' }, 503);
+    courts.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
+  return json({ courts, synced, ...(problems.length ? { problems } : {}), ...(mayFetch ? {} : { stored: true }) });
 });
