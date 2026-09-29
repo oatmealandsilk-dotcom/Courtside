@@ -89,13 +89,11 @@ export default function AccountCentre() {
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && onPress ? { backgroundColor: colors.surfaceAlt } : null]}
     >
-      <View style={styles.lead}><Ionicons name={icon} size={20} color={danger ? colors.danger : colors.text} /></View>
+      <View style={styles.lead}><Ionicons name={icon} size={19} color={danger ? colors.danger : colors.textMuted} /></View>
       <View style={[styles.rowBody, index > 0 && styles.rowBorder]}>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={[styles.rowLabel, danger && { color: colors.danger }]}>{label}</Text>
-          {detail ? <Text style={styles.rowDetail}>{detail}</Text> : null}
-        </View>
-        {onPress ? <Ionicons name="chevron-forward" size={16} color={colors.textFaint} /> : null}
+        <Text style={[styles.rowLabel, danger && { color: colors.danger }]} numberOfLines={1}>{label}</Text>
+        {detail ? <Text style={styles.rowDetail} numberOfLines={1}>{detail}</Text> : null}
+        {onPress ? <Ionicons name="chevron-forward" size={15} color={colors.textFaint} /> : null}
       </View>
     </Pressable>
   );
@@ -107,11 +105,10 @@ export default function AccountCentre() {
     <Screen title="Account center" compactTitle onBack={() => goBack()}>
       {currentUser ? (
         <View style={styles.hero}>
-          <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={56} />
+          <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={48} />
           <View style={{ flex: 1 }}>
             <Text style={styles.heroName}>{currentUser.name}</Text>
-            <Text style={styles.heroMeta}>@{currentUser.handle}{info?.email ? ` · ${info.email}` : ''}</Text>
-            {info ? <Text style={styles.heroMeta}>Member since {formatDate(info.createdAt)}</Text> : null}
+            <Text style={styles.heroMeta}>@{currentUser.handle}</Text>
           </View>
         </View>
       ) : null}
@@ -119,33 +116,32 @@ export default function AccountCentre() {
       {!isSupabaseConfigured ? <Text style={styles.demo}>This is the demo build. There is no real account behind this screen, so the sign-in and password options do nothing.</Text> : null}
       {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
-      <Text style={styles.sectionTitle}>Personal details</Text>
+      <Text style={styles.sectionTitle}>Profile</Text>
       <View style={styles.card}>
-        {row('person-outline', 'Name, bio and location', currentUser?.name, () => router.push('/edit-profile'), false, 0)}
-        {row('at-outline', 'Handle', `@${currentUser?.handle ?? ''} · once every 30 days`, () => router.push('/change-handle'), false, 1)}
-        {row('mail-outline', 'Email', info?.email ? `${info.email}${info.emailConfirmed ? '' : ' · not confirmed'}` : 'Not signed in', isSupabaseConfigured ? () => { setEmail(info?.email ?? ''); setSheet('email'); } : undefined, false, 2)}
+        {row('person-outline', 'Name, bio and city', undefined, () => router.push('/edit-profile'), false, 0)}
+        {row('at-outline', 'Handle', `@${currentUser?.handle ?? ''}`, () => router.push('/change-handle'), false, 1)}
+        {row('mail-outline', 'Email', info?.email ? (info.emailConfirmed ? info.email : 'Not confirmed') : undefined, isSupabaseConfigured ? () => { setEmail(info?.email ?? ''); setSheet('email'); } : undefined, false, 2)}
       </View>
 
-      <Text style={styles.sectionTitle}>Password and sign-in</Text>
+      <Text style={styles.sectionTitle}>Sign-in</Text>
       <View style={styles.card}>
-        {row('key-outline', 'Change password', hasEmail ? 'Email and password sign-in' : 'Set a password to sign in without Google', isSupabaseConfigured ? () => { setPassword(''); setPassword2(''); setSheet('password'); } : undefined, false, 0)}
-        {row('logo-google', hasGoogle ? 'Google' : 'Link Google', hasGoogle ? 'Connected. You can sign in with Google' : 'Sign in with your Google account as well', !hasGoogle && isSupabaseConfigured ? () => run(() => actions.linkGoogle(), 'Follow the Google prompt to finish linking.') : undefined, false, 1)}
-        {row('time-outline', 'Last sign-in', info?.lastSignInAt ? formatDate(info.lastSignInAt) : '—', undefined, false, 2)}
-        {row('log-out-outline', 'Log out of all devices', 'Signs you out everywhere, including this one', () => run(async () => { await actions.signOutEverywhere(); router.replace('/sign-in'); }, 'Signed out everywhere.'), false, 3)}
+        {row('key-outline', hasEmail ? 'Change password' : 'Set a password', undefined, isSupabaseConfigured ? () => { setPassword(''); setPassword2(''); setSheet('password'); } : undefined, false, 0)}
+        {row('logo-google', 'Google', hasGoogle ? 'Connected' : 'Link', !hasGoogle && isSupabaseConfigured ? () => run(() => actions.linkGoogle(), 'Follow the Google prompt to finish linking.') : undefined, false, 1)}
+        {row('time-outline', 'Last sign-in', info?.lastSignInAt ? formatDate(info.lastSignInAt) : undefined, undefined, false, 2)}
+        {row('log-out-outline', 'Log out everywhere', undefined, () => run(async () => { await actions.signOutEverywhere(); router.replace('/sign-in'); }, 'Signed out everywhere.'), false, 3)}
       </View>
 
-      <Text style={styles.sectionTitle}>Your information</Text>
+      <Text style={styles.sectionTitle}>Your data</Text>
       <View style={styles.card}>
-        {row('download-outline', 'Download your data', 'Profile, posts, questions, instants and messages, in one file', () => { void download(); }, false, 0)}
-        {row('sparkles-outline', 'What the coach remembers', 'Notes the AI coach keeps about you', () => (aiCoachOn ? router.push('/coach-memory') : toast.show({ title: 'AI coach is coming soon', body: 'A weekly plan and a coach to ask about your game', icon: 'sparkles' })), false, 1)}
-        {row('shield-checkmark-outline', 'Privacy center', 'What we store and who can see it', () => router.push('/privacy'), false, 2)}
-        {row('card-outline', 'Payments', 'Coaching you have paid for, and refunds', () => router.push('/payments'), false, 3)}
+        {row('shield-checkmark-outline', 'Privacy', undefined, () => router.push('/privacy'), false, 0)}
+        {row('card-outline', 'Payments', undefined, () => router.push('/payments'), false, 1)}
+        {row('sparkles-outline', 'Coach memory', undefined, () => (aiCoachOn ? router.push('/coach-memory') : toast.show({ title: 'AI coach is coming soon', body: 'A weekly plan and a coach to ask about your game', icon: 'sparkles' })), false, 2)}
+        {row('download-outline', 'Download your data', undefined, () => { void download(); }, false, 3)}
       </View>
 
-      <Text style={styles.sectionTitle}>Account</Text>
-      <View style={styles.card}>
-        {row('swap-horizontal-outline', 'Switch account', 'Pick another login saved on this phone', () => router.push('/accounts'), false, 0)}
-        {row('trash-outline', 'Delete account', 'Removes your profile, posts and messages. Cannot be undone.', () => { setConfirmWord(''); setSheet('delete'); }, true, 1)}
+      <View style={[styles.card, { marginTop: spacing.xl }]}>
+        {row('swap-horizontal-outline', 'Switch account', undefined, () => router.push('/accounts'), false, 0)}
+        {row('trash-outline', 'Delete account', undefined, () => { setConfirmWord(''); setSheet('delete'); }, true, 1)}
       </View>
 
       <Modal visible={sheet !== null} transparent animationType="fade" onRequestClose={() => setSheet(null)}>
@@ -283,21 +279,21 @@ function ResetPage({ email, onSave }: { email?: string; onSave: (password: strin
 }
 
 const styleDefinitions = StyleSheet.create({
-  hero: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingBottom: spacing.lg },
+  hero: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingBottom: spacing.sm },
   heroName: { ...typography.heading, color: colors.text },
   heroMeta: { ...typography.small, color: colors.textMuted },
   demo: { ...typography.small, color: colors.textFaint, lineHeight: 19, paddingBottom: spacing.md },
   notice: { ...typography.small, color: colors.success, paddingBottom: spacing.sm },
-  // The way Settings reads: sentence-case labels, borderless grouped lists a
-  // shade off the page, hairlines that start past the icons.
-  sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingTop: spacing.xl, paddingBottom: spacing.sm },
-  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  // Quiet, the way Settings reads: short labels, the value at the right,
+  // flat grouped lists with a hairline edge instead of a raised shadow.
+  sectionTitle: { ...typography.small, color: colors.textFaint, paddingHorizontal: spacing.sm, paddingTop: spacing.xl, paddingBottom: 6 },
+  card: { borderRadius: 16, backgroundColor: colors.surface, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   row: { flexDirection: 'row', alignItems: 'stretch', paddingLeft: spacing.lg },
-  lead: { width: 26, alignItems: 'center', justifyContent: 'center', marginRight: spacing.md },
-  rowBody: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 52, paddingVertical: 11, paddingRight: spacing.lg },
+  lead: { width: 22, alignItems: 'center', justifyContent: 'center', marginRight: spacing.md },
+  rowBody: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 48, paddingVertical: 10, paddingRight: spacing.md },
   rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  rowLabel: { ...typography.body, color: colors.text },
-  rowDetail: { ...typography.small, color: colors.textFaint },
+  rowLabel: { ...typography.body, fontSize: 15, color: colors.text, flex: 1 },
+  rowDetail: { ...typography.small, fontSize: 14, color: colors.textFaint, maxWidth: '55%' },
   backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
   sheet: { backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: spacing.lg, paddingBottom: spacing.xxl, maxWidth: 520, width: '100%', alignSelf: 'center', overflow: 'hidden' },
   sheetBody: { padding: spacing.lg, gap: spacing.lg },
