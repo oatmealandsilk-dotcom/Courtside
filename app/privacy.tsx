@@ -46,23 +46,6 @@ export default function PrivacyCentre() {
         {link('time-outline', 'Your activity', undefined, () => router.push('/activity'))}
       </View>
 
-      <Text style={styles.sectionTitle}>What we keep</Text>
-      <View style={styles.card}>
-        {[
-          ['person-outline', 'Your profile', 'Public'],
-          ['images-outline', 'Posts and clips', 'Public, or followers'],
-          ['chatbubble-outline', 'Messages', 'You and them'],
-          ['school-outline', 'Coaching', 'You and your coach'],
-          ['heart-outline', 'Health data', 'Only you'],
-        ].map(([icon, title, who], index) => (
-          <View key={title} style={[styles.row, index > 0 && styles.rowBorder]}>
-            <Ionicons name={icon as keyof typeof Ionicons.glyphMap} size={19} color={colors.textMuted} />
-            <Text style={styles.rowLabel}>{title}</Text>
-            <Text style={styles.rowDetail}>{who}</Text>
-          </View>
-        ))}
-      </View>
-
       <Pressable accessibilityRole="link" onPress={() => openLegal('privacy')} hitSlop={8} style={styles.policy}>
         <Text style={styles.policyText}>{isSupabaseConfigured ? 'Read the full privacy policy' : 'Demo build: nothing leaves this device. Privacy policy'}</Text>
         <Ionicons name="open-outline" size={14} color={colors.textFaint} />
@@ -72,7 +55,7 @@ export default function PrivacyCentre() {
 }
 
 const styleDefinitions = StyleSheet.create({
-  // Quiet, the way Settings reads: short labels, who can see it at the right,
+  // Quiet, the way Settings reads: short labels, the value at the right,
   // flat grouped lists with a hairline edge instead of a raised shadow.
   sectionTitle: { ...typography.small, color: colors.textFaint, paddingHorizontal: spacing.sm, paddingTop: spacing.lg, paddingBottom: 6 },
   card: { borderRadius: 16, backgroundColor: colors.surface, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
