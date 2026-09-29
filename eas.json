@@ -17,7 +17,7 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://cgitvbnvchmofqkhtlml.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://auth.courtsidebase.com",
         "EXPO_PUBLIC_SUPABASE_KEY": "sb_publishable_8PesptF4vNXClY9w2cit-A_LiSY4Zjj"
       }
     }

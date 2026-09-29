@@ -23,6 +23,9 @@ export const supabase: SupabaseClient | null =
     ? createClient(url, key, {
         auth: {
           storage: Platform.OS === 'web' ? undefined : AsyncStorage,
+          // Where the login is kept on the device. Named after the project, not
+          // the address, so moving to auth.courtsidebase.com signs nobody out.
+          storageKey: 'sb-cgitvbnvchmofqkhtlml-auth-token',
           autoRefreshToken: true,
           persistSession: true,
           detectSessionInUrl: Platform.OS === 'web',

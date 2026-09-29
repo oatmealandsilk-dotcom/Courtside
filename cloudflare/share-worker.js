@@ -16,7 +16,7 @@
  * Setup: cloudflare/README.md.
  */
 const APP = 'https://app.courtsidebase.com';
-const SUPABASE = 'https://cgitvbnvchmofqkhtlml.supabase.co';
+const SUPABASE = 'https://auth.courtsidebase.com';
 const KEY = 'sb_publishable_8PesptF4vNXClY9w2cit-A_LiSY4Zjj';
 const FALLBACK = {
   title: 'CourtSide',
