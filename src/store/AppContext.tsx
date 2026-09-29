@@ -337,7 +337,8 @@ interface AppActions {
   /** With Supabase: email and password. Without it: the demo handle. */
   signIn: (identity: string, password?: string) => Promise<void>;
   /** Creates the account. Resolves 'confirm' when the project wants the email verified first. */
-  signUp: (email: string, password: string, name: string, handle: string) => Promise<'session' | 'confirm'>;
+  /** With the sign-up form's birthday, which is saved as the account is made. */
+  signUp: (email: string, password: string, name: string, handle: string, birthDate?: string) => Promise<'session' | 'confirm'>;
   /** Resolves once the account is loaded, or false if the person backed out. */
   signInWithGoogle: () => Promise<boolean>;
   signInWithApple: () => Promise<boolean>;
@@ -1108,10 +1109,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(t);
   }, [state.currentUserId, state.sessions, state.posts, state.stories, state.users, state.remoteLoaded, state.snapshotShown]);
 
+  // Read from the ref, not from this render: an action started just before a
+  // sign-in (sign-up's birthday, say) must see the account that now exists.
   const requireUser = useCallback((): ID => {
-    if (!state.currentUserId) throw new Error('Not signed in');
-    return state.currentUserId;
-  }, [state.currentUserId]);
+    const me = stateRef.current.currentUserId;
+    if (!me) throw new Error('Not signed in');
+    return me;
+  }, []);
 
   const signIn = useCallback(async (identity: string, password?: string) => {
     if (isSupabaseConfigured && password !== undefined) {
@@ -1138,9 +1142,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => { live = false; };
   }, [signIn]);
 
-  const signUp = useCallback(async (email: string, password: string, name: string, handle: string) => {
+  const signUp = useCallback(async (email: string, password: string, name: string, handle: string, birthDate?: string) => {
     const session = await remoteAuth.signUp(email, password, name, handle);
     if (!session) return 'confirm' as const;
+    // The birthday typed on the sign-up form is kept before the account
+    // opens, so it is never asked for a second time.
+    if (birthDate) {
+      const answer = await remote.setBirthDate(birthDate).catch(() => null);
+      if (answer === 'teen' || answer === 'adult') await rememberAnswered(session.user.id, answer);
+      else if (answer === null) await rememberAnswered(session.user.id, groupFor(yearsOld(birthDate)));
+    }
     await loadRemote(session.user.id, session.user.email);
     return 'session' as const;
   }, [loadRemote]);

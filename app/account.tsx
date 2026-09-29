@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { BrandMark } from '@/components/BrandMark';
 import { Wash } from '@/components/Wash';
@@ -149,8 +149,11 @@ export default function AccountCentre() {
       </View>
 
       <Modal visible={sheet !== null} transparent animationType="fade" onRequestClose={() => setSheet(null)}>
-        <Pressable accessibilityLabel="Close" onPress={() => !busy && setSheet(null)} style={styles.backdrop}>
-          <View style={styles.sheet} onStartShouldSetResponder={() => true}>
+        {/* The dimmed page behind is its own button, beside the sheet rather than around it:
+            wrapped around it, a click in a password box also counted as a click on the page and closed the sheet. */}
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.backdrop}>
+          <Pressable accessibilityLabel="Close" onPress={() => !busy && setSheet(null)} style={StyleSheet.absoluteFill} />
+          <View style={styles.sheet}>
             <Wash height={240} strength={0.8} />
             {sheet === 'password' ? (
               <>
@@ -184,7 +187,7 @@ export default function AccountCentre() {
               </>
             ) : null}
           </View>
-        </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </Screen>
   );
