@@ -2,7 +2,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Platform, View } from 'react-native';
 import { goBack } from '@/lib/goBack';
-import { router, useGlobalSearchParams, usePathname } from 'expo-router';
+import { router, useGlobalSearchParams, usePathname, useSegments } from 'expo-router';
 import { NavBar } from './NavBar';
 import { setInstantExit } from '@/features/navigation/instantExit';
 import { UploadBar } from '@/components/UploadBar';
@@ -107,7 +107,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Arriving from the password-reset email is its own calm page, with no app around it yet.
   const { reset } = useGlobalSearchParams<{ reset?: string }>();
   const hideEverywhere = ['/sign-in', '/onboarding', '/agree', '/birthday', '/first-move', '/hit'].includes(pathname) || pathname.startsWith('/story/') || (pathname === '/account' && !!reset);
-  const showNav = !!currentUserId && !hideEverywhere && !(isPhone && phoneOnlyHide);
+  // The splash shares Home's address ('/'); only the route's segments tell
+  // them apart. The bar waits until the splash has handed over to the app.
+  const segments = useSegments() as string[];
+  const onSplash = segments.length === 0 || (segments.length === 1 && segments[0] === 'index');
+  const showNav = !!currentUserId && !hideEverywhere && !onSplash && !(isPhone && phoneOnlyHide);
   // A shared link opened while signed out goes to sign-in, not to an empty page.
   const mustSignIn = ready && authResolved && !currentUserId && !['/', '/index', '/sign-in', '/onboarding', '/birthday'].includes(pathname);
   // The gates — sign in, birthday, terms — are reached by one replace each,
@@ -159,7 +163,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     {showNav && !isPhone && nav}
     <View style={{ flex: 1, minWidth: 0, minHeight: 0 }}><RouteTransition>{children}</RouteTransition><Toast /><UploadBar /></View>
     {showNav && isPhone && nav}
-    {showNav && (pathname === '/' || pathname === '/index') ? <WarmCurtain /> : null}
+    {!!currentUserId && !hideEverywhere && (pathname === '/' || pathname === '/index') ? <WarmCurtain /> : null}
     {/* On its way to a gate (sign-in, birthday, terms): the page underneath is covered for the moment it takes. */}
     {detour ? <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.bg }} /> : null}
   </View>;
