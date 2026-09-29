@@ -1293,7 +1293,13 @@ export const remote = {
     if (patch.cityAt !== undefined) { row.city_lat = patch.cityAt?.lat ?? null; row.city_lng = patch.cityAt?.lng ?? null; }
     if (patch.avatarUrl !== undefined) row.avatar_url = patch.avatarUrl;
     if (patch.profile !== undefined) row.profile = patch.profile;
-    const { error } = await need().from('profiles').update(row).eq('id', me);
+    let { error } = await need().from('profiles').update(row).eq('id', me);
+    // A database without the town's position yet (migration 49): save the rest.
+    if (error && /city_l(at|ng)/.test(error.message) && ('city_lat' in row || 'city_lng' in row)) {
+      delete row.city_lat; delete row.city_lng;
+      if (Object.keys(row).length) ({ error } = await need().from('profiles').update(row).eq('id', me));
+      else error = null;
+    }
     if (error) fail('profile update')(error);
   },
 
