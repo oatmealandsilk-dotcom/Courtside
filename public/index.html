@@ -5,6 +5,13 @@
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
     <!-- viewport-fit=cover lets a phone browser report the notch and home bar, so the app keeps clear of them. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, shrink-to-fit=no" />
+    <!-- An iPhone zooms the page in whenever a text box smaller than 16px is tapped, and stays zoomed.
+         Telling iPhones not to zoom stops that; pinching to zoom still works there. Other phones never did it. -->
+    <script>
+      if (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+        document.querySelector('meta[name=viewport]').setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, shrink-to-fit=no');
+      }
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>CourtSide</title>

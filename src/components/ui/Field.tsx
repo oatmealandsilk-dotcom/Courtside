@@ -74,6 +74,7 @@ export function Field({
   // Where the caret is, so the @ being typed is the one at the caret rather
   // than any @ in the text. Read from the box's own selection events.
   const [caret, setCaret] = useState(0);
+  const [focused, setFocused] = useState(false);
   const candidatesFor = useMentionCandidates();
   const own = useRef<TextInput>(null);
   const reveal = useRevealOnFocus();
@@ -115,14 +116,15 @@ export function Field({
         keyboardType={keyboardType}
         secureTextEntry={secureTextEntry}
         selectTextOnFocus={selectTextOnFocus}
-        onFocus={() => { reveal(box()); onFocus?.(); }}
-        onBlur={onBlur}
+        onFocus={() => { setFocused(true); reveal(box()); onFocus?.(); }}
+        onBlur={() => { setFocused(false); onBlur?.(); }}
         autoCorrect={autoCorrect}
         onSubmitEditing={submits ? onSubmitEditing : undefined}
         blurOnSubmit={submits && multiline ? true : undefined}
         returnKeyType={submits ? 'send' : undefined}
         style={[
           styles.input,
+          focused && styles.inputFocused,
           soft && (multiline ? styles.softArea : styles.softLine),
           multiline && { minHeight: minHeight ?? 110, textAlignVertical: 'top' },
           flush && { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
@@ -147,7 +149,10 @@ const styleDefinitions = StyleSheet.create({
     paddingVertical: spacing.md,
     color: colors.text,
     fontSize: 15,
+    // The browser's own blue ring; the border darkening is the focus mark instead.
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}),
   },
+  inputFocused: { borderColor: colors.borderStrong },
   hint: { ...typography.small, color: colors.textFaint },
   softLine: { ...lift, borderWidth: 0, borderRadius: radius.pill, minHeight: 52, paddingVertical: 14, fontSize: 16 },
   softArea: { ...lift, borderWidth: 0, borderRadius: 20, paddingVertical: 14, fontSize: 16, lineHeight: 22 },

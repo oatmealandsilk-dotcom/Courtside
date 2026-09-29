@@ -103,7 +103,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // menu sits at the side, out of their way, so it stays, the way
   // Instagram's does behind its Create box. Sign-in, setup and the camera
   // hide it everywhere.
-  const phoneOnlyHide = ['/compose', '/edit-post', '/ask', '/ask-coach', '/pick-location', '/pick-court', '/invite', '/comments', '/share', '/likes', '/post-menu', '/log-session', '/hit-request/new', '/court-report', '/wrapped'].includes(pathname) || pathname.startsWith('/messages/');
+  const phoneOnlyHide = ['/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/invite', '/comments', '/share', '/likes', '/post-menu', '/log-session', '/hit-request/new', '/court-report', '/wrapped'].includes(pathname) || pathname.startsWith('/messages/');
   // Arriving from the password-reset email is its own calm page, with no app around it yet.
   const { reset } = useGlobalSearchParams<{ reset?: string }>();
   const hideEverywhere = ['/sign-in', '/onboarding', '/agree', '/birthday', '/first-move', '/hit'].includes(pathname) || pathname.startsWith('/story/') || (pathname === '/account' && !!reset);
