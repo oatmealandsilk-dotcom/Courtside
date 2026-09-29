@@ -11,7 +11,7 @@ import { AchievementGrid } from '@/components/AchievementGrid';
 import { LevelPill } from '@/components/LevelPill';
 import { Avatar, EmptyState, Meter, Screen } from '@/components/ui';
 import { evaluateAchievements, fitnessLabel, levelBadge, playStyleLabel, surfaceLabel, winRate } from '@/lib/badges';
-import { formatDate } from '@/lib/format';
+import { formatDate, experienceLabel } from '@/lib/format';
 import { confirmAction } from '@/lib/confirm';
 import { localDay } from '@/features/practice/stats';
 import { CourtGlyph } from '@/components/map/MapChrome';
@@ -120,7 +120,7 @@ export default function Profile() {
         <Detail line label="Hands" value={`${profile.handedness === 'right' ? 'Right' : 'Left'}-handed · ${profile.backhand === 'one-handed' ? 'one' : 'two'}-handed backhand`} />
         <Detail line label="Surface" value={surfaceLabel[profile.preferredSurface]} />
         {profile.sessionsPerWeek !== undefined ? <Detail line label="Plays" value={`${profile.sessionsPerWeek} times a week`} /> : null}
-        {profile.yearsPlaying !== undefined ? <Detail line label="Experience" value={`${profile.yearsPlaying} years`} /> : null}
+        {profile.yearsPlaying !== undefined ? <Detail line label="Experience" value={experienceLabel(profile.yearsPlaying)} /> : null}
       </View>
 
       {/* The gear bag: what they play with, one of the first things players ask each other. */}
