@@ -4,7 +4,7 @@ import Reanimated from 'react-native-reanimated';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, ScrollView, TextInput, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Platform, ScrollView, TextInput, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -276,7 +276,7 @@ const styleDefinitions = StyleSheet.create({
   sectionUnderline: { position: 'absolute', left: 0, bottom: -1, height: 2, backgroundColor: colors.brand, borderRadius: 1 },
   searchWrap: { position: 'relative', justifyContent: 'center' },
   searchIcon: { position: 'absolute', left: 16, zIndex: 1 },
-  search: { ...typography.body, fontSize: 16, color: colors.text, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingLeft: 42, paddingRight: spacing.lg, paddingVertical: 12 },
+  search: { ...typography.body, fontSize: 16, color: colors.text, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingLeft: 42, paddingRight: spacing.lg, paddingVertical: 12, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
   mapStandIn: { height: 330, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   playersHead: { gap: 3, paddingTop: spacing.sm },
   playersTitle: { ...typography.title, color: colors.text },
