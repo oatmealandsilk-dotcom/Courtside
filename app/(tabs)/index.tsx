@@ -267,9 +267,12 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       const ranked = rankFeed(data.posts.filter(reachable), data.questions.filter((q) => !q.source), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st))).flatMap((i) =>
         i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : [],
       );
-      // Something of yours from the last few minutes goes first, so a fresh post is right there.
+      // Something of yours from the last few minutes goes first, so a fresh post
+      // is right there. Newest first, that window is a whole day: your own new
+      // post is the first thing you see until tomorrow, however you refresh.
+      const mineFor = NEWEST_FIRST ? 24 * 60 * 60_000 : 5 * 60_000;
       const justMine = data.posts
-        .filter((p) => p.authorId === data.currentUserId && !p.archived && Date.now() - Date.parse(p.createdAt) < 5 * 60_000)
+        .filter((p) => p.authorId === data.currentUserId && !p.archived && Date.now() - Date.parse(p.createdAt) < mineFor)
         .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
         .map((p) => `p:${p.id}`);
       // The feed is dealt, not listed: what you have already watched this
@@ -278,7 +281,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       const others = ranked.filter((k) => !justMine.includes(k));
       const unseen = others.filter((k) => !seen.current.has(k));
       const watched = others.filter((k) => seen.current.has(k));
-      const rest = [...shuffleFeed(unseen), ...shuffleFeed(watched)];
+      // Newest first means just that: nothing already seen is moved to the back.
+      const rest = NEWEST_FIRST ? others : [...shuffleFeed(unseen), ...shuffleFeed(watched)];
       const final = [...justMine, ...rest];
       // New players' first posts, nearby first, are dealt near the top so
       // they meet people (and likes) on their first day.
@@ -373,7 +377,12 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   }, [app.remoteLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A post of yours that just finished uploading: the feed starts over with it on top.
-  useEffect(() => subscribeFeedRefresh(() => { if (!scope) rerank(); }), [scope, rerank]);
+  // …and the feed is taken back to the top to show it, wherever you had scrolled to.
+  useEffect(() => subscribeFeedRefresh(() => {
+    if (scope) return;
+    rerank();
+    setTimeout(() => pager.current?.scrollToTop(), 60);
+  }), [scope, rerank]);
   // Pulling down on the first page fetches what is new and starts the feed over from the top.
   // Pull-to-refresh: fetch what is new, rank the pages again in place (the
   // pager is holding the feed down and brings it back itself), and give the
