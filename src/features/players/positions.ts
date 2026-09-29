@@ -77,8 +77,8 @@ function placeForTimeZone(): Place | undefined {
  * never tracked. Someone we know neither for is left off the map rather
  * than set down beside you, where they are not.
  */
-export function positionFor(user: User, seen?: LastSeen): LatLng | null {
-  const centre = seen ?? placeFor(user.location);
+export function positionFor(user: User, seen?: LastSeen, cityGuess?: LatLng | null): LatLng | null {
+  const centre = seen ?? user.cityAt ?? placeFor(user.location) ?? cityGuess ?? undefined;
   if (!centre) return null;
   const { x, y } = spread(user.avatarSeed);
   // A last spot is already rounded to about a kilometre, so it only needs
@@ -89,8 +89,8 @@ export function positionFor(user: User, seen?: LastSeen): LatLng | null {
 }
 
 /** Whether the map knows where you are, or would only be guessing from the time zone. */
-export function homeIsKnown(me: User, fix?: LatLng | null): boolean {
-  return !!fix || !!placeFor(me.location) || !!regionFor(me.location);
+export function homeIsKnown(me: User, fix?: LatLng | null, cityGuess?: LatLng | null): boolean {
+  return !!fix || !!me.cityAt || !!placeFor(me.location) || !!cityGuess || !!regionFor(me.location);
 }
 
 /**
@@ -98,8 +98,26 @@ export function homeIsKnown(me: User, fix?: LatLng | null): boolean {
  * or a city in the same state; else the city your phone's time zone is
  * named after; and only then Los Angeles.
  */
-export function homeFor(me: User, fix?: LatLng | null): LatLng {
+export function homeFor(me: User, fix?: LatLng | null, cityGuess?: LatLng | null): LatLng {
   if (fix) return fix;
-  const place = placeFor(me.location) ?? regionFor(me.location) ?? placeForTimeZone() ?? PLACES[0];
+  if (me.cityAt) return me.cityAt;
+  const known = placeFor(me.location);
+  if (!known && cityGuess) return cityGuess;
+  const place = known ?? regionFor(me.location) ?? placeForTimeZone() ?? PLACES[0];
   return { lat: place.lat, lng: place.lng };
+}
+
+/**
+ * Where the map starts when it doesn't know your town: your part of the
+ * world, zoomed out, rather than a big city you may not be anywhere near.
+ * US time zones show the whole country; elsewhere, the zone's own region.
+ */
+export function wideView(): { center: LatLng; zoom: number } {
+  let zone = '';
+  try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone ?? ''; } catch { /* no zone */ }
+  if (/^America\/(New_York|Detroit|Chicago|Denver|Phoenix|Los_Angeles|Anchorage|Boise|Indiana|Kentucky|North_Dakota|Menominee)/.test(zone) || zone.startsWith('US/')) {
+    return { center: { lat: 38.5, lng: -96.5 }, zoom: 3.2 };
+  }
+  const city = placeForTimeZone();
+  return city ? { center: { lat: city.lat, lng: city.lng }, zoom: 4.5 } : { center: { lat: 25, lng: 0 }, zoom: 1.5 };
 }

@@ -29,6 +29,8 @@ interface Props {
    */
   onSubmitEditing?: () => void;
   onFocus?: () => void;
+  /** Tapping in selects what is there, so typing replaces it (a prefilled number, say). */
+  selectTextOnFocus?: boolean;
   onBlur?: () => void;
   autoCorrect?: boolean;
   /** Square off the bottom corners so a list can hang straight off the box. */
@@ -60,6 +62,7 @@ export function Field({
   hint,
   onSubmitEditing,
   onFocus,
+  selectTextOnFocus,
   onBlur,
   autoCorrect,
   flush = false,
@@ -111,6 +114,7 @@ export function Field({
         autoCapitalize={autoCapitalize}
         keyboardType={keyboardType}
         secureTextEntry={secureTextEntry}
+        selectTextOnFocus={selectTextOnFocus}
         onFocus={() => { reveal(box()); onFocus?.(); }}
         onBlur={onBlur}
         autoCorrect={autoCorrect}

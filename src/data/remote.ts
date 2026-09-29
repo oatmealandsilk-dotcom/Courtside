@@ -73,6 +73,8 @@ const emptyStats: PlayerStats = {
 
 interface ProfileRow {
   id: string; handle: string; name: string; bio: string; location: string;
+  /** Migration 49. */
+  city_lat?: number | null; city_lng?: number | null;
   avatar_url: string | null; is_coach: boolean; profile: Partial<PlayerProfile> | null; created_at: string;
   is_private?: boolean | null;
   /** Migration 31. */
@@ -119,6 +121,7 @@ const toUser = (row: ProfileRow, followers: number, following: number): User => 
   name: row.name,
   bio: row.bio ?? '',
   location: row.location ?? '',
+  cityAt: row.city_lat != null && row.city_lng != null ? { lat: row.city_lat, lng: row.city_lng } : undefined,
   joinedAt: row.created_at,
   avatarSeed: row.id,
   avatarUrl: row.avatar_url ?? undefined,
@@ -1278,7 +1281,7 @@ export const remote = {
   },
   async voteTip(tipId: ID, dir: 1 | -1) { const { error } = await need().rpc('vote_tip', { t: tipId, dir }); if (error) fail('tip vote')(error); },
 
-  async updateProfile(me: ID, patch: { name?: string; bio?: string; location?: string; avatarUrl?: string; profile?: PlayerProfile; isPrivate?: boolean; readReceipts?: boolean; openToHitUntil?: string | null; firstMove?: FirstMove }) {
+  async updateProfile(me: ID, patch: { name?: string; bio?: string; location?: string; cityAt?: { lat: number; lng: number } | null; avatarUrl?: string; profile?: PlayerProfile; isPrivate?: boolean; readReceipts?: boolean; openToHitUntil?: string | null; firstMove?: FirstMove }) {
     const row: Record<string, unknown> = {};
     if (patch.firstMove !== undefined) { row.first_move = patch.firstMove; row.first_move_at = new Date().toISOString(); }
     if (patch.openToHitUntil !== undefined) row.open_to_hit_until = patch.openToHitUntil;
@@ -1287,6 +1290,7 @@ export const remote = {
     if (patch.name !== undefined) row.name = patch.name;
     if (patch.bio !== undefined) row.bio = patch.bio;
     if (patch.location !== undefined) row.location = patch.location;
+    if (patch.cityAt !== undefined) { row.city_lat = patch.cityAt?.lat ?? null; row.city_lng = patch.cityAt?.lng ?? null; }
     if (patch.avatarUrl !== undefined) row.avatar_url = patch.avatarUrl;
     if (patch.profile !== undefined) row.profile = patch.profile;
     const { error } = await need().from('profiles').update(row).eq('id', me);

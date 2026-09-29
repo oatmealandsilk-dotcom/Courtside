@@ -142,6 +142,7 @@ export default function Onboarding() {
   const existing = currentUser?.profile;
   const [name, setName] = useState(currentUser?.name ?? '');
   const [location, setLocation] = useState(currentUser?.location ?? '');
+  const [cityAt, setCityAt] = useState(currentUser?.cityAt ?? null);
   const [skillSystem, setSkillSystem] = useState<'NTRP' | 'UTR'>(existing?.skillSystem === 'UTR' ? 'UTR' : 'NTRP');
   const [rating, setRating] = useState(existing?.rating && existing.skillSystem !== 'ITF' ? existing.rating : 3.5);
   const [ratingText, setRatingText] = useState(String(existing?.rating && existing.skillSystem !== 'ITF' ? existing.rating : '3.5'));
@@ -231,7 +232,7 @@ export default function Onboarding() {
   const finish = () => {
     haptics.commit();
     if (currentUser && (name.trim() !== currentUser.name || location.trim() !== currentUser.location)) {
-      actions.updateIdentity({ name: name.trim() || currentUser.name, bio: currentUser.bio, location: location.trim() });
+      actions.updateIdentity({ name: name.trim() || currentUser.name, bio: currentUser.bio, location: location.trim(), cityAt: location.trim() ? cityAt : null });
     }
     if (editing) {
       // Changing answers later: keep when you first joined, leave the setup reminders alone, and go back.
@@ -288,7 +289,7 @@ export default function Onboarding() {
               <Field label="Name" value={name} onChangeText={setName} placeholder="Your name" autoCapitalize="words" />
               <View style={styles.group}>
                 <Text style={styles.groupLabel}>Where you play</Text>
-                <LocationField value={location} onChange={setLocation} />
+                <LocationField value={location} onChange={(next, at) => { setLocation(next); setCityAt(at); }} />
               </View>
               <View style={styles.twoCol}>
                 <View style={{ flex: 1 }}>
@@ -307,6 +308,7 @@ export default function Onboarding() {
                     onChangeText={typeRating}
                     placeholder={skillSystem === 'UTR' ? '6.4' : '3.5'}
                     keyboardType="decimal-pad"
+                    selectTextOnFocus
                   />
                 </View>
               </View>

@@ -85,6 +85,8 @@ export interface User {
   name: string;
   bio: string;
   location: string;
+  /** Where the profile's city is (migration 49), when it was picked from the search. */
+  cityAt?: { lat: number; lng: number };
   joinedAt: string;
   /** Deterministic avatar tint; no network images in the mock build. */
   avatarSeed: string;

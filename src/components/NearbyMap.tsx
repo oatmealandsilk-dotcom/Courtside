@@ -48,7 +48,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const [meOpen, setMeOpen] = useState(false);
   const openToHit = isOpenToHit(me);
   const model = useMapModel(me, players, at);
-  const { home } = model;
+  const { home, start } = model;
+  const startZoom = start.zoom ?? CITY_ZOOM;
   const weather = useWeather(home);
   const cityName = me.location.trim() ? me.location.split(',')[0] : 'you';
   const canvas = useRef<MapCanvasHandle | null>(null);
@@ -57,8 +58,8 @@ export function NearbyMap(props: NearbyMapProps) {
   useEffect(() => {
     if (lastHome.current.lat === home.lat && lastHome.current.lng === home.lng) return;
     lastHome.current = home;
-    canvas.current?.flyTo(home, CITY_ZOOM, 600);
-  }, [home]);
+    if (model.homeKnown) canvas.current?.flyTo(home, CITY_ZOOM, 600);
+  }, [home]); // eslint-disable-line react-hooks/exhaustive-deps
   // Picking someone, a court, or typing a city takes the map there.
   useEffect(() => { if (model.selected) canvas.current?.flyTo(model.selected.at, CLOSE_ZOOM); }, [model.selected]);
   useEffect(() => { if (model.selectedCourt) canvas.current?.flyTo(model.selectedCourt, CLOSE_ZOOM); }, [model.selectedCourt]);
@@ -74,15 +75,16 @@ export function NearbyMap(props: NearbyMapProps) {
       const size = on ? 38 : 30;
       list.push({ id: `p:${p.user.id}`, lat: p.at.lat, lng: p.at.lng, html: playerPinHtml(p.user, { size, on, label: expanded }), anchor: expanded ? 'top' : 'center', offsetY: expanded ? -(size + 8) / 2 : 0 });
     }
-    list.push({ id: 'me', lat: home.lat, lng: home.lng, html: mePinHtml(me, expanded ? 34 : 26) });
+    // Your pin only where the map actually knows you are.
+    if (model.homeKnown) list.push({ id: 'me', lat: home.lat, lng: home.lng, html: mePinHtml(me, expanded ? 34 : 26) });
     return list;
-  }, [model.courts, shown, selectedId, selectedCourtId, expanded, home.lat, home.lng, me, theme, openToHit]);
+  }, [model.courts, shown, selectedId, selectedCourtId, expanded, home.lat, home.lng, me, theme, openToHit, model.homeKnown]);
 
   const mapView = (
     <MapCanvas
       ref={canvas}
-      center={home}
-      zoom={CITY_ZOOM}
+      center={start.center}
+      zoom={startZoom}
       look={look}
       interactive={expanded}
       markers={markers}
@@ -118,7 +120,7 @@ export function NearbyMap(props: NearbyMapProps) {
         <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
       </View>
       <View pointerEvents="box-none" style={styles.bottom}>
-        <MapButtons onRecentre={() => { model.select(null); canvas.current?.flyTo(home, CITY_ZOOM, 600); }} />
+        <MapButtons onRecentre={() => { model.select(null); canvas.current?.flyTo(start.center, startZoom, 600); }} />
         {meOpen ? (
           <YouSheet me={me} open={openToHit} onToggle={actions.setOpenToHit} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} />
         ) : model.selected ? (
