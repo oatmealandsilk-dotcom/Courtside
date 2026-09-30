@@ -60,6 +60,12 @@ module.exports = {
       ['react-native-health', { healthSharePermission: 'CourtSide reads your sleep, heart rate variability, resting heart rate, steps and active energy so the AI coach can plan around how recovered you are.', healthUpdatePermission: 'CourtSide does not write to Health.' }],
     ],
     experiments: { baseUrl },
+    // Instant updates: a build asks Expo for newer app code when it opens and
+    // uses it from the next launch. A build only takes code made for the same
+    // version, so bump `version` above whenever something native changes (a new
+    // package with phone code, a permission, a plugin) and make a new build.
+    runtimeVersion: { policy: 'appVersion' },
+    updates: { url: 'https://u.expo.dev/ce2e922d-6122-47f6-97b7-58a7fad4b3ef', checkAutomatically: 'ON_LOAD', fallbackToCacheTimeout: 0 },
     // The app's home on Expo's build service (the robertzchen account), for builds and push alerts.
     extra: { eas: { projectId: process.env.EAS_PROJECT_ID ?? 'ce2e922d-6122-47f6-97b7-58a7fad4b3ef' } },
   },
