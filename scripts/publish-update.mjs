@@ -16,7 +16,7 @@ if (!env.EXPO_PUBLIC_SUPABASE_URL || !env.EXPO_PUBLIC_SUPABASE_KEY) {
 }
 const message = process.argv.slice(2).join(' ').trim() || 'Fixes';
 // iOS only: there is no Android build yet. Add 'android' here once there is.
-const run = spawnSync('npx', ['eas-cli@latest', 'update', '--channel', channel, '--platform', 'ios', '--message', message, '--non-interactive'], {
+const run = spawnSync('npx', ['eas-cli@latest', 'update', '--channel', channel, '--environment', 'production', '--platform', 'ios', '--message', message, '--non-interactive'], {
   stdio: 'inherit',
   env: { ...process.env, ...env, EXPO_BASE_URL: '' },
 });
