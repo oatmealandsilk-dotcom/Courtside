@@ -146,7 +146,7 @@ export function NearbyMap(props: NearbyMapProps) {
     for (const p of shown) {
       const on = p.user.id === selectedId;
       const size = on ? 38 : 30;
-      const html = playerPinHtml(p.user, { size, on, label: expanded });
+      const html = playerPinHtml(p.user, { size, on, label: expanded, seenAt: p.seenAt });
       seen.add(p.user.id);
       const kept = pins.current.get(p.user.id);
       if (kept) {
@@ -181,17 +181,18 @@ export function NearbyMap(props: NearbyMapProps) {
   // You: one pin, rebuilt only when you or where you are changes.
   useEffect(() => {
     const instance = map.current;
-    // Your pin only where the map actually knows you are.
-    if (!instance || !model.homeKnown) return;
+    // Your pin only where you last shared your location; location off, no pin.
+    const mine = model.mePos;
+    if (!instance || !mine) return;
     const markers: maplibregl.Marker[] = [];
     const pin = (html: string) => { const node = document.createElement('div'); node.innerHTML = html; return node; };
     const meSize = expanded ? 34 : 26;
     markers.push(new maplibregl.Marker({
       element: (() => { const node = pin(mePinHtml(me, meSize)); node.setAttribute('role', 'button'); node.setAttribute('aria-label', 'You'); node.addEventListener('click', (event) => { event.stopPropagation(); latest.current.openMe(); }); return node; })(),
       anchor: 'center',
-    }).setLngLat([home.lng, home.lat]).addTo(instance));
+    }).setLngLat([mine.lng, mine.lat]).addTo(instance));
     return () => { markers.forEach((m) => m.remove()); };
-  }, [expanded, home.lat, home.lng, me, night, openToHit, model.homeKnown]);
+  }, [expanded, model.mePos, me, night, openToHit]);
 
   // Courts, when that layer is on.
   const selectedCourtId = model.selectedCourt?.id ?? null;

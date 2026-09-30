@@ -15,11 +15,24 @@ const face = (user: User, size: number) => {
   return `<div style="width:${size}px;height:${size}px;border-radius:999px;${fill}color:#fff;${FONT};display:flex;align-items:center;justify-content:center">${user.avatarUrl ? '' : initials(user.name)}</div>`;
 };
 
-/** A player: their picture; a green ring when they are open to hit today; their first name beneath on the full map. */
-export function playerPinHtml(user: User, { size, on, label }: { size: number; on: boolean; label: boolean }): string {
+/** How long ago someone last shared where they are, as short as a map label wants: "now", "12m", "3h", "2d", "5w". */
+export function agoShort(iso?: string): string {
+  if (!iso) return '';
+  const minutes = Math.max(0, (Date.now() - Date.parse(iso)) / 60_000);
+  if (minutes < 5) return 'now';
+  if (minutes < 60) return `${Math.floor(minutes)}m`;
+  if (minutes < 60 * 24) return `${Math.floor(minutes / 60)}h`;
+  if (minutes < 60 * 24 * 7) return `${Math.floor(minutes / (60 * 24))}d`;
+  return `${Math.floor(minutes / (60 * 24 * 7))}w`;
+}
+
+/** A player: their picture; a green ring when they are open to hit today; on the full map, their first name and when they were last there. */
+export function playerPinHtml(user: User, { size, on, label, seenAt }: { size: number; on: boolean; label: boolean; seenAt?: string }): string {
   const open = isOpenToHit(user);
   const ring = open ? colors.brand : colors.border;
-  const name = label ? `<div style="margin-top:2px;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 6px;border-radius:999px;background:${colors.bg};color:${colors.text};${FONT}">${user.name.split(' ')[0]}</div>` : '';
+  const ago = agoShort(seenAt);
+  const when = ago ? ` <span style="color:${colors.textMuted};font-weight:500">${ago}</span>` : '';
+  const name = label ? `<div style="margin-top:2px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 6px;border-radius:999px;background:${colors.bg};color:${colors.text};${FONT}">${user.name.split(' ')[0]}${when}</div>` : '';
   return `<div style="display:flex;flex-direction:column;align-items:center;cursor:pointer"><div style="width:${size + 8}px;height:${size + 8}px;border-radius:999px;background:${colors.bg};border:${open ? (on ? 3 : 2.5) : 1.5}px solid ${ring};display:flex;align-items:center;justify-content:center;box-shadow:${open ? `0 0 0 5px ${colors.brand}33,` : ''}0 2px 6px rgba(0,0,0,.22)">${face(user, size)}</div>${name}</div>`;
 }
 

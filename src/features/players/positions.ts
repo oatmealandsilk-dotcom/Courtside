@@ -77,15 +77,16 @@ function placeForTimeZone(): Place | undefined {
  * never tracked. Someone we know neither for is left off the map rather
  * than set down beside you, where they are not.
  */
-export function positionFor(user: User, seen?: LastSeen, cityGuess?: LatLng | null): LatLng | null {
-  const centre = seen ?? user.cityAt ?? placeFor(user.location) ?? cityGuess ?? undefined;
-  if (!centre) return null;
+export function positionFor(user: User, seen?: LastSeen): LatLng | null {
+  // Only where someone last shared their location, the way Snapchat's map
+  // works: no spot, no pin. A profile's city is never a position — it put
+  // people where they weren't.
+  if (!seen) return null;
   const { x, y } = spread(user.avatarSeed);
   // A last spot is already rounded to about a kilometre, so it only needs
-  // nudging apart from its neighbours; a city centre spreads about ±3 km.
-  // East–west is shrunk so the scatter stays round on the map.
-  const reach = seen ? 0.008 : 0.05;
-  return { lat: centre.lat + y * reach, lng: centre.lng + (x * reach) / Math.max(0.2, Math.cos((centre.lat * Math.PI) / 180)) };
+  // nudging apart from its neighbours. East–west is shrunk so the scatter stays round.
+  const reach = 0.008;
+  return { lat: seen.lat + y * reach, lng: seen.lng + (x * reach) / Math.max(0.2, Math.cos((seen.lat * Math.PI) / 180)) };
 }
 
 /** Whether the map knows where you are, or would only be guessing from the time zone. */
