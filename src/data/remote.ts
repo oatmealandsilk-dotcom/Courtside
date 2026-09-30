@@ -423,6 +423,8 @@ interface ReportRow { id: string; reporter_id: string; target_user_id: string | 
 export interface WaitlistEntry { id: string; email: string; name?: string; source?: string; referredBy?: string; createdAt: string }
 /** A note from the waitlist page's feedback box. */
 export interface SiteFeedback { id: string; message: string; email?: string; createdAt: string }
+/** Where the beta invite email stands: live once Apple has approved the beta. */
+export interface BetaInviteStatus { live: boolean; total: number; invited: number; waiting: number; sent: number; failed: string[] }
 
 export interface AdminReport {
   id: ID;
@@ -1069,6 +1071,12 @@ export const remote = {
       (from, to) => need().from('waitlist').select('id, email, name, source, referred_by, created_at').order('created_at', { ascending: false }).range(from, to), 20000);
     if (error) { fail('waitlist')(error); return []; }
     return data.map((r) => ({ id: r.id, email: r.email, name: r.name ?? undefined, source: r.source ?? undefined, referredBy: r.referred_by ?? undefined, createdAt: r.created_at }));
+  },
+  /** The beta invite email: the counts, or (send) mail everyone still waiting, top of the list first. Admins only. */
+  async betaInvites(send: boolean): Promise<BetaInviteStatus | null> {
+    const { data, error } = await need().functions.invoke('waitlist-welcome', { body: { invite: true, dry: !send } });
+    if (error || !data || typeof (data as BetaInviteStatus).total !== 'number') { if (error) fail('beta invites')(error); return null; }
+    return data as BetaInviteStatus;
   },
   /** Notes left in the build log's feedback box, newest first. Admins only. */
   async fetchSiteFeedback(): Promise<SiteFeedback[]> {

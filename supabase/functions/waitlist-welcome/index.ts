@@ -12,6 +12,14 @@
 //           WAITLIST_REPLY_TO         (optional — the inbox replies should reach)
 //           WAITLIST_BACKFILL_TOKEN   (optional — set only while catching up on people
 //                                      who joined before the email existed; unset it after)
+//           BETA_LIVE                 ("on" the day Apple approves the beta: new sign-ups
+//                                      get the beta email instead of the welcome, and an
+//                                      admin can send it to everyone already waiting)
+//           BETA_LINK                 (optional, default the TestFlight public link)
+//
+// Beta invites: an admin's app POSTs {"invite": true, "dry": true} for the
+// counts, or {"invite": true} to send the beta email to everyone who has not
+// had it, in the list's own order (most friends brought, then earliest).
 //
 // Catch-up: POST {"backfill": true, "token": "<WAITLIST_BACKFILL_TOKEN>", "dry": true}
 // counts who is still waiting for a welcome; without "dry" it welcomes up to
@@ -27,6 +35,8 @@ const HERO = 'https://app.courtsidebase.com/waitlist/email-hero.png';
 const HEADER = 'https://app.courtsidebase.com/email/header.png';
 const FONT = "Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
 const SHARE_BASE = 'https://courtsidebase.com/';
+const BETA_LINK = Deno.env.get('BETA_LINK') ?? 'https://testflight.apple.com/join/21UJPuny';
+const BETA_LIVE = Deno.env.get('BETA_LIVE') === 'on';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -79,8 +89,91 @@ ${p('Also, who&rsquo;s your GOAT? Reply and tell me, I&rsquo;m curious.')}
   return { text, html };
 }
 
+/** The beta is live: how to get it, in Robert's words. */
+function betaLetter(first: string | null) {
+  const hey = first ? `Hey ${first}` : 'Hey';
+  const text = `${hey},
+
+As promised, with everyone's interest, the beta is live!
+
+To get it on your iPhone:
+1. Download TestFlight from the App Store (it's Apple's app for testing new apps)
+2. Open this email on your phone and tap the link below
+3. Hit Install
+
+${BETA_LINK}
+
+Not on iPhone? You can use it in your browser at app.courtsidebase.com.
+
+It's a beta, so some stuff will break. If something looks off, reply with a screenshot and I'll fix it.
+
+Also, share the link with anyone interested. It's way more fun when your friends are on it.
+
+Robert`;
+  const p = (inner: string) => `<p style="margin:0 0 18px;font-size:16px;line-height:1.6;color:#3A3A33">${inner}</p>`;
+  const step = (n: number, inner: string) => `<tr><td valign="top" style="width:28px;padding:0 0 10px;font-family:${FONT};font-size:16px;line-height:1.6;color:#3F7049;font-weight:600">${n}.</td><td style="padding:0 0 10px;font-family:${FONT};font-size:16px;line-height:1.6;color:#3A3A33">${inner}</td></tr>`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light only">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet"></head>
+<body style="margin:0;padding:0;background:#F8F7F2">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F8F7F2"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">
+<tr><td><img src="${HEADER}" width="560" alt="CourtSide" style="display:block;width:100%;max-width:560px;height:auto;border:0"></td></tr>
+<tr><td style="padding:8px 28px 8px;font-family:${FONT}">
+${p(`${esc(hey)},`)}
+${p('As promised, with everyone&rsquo;s interest, the beta is live!')}
+${p('To get it on your iPhone:')}
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 12px">
+${step(1, 'Download <b style="color:#24251F">TestFlight</b> from the App Store (it&rsquo;s Apple&rsquo;s app for testing new apps)')}
+${step(2, 'Open this email on your phone and tap the button below')}
+${step(3, 'Hit <b style="color:#24251F">Install</b>')}
+</table>
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:2px 0 10px"><tr><td style="border-radius:999px;background:#3F7049">
+<a href="${BETA_LINK}" style="display:inline-block;padding:14px 26px;font-family:${FONT};font-size:15px;font-weight:600;color:#FAF8F0;text-decoration:none;border-radius:999px">Get the beta</a>
+</td></tr></table>
+<p style="margin:0 0 26px;font-size:13px;color:#6C665A"><a href="${BETA_LINK}" style="color:#3F7049">${BETA_LINK.replace('https://', '')}</a></p>
+${p('Not on iPhone? You can use it in your browser at <a href="https://app.courtsidebase.com" style="color:#3F7049">app.courtsidebase.com</a>.')}
+${p('It&rsquo;s a beta, so some stuff will break. If something looks off, reply with a screenshot and I&rsquo;ll fix it.')}
+${p('Also, share the link with anyone interested. It&rsquo;s way more fun when your friends are on it.')}
+<p style="margin:26px 0 0;font-size:16px;line-height:1.5;color:#24251F">Robert</p>
+</td></tr>
+<tr><td style="padding:36px 28px 40px;font-family:${FONT};font-size:12px;line-height:1.6;color:#8A8577">You&rsquo;re getting this because you joined the CourtSide waitlist at courtsidebase.com.</td></tr>
+</table></td></tr></table>
+</body></html>`;
+  return { text, html };
+}
+
+/** One email through Resend. */
+function send(to: string, subject: string, text: string, html: string) {
+  return fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${RESEND}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ from: FROM, to: [to], subject, text, html, ...(REPLY_TO ? { reply_to: REPLY_TO } : {}) }),
+  });
+}
+
+/** The beta email to one claimed row; gives the claim back if the send fails. */
+async function invite(row: { id: string; email: string; name: string | null }) {
+  const first = row.name ? (String(row.name).trim().split(/\s+/)[0].replace(/[^\p{L}'-]/gu, '').slice(0, 30) || null) : null;
+  const { text, html } = betaLetter(first);
+  const res = await send(row.email, "you're in 🎾", text, html);
+  if (!res.ok) {
+    await admin.from('waitlist').update({ beta_invited_at: null }).eq('id', row.id);
+    return `resend ${res.status}`;
+  }
+  return null;
+}
+
 /** Welcomes one claimed row; gives the claim back if the send fails. */
 async function welcome(row: { id: string; email: string; name: string | null }) {
+  // After launch a new sign-up gets the beta straight away, marked so it is never sent twice.
+  if (BETA_LIVE) {
+    const { data: claimed } = await admin.from('waitlist').update({ beta_invited_at: new Date().toISOString() })
+      .eq('id', row.id).is('beta_invited_at', null).select('id').maybeSingle();
+    if (!claimed) return null;
+    const problem = await invite(row);
+    if (problem) await admin.from('waitlist').update({ welcomed_at: null }).eq('id', row.id);
+    return problem;
+  }
   // Their place and code, the same way the page shows them.
   const { data: spot } = await admin.rpc('join_waitlist', { p_email: row.email });
   const s = Array.isArray(spot) ? spot[0] : spot;
@@ -90,11 +183,7 @@ async function welcome(row: { id: string; email: string; name: string | null }) 
   const first = row.name ? (String(row.name).trim().split(/\s+/)[0].replace(/[^\p{L}'-]/gu, '').slice(0, 30) || null) : null;
   const { text, html } = letter(first, place, link);
 
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { authorization: `Bearer ${RESEND}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ from: FROM, to: [row.email], subject: `you're #${place} on CourtSide`, text, html, ...(REPLY_TO ? { reply_to: REPLY_TO } : {}) }),
-  });
+  const res = await send(row.email, `you're #${place} on CourtSide`, text, html);
   if (!res.ok) {
     // Give the send back, so a fixed key or domain can try again for this person.
     await admin.from('waitlist').update({ welcomed_at: null }).eq('id', row.id);
@@ -126,12 +215,53 @@ async function backfill(body: { token?: string; dry?: boolean; limit?: number })
   return json({ sent, failed, waiting: await waiting() });
 }
 
+/** Whether the request comes from someone signed in as a CourtSide admin. */
+async function callerIsAdmin(req: Request) {
+  const bearer = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
+  if (!bearer) return false;
+  const { data } = await admin.auth.getUser(bearer);
+  if (!data.user) return false;
+  const { data: profile } = await admin.from('profiles').select('is_admin').eq('id', data.user.id).maybeSingle();
+  return !!profile?.is_admin;
+}
+
+/** The beta email to everyone on the list who has not had it, top of the list first. */
+async function betaInvites(req: Request, body: { dry?: boolean; limit?: number }) {
+  if (!(await callerIsAdmin(req))) return json({ error: 'not allowed' }, 403);
+  const { data, error } = await admin.from('waitlist').select('id, email, name, referred_by, created_at, beta_invited_at');
+  if (error) return json({ error: 'run migration 50 (beta invites) first' }, 500);
+  const rows = (data ?? []) as { id: string; email: string; name: string | null; referred_by: string | null; created_at: string; beta_invited_at: string | null }[];
+  // The list's own order: most friends brought first, then earliest to join (see join_waitlist).
+  const code = (id: string) => id.replace(/-/g, '').slice(0, 8);
+  const brought = new Map<string, number>();
+  for (const r of rows) if (r.referred_by) brought.set(r.referred_by, (brought.get(r.referred_by) ?? 0) + 1);
+  const ordered = [...rows].sort((a, b) => ((brought.get(code(b.id)) ?? 0) - (brought.get(code(a.id)) ?? 0)) || a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
+  const waiting = ordered.filter((r) => !r.beta_invited_at);
+  let sent = 0;
+  const failed: string[] = [];
+  const counts = () => ({ live: BETA_LIVE, total: rows.length, invited: rows.length - waiting.length + sent, waiting: waiting.length - sent, sent, failed });
+  if (body.dry || !BETA_LIVE) return json(counts());
+
+  const limit = Math.max(1, Math.min(80, Number(body.limit) || 80));
+  for (const { id } of waiting.slice(0, limit)) {
+    // Claim first, so two taps at once can never send anyone two.
+    const { data: row } = await admin.from('waitlist').update({ beta_invited_at: new Date().toISOString() })
+      .eq('id', id).is('beta_invited_at', null).select('id, email, name').maybeSingle();
+    if (!row) continue;
+    const problem = await invite(row);
+    if (problem) { failed.push(problem); if (problem === 'resend 429') break; } else sent++;
+    await new Promise((r) => setTimeout(r, 600)); // Resend takes two a second
+  }
+  return json(counts());
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json({ error: 'post only' }, 405);
-  const body = await req.json().catch(() => ({})) as { email?: string; backfill?: boolean; token?: string; dry?: boolean; limit?: number };
+  const body = await req.json().catch(() => ({})) as { email?: string; backfill?: boolean; invite?: boolean; token?: string; dry?: boolean; limit?: number };
   if (!RESEND) return json({ sent: false, reason: 'not set up' });
   if (body.backfill) return backfill(body);
+  if (body.invite) return betaInvites(req, body);
   const email = String(body.email ?? '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) return json({ sent: false });
 

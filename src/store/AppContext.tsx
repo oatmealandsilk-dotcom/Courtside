@@ -16,7 +16,7 @@ import { planStreakReminder } from '@/features/practice/reminder';
 import { TERMS_VERSION } from '@/lib/legal';
 
 import { fetchBootstrap, signIn as apiSignIn, type Bootstrap } from '@/data/api';
-import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type AdminReport, type FeedSignal, type SiteFeedback, type WaitlistEntry, type FirstDayStats, type FirstMove, type HandleStatus, type RemoteData } from '@/data/remote';
+import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type AdminReport, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type RemoteData } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
@@ -489,6 +489,8 @@ interface AppActions {
   loadReports: () => Promise<AdminReport[]>;
   /** Admins only: the waitlist and the waitlist page's feedback. */
   loadWaitlist: () => Promise<WaitlistEntry[]>;
+  /** The beta invite email: counts, or send it to everyone on the waitlist still waiting. Admins only. */
+  betaInvites: (send: boolean) => Promise<BetaInviteStatus | null>;
   /** Everyone's first post from the last month, for the founder to welcome. */
   loadFirstPosts: () => Promise<Post[]>;
   loadFirstDayStats: () => Promise<FirstDayStats | null>;
@@ -2219,6 +2221,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Reports, for admins. The database decides who may read and act on them.
   const loadReports = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchReports() : []), []);
   const loadWaitlist = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchWaitlist() : []), []);
+  const betaInvites = useCallback(async (send: boolean) => (live(stateRef.current.currentUserId) ? remote.betaInvites(send) : null), []);
   const loadFirstDayStats = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchFirstDayStats() : null), []);
   const noteFirstMove = useCallback((move: FirstMove) => {
     const me = stateRef.current.currentUserId;
@@ -3479,6 +3482,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadFollowsOf,
       loadReports,
       loadWaitlist,
+      betaInvites,
       loadFirstPosts,
       loadFirstDayStats,
       noteFirstMove,
@@ -3612,6 +3616,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadFollowsOf,
       loadReports,
       loadWaitlist,
+      betaInvites,
       loadFirstPosts,
       loadFirstDayStats,
       noteFirstMove,
