@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { router } from 'expo-router';
 import { requestSection } from '@/features/navigation/swipeOrder';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { Image as ExpoImage } from 'expo-image';
 
 import { Avatar, EmptyState, Screen } from '@/components/ui';
 import { FollowPill } from '@/components/FollowPill';
@@ -12,8 +13,9 @@ import { BrandMark } from '@/components/BrandMark';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
-import type { Notification, NotificationKind } from '@/data/types';
-import { colors, radius, spacing, typography } from '@/theme';
+import type { Notification, NotificationKind, PostKind } from '@/data/types';
+import { colors, radius, spacing, surfaceColorFor, typography } from '@/theme';
+import { CourtGlyph } from '@/components/map/MapChrome';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 
 /**
@@ -121,7 +123,7 @@ const SECTIONS = ['New', 'Today', 'This week', 'This month', 'Earlier'];
 
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
-  const { notifications, users, posts, currentUserId, followRequests, followingIds, actions } = useApp();
+  const { notifications, users, posts, stories, currentUserId, followRequests, followingIds, actions } = useApp();
   // "liked your clip", "liked your photo": the verb names what was liked, not just "post".
   const verbFor = (group: Group) => {
     if (group.kind === 'milestone') return `just passed ${group.preview ?? 'a milestone'}`;
@@ -182,6 +184,35 @@ export default function Notifications() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mine.length, followRequests.length]);
 
+  // The post each row is about, small on the right the way Instagram's inbox
+  // shows it, so "liked your clip" says which clip. Posts the app hasn't
+  // loaded (older ones) are asked for once, just their picture.
+  // null: asked, and the post is gone (deleted, or never there), so the row shows no picture.
+  const [thumbs, setThumbs] = useState<Record<string, { thumb?: string; kind: PostKind } | null>>({});
+  useEffect(() => {
+    const missing = [...new Set(groups.filter((g) => g.targetKind === 'post' && !posts.some((p) => p.id === g.targetId) && !(g.targetId in thumbs)).map((g) => g.targetId))];
+    if (!missing.length) return;
+    let on = true;
+    void actions.loadPostThumbs(missing).then((found) => {
+      if (on) setThumbs((t) => ({ ...t, ...Object.fromEntries(missing.map((id) => [id, found[id] ?? null])) }));
+    });
+    return () => { on = false; };
+  }, [groups, posts, actions]); // eslint-disable-line react-hooks/exhaustive-deps
+  const thumbFor = (group: Group): { uri?: string; clip: boolean; words: boolean; seed: string } | null => {
+    const seed = group.targetId;
+    if (group.targetKind === 'post') {
+      const p = posts.find((x) => x.id === group.targetId);
+      if (p) return { uri: p.thumbnailUrl ?? p.imageUrl, clip: p.kind === 'clip', words: p.kind === 'note' && !p.imageUrl && !p.videoUrl, seed };
+      const t = thumbs[group.targetId];
+      return t ? { uri: t.thumb, clip: t.kind === 'clip', words: t.kind === 'note' && !t.thumb, seed } : null;
+    }
+    if (group.targetKind === 'hit') {
+      const st = stories.find((x) => x.id === group.targetId);
+      return st ? { uri: st.thumbnailUrl ?? st.imageUrl, clip: !!st.videoUrl, words: false, seed } : null;
+    }
+    return null;
+  };
+
   useEffect(() => {
     actions.markNotificationsRead();
   }, [actions]);
@@ -215,6 +246,7 @@ export default function Notifications() {
                   ? `${nameOf(first)} and ${nameOf(rest[0])}`
                   : `${nameOf(first)}, ${nameOf(rest[0])} and ${rest.length - 1} ${rest.length - 1 === 1 ? 'other' : 'others'}`;
             const heading = index === 0 || groups[index - 1].section !== group.section ? group.section : null;
+            const thumb = thumbFor(group);
 
             return (
               <React.Fragment key={group.key}>
@@ -263,6 +295,15 @@ export default function Notifications() {
                 {/* Follow back, right from the row, the way Instagram's inbox does it. */}
                 {(group.kind === 'follow' || group.kind === 'joined') && first && first !== currentUserId ? (
                   <FollowPill small following={followingIds.includes(first)} onPress={() => actions.toggleFollow(first)} name={nameOf(first).split(' ')[0]} />
+                ) : thumb ? (
+                  <View style={[styles.thumb, !thumb.uri && !thumb.words && { backgroundColor: surfaceColorFor(thumb.seed) }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                    {thumb.uri ? <ExpoImage source={{ uri: thumb.uri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={120} />
+                      // A post that is only words: a speech mark where a picture would be.
+                      : thumb.words ? <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.textMuted} />
+                      // A photo or clip with no picture yet: the tinted court tile the app uses everywhere for that.
+                      : <CourtGlyph size={14} color={colors.brandInk} />}
+                    {thumb.clip ? <View style={styles.thumbPlay}><Ionicons name="play" size={8} color="#fff" /></View> : null}
+                  </View>
                 ) : group.unread ? <View style={styles.dot} /> : null}
               </Pressable>
               </React.Fragment>
@@ -308,6 +349,9 @@ const styleDefinitions = StyleSheet.create({
   preview: { ...typography.small, color: colors.textMuted },
   time: { ...typography.caption, color: colors.textFaint },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.brand },
+  // Square like Instagram's, rounded like everything else here.
+  thumb: { width: 44, height: 44, borderRadius: 8, overflow: 'hidden', backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  thumbPlay: { position: 'absolute', right: 3, bottom: 3, width: 14, height: 14, borderRadius: 7, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
   askRow: { flexDirection: 'row', gap: spacing.sm, paddingTop: spacing.xs },
   accept: { paddingHorizontal: spacing.lg, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.brand },
   acceptText: { ...typography.smallStrong, color: colors.brandInk },

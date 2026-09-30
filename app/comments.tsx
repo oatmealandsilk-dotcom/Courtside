@@ -135,13 +135,13 @@ export default function CommentsSheet() {
           <View style={styles.inputRow}>
             <Avatar name={me?.name ?? 'You'} seed={me?.avatarSeed ?? currentUserId ?? 'me'} uri={me?.avatarUrl} size={34} style={styles.me} />
             <View style={{ flex: 1 }}>
-              <Field inputRef={input} value={draft} onChangeText={setDraft} placeholder={author && author.id !== currentUserId ? `Add a comment for ${author.name.split(' ')[0]}…` : 'Add a comment…'} multiline minHeight={44} onSubmitEditing={send} mentions soft compact />
+              <Field inputRef={input} value={draft} onChangeText={setDraft} placeholder={author && author.id !== currentUserId ? `Add a comment for ${author.name.split(' ')[0]}…` : 'Add a comment…'} multiline minHeight={44} onSubmitEditing={send} mentions compact />
             </View>
             <View style={styles.action}>
               {kind === 'post' ? (
                 <Animated.View style={[StyleSheet.absoluteFill, styles.center, photoStyle]} pointerEvents={canSend ? 'none' : 'auto'}>
                   <Pressable accessibilityRole="button" accessibilityLabel="Add a photo" hitSlop={6} onPress={() => void addPhoto()} style={styles.photoButton}>
-                    <Ionicons name="image-outline" size={21} color={colors.textMuted} />
+                    <Ionicons name="image-outline" size={19} color={colors.textMuted} />
                   </Pressable>
                 </Animated.View>
               ) : null}
@@ -175,6 +175,7 @@ const styleDefinitions = StyleSheet.create({
   me: { marginBottom: 5 },
   action: { width: 40, height: 44, alignItems: 'center', justifyContent: 'center' },
   center: { alignItems: 'center', justifyContent: 'center' },
-  photoButton: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  send: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  // The same two round buttons as the message box: a quiet one for the photo (like the mic there), the green one to send.
+  photoButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  send: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
 });

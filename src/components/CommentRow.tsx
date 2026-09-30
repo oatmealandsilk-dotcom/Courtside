@@ -74,7 +74,7 @@ const styleDefinitions = StyleSheet.create({
   textBig: { ...typography.body, lineHeight: 22 },
   like: { alignItems: 'center', gap: 2, paddingTop: 4, minWidth: 24 },
   count: { ...typography.caption, color: colors.textFaint, letterSpacing: 0 },
-  photo: { width: 168, height: 210, borderRadius: 14, overflow: 'hidden', backgroundColor: colors.surfaceAlt, marginTop: 4 },
+  photo: { width: 168, height: 210, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surfaceAlt, marginTop: 4 },
   // The viewer is a dark room whatever the theme: a photo reads best on black.
   viewer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
   viewerImage: { width: '100%', height: '80%' },
