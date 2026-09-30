@@ -46,10 +46,9 @@ The iPhone beta opens soon, and you'll get the link before anyone else.
 Want in sooner? Every friend who joins through your link moves you up the list:
 ${link}
 
-One question while you're here: who's really the GOAT of the Big 3? Mine's Federer, but I don't judge. Just hit reply. I read every one.
+Also, who's your GOAT? Reply and tell me, I'm curious.
 
-Robert
-Founder, CourtSide`;
+Robert`;
   // A personal note in the app's own look: the cream page, the warm glow and
   // the name across the top, the words straight on the page, one picture, one link.
   const p = (inner: string) => `<p style="margin:0 0 18px;font-size:16px;line-height:1.6;color:#3A3A33">${inner}</p>`;
@@ -69,8 +68,8 @@ ${p('Want in sooner? Every friend who joins through your link moves you up the l
 <a href="${link}" style="display:inline-block;padding:14px 26px;font-family:${FONT};font-size:15px;font-weight:600;color:#FAF8F0;text-decoration:none;border-radius:999px">Share your link</a>
 </td></tr></table>
 <p style="margin:0 0 26px;font-size:13px;color:#6C665A"><a href="${link}" style="color:#3F7049">${link.replace('https://', '')}</a></p>
-${p('One question while you&rsquo;re here: who&rsquo;s really the GOAT of the Big 3? Mine&rsquo;s Federer, but I don&rsquo;t judge. Just hit reply. I read every one.')}
-<p style="margin:26px 0 0;font-size:16px;line-height:1.5;color:#24251F">Robert<br><span style="font-size:14px;color:#6C665A">Founder, CourtSide</span></p>
+${p('Also, who&rsquo;s your GOAT? Reply and tell me, I&rsquo;m curious.')}
+<p style="margin:26px 0 0;font-size:16px;line-height:1.5;color:#24251F">Robert</p>
 </td></tr>
 <tr><td style="padding:36px 28px 40px;font-family:${FONT};font-size:12px;line-height:1.6;color:#8A8577">You&rsquo;re getting this because you joined the CourtSide waitlist at courtsidebase.com.</td></tr>
 </table></td></tr></table>
