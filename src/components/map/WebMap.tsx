@@ -18,7 +18,7 @@ import { levelBadge } from '@/lib/badges';
 import { useWeather } from '@/features/players/useWeather';
 import { colors, radius, spacing, typography } from '@/theme';
 import { STYLE, applyLook, lookFor } from '@/components/map/look';
-import { courtPinHtml, mePinHtml, playerPinHtml } from '@/components/map/markers';
+import { CLOSE_ZOOM_NAMES, FAR_ZOOM, MAP_PIN_CSS, courtPinHtml, mePinHtml, playerPinHtml } from '@/components/map/markers';
 
 const HEIGHT = 330;
 const START_ZOOM = 11.5;
@@ -75,6 +75,11 @@ export function NearbyMap(props: NearbyMapProps) {
     });
     instance.touchZoomRotate.disableRotation();
     instance.on('load', () => applyLook(instance, lookFor(themes[theme])));
+    // The pins' shared styles, once per page, and the zoom classes they answer to.
+    if (!document.getElementById('cs-pin-css')) { const css = document.createElement('style'); css.id = 'cs-pin-css'; css.textContent = MAP_PIN_CSS; document.head.appendChild(css); }
+    const zoomClass = () => { const z = instance.getZoom(); el.classList.toggle('cs-close', z >= CLOSE_ZOOM_NAMES); el.classList.toggle('cs-far', z < FAR_ZOOM); };
+    zoomClass();
+    instance.on('zoom', zoomClass);
     instance.on('click', () => { latest.current.select(null); latest.current.selectCourt(null); setMeOpen(false); });
     // Courts for where the map came to rest: asked once it has been still a
     // moment, not on every frame of a scroll.
@@ -154,20 +159,23 @@ export function NearbyMap(props: NearbyMapProps) {
         if (kept.html !== html) {
           kept.node.innerHTML = html;
           kept.html = html;
-          kept.marker.setOffset(expanded ? [0, -(size + 8) / 2] : [0, 0]);
+          kept.node.style.zIndex = on ? '5' : '3';
+          kept.marker.setOffset(expanded ? [0, -(size + 6) / 2] : [0, 0]);
         }
         kept.marker.setLngLat([p.at.lng, p.at.lat]);
         continue;
       }
       const node = document.createElement('div');
       node.innerHTML = html;
+      // Players stand above courts; the one you picked above everyone.
+      node.style.zIndex = on ? '5' : '3';
       node.style.opacity = '0';
       node.style.transition = 'opacity 180ms ease-out';
       node.setAttribute('role', expanded ? 'button' : 'link');
       node.setAttribute('aria-label', expanded ? p.user.name : `${p.user.name}, open profile`);
       const id = p.user.id;
       node.addEventListener('click', (event) => { event.stopPropagation(); if (expanded) latest.current.select(id); else latest.current.onOpen(id); });
-      const marker = new maplibregl.Marker({ element: node, anchor: expanded ? 'top' : 'center', offset: expanded ? [0, -(size + 8) / 2] : [0, 0] }).setLngLat([p.at.lng, p.at.lat]).addTo(instance);
+      const marker = new maplibregl.Marker({ element: node, anchor: expanded ? 'top' : 'center', offset: expanded ? [0, -(size + 6) / 2] : [0, 0] }).setLngLat([p.at.lng, p.at.lat]).addTo(instance);
       pins.current.set(id, { marker, html, node });
       requestAnimationFrame(() => { node.style.opacity = '1'; });
     }
@@ -188,7 +196,7 @@ export function NearbyMap(props: NearbyMapProps) {
     const pin = (html: string) => { const node = document.createElement('div'); node.innerHTML = html; return node; };
     const meSize = expanded ? 34 : 26;
     markers.push(new maplibregl.Marker({
-      element: (() => { const node = pin(mePinHtml(me, meSize)); node.setAttribute('role', 'button'); node.setAttribute('aria-label', 'You'); node.addEventListener('click', (event) => { event.stopPropagation(); latest.current.openMe(); }); return node; })(),
+      element: (() => { const node = pin(mePinHtml(me, meSize)); node.style.zIndex = '6'; node.setAttribute('role', 'button'); node.setAttribute('aria-label', 'You'); node.addEventListener('click', (event) => { event.stopPropagation(); latest.current.openMe(); }); return node; })(),
       anchor: 'center',
     }).setLngLat([mine.lng, mine.lat]).addTo(instance));
     return () => { markers.forEach((m) => m.remove()); };
@@ -204,6 +212,7 @@ export function NearbyMap(props: NearbyMapProps) {
       const on = c.id === selectedCourtId;
       const node = document.createElement('div');
       node.innerHTML = courtPinHtml(c, on);
+      node.style.zIndex = on ? '4' : '1';
       node.setAttribute('role', 'button'); node.setAttribute('aria-label', c.name);
       node.addEventListener('click', (event) => { event.stopPropagation(); latest.current.selectCourt(c.id); });
       markers.push(new maplibregl.Marker({ element: node, anchor: 'center' }).setLngLat([c.lng, c.lat]).addTo(instance));

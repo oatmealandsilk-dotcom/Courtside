@@ -21,7 +21,7 @@ export const STYLE = 'https://tiles.openfreemap.org/styles/positron';
 export type Look = Record<string, { fill?: string; line?: string; text?: string; halo?: string; hide?: boolean; /** Only from this zoom in — small roads appear once you are close. */ minZoom?: number }>;
 
 /** The handful of palette colours the map is mixed from. */
-export interface MapPalette { bg: string; surface: string; text: string; textMuted: string; brand: string; court: string; hard: string; clay: string }
+export interface MapPalette { bg: string; surface: string; text: string; textMuted: string; brand: string; court: string; hard: string; clay: string; grass: string }
 
 const hex = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
 const isDark = (c: string) => { const [r, g, b] = hex(c); return (r * 299 + g * 587 + b * 114) / 1000 < 128; };
@@ -32,60 +32,70 @@ export const mix = (a: string, b: string, t: number) => {
 };
 
 /*
- * Snap Map, in the app's own colours: the ground is the theme's page, the
- * parks are its court green, the water its hard-court blue, the roads a
- * whisper lighter than the ground (small ones only when you are close).
- * No buildings, no road names, no shields, no motorway yellow — just
- * neighbourhoods and towns, so it reads as a place, not a street atlas.
+ * A clear, friendly map in the app's own colours, the way Apple Maps reads:
+ * the ground is the theme's page, neighbourhoods a shade deeper, parks a
+ * soft grass green, water a clean blue, roads white with a fine edge so they
+ * stand off the ground. Detail arrives as you come closer: neighbourhood
+ * names, then buildings and street names. No shields, no rail, no motorway
+ * yellow. The pins are the point; the map stays quiet under them.
  */
 export function lookFor(p: MapPalette): Look {
   const dark = isDark(p.bg);
-  const ground = p.bg;
-  const built = mix(p.bg, p.surface, 0.6);
-  const park = mix(ground, p.court, dark ? 0.22 : 0.2);
-  const wood = mix(ground, p.court, dark ? 0.28 : 0.26);
-  const grass = mix(ground, p.court, dark ? 0.14 : 0.12);
-  const water = mix(ground, p.hard, dark ? 0.38 : 0.36);
-  const road = dark ? mix(ground, p.text, 0.16) : '#FFFFFF';
-  const big = dark ? mix(ground, p.text, 0.24) : mix('#FFFFFF', p.clay, 0.12);
+  // A shade under the page, so white roads read on it the way they do on Apple's map.
+  const ground = dark ? p.bg : mix(p.bg, p.text, 0.05);
+  const built = mix(ground, p.text, dark ? 0.05 : 0.03);
+  const building = mix(ground, p.text, dark ? 0.1 : 0.07);
+  // Parks and water lean toward a fresh green and a clear blue, still tinted by the theme.
+  const green = mix(p.grass, '#5FAE5A', 0.45);
+  const blue = mix(p.hard, '#4B9BD8', 0.45);
+  const park = dark ? mix(ground, green, 0.34) : mix(green, '#FFFFFF', 0.62);
+  const wood = dark ? mix(ground, green, 0.42) : mix(green, '#FFFFFF', 0.55);
+  const grass = dark ? mix(ground, green, 0.24) : mix(green, '#FFFFFF', 0.72);
+  const water = dark ? mix(ground, blue, 0.5) : mix(blue, '#FFFFFF', 0.5);
+  const road = dark ? mix(ground, p.text, 0.2) : '#FFFFFF';
+  const edge = dark ? mix(ground, '#000000', 0.35) : mix(ground, p.text, 0.14);
+  const big = dark ? mix(ground, p.text, 0.32) : mix('#FFFFFF', p.clay, 0.22);
+  const bigEdge = dark ? mix(ground, '#000000', 0.4) : mix(big, p.text, 0.18);
   const tunnel = mix(ground, road, 0.5);
+  const label = p.textMuted;
   const hidden = { hide: true };
   return {
     background: { fill: ground },
-    // Detail arrives as you come closer: built-up patches and bigger roads
-    // from a town's distance, small roads and village names only up close.
-    landuse_residential: { fill: built, minZoom: 12 },
+    landuse_residential: { fill: built, minZoom: 11 },
     park: { fill: park },
     landcover_wood: { fill: wood },
     landcover_grass: { fill: grass },
     water: { fill: water },
     waterway: { line: water },
-    building: hidden,
+    building: { fill: building, minZoom: 15 },
     highway_path: hidden,
-    highway_minor: { line: road, minZoom: 14 },
-    highway_major_casing: hidden,
+    highway_minor: { line: road, minZoom: 13 },
+    highway_major_casing: { line: edge, minZoom: 11.5 },
     highway_major_inner: { line: road, minZoom: 11.5 },
     highway_major_subtle: { line: road, minZoom: 11.5 },
-    highway_motorway_casing: hidden,
+    highway_motorway_casing: { line: bigEdge },
     highway_motorway_inner: { line: big },
     highway_motorway_subtle: { line: big },
-    highway_motorway_bridge_casing: hidden,
+    highway_motorway_bridge_casing: { line: bigEdge },
     highway_motorway_bridge_inner: { line: big },
     tunnel_motorway_casing: hidden,
     tunnel_motorway_inner: { line: tunnel },
     railway: hidden, railway_transit: hidden, railway_service: hidden,
     railway_dashline: hidden, railway_transit_dashline: hidden, railway_service_dashline: hidden,
     boundary_2: hidden, boundary_3: hidden,
-    'highway-name-path': hidden, 'highway-name-minor': hidden, 'highway-name-major': hidden,
+    'highway-name-path': hidden,
+    'highway-name-minor': { text: label, halo: road, minZoom: 15.5 },
+    'highway-name-major': { text: label, halo: road, minZoom: 13.5 },
     'highway-shield-non-us': hidden, 'highway-shield-us-interstate': hidden, road_shield_us: hidden,
     airport: hidden,
-    label_other: hidden,
-    label_village: { text: p.textMuted, halo: ground, minZoom: 13 },
-    label_town: { text: p.textMuted, halo: ground, minZoom: 11 },
+    // Neighbourhoods by name once you are down among them: "North Hills", "Five Points".
+    label_other: { text: label, halo: ground, minZoom: 12.5 },
+    label_village: { text: label, halo: ground, minZoom: 12 },
+    label_town: { text: p.text, halo: ground, minZoom: 9 },
     label_city: { text: p.text, halo: ground },
     label_city_capital: { text: p.text, halo: ground },
     label_state: hidden,
-    water_name_point_label: { text: mix(p.hard, p.text, 0.3), halo: water },
+    water_name_point_label: { text: mix(p.hard, p.text, 0.35), halo: water },
     water_name_line_label: hidden,
     waterway_line_label: hidden,
   };
@@ -99,6 +109,8 @@ export function applyLook(map: LookMap, look: Look) {
       if (rule.hide) { map.setLayoutProperty(id, 'visibility', 'none'); continue; }
       if (rule.minZoom !== undefined) map.setLayerZoomRange(id, rule.minZoom, 24);
       if (rule.fill) map.setPaintProperty(id, id === 'background' ? 'background-color' : 'fill-color', rule.fill);
+      // Shapes are flat fills: an outline in the style's own colour drew every building twice on a dark map.
+      if (rule.fill && id !== 'background') map.setPaintProperty(id, 'fill-outline-color', rule.fill);
       if (rule.line) map.setPaintProperty(id, 'line-color', rule.line);
       if (rule.text) map.setPaintProperty(id, 'text-color', rule.text);
       if (rule.halo) map.setPaintProperty(id, 'text-halo-color', rule.halo);
