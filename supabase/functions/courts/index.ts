@@ -23,14 +23,80 @@ const cors = {
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'content-type': 'application/json' } });
 
-interface Element { id: number; type: string; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }
+interface Element { id: number; type: string; lat?: number; lon?: number; center?: { lat: number; lon: number }; bounds?: { minlat: number; minlon: number; maxlat: number; maxlon: number }; tags?: Record<string, string> }
+
+/**
+ * The query for one square: every tennis court in it, and every named place
+ * a court can sit inside (a park, a school, a club, a neighbourhood), since
+ * most courts carry no name of their own and the place around them does.
+ */
+export function squareQuery(box: string, timeout = 25) {
+  const tennis = `["leisure"="pitch"]["sport"~"(^|;)tennis(;|$)"](${box})`;
+  const places = [
+    `["leisure"~"^(park|sports_centre|recreation_ground|stadium|golf_course|garden|nature_reserve|common)$"]["name"](${box})`,
+    `["amenity"~"^(school|college|university|community_centre|social_facility|place_of_worship)$"]["name"](${box})`,
+    `["club"]["name"](${box})`,
+    `["landuse"~"^(residential|recreation_ground|education|religious)$"]["name"](${box})`,
+    `["building"~"^(apartments|school|university)$"]["name"](${box})`,
+  ];
+  return `[out:json][timeout:${timeout}];(node${tennis};way${tennis};relation${tennis};way${places.join(';way')};relation${places.join(';relation')};);out tags bb;`;
+}
+
+/** Where a court or a place is: its point, or the middle of its outline. */
+function spotOf(el: Element): { lat: number; lng: number } | null {
+  if (el.lat !== undefined && el.lon !== undefined) return { lat: el.lat, lng: el.lon };
+  if (el.center) return { lat: el.center.lat, lng: el.center.lon };
+  if (el.bounds) return { lat: (el.bounds.minlat + el.bounds.maxlat) / 2, lng: (el.bounds.minlon + el.bounds.maxlon) / 2 };
+  return null;
+}
+
+/** How specific a surrounding place is: a club or a park names courts better than a whole neighbourhood. */
+const placeRank = (tags: Record<string, string>) =>
+  tags.club || tags.leisure === 'sports_centre' || tags.leisure === 'stadium' ? 0
+  : tags.leisure ? 1
+  : tags.amenity || tags.building ? 2
+  : 3;
+
+/** A court's own name only when it says more than "Court 3". */
+const ownName = (tags?: Record<string, string>) => {
+  const n = tags?.name?.trim();
+  return n && !/^(tennis\s*)?courts?\s*#?\s*\d*[a-z]?$/i.test(n) ? n : null;
+};
+
+/** Trails and game lands are long or huge: a court inside their outline's box is rarely really in them. */
+const tooLoose = (tags: Record<string, string>) => /greenway|trail\b|game land|state park|national|state forest/i.test(tags.name ?? '') && !tags.club;
+/** Bigger than this (about 4 km², a club's golf course is allowed a little more), an outline's box says little about what is inside it. */
+const maxArea = (rank: number) => (rank === 0 ? 0.0006 : 0.0004);
+
+/** The name of the place a court sits in: the most specific, smallest one around it, else the nearest park or club within 250 m, or anything within 120 m. */
+function nameFor(lat: number, lng: number, places: Element[]): string | null {
+  let best: { name: string; rank: number; area: number } | null = null;
+  for (const p of places) {
+    const b = p.bounds;
+    if (!b || lat < b.minlat || lat > b.maxlat || lng < b.minlon || lng > b.maxlon || tooLoose(p.tags!)) continue;
+    const rank = placeRank(p.tags!);
+    const area = (b.maxlat - b.minlat) * (b.maxlon - b.minlon);
+    if (area > maxArea(rank)) continue;
+    if (!best || rank < best.rank || (rank === best.rank && area < best.area)) best = { name: p.tags!.name, rank, area };
+  }
+  if (best) return best.name.slice(0, 160);
+  let near: { name: string; d: number } | null = null;
+  for (const p of places) {
+    const c = spotOf(p);
+    if (!c || tooLoose(p.tags!)) continue;
+    const d = Math.hypot((c.lat - lat) * 111_000, (c.lng - lng) * 111_000 * Math.cos((lat * Math.PI) / 180));
+    // A park or club a short walk away, or anything right next door.
+    const reach = placeRank(p.tags!) <= 1 ? 250 : 120;
+    if (d <= reach && (!near || d < near.d)) near = { name: p.tags!.name, d };
+  }
+  return near ? near.name.slice(0, 160) : null;
+}
 
 /** Fetches one square from OpenStreetMap and keeps every court in it. Says what went wrong, or null. */
 async function syncCell(cell: string, until: number): Promise<string | null> {
   const [i, j] = cell.split(':').map(Number);
   const box = `${i * CELL},${j * CELL},${(i + 1) * CELL},${(j + 1) * CELL}`;
-  const tennis = `["leisure"="pitch"]["sport"~"(^|;)tennis(;|$)"](${box})`;
-  const query = `[out:json][timeout:25];(node${tennis};way${tennis};relation${tennis};);out center tags;`;
+  const query = squareQuery(box);
   let elements: Element[] | null = null;
   const tried: string[] = [];
   for (const [n, url] of MIRRORS.entries()) {
@@ -51,13 +117,16 @@ async function syncCell(cell: string, until: number): Promise<string | null> {
 
 /** Keeps every court in one square, and notes the square as fetched. */
 async function saveCell(cell: string, elements: Element[]): Promise<string | null> {
-  const rows = elements.flatMap((el) => {
-    const lat = el.lat ?? el.center?.lat;
-    const lng = el.lon ?? el.center?.lon;
-    if (lat === undefined || lng === undefined || !['node', 'way', 'relation'].includes(el.type)) return [];
+  const isCourt = (el: Element) => el.tags?.leisure === 'pitch' && /(^|;)tennis(;|$)/.test(el.tags?.sport ?? '');
+  const places = elements.filter((el) => !isCourt(el) && el.tags?.name);
+  const rows = elements.filter(isCourt).flatMap((el) => {
+    const spot = spotOf(el);
+    if (!spot || !['node', 'way', 'relation'].includes(el.type)) return [];
+    const { lat, lng } = spot;
     return [{
       id: `${el.type}${el.id}`,
-      name: el.tags?.name?.slice(0, 160) ?? null,
+      // Its own name when it has a real one; else the park, school or club it sits in.
+      name: ownName(el.tags)?.slice(0, 160) ?? nameFor(lat, lng, places),
       lat, lng,
       lit: el.tags?.lit === 'yes' ? true : el.tags?.lit === 'no' ? false : null,
       surface: el.tags?.surface?.slice(0, 40) ?? null,
@@ -80,7 +149,7 @@ Deno.serve(async (req) => {
   // The seeding script fetches squares itself and hands them over whole.
   if (seedToken && body.token === seedToken && typeof body.cell === 'string' && Array.isArray(body.elements)) {
     if (!/^-?[0-9]{1,3}:-?[0-9]{1,4}$/.test(body.cell)) return json({ error: 'cell?' }, 400);
-    const problem = await saveCell(body.cell, body.elements.slice(0, 20000));
+    const problem = await saveCell(body.cell, body.elements.slice(0, 60000));
     return problem ? json({ error: problem }, 500) : json({ saved: body.elements.length });
   }
   const lat = Number(body.lat), lng = Number(body.lng);
