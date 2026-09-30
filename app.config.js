@@ -3,14 +3,15 @@
 const baseUrl = process.env.EXPO_BASE_URL || undefined;
 // How a preview copy looks in Expo Go's list, so the copies are told apart at
 // a glance: a name after "CourtSide" (COURTSIDE_LABEL, e.g. "Demo") and the
-// beige icon (COURTSIDE_ICON=beige). Either can also sit in .courtside-local.json
+// old green icon (COURTSIDE_ICON=green). Either can also sit in .courtside-local.json
 // on this Mac, which is never committed and is read afresh each time the phone
 // asks — so the look of a running copy changes without restarting it. With
-// neither, as in every store build, it is plain CourtSide with the green icon.
+// neither, as in every store build, it is plain CourtSide with the beige icon,
+// the brand's default since Sep 29: the green mark on the cream ground.
 let local = {};
 try { local = JSON.parse(require('fs').readFileSync(`${__dirname}/.courtside-local.json`, 'utf8')); } catch { /* none */ }
 const label = process.env.COURTSIDE_LABEL || local.label;
-const beige = (process.env.COURTSIDE_ICON || local.icon) === 'beige';
+const green = (process.env.COURTSIDE_ICON || local.icon) === 'green';
 
 module.exports = {
   expo: {
@@ -23,7 +24,7 @@ module.exports = {
     backgroundColor: '#F8F7F2',
     // Shown by Expo Go and native builds while the JS loads; matches app/index.tsx
     // so the loader fades straight into the in-app splash.
-    icon: beige ? './assets/icon-beige.png' : './assets/icon.png',
+    icon: green ? './assets/icon.png' : './assets/icon-beige.png',
     splash: { image: './assets/splash.png', resizeMode: 'contain', backgroundColor: '#F8F7F2' },
     newArchEnabled: true,
     ios: {
@@ -42,7 +43,7 @@ module.exports = {
       package: 'co.courtside.app',
       versionCode: 1,
       edgeToEdgeEnabled: true,
-      adaptiveIcon: { foregroundImage: './assets/adaptive-icon.png', backgroundColor: '#3F7049' },
+      adaptiveIcon: { foregroundImage: './assets/adaptive-icon-beige.png', backgroundColor: '#F8F7F2' },
       permissions: ['CAMERA', 'RECORD_AUDIO', 'READ_MEDIA_IMAGES', 'READ_MEDIA_VIDEO', 'ACCESS_COARSE_LOCATION'],
     },
     web: { bundler: 'metro', output: 'single', name: 'CourtSide' },
