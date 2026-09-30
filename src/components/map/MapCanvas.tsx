@@ -3,10 +3,11 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 import { STYLE, type Look } from '@/components/map/look';
+import { CLOSE_ZOOM_NAMES, FAR_ZOOM, MAP_PIN_CSS } from '@/components/map/markers';
 import type { LatLng } from '@/features/players/positions';
 
 /** One thing drawn on the map, as the HTML MapLibre will place there. */
-export interface CanvasMarker { id: string; lat: number; lng: number; html: string; anchor?: 'center' | 'top'; offsetY?: number }
+export interface CanvasMarker { id: string; lat: number; lng: number; html: string; anchor?: 'center' | 'top'; offsetY?: number; /** Stacking: higher sits on top (courts under players under you). */ z?: number }
 
 export interface MapCanvasHandle { flyTo: (to: LatLng, zoom?: number, ms?: number) => void }
 
@@ -60,19 +61,20 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
   // The page is built once; everything after arrives as messages.
   const html = useMemo(() => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-<style>html,body,#m{margin:0;height:100%;background:${look.background?.fill ?? '#F4EFE6'};overflow:hidden}.maplibregl-ctrl{display:none}.maplibregl-canvas{outline:none}</style></head>
+<style>html,body,#m{margin:0;height:100%;background:${look.background?.fill ?? '#F4EFE6'};overflow:hidden}.maplibregl-ctrl{display:none}.maplibregl-canvas{outline:none}${MAP_PIN_CSS.replace(/\n/g, '')}</style></head>
 <body><div id="m"></div><script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script><script>
 var LOOK=${lookJson};
 var post=function(o){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify(o))};
 var map=new maplibregl.Map({container:'m',style:'${STYLE}',center:[${center.lng},${center.lat}],zoom:${zoom},interactive:${interactive},attributionControl:false,dragRotate:false,pitchWithRotate:false,touchPitch:false});
 map.touchZoomRotate.disableRotation();
-function look(l){for(var id in l){if(!map.getLayer(id))continue;var r=l[id];try{if(r.hide){map.setLayoutProperty(id,'visibility','none');continue}if(r.minZoom!=null)map.setLayerZoomRange(id,r.minZoom,24);if(r.fill)map.setPaintProperty(id,id==='background'?'background-color':'fill-color',r.fill);if(r.line)map.setPaintProperty(id,'line-color',r.line);if(r.text)map.setPaintProperty(id,'text-color',r.text);if(r.halo)map.setPaintProperty(id,'text-halo-color',r.halo)}catch(e){}}}
+function look(l){for(var id in l){if(!map.getLayer(id))continue;var r=l[id];try{if(r.hide){map.setLayoutProperty(id,'visibility','none');continue}if(r.minZoom!=null)map.setLayerZoomRange(id,r.minZoom,24);if(r.fill)map.setPaintProperty(id,id==='background'?'background-color':'fill-color',r.fill);if(r.fill&&id!=='background')map.setPaintProperty(id,'fill-outline-color',r.fill);if(r.line)map.setPaintProperty(id,'line-color',r.line);if(r.text)map.setPaintProperty(id,'text-color',r.text);if(r.halo)map.setPaintProperty(id,'text-halo-color',r.halo)}catch(e){}}}
 map.on('load',function(){look(LOOK);post({type:'ready'})});
+var box=document.getElementById('m');function zoomClass(){var z=map.getZoom();box.classList.toggle('cs-close',z>=${CLOSE_ZOOM_NAMES});box.classList.toggle('cs-far',z<${FAR_ZOOM})}zoomClass();map.on('zoom',zoomClass);
 map.on('click',function(){post({type:'maptap'})});
 map.on('moveend',function(){var c=map.getCenter();post({type:'move',lat:c.lat,lng:c.lng})});
 var ms=[];
 window.__cs={
-  set:function(list){ms.forEach(function(m){m.remove()});ms=[];list.forEach(function(it){var el=document.createElement('div');el.innerHTML=it.html;el.addEventListener('click',function(e){e.stopPropagation();post({type:'tap',id:it.id})});ms.push(new maplibregl.Marker({element:el,anchor:it.anchor||'center',offset:[0,it.offsetY||0]}).setLngLat([it.lng,it.lat]).addTo(map))})},
+  set:function(list){ms.forEach(function(m){m.remove()});ms=[];list.forEach(function(it){var el=document.createElement('div');el.innerHTML=it.html;if(it.z!=null)el.style.zIndex=String(it.z);el.addEventListener('click',function(e){e.stopPropagation();post({type:'tap',id:it.id})});ms.push(new maplibregl.Marker({element:el,anchor:it.anchor||'center',offset:[0,it.offsetY||0]}).setLngLat([it.lng,it.lat]).addTo(map))})},
   fly:function(lat,lng,z,ms){map.flyTo({center:[lng,lat],zoom:z==null?map.getZoom():Math.max(map.getZoom(),z),duration:ms})},
   look:function(l){LOOK=l;document.body.style.background=(l.background&&l.background.fill)||'#F4EFE6';if(map.loaded())look(l)}
 };

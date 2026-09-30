@@ -70,15 +70,15 @@ export function NearbyMap(props: NearbyMapProps) {
   const selectedId = model.selected?.user.id ?? null;
   const selectedCourtId = model.selectedCourt?.id ?? null;
   const markers = useMemo<CanvasMarker[]>(() => {
-    const list: CanvasMarker[] = model.courts.map((c) => ({ id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, c.id === selectedCourtId) }));
+    const list: CanvasMarker[] = model.courts.map((c) => ({ id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, c.id === selectedCourtId), z: c.id === selectedCourtId ? 4 : 1 }));
     for (const p of shown) {
       const on = p.user.id === selectedId;
       const size = on ? 38 : 30;
-      list.push({ id: `p:${p.user.id}`, lat: p.at.lat, lng: p.at.lng, html: playerPinHtml(p.user, { size, on, label: expanded, seenAt: p.seenAt }), anchor: expanded ? 'top' : 'center', offsetY: expanded ? -(size + 8) / 2 : 0 });
+      list.push({ id: `p:${p.user.id}`, lat: p.at.lat, lng: p.at.lng, html: playerPinHtml(p.user, { size, on, label: expanded, seenAt: p.seenAt }), anchor: expanded ? 'top' : 'center', offsetY: expanded ? -(size + 6) / 2 : 0, z: on ? 5 : 3 });
     }
     // Your pin only where you last shared your location; location off, no pin.
     const mine = model.mePos;
-    if (mine) list.push({ id: 'me', lat: mine.lat, lng: mine.lng, html: mePinHtml(me, expanded ? 34 : 26) });
+    if (mine) list.push({ id: 'me', lat: mine.lat, lng: mine.lng, html: mePinHtml(me, expanded ? 34 : 26), z: 6 });
     return list;
   }, [model.courts, shown, selectedId, selectedCourtId, expanded, me, theme, openToHit, model.mePos]);
 

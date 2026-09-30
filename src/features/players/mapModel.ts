@@ -64,7 +64,8 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   /** Your town close up, or zoomed out on your part of the world when it doesn't know it. */
   const homeView = useMemo(() => (homeKnown ? { center: home, zoom: null as number | null } : wideView()), [homeKnown, home]);
   /** Where the map opens: a tagged court when one was tapped, else your town. */
-  const start = useMemo(() => (focus ? { center: { lat: focus.lat, lng: focus.lng }, zoom: 14 as number | null } : homeView), [focus, homeView]);
+  // Street level, close enough for the court names to show.
+  const start = useMemo(() => (focus ? { center: { lat: focus.lat, lng: focus.lng }, zoom: 15 as number | null } : homeView), [focus, homeView]);
   // Each opening fetches where people were last seen, so the map is never a day old.
   useEffect(() => { void actions.loadLastSeen(); }, [actions.loadLastSeen]);
   const ranked = useMemo<Placed[]>(
@@ -104,6 +105,8 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   const [courtsOn, setCourtsOn] = useState(!!focus);
   const [courts, setCourts] = useState<Court[]>([]);
   const [courtsLoading, setCourtsLoading] = useState(false);
+  // How many times the courts have come back (or failed to), so a tagged court waits for the first.
+  const [courtsLoads, setCourtsLoads] = useState(0);
   const [selectedCourtId, setSelectedCourtId] = useState<string | null>(null);
   const selectedCourt = useMemo(() => courts.find((c) => c.id === selectedCourtId) ?? null, [courts, selectedCourtId]);
   const selectCourt = useCallback((id: string | null) => { setSelectedCourtId(id); if (id) setSelectedId(null); }, []);
@@ -120,6 +123,7 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
       showToast({ title: 'Could not load courts', body: 'Check your connection and try again.', icon: 'tennisball-outline' });
     } finally {
       setCourtsLoading(false);
+      setCourtsLoads((n) => n + 1);
     }
   }, []);
   useEffect(() => { if (courtsOn) void loadCourts(focus ?? home); }, [courtsOn, focus, home, loadCourts]);
@@ -128,14 +132,13 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   // if the courts list has nothing there, the tag itself stands in for it.
   const focused = useRef(false);
   useEffect(() => {
-    if (!focus || focused.current || courtsLoading) return;
-    if (!courts.length && courtsOn && !lastCentre.current) return;
+    if (!focus || focused.current || courtsLoading || !courtsLoads) return;
     focused.current = true;
     const match = courts.find((c) => c.id === focus.id) ?? courts.find((c) => milesBetween(c, focus) < 0.15);
     if (match) { setSelectedCourtId(match.id); return; }
     setCourts((list) => [{ id: focus.id, name: focus.name, lat: focus.lat, lng: focus.lng, count: 1 }, ...list]);
     setSelectedCourtId(focus.id);
-  }, [focus, courts, courtsLoading, courtsOn]);
+  }, [focus, courts, courtsLoading, courtsLoads]);
   const toggleCourts = useCallback(() => { setCourtsOn((on) => { if (on) setSelectedCourtId(null); return !on; }); }, []);
 
   // Your pin: only where you last shared your location (or where the phone says you are now).
