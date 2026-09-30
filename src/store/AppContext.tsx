@@ -493,6 +493,8 @@ interface AppActions {
   loadReports: () => Promise<AdminReport[]>;
   /** Admins only: the waitlist and the waitlist page's feedback. */
   loadWaitlist: () => Promise<WaitlistEntry[]>;
+  /** The pictures of posts the app has not loaded (older ones a notification is about). */
+  loadPostThumbs: (ids: ID[]) => Promise<Record<ID, { thumb?: string; kind: PostKind }>>;
   /** Posts tagged at a court (within a few hundred feet), newest first, for its card on the map. */
   loadCourtPosts: (at: { lat: number; lng: number }) => Promise<Post[]>;
   /** The beta invite email: counts, or send it to everyone on the waitlist still waiting. Admins only. */
@@ -2243,6 +2245,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Reports, for admins. The database decides who may read and act on them.
   const loadReports = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchReports() : []), []);
   const loadWaitlist = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchWaitlist() : []), []);
+  const loadPostThumbs = useCallback(async (ids: ID[]) => (live(stateRef.current.currentUserId) ? remote.fetchPostThumbs(ids).catch(() => ({})) : {}), []);
   const loadCourtPosts = useCallback(async (at: { lat: number; lng: number }) => {
     // The feed already has the newest; a court's card adds whatever the database has on top.
     const near = (p: Post) => !!p.court && !p.archived && Math.abs(p.court.lat - at.lat) <= 0.0025 && Math.abs(p.court.lng - at.lng) <= 0.003;
@@ -3513,6 +3516,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadReports,
       loadWaitlist,
       loadCourtPosts,
+      loadPostThumbs,
       betaInvites,
       loadFirstPosts,
       loadFirstDayStats,
@@ -3648,6 +3652,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadReports,
       loadWaitlist,
       loadCourtPosts,
+      loadPostThumbs,
       betaInvites,
       loadFirstPosts,
       loadFirstDayStats,

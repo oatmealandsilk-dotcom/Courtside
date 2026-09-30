@@ -1081,7 +1081,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       {/* The level belongs on the clip above all: a rally read
                           against a rating is the whole point, and this was the
                           one page that left it off. */}
-                      <Text style={[styles.authorName, styles.authorFill]} numberOfLines={1}>@{author.handle}<Text style={styles.authorTime}> · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}{post.court ? <> · <Text accessibilityRole="link" accessibilityLabel={`${post.court.name}, open on the map`} onPress={() => openCourtOnMap(post.court!)} style={styles.courtLink}>{post.court.name}</Text></> : post.location ? ` · ${post.location}` : ''}</Text></Text>
+                      <Text style={[styles.authorName, styles.authorFill]} numberOfLines={1}>@{author.handle}<Text style={styles.authorTime}> · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}{post.court ? <> · <Text accessibilityRole="link" accessibilityLabel={`${post.court.name}, open on the map`} onPress={(e) => { e?.stopPropagation?.(); openCourtOnMap(post.court!); }} style={styles.courtLink}>{post.court.name}</Text></> : post.location ? ` · ${post.location}` : ''}</Text></Text>
                       <LevelPill profile={author.profile} small onMedia />
                     </Pressable>
                     {isNewHere(post) ? <NewHereTag onMedia /> : null}

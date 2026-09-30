@@ -192,7 +192,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
               <LevelPill profile={author.profile} small />
               {isNewHere(post) ? <NewHereTag /> : null}
             </View>
-            <Text style={styles.sub} numberOfLines={1}>@{author.handle} · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}{post.court ? <> · <Text accessibilityRole="link" accessibilityLabel={`${post.court.name}, open on the map`} onPress={() => openCourtOnMap(post.court!)} style={styles.courtLink}>{post.court.name}</Text></> : post.location ? ` · ${post.location}` : ''}</Text>
+            <Text style={styles.sub} numberOfLines={1}>@{author.handle} · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}{post.court ? <> · <Text accessibilityRole="link" accessibilityLabel={`${post.court.name}, open on the map`} onPress={(e) => { e?.stopPropagation?.(); openCourtOnMap(post.court!); }} style={styles.courtLink}>{post.court.name}</Text></> : post.location ? ` · ${post.location}` : ''}</Text>
           </View>
         </Pressable>
       </View>

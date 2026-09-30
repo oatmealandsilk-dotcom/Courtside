@@ -1,4 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { openCourtOnMap } from '@/features/players/courtLink';
 import React, { useState, memo } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
@@ -96,7 +97,7 @@ function PostCardInner({
             {isNewHere(post) ? <NewHereTag /> : null}
           </View>
           <Text style={styles.sub} numberOfLines={1}>
-            @{author.handle} · {relativeTime(post.createdAt)}
+            @{author.handle} · {relativeTime(post.createdAt)}{post.court ? <> · <Text accessibilityRole="link" accessibilityLabel={`${post.court.name}, open on the map`} onPress={(e) => { e?.stopPropagation?.(); openCourtOnMap(post.court!); }} style={styles.courtLink}>{post.court.name}</Text></> : post.location ? ` · ${post.location}` : ''}
           </Text>
         </View>
         {onDelete || onArchive ? (
@@ -260,6 +261,7 @@ const styleDefinitions = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   name: { ...typography.bodyStrong, color: colors.text },
   sub: { ...typography.small, color: colors.textFaint },
+  courtLink: { ...typography.smallStrong, color: colors.brand },
   body: { gap: spacing.md, flexShrink: 1, minHeight: 0, overflow: 'hidden' },
   kindRow: {
     flexDirection: 'row',

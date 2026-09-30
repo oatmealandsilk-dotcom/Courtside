@@ -1055,6 +1055,15 @@ export const remote = {
     return data as FirstDayStats;
   },
 
+  /** Just enough of some posts to show them small: their picture and what kind they are. For notifications. */
+  async fetchPostThumbs(ids: ID[]): Promise<Record<ID, { thumb?: string; kind: Post['kind'] }>> {
+    const wanted = ids.filter((id) => UUID_RE.test(id)).slice(0, 100);
+    if (!wanted.length) return {};
+    const { data, error } = await need().from('posts').select('id, kind, image_url, thumbnail_url').in('id', wanted);
+    if (error || !data) return {};
+    return Object.fromEntries((data as { id: string; kind: Post['kind']; image_url: string | null; thumbnail_url: string | null }[])
+      .map((r) => [r.id, { thumb: r.thumbnail_url ?? r.image_url ?? undefined, kind: r.kind }]));
+  },
   /** What was posted at a court: posts tagged within a few hundred feet of it, newest first. Empty before migration 51. */
   async fetchCourtPosts(at: { lat: number; lng: number }): Promise<Post[]> {
     const { data, error } = await need().from('posts').select('*')
