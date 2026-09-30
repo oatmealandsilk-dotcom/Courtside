@@ -215,6 +215,8 @@ export interface Post {
   pinned?: boolean;
   /** Where it was, in the author's words. */
   location?: string;
+  /** The court it was played on, tagged from the map's courts. Its name is the location too. */
+  court?: TaggedCourt;
   /** The author is fine with CourtSide featuring this on its own channels. Kept only when off. */
   featureOk?: boolean;
   /** The author's first post on CourtSide: welcomed with a tag and a nudge up nearby feeds for its first two weeks. */
@@ -661,6 +663,9 @@ export type NotificationKind =
   | 'hit-join';
 
 export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application' | 'report' | 'coaching-request' | 'profile' | 'hit-request';
+
+/** A court a post is tagged with: the map's id for it, its name, and where it is. */
+export interface TaggedCourt { id: string; name: string; lat: number; lng: number }
 
 /** What one player says about a public court on the map. Unsaid is left out. */
 export interface CourtNote {

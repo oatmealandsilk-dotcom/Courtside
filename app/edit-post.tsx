@@ -6,6 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { DragSheet } from '@/components/DragSheet';
 import { LocationLink } from '@/components/LocationChip';
+import type { TaggedCourt } from '@/data/types';
 import { openPlacePicker } from '@/features/places/picker';
 import { TagPlayers } from '@/components/TagPlayers';
 import { Button, Field } from '@/components/ui';
@@ -30,6 +31,7 @@ export default function EditPost() {
   const [title, setTitle] = useState(question?.title ?? '');
   const [tagged, setTagged] = useState<string[]>(post?.taggedUserIds ?? []);
   const [location, setLocation] = useState(post?.location ?? '');
+  const [court, setCourt] = useState<TaggedCourt | null>(post?.court ?? null);
   const [closeSignal, setCloseSignal] = useState(0);
   // Opened before the post had loaded (a reload, a link): the fields fill in
   // once, when it arrives, and Save stays off until then, so saving can
@@ -41,13 +43,14 @@ export default function EditPost() {
     setTitle(question?.title ?? '');
     setTagged(post?.taggedUserIds ?? []);
     setLocation(post?.location ?? '');
+    setCourt(post?.court ?? null);
     setFilled(true);
   }, [filled, post, question]);
 
   const canSave = filled && mine && (isQuestion ? title.trim().length >= 3 : true);
   const save = () => {
     if (!canSave) return;
-    if (post) actions.editPost(post.id, { body: body.trim(), taggedUserIds: tagged, location });
+    if (post) actions.editPost(post.id, { body: body.trim(), taggedUserIds: tagged, location, court });
     if (question) actions.editQuestion(question.id, { title: title.trim(), body: body.trim() });
     setCloseSignal((n) => n + 1);
   };
@@ -76,7 +79,7 @@ export default function EditPost() {
           </>
         ) : (
           <>
-            <Field label="Caption" labelRight={<LocationLink value={location} onPress={() => openPlacePicker(setLocation, location)} onClear={() => setLocation('')} />} value={body} onChangeText={setBody} placeholder="Write a caption…" multiline minHeight={80} mentions />
+            <Field label="Caption" labelRight={<LocationLink value={location} court={!!court} onPress={() => openPlacePicker((value, picked) => { setLocation(value); setCourt(picked ?? null); }, location)} onClear={() => { setLocation(''); setCourt(null); }} />} value={body} onChangeText={setBody} placeholder="Write a caption…" multiline minHeight={80} mentions />
             <TagPlayers tagged={tagged} onChange={setTagged} />
           </>
         )}

@@ -1,7 +1,7 @@
 import { useTheme } from '@/theme/ThemeProvider';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 
 import { NearbyMap } from '@/components/NearbyMap';
@@ -24,11 +24,18 @@ export default function MapScreen() {
     asked.current = true;
     void actions.setLocationEnabled(true);
   }, [locationEnabled, actions]);
-  const back = () => goBack('/discuss?section=players');
+  // Opened from a post's tagged court: the map goes there, with the courts showing.
+  const params = useLocalSearchParams<{ court?: string; lat?: string; lng?: string; name?: string }>();
+  const lat = Number(params.lat); const lng = Number(params.lng);
+  const focusCourt = useMemo(
+    () => (params.court && params.name && Number.isFinite(lat) && Number.isFinite(lng) ? { id: params.court, name: params.name, lat, lng } : null),
+    [params.court, params.name, lat, lng],
+  );
+  const back = () => goBack(focusCourt ? '/' : '/discuss?section=players');
   return (
     <View style={{ flex: 1, backgroundColor: colors.bgElevated }}>
       {currentUser ? (
-        <NearbyMap expanded fullscreen me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onBack={back} onOpen={(id) => router.push(`/user/${id}`)} />
+        <NearbyMap expanded fullscreen me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onBack={back} onOpen={(id) => router.push(`/user/${id}`)} focusCourt={focusCourt} />
       ) : (
         <EmptyState title="Sign in to see who is around" />
       )}

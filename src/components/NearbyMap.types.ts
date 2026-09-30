@@ -1,4 +1,4 @@
-import type { User } from '@/data/types';
+import type { TaggedCourt, User } from '@/data/types';
 import type { LatLng } from '@/features/players/positions';
 
 export interface NearbyMapProps {
@@ -15,4 +15,6 @@ export interface NearbyMapProps {
   locationOn?: boolean;
   locating?: boolean;
   onToggleLocation?: () => void;
+  /** Opened from a post's tagged court: the map starts there with that court's card up. */
+  focusCourt?: TaggedCourt | null;
 }

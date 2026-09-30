@@ -17,7 +17,7 @@ import { shrinkPhoto } from '@/lib/shrinkPhoto';
 import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, Question, Story, Tip, User, CoachApplication } from './types';
+import type { Answer, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, TaggedCourt, Question, Story, Tip, User, CoachApplication } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
 
 /** What a new player did first, after setup. */
@@ -101,6 +101,7 @@ interface PostRow {
   /** Numeric columns arrive as strings, as trim_start does. */
   speed?: number | string | null; volume?: number | string | null;
   location?: string | null; edited_at?: string | null; feature_ok?: boolean | null; referred_by?: string | null; is_first?: boolean | null;
+  court_id?: string | null; court_name?: string | null; court_lat?: number | null; court_lng?: number | null;
   post_likes?: { user_id: string }[]; post_saves?: { user_id: string }[]; comments?: { id: string }[];
 }
 interface CommentRow {
@@ -190,6 +191,8 @@ const toPost = (row: PostRow): Post => ({
   archived: row.archived || undefined,
   pinned: row.pinned || undefined,
   location: row.location ?? undefined,
+  court: row.court_id && row.court_name && row.court_lat != null && row.court_lng != null
+    ? { id: row.court_id, name: row.court_name, lat: Number(row.court_lat), lng: Number(row.court_lng) } : undefined,
   featureOk: row.feature_ok === false ? false : undefined,
   isFirst: row.is_first || undefined,
   editedAt: row.edited_at ?? undefined,
@@ -617,12 +620,13 @@ const fail = (what: string) => (error: unknown) => {
 };
 
 /** The edits a post can carry, and the migration file that adds each one's column. */
-const OPTIONAL_COLUMNS = /trim_|muted|crop|location|speed|volume|feature_ok/;
+const OPTIONAL_COLUMNS = /trim_|muted|crop|location|speed|volume|feature_ok|court_/;
 const MIGRATION_FOR: Record<string, string> = {
   trim_start: '20260916000002_post_trim.sql', trim_end: '20260916000002_post_trim.sql', muted: '20260916000002_post_trim.sql',
   crop: '20260916000003_post_crop.sql', location: '20260916000004_post_edit.sql',
   speed: '20260925000026_post_speed_volume.sql', volume: '20260925000026_post_speed_volume.sql',
   feature_ok: '20260926000028_feature_ok_referrals.sql',
+  court_id: '20260930000051_post_court.sql', court_name: '20260930000051_post_court.sql', court_lat: '20260930000051_post_court.sql', court_lng: '20260930000051_post_court.sql',
 };
 const missingColumnsNote = (cols: string[]) =>
   `[remote] The posts table has no "${cols.join('", "')}" column yet, so this post was saved without that edit (it still went up). To keep it next time, open Supabase → SQL Editor → New query, paste the file supabase/migrations/${MIGRATION_FOR[cols[0]] ?? '…'} and press Run. It is safe to run more than once.`;
@@ -1050,6 +1054,15 @@ export const remote = {
     return data as FirstDayStats;
   },
 
+  /** What was posted at a court: posts tagged within a few hundred feet of it, newest first. Empty before migration 51. */
+  async fetchCourtPosts(at: { lat: number; lng: number }): Promise<Post[]> {
+    const { data, error } = await need().from('posts').select('*')
+      .gte('court_lat', at.lat - 0.0025).lte('court_lat', at.lat + 0.0025)
+      .gte('court_lng', at.lng - 0.003).lte('court_lng', at.lng + 0.003)
+      .eq('archived', false).order('created_at', { ascending: false }).limit(12);
+    if (error || !data) return [];
+    return (data as PostRow[]).map(toPost);
+  },
   /** One post by id, for a page opened from a link before the feed has it. */
   async fetchPost(id: ID): Promise<{ posts: Post[]; comments: Comment[] } | null> {
     if (!UUID_RE.test(id)) return null;
@@ -1349,6 +1362,7 @@ export const remote = {
       ...(post.speed && post.speed !== 1 ? { speed: post.speed } : {}),
       ...(post.volume !== undefined && post.volume > 0 && post.volume < 1 ? { volume: post.volume } : {}),
       ...(post.featureOk === false ? { feature_ok: false } : {}),
+      ...(post.court ? { court_id: post.court.id, court_name: post.court.name, court_lat: post.court.lat, court_lng: post.court.lng } : {}),
     };
     const sending = { ...extras };
     const dropped: string[] = [];
@@ -1360,6 +1374,8 @@ export const remote = {
       if (named && named in sending) {
         delete sending[named];
         if (named === 'trim_start') delete sending.trim_end;
+        // The court's four columns come and go together.
+        if (named.startsWith('court_')) for (const key of Object.keys(sending)) if (key.startsWith('court_')) delete sending[key];
         dropped.push(named);
         continue;
       }
@@ -1383,9 +1399,12 @@ export const remote = {
     if (error) fail('post archive')(error);
   },
   /** The author's edit: words, tags, who is in it, where it was — and when. */
-  async updatePost(postId: ID, patch: { body: string; tags: string[]; taggedUserIds: ID[]; location?: string; editedAt: string }) {
+  async updatePost(postId: ID, patch: { body: string; tags: string[]; taggedUserIds: ID[]; location?: string; court?: TaggedCourt | null; editedAt: string }) {
     const base = { body: patch.body, tags: patch.tags, tagged_user_ids: patch.taggedUserIds };
-    const { error } = await need().from('posts').update({ ...base, location: patch.location ?? null, edited_at: patch.editedAt }).eq('id', postId);
+    const court = patch.court === undefined ? {} : { court_id: patch.court?.id ?? null, court_name: patch.court?.name ?? null, court_lat: patch.court?.lat ?? null, court_lng: patch.court?.lng ?? null };
+    let { error } = await need().from('posts').update({ ...base, location: patch.location ?? null, ...court, edited_at: patch.editedAt }).eq('id', postId);
+    // Before migration 51 there is nowhere to keep the court: save the rest.
+    if (error && /court_/.test(error.message)) ({ error } = await need().from('posts').update({ ...base, location: patch.location ?? null, edited_at: patch.editedAt }).eq('id', postId));
     if (!error) return;
     if (/location|edited_at/.test(error.message)) {
       console.warn('[remote] edit columns missing; run the pending migration — saving the words only');

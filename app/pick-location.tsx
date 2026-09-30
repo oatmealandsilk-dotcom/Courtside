@@ -5,7 +5,11 @@ import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Screen } from '@/components/ui';
+import { CourtGlyph } from '@/components/map/MapChrome';
+import type { TaggedCourt } from '@/data/types';
 import { takePlacePicker } from '@/features/places/picker';
+import { fetchCourts, type Court } from '@/features/players/courts';
+import { formatMiles, milesBetween } from '@/features/players/geo';
 import { searchPlacesLocal, searchPlacesRemote, type PlaceHit } from '@/features/places/search';
 import { homeFor } from '@/features/players/positions';
 import { useApp } from '@/store/AppContext';
@@ -13,12 +17,13 @@ import { colors, radius, spacing, typography } from '@/theme';
 
 /**
  * Where a post was, chosen the way Instagram does it: a page of its own
- * with the search at the top (never under the keyboard) and places from
- * the whole world beneath it — cities, parks, clubs — nearest first.
+ * with the search at the top (never under the keyboard). The courts near
+ * you come first, by name, since that is where most posts were played;
+ * picking one tags the court. Places from the whole world follow.
  */
 export default function PickLocation() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, detectedCoords, locationEnabled, detectedLocation } = useApp();
+  const { currentUser, detectedCoords, locationEnabled, detectedLocation, lastSeen } = useApp();
   const picker = useRef(takePlacePicker());
   const [query, setQuery] = useState(picker.current?.initial ?? '');
   const [remote, setRemote] = useState<PlaceHit[]>([]);
@@ -27,7 +32,16 @@ export default function PickLocation() {
   const input = useRef<TextInput>(null);
   useEffect(() => { const t = setTimeout(() => input.current?.focus(), 80); return () => clearTimeout(t); }, []);
 
-  const near = useMemo(() => (currentUser ? homeFor(currentUser, detectedCoords) : null), [currentUser, detectedCoords]);
+  // Where you are now, else where you last shared your location, else your profile's town.
+  const mine = currentUser ? lastSeen[currentUser.id] : undefined;
+  const near = useMemo(() => (currentUser ? homeFor(currentUser, detectedCoords ?? (mine ? { lat: mine.lat, lng: mine.lng } : null)) : null), [currentUser, detectedCoords, mine]);
+  const [courts, setCourts] = useState<Court[]>([]);
+  useEffect(() => {
+    if (!near) return;
+    let on = true;
+    fetchCourts(near).then((list) => { if (on) setCourts(list); }).catch(() => undefined);
+    return () => { on = false; };
+  }, [near]);
   const typed = query.trim();
   const local = useMemo(() => searchPlacesLocal(query), [query]);
   // The world's answers arrive a beat after you stop typing; a newer search cancels an older one.
@@ -49,9 +63,18 @@ export default function PickLocation() {
     return [...local, ...remote].filter((h) => (seen.has(h.value.toLowerCase()) ? false : (seen.add(h.value.toLowerCase()), true)));
   }, [local, remote]);
   const exact = hits.some((h) => h.value.toLowerCase() === typed.toLowerCase());
+  // Named courts, nearest first; typing narrows them to the ones whose name matches.
+  const nearbyCourts = useMemo(() => {
+    const q = typed.toLowerCase();
+    return courts
+      .filter((c) => c.name !== 'Tennis courts' && (!q || c.name.toLowerCase().includes(q)))
+      .map((c) => ({ c, miles: near ? milesBetween(near, c) : 0 }))
+      .sort((a, b) => a.miles - b.miles)
+      .slice(0, q ? 5 : 8);
+  }, [courts, typed, near]);
 
-  const choose = (value: string) => {
-    picker.current?.onPick(value);
+  const choose = (value: string, court?: TaggedCourt) => {
+    picker.current?.onPick(value, court);
     router.back();
   };
 
@@ -85,6 +108,14 @@ export default function PickLocation() {
             <View style={styles.words}><Text style={styles.title}>{detectedLocation}</Text><Text style={styles.sub}>Where you are</Text></View>
           </Pressable>
         ) : null}
+        {nearbyCourts.length ? <Text style={styles.section}>{typed ? 'Courts' : 'Courts near you'}</Text> : null}
+        {nearbyCourts.map(({ c, miles }) => (
+          <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`Tag ${c.name}`} onPress={() => choose(c.name, { id: c.id, name: c.name, lat: c.lat, lng: c.lng })} style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
+            <View style={[styles.disc, styles.discCourt]}><CourtGlyph size={15} color={colors.brand} /></View>
+            <View style={styles.words}><Text style={styles.title} numberOfLines={1}>{c.name}</Text><Text style={styles.sub} numberOfLines={1}>{formatMiles(miles)}{c.count > 1 ? ` · ${c.count} courts` : ''}{c.lit ? ' · lights' : ''}</Text></View>
+          </Pressable>
+        ))}
+        {nearbyCourts.length && (hits.length || (typed && !exact)) ? <Text style={styles.section}>Places</Text> : null}
         {hits.map((h) => (
           <Pressable key={h.value} accessibilityRole="button" accessibilityLabel={`Use ${h.value}`} onPress={() => choose(h.value)} style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
             <View style={styles.disc}><Ionicons name="location-outline" size={17} color={colors.text} /></View>
@@ -112,6 +143,8 @@ const styleDefinitions = StyleSheet.create({
   rowPressed: { opacity: 0.6 },
   disc: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   discOn: { backgroundColor: colors.brand },
+  discCourt: { backgroundColor: colors.brandDim },
+  section: { ...typography.smallStrong, color: colors.textMuted, paddingTop: spacing.md, paddingBottom: 2 },
   words: { flex: 1, gap: 2 },
   title: { ...typography.bodyStrong, color: colors.text },
   sub: { ...typography.small, color: colors.textMuted },

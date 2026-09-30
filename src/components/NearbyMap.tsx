@@ -37,7 +37,7 @@ export type { NearbyMapProps };
  * bottom, and a card for whoever you tap.
  */
 export function NearbyMap(props: NearbyMapProps) {
-  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation } = props;
+  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt } = props;
   const styles = useThemedStyles(styleDefinitions);
   const { theme } = useTheme();
   const look = useMemo(() => lookFor(themes[theme]), [theme]);
@@ -47,7 +47,7 @@ export function NearbyMap(props: NearbyMapProps) {
   // Your own pin, tapped: the card with your open-to-hit switch.
   const [meOpen, setMeOpen] = useState(false);
   const openToHit = isOpenToHit(me);
-  const model = useMapModel(me, players, at);
+  const model = useMapModel(me, players, at, focusCourt);
   const { home, start } = model;
   const startZoom = start.zoom ?? CITY_ZOOM;
   const weather = useWeather(home);
@@ -58,7 +58,8 @@ export function NearbyMap(props: NearbyMapProps) {
   useEffect(() => {
     if (lastHome.current.lat === home.lat && lastHome.current.lng === home.lng) return;
     lastHome.current = home;
-    if (model.homeKnown) canvas.current?.flyTo(home, CITY_ZOOM, 600);
+    // Opened on a tagged court, the map stays there.
+    if (model.homeKnown && !focusCourt) canvas.current?.flyTo(home, CITY_ZOOM, 600);
   }, [home]); // eslint-disable-line react-hooks/exhaustive-deps
   // Picking someone, a court, or typing a city takes the map there.
   useEffect(() => { if (model.selected) canvas.current?.flyTo(model.selected.at, CLOSE_ZOOM); }, [model.selected]);
@@ -121,7 +122,7 @@ export function NearbyMap(props: NearbyMapProps) {
         <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
       </View>
       <View pointerEvents="box-none" style={styles.bottom}>
-        <MapButtons onRecentre={() => { model.select(null); canvas.current?.flyTo(start.center, startZoom, 600); }} />
+        <MapButtons onRecentre={() => { model.select(null); model.selectCourt(null); canvas.current?.flyTo(model.homeView.center, model.homeView.zoom ?? CITY_ZOOM, 600); }} />
         {meOpen ? (
           <YouSheet me={me} open={openToHit} onToggle={actions.setOpenToHit} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} />
         ) : model.selected ? (

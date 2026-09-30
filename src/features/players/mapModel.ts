@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { searchPlaces, type Place } from '@/data/locations';
-import type { User } from '@/data/types';
+import type { TaggedCourt, User } from '@/data/types';
 import { fetchCourts, type Court } from '@/features/players/courts';
 import { milesBetween } from '@/features/players/geo';
 import { homeFor, homeIsKnown, placeFor, positionFor, wideView, type LatLng } from '@/features/players/positions';
@@ -32,7 +32,7 @@ export const IN_TOWN_MILES = 30;
  * keep, who or what is picked, and the courts layer. The two map canvases
  * (phone, browser) draw from this and hand back taps.
  */
-export function useMapModel(me: User, players: User[], fix?: LatLng | null) {
+export function useMapModel(me: User, players: User[], fix?: LatLng | null, focus?: TaggedCourt | null) {
   const { lastSeen, actions } = useApp();
   // Profile towns outside the built-in list, found by name, so nobody from a
   // smaller town lands in the wrong city (or off the map).
@@ -61,8 +61,10 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null) {
   const where = useMemo(() => fix ?? (mine ? { lat: mine.lat, lng: mine.lng } : null), [fix, mine]);
   const home = useMemo(() => homeFor(me, where, townOf(me)), [me, where, townOf]);
   const homeKnown = useMemo(() => homeIsKnown(me, where, townOf(me)), [me, where, townOf]);
-  /** Where the map opens: your town close up, or zoomed out on your part of the world when it doesn't know it. */
-  const start = useMemo(() => (homeKnown ? { center: home, zoom: null as number | null } : wideView()), [homeKnown, home]);
+  /** Your town close up, or zoomed out on your part of the world when it doesn't know it. */
+  const homeView = useMemo(() => (homeKnown ? { center: home, zoom: null as number | null } : wideView()), [homeKnown, home]);
+  /** Where the map opens: a tagged court when one was tapped, else your town. */
+  const start = useMemo(() => (focus ? { center: { lat: focus.lat, lng: focus.lng }, zoom: 14 as number | null } : homeView), [focus, homeView]);
   // Each opening fetches where people were last seen, so the map is never a day old.
   useEffect(() => { void actions.loadLastSeen(); }, [actions.loadLastSeen]);
   const ranked = useMemo<Placed[]>(
@@ -98,7 +100,8 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null) {
   const selected = useMemo(() => ranked.find((p) => p.user.id === selectedId) ?? null, [ranked, selectedId]);
   const select = useCallback((id: string | null) => { setSelectedId(id); if (id) setSelectedCourtId(null); }, []);
 
-  const [courtsOn, setCourtsOn] = useState(false);
+  // Opened on a tagged court: the courts layer is on from the start.
+  const [courtsOn, setCourtsOn] = useState(!!focus);
   const [courts, setCourts] = useState<Court[]>([]);
   const [courtsLoading, setCourtsLoading] = useState(false);
   const [selectedCourtId, setSelectedCourtId] = useState<string | null>(null);
@@ -119,12 +122,25 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null) {
       setCourtsLoading(false);
     }
   }, []);
-  useEffect(() => { if (courtsOn) void loadCourts(home); }, [courtsOn, home, loadCourts]);
+  useEffect(() => { if (courtsOn) void loadCourts(focus ?? home); }, [courtsOn, focus, home, loadCourts]);
+  // The tagged court's card comes up as soon as the courts around it are in. It is
+  // the same court if it is the same id or stands within a few hundred feet of it;
+  // if the courts list has nothing there, the tag itself stands in for it.
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!focus || focused.current || courtsLoading) return;
+    if (!courts.length && courtsOn && !lastCentre.current) return;
+    focused.current = true;
+    const match = courts.find((c) => c.id === focus.id) ?? courts.find((c) => milesBetween(c, focus) < 0.15);
+    if (match) { setSelectedCourtId(match.id); return; }
+    setCourts((list) => [{ id: focus.id, name: focus.name, lat: focus.lat, lng: focus.lng, count: 1 }, ...list]);
+    setSelectedCourtId(focus.id);
+  }, [focus, courts, courtsLoading, courtsOn]);
   const toggleCourts = useCallback(() => { setCourtsOn((on) => { if (on) setSelectedCourtId(null); return !on; }); }, []);
 
   // Your pin: only where you last shared your location (or where the phone says you are now).
   const mePos = where;
-  return { home, homeKnown, mePos, start, ranked, inTown, filter, setFilter, query, setQuery, place, shown, selected, select, courtsOn, toggleCourts, courts: courtsOn ? courts : [], courtsLoading, loadCourts, selectedCourt, selectCourt };
+  return { home, homeKnown, homeView, mePos, start, ranked, inTown, filter, setFilter, query, setQuery, place, shown, selected, select, courtsOn, toggleCourts, courts: courtsOn ? courts : [], courtsLoading, loadCourts, selectedCourt, selectCourt };
 }
 
 export type MapModel = ReturnType<typeof useMapModel>;
