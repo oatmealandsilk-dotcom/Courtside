@@ -37,13 +37,15 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 
 function letter(first: string | null, place: number, link: string) {
   const hey = first ? `Hey ${first}` : 'Hey';
-  const text = `${hey}, thanks for joining. You're #${place} on the list.
+  const text = `${hey},
 
-CourtSide is the tennis app I'm building: post your clips, find players at your level nearby, and ask real coaches. Here's how far it has come, day 1 on the left and today on the right: ${HERO}
+You're #${place} on the list. Since you joined, I'll just assume you're interested haha.
 
-The iPhone beta opens soon, and you'll get the link before anyone else.
+Beta testing is well on its way and will launch very soon. You'll get the link based on your spot on the waitlist.
 
-Want in sooner? Every friend who joins through your link moves you up the list:
+Day 1 vs. today: ${HERO}
+
+If you want in sooner, share your link. Everyone who joins with it pushes you up the list:
 ${link}
 
 Also, who's your GOAT? Reply and tell me, I'm curious.
@@ -59,11 +61,11 @@ Robert`;
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">
 <tr><td><img src="${HEADER}" width="560" alt="CourtSide" style="display:block;width:100%;max-width:560px;height:auto;border:0"></td></tr>
 <tr><td style="padding:8px 28px 8px;font-family:${FONT}">
-${p(`${esc(hey)}, thanks for joining. You&rsquo;re <b style="color:#24251F">#${place}</b> on the list.`)}
-${p('CourtSide is the tennis app I&rsquo;m building: post your clips, find players at your level nearby, and ask real coaches. Here&rsquo;s how far it has come, day 1 on the left and today on the right:')}
+${p(`${esc(hey)},`)}
+${p(`You&rsquo;re <b style="color:#24251F">#${place}</b> on the list. Since you joined, I&rsquo;ll just assume you&rsquo;re interested haha.`)}
+${p('Beta testing is well on its way and will launch very soon. You&rsquo;ll get the link based on your spot on the waitlist.')}
 <p style="margin:4px 0 22px"><img src="${HERO}" width="504" alt="CourtSide on day 1 and today" style="display:block;width:100%;max-width:504px;height:auto;border:0"></p>
-${p('The iPhone beta opens soon, and you&rsquo;ll get the link before anyone else.')}
-${p('Want in sooner? Every friend who joins through your link moves you up the list:')}
+${p('If you want in sooner, share your link. Everyone who joins with it pushes you up the list:')}
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:2px 0 10px"><tr><td style="border-radius:999px;background:#3F7049">
 <a href="${link}" style="display:inline-block;padding:14px 26px;font-family:${FONT};font-size:15px;font-weight:600;color:#FAF8F0;text-decoration:none;border-radius:999px">Share your link</a>
 </td></tr></table>
