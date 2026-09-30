@@ -19,6 +19,7 @@ import { BrandMark } from '@/components/BrandMark';
 import { installCrashReporting, reportError } from '@/lib/crashReporting';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { SignOutCurtainHost } from '@/components/SignOutCurtain';
+import { useInstantUpdates } from '@/lib/instantUpdates';
 
 // Any error the app does not catch itself is filed as a crash report.
 installCrashReporting();
@@ -45,6 +46,8 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
 export default function RootLayout() {
   // A browser tab in the background carries on playing; this stops it.
   usePauseWhenHidden();
+  // Fixes reach the iPhone app without a new build.
+  useInstantUpdates();
   // Inter ships in the bundle, so on a phone this resolves before the splash
   // has gone; in a browser it is one small fetch, kept after that.
   const desktop = isDesktopBrowser();
