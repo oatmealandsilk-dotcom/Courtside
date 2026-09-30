@@ -38,7 +38,7 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null) {
   // smaller town lands in the wrong city (or off the map).
   const [towns, setTowns] = useState(0);
   useEffect(() => {
-    const wanted = [...new Set([me, ...players]
+    const wanted = [...new Set([me]
       .filter((u) => u.location?.trim() && !u.cityAt && !placeFor(u.location) && !townCache.has(townKey(u.location)))
       .map((u) => u.location.trim()))].slice(0, 25);
     if (!wanted.length) return;
@@ -53,7 +53,7 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null) {
       if (live) setTowns((n) => n + 1);
     })();
     return () => { live = false; };
-  }, [me, players]);
+  }, [me]);
   const townOf = useCallback((u: User) => (u.location ? townCache.get(townKey(u.location)) ?? null : null), [towns]); // eslint-disable-line react-hooks/exhaustive-deps
   // Without a fix here (a computer that was never asked), your own last spot
   // from the phone is the next best thing to where you are.
@@ -69,11 +69,11 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null) {
     () => players
       .flatMap((user) => {
         const seen = lastSeen[user.id];
-        const at = positionFor(user, seen, townOf(user));
+        const at = positionFor(user, seen);
         return at ? [{ user, at, miles: milesBetween(home, at), seenAt: seen?.seenAt, seenCity: seen?.city }] : [];
       })
       .sort((a, b) => a.miles - b.miles),
-    [players, home, lastSeen, townOf],
+    [players, home, lastSeen],
   );
   const inTown = useMemo(() => ranked.filter((p) => p.miles <= IN_TOWN_MILES), [ranked]);
 
@@ -122,7 +122,9 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null) {
   useEffect(() => { if (courtsOn) void loadCourts(home); }, [courtsOn, home, loadCourts]);
   const toggleCourts = useCallback(() => { setCourtsOn((on) => { if (on) setSelectedCourtId(null); return !on; }); }, []);
 
-  return { home, homeKnown, start, ranked, inTown, filter, setFilter, query, setQuery, place, shown, selected, select, courtsOn, toggleCourts, courts: courtsOn ? courts : [], courtsLoading, loadCourts, selectedCourt, selectCourt };
+  // Your pin: only where you last shared your location (or where the phone says you are now).
+  const mePos = where;
+  return { home, homeKnown, mePos, start, ranked, inTown, filter, setFilter, query, setQuery, place, shown, selected, select, courtsOn, toggleCourts, courts: courtsOn ? courts : [], courtsLoading, loadCourts, selectedCourt, selectCourt };
 }
 
 export type MapModel = ReturnType<typeof useMapModel>;

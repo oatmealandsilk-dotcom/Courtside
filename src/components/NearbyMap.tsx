@@ -73,12 +73,13 @@ export function NearbyMap(props: NearbyMapProps) {
     for (const p of shown) {
       const on = p.user.id === selectedId;
       const size = on ? 38 : 30;
-      list.push({ id: `p:${p.user.id}`, lat: p.at.lat, lng: p.at.lng, html: playerPinHtml(p.user, { size, on, label: expanded }), anchor: expanded ? 'top' : 'center', offsetY: expanded ? -(size + 8) / 2 : 0 });
+      list.push({ id: `p:${p.user.id}`, lat: p.at.lat, lng: p.at.lng, html: playerPinHtml(p.user, { size, on, label: expanded, seenAt: p.seenAt }), anchor: expanded ? 'top' : 'center', offsetY: expanded ? -(size + 8) / 2 : 0 });
     }
-    // Your pin only where the map actually knows you are.
-    if (model.homeKnown) list.push({ id: 'me', lat: home.lat, lng: home.lng, html: mePinHtml(me, expanded ? 34 : 26) });
+    // Your pin only where you last shared your location; location off, no pin.
+    const mine = model.mePos;
+    if (mine) list.push({ id: 'me', lat: mine.lat, lng: mine.lng, html: mePinHtml(me, expanded ? 34 : 26) });
     return list;
-  }, [model.courts, shown, selectedId, selectedCourtId, expanded, home.lat, home.lng, me, theme, openToHit, model.homeKnown]);
+  }, [model.courts, shown, selectedId, selectedCourtId, expanded, me, theme, openToHit, model.mePos]);
 
   const mapView = (
     <MapCanvas

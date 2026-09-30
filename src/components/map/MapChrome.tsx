@@ -25,6 +25,7 @@ import { Toggle } from '@/components/ui';
 import type { MapFilter, Placed } from '@/features/players/mapModel';
 import type { Weather } from '@/lib/weather';
 import { colors, radius, spacing, typography } from '@/theme';
+import { agoShort } from '@/components/map/markers';
 import Svg, { Line, Rect } from 'react-native-svg';
 
 /*
@@ -263,14 +264,14 @@ export function NearbyRail({ items, cityName, selectedId, onSelect, weather }: {
                   <Tappable accessibilityLabel={`${p.user.name}, ${formatMiles(p.miles)}`} onPress={() => onSelect(p.user.id)} scaleTo={0.96} style={[styles.railItem, selectedId === p.user.id && styles.railItemOn]}>
                     <View style={[styles.railRing, isOpenToHit(p.user) && styles.railRingOn]}><Avatar name={p.user.name} seed={p.user.avatarSeed} size={46} ring={p.user.isCoach} /></View>
                     <Text style={styles.railName} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text>
-                    <Text style={styles.railMeta} numberOfLines={1}>{formatMiles(p.miles)}</Text>
+                    <Text style={styles.railMeta} numberOfLines={1}>{formatMiles(p.miles)}{p.seenAt ? ` · ${agoShort(p.seenAt)}` : ''}</Text>
                   </Tappable>
                 </View>
               ))}
             </ScrollView>
             </Animated.View>
           ) : (
-            <Animated.Text entering={FadeIn.duration(180)} style={styles.sheetEmpty}>No one matches. Try another filter.</Animated.Text>
+            <Animated.Text entering={FadeIn.duration(180)} style={styles.sheetEmpty}>No one here right now. Players show up once they share their location.</Animated.Text>
           )}
         </View>
       </Animated.View>
