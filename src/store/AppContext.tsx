@@ -30,6 +30,7 @@ import { pickNutritionExport } from '@/features/health/cronometer';
 import { nearestPlace } from '@/data/locations';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getPosition } from '@/lib/geo';
+import { shrinkPhoto } from '@/features/compose/shrinkPhoto';
 import * as haptics from '@/lib/haptics';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
@@ -390,7 +391,8 @@ interface AppActions {
   /** Pull-to-refresh: fetches everything again from the server. */
   refresh: () => Promise<void>;
   deletePost: (postId: ID) => void;
-  addComment: (postId: ID, body: string) => void;
+  /** A comment on a post; `photo` is a picture picked on this device, shrunk and uploaded here. */
+  addComment: (postId: ID, body: string, photo?: string) => void;
   toggleLikeStory: (storyId: ID) => void;
   toggleLikeComment: (commentId: ID) => void;
   addStoryComment: (storyId: ID, body: string) => void;
@@ -1805,7 +1807,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const addComment = useCallback(
-    (postId: ID, body: string) => {
+    (postId: ID, body: string, photo?: string) => {
       const me = requireUser();
       const comment: Comment = {
         id: nextId('c'),
@@ -1814,9 +1816,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         body,
         createdAt: new Date().toISOString(),
         likedBy: [],
+        // Shows straight away from the phone; the web address replaces it once uploaded.
+        ...(photo ? { imageUrl: photo } : {}),
       };
       haptics.commit();
-      if (live(me, postId)) remote.insertComment(comment);
+      if (live(me, postId)) {
+        if (!photo) remote.insertComment(comment);
+        else void (async () => {
+          // Shrunk first (about 1080 px, a couple of hundred KB), then uploaded, then saved with its address.
+          let imageUrl: string | undefined;
+          try { imageUrl = await uploadMedia(me, await shrinkPhoto(photo), 'photo'); }
+          catch { showToast({ title: 'The photo didn’t upload', body: body.trim() ? 'Your comment was posted without it.' : 'Try again in a moment.', icon: 'alert-circle-outline' }); }
+          setState((prev) => ({ ...prev, comments: imageUrl ? prev.comments.map((c) => (c.id === comment.id ? { ...c, imageUrl } : c)) : prev.comments.map((c) => (c.id === comment.id ? { ...c, imageUrl: undefined } : c)) }));
+          // A comment that was only a photo, which did not upload, is not saved empty.
+          if (!imageUrl && !body.trim()) return;
+          await remote.insertComment({ ...comment, imageUrl });
+        })();
+      }
       setState((prev) => {
         const post = prev.posts.find((p) => p.id === postId);
         const next: AppState = {

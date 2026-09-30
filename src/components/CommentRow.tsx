@@ -1,6 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -28,6 +29,8 @@ export function CommentRow({ comment, big = false, onPressBody, onLayout }: {
   const who = users.find((u) => u.id === comment.authorId);
   const liked = !!currentUserId && comment.likedBy.includes(currentUserId);
   const openProfile = () => { if (who) router.push(who.id === currentUserId ? '/profile' : `/user/${who.id}`); };
+  // A photo in the comment opens to the whole screen; a tap anywhere puts it away.
+  const [viewing, setViewing] = useState(false);
   return (
     <View style={styles.row} onLayout={onLayout ? (e) => onLayout(e.nativeEvent.layout.y) : undefined}>
       <Pressable accessibilityRole="link" accessibilityLabel={who ? `Open ${who.name}'s profile` : undefined} onPress={openProfile}>
@@ -38,8 +41,20 @@ export function CommentRow({ comment, big = false, onPressBody, onLayout }: {
           <Text style={[styles.name, big && styles.nameBig]} onPress={openProfile}>{who?.name ?? 'Unknown'}</Text>
           {'  '}{relativeTime(comment.createdAt)}
         </Text>
-        <RichText style={[styles.text, big && styles.textBig]}>{comment.body}</RichText>
+        {comment.body.trim() ? <RichText style={[styles.text, big && styles.textBig]}>{comment.body}</RichText> : null}
+        {comment.imageUrl ? (
+          <Pressable accessibilityRole="imagebutton" accessibilityLabel="Photo in the comment. Open it larger" onPress={() => setViewing(true)} style={styles.photo}>
+            <ExpoImage source={{ uri: comment.imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+          </Pressable>
+        ) : null}
       </Pressable>
+      {comment.imageUrl ? (
+        <Modal visible={viewing} transparent animationType="fade" onRequestClose={() => setViewing(false)} statusBarTranslucent>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close the photo" onPress={() => setViewing(false)} style={styles.viewer}>
+            <ExpoImage source={{ uri: comment.imageUrl }} style={styles.viewerImage} contentFit="contain" cachePolicy="memory-disk" />
+          </Pressable>
+        </Modal>
+      ) : null}
       <Pressable accessibilityRole="button" accessibilityLabel={liked ? 'Unlike comment' : 'Like comment'} accessibilityState={{ selected: liked }} hitSlop={8} onPress={() => actions.toggleLikeComment(comment.id)} style={styles.like}>
         <Ionicons name={liked ? 'heart' : 'heart-outline'} size={16} color={liked ? colors.danger : colors.textFaint} />
         {comment.likedBy.length ? <Text style={[styles.count, liked && { color: colors.danger }]}>{comment.likedBy.length}</Text> : null}
@@ -59,4 +74,8 @@ const styleDefinitions = StyleSheet.create({
   textBig: { ...typography.body, lineHeight: 22 },
   like: { alignItems: 'center', gap: 2, paddingTop: 4, minWidth: 24 },
   count: { ...typography.caption, color: colors.textFaint, letterSpacing: 0 },
+  photo: { width: 168, height: 210, borderRadius: 14, overflow: 'hidden', backgroundColor: colors.surfaceAlt, marginTop: 4 },
+  // The viewer is a dark room whatever the theme: a photo reads best on black.
+  viewer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
+  viewerImage: { width: '100%', height: '80%' },
 });

@@ -4,11 +4,15 @@ import { Keyboard, Platform, StyleSheet, View, useWindowDimensions } from 'react
 import { Pressable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, runOnJS, useAnimatedKeyboard, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { colors, radius } from '@/theme';
 import { Wash } from '@/components/Wash';
 
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
+/** Out of the way fast: a quick ease-in, the way a card is tossed down. */
+const EASE_OUT_OF_VIEW = Easing.bezier(0.4, 0, 1, 1);
+/** Apple's sheets rise on a spring: quick, with the faintest settle at the top. */
+const SPRING = { damping: 24, stiffness: 240, mass: 0.9, overshootClamping: false } as const;
 const FLICK_PX_PER_S = 700;
 
 /**
@@ -59,8 +63,8 @@ export function DragSheet({
   const dismissedRef = useRef(false);
 
   useEffect(() => {
-    translateY.value = withTiming(openOffset, { duration: 320, easing: EASE });
-    backdropOpacity.value = withTiming(1, { duration: 320, easing: EASE });
+    translateY.value = withSpring(openOffset, SPRING);
+    backdropOpacity.value = withTiming(1, { duration: 260, easing: EASE });
     // Only the opening height depends on these; re-running on resize would
     // fight a drag in progress.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -72,36 +76,27 @@ export function DragSheet({
     onDismissed();
   };
   const dismiss = () => {
-    translateY.value = withTiming(fullHeight, { duration: 220, easing: EASE }, (done) => {
+    translateY.value = withTiming(fullHeight, { duration: 230, easing: EASE_OUT_OF_VIEW }, (done) => {
       if (done) runOnJS(finish)();
     });
-    backdropOpacity.value = withTiming(0, { duration: 200, easing: EASE });
+    backdropOpacity.value = withTiming(0, { duration: 210, easing: EASE });
   };
   const openFull = () => {
-    translateY.value = withTiming(0, { duration: 260, easing: EASE });
-    backdropOpacity.value = withTiming(1, { duration: 260, easing: EASE });
+    translateY.value = withSpring(0, SPRING);
+    backdropOpacity.value = withTiming(1, { duration: 240, easing: EASE });
   };
   const returnTo = (origin: number) => {
-    translateY.value = withTiming(origin, { duration: 220, easing: EASE });
+    translateY.value = withSpring(origin, SPRING);
     backdropOpacity.value = withTiming(1 - origin / fullHeight, { duration: 220, easing: EASE });
   };
-  // The keyboard: the sheet opens all the way and lifts its bottom edge to
-  // sit on top of the keyboard, so a box at the bottom of it stays in view.
-  const sheetRef = useRef<View>(null);
-  const [keyboardPad, setKeyboardPad] = useState(0);
+  // The keyboard: the sheet opens all the way, and its bottom rides up with
+  // the keyboard frame by frame (the phone reports its height as it moves),
+  // so a box at the bottom stays right on top of it, never jumping after it.
+  const keyboard = useAnimatedKeyboard();
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const show = Keyboard.addListener(showEvent, (e) => {
-      openFull();
-      const keyboardTop = windowHeight - e.endCoordinates.height;
-      sheetRef.current?.measureInWindow((_x, y, _w, h) => {
-        // The sheet is measured while it may still be rising; its bottom edge does not move, which is all this needs.
-        setKeyboardPad(Math.max(0, y + h - keyboardTop));
-      });
-    });
-    const hide = Keyboard.addListener(hideEvent, () => setKeyboardPad(0));
-    return () => { show.remove(); hide.remove(); };
+    const show = Keyboard.addListener(showEvent, () => openFull());
+    return () => { show.remove(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowHeight]);
 
@@ -139,13 +134,15 @@ export function DragSheet({
     });
 
   const sheetStyle = useAnimatedStyle(() => ({ height: Math.max(0, fullHeight - translateY.value) }));
+  // Clear of the home bar when the keyboard is down; on top of the keyboard when it is up.
+  const bodyStyle = useAnimatedStyle(() => ({ paddingBottom: Math.max(keyboard.height.value, insets.bottom) }));
   const backdropStyle = useAnimatedStyle(() => ({ opacity: backdropOpacity.value }));
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }, backdropStyle]} />
       <Pressable accessibilityRole="button" accessibilityLabel="Close" style={StyleSheet.absoluteFill} onPress={dismiss} />
-      <Animated.View ref={sheetRef} style={[styles.sheet, sheetStyle]}>
+      <Animated.View style={[styles.sheet, sheetStyle]}>
         {/* The same warm glow the pages open with, so a sheet reads as part of the app. */}
         <Wash height={300} strength={0.85} />
         <GestureDetector gesture={pan}>
@@ -154,8 +151,7 @@ export function DragSheet({
             {header}
           </View>
         </GestureDetector>
-        {/* Clear of the home bar when the keyboard is down; on top of the keyboard when it is up. */}
-        <View style={[styles.body, { paddingBottom: Math.max(keyboardPad, insets.bottom) }]}>{children}</View>
+        <Animated.View style={[styles.body, bodyStyle]}>{children}</Animated.View>
       </Animated.View>
     </View>
   );
