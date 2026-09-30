@@ -5,7 +5,7 @@ import * as Clipboard from 'expo-clipboard';
 import { goBack } from '@/lib/goBack';
 
 import { Button, EmptyState, Screen, SegmentedControl } from '@/components/ui';
-import type { SiteFeedback, WaitlistEntry } from '@/data/remote';
+import type { BetaInviteStatus, SiteFeedback, WaitlistEntry } from '@/data/remote';
 import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -26,12 +26,37 @@ export default function AdminWaitlist() {
   const [notes, setNotes] = useState<SiteFeedback[] | null>(null);
   const [copied, setCopied] = useState('');
   const [removing, setRemoving] = useState<string | null>(null);
+  // The beta invite email: where it stands, and a send that takes two taps.
+  const [beta, setBeta] = useState<BetaInviteStatus | null | undefined>(undefined);
+  const [betaBusy, setBetaBusy] = useState(false);
+  const [betaArmed, setBetaArmed] = useState(false);
 
   const load = useCallback(async () => {
-    const [list, feedback] = await Promise.all([actions.loadWaitlist(), actions.loadSiteFeedback()]);
+    const [list, feedback, invites] = await Promise.all([actions.loadWaitlist(), actions.loadSiteFeedback(), actions.betaInvites(false)]);
     setEntries(list);
     setNotes(feedback);
+    setBeta(invites);
   }, [actions]);
+
+  // The first tap asks; a second within a few seconds sends. Emails cannot be taken back.
+  useEffect(() => {
+    if (!betaArmed) return;
+    const t = setTimeout(() => setBetaArmed(false), 5000);
+    return () => clearTimeout(t);
+  }, [betaArmed]);
+  const sendBeta = async () => {
+    if (!betaArmed) { setBetaArmed(true); return; }
+    setBetaArmed(false);
+    setBetaBusy(true);
+    const result = await actions.betaInvites(true);
+    setBetaBusy(false);
+    setBeta(result ?? (await actions.betaInvites(false)));
+  };
+  const betaLine = beta === undefined ? 'Checking…'
+    : beta === null ? 'Could not check. Try again in a moment.'
+    : !beta.live ? `Turns on the day Apple approves the beta. ${beta.waiting} on the list will get it, top of the list first.`
+    : beta.waiting ? `${beta.invited} sent · ${beta.waiting} waiting. It goes out top of the list first; new signups get it on their own.${beta.failed.length ? ` ${beta.failed.length} did not send; send again to retry them.` : ''}`
+    : `Sent to everyone on the list (${beta.invited}). New signups get it on their own.`;
   useEffect(() => { void load(); }, [load]);
 
   // Which posts are working: signups counted by the ?ref= on the link they came
@@ -97,6 +122,18 @@ export default function AdminWaitlist() {
           <EmptyState icon="mail-outline" title="Nobody on the list yet" body="Signups from the waitlist page show up here, newest first." />
         ) : (
           <>
+            <View style={styles.beta}>
+              <Text style={styles.email}>Beta invites</Text>
+              <Text style={styles.muted} accessibilityLiveRegion="polite">{betaLine}</Text>
+              {beta?.live && beta.waiting > 0 ? (
+                <Button
+                  label={betaBusy ? 'Sending…' : betaArmed ? `Tap again to email ${beta.waiting} ${beta.waiting === 1 ? 'person' : 'people'}` : 'Send beta invites'}
+                  loading={betaBusy}
+                  variant={betaArmed ? 'primary' : 'secondary'}
+                  onPress={() => void sendBeta()}
+                />
+              ) : null}
+            </View>
             <View style={styles.summary}>
               <Text style={styles.summaryText}>
                 {sources.map(([name, n]) => `${n} from ${name}`).join(' · ')}
@@ -154,6 +191,7 @@ export default function AdminWaitlist() {
 const styleDefinitions = StyleSheet.create({
   tabs: { paddingBottom: spacing.md },
   summary: { gap: spacing.sm, paddingBottom: spacing.lg, alignItems: 'flex-start' },
+  beta: { gap: spacing.sm, padding: spacing.lg, marginBottom: spacing.lg, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: 'flex-start' },
   summaryText: { ...typography.smallStrong, color: colors.textMuted },
   list: { borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
