@@ -7,7 +7,9 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
 import { setSidePanel } from '@/features/feed/sidePanel';
 
 const EASE = 'cubic-bezier(.22,.61,.36,1)';
-const OPEN_MS = 320;
+/** Apple's own sheet curve: a fast start that glides to rest, the web's stand-in for the phone's spring. */
+const SHEET_CURVE = 'cubic-bezier(.32,.72,0,1)';
+const OPEN_MS = 380;
 const SETTLE_MS = 220;
 /** Faster than this, in px per ms, and a drag counts as a flick regardless of distance. */
 const FLICK = 0.7;
@@ -197,9 +199,9 @@ function Sheet({
    * to the bottom edge, not a full card slid down, so the bottom of its body
    * — a comment box, a send button — is always on screen.
    */
-  const place = (y: number, ms: number) => {
+  const place = (y: number, ms: number, curve = SHEET_CURVE) => {
     current.current = y;
-    const transition = ms ? `${ms}ms ${EASE}` : 'none';
+    const transition = ms ? `${ms}ms ${curve}` : 'none';
     if (sheet.current) {
       sheet.current.style.transition = ms ? `height ${transition}` : 'none';
       sheet.current.style.height = `${Math.max(0, geometry.current.fullHeight - y)}px`;
@@ -239,7 +241,7 @@ function Sheet({
     onDismissed();
   };
   const close = () => {
-    place(geometry.current.fullHeight, SETTLE_MS);
+    place(geometry.current.fullHeight, SETTLE_MS, 'cubic-bezier(.4,0,1,1)');
     window.setTimeout(finish, SETTLE_MS + 20);
   };
   const openFull = () => place(0, SETTLE_MS);

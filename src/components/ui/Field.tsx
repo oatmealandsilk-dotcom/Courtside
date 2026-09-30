@@ -39,6 +39,8 @@ interface Props {
   mentions?: boolean;
   /** The soft look of the app's own ask boxes: white, lifted on a shadow, no outline. Used in sheets. */
   soft?: boolean;
+  /** A slim one-line pill that grows as you type (a comment box, a message box). */
+  compact?: boolean;
 }
 
 /**
@@ -68,6 +70,7 @@ export function Field({
   flush = false,
   mentions = false,
   soft = false,
+  compact = false,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const submits = Boolean(onSubmitEditing) && (submitOnEnter || !multiline);
@@ -122,11 +125,14 @@ export function Field({
         onSubmitEditing={submits ? onSubmitEditing : undefined}
         blurOnSubmit={submits && multiline ? true : undefined}
         returnKeyType={submits ? 'send' : undefined}
+        // One row to start with on the web, where a box would otherwise open two lines tall.
+        numberOfLines={compact ? 1 : undefined}
         style={[
           styles.input,
           focused && styles.inputFocused,
           soft && (multiline ? styles.softArea : styles.softLine),
           multiline && { minHeight: minHeight ?? 110, textAlignVertical: 'top' },
+          compact && styles.compact,
           flush && { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
         ]}
       />
@@ -156,4 +162,5 @@ const styleDefinitions = StyleSheet.create({
   hint: { ...typography.small, color: colors.textFaint },
   softLine: { ...lift, borderWidth: 0, borderRadius: radius.pill, minHeight: 52, paddingVertical: 14, fontSize: 16 },
   softArea: { ...lift, borderWidth: 0, borderRadius: 20, paddingVertical: 14, fontSize: 16, lineHeight: 22 },
+  compact: { minHeight: 44, maxHeight: 120, borderRadius: 22, paddingTop: 11, paddingBottom: 11, paddingHorizontal: 16, fontSize: 16, lineHeight: 22 },
 });

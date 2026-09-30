@@ -255,6 +255,8 @@ export interface Comment {
   body: string;
   createdAt: string;
   likedBy: ID[];
+  /** A photo with the comment (shrunk before upload), like Instagram's. */
+  imageUrl?: string;
 }
 
 /* ------------------------------- Discussions ----------------------------- */

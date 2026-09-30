@@ -105,7 +105,7 @@ interface PostRow {
   post_likes?: { user_id: string }[]; post_saves?: { user_id: string }[]; comments?: { id: string }[];
 }
 interface CommentRow {
-  id: string; post_id: string; author_id: string; body: string; created_at: string;
+  id: string; post_id: string; author_id: string; body: string; created_at: string; image_url?: string | null;
   comment_likes?: { user_id: string }[];
 }
 interface StoryRow {
@@ -148,7 +148,7 @@ const toUser = (row: ProfileRow, followers: number, following: number): User => 
  * comments. Used by the opening load and by every later page, so a post that
  * comes in later is never a thinner version of the same thing.
  */
-const POST_SELECT = '*, post_likes(user_id), post_saves(user_id), comments(id, post_id, author_id, body, created_at, comment_likes(user_id))';
+const POST_SELECT = '*, post_likes(user_id), post_saves(user_id), comments(id, post_id, author_id, body, image_url, created_at, comment_likes(user_id))';
 /** How many posts come at a time: on open, and each time the feed nears its end. */
 export const POST_PAGE = 40;
 type FullPostRow = PostRow & { comments?: CommentRow[]; removed_at?: string | null };
@@ -205,6 +205,7 @@ const toComment = (row: CommentRow): Comment => ({
   body: row.body,
   createdAt: row.created_at,
   likedBy: (row.comment_likes ?? []).map((l) => l.user_id),
+  imageUrl: row.image_url ?? undefined,
 });
 
 const toStory = (row: StoryRow): Story => ({
@@ -1436,9 +1437,10 @@ export const remote = {
   },
 
   async insertComment(comment: Comment) {
-    const { error } = await need().from('comments').insert({
-      id: comment.id, post_id: comment.postId, author_id: comment.authorId, body: comment.body, created_at: comment.createdAt,
-    });
+    const row = { id: comment.id, post_id: comment.postId, author_id: comment.authorId, body: comment.body, created_at: comment.createdAt };
+    let { error } = await need().from('comments').insert({ ...row, ...(comment.imageUrl ? { image_url: comment.imageUrl } : {}) });
+    // Before migration 52 there is nowhere for the photo: the words still go up.
+    if (error && comment.imageUrl && /image_url/.test(error.message)) ({ error } = await need().from('comments').insert(row));
     if (error) fail('comment insert')(error);
   },
 
