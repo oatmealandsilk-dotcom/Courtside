@@ -20,7 +20,7 @@ import { PreparingRing } from '@/components/PreparingRing';
 import { TagPlayers } from '@/components/TagPlayers';
 import { addToBank, getBank } from '@/features/compose/mediaBank';
 import { useApp } from '@/store/AppContext';
-import type { QuestionTopic } from '@/data/types';
+import type { QuestionTopic, TaggedCourt } from '@/data/types';
 import { colors, radius, spacing, typography, font } from '@/theme';
 import { challengeFor } from '@/features/challenge/weekly';
 
@@ -99,6 +99,8 @@ export default function Compose() {
   // People tagged in the post: chips under the caption, added from a short search.
   const [tagged, setTagged] = useState<string[]>([]);
   const [location, setLocation] = useState('');
+  // The court it was played on, when the location was picked from the courts list.
+  const [court, setCourt] = useState<TaggedCourt | null>(null);
   const [featureOk, setFeatureOk] = useState(true);
   const [questionTitle, setQuestionTitle] = useState('');
   const [topic, setTopic] = useState<QuestionTopic>('gear');
@@ -144,6 +146,7 @@ export default function Compose() {
       tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
       taggedUserIds: tagged.length ? tagged : undefined,
       location: location.trim() || undefined,
+      court: location.trim() && court ? court : undefined,
       featureOk: featureOk ? undefined : false,
       imageUrl: media?.kind === 'photo' ? media.uri : undefined,
       videoUrl: media?.kind === 'video' ? media.uri : undefined,
@@ -339,7 +342,7 @@ export default function Compose() {
                 ) : null}
                 <Field
                   label={mode !== 'story' && mode !== 'hit' ? 'Caption' : undefined}
-                  labelRight={mode !== 'story' && mode !== 'hit' ? <LocationLink value={location} onPress={() => openPlacePicker(setLocation, location)} onClear={() => setLocation('')} /> : undefined}
+                  labelRight={mode !== 'story' && mode !== 'hit' ? <LocationLink value={location} court={!!court} onPress={() => openPlacePicker((value, picked) => { setLocation(value); setCourt(picked ?? null); }, location)} onClear={() => { setLocation(''); setCourt(null); }} /> : undefined}
                   value={body}
                   onChangeText={setBody}
                   placeholder={mode === 'story' ? 'Add a line (optional)' : mode === 'hit' ? 'How did it go? (optional)' : 'Write a caption…'}

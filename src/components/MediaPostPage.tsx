@@ -1,4 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { openCourtOnMap } from '@/features/players/courtLink';
 import { Wash } from '@/components/Wash';
 import React, { useEffect, useRef, useState, memo } from 'react';
 import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -191,7 +192,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
               <LevelPill profile={author.profile} small />
               {isNewHere(post) ? <NewHereTag /> : null}
             </View>
-            <Text style={styles.sub} numberOfLines={1}>@{author.handle} · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}{post.location ? ` · ${post.location}` : ''}</Text>
+            <Text style={styles.sub} numberOfLines={1}>@{author.handle} · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}{post.court ? <> · <Text accessibilityRole="link" accessibilityLabel={`${post.court.name}, open on the map`} onPress={() => openCourtOnMap(post.court!)} style={styles.courtLink}>{post.court.name}</Text></> : post.location ? ` · ${post.location}` : ''}</Text>
           </View>
         </Pressable>
       </View>
@@ -297,6 +298,7 @@ const styleDefinitions = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   name: { ...typography.bodyStrong, color: colors.text },
   sub: { ...typography.small, color: colors.textFaint },
+  courtLink: { ...typography.smallStrong, color: colors.brand },
   actions: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', paddingHorizontal: spacing.xs, paddingTop: spacing.xs },
   action: { alignItems: 'center', gap: 3, minWidth: 48 },
   actionText: { ...typography.smallStrong, color: colors.text },

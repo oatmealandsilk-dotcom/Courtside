@@ -76,7 +76,7 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt } from '@/data/types';
 
 interface NewStoryInput {
   imageUrl?: string;
@@ -90,6 +90,8 @@ interface NewPostInput {
   kind: PostKind;
   /** Where it was, if they said. */
   location?: string;
+  /** The court it was played on, picked from the map's courts. */
+  court?: TaggedCourt;
   /** Off when the author would rather CourtSide did not feature it. */
   featureOk?: boolean;
   /** People tagged in it; each gets a notification. */
@@ -382,7 +384,7 @@ interface AppActions {
   toggleArchivePost: (postId: ID) => void;
   togglePinPost: (postId: ID) => void;
   /** Change your own post's words, tags, who is in it, and where it was. */
-  editPost: (postId: ID, patch: { body: string; taggedUserIds: ID[]; location?: string }) => void;
+  editPost: (postId: ID, patch: { body: string; taggedUserIds: ID[]; location?: string; court?: TaggedCourt | null }) => void;
   /** Change your own thread's question and details. */
   editQuestion: (questionId: ID, patch: { title: string; body: string }) => void;
   /** Pull-to-refresh: fetches everything again from the server. */
@@ -489,6 +491,8 @@ interface AppActions {
   loadReports: () => Promise<AdminReport[]>;
   /** Admins only: the waitlist and the waitlist page's feedback. */
   loadWaitlist: () => Promise<WaitlistEntry[]>;
+  /** Posts tagged at a court (within a few hundred feet), newest first, for its card on the map. */
+  loadCourtPosts: (at: { lat: number; lng: number }) => Promise<Post[]>;
   /** The beta invite email: counts, or send it to everyone on the waitlist still waiting. Admins only. */
   betaInvites: (send: boolean) => Promise<BetaInviteStatus | null>;
   /** Everyone's first post from the last month, for the founder to welcome. */
@@ -1599,7 +1603,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   }, [requireUser]);
 
-  const editPost = useCallback((postId: ID, patch: { body: string; taggedUserIds: ID[]; location?: string }) => {
+  const editPost = useCallback((postId: ID, patch: { body: string; taggedUserIds: ID[]; location?: string; court?: TaggedCourt | null }) => {
     const me = requireUser();
     const post = stateRef.current.posts.find((p) => p.id === postId);
     if (!post || post.authorId !== me) return;
@@ -1607,13 +1611,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const editedAt = new Date().toISOString();
     const tags = Array.from(new Set((patch.body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map((tag) => tag.slice(1).toLowerCase())));
     const location = patch.location?.trim() || undefined;
-    if (live(me, postId)) remote.updatePost(postId, { body: patch.body, tags, taggedUserIds: patch.taggedUserIds, location, editedAt });
+    // A court belongs with its name: no location, no court.
+    const court = location ? patch.court : null;
+    if (live(me, postId)) remote.updatePost(postId, { body: patch.body, tags, taggedUserIds: patch.taggedUserIds, location, court, editedAt });
     setState((prev) => {
       const before = prev.posts.find((p) => p.id === postId);
       const newlyTagged = patch.taggedUserIds.filter((id) => !(before?.taggedUserIds ?? []).includes(id));
       const next: AppState = {
         ...prev,
-        posts: prev.posts.map((p) => (p.id === postId ? { ...p, body: patch.body, tags, taggedUserIds: patch.taggedUserIds.length ? patch.taggedUserIds : undefined, location, editedAt } : p)),
+        posts: prev.posts.map((p) => (p.id === postId ? { ...p, body: patch.body, tags, taggedUserIds: patch.taggedUserIds.length ? patch.taggedUserIds : undefined, location, court: court === undefined ? p.court : court ?? undefined, editedAt } : p)),
       };
       return newlyTagged.reduce((acc, id) => withNotification(acc, { userId: id, actorId: me, kind: 'tag', targetId: postId, targetKind: 'post', preview: snippet(patch.body || 'a post') }), next);
     });
@@ -2221,6 +2227,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Reports, for admins. The database decides who may read and act on them.
   const loadReports = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchReports() : []), []);
   const loadWaitlist = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchWaitlist() : []), []);
+  const loadCourtPosts = useCallback(async (at: { lat: number; lng: number }) => {
+    // The feed already has the newest; a court's card adds whatever the database has on top.
+    const near = (p: Post) => !!p.court && !p.archived && Math.abs(p.court.lat - at.lat) <= 0.0025 && Math.abs(p.court.lng - at.lng) <= 0.003;
+    const local = stateRef.current.posts.filter(near);
+    const fetched = live(stateRef.current.currentUserId) ? await remote.fetchCourtPosts(at).catch(() => []) : [];
+    const seen = new Set<ID>();
+    return [...local, ...fetched].filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true))).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 12);
+  }, []);
   const betaInvites = useCallback(async (send: boolean) => (live(stateRef.current.currentUserId) ? remote.betaInvites(send) : null), []);
   const loadFirstDayStats = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchFirstDayStats() : null), []);
   const noteFirstMove = useCallback((move: FirstMove) => {
@@ -3482,6 +3496,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadFollowsOf,
       loadReports,
       loadWaitlist,
+      loadCourtPosts,
       betaInvites,
       loadFirstPosts,
       loadFirstDayStats,
@@ -3616,6 +3631,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadFollowsOf,
       loadReports,
       loadWaitlist,
+      loadCourtPosts,
       betaInvites,
       loadFirstPosts,
       loadFirstDayStats,

@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { CourtGlyph } from '@/components/map/MapChrome';
 
 import { colors, typography } from '@/theme';
 
@@ -10,7 +11,7 @@ import { colors, typography } from '@/theme';
  * label ("Add location"), which becomes the place once one is picked, with
  * an × to take it off. Tapping it opens the Add location page.
  */
-export function LocationLink({ value, onPress, onClear }: { value: string; onPress: () => void; onClear: () => void }) {
+export function LocationLink({ value, onPress, onClear, court = false }: { value: string; onPress: () => void; onClear: () => void; /** The location is a tagged court: the court mark instead of the pin. */ court?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   if (!value) {
     return (
@@ -23,7 +24,7 @@ export function LocationLink({ value, onPress, onClear }: { value: string; onPre
   return (
     <View style={styles.link}>
       <Pressable accessibilityRole="button" accessibilityLabel={`Location: ${value}. Tap to change it`} hitSlop={8} onPress={onPress} style={styles.set}>
-        <Ionicons name="location" size={14} color={colors.brand} />
+        {court ? <CourtGlyph size={13} color={colors.brand} /> : <Ionicons name="location" size={14} color={colors.brand} />}
         <Text style={styles.setText} numberOfLines={1}>{value}</Text>
       </Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel="Remove location" hitSlop={10} onPress={onClear}>

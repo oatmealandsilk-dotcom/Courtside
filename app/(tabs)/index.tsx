@@ -1,4 +1,5 @@
 import { asTabRoute } from '@/features/navigation/tabFocus';
+import { openCourtOnMap } from '@/features/players/courtLink';
 import { ThreadReplies } from '@/components/ThreadReplies';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -1080,7 +1081,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       {/* The level belongs on the clip above all: a rally read
                           against a rating is the whole point, and this was the
                           one page that left it off. */}
-                      <Text style={[styles.authorName, styles.authorFill]} numberOfLines={1}>@{author.handle}<Text style={styles.authorTime}> · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}{post.location ? ` · ${post.location}` : ''}</Text></Text>
+                      <Text style={[styles.authorName, styles.authorFill]} numberOfLines={1}>@{author.handle}<Text style={styles.authorTime}> · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}{post.court ? <> · <Text accessibilityRole="link" accessibilityLabel={`${post.court.name}, open on the map`} onPress={() => openCourtOnMap(post.court!)} style={styles.courtLink}>{post.court.name}</Text></> : post.location ? ` · ${post.location}` : ''}</Text></Text>
                       <LevelPill profile={author.profile} small onMedia />
                     </Pressable>
                     {isNewHere(post) ? <NewHereTag onMedia /> : null}
@@ -1270,6 +1271,8 @@ const styleDefinitions = StyleSheet.create({
   hitClockText: { color: 'white', fontSize: 11, ...font('700'), letterSpacing: 0.6 },
   authorName: { color: 'white', fontSize: 14, ...font('700') },
   authorTime: { color: 'rgba(255,255,255,0.75)', fontSize: 12, ...font('500') },
+  // The tagged court, over the picture like the rest of the line, a touch brighter because it opens the map.
+  courtLink: { color: '#fff', fontSize: 12, ...font('600') },
   body: { color: 'white', fontSize: 13, lineHeight: 19 },
   more: { color: 'white', fontSize: 13, lineHeight: 19, ...font('600') },
   tags: { color: 'rgba(255,255,255,0.85)', fontSize: 11 },

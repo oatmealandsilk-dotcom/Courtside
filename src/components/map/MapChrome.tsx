@@ -20,7 +20,7 @@ import { formatMiles } from '@/features/players/geo';
 import { relativeTime } from '@/lib/format';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { LevelPill as Level } from '@/components/LevelPill';
-import type { User } from '@/data/types';
+import type { Post, User } from '@/data/types';
 import { Toggle } from '@/components/ui';
 import type { MapFilter, Placed } from '@/features/players/mapModel';
 import type { Weather } from '@/lib/weather';
@@ -416,6 +416,14 @@ export function CourtSheet({ court, miles, onClose, onDirections }: { court: Cou
   const said = summarizeCourt(notes);
   const mine = notes.some((n) => n.userId === currentUserId);
   const facts = [court.count > 1 ? `${court.count} courts` : '1 court', court.surface ? court.surface.replace(/_/g, ' ') : null, court.lit ? 'lit at night' : null].filter(Boolean).join(' · ');
+  // Clips and photos people tagged here: the best proof a court gets played on.
+  const [posted, setPosted] = useState<Post[]>([]);
+  useEffect(() => {
+    let on = true;
+    setPosted([]);
+    void actions.loadCourtPosts({ lat: court.lat, lng: court.lng }).then((list) => { if (on) setPosted(list.filter((p) => p.thumbnailUrl || p.imageUrl)); });
+    return () => { on = false; };
+  }, [court.lat, court.lng, actions]);
   return (
     <GestureDetector gesture={pull.gesture}>
     <Animated.View style={[styles.sheet, pull.style]}>
@@ -448,6 +456,19 @@ export function CourtSheet({ court, miles, onClose, onDirections }: { court: Cou
             </ScrollView>
           ) : null}
           {said.latest ? <Text style={styles.saysQuote} numberOfLines={2}>“{said.latest}”</Text> : null}
+        </View>
+      ) : null}
+      {posted.length ? (
+        <View style={styles.posted}>
+          <Text style={styles.postedTitle}>Played here <Text style={styles.postedCount}>· {posted.length}</Text></Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.postedRow}>
+            {posted.map((p) => (
+              <Pressable key={p.id} accessibilityRole="button" accessibilityLabel={p.kind === 'clip' ? 'A clip from this court' : 'A post from this court'} onPress={() => router.push(`/post/${p.id}`)} style={({ pressed }) => [styles.postedThumb, pressed && styles.postedPressed]}>
+                <ExpoImage source={{ uri: p.thumbnailUrl ?? p.imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
+                {p.kind === 'clip' || p.videoUrl ? <View style={styles.postedPlay}><Ionicons name="play" size={11} color="#fff" /></View> : null}
+              </Pressable>
+            ))}
+          </ScrollView>
         </View>
       ) : null}
       <View style={styles.personActions}>
@@ -570,6 +591,14 @@ const styleDefinitions = StyleSheet.create({
   saysPhotos: { gap: spacing.sm },
   saysPhoto: { width: 96, height: 72, borderRadius: 12, backgroundColor: colors.surfaceAlt },
   saysQuote: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
+  posted: { gap: spacing.sm, paddingBottom: spacing.md },
+  postedTitle: { ...typography.smallStrong, color: colors.text, paddingHorizontal: spacing.lg },
+  postedCount: { color: colors.textFaint },
+  postedRow: { gap: spacing.sm, paddingHorizontal: spacing.lg },
+  // Upright, like the clips themselves, and a touch taller than the players' court photos above.
+  postedThumb: { width: 66, height: 88, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
+  postedPressed: { opacity: 0.85 },
+  postedPlay: { position: 'absolute', right: 5, bottom: 5, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
   // The still card's overlay.
   previewTitle: { position: 'absolute', left: 12, top: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   previewTitleText: { ...typography.smallStrong, color: colors.text },
