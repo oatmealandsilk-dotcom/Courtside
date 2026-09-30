@@ -316,7 +316,8 @@ function Sheet({
           <div style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, alignSelf: 'center' }} />
           {header}
         </div>
-        <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{children}</div>
+        {/* Clear of a phone's home bar, the same as the app's own sheet. */}
+        <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', paddingBottom: insets.bottom }}>{children}</div>
       </div>
     </div>
   );

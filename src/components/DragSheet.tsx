@@ -154,7 +154,8 @@ export function DragSheet({
             {header}
           </View>
         </GestureDetector>
-        <View style={[styles.body, { paddingBottom: keyboardPad }]}>{children}</View>
+        {/* Clear of the home bar when the keyboard is down; on top of the keyboard when it is up. */}
+        <View style={[styles.body, { paddingBottom: Math.max(keyboardPad, insets.bottom) }]}>{children}</View>
       </Animated.View>
     </View>
   );
