@@ -8,6 +8,7 @@ import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { LevelPill } from '@/components/LevelPill';
+import { SectionPager } from '@/components/SectionPager';
 import { PlayerName } from '@/components/PlayerName';
 import { Tappable } from '@/components/Tappable';
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
@@ -65,11 +66,28 @@ export default function UserProfile() {
   // What a private account keeps behind the door until they say yes.
   const locked = !!user.isPrivate && !isMe && !following;
   const own = posts.filter((p) => p.authorId === user.id && !p.archived);
-  const items = (tab === 'Tagged' ? posts.filter((p) => p.taggedUserIds?.includes(user.id) && !p.archived) : own.filter((p) => tab !== 'Clips' || p.kind === 'clip'))
+  const itemsFor = (section: (typeof TABS)[number]) => (section === 'Tagged' ? posts.filter((p) => p.taggedUserIds?.includes(user.id) && !p.archived) : own.filter((p) => section !== 'Clips' || p.kind === 'clip'))
     .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
   const counts = { Posts: own.length, Clips: own.filter((p) => p.kind === 'clip').length, Tagged: posts.filter((p) => p.taggedUserIds?.includes(user.id) && !p.archived).length };
   const unlocked = evaluateAchievements(user).filter((a) => a.unlocked);
   const profile = user.profile;
+
+  const grid = (section: (typeof TABS)[number]) => (
+        <View style={{ minHeight: 320 }}>
+            <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>
+              {itemsFor(section).map((p) => (
+                <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: section === 'Clips' ? 'clips' : section === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
+                  <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
+                  {p.thumbnailUrl ? <ExpoImage accessibilityIgnoresInvertColors source={{ uri: p.thumbnailUrl }} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120} /> : null}
+                  {p.kind === 'clip' && <Ionicons name="play" size={14} color="#FFFFFF" style={styles.tilePlay} />}
+                  {(p.videoUrl || p.kind === 'clip') && (p.views ?? 0) > 0 ? <TileViews views={p.views ?? 0} /> : null}
+                  {p.pinned && section !== 'Tagged' && <Ionicons name="pin" size={13} color="#FFFFFF" style={styles.tilePin} />}
+                </Pressable>
+              ))}
+            </View>
+            {!itemsFor(section).length && <EmptyState title={section === 'Tagged' ? 'No tagged posts yet' : `No ${section.toLowerCase()} yet`} body="Their shared moments will appear here." />}
+        </View>
+  );
 
   const say = (text: string) => {
     setNotice(text);
@@ -187,18 +205,9 @@ export default function UserProfile() {
               </Pressable>
             ))}
           </View>
-          <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>
-            {items.map((p) => (
-              <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: tab === 'Clips' ? 'clips' : tab === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
-                <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
-                {p.thumbnailUrl ? <ExpoImage accessibilityIgnoresInvertColors source={{ uri: p.thumbnailUrl }} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120} /> : null}
-                {p.kind === 'clip' && <Ionicons name="play" size={14} color="#FFFFFF" style={styles.tilePlay} />}
-                {(p.videoUrl || p.kind === 'clip') && (p.views ?? 0) > 0 ? <TileViews views={p.views ?? 0} /> : null}
-                {p.pinned && tab !== 'Tagged' && <Ionicons name="pin" size={13} color="#FFFFFF" style={styles.tilePin} />}
-              </Pressable>
-            ))}
-          </View>
-          {!items.length && <EmptyState title={tab === 'Tagged' ? 'No tagged posts yet' : `No ${tab.toLowerCase()} yet`} body="Their shared moments will appear here." />}
+          {/* Posts, Clips and Tagged side by side: a swipe slides between them,
+              the way your own profile does, instead of landing on a tile as a tap. */}
+          <SectionPager index={TABS.indexOf(tab)} panes={TABS.map((section) => grid(section))} depth={1} delegateRight onIndex={(i) => setTab(TABS[i])} />
         </>
       )}
 
