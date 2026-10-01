@@ -1234,7 +1234,35 @@ export const remote = {
     return () => { void db.removeChannel(channel); };
   },
 
-  onMessages(handle: { added: (message: Message) => void; changed: (message: Message) => void; removed: (messageId: ID) => void }): () => void {
+  /**
+   * Every message in your chats sent after `since`, oldest first: what the
+   * phone missed while it was asleep or the live connection was down.
+   */
+  async fetchMessagesSince(since: string): Promise<Message[]> {
+    const { data, error } = await need().from('messages').select('*').gt('created_at', since).order('created_at', { ascending: true }).limit(500);
+    if (error || !data) return [];
+    return toConversations('', [], data as MessageRow[]).messages;
+  },
+
+  /**
+   * "Typing…" in one chat: a quick signal sent straight between phones (never
+   * stored). `ping` says you are typing; `onTyping` hears who else is.
+   */
+  typing(conversationId: ID, me: ID, onTyping: (userId: ID) => void): { ping: () => void; off: () => void } {
+    const db = need();
+    const channel = db.channel(`typing:${conversationId}`, { config: { broadcast: { self: false } } })
+      .on('broadcast', { event: 'typing' }, ({ payload }) => {
+        const who = (payload as { userId?: string } | null)?.userId;
+        if (who && who !== me) onTyping(who);
+      })
+      .subscribe();
+    return {
+      ping: () => { void channel.send({ type: 'broadcast', event: 'typing', payload: { userId: me } }); },
+      off: () => { void db.removeChannel(channel); },
+    };
+  },
+
+  onMessages(handle: { added: (message: Message) => void; changed: (message: Message) => void; removed: (messageId: ID) => void; connected?: () => void; dropped?: () => void }): () => void {
     const db = need();
     const one = (row: MessageRow) => toConversations('', [{ id: row.conversation_id, updated_at: row.created_at }], [row]).messages[0];
     const channel = db.channel('messages-live')
@@ -1244,7 +1272,12 @@ export const remote = {
         const id = (payload.old as { id?: string } | null)?.id;
         if (id) handle.removed(id);
       })
-      .subscribe();
+      // Connected (again): the caller catches up on anything sent meanwhile.
+      // Dropped (a sleeping phone, a bad signal): the caller reconnects.
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') handle.connected?.();
+        else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') handle.dropped?.();
+      });
     return () => { void db.removeChannel(channel); };
   },
 

@@ -42,7 +42,7 @@ import { activeMention, applyMention } from '@/lib/mentions';
 import { show as showToast } from '@/lib/toast';
 import * as haptics from '@/lib/haptics';
 import type { Message } from '@/data/types';
-import Reanimated, { Easing, FadeIn, FadeInDown, FadeInUp, FadeOut, LinearTransition, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Reanimated, { Easing, FadeIn, FadeInDown, FadeInUp, FadeOut, LinearTransition, cancelAnimation, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { colors, radius, spacing, typography, font } from '@/theme';
 
 /** Two messages from the same person this close together read as one run: tighter, one tail. */
@@ -93,6 +93,9 @@ export default function Thread() {
   const group = !!conversation && isGroupChat(conversation);
   const people = conversation ? othersIn(conversation, users, currentUserId) : [];
 
+  // Opening a chat fetches it fresh, so it never sits on an old copy waiting for the next refresh.
+  useEffect(() => { if (id) void actions.syncConversation(id); }, [id, actions]);
+
   useEffect(() => {
     const mark = () => {
       if (focused && conversation && (typeof document === 'undefined' || document.visibilityState === 'visible')) actions.markConversationRead(conversation.id);
@@ -111,6 +114,41 @@ export default function Thread() {
         .filter((m): m is NonNullable<typeof m> => Boolean(m)),
     [conversation, messages],
   );
+
+  // "Typing…": who else in this chat is typing right now. Heard straight from
+  // their phone (nothing is stored); it lapses 4 seconds after the last word
+  // of it, and their message arriving ends it at once.
+  const [typing, setTyping] = useState<Record<string, number>>({});
+  const typingLink = useRef<{ ping: () => void; off: () => void } | null>(null);
+  useEffect(() => {
+    if (!id) return;
+    setTyping({});
+    const link = actions.watchTyping(id, (uid) => setTyping((t) => ({ ...t, [uid]: Date.now() })));
+    typingLink.current = link;
+    return () => { link.off(); typingLink.current = null; };
+  }, [id, actions]);
+  useEffect(() => {
+    if (!Object.keys(typing).length) return;
+    const t = setInterval(() => setTyping((cur) => {
+      const now = Date.now();
+      const next = Object.fromEntries(Object.entries(cur).filter(([, at]) => now - at < 4000));
+      return Object.keys(next).length === Object.keys(cur).length ? cur : next;
+    }), 1000);
+    return () => clearInterval(t);
+  }, [typing]);
+  const lastMessage = thread[thread.length - 1];
+  useEffect(() => {
+    if (!lastMessage) return;
+    setTyping((cur) => { if (!cur[lastMessage.senderId]) return cur; const next = { ...cur }; delete next[lastMessage.senderId]; return next; });
+  }, [lastMessage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const typers = Object.keys(typing).filter((uid) => uid !== currentUserId && !blockedIds.includes(uid));
+  // While you type, the others hear it every couple of seconds, never on every key.
+  const lastPing = useRef(0);
+  const pingTyping = (text: string) => {
+    if (!text.trim()) return;
+    const now = Date.now();
+    if (now - lastPing.current > 2000) { lastPing.current = now; typingLink.current?.ping(); }
+  };
 
   // A chat with someone you are blocked with (either of you blocked the other)
   // can still be read, but not written in: the box gives way to a note.
@@ -396,7 +434,13 @@ export default function Thread() {
             </React.Fragment>
           );
         })}
-        {thread.length > 0 && thread[thread.length - 1].senderId === currentUserId && !thread[thread.length - 1].failed && <Text accessibilityLiveRegion="polite" style={styles.timestamp}>
+        {typers.length ? (
+          <TypingBubble
+            styles={styles}
+            label={group ? `${typers.map((uid) => users.find((u) => u.id === uid)?.name.split(' ')[0] ?? 'Someone').join(', ')} ${typers.length === 1 ? 'is' : 'are'} typing` : undefined}
+          />
+        ) : null}
+        {!typers.length && thread.length > 0 && thread[thread.length - 1].senderId === currentUserId && !thread[thread.length - 1].failed && <Text accessibilityLiveRegion="polite" style={styles.timestamp}>
           {other.readReceiptsEnabled !== false && thread[thread.length - 1].readAtBy?.[other.id] ? 'Read' : 'Sent'}
         </Text>}
       </ScrollView>
@@ -469,7 +513,7 @@ export default function Thread() {
         <TextInput
           ref={inputRef}
           value={draft}
-          onChangeText={(text) => { setDraft(text); setCaret((c) => c + (text.length - draft.length)); }}
+          onChangeText={(text) => { setDraft(text); setCaret((c) => c + (text.length - draft.length)); pingTyping(text); }}
           onSelectionChange={(e) => setCaret(e.nativeEvent.selection.end)}
           // Tapping into the words brings the phone keyboard back in the emoji keyboard's place.
           onFocus={() => { if (emojiOpen && !desktopWeb) setEmojiOpen(false); }}
@@ -720,6 +764,41 @@ function ReactionChip({ emoji, count, mine, onPress, style }: {
   );
 }
 
+
+/**
+ * The other person typing: three dots in one of their bubbles, rising and
+ * brightening one after another, the way iMessage shows it. Still dots under
+ * Reduce Motion. In a group, who it is sits above it.
+ */
+function TypingBubble({ styles, label }: { styles: ReturnType<typeof useThemedStyles<typeof styleDefinitions>>; label?: string }) {
+  return (
+    <Reanimated.View entering={FadeInDown.duration(200)} exiting={FadeOut.duration(150)} style={styles.typingWrap} accessibilityLiveRegion="polite" accessibilityLabel={label ?? 'Typing'}>
+      {label ? <Text style={styles.typingWho} numberOfLines={1}>{label}</Text> : null}
+      <View style={[styles.bubble, styles.theirs, styles.typingBubble]}>
+        <TypingDot styles={styles} delay={0} />
+        <TypingDot styles={styles} delay={160} />
+        <TypingDot styles={styles} delay={320} />
+      </View>
+    </Reanimated.View>
+  );
+}
+
+function TypingDot({ styles, delay }: { styles: ReturnType<typeof useThemedStyles<typeof styleDefinitions>>; delay: number }) {
+  const still = useReducedMotion();
+  const v = useSharedValue(0);
+  useEffect(() => {
+    if (still) return;
+    v.value = withDelay(delay, withRepeat(withSequence(
+      withTiming(1, { duration: 280, easing: Easing.out(Easing.quad) }),
+      withTiming(0, { duration: 280, easing: Easing.in(Easing.quad) }),
+      withTiming(0, { duration: 360 }),
+    ), -1));
+    return () => cancelAnimation(v);
+  }, [still, delay, v]);
+  const style = useAnimatedStyle(() => ({ opacity: 0.35 + 0.65 * v.value, transform: [{ translateY: -3 * v.value }] }));
+  return <Reanimated.View style={[styles.typingDot, style]} />;
+}
+
 const styleDefinitions = StyleSheet.create({
   blockedNote: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   blockedNoteText: { ...typography.small, color: colors.textMuted },
@@ -755,6 +834,10 @@ const styleDefinitions = StyleSheet.create({
   },
   mine: { alignSelf: 'flex-end', backgroundColor: colors.brand, borderBottomRightRadius: 6 },
   theirs: { alignSelf: 'flex-start', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 6 },
+  typingWrap: { alignSelf: 'flex-start', marginTop: 4, gap: 3 },
+  typingWho: { ...typography.caption, letterSpacing: 0, color: colors.textFaint, paddingLeft: 4 },
+  typingBubble: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 14, paddingHorizontal: 16 },
+  typingDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.textMuted },
   bubbleText: { ...typography.body, color: colors.text, lineHeight: 21 },
   bubbleWrap: { maxWidth: '78%' },
   row: { width: '100%' },

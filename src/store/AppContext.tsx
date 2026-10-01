@@ -475,6 +475,10 @@ interface AppActions {
   noteFeedSignal: (signal: FeedSignal) => void;
   /** The next older page of a chat, for scrolling up. Resolves to how many older messages came (fewer than a page: that was the last). */
   loadOlderMessages: (conversationId: ID) => Promise<number>;
+  /** One chat fetched fresh as it opens, so it never shows an old copy for long. */
+  syncConversation: (conversationId: ID) => Promise<void>;
+  /** "Typing…" in a chat: `ping` while you type; `onTyping` hears the others. No-op in the demo. */
+  watchTyping: (conversationId: ID, onTyping: (userId: ID) => void) => { ping: () => void; off: () => void };
   /** Every reply in a thread, loaded when it is opened. */
   loadThread: (questionId: ID) => Promise<void>;
   /** The next page of older feed posts. Resolves with the ones that were added. */
@@ -545,6 +549,40 @@ interface AppActions {
 interface AppContextValue extends AppState {
   currentUser: User | null;
   actions: AppActions;
+}
+
+
+/**
+ * Messages fetched afresh (a catch-up after the phone slept, a chat just
+ * opened) laid over what the app holds: new ones added in time order, ones
+ * already here updated in place (an edit, a reaction), each chat's list and
+ * its last-active time brought up to date, and anything new from someone
+ * else counted as unread unless that chat is open.
+ */
+function mergeFetchedMessages(prev: AppState, fetched: Message[], me: ID, openChat?: ID): AppState {
+  if (!fetched.length) return prev;
+  const byId = new Map(prev.messages.map((m) => [m.id, m]));
+  let changed = false;
+  const added: Message[] = [];
+  for (const m of fetched) {
+    const had = byId.get(m.id);
+    if (!had) { added.push(m); byId.set(m.id, m); changed = true; continue; }
+    if (had.body !== m.body || had.editedAt !== m.editedAt || JSON.stringify(had.reactions ?? {}) !== JSON.stringify(m.reactions ?? {})) {
+      byId.set(m.id, { ...had, body: m.body, editedAt: m.editedAt, reactions: m.reactions });
+      changed = true;
+    }
+  }
+  if (!changed) return prev;
+  const messages = prev.messages.map((m) => byId.get(m.id)!).concat(added);
+  const touched = new Set(added.map((m) => m.conversationId));
+  const conversations = prev.conversations.map((c) => {
+    if (!touched.has(c.id)) return c;
+    const inChat = messages.filter((m) => m.conversationId === c.id).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+    const newFromOthers = added.filter((m) => m.conversationId === c.id && m.senderId !== me).length;
+    const last = inChat[inChat.length - 1];
+    return { ...c, messageIds: inChat.map((m) => m.id), updatedAt: last && last.createdAt > c.updatedAt ? last.createdAt : c.updatedAt, unreadCount: c.id === openChat ? c.unreadCount : c.unreadCount + newFromOthers };
+  });
+  return { ...prev, messages, conversations };
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -885,13 +923,55 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // else just started is fetched whole the first time it is heard from.
   const remoteLoaded = state.remoteLoaded;
   const currentUserForLive = state.currentUserId;
+  // Bumped to reconnect: after the connection drops, and whenever the app comes back to the front.
+  const [liveEpoch, setLiveEpoch] = useState(0);
+  const dropRetries = useRef(0);
+  // Whatever was sent while the phone slept or the connection was down, in one small ask:
+  // every message newer than the newest one here.
+  const catchUpMessages = useCallback(async () => {
+    const me = stateRef.current.currentUserId;
+    if (!me || !UUID.test(me) || !isSupabaseConfigured) return;
+    const newest = stateRef.current.messages.reduce((t, m) => (m.createdAt > t ? m.createdAt : t), '');
+    const since = new Date((newest ? Date.parse(newest) : Date.now() - 86_400_000) - 5000).toISOString();
+    const fresh = await remote.fetchMessagesSince(since).catch(() => [] as Message[]);
+    if (!fresh.length) return;
+    const known = new Set(stateRef.current.conversations.map((c) => c.id));
+    const strangers = [...new Set(fresh.map((m) => m.conversationId).filter((cid) => !known.has(cid)))];
+    // A chat someone else started while you were away arrives whole.
+    const started = (await Promise.all(strangers.map((cid) => remote.fetchConversation(me, cid).catch(() => null)))).filter(Boolean) as { conversation: Conversation; messages: Message[] }[];
+    setState((prev) => {
+      let next = started.reduce((acc, got) => (acc.conversations.some((c) => c.id === got.conversation.id) ? acc : { ...acc, conversations: [got.conversation, ...acc.conversations], messages: [...acc.messages, ...got.messages.filter((m) => !acc.messages.some((p) => p.id === m.id))] }), prev);
+      next = mergeFetchedMessages(next, fresh.filter((m) => next.conversations.some((c) => c.id === m.conversationId)), me);
+      return next;
+    });
+  }, []);
+  useEffect(() => {
+    if (!isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive)) return;
+    // Back to the front (a phone woken, a browser tab looked at again): reconnect and catch up.
+    const wake = () => setLiveEpoch((n) => n + 1);
+    const sub = DeviceState.addEventListener('change', (st) => { if (st === 'active') wake(); });
+    const onVisible = () => { if (typeof document !== 'undefined' && document.visibilityState === 'visible') wake(); };
+    if (Platform.OS === 'web' && typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
+    return () => { sub.remove(); if (Platform.OS === 'web' && typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible); };
+  }, [remoteLoaded, currentUserForLive]);
   useEffect(() => {
     if (!isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive)) return;
     const me = currentUserForLive;
     let off: (() => void) | undefined;
     let offReads: (() => void) | undefined;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    // Closing it ourselves (leaving, reconnecting) also reports "closed"; that is not a drop.
+    let disposed = false;
     try {
       off = remote.onMessages({
+        connected: () => { dropRetries.current = 0; void catchUpMessages(); },
+        // Dropped: try again after a moment, waiting a little longer each time (2s, 4s, 8s… up to 30s).
+        dropped: () => {
+          if (disposed || retry) return;
+          const wait = Math.min(30_000, 2000 * 2 ** dropRetries.current);
+          dropRetries.current += 1;
+          retry = setTimeout(() => setLiveEpoch((n) => n + 1), wait);
+        },
         added: (message) => {
           if (stateRef.current.messages.some((m) => m.id === message.id)) return;
           const known = stateRef.current.conversations.some((c) => c.id === message.conversationId);
@@ -941,8 +1021,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }));
       });
     } catch { /* live updates are a nicety */ }
-    return () => { off?.(); offReads?.(); };
-  }, [remoteLoaded, currentUserForLive]);
+    return () => { disposed = true; if (retry) clearTimeout(retry); off?.(); offReads?.(); };
+  }, [remoteLoaded, currentUserForLive, liveEpoch, catchUpMessages]);
 
   // Notifications for other people are never sent from this phone: the
   // database files them itself when the real like, comment or follow is
@@ -2287,6 +2367,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return remote.isChatBlocked(conversationId);
   }, []);
   // Scrolling up in a chat: the page of messages before the oldest one here.
+  const syncConversation = useCallback(async (conversationId: ID) => {
+    const me = stateRef.current.currentUserId;
+    if (!me || !live(me, conversationId)) return;
+    const got = await remote.fetchConversation(me, conversationId).catch(() => null);
+    if (!got) return;
+    setState((prev) => (prev.conversations.some((c) => c.id === conversationId)
+      ? mergeFetchedMessages(prev, got.messages, me, conversationId)
+      : { ...prev, conversations: [got.conversation, ...prev.conversations], messages: [...prev.messages, ...got.messages.filter((m) => !prev.messages.some((p) => p.id === m.id))] }));
+  }, []);
+  const watchTyping = useCallback((conversationId: ID, onTyping: (userId: ID) => void) => {
+    const me = stateRef.current.currentUserId;
+    if (!me || !live(me, conversationId)) return { ping: () => undefined, off: () => undefined };
+    try { return remote.typing(conversationId, me, onTyping); } catch { return { ping: () => undefined, off: () => undefined }; }
+  }, []);
   const loadOlderMessages = useCallback(async (conversationId: ID) => {
     const me = stateRef.current.currentUserId;
     if (!me || !live(me, conversationId)) return 0;
@@ -3506,6 +3600,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       recordView,
       noteFeedSignal,
       loadOlderMessages,
+      syncConversation,
+      watchTyping,
       loadThread,
       loadMorePosts,
       loadPostsOf,
@@ -3642,6 +3738,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       recordView,
       noteFeedSignal,
       loadOlderMessages,
+      syncConversation,
+      watchTyping,
       loadThread,
       loadMorePosts,
       loadPostsOf,
