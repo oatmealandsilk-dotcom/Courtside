@@ -18,7 +18,29 @@ export interface LookMap {
  */
 export const STYLE = 'https://tiles.openfreemap.org/styles/positron';
 
-export type Look = Record<string, { fill?: string; line?: string; text?: string; halo?: string; hide?: boolean; /** Only from this zoom in — small roads appear once you are close. */ minZoom?: number }>;
+export type Look = Record<string, { fill?: string; line?: string; text?: string; halo?: string; hide?: boolean; /** Only from this zoom in — small roads appear once you are close. */ minZoom?: number; /** A line's opacity, as a MapLibre expression: how each kind of road fades in as you come closer. */ opacity?: unknown }>;
+
+/** How long a kind of road takes to fade in, in zoom levels. */
+const FADE = 0.8;
+/**
+ * Roads by importance, each fading in as you zoom closer and fully drawn at
+ * its own zoom: { primary: 10.5, secondary: 12.6 } shows the main roads
+ * across a city and lets the next tier in a step closer. Any class not
+ * named is always drawn.
+ */
+function fadeIn(byClass: Record<string, number>): unknown {
+  const zooms = [...new Set(Object.values(byClass).flatMap((z) => [z - FADE, z]))].sort((a, b) => a - b);
+  const at = (zoom: number, full: number) => Math.min(1, Math.max(0, (zoom - (full - FADE)) / FADE));
+  const stops = zooms.flatMap((zoom) => [zoom, ['match', ['get', 'class'], ...Object.entries(byClass).flatMap(([kind, full]) => [kind, at(zoom, full)]), 1]]);
+  return ['interpolate', ['linear'], ['zoom'], ...stops];
+}
+/*
+ * A city at a glance carries only its motorways and main roads; the next
+ * tier comes in as you zoom toward a neighbourhood, and the small streets
+ * only once you are down at street level, looking for a court.
+ */
+const MAJOR_ROADS = fadeIn({ trunk: 9, primary: 10.6, secondary: 12.6, tertiary: 13.6 });
+const SMALL_ROADS = fadeIn({ minor: 14.6, service: 15.8, track: 15.8 });
 
 /** The handful of palette colours the map is mixed from. */
 export interface MapPalette { bg: string; surface: string; text: string; textMuted: string; brand: string; court: string; hard: string; clay: string; grass: string }
@@ -69,10 +91,11 @@ export function lookFor(p: MapPalette): Look {
     waterway: { line: water },
     building: { fill: building, minZoom: 15 },
     highway_path: hidden,
-    highway_minor: { line: road, minZoom: 13 },
-    highway_major_casing: { line: edge, minZoom: 11.5 },
-    highway_major_inner: { line: road, minZoom: 11.5 },
-    highway_major_subtle: { line: road, minZoom: 11.5 },
+    highway_minor: { line: road, minZoom: 13.7, opacity: SMALL_ROADS },
+    highway_major_casing: { line: edge, minZoom: 9, opacity: MAJOR_ROADS },
+    highway_major_inner: { line: road, minZoom: 9, opacity: MAJOR_ROADS },
+    // The style's grey stand-in for every main road when zoomed out: the fades above do that job now.
+    highway_major_subtle: hidden,
     highway_motorway_casing: { line: bigEdge },
     highway_motorway_inner: { line: big },
     highway_motorway_subtle: { line: big },
@@ -84,8 +107,8 @@ export function lookFor(p: MapPalette): Look {
     railway_dashline: hidden, railway_transit_dashline: hidden, railway_service_dashline: hidden,
     boundary_2: hidden, boundary_3: hidden,
     'highway-name-path': hidden,
-    'highway-name-minor': { text: label, halo: road, minZoom: 15.5 },
-    'highway-name-major': { text: label, halo: road, minZoom: 13.5 },
+    'highway-name-minor': { text: label, halo: road, minZoom: 16 },
+    'highway-name-major': { text: label, halo: road, minZoom: 14 },
     'highway-shield-non-us': hidden, 'highway-shield-us-interstate': hidden, road_shield_us: hidden,
     airport: hidden,
     // Neighbourhoods by name once you are down among them: "North Hills", "Five Points".
@@ -112,6 +135,7 @@ export function applyLook(map: LookMap, look: Look) {
       // Shapes are flat fills: an outline in the style's own colour drew every building twice on a dark map.
       if (rule.fill && id !== 'background') map.setPaintProperty(id, 'fill-outline-color', rule.fill);
       if (rule.line) map.setPaintProperty(id, 'line-color', rule.line);
+      if (rule.opacity !== undefined) map.setPaintProperty(id, 'line-opacity', rule.opacity);
       if (rule.text) map.setPaintProperty(id, 'text-color', rule.text);
       if (rule.halo) map.setPaintProperty(id, 'text-halo-color', rule.halo);
     } catch {
