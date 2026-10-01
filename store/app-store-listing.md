@@ -111,7 +111,7 @@ Leave it on **Apple's standard license agreement**. Apple also expects people to
 
 Four screenshots are ready in `store/screenshots/` at 1290 × 2796 pixels, the size for the **6.9-inch iPhone** slot: `01-home.png` (clips), `02-community.png` (discussions), `03-players.png` (players near you and the map), `04-messages.png` (a chat). Upload them in that order. They show sample players with made-up names, which is normal for store images; the profile screen was left out because it shows the unfinished Apple Health row. That one slot is enough, because Apple scales it down for smaller iPhones. CourtSide is iPhone-only (`supportsTablet: false` in `app.config.js`), so no iPad screenshots are needed. You can upload up to 10. The optional **App Preview** is a short video; it can be added later.
 
-Screenshots must show what is really in the build. Leave out the Grand Slam theme names, the sample coaches, the "Coming soon" AI coach card, the Payments and Health screens, and anything with a made-up person's name that looks real.
+Screenshots must show what is really in the build. Leave out the sample coaches, the "Coming soon" AI coach card, the Payments and Health screens, and anything with a made-up person's name that looks real.
 
 ### Promotional Text (limit 170 characters)
 
@@ -185,7 +185,7 @@ Privacy Policy: https://oatmealandsilk-dotcom.github.io/Courtside/privacy.html
 
 - **The AI coach.** The Coaching tab shows it as "Coming soon", and tapping it only says so. Describing a feature that does not work yet breaks Apple's rule that the description must match the app (2.3).
 - **Paid coaching, prices, "certified" or "verified" coaches.** No payment can be taken and the coaches on screen today are invented.
-- **Grand Slam names.** "Wimbledon", "Roland Garros", "Australian Open" and "US Open" are trademarks (names legally owned by the tournaments). The themes are described by look instead.
+- **Grand Slam names.** "Wimbledon", "Roland Garros", "Australian Open" and "US Open" are trademarks (names legally owned by the tournaments). The themes are named for cities instead (Melbourne, Paris, London, New York); don't use the tournament names in the listing either.
 - **Apple Health, WHOOP, Cronometer.** Not connected.
 - **Talk Tennis / Reddit.** Leave them out until you have permission.
 - No prices and no competitor names, as asked.
@@ -568,7 +568,7 @@ Items marked **(Claude)** are code or website changes Claude makes once you say 
   - the Settings → Blocked screen says blocked people "cannot see your posts, message you, or find your profile". The privacy policy says blocking does not yet stop them seeing your public posts. Make the screen match what blocking really does, or make blocking do what the screen says.
 - [ ] **(Claude) Account deletion must remove uploaded photos and videos too.** Today the files stay reachable at their web address after the account is gone. Apple requires deleting the account's data (rule 5.1.1(v)). Also check that the `delete-account` server function is deployed, and test it with a throwaway account.
 - [ ] **(Claude) Production build settings:** the real Supabase key must be in the build (`eas.json` still holds a placeholder), and the Expo project ID must be set so push notifications work. A build missing either falls back to a broken or demo mode.
-- [ ] **(you decide, Claude changes) Grand Slam theme names.** "Australian Open", "Roland Garros", "Wimbledon" and "US Open" in Settings → Theme are trademarks, and rule 5.2.1 covers trademarks. Suggested renames: "Hard Court Blue", "Clay", "Grass", "Night Session".
+- [x] **Grand Slam theme names.** Renamed Sep 30 to Melbourne, Paris, London and New York (the tournament names are trademarks, rule 5.2.1), in the app and on the waitlist page.
 - [ ] **(you decide, Claude changes) Teens on the Find Players map.** Teen accounts appear on the map and in player search (at city level, never at their real position). Hiding teen accounts from adults there is a sensible child-safety step, and reviewers notice these things.
 - [ ] **(Claude) Change the "Contacts, mutuals, interactions" line** on "Players you might know". The app does not read contacts.
 
@@ -617,7 +617,7 @@ Items marked **(Claude)** are code or website changes Claude makes once you say 
 4. **Coaching at launch:** will real coaches be on CourtSide, ready to answer questions? If not, what should the Coaching tab show once the sample coaches are removed? Also, for later: when paid coaching arrives, Apple will likely require its own In-App Purchase system (Apple takes a commission) for anything that is not a live one-to-one session, such as video reviews, written answers and training plans. Only live, real-time one-to-one sessions may be paid another way (rule 3.1.3(d)).
 5. **Sign in with Apple:** add it (recommended), or drop Google on iPhone?
 6. **Unfinished features:** OK to hide Payments, Health and nutrition, and the AI coach card for version 1.0?
-7. **Theme names:** rename the four Grand Slam themes?
+7. **Theme names:** decided Sep 30: Melbourne, Paris, London, New York.
 8. **Teen accounts on the Find Players map:** hide them from adults?
 9. **Weather:** add the credit line, and is CourtSide commercial (pay Open-Meteo, or switch to Apple's WeatherKit)?
 10. **Countries:** include Australia (under-16 social media law)? Include the EU (the trader question makes your contact details public)?

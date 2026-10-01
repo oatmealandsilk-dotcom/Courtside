@@ -44,7 +44,7 @@ const TOPICS: { title: string; body: string }[] = [
   },
   {
     title: 'How do I change the look?',
-    body: 'Settings → Theme. Pick a Grand Slam court or the night theme; it applies everywhere straight away.',
+    body: 'Settings → Theme. Pick a city court (Melbourne, Paris, London or New York), Night, or Clean; it applies everywhere straight away.',
   },
 ];
 

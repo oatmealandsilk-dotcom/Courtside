@@ -180,7 +180,7 @@ the loudest thing on most screens.
 
 Warm, low-chroma and close in value, so the content and the wash supply the colour rather than the
 chrome. The token block above is the default palette; the six palettes in `ThemeProvider.tsx`
-(CourtSide, Night, Clean, Australian Open, Roland Garros, Wimbledon, US Open) each fill every one
+(CourtSide, Night, Melbourne, Paris, London, New York, Clean) each fill every one
 of the same slots, and the wash, the mark, the lift shadow and the dotted rule all draw from those
 slots so each court arrives in its own colours.
 
