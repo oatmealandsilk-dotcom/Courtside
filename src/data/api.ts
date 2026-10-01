@@ -104,6 +104,14 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
   );
 }
 
+/**
+ * Posts matching a search that the app has not loaded yet. In the demo every
+ * post is already in memory, so there is never anything more to fetch.
+ */
+export async function searchPosts(_term: string): Promise<{ posts: Post[]; comments: Comment[] } | null> {
+  return null;
+}
+
 /* ------------------------------- Coach memory ------------------------------ */
 
 export interface CoachMemory {

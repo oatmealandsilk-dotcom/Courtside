@@ -15,7 +15,7 @@ import { computeStats, localDay, streakAtRisk } from '@/features/practice/stats'
 import { planStreakReminder } from '@/features/practice/reminder';
 import { TERMS_VERSION } from '@/lib/legal';
 
-import { fetchBootstrap, signIn as apiSignIn, type Bootstrap } from '@/data/api';
+import { fetchBootstrap, searchPosts as apiSearchPosts, signIn as apiSignIn, type Bootstrap } from '@/data/api';
 import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ReportedChat, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type RemoteData } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
@@ -490,6 +490,8 @@ interface AppActions {
   loadMorePosts: () => Promise<Post[]>;
   /** One player's own posts, loaded when their profile is opened. */
   loadPostsOf: (userId: ID) => Promise<void>;
+  /** Search reaching past what is loaded: posts matching the words, fetched and kept. Each term is asked once per session. */
+  searchPosts: (term: string) => Promise<void>;
   /** Brings one post into memory (a page opened from a link). Resolves true when it exists. */
   loadPost: (postId: ID) => Promise<boolean>;
   /** Everything bookmarked, loaded when Saved is opened. */
@@ -2576,6 +2578,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // One page of posts at a time, and one ask per profile per session.
   const loadingMore = useRef(false);
   const loadedProfiles = useRef(new Set<ID>());
+  const searchedTerms = useRef(new Set<string>());
   const loadedSaved = useRef(false);
   // Reports, for admins. The database decides who may read and act on them.
   const loadReports = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchReports() : []), []);
@@ -2693,6 +2696,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     loadedProfiles.current.add(userId);
     const got = await remote.fetchUserPosts(userId);
     if (!got) return;
+    setState((prev) => addPosts(prev, got));
+  }, []);
+  /**
+   * Search looking past the posts the app happens to hold (the newest page,
+   * plus feed pages scrolled and profiles opened): the matching posts are
+   * fetched and kept like any others, so the search page finds them in place.
+   */
+  const searchPosts = useCallback(async (term: string) => {
+    const key = term.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (key.length < 2 || searchedTerms.current.has(key)) return;
+    searchedTerms.current.add(key);
+    const got = live(stateRef.current.currentUserId) ? await remote.searchPosts(key).catch(() => null) : await apiSearchPosts(key);
+    // A failed ask may be asked again on the next keystroke.
+    if (!got) { searchedTerms.current.delete(key); return; }
     setState((prev) => addPosts(prev, got));
   }, []);
   /** Opening Saved: everything bookmarked, however far back, not only what the feed holds. */
@@ -4190,6 +4207,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadThread,
       loadMorePosts,
       loadPostsOf,
+      searchPosts,
       loadPost,
       loadSavedPosts,
       isChatBlocked,
@@ -4335,6 +4353,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadThread,
       loadMorePosts,
       loadPostsOf,
+      searchPosts,
       loadPost,
       loadSavedPosts,
       isChatBlocked,

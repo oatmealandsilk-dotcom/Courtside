@@ -1404,6 +1404,25 @@ export const remote = {
   },
 
   /**
+   * Search, for posts the app has not loaded yet: the 30 newest whose words
+   * or place contain what was typed, or that carry it as a tag. Characters
+   * the query language reserves (and the wildcards) become "any one
+   * character", so "4.0" or "Pullen, Park" still find themselves.
+   */
+  async searchPosts(term: string): Promise<{ posts: Post[]; comments: Comment[] } | null> {
+    const words = term.trim().replace(/^#/, '');
+    const like = words.replace(/[%_*,.:()"'\\]/g, '_');
+    if (like.replace(/_/g, '').length < 2) return null;
+    const tag = words.toLowerCase().replace(/[^\p{L}\p{N}_-]/gu, '');
+    const either = [`body.ilike.%${like}%`, `location.ilike.%${like}%`, ...(tag ? [`tags.cs.{${tag}}`] : [])].join(',');
+    const { data, error } = await need().from('posts').select(POST_SELECT)
+      .eq('archived', false).or(either)
+      .order('created_at', { ascending: false }).limit(30);
+    if (error) { fail('search posts')(error); return null; }
+    return toPosts((data ?? []) as FullPostRow[]);
+  },
+
+  /**
    * Everything one player has posted, newest first, plus the posts they were
    * tagged in — so their grid and their counts are whole however old the
    * posts are. Your own put-away posts come too (nobody else's do: the
