@@ -238,10 +238,10 @@ export function NearbyMap(props: NearbyMapProps) {
     return (
       <View style={styles.card}>
         {canvas}
-        <MapCredit style={{ position: 'absolute', right: 10, bottom: 10 }} />
         {/* A still card: the tap goes to the full map, not to the tiles. */}
         <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of players near you" onPress={onExpand} disabled={!onExpand} style={StyleSheet.absoluteFill} />
         <PreviewOverlay cityName={cityName} count={model.inCity.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} />
+        <MapCredit align="right" style={{ position: 'absolute', right: 10, bottom: 10 }} />
       </View>
     );
   }

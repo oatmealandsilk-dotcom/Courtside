@@ -26,6 +26,7 @@ import type { MapFilter, Placed } from '@/features/players/mapModel';
 import type { Weather } from '@/lib/weather';
 import { colors, radius, spacing, typography } from '@/theme';
 import { agoShort } from '@/components/map/markers';
+import { MAP_CREDITS } from '@/components/map/credits';
 import Svg, { Line, Rect } from 'react-native-svg';
 
 /*
@@ -190,15 +191,28 @@ export function MapButtons({ onRecentre, onZoomIn, onZoomOut }: { onRecentre: ()
 }
 
 /**
- * The map's credit. The data's licence asks for it to be findable, not
- * shouting: a faint ⓘ that opens OpenStreetMap's own credits page.
+ * The map's credits, findable but not shouting: a faint ⓘ that opens a
+ * small card naming where the map and the weather come from, each a link.
+ * `align` says which side of the ⓘ the card hangs from.
  */
-export function MapCredit({ style }: { style?: object }) {
+export function MapCredit({ style, align = 'left' }: { style?: object; align?: 'left' | 'right' }) {
   const styles = useThemedStyles(styleDefinitions);
+  const [open, setOpen] = useState(false);
   return (
-    <Pressable accessibilityRole="link" accessibilityLabel="Map data © OpenStreetMap contributors" hitSlop={10} onPress={() => { void Linking.openURL('https://www.openstreetmap.org/copyright'); }} style={[styles.credit, style]}>
-      <Ionicons name="information-circle-outline" size={13} color={colors.textFaint} />
-    </Pressable>
+    <View style={[styles.creditWrap, style]}>
+      {open ? (
+        <Animated.View entering={FadeIn.duration(140)} style={[styles.creditCard, align === 'right' ? { right: 0 } : { left: 0 }]}>
+          {MAP_CREDITS.map((c) => (
+            <Pressable key={c.url} accessibilityRole="link" accessibilityLabel={c.label} hitSlop={4} onPress={() => { setOpen(false); void Linking.openURL(c.url); }}>
+              <Text style={styles.creditText} numberOfLines={1}>{c.label}</Text>
+            </Pressable>
+          ))}
+        </Animated.View>
+      ) : null}
+      <Pressable accessibilityRole="button" accessibilityLabel={open ? 'Hide map credits' : 'Map and weather credits'} hitSlop={10} onPress={() => setOpen((v) => !v)} style={styles.credit}>
+        <Ionicons name={open ? 'close-circle-outline' : 'information-circle-outline'} size={13} color={colors.textFaint} />
+      </Pressable>
+    </View>
   );
 }
 
@@ -671,6 +685,9 @@ const styleDefinitions = StyleSheet.create({
   buttonsRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', paddingHorizontal: spacing.md },
   buttons: { alignItems: 'flex-end', gap: spacing.sm },
   credit: { padding: 2, opacity: 0.7 },
+  creditWrap: { zIndex: 20 },
+  creditCard: { position: 'absolute', bottom: 22, gap: 6, paddingHorizontal: 12, paddingVertical: 9, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
+  creditText: { ...typography.caption, color: colors.textMuted, letterSpacing: 0 },
   zoom: { borderRadius: 21, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
   zoomButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
   zoomRule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },

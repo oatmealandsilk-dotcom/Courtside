@@ -7,6 +7,7 @@ import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandMark } from '@/components/BrandMark';
+import { MAP_CREDITS } from '@/components/map/credits';
 import { Screen } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { openLegal } from '@/lib/legal';
@@ -60,6 +61,17 @@ export default function About() {
           <View key={line} style={[styles.item, index > 0 && styles.rowBorder]}>
             <Text style={styles.itemBody}>{line}</Text>
           </View>
+        ))}
+      </View>
+
+      <Text style={styles.sectionTitle}>Credits</Text>
+      <View style={styles.card}>
+        {MAP_CREDITS.map((c, index) => (
+          <Pressable key={c.url} accessibilityRole="link" onPress={() => { void Linking.openURL(c.url); }} style={[styles.row, index > 0 && styles.rowBorder]}>
+            <Ionicons name={index === 0 ? 'map-outline' : 'partly-sunny-outline'} size={20} color={colors.text} />
+            <Text style={styles.rowLabel}>{c.label}</Text>
+            <Ionicons name="open-outline" size={16} color={colors.textFaint} />
+          </Pressable>
         ))}
       </View>
 
