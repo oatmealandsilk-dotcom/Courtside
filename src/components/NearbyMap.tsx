@@ -4,9 +4,10 @@ import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-nati
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CourtSheet, FilterChips, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlayerSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
+import { CitylessCard, CourtSheet, FilterChips, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlayerSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
+import { CourtSpinner } from '@/components/CourtSpinner';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle } from '@/components/map/MapCanvas';
-import { lookFor } from '@/components/map/look';
+import { cardLook, lookFor } from '@/components/map/look';
 import { courtPinHtml, mePinHtml, playerPinHtml } from '@/components/map/markers';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { milesBetween } from '@/features/players/geo';
@@ -40,7 +41,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt } = props;
   const styles = useThemedStyles(styleDefinitions);
   const { theme } = useTheme();
-  const look = useMemo(() => lookFor(themes[theme]), [theme]);
+  // The still card takes the place names off: it sets your city's name in the middle itself.
+  const look = useMemo(() => (expanded ? lookFor(themes[theme]) : cardLook(lookFor(themes[theme]))), [theme, expanded]);
   const insets = useSafeAreaInsets();
   const barInset = useBarInset();
   const { followingIds, actions } = useApp();
@@ -49,7 +51,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const openToHit = isOpenToHit(me);
   const model = useMapModel(me, players, at, focusCourt);
   const { home, start } = model;
-  const startZoom = start.zoom ?? CITY_ZOOM;
+  // The full map opens where you are; the still card always on your profile's city.
+  const view = expanded ? { center: start.center, zoom: start.zoom ?? CITY_ZOOM } : { center: model.city ?? start.center, zoom: CITY_ZOOM };
   const weather = useWeather(home);
   const cityName = me.location.trim() ? me.location.split(',')[0] : 'you';
   const canvas = useRef<MapCanvasHandle | null>(null);
@@ -58,15 +61,18 @@ export function NearbyMap(props: NearbyMapProps) {
   useEffect(() => {
     if (lastHome.current.lat === home.lat && lastHome.current.lng === home.lng) return;
     lastHome.current = home;
-    // Opened on a tagged court, the map stays there.
-    if (model.homeKnown && !focusCourt) canvas.current?.flyTo(home, CITY_ZOOM, 600);
+    // Opened on a tagged court, the map stays there; the still card stays on your city.
+    if (expanded && model.homeKnown && !focusCourt) canvas.current?.flyTo(home, CITY_ZOOM, 600);
   }, [home]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The still card follows a change of city on the profile.
+  const cityKey = model.city ? `${model.city.lat},${model.city.lng}` : '';
+  useEffect(() => { if (!expanded && model.city) canvas.current?.flyTo(model.city, CITY_ZOOM, 0); }, [cityKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // Picking someone, a court, or typing a city takes the map there.
   useEffect(() => { if (model.selected) canvas.current?.flyTo(model.selected.at, CLOSE_ZOOM); }, [model.selected]);
   useEffect(() => { if (model.selectedCourt) canvas.current?.flyTo(model.selectedCourt, CLOSE_ZOOM); }, [model.selectedCourt]);
   useEffect(() => { if (model.place) canvas.current?.flyTo(model.place, CITY_ZOOM, 700); }, [model.place]);
 
-  const shown = expanded ? model.shown : model.inTown.length ? model.inTown : model.ranked.slice(0, 12);
+  const shown = expanded ? model.shown : model.inCity;
   const selectedId = model.selected?.user.id ?? null;
   const selectedCourtId = model.selectedCourt?.id ?? null;
   const markers = useMemo<CanvasMarker[]>(() => {
@@ -77,7 +83,8 @@ export function NearbyMap(props: NearbyMapProps) {
       list.push({ id: `p:${p.user.id}`, lat: p.at.lat, lng: p.at.lng, html: playerPinHtml(p.user, { size, on, label: expanded, seenAt: p.seenAt }), anchor: expanded ? 'top' : 'center', offsetY: expanded ? -(size + 6) / 2 : 0, z: on ? 5 : 3 });
     }
     // Your pin only where you last shared your location; location off, no pin.
-    const mine = model.mePos;
+    // Not on the still card: it shows your city, never your spot in it.
+    const mine = expanded ? model.mePos : null;
     if (mine) list.push({ id: 'me', lat: mine.lat, lng: mine.lng, html: mePinHtml(me, expanded ? 34 : 26), z: 6 });
     return list;
   }, [model.courts, shown, selectedId, selectedCourtId, expanded, me, theme, openToHit, model.mePos]);
@@ -85,8 +92,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const mapView = (
     <MapCanvas
       ref={canvas}
-      center={start.center}
-      zoom={startZoom}
+      center={view.center}
+      zoom={view.zoom}
       look={look}
       interactive={expanded}
       markers={markers}
@@ -96,12 +103,16 @@ export function NearbyMap(props: NearbyMapProps) {
     />
   );
 
+  if (!expanded && !model.city) {
+    // A city still being looked up holds the card's place; no city at all asks for one.
+    return model.cityPending ? <View style={[styles.card, styles.waiting]}><CourtSpinner size={24} /></View> : <CitylessCard onOpenMap={onExpand} />;
+  }
   if (!expanded) {
     return (
       <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of players near you" onPress={onExpand} disabled={!onExpand} style={styles.card}>
         {mapView}
         <MapCredit style={{ position: 'absolute', right: 10, bottom: 10 }} />
-        <PreviewOverlay cityName={cityName} count={model.inTown.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} />
+        <PreviewOverlay cityName={cityName} count={model.inCity.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} />
       </Pressable>
     );
   }
@@ -143,6 +154,7 @@ export function NearbyMap(props: NearbyMapProps) {
 
 const styleDefinitions = StyleSheet.create({
   card: { height: HEIGHT, borderRadius: radius.xl, overflow: 'hidden', backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.border },
+  waiting: { alignItems: 'center', justifyContent: 'center' },
   fill: { flex: 1, backgroundColor: colors.bgElevated, overflow: 'hidden' },
   top: { position: 'absolute', left: 0, right: 0, top: 0, gap: 2 },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', gap: spacing.md },

@@ -124,6 +124,16 @@ export function lookFor(p: MapPalette): Look {
   };
 }
 
+/**
+ * The still card's look: the same map with the place names taken off, since
+ * the card sets your city's name in the middle itself (and a second, smaller
+ * one from the map would sit just beside it).
+ */
+export function cardLook(look: Look): Look {
+  const hidden = { hide: true };
+  return { ...look, label_city: hidden, label_city_capital: hidden, label_town: hidden, label_village: hidden, label_other: hidden };
+}
+
 /** Recolours the loaded style layer by layer; anything the style lacks is skipped. */
 export function applyLook(map: LookMap, look: Look) {
   for (const [id, rule] of Object.entries(look)) {
