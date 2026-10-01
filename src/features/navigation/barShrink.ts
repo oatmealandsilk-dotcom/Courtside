@@ -9,6 +9,12 @@ export const barCompact = makeMutable(0);
 /** How much shorter the bar is when fully ducked (its top and bottom padding together), in points. */
 export const DUCK = 8;
 export const BAR_DUCK_PX = DUCK * 2.5;
+/**
+ * How far the floating bar tucks down toward the edge when fully ducked, in
+ * points. The words over a clip follow it down by the same amount, so they
+ * keep the same small gap above the bar whether it is up or tucked.
+ */
+export const BAR_TUCK = 12;
 
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
 let current = false;

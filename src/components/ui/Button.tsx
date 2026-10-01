@@ -12,7 +12,7 @@ import {
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { Tappable } from '@/components/Tappable';
 import { BrandWash } from '@/components/ui/BrandWash';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, pageIsDark, radius, spacing, typography } from '@/theme';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
@@ -49,7 +49,7 @@ export function Button({
       accessibilityLabel={label}
       style={[
         styles.base,
-        variant === 'primary' && !inactive && styles.lift,
+        variant === 'primary' && !inactive && (pageIsDark() ? styles.liftDark : styles.lift),
         full && styles.full,
         { backgroundColor: palette.bg, borderColor: palette.border, opacity: inactive ? 0.5 : 1 },
         style,
@@ -88,6 +88,8 @@ const styleDefinitions = StyleSheet.create({
   full: { alignSelf: 'stretch' },
   // The one shadow on the page: the primary action, in its own colour, soft.
   lift: { shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
+  // On a dark page a shadow in the button's own colour turns into a halo; a plain dark one just lifts it.
+  liftDark: { shadowColor: '#000000', shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
   inner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   label: { ...typography.bodyStrong },
 });

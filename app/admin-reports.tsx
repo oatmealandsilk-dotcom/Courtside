@@ -6,13 +6,18 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { goBack } from '@/lib/goBack';
 
 import { Avatar, Button, EmptyState, Screen, SegmentedControl } from '@/components/ui';
-import type { AdminReport } from '@/data/remote';
+import type { AdminReport, ReportedChat } from '@/data/remote';
+import { GroupAvatar, groupName } from '@/features/messages/groups';
 import { relativeTime } from '@/lib/format';
+import type { User } from '@/data/types';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 
 type Tab = 'open' | 'done';
 type Decision = 'remove' | 'restore' | 'suspend' | 'unsuspend' | 'dismiss';
+
+/** How many of a reported chat's messages show before "Show all". */
+const CHAT_PREVIEW = 8;
 
 /**
  * Reports, for admins only (the database will not hand them to anyone else).
@@ -20,6 +25,10 @@ type Decision = 'remove' | 'restore' | 'suspend' | 'unsuspend' | 'dismiss';
  * the post or hit (hidden from everyone, but kept), suspend the account (no
  * posting, commenting, replying or messaging), or dismiss the report. Both
  * removing and suspending can be undone from the same card.
+ *
+ * A reported group chat ("Report group") shows its name, who is in it and
+ * its last 30 messages, which admins can read only because it was reported
+ * (report_chat_context, migration 54).
  */
 export default function AdminReports() {
   const styles = useThemedStyles(styleDefinitions);
@@ -27,6 +36,9 @@ export default function AdminReports() {
   const [tab, setTab] = useState<Tab>('open');
   const [reports, setReports] = useState<AdminReport[] | null>(null);
   const [items, setItems] = useState<Record<string, { body: string; picture?: string; removed: boolean } | null>>({});
+  // Reported chats, by report, and which of them show every message.
+  const [chats, setChats] = useState<Record<string, ReportedChat | null>>({});
+  const [chatOpen, setChatOpen] = useState<Record<string, boolean>>({});
   // Suspensions decided here, before the next app open brings them in.
   const [suspended, setSuspended] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -34,9 +46,14 @@ export default function AdminReports() {
   const load = useCallback(async () => {
     const list = await actions.loadReports();
     setReports(list);
-    const wanted = list.filter((r) => r.kind !== 'profile' && r.targetId);
-    const got = await Promise.all(wanted.map((r) => actions.loadReportedItem(r.kind as 'post' | 'hit', r.targetId!)));
+    const wanted = list.filter((r) => (r.kind === 'post' || r.kind === 'hit') && r.targetId);
+    const chatReports = list.filter((r) => r.kind === 'conversation' && r.targetId);
+    const [got, gotChats] = await Promise.all([
+      Promise.all(wanted.map((r) => actions.loadReportedItem(r.kind as 'post' | 'hit', r.targetId!))),
+      Promise.all(chatReports.map((r) => actions.loadReportedChat(r.targetId!))),
+    ]);
     setItems(Object.fromEntries(wanted.map((r, i) => [r.id, got[i]])));
+    setChats(Object.fromEntries(chatReports.map((r, i) => [r.id, gotChats[i]])));
   }, [actions]);
   useEffect(() => { void load(); }, [load]);
 
@@ -78,6 +95,7 @@ export default function AdminReports() {
           const reporter = users.find((u) => u.id === report.reporterId);
           const person = report.userId ? users.find((u) => u.id === report.userId) : undefined;
           const item = items[report.id];
+          const chat = report.kind === 'conversation' ? chats[report.id] : undefined;
           const isSuspended = report.userId ? suspended[report.userId] ?? !!person?.suspended : false;
           const openTarget = () => {
             if (report.kind === 'post' && report.targetId) router.push(`/post/${report.targetId}`);
@@ -85,6 +103,26 @@ export default function AdminReports() {
             else if (report.userId) router.push(`/user/${report.userId}`);
           };
           const waiting = (d: Decision) => busy === `${report.id}:${d}`;
+          if (report.kind === 'conversation') {
+            const showAll = !!chatOpen[report.id];
+            const lines = chat ? (showAll ? chat.messages : chat.messages.slice(-CHAT_PREVIEW)) : [];
+            return (
+              <View key={report.id} style={styles.card}>
+                <View style={styles.head}>
+                  <View style={styles.kind}><Text style={styles.kindText}>{chat && !chat.isGroup ? 'Chat' : 'Group chat'}</Text></View>
+                  <Text style={styles.muted}>{relativeTime(report.createdAt)}</Text>
+                  {report.status !== 'open' ? <Text style={styles.status}>{report.status === 'dismissed' ? 'Dismissed' : 'Reviewed'}</Text> : null}
+                </View>
+                <ReportedChatCard chat={chat} showAll={showAll} lines={lines} onShowAll={() => setChatOpen((o) => ({ ...o, [report.id]: true }))} styles={styles} users={users} />
+                <Text style={styles.muted}>Reported by {reporter ? `@${reporter.handle}` : 'someone'}{report.reason ? ` · ${report.reason}` : ''}</Text>
+                {report.status === 'open' ? (
+                  <View style={styles.actions}>
+                    <Button label="Dismiss" variant="ghost" loading={waiting('dismiss')} onPress={() => void decide(report, 'dismiss')} />
+                  </View>
+                ) : null}
+              </View>
+            );
+          }
           return (
             <View key={report.id} style={styles.card}>
               <View style={styles.head}>
@@ -137,6 +175,72 @@ export default function AdminReports() {
   );
 }
 
+/** What a reported chat said, in a few words for a line: a shared item or a voice note has no words of its own. */
+function chatLineWords(kind: string, body: string): string {
+  if (kind === 'post') return 'Sent a clip';
+  if (kind === 'question') return 'Sent a thread';
+  if (kind === 'profile') return 'Sent a profile';
+  if (kind === 'court') return body ? `Sent a court: ${body}` : 'Sent a court';
+  if (kind === 'voice') return 'Sent a voice message';
+  if (kind === 'hit-request') return 'Sent a hit';
+  return body || '(no words)';
+}
+
+/**
+ * A reported chat on its card: its picture, name and people, then its last
+ * messages, oldest first (each person tappable for their profile). Event
+ * lines ("Mira added Dev") show as they were written, in grey.
+ */
+function ReportedChatCard({ chat, showAll, lines, onShowAll, styles, users }: {
+  chat: ReportedChat | null | undefined; showAll: boolean; lines: ReportedChat['messages']; onShowAll: () => void;
+  styles: typeof styleDefinitions; users: User[];
+}) {
+  if (chat === undefined) return <Text style={styles.muted}>Loading the chat…</Text>;
+  if (chat === null) {
+    return (
+      <View style={styles.target}>
+        <View style={[styles.thumb, styles.noThumb]}><Ionicons name="chatbubbles-outline" size={18} color={colors.textMuted} /></View>
+        <Text style={[styles.muted, { flex: 1 }]}>This chat is gone, or can’t be read yet (run migration 54).</Text>
+      </View>
+    );
+  }
+  const people = chat.memberIds.map((id) => users.find((u) => u.id === id)).filter((u): u is User => !!u);
+  const name = groupName({ id: '', participantIds: chat.memberIds, isGroup: chat.isGroup, title: chat.title, messageIds: [], updatedAt: '', unreadCount: 0 }, users, null);
+  const firstName = (id: string) => users.find((u) => u.id === id)?.name.trim().split(/\s+/)[0] ?? 'Someone';
+  return (
+    <>
+      <View style={styles.target}>
+        <GroupAvatar people={people} size={44} name={name} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={styles.name} numberOfLines={1}>{name}</Text>
+          <Text style={styles.muted} numberOfLines={2}>
+            {chat.memberIds.length ? `${chat.memberIds.length} ${chat.memberIds.length === 1 ? 'member' : 'members'}: ${people.map((u) => `@${u.handle}`).join(', ')}` : 'Nobody is in it any more'}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.chatBox}>
+        {!chat.messages.length ? <Text style={styles.muted}>No messages.</Text> : null}
+        {!showAll && chat.messages.length > lines.length ? (
+          <Pressable accessibilityRole="button" onPress={onShowAll} hitSlop={6}>
+            <Text style={styles.showAll}>Show all {chat.messages.length} messages</Text>
+          </Pressable>
+        ) : null}
+        {lines.map((m, i) => (
+          m.kind === 'system' ? (
+            <Text key={`${m.createdAt}-${i}`} style={styles.chatEvent}>{m.body}</Text>
+          ) : (
+            <Text key={`${m.createdAt}-${i}`} style={styles.chatLine}>
+              <Text style={styles.chatWho} onPress={() => router.push(`/user/${m.senderId}`)}>{firstName(m.senderId)}</Text>
+              <Text style={styles.muted}>{` · ${relativeTime(m.createdAt)}  `}</Text>
+              {chatLineWords(m.kind, m.body)}
+            </Text>
+          )
+        ))}
+      </View>
+    </>
+  );
+}
+
 const styleDefinitions = StyleSheet.create({
   tabs: { paddingBottom: spacing.md },
   card: { gap: spacing.sm, padding: spacing.md, marginBottom: spacing.md, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
@@ -151,4 +255,9 @@ const styleDefinitions = StyleSheet.create({
   body: { ...typography.body, color: colors.text },
   muted: { ...typography.small, color: colors.textMuted },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chatBox: { gap: 6, padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
+  chatLine: { ...typography.small, color: colors.text },
+  chatWho: { ...typography.smallStrong, color: colors.text },
+  chatEvent: { ...typography.small, color: colors.textMuted, fontStyle: 'italic', textAlign: 'center' },
+  showAll: { ...typography.smallStrong, color: colors.brand },
 });

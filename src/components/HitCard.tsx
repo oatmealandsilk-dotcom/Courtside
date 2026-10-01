@@ -18,6 +18,8 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
  * A "Looking for a hit" post: who, when, where, what level and format, and
  * how many spots are left. "I'm in" joins and opens the hit's group chat,
  * where the details get sorted. The poster sees who is in and can call it off.
+ * The paper plane sends the hit into any of your chats or groups, for the
+ * friends who might want the spot.
  */
 export function HitCard({ hit }: { hit: HitRequest }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -46,6 +48,9 @@ export function HitCard({ hit }: { hit: HitRequest }) {
           <Text style={styles.who} numberOfLines={1}>{mine ? 'You' : author?.name ?? 'A player'} <Text style={styles.wants}>{mine ? 'are looking for a hit' : 'is looking for a hit'}</Text></Text>
           <Text style={styles.when}>{hitWhen(hit.startsAt)}</Text>
         </View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Send this hit to a chat" hitSlop={8} onPress={(e) => { e.stopPropagation?.(); router.push({ pathname: '/share', params: { kind: 'hit-request', id: hit.id } }); }} style={({ pressed }) => [styles.send, pressed && { opacity: 0.6 }]}>
+          <Ionicons name="paper-plane-outline" size={18} color={colors.textMuted} />
+        </Pressable>
       </View>
       <Pressable accessibilityRole="link" accessibilityLabel={`${hit.place.name}. Open in Maps`} disabled={hit.place.lat === undefined} onPress={(e) => { e.stopPropagation?.(); if (hit.place.lat !== undefined && hit.place.lng !== undefined) openInMaps({ name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={styles.place}>
         <CourtGlyph size={13} color={colors.brand} />
@@ -80,6 +85,7 @@ export function HitCard({ hit }: { hit: HitRequest }) {
 const styleDefinitions = StyleSheet.create({
   card: { ...lift, gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  send: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgElevated },
   who: { ...typography.bodyStrong, color: colors.text },
   wants: { ...typography.body, color: colors.textMuted },
   when: { ...typography.title, fontSize: 20, color: colors.text, marginTop: 2 },

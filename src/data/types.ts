@@ -567,7 +567,27 @@ export interface Tip {
 
 /* -------------------------------- Messaging ------------------------------ */
 
-export type MessageKind = 'text' | 'post' | 'question' | 'profile' | 'court' | 'voice';
+/**
+ * What a message is. 'hit-request' is a shared "Looking for a hit" post (not
+ * 'hit', which already means an Instant). 'system' is an event line in a
+ * group ("Mira added Dev"): only the server writes those (migration 54).
+ */
+export type MessageKind = 'text' | 'post' | 'question' | 'profile' | 'court' | 'voice' | 'hit-request' | 'system';
+
+/**
+ * What an event line in a group is about, so the app can word it for whoever
+ * reads it ("You added Dev", "Mira added you"). The message's body carries a
+ * plain sentence too, for app builds older than this.
+ */
+export interface ChatEvent {
+  type: 'created' | 'added' | 'removed' | 'left' | 'renamed' | 'photo' | 'admin' | 'joined';
+  /** Who it was done to: the people added or removed, or made an admin. */
+  targetIds?: ID[];
+  /** The group's new name ('renamed', and 'created' when it was given one). No name on 'renamed' means the name was taken off. */
+  title?: string;
+  /** 'photo': a new photo (true) or the photo taken off (false). 'admin': made an admin (true) or no longer one (false). */
+  on?: boolean;
+}
 
 export interface Message {
   openedAtBy?: Record<ID, string>;
@@ -578,8 +598,10 @@ export interface Message {
   body: string;
   createdAt: string;
   kind: MessageKind;
-  /** Set when kind is 'post' or 'question' — the shared item. */
+  /** Set when kind is 'post', 'question', 'profile' or 'hit-request' — the shared item. */
   sharedId?: ID;
+  /** Set when kind is 'system': what happened in the group. */
+  event?: ChatEvent;
   /** One reaction per person, keyed by who left it. */
   reactions?: Record<ID, string>;
   /** When its sender last changed the words; the chat says "Edited" under it. */
@@ -594,16 +616,33 @@ export interface Message {
 
 export interface Conversation {
   id: ID;
-  /** Two people, or up to 16 in a group (migration 42). */
+  /** Two people, or up to 16 in a group (migrations 42 and 54; GROUP_CAP in src/features/messages/groupRules.ts). */
   participantIds: ID[];
   /** A group chat, which may have a name; without one it is called by its members. */
   isGroup?: boolean;
   title?: string;
+  /** Who started the group. */
+  createdBy?: ID;
+  /** A group's admins: they can remove people and make others admins (migration 54). Missing on a database without it. */
+  adminIds?: ID[];
+  /** A group's photo, in our own media bucket. */
+  photoUrl?: string;
+  /** You muted this chat until then: no alerts, and it stays off the unread badge. Only you can see it. */
+  mutedUntil?: string;
   messageIds: ID[];
   updatedAt: string;
-  /** Message ids the current user has not opened. */
+  /** Messages from other people the current user has not opened (event lines never count). */
   unreadCount: number;
 }
+
+/**
+ * Something sent into chats from the Send-to sheet: a post, thread, profile
+ * or hit by its id, a court by where it is, or a message forwarded as it is.
+ */
+export type ShareItem =
+  | { kind: 'post' | 'question' | 'profile' | 'hit-request'; id: ID }
+  | { kind: 'court'; place: { name: string; lat: number; lng: number } }
+  | { kind: 'message'; id: ID };
 
 /* -------------------------------- Payments ------------------------------- */
 

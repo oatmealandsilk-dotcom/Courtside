@@ -16,10 +16,11 @@ import { evaluateAchievements, playStyleLabel, surfaceLabel, tierColor } from '@
 import { compactNumber, experienceLabel } from '@/lib/format';
 import { TileViews } from '@/components/TileViews';
 import { TilePin } from '@/components/TilePin';
+import { SuggestedPlayers } from '@/components/SuggestedPlayers';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font, lift } from '@/theme';
 import { useStillLoading } from '@/lib/useStillLoading';
-import { confirmBlock, confirmUnfollow } from '@/lib/confirm';
+import { afterMenu, confirmBlock, confirmUnfollow } from '@/lib/confirm';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { ProfileSkeleton } from '@/components/Skeleton';
 import { isDesktopBrowser } from '@/lib/browserDevice';
@@ -97,13 +98,17 @@ export default function UserProfile() {
     setTimeout(() => setNotice(''), 2200);
   };
 
-  const followLabel = following ? 'Following' : requested ? 'Requested' : user.isPrivate ? 'Request to follow' : 'Follow';
+  // One word, as on every app: a private account's Follow sends an ask, and the button then says so.
+  const followLabel = following ? 'Following' : requested ? 'Requested' : 'Follow';
   // Unblock, notifications and mute announce themselves, in a toast with Undo.
   const menu: { icon: keyof typeof Ionicons.glyphMap; label: string; danger?: boolean; onPress: () => void }[] = blocked
     ? [{ icon: 'checkmark-circle-outline', label: 'Unblock', onPress: () => actions.toggleBlock(user.id) }]
     : [
         { icon: following ? 'person-remove-outline' : 'person-add-outline', label: following ? 'Unfollow' : requested ? 'Cancel request' : followLabel, onPress: following ? () => confirmUnfollow(user, () => actions.toggleFollow(user.id), true) : () => actions.toggleFollow(user.id) },
         { icon: alerts ? 'notifications-off-outline' : 'notifications-outline', label: alerts ? 'Turn off notifications' : 'Turn on notifications', onPress: () => actions.toggleAlerts(user.id) },
+        // Instagram's two: their profile into any of your chats, or them into one of your groups. Each opens its sheet once this menu has gone.
+        { icon: 'paper-plane-outline', label: 'Send profile…', onPress: () => afterMenu(() => router.push({ pathname: '/share', params: { kind: 'profile', id: user.id } })) },
+        { icon: 'people-outline', label: 'Add to group…', onPress: () => afterMenu(() => router.push({ pathname: '/pick-group', params: { user: user.id } })) },
         { icon: muted ? 'volume-high-outline' : 'volume-mute-outline', label: muted ? 'Unmute' : 'Mute', onPress: () => actions.toggleMute(user.id) },
         { icon: 'flag-outline', label: 'Report', danger: true, onPress: () => { actions.reportUser(user.id, 'profile'); say('Thanks — a person will review this'); } },
         { icon: 'ban-outline', label: 'Block', danger: true, onPress: () => confirmBlock(user, () => { actions.toggleBlock(user.id); say(`Blocked ${user.name}`); }, true) },
@@ -168,11 +173,15 @@ export default function UserProfile() {
       {!!notice && <Text accessibilityLiveRegion="polite" style={styles.notice}>{notice}</Text>}
 
       {blocked ? null : locked ? (
-        <View style={styles.lockedBox}>
-          <Ionicons name="lock-closed-outline" size={26} color={colors.textMuted} />
-          <Text style={styles.lockedTitle}>This account is private</Text>
-          <Text style={styles.lockedBody}>{requested ? `Your request is with ${user.name.split(' ')[0]}. Once they say yes, their posts, instants and tennis profile show up here.` : `Follow ${user.name.split(' ')[0]} to see their posts, instants and tennis profile.`}</Text>
-        </View>
+        <>
+          <View style={styles.lockedBox}>
+            <Ionicons name="lock-closed-outline" size={26} color={colors.textMuted} />
+            <Text style={styles.lockedTitle}>This account is private</Text>
+            <Text style={styles.lockedBody}>{requested ? `Requested. You’ll see their posts once ${user.name.split(' ')[0]} accepts.` : 'Follow to see their posts.'}</Text>
+          </View>
+          {/* Players you might know, so a private account's page is never just a lock. */}
+          <SuggestedPlayers near={user.location} exclude={[user.id]} />
+        </>
       ) : (
         <>
           <Pressable accessibilityRole="link" accessibilityLabel={`${user.name}'s tennis profile`} onPress={() => router.push({ pathname: '/profile-details', params: { userId: user.id } })} style={styles.tennis}>

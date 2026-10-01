@@ -19,6 +19,7 @@ interface Row { id: string; name: string | null; lat: number; lng: number; lit: 
 interface Element { id: number; type: string; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }
 
 const cache = new Map<string, Court[]>();
+const inFlight = new Map<string, Promise<Court[]>>();
 
 /**
  * Courts around a spot. Signed in, they come from our own database through
@@ -27,10 +28,19 @@ const cache = new Map<string, Court[]>();
  * function cannot be reached, straight from OpenStreetMap's free query
  * service. Cached per area for the session.
  */
-export async function fetchCourts(center: LatLng, radiusMeters = 9000): Promise<Court[]> {
+export function fetchCourts(center: LatLng, radiusMeters = 9000): Promise<Court[]> {
   const key = `${center.lat.toFixed(2)},${center.lng.toFixed(2)},${radiusMeters}`;
   const hit = cache.get(key);
-  if (hit) return hit;
+  if (hit) return Promise.resolve(hit);
+  // Two screens asking for the same area at once share one request.
+  const asked = inFlight.get(key);
+  if (asked) return asked;
+  const ask = loadCourts(center, radiusMeters, key).finally(() => inFlight.delete(key));
+  inFlight.set(key, ask);
+  return ask;
+}
+
+async function loadCourts(center: LatLng, radiusMeters: number, key: string): Promise<Court[]> {
   let rows: Row[] | null = null;
   if (supabase) {
     try {

@@ -25,7 +25,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 
 import { Avatar, BrandWash, EmptyState } from '@/components/ui';
-import { GroupAvatar, groupName, isGroupChat, othersIn } from '@/features/messages/groups';
+import { GroupAvatar, eventText, groupName, holdsHitSpot, isGroupChat, isMuted, leaveGroupMessage, othersIn, seenByLabel } from '@/features/messages/groups';
+import { HitGlyph } from '@/components/HitGlyph';
+import { hitWhen } from '@/features/hits/format';
+import { goBack } from '@/lib/goBack';
 import { VoiceNote } from '@/components/VoiceNote';
 import { EmojiKeyboard } from '@/components/EmojiKeyboard';
 import { isDesktopBrowser } from '@/lib/browserDevice';
@@ -40,9 +43,9 @@ import { MentionSuggestions } from '@/components/MentionSuggestions';
 import { useMentionCandidates } from '@/features/mentions/useMentionCandidates';
 import { activeMention, applyMention } from '@/lib/mentions';
 import { show as showToast } from '@/lib/toast';
-import { confirmAfterMenu } from '@/lib/confirm';
+import { afterMenu, confirm, confirmAfterMenu } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
-import type { Message } from '@/data/types';
+import type { Message, User } from '@/data/types';
 import Reanimated, { Easing, FadeIn, FadeInDown, FadeInUp, FadeOut, LinearTransition, cancelAnimation, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { colors, radius, spacing, typography, font } from '@/theme';
 
@@ -52,12 +55,19 @@ const GROUP_GAP_MS = 2 * 60_000;
 /** Quiet for this long between two messages and the next one gets a time line. */
 const STAMP_GAP_MS = 20 * 60_000;
 
+/**
+ * In a group, others' messages sit beside a small face (Instagram and
+ * Messenger do this): the sender's picture by the last bubble of each run,
+ * and an empty space of the same width by the rest, so the bubbles line up.
+ */
+const FACE = 28;
+
 /** One conversation. Bubbles, shared-item cards, and a composer bar. */
 export default function Thread() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-  const { conversations, messages, users, posts, questions, currentUserId, defaultReaction, actions, blockedIds } = useApp();
+  const { conversations, messages, users, posts, questions, hitRequests, currentUserId, defaultReaction, actions, blockedIds } = useApp();
   const [draft, setDraft] = useState('');
   // Holding a message opens its menu over the chat; Edit puts its words back in the box.
   const [menu, setMenu] = useState<MenuTarget | null>(null);
@@ -87,33 +97,48 @@ export default function Thread() {
   const inputRef = useRef<TextInput>(null);
   const focused = useIsFocused();
 
-  const conversation = conversations.find((c) => c.id === id);
+  const liveConversation = conversations.find((c) => c.id === id);
+  // Someone took you out of this group (found out while it was open, or on
+  // opening it): it stays readable as it last stood, with a note in place of
+  // the box, the way Instagram and WhatsApp keep it, instead of vanishing.
+  const removedFrom = !liveConversation && id ? actions.removedChat(id) : undefined;
+  const removed = !!removedFrom;
+  const conversation = liveConversation ?? removedFrom?.conversation;
   const other = users.find(
     (u) => u.id === conversation?.participantIds.find((p) => p !== currentUserId),
   );
   const group = !!conversation && isGroupChat(conversation);
   const people = conversation ? othersIn(conversation, users, currentUserId) : [];
+  // Someone you blocked who is in this group with you. Instagram's way: you
+  // both stay and can both still write; their messages fold away on your
+  // side, and a line over the box says they are here.
+  const blockedInGroup = group ? people.filter((u) => blockedIds.includes(u.id)) : [];
+  // Folded messages you chose to see, by id, for as long as the chat is open.
+  const [shownIds, setShownIds] = useState<string[]>([]);
+  useEffect(() => { setShownIds([]); }, [id]);
 
   // Opening a chat fetches it fresh, so it never sits on an old copy waiting for the next refresh.
   useEffect(() => { if (id) void actions.syncConversation(id); }, [id, actions]);
 
   useEffect(() => {
     const mark = () => {
-      if (focused && conversation && (typeof document === 'undefined' || document.visibilityState === 'visible')) actions.markConversationRead(conversation.id);
+      if (focused && conversation && !removed && (typeof document === 'undefined' || document.visibilityState === 'visible')) actions.markConversationRead(conversation.id);
     };
     mark();
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', mark);
       return () => document.removeEventListener('visibilitychange', mark);
     }
-  }, [focused, conversation?.id, messages, currentUserId, actions]);
+  }, [focused, conversation?.id, messages, currentUserId, actions, removed]);
 
+  // A group you were taken out of shows the messages it had when you were.
+  const pool = removedFrom ? removedFrom.messages : messages;
   const thread = useMemo(
     () =>
       (conversation?.messageIds ?? [])
-        .map((mid) => messages.find((m) => m.id === mid))
+        .map((mid) => pool.find((m) => m.id === mid))
         .filter((m): m is NonNullable<typeof m> => Boolean(m)),
-    [conversation, messages],
+    [conversation, pool],
   );
 
   // "Typing…": who else in this chat is typing right now. Heard straight from
@@ -122,12 +147,12 @@ export default function Thread() {
   const [typing, setTyping] = useState<Record<string, number>>({});
   const typingLink = useRef<{ ping: () => void; off: () => void } | null>(null);
   useEffect(() => {
-    if (!id) return;
+    if (!id || removed) return;
     setTyping({});
     const link = actions.watchTyping(id, (uid) => setTyping((t) => ({ ...t, [uid]: Date.now() })));
     typingLink.current = link;
     return () => { link.off(); typingLink.current = null; };
-  }, [id, actions]);
+  }, [id, actions, removed]);
   useEffect(() => {
     if (!Object.keys(typing).length) return;
     const t = setInterval(() => setTyping((cur) => {
@@ -151,15 +176,18 @@ export default function Thread() {
     if (now - lastPing.current > 2000) { lastPing.current = now; typingLink.current?.ping(); }
   };
 
-  // A chat with someone you are blocked with (either of you blocked the other)
-  // can still be read, but not written in: the box gives way to a note.
+  // A one-to-one chat with someone you are blocked with (either of you
+  // blocked the other) can still be read, but not written in: the box gives
+  // way to a note. A group stays open to both (the server agrees from
+  // migration 54); before that, the server may still lock one, and the note
+  // says so in a group's words.
   const [chatBlocked, setChatBlocked] = useState(false);
   const checkBlocked = actions.isChatBlocked;
   useEffect(() => {
     let on = true;
-    if (conversation?.id) void checkBlocked(conversation.id).then((b) => { if (on) setChatBlocked(b); });
+    if (conversation?.id && !removed) void checkBlocked(conversation.id).then((b) => { if (on) setChatBlocked(b); });
     return () => { on = false; };
-  }, [conversation?.id, checkBlocked, blockedIds]);
+  }, [conversation?.id, checkBlocked, blockedIds, removed]);
   const blockedHere = chatBlocked || (!group && !!other && blockedIds.includes(other.id));
 
   // Scrolling up to the top loads the page of messages before the oldest
@@ -172,7 +200,7 @@ export default function Thread() {
   const holdPlace = useRef<{ height: number; y: number } | null>(null);
   useEffect(() => { noMoreOlder.current = false; }, [id]);
   const loadOlder = async () => {
-    if (olderLoading || noMoreOlder.current || !conversation) return;
+    if (olderLoading || noMoreOlder.current || !conversation || removed) return;
     setOlderLoading(true);
     holdPlace.current = { height: contentHeight.current, y: scrollY.current };
     const came = await actions.loadOlderMessages(conversation.id);
@@ -186,7 +214,10 @@ export default function Thread() {
   // (These hooks sit above the early return below: a thread that loads a
   // moment after the page would otherwise change the hook count and crash.)
   const [caret, setCaret] = useState(0);
-  const candidatesFor = useMentionCandidates();
+  // In a group, its own people come first: they are who you are talking to.
+  const memberKey = conversation?.participantIds.join(',') ?? '';
+  const memberIds = useMemo(() => (memberKey ? memberKey.split(',').filter((p) => p !== currentUserId) : []), [memberKey, currentUserId]);
+  const candidatesFor = useMentionCandidates(group ? memberIds : undefined);
   // Voice notes: the mic sits where Send is while the box is empty.
   const voice = useVoiceRecorder();
   const sendRecording = async () => {
@@ -200,14 +231,46 @@ export default function Thread() {
   };
   useEffect(() => { if (voice.recording && voice.elapsed >= VOICE_LIMIT_MS) void sendRecording(); }, [voice.elapsed]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!conversation || !other) {
+  // A group opens even with nobody else left in it (or nobody else loaded yet).
+  if (!conversation || (!group && !other)) {
     return (
-      <View style={styles.root}>
+      <View style={[styles.root, { paddingTop: insets.top }]}>
         <Wash height={320} strength={0.7} />
+        {/* A way back, even from a chat that is gone. */}
+        <View style={styles.header}>
+          <Pressable onPress={() => goBack('/messages')} accessibilityRole="button" accessibilityLabel="Back" hitSlop={10}>
+            <Ionicons name="chevron-back" size={24} color={colors.text} />
+          </Pressable>
+        </View>
         <EmptyState title="Conversation not found" body="It may have been removed." />
       </View>
     );
   }
+  const title = group ? groupName(conversation, users, currentUserId) : other?.name ?? '';
+  const muted = isMuted(conversation);
+  const members = conversation.participantIds.length;
+  // The group's page, or a one-to-one chat's details (mute, block, report).
+  const openDetails = () => router.push({ pathname: '/messages/group', params: { id: conversation.id } });
+  // Holding a message opens its menu; a group you were taken out of offers none.
+  const openMenu = (target: MenuTarget) => { if (!removed) setMenu(target); };
+  const leaveGroup = () => confirm({
+    title: 'Leave this group?',
+    message: leaveGroupMessage(holdsHitSpot(hitRequests, conversation.id, currentUserId)),
+    confirmLabel: 'Leave',
+    destructive: true,
+    onConfirm: () => { actions.leaveGroup(conversation.id); router.replace('/messages'); },
+  });
+  // The read line goes under your newest message (event lines aside): "Read"
+  // or "Sent" in a one-to-one chat, "Seen by Mira, Dev" or "Seen by
+  // everyone" in a group, counting only people who let read receipts show.
+  const lastReal = [...thread].reverse().find((m) => m.kind !== 'system');
+  const readLine = !typers.length && lastReal && lastReal.senderId === currentUserId && !lastReal.failed
+    ? group
+      ? seenByLabel(lastReal, conversation, users, currentUserId)
+      : other && other.readReceiptsEnabled !== false && lastReal.readAtBy?.[other.id] ? 'Read' : 'Sent'
+    : null;
+  const firstName = (u?: User) => u?.name.trim().split(/\s+/)[0] ?? 'Someone';
+  const faceOf = (uid: string) => users.find((u) => u.id === uid);
   // An emoji goes in where the cursor is, and the cursor moves past it.
   const placeCaret = (at: number) => { setCaret(at); setTimeout(() => inputRef.current?.setNativeProps?.({ selection: { start: at, end: at } }), 0); };
   const insertEmoji = (emoji: string) => {
@@ -258,16 +321,21 @@ export default function Thread() {
     <KeyboardAvoidingView style={[styles.root, { paddingTop: insets.top }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Wash height={320} strength={0.7} />
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back">
+        {/* Back to the inbox even when this chat was the first page opened (a link, a reload). */}
+        <Pressable onPress={() => goBack('/messages')} accessibilityRole="button" accessibilityLabel="Back">
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </Pressable>
-        {group ? (
-          // A group: its faces and name; tapping opens who is in it, and the name, add and leave.
-          <Pressable style={styles.headerUser} accessibilityRole="button" accessibilityLabel="Group details" onPress={() => router.push({ pathname: '/messages/group', params: { id: conversation.id } })}>
-            <GroupAvatar people={people} size={36} />
+        {group || !other ? (
+          // A group: its photo (or faces), its name and how many are in it; tapping opens its page.
+          <Pressable style={styles.headerUser} accessibilityRole={removed ? undefined : 'button'} accessibilityLabel={removed ? title : `${title}, ${members} members. Group details`} disabled={removed} onPress={openDetails}>
+            <GroupAvatar people={people} size={36} photoUrl={conversation.photoUrl} name={title} />
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.headerName} numberOfLines={1}>{groupName(conversation, users, currentUserId)}</Text>
-              <Text style={styles.headerHandle}>{people.length + 1} people</Text>
+              <View style={styles.headerNameRow}>
+                <Text style={[styles.headerName, styles.headerNameShrink]} numberOfLines={1}>{title}</Text>
+                {muted ? <Ionicons name="notifications-off-outline" size={13} color={colors.textFaint} accessibilityLabel="Muted" /> : null}
+              </View>
+              {/* Taken out of it: the count is no longer yours to see (the note at the bottom says why). */}
+              {!removed ? <Text style={styles.headerHandle}>{members === 1 ? 'Just you' : `${members} members`}</Text> : null}
             </View>
           </Pressable>
         ) : (
@@ -277,12 +345,20 @@ export default function Thread() {
           onPress={() => router.push(`/user/${other.id}`)}
         >
           <Avatar name={other.name} seed={other.avatarSeed} uri={other.avatarUrl} size={34} />
-          <View>
-            <PlayerName userId={other.id} style={styles.headerName}>{other.name}</PlayerName>
+          <View style={{ flexShrink: 1, minWidth: 0 }}>
+            <View style={styles.headerNameRow}>
+              <PlayerName userId={other.id} style={styles.headerName}>{other.name}</PlayerName>
+              {muted ? <Ionicons name="notifications-off-outline" size={13} color={colors.textFaint} accessibilityLabel="Muted" /> : null}
+            </View>
             <PlayerName userId={other.id} style={styles.headerHandle}>@{other.handle}</PlayerName>
           </View>
         </Pressable>
         )}
+        {!removed ? (
+          <Pressable onPress={openDetails} accessibilityRole="button" accessibilityLabel={group ? 'Group details' : 'Chat details'} hitSlop={10}>
+            <Ionicons name="information-circle-outline" size={24} color={colors.text} />
+          </Pressable>
+        ) : null}
       </View>
 
       <ScrollView
@@ -319,37 +395,87 @@ export default function Thread() {
           const stamp = !prev || Date.parse(message.createdAt) - Date.parse(prev.createdAt) > STAMP_GAP_MS
             ? <Text style={styles.stamp}>{chatStamp(message.createdAt)}</Text>
             : null;
+
+          // An event line ("Mira added Dev", "You named the group…"): a quiet
+          // centred sentence, worded for whoever reads it. Nobody sent it, so
+          // it takes no reactions and no menu.
+          if (message.kind === 'system') {
+            return (
+              <React.Fragment key={message.id}>
+                {stamp}
+                <Text style={styles.event}>{eventText(message, users, currentUserId)}</Text>
+              </React.Fragment>
+            );
+          }
+
           const next = thread[i + 1];
-          const runsOn = (a?: Message, b?: Message) => !!a && !!b && a.senderId === b.senderId && Date.parse(b.createdAt) - Date.parse(a.createdAt) <= GROUP_GAP_MS;
+          // An event line breaks a run, the way a time line does.
+          const runsOn = (a?: Message, b?: Message) => !!a && !!b && a.kind !== 'system' && b.kind !== 'system' && a.senderId === b.senderId && Date.parse(b.createdAt) - Date.parse(a.createdAt) <= GROUP_GAP_MS;
           // In a run only the last bubble keeps its tail, and the gap between them closes up.
           const inRun = runsOn(prev, message) && !stamp;
           const lastOfRun = !runsOn(message, next);
           // A new message rises out of the composer and settles with a small spring.
           const arrive = settled.current ? FadeInUp.duration(150).easing(Easing.out(Easing.cubic)) : undefined;
+          // Under your newest message: "Read" / "Sent", or "Seen by …" in a group.
+          const readUnder = readLine && message.id === lastReal?.id
+            ? <Text accessibilityLiveRegion="polite" style={styles.timestamp}>{readLine}</Text>
+            : null;
 
-          // In a group, the sender's name over the first of their run of messages.
-          const who = group && !mine && !inRun ? <Text style={styles.sender}>{users.find((u) => u.id === message.senderId)?.name.split(' ')[0] ?? 'Someone'}</Text> : null;
+          // In a group, others' messages carry who sent them: a face by the
+          // last bubble of each run, a name over the first. Both open their profile.
+          const gutter = group && !mine;
+          const sender = gutter ? faceOf(message.senderId) : undefined;
+          const leading = !gutter ? undefined : lastOfRun && sender ? (
+            <Pressable accessibilityRole="link" accessibilityLabel={`${sender.name}'s profile`} hitSlop={4} onPress={() => router.push(`/user/${sender.id}`)}>
+              <Avatar name={sender.name} seed={sender.avatarSeed} uri={sender.avatarUrl} size={FACE} />
+            </Pressable>
+          ) : <View style={styles.faceSpace} />;
 
-          if (message.kind === 'voice' && message.audio) {
+          // From someone you blocked: folded to one quiet line per run, until you choose to see it.
+          if (gutter && blockedIds.includes(message.senderId) && !shownIds.includes(message.id)) {
+            if (inRun && prev && !shownIds.includes(prev.id)) return null;
+            const run = [message.id];
+            for (let j = i + 1; j < thread.length && runsOn(thread[j - 1], thread[j]); j += 1) run.push(thread[j].id);
             return (
               <React.Fragment key={message.id}>
-              {stamp}
-              {who}
-              <Reanimated.View entering={arrive} layout={LinearTransition.duration(120)} style={[styles.row, mine ? styles.rowMine : styles.rowTheirs, inRun && styles.inRun]}>
-                <View style={{ opacity: message.failed ? 0.5 : 1 }}><VoiceNote url={message.audio.url} ms={message.audio.ms} mine={mine} /></View>
-              </Reanimated.View>
-              {message.failed ? <Text style={[styles.sender, { alignSelf: 'flex-end', marginRight: spacing.lg, color: colors.danger }]}>Not sent</Text> : null}
+                {stamp}
+                <Row mine={false} inRun={false} arrive={arrive} leading={<View style={styles.faceSpace} />} styles={styles}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${run.length === 1 ? 'A message' : `${run.length} messages`} from someone you blocked. Show`}
+                    onPress={() => setShownIds((s) => [...s, ...run])}
+                    style={({ pressed }) => [styles.folded, pressed && { opacity: 0.7 }]}
+                  >
+                    <Ionicons name="eye-off-outline" size={14} color={colors.textFaint} />
+                    <Text style={styles.foldedText}>
+                      {run.length === 1 ? 'Message' : `${run.length} messages`} from someone you blocked · <Text style={styles.foldedShow}>Show</Text>
+                    </Text>
+                  </Pressable>
+                </Row>
               </React.Fragment>
             );
           }
 
-          if (message.kind === 'court' && message.place) {
+          const who = gutter && !inRun ? (
+            <Pressable accessibilityRole="link" disabled={!sender} onPress={() => sender && router.push(`/user/${sender.id}`)} style={styles.senderLink}>
+              <Text style={[styles.sender, styles.senderBeside]}>{firstName(sender)}</Text>
+            </Pressable>
+          ) : null;
+
+          let body: React.ReactNode;
+          if (message.kind === 'voice' && message.audio) {
+            body = (
+              <>
+                <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles}>
+                  <View style={{ opacity: message.failed ? 0.5 : 1 }}><VoiceNote url={message.audio.url} ms={message.audio.ms} mine={mine} /></View>
+                </Row>
+                {message.failed ? <Text style={[styles.sender, { alignSelf: 'flex-end', marginRight: spacing.lg, color: colors.danger }]}>Not sent</Text> : null}
+              </>
+            );
+          } else if (message.kind === 'court' && message.place) {
             const place = message.place;
-            return (
-              <React.Fragment key={message.id}>
-              {stamp}
-              {who}
-              <Reanimated.View entering={arrive} layout={LinearTransition.duration(120)} style={[styles.row, mine ? styles.rowMine : styles.rowTheirs, inRun && styles.inRun]}>
+            body = (
+              <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles}>
                 <Tappable accessibilityRole="link" accessibilityLabel={`${place.name}. Open in Maps`} scaleTo={0.97} onPress={() => openInMaps(place)} style={[styles.sharedCard, styles.courtCard]}>
                   <View style={styles.sharedHead}>
                     <Ionicons name="location" size={16} color={colors.brand} />
@@ -358,12 +484,42 @@ export default function Thread() {
                   <Text numberOfLines={2} style={styles.courtName}>{place.name}</Text>
                   <Text style={styles.courtOpen}>Open in Maps</Text>
                 </Tappable>
-              </Reanimated.View>
-              </React.Fragment>
+              </Row>
             );
-          }
-
-          if (message.kind !== 'text' && message.sharedId) {
+          } else if (message.kind === 'hit-request') {
+            // A "Looking for a hit" post sent into the chat: when, where, how
+            // many spots are left; it opens the hit. Once it is gone (called
+            // off, or over), the card says so.
+            const hit = hitRequests.find((h) => h.id === message.sharedId && !h.cancelled);
+            const left = hit ? Math.max(0, hit.spots - hit.joinedIds.length) : 0;
+            body = (
+              <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles}>
+                <HoldArea onHold={(rect) => openMenu({ message, mine, rect })} style={styles.sharedCardArea}>
+                  {(hold) => (
+                    <Tappable
+                      accessibilityRole="link"
+                      accessibilityLabel={hit ? `Looking for a hit, ${hitWhen(hit.startsAt)}, ${hit.place.name}` : 'This hit is over'}
+                      scaleTo={0.97}
+                      onLongPress={hold}
+                      onPress={() => (hit ? router.push(`/hit-request/${hit.id}`) : undefined)}
+                      style={[styles.sharedCard, styles.courtCard]}
+                    >
+                      <View style={styles.sharedHead}>
+                        <HitGlyph size={16} color={colors.brand} />
+                        <Text style={styles.sharedKind}>Looking for a hit</Text>
+                      </View>
+                      {hit ? (
+                        <>
+                          <Text numberOfLines={1} style={styles.courtName}>{hitWhen(hit.startsAt)}</Text>
+                          <Text numberOfLines={2} style={styles.sharedBody}>{hit.place.name} · {left ? `${left} ${left === 1 ? 'spot' : 'spots'} left` : 'Full'}</Text>
+                        </>
+                      ) : <Text style={styles.sharedBody}>This hit is over</Text>}
+                    </Tappable>
+                  )}
+                </HoldArea>
+              </Row>
+            );
+          } else if (message.kind !== 'text' && message.sharedId) {
             const shared =
               message.kind === 'profile' ? users.find(u=>u.id===message.sharedId) : message.kind === 'post'
                 ? posts.find((p) => p.id === message.sharedId)
@@ -373,11 +529,9 @@ export default function Thread() {
                 ? (shared as { body: string }).body
                 : (shared as { title: string }).title
               : 'This item was removed';
-            return (
-              <React.Fragment key={message.id}>
-              {stamp}
-              <Reanimated.View entering={arrive} layout={LinearTransition.duration(120)} style={[styles.row, mine ? styles.rowMine : styles.rowTheirs, inRun && styles.inRun]}>
-              <HoldArea onHold={(rect) => setMenu({ message, mine, rect })} style={styles.sharedCardArea}>
+            body = (
+              <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles}>
+              <HoldArea onHold={(rect) => openMenu({ message, mine, rect })} style={styles.sharedCardArea}>
               {(hold) => (
               <Tappable
                 accessibilityRole="link"
@@ -410,8 +564,24 @@ export default function Thread() {
               </Tappable>
               )}
               </HoldArea>
-              </Reanimated.View>
-              </React.Fragment>
+              </Row>
+            );
+          } else {
+            body = (
+              <Bubble
+                message={message}
+                mine={mine}
+                inRun={inRun}
+                tail={lastOfRun}
+                arrive={arrive}
+                leading={leading}
+                styles={styles}
+                me={currentUserId}
+                held={menu?.message.id === message.id}
+                onHold={(rect) => openMenu({ message, mine, rect })}
+                onReact={(emoji) => { if (!removed) actions.reactToMessage(message.id, emoji); }}
+                onRetry={() => actions.retryMessage(message.id)}
+              />
             );
           }
 
@@ -419,31 +589,22 @@ export default function Thread() {
             <React.Fragment key={message.id}>
             {stamp}
             {who}
-            <Bubble
-              message={message}
-              mine={mine}
-              inRun={inRun}
-              tail={lastOfRun}
-              arrive={arrive}
-              styles={styles}
-              me={currentUserId}
-              held={menu?.message.id === message.id}
-              onHold={(rect) => setMenu({ message, mine, rect })}
-              onReact={(emoji) => actions.reactToMessage(message.id, emoji)}
-              onRetry={() => actions.retryMessage(message.id)}
-            />
+            {body}
+            {readUnder}
             </React.Fragment>
           );
         })}
         {typers.length ? (
           <TypingBubble
             styles={styles}
-            label={group ? `${typers.map((uid) => users.find((u) => u.id === uid)?.name.split(' ')[0] ?? 'Someone').join(', ')} ${typers.length === 1 ? 'is' : 'are'} typing` : undefined}
+            label={group ? `${typers.map((uid) => firstName(faceOf(uid))).join(', ')} ${typers.length === 1 ? 'is' : 'are'} typing` : undefined}
+            // In a group, the first typer's face sits in the same place as a sender's.
+            leading={group ? (() => {
+              const u = faceOf(typers[0]);
+              return u ? <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={FACE} /> : <View style={styles.faceSpace} />;
+            })() : undefined}
           />
         ) : null}
-        {!typers.length && thread.length > 0 && thread[thread.length - 1].senderId === currentUserId && !thread[thread.length - 1].failed && <Text accessibilityLiveRegion="polite" style={styles.timestamp}>
-          {other.readReceiptsEnabled !== false && thread[thread.length - 1].readAtBy?.[other.id] ? 'Read' : 'Sent'}
-        </Text>}
       </ScrollView>
 
       {menu ? (
@@ -458,6 +619,8 @@ export default function Thread() {
           // Both ask first, once the menu has gone, so the question does not land on a menu still fading out.
           onUnsend={() => { const messageId = menu.message.id; confirmAfterMenu({ title: 'Unsend message?', message: "It's removed for everyone in the chat.", confirmLabel: 'Unsend', destructive: true, onConfirm: () => actions.unsendMessage(messageId) }); }}
           onDelete={() => { const messageId = menu.message.id; confirmAfterMenu({ title: 'Delete message?', message: menu.mine ? "It's removed for you. Others in the chat still see it." : "It's removed for you only.", confirmLabel: 'Delete', destructive: true, onConfirm: () => actions.deleteMessageForMe(messageId) }); }}
+          // The Send-to sheet, once the menu has gone: pick chats (groups too) and it goes to each as it is.
+          onForward={() => { const messageId = menu.message.id; afterMenu(() => router.push({ pathname: '/share', params: { kind: 'message', id: messageId } })); }}
           doubleTap={defaultReaction}
           onDoubleTap={(emoji) => { actions.setDefaultReaction(emoji); showToast({ title: `Double tap now leaves ${emoji}`, icon: 'heart-outline' }); }}
         />
@@ -478,10 +641,28 @@ export default function Thread() {
           <MentionSuggestions candidates={mentionRows} onPick={pickMention} />
         </View>
       ) : null}
-      {blockedHere ? (
+      {blockedInGroup.length && !blockedHere && !removed ? (
+        // Someone you blocked is in this group: you both stay, their messages fold away, and leaving is one tap.
+        <View style={styles.blockedBanner}>
+          <Ionicons name="ban-outline" size={15} color={colors.textMuted} />
+          <Text style={styles.blockedBannerText} numberOfLines={2}>
+            You blocked {listNames(blockedInGroup.map((u) => firstName(u)))}. They’re still in this group.
+          </Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Leave this group" hitSlop={8} onPress={leaveGroup}>
+            <Text style={styles.blockedBannerLink}>Leave</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      {removed ? (
+        // Taken out of this group: what was said stays readable, and nothing more can be sent.
+        <View style={[styles.blockedNote, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+          <Ionicons name="people-outline" size={15} color={colors.textMuted} />
+          <Text style={styles.blockedNoteText}>You’re no longer in this group</Text>
+        </View>
+      ) : blockedHere ? (
         <View style={[styles.blockedNote, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
           <Ionicons name="lock-closed-outline" size={15} color={colors.textMuted} />
-          <Text style={styles.blockedNoteText}>You can't message this account.</Text>
+          <Text style={styles.blockedNoteText}>{group ? 'You can’t send messages in this group.' : "You can't message this account."}</Text>
         </View>
       ) : (
       voice.recording ? (
@@ -543,14 +724,43 @@ export default function Thread() {
   );
 }
 
+/** "Dev", "Dev and June", "Dev, June and Mira", "Dev, June and 2 others". */
+function listNames(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? '';
+  if (names.length <= 3) return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return `${names[0]}, ${names[1]} and ${names.length - 2} others`;
+}
+
+/**
+ * One message's line across the chat: yours on the right, theirs on the
+ * left. In a group, theirs carries `leading` (the sender's face, or an empty
+ * space the same size) beside the message, the face lined up with its bottom.
+ */
+function Row({ mine, inRun, arrive, leading, styles, children }: {
+  mine: boolean; inRun: boolean; arrive?: FadeInUp; leading?: React.ReactNode; styles: any; children: React.ReactNode;
+}) {
+  return (
+    <Reanimated.View entering={arrive} layout={LinearTransition.duration(120)} style={[styles.row, mine ? styles.rowMine : styles.rowTheirs, inRun && styles.inRun, leading !== undefined && styles.rowFace]}>
+      {leading !== undefined ? (
+        <>
+          {leading}
+          <View style={styles.faceColumn}>{children}</View>
+        </>
+      ) : children}
+    </Reanimated.View>
+  );
+}
+
 /**
  * One text message.
  *
  * Double tap leaves your default reaction; a long press opens the picker for a
  * different one. Reactions sit under the bubble and are tappable to remove.
  */
-function Bubble({ message, mine, inRun, tail, arrive, styles, me, held = false, onHold, onReact, onRetry }: {
+function Bubble({ message, mine, inRun, tail, arrive, leading, styles, me, held = false, onHold, onReact, onRetry }: {
   message: Message; mine: boolean; inRun: boolean; tail: boolean; arrive?: FadeInUp; styles: any; me: string | null;
+  /** In a group, the sender's face (or its empty space) beside their message. */
+  leading?: React.ReactNode;
   /** Its menu is open: the lifted copy stands in for it, so it steps out of sight. */
   held?: boolean;
   onHold: (rect: Rect) => void; onReact: (emoji?: string) => void; onRetry?: () => void;
@@ -571,7 +781,7 @@ function Bubble({ message, mine, inRun, tail, arrive, styles, me, held = false, 
     // The row spans the chat, so the bubble's width limit is a share of the
     // chat itself. (A row that shrank to fit its text made that limit a share
     // of the text's own width, and short messages broke onto a second line.)
-    <Reanimated.View entering={arrive} layout={LinearTransition.duration(120)} style={[styles.row, mine ? styles.rowMine : styles.rowTheirs, inRun && styles.inRun]}>
+    <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles}>
       {/* The chip is anchored to the bubble, not the row, so it sits on the
           bubble's bottom inner corner however wide the message is. */}
       <HoldArea onHold={onHold} style={[styles.bubbleWrap, reacted && styles.bubbleWrapReacted, held && { opacity: 0 }]}>
@@ -613,7 +823,7 @@ function Bubble({ message, mine, inRun, tail, arrive, styles, me, held = false, 
           <Text style={[styles.edited, { color: colors.danger }]}>Not sent · Tap to retry</Text>
         </Pressable>
       ) : null}
-    </Reanimated.View>
+    </Row>
   );
 }
 
@@ -633,12 +843,13 @@ function HoldArea({ onHold, style, children }: { onHold: (rect: Rect) => void; s
 /**
  * What a held message offers, the way iMessage and Instagram show it: the
  * chat dims, the message stays lifted where it was, the reactions sit above
- * it and the actions below. Your own message: Copy, Edit, Unsend, Delete.
- * Theirs: Copy and Delete. Delete only takes it out of your own view.
+ * it and the actions below. Your own message: Copy, Edit, Forward, Unsend,
+ * Delete. Theirs: Copy, Forward and Delete. Delete only takes it out of your
+ * own view; Forward opens the Send-to sheet.
  */
-function MessageMenu({ target, me, styles, onClose, onReact, onCopy, onEdit, onUnsend, onDelete, doubleTap, onDoubleTap }: {
+function MessageMenu({ target, me, styles, onClose, onReact, onCopy, onEdit, onForward, onUnsend, onDelete, doubleTap, onDoubleTap }: {
   target: MenuTarget; me: string | null; styles: any;
-  onClose: () => void; onReact: (emoji: string) => void; onCopy: () => void; onEdit: () => void; onUnsend: () => void; onDelete: () => void;
+  onClose: () => void; onReact: (emoji: string) => void; onCopy: () => void; onEdit: () => void; onForward: () => void; onUnsend: () => void; onDelete: () => void;
   /** The reaction a double tap leaves, and how to change it: the last row turns the reactions above into that choice. */
   doubleTap: string; onDoubleTap: (emoji: string) => void;
 }) {
@@ -650,6 +861,8 @@ function MessageMenu({ target, me, styles, onClose, onReact, onCopy, onEdit, onU
   const actions = [
     ...(text ? [{ key: 'copy', label: 'Copy', icon: 'copy-outline' as const, run: onCopy }] : []),
     ...(mine && text ? [{ key: 'edit', label: 'Edit', icon: 'create-outline' as const, run: onEdit }] : []),
+    // Anything anyone sent can go on to other chats; an event line ("Mira added Dev") is not a message.
+    ...(message.kind !== 'system' ? [{ key: 'forward', label: 'Forward', icon: 'arrow-redo-outline' as const, run: onForward }] : []),
     ...(mine ? [{ key: 'unsend', label: 'Unsend', icon: 'arrow-undo-outline' as const, run: onUnsend }] : []),
     { key: 'delete', label: mine ? 'Delete for you' : 'Delete', icon: 'trash-outline' as const, run: onDelete, danger: true },
   ];
@@ -772,17 +985,21 @@ function ReactionChip({ emoji, count, mine, onPress, style }: {
 /**
  * The other person typing: three dots in one of their bubbles, rising and
  * brightening one after another, the way iMessage shows it. Still dots under
- * Reduce Motion. In a group, who it is sits above it.
+ * Reduce Motion. In a group, who it is sits above it, and the first typer's
+ * face sits beside it where a sender's face goes (`leading`).
  */
-function TypingBubble({ styles, label }: { styles: ReturnType<typeof useThemedStyles<typeof styleDefinitions>>; label?: string }) {
+function TypingBubble({ styles, label, leading }: { styles: ReturnType<typeof useThemedStyles<typeof styleDefinitions>>; label?: string; leading?: React.ReactNode }) {
+  const dots = (
+    <View style={[styles.bubble, styles.theirs, styles.typingBubble]}>
+      <TypingDot styles={styles} delay={0} />
+      <TypingDot styles={styles} delay={160} />
+      <TypingDot styles={styles} delay={320} />
+    </View>
+  );
   return (
     <Reanimated.View entering={FadeInDown.duration(200)} exiting={FadeOut.duration(150)} style={styles.typingWrap} accessibilityLiveRegion="polite" accessibilityLabel={label ?? 'Typing'}>
-      {label ? <Text style={styles.typingWho} numberOfLines={1}>{label}</Text> : null}
-      <View style={[styles.bubble, styles.theirs, styles.typingBubble]}>
-        <TypingDot styles={styles} delay={0} />
-        <TypingDot styles={styles} delay={160} />
-        <TypingDot styles={styles} delay={320} />
-      </View>
+      {label ? <Text style={[styles.typingWho, leading !== undefined && styles.typingWhoBeside]} numberOfLines={1}>{label}</Text> : null}
+      {leading !== undefined ? <View style={styles.typingRow}>{leading}{dots}</View> : dots}
     </Reanimated.View>
   );
 }
@@ -818,7 +1035,9 @@ const styleDefinitions = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   headerUser: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1 },
+  headerNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minWidth: 0 },
   headerName: { ...typography.bodyStrong, ...font('500'), fontSize: 16, color: colors.text },
+  headerNameShrink: { flexShrink: 1 },
   headerHandle: { ...typography.small, color: colors.textMuted },
   scroll: { flex: 1 },
   scrollContent: {
@@ -840,6 +1059,8 @@ const styleDefinitions = StyleSheet.create({
   theirs: { alignSelf: 'flex-start', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 6 },
   typingWrap: { alignSelf: 'flex-start', marginTop: 4, gap: 3 },
   typingWho: { ...typography.caption, letterSpacing: 0, color: colors.textFaint, paddingLeft: 4 },
+  typingWhoBeside: { paddingLeft: FACE + spacing.sm + 4 },
+  typingRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
   typingBubble: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 14, paddingHorizontal: 16 },
   typingDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.textMuted },
   bubbleText: { ...typography.body, color: colors.text, lineHeight: 21 },
@@ -847,6 +1068,10 @@ const styleDefinitions = StyleSheet.create({
   row: { width: '100%' },
   rowMine: { alignItems: 'flex-end' },
   rowTheirs: { alignItems: 'flex-start' },
+  // Theirs in a group: the face, then the message beside it, both resting on the same bottom line.
+  rowFace: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
+  faceColumn: { flex: 1, minWidth: 0, alignItems: 'flex-start' },
+  faceSpace: { width: FACE, height: FACE },
   sharedCardArea: { maxWidth: '78%' },
   edited: { ...typography.caption, color: colors.textFaint, letterSpacing: 0, marginTop: 3, marginHorizontal: 6 },
   menuBackdrop: { backgroundColor: colors.overlay },
@@ -900,6 +1125,18 @@ const styleDefinitions = StyleSheet.create({
   courtName: { ...typography.bodyStrong, color: colors.text },
   courtOpen: { ...typography.smallStrong, color: colors.brand },
   sender: { ...typography.caption, letterSpacing: 0, color: colors.textMuted, marginLeft: spacing.lg, marginTop: spacing.sm, marginBottom: 2 },
+  // A sender's name in a group: over their first bubble, past the face column, and it opens their profile.
+  senderLink: { alignSelf: 'flex-start' },
+  senderBeside: { marginLeft: FACE + spacing.sm + 6 },
+  // An event line: small, muted and centred, between the messages rather than in a bubble.
+  event: { ...typography.small, fontSize: 12, lineHeight: 17, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.xs },
+  // A message from someone you blocked, folded to one quiet line.
+  folded: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed' },
+  foldedText: { ...typography.small, color: colors.textFaint, flexShrink: 1 },
+  foldedShow: { ...font('600'), color: colors.textMuted },
+  blockedBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, maxWidth: 700, width: '100%', alignSelf: 'center' },
+  blockedBannerText: { ...typography.small, color: colors.textMuted, flex: 1 },
+  blockedBannerLink: { ...typography.smallStrong, color: colors.danger },
   timestamp: { ...typography.caption, color: colors.textFaint, textAlign: 'center', paddingTop: spacing.md },
   stamp: { ...typography.caption, fontSize: 12, letterSpacing: 0, color: colors.textFaint, textAlign: 'center', paddingTop: spacing.xl, paddingBottom: spacing.md },
   mentionTray: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm },

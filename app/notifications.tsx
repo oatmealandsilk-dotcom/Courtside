@@ -127,7 +127,13 @@ const SECTIONS = ['New', 'Today', 'This week', 'This month', 'Earlier'];
 
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
-  const { notifications, users, posts, stories, currentUserId, followRequests, followingIds, actions } = useApp();
+  const { notifications, users, posts, stories, hitRequests, conversations, currentUserId, followRequests, followingIds, actions } = useApp();
+  // Someone is in for your hit: the hit's group chat, when it is here to open.
+  const hitChatFor = (group: Group): string | undefined => {
+    if (group.kind !== 'hit-join') return undefined;
+    const chat = hitRequests.find((h) => h.id === group.targetId)?.conversationId;
+    return chat && conversations.some((c) => c.id === chat) ? chat : undefined;
+  };
   // "liked your clip", "liked your photo": the verb names what was liked, not just "post".
   const verbFor = (group: Group) => {
     if (group.kind === 'milestone') return `just passed ${group.preview ?? 'a milestone'}`;
@@ -251,6 +257,7 @@ export default function Notifications() {
                   : `${nameOf(first)}, ${nameOf(rest[0])} and ${rest.length - 1} ${rest.length - 1 === 1 ? 'other' : 'others'}`;
             const heading = index === 0 || groups[index - 1].section !== group.section ? group.section : null;
             const thumb = thumbFor(group);
+            const hitChat = hitChatFor(group);
 
             return (
               <React.Fragment key={group.key}>
@@ -303,8 +310,11 @@ export default function Notifications() {
                     if (!actions.canMessage(first)) { showToast({ title: 'Only people they follow can message them', icon: 'lock-closed-outline' }); return; }
                     router.push(`/messages/${actions.openConversationWith(first)}`);
                   }} style={styles.accept}><Text style={styles.acceptText}>Message</Text></Pressable>
+                ) : hitChat ? (
+                  // In for your hit: straight to the hit's group chat, where the details get sorted.
+                  <Pressable accessibilityRole="button" accessibilityLabel="Open the hit's chat" onPress={() => router.push(`/messages/${hitChat}`)} style={styles.accept}><Text style={styles.acceptText}>Chat</Text></Pressable>
                 ) : (group.kind === 'follow' || group.kind === 'joined') && first && first !== currentUserId ? (
-                  <FollowPill small following={followingIds.includes(first)} onPress={() => { const who = users.find((u) => u.id === first); if (who && followingIds.includes(first)) confirmUnfollow(who, () => actions.toggleFollow(first)); else actions.toggleFollow(first); }} name={nameOf(first).split(' ')[0]} />
+                  <FollowPill small following={followingIds.includes(first)} userId={first} onPress={() => { const who = users.find((u) => u.id === first); if (who && followingIds.includes(first)) confirmUnfollow(who, () => actions.toggleFollow(first)); else actions.toggleFollow(first); }} name={nameOf(first).split(' ')[0]} />
                 ) : thumb ? (
                   <View style={[styles.thumb, !thumb.uri && !thumb.words && { backgroundColor: surfaceColorFor(thumb.seed) }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
                     {thumb.uri ? <ExpoImage source={{ uri: thumb.uri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={120} />

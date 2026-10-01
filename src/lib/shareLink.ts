@@ -7,7 +7,16 @@
 const PREVIEWS_LIVE = false;
 const BASE = PREVIEWS_LIVE ? 'https://share.courtsidebase.com' : 'https://app.courtsidebase.com';
 
-/** The link to share outside the app for a post, a profile or a Community thread. */
-export function shareLink(kind: 'post' | 'profile' | 'question', id: string): string {
+/**
+ * The link to share outside the app for a post, a profile, a Community
+ * thread or a "Looking for a hit". The preview robot only knows the first
+ * three; any other path it passes straight on to the app.
+ */
+export function shareLink(kind: 'post' | 'profile' | 'question' | 'hit-request', id: string): string {
   return `${BASE}/${kind === 'profile' ? 'user' : kind}/${id}`;
+}
+
+/** A court as a map link anyone can open, in or out of the app. */
+export function placeLink(place: { lat: number; lng: number }): string {
+  return `https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`;
 }

@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { Heart } from '@/components/Heart';
 import { Tappable } from '@/components/Tappable';
 import * as haptics from '@/lib/haptics';
+import { compactNumber } from '@/lib/format';
 import { useOptimisticToggle } from '@/lib/useOptimisticToggle';
 
 interface Props {
@@ -49,7 +50,8 @@ export function LikeButton({ ledgerKey, liked, count, onToggle, likesRoute, pop 
         <Heart liked={like.on} pop={pop} size={size} ink={ink} style={glyphStyle} />
       </Tappable>
       <Pressable accessibilityRole="button" accessibilityLabel={`See who liked this${thing}`} hitSlop={8} disabled={total === 0} onPress={() => router.push(likesRoute)} style={countHit}>
-        {(state) => <Text style={[labelStyle, (state as { hovered?: boolean }).hovered && { textDecorationLine: 'underline' }]}>{total}</Text>}
+        {/* "1.2k" past a thousand; no likes yet shows nothing, the space holding the line so the rail never jumps. */}
+        {(state) => <Text maxFontSizeMultiplier={1.2} style={[labelStyle, (state as { hovered?: boolean }).hovered && { textDecorationLine: 'underline' }]}>{total > 0 ? compactNumber(total) : '\u00A0'}</Text>}
       </Pressable>
     </View>
   );

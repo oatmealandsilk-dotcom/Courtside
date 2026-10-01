@@ -251,6 +251,9 @@ export function NearbyMap(props: NearbyMapProps) {
     if (!actions.canMessage(id)) { showToast({ title: 'Only people they follow can message them', icon: 'lock-closed-outline' }); return; }
     router.push(`/messages/${actions.openConversationWith(id)}`);
   };
+  // Into one of your groups (the sheet says if they can't be), or a court into any of your chats.
+  const addToGroup = (id: string) => router.push({ pathname: '/pick-group', params: { user: id } });
+  const sendCourt = (c: { lat: number; lng: number; name: string }) => router.push({ pathname: '/share', params: { kind: 'court', name: c.name, lat: String(c.lat), lng: String(c.lng) } });
   return (
     <View style={styles.fill}>
       {canvas}
@@ -263,9 +266,9 @@ export function NearbyMap(props: NearbyMapProps) {
         {meOpen ? (
           <YouSheet me={me} open={openToHit} onToggle={actions.setOpenToHit} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} />
         ) : model.selected ? (
-          <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onFollow={() => { const who = model.selected!.user; if (followingIds.includes(who.id)) confirmUnfollow(who, () => actions.toggleFollow(who.id)); else actions.toggleFollow(who.id); }} />
+          <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onAddToGroup={() => addToGroup(model.selected!.user.id)} onFollow={() => { const who = model.selected!.user; if (followingIds.includes(who.id)) confirmUnfollow(who, () => actions.toggleFollow(who.id)); else actions.toggleFollow(who.id); }} />
         ) : model.selectedCourt ? (
-          <CourtSheet court={model.selectedCourt} miles={milesBetween(home, model.selectedCourt)} onClose={() => model.selectCourt(null)} onDirections={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${model.selectedCourt!.lat},${model.selectedCourt!.lng}`, '_blank', 'noopener')} />
+          <CourtSheet court={model.selectedCourt} miles={milesBetween(home, model.selectedCourt)} onClose={() => model.selectCourt(null)} onSend={() => sendCourt(model.selectedCourt!)} onDirections={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${model.selectedCourt!.lat},${model.selectedCourt!.lng}`, '_blank', 'noopener')} />
         ) : !model.homeKnown && !model.place ? (
           <WhereCard locating={locating} onLocation={onToggleLocation} />
         ) : (

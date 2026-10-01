@@ -16,11 +16,12 @@ import { planStreakReminder } from '@/features/practice/reminder';
 import { TERMS_VERSION } from '@/lib/legal';
 
 import { fetchBootstrap, signIn as apiSignIn, type Bootstrap } from '@/data/api';
-import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type AdminReport, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type RemoteData } from '@/data/remote';
+import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ReportedChat, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type RemoteData } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { markMessagesOpened } from '@/features/messaging/readReceipts';
+import { GROUP_CAP, eventText, findDirectChat, groupName, isDirectChat, isGroupAdmin, isGroupChat } from '@/features/messages/groupRules';
 import { readReceiptPreference, saveReceiptPreference } from '@/features/messaging/preferences';
 import { connectProvider, disconnectProvider } from '@/lib/integrations';
 import { appleHealthAvailable, connectAppleHealth, readAppleHealth, readAppleNutrition } from '@/features/health/appleHealth';
@@ -74,6 +75,8 @@ import type {
   CourtNote,
   LastSeen,
   HitRequest,
+  ChatEvent,
+  ShareItem,
   Story,
   User,
   PlayerProfile,
@@ -291,7 +294,7 @@ interface AppState extends Bootstrap {
   /** Open "Looking for a hit" posts. */
   hitRequests: HitRequest[];
   /** Small switches from Settings, kept with the account. */
-  prefs: { showActivity: boolean; pushLikes: boolean; pushCoach: boolean };
+  prefs: { showActivity: boolean; pushLikes: boolean; pushCoach: boolean; pushMessages: boolean };
   /** Whether the app may ask the device where you are, and the city it found. */
   locationEnabled: boolean;
   detectedLocation: string | null;
@@ -321,7 +324,7 @@ interface AppActions {
   checkHandle: (handle: string) => Promise<HandleStatus | null>;
   /** Changes your handle. Throws with a plain-English reason when it cannot. */
   changeHandle: (handle: string) => Promise<void>;
-  setPref: (key: 'showActivity' | 'pushLikes' | 'pushCoach', value: boolean) => void;
+  setPref: (key: 'showActivity' | 'pushLikes' | 'pushCoach' | 'pushMessages', value: boolean) => void;
   /** The asker marks the answer that solved it. */
   acceptAnswer: (questionId: ID, answerId: ID) => void;
   /** The asker marks their coach question as answered. */
@@ -514,16 +517,48 @@ interface AppActions {
   /** Admins only: take someone off the waitlist (they asked), or clear a feedback note. */
   removeFromWaitlistPage: (table: 'waitlist' | 'site_feedback', id: ID) => Promise<boolean>;
   loadReportedItem: (kind: 'post' | 'hit', id: ID) => Promise<{ body: string; picture?: string; removed: boolean } | null>;
+  /** Admins only: a reported chat's name, people and last 30 messages (admins cannot otherwise read a chat they are not in). */
+  loadReportedChat: (conversationId: ID) => Promise<ReportedChat | null>;
   decideReport: (reportId: ID, decision: 'remove' | 'restore' | 'suspend' | 'unsuspend' | 'dismiss') => Promise<boolean>;
 
   /* Messaging */
   openConversationWith: (userId: ID) => ID;
   sendMessage: (conversationId: ID, body: string) => void;
-  /** A group chat with the people picked (two or more others) and an optional name. Returns its id. */
-  openGroup: (memberIds: ID[], title?: string) => ID;
-  addToGroup: (conversationId: ID, memberId: ID) => void;
+  /**
+   * A group chat with the people picked (two or more others, GROUP_CAP people
+   * in all) and an optional name; you are its admin. Returns its id, or null
+   * (with a note on screen) when it cannot be made.
+   */
+  createGroup: (memberIds: ID[], title?: string) => ID | null;
+  /**
+   * Adds people to a group you are in; anyone in it can. Resolves true once
+   * they are in (the server agreed), false when nobody was added (a note on
+   * screen says why).
+   */
+  addGroupMembers: (conversationId: ID, memberIds: ID[]) => Promise<boolean>;
+  /** An admin takes someone out of a group. */
+  removeGroupMember: (conversationId: ID, memberId: ID) => void;
+  /** Anyone in a group can rename it; an empty name takes the name off. */
   renameGroup: (conversationId: ID, title: string) => void;
+  /** A group photo picked on this device (uploaded first), or null to take it off. */
+  setGroupPhoto: (conversationId: ID, uri: string | null) => void;
+  /** An admin makes someone an admin (true) or takes it away (false). */
+  setGroupAdmin: (conversationId: ID, memberId: ID, admin: boolean) => void;
   leaveGroup: (conversationId: ID) => void;
+  /**
+   * A group someone took you out of, as it stood when you last had it (its
+   * messages too), so a chat open on screen can stay readable with "You're
+   * no longer in this group" instead of vanishing. Undefined for any other chat.
+   */
+  removedChat: (conversationId: ID) => { conversation: Conversation; messages: Message[] } | undefined;
+  /**
+   * Mutes a chat (group or one-to-one) until a moment — MUTED_FOREVER for
+   * "until I turn it back on" — or unmutes it with null. No alerts unless
+   * someone @mentions you, and off the unread badge. `quiet`: no Undo toast.
+   */
+  muteChat: (conversationId: ID, until: string | null, quiet?: boolean) => void;
+  /** Reports a chat to CourtSide for a person to review. */
+  reportChat: (conversationId: ID, reason: string) => void;
   /** Send a court in a chat: where to meet. */
   sendCourt: (conversationId: ID, place: { name: string; lat: number; lng: number }) => void;
   /** Send a voice note recorded on this device (uploaded first). */
@@ -544,7 +579,12 @@ interface AppActions {
   unsendMessage: (messageId: ID) => void;
   /** Hides a message from your own view only. */
   deleteMessageForMe: (messageId: ID) => void;
-  shareToUsers: (userIds: ID[], kind: 'post' | 'question' | 'profile', sharedId: ID, note?: string) => void;
+  /**
+   * Sends a post, thread, profile, hit, court or forwarded message into
+   * chats: groups and one-to-one chats by id, and people (into your
+   * one-to-one with each, started if need be), with an optional note.
+   */
+  shareToChats: (targets: { conversationIds?: ID[]; userIds?: ID[] }, item: ShareItem, note?: string) => void;
   markConversationRead: (conversationId: ID) => void;
 }
 
@@ -580,12 +620,68 @@ function mergeFetchedMessages(prev: AppState, fetched: Message[], me: ID, openCh
   const conversations = prev.conversations.map((c) => {
     if (!touched.has(c.id)) return c;
     const inChat = messages.filter((m) => m.conversationId === c.id).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
-    const newFromOthers = added.filter((m) => m.conversationId === c.id && m.senderId !== me).length;
+    // An event line ("Mira added Dev") is news, but never unread.
+    const newFromOthers = added.filter((m) => m.conversationId === c.id && m.senderId !== me && m.kind !== 'system').length;
     const last = inChat[inChat.length - 1];
     return { ...c, messageIds: inChat.map((m) => m.id), updatedAt: last && last.createdAt > c.updatedAt ? last.createdAt : c.updatedAt, unreadCount: c.id === openChat ? c.unreadCount : c.unreadCount + newFromOthers };
   });
   return { ...prev, messages, conversations };
 }
+
+/** The parts of a chat that change without a message of their own: who is in it, its name, photo, admins, and your mute. */
+const chatDetails = (c: Conversation) => ({
+  participantIds: c.participantIds, isGroup: c.isGroup, title: c.title, createdBy: c.createdBy,
+  adminIds: c.adminIds, photoUrl: c.photoUrl, mutedUntil: c.mutedUntil,
+});
+
+/**
+ * A chat fetched afresh laid over what the app holds. One already here takes
+ * the server's word on its details (someone else may have added people,
+ * renamed it or changed its photo) and its new messages merge in; one not
+ * here yet is added whole.
+ */
+function applyFetchedChat(prev: AppState, got: { conversation: Conversation; messages: Message[] }, me: ID, openChat?: ID): AppState {
+  const fresh = got.conversation;
+  const had = prev.conversations.find((c) => c.id === fresh.id);
+  if (!had) {
+    const known = new Set(prev.messages.map((m) => m.id));
+    return { ...prev, conversations: [fresh, ...prev.conversations], messages: [...prev.messages, ...got.messages.filter((m) => !known.has(m.id))] };
+  }
+  const details = chatDetails(fresh);
+  const same = JSON.stringify(chatDetails(had)) === JSON.stringify(details);
+  const next = same ? prev : { ...prev, conversations: prev.conversations.map((c) => (c.id === fresh.id ? { ...c, ...details } : c)) };
+  return mergeFetchedMessages(next, got.messages, me, openChat);
+}
+
+/**
+ * A chat made on this phone that the server keeps under another id (it
+ * already had one with that person): its messages move over, and it folds
+ * into the one already here, or simply takes the server's id.
+ */
+function foldChatInto(prev: AppState, from: ID, to: ID): AppState {
+  if (from === to) return prev;
+  const moving = prev.conversations.find((c) => c.id === from);
+  const target = prev.conversations.find((c) => c.id === to);
+  const messages = prev.messages.map((m) => (m.conversationId === from ? { ...m, conversationId: to } : m));
+  if (!target) {
+    return { ...prev, messages, conversations: prev.conversations.map((c) => (c.id === from ? { ...c, id: to } : c)) };
+  }
+  const inChat = messages.filter((m) => m.conversationId === to).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+  const updatedAt = moving && moving.updatedAt > target.updatedAt ? moving.updatedAt : target.updatedAt;
+  return {
+    ...prev,
+    messages,
+    conversations: prev.conversations
+      .filter((c) => c.id !== from)
+      .map((c) => (c.id === to ? { ...c, messageIds: inChat.map((m) => m.id), updatedAt } : c)),
+  };
+}
+
+/** A group name as the server keeps it (clean_chat_title, migration 54): one line, trimmed, at most 60 characters. Empty means no name. */
+const cleanTitle = (title?: string) => (title ?? '').replace(/\s+/g, ' ').trim().slice(0, 60).trim() || undefined;
+
+/** A group function's answer that is a refusal rather than the chat's id. */
+const isRefusal = (result: string): result is GroupRefusal | 'failed' => ['blocked', 'teen', 'full', 'not-admin', 'failed'].includes(result);
 
 const AppContext = createContext<AppContextValue | null>(null);
 
@@ -713,6 +809,7 @@ function snapshotOf(s: AppState, me: ID): RemoteData {
     userState: {
       mutedIds: s.mutedIds, blockedIds: s.blockedIds, savedQuestionIds: s.saved.questionIds, paymentMethods: s.paymentMethods,
       defaultPaymentId: s.defaultPaymentId, showActivity: s.prefs.showActivity, pushLikes: s.prefs.pushLikes, pushCoach: s.prefs.pushCoach,
+      pushMessages: s.prefs.pushMessages,
       constraints: self?.profile.constraints,
     },
     tips: s.tips, coachApplications: s.coachApplications, coaches: s.coaches, coachReviews: s.coachReviews, coachResults: s.coachResults,
@@ -801,7 +898,9 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       blockedIds: data.userState ? data.userState.blockedIds : prev.blockedIds,
       paymentMethods: data.userState && data.userState.paymentMethods.length ? data.userState.paymentMethods : prev.paymentMethods,
       defaultPaymentId: data.userState?.defaultPaymentId ?? prev.defaultPaymentId,
-      prefs: data.userState ? { showActivity: data.userState.showActivity, pushLikes: data.userState.pushLikes, pushCoach: data.userState.pushCoach } : prev.prefs,
+      prefs: data.userState
+        ? { showActivity: data.userState.showActivity, pushLikes: data.userState.pushLikes, pushCoach: data.userState.pushCoach, pushMessages: data.userState.pushMessages ?? true }
+        : prev.prefs,
       // The saved copy shows the app; only the server's answer counts as loaded (live updates, settings sync and retries wait for it).
       remoteLoaded: fromSnapshot ? prev.remoteLoaded : true,
       snapshotShown: fromSnapshot ? true : prev.snapshotShown,
@@ -863,7 +962,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     alertIds: [],
     paymentMethods: STARTER_PAYMENTS,
     defaultPaymentId: readDefaultPayment(),
-    prefs: { showActivity: true, pushLikes: true, pushCoach: true },
+    prefs: { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true },
     tips: [],
     sessions: [],
     courtNotes: {},
@@ -928,6 +1027,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Bumped to reconnect: after the connection drops, and whenever the app comes back to the front.
   const [liveEpoch, setLiveEpoch] = useState(0);
   const dropRetries = useRef(0);
+  // Chats made on this phone that the server may not have yet (a group whose
+  // start is still on its way): a fetch that does not find one says nothing.
+  const pendingChats = useRef(new Set<ID>());
+  // Groups someone took you out of, as they last stood here, for a chat that
+  // is open on screen when it happens (see removedChat). Kept with who you
+  // were, so another account on this phone never sees them.
+  const removedChats = useRef(new Map<ID, { me: ID; chat: { conversation: Conversation; messages: Message[] } }>());
+  /**
+   * One chat fetched as it stands now and laid over what is here: who is in
+   * it, its name, photo, admins and your mute, and its newest messages. A
+   * group the server no longer has for you (someone took you out, or
+   * everyone left) goes, with a note saying so: that is how a removed person
+   * finds out. `open`: the chat is on screen, so nothing in it counts as unread.
+   */
+  const refreshChat = useCallback(async (conversationId: ID, open = false) => {
+    const me = stateRef.current.currentUserId;
+    if (!me || !live(me, conversationId)) return;
+    const got = await remote.fetchConversationState(me, conversationId).catch(() => null);
+    if (!got || stateRef.current.currentUserId !== me) return;
+    if (got === 'gone') {
+      const had = stateRef.current.conversations.find((c) => c.id === conversationId);
+      if (!had || !isGroupChat(had) || pendingChats.current.has(conversationId)) return;
+      removedChats.current.set(conversationId, { me, chat: { conversation: had, messages: stateRef.current.messages.filter((m) => m.conversationId === conversationId) } });
+      setState((prev) => ({
+        ...prev,
+        conversations: prev.conversations.filter((c) => c.id !== conversationId),
+        messages: prev.messages.filter((m) => m.conversationId !== conversationId),
+      }));
+      showToast({ title: `You’re no longer in ${groupName(had, stateRef.current.users, me)}`, icon: 'people-outline' });
+      return;
+    }
+    setState((prev) => applyFetchedChat(prev, got, me, open ? conversationId : undefined));
+  }, []);
   // Whatever was sent while the phone slept or the connection was down, in one small ask:
   // every message newer than the newest one here.
   const catchUpMessages = useCallback(async () => {
@@ -939,14 +1071,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!fresh.length) return;
     const known = new Set(stateRef.current.conversations.map((c) => c.id));
     const strangers = [...new Set(fresh.map((m) => m.conversationId).filter((cid) => !known.has(cid)))];
-    // A chat someone else started while you were away arrives whole.
+    // A chat someone else started (or a group you were added to) while you were away arrives whole.
     const started = (await Promise.all(strangers.map((cid) => remote.fetchConversation(me, cid).catch(() => null)))).filter(Boolean) as { conversation: Conversation; messages: Message[] }[];
     setState((prev) => {
       let next = started.reduce((acc, got) => (acc.conversations.some((c) => c.id === got.conversation.id) ? acc : { ...acc, conversations: [got.conversation, ...acc.conversations], messages: [...acc.messages, ...got.messages.filter((m) => !acc.messages.some((p) => p.id === m.id))] }), prev);
       next = mergeFetchedMessages(next, fresh.filter((m) => next.conversations.some((c) => c.id === m.conversationId)), me);
       return next;
     });
-  }, []);
+    // A group already here that changed meanwhile (people added or gone, a
+    // new name or photo) says so with an event line: fetch it as it stands.
+    const changed = new Set(fresh.filter((m) => m.kind === 'system' && known.has(m.conversationId)).map((m) => m.conversationId));
+    changed.forEach((cid) => { void refreshChat(cid); });
+  }, [refreshChat]);
   useEffect(() => {
     if (!isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive)) return;
     // Back to the front (a phone woken, a browser tab looked at again): reconnect and catch up.
@@ -978,13 +1114,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (stateRef.current.messages.some((m) => m.id === message.id)) return;
           const known = stateRef.current.conversations.some((c) => c.id === message.conversationId);
           if (known) {
+            // An event line ("Mira added Dev", "Dev named the group…") is never unread.
+            const system = message.kind === 'system';
             setState((prev) => prev.messages.some((m) => m.id === message.id) ? prev : {
               ...prev,
               messages: [...prev.messages, message],
               conversations: prev.conversations.map((c) => c.id === message.conversationId
-                ? { ...c, messageIds: [...c.messageIds, message.id], updatedAt: message.createdAt, unreadCount: message.senderId === me ? c.unreadCount : c.unreadCount + 1 }
+                ? { ...c, messageIds: [...c.messageIds, message.id], updatedAt: message.createdAt, unreadCount: message.senderId === me || system ? c.unreadCount : c.unreadCount + 1 }
                 : c),
             });
+            // It also means the group itself changed (its people, name, photo
+            // or admins): fetch it as it stands, so every screen shows it now.
+            if (system) void refreshChat(message.conversationId);
             return;
           }
           void remote.fetchConversation(me, message.conversationId).then((got) => {
@@ -1017,14 +1158,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const upTo = Date.parse(readAt);
         setState((prev) => ({
           ...prev,
-          messages: prev.messages.map((m) => (m.conversationId === conversationId && m.senderId !== userId && Date.parse(m.createdAt) <= upTo && !m.readAtBy?.[userId]
+          // Event lines are never "read by" anyone.
+          messages: prev.messages.map((m) => (m.conversationId === conversationId && m.kind !== 'system' && m.senderId !== userId && Date.parse(m.createdAt) <= upTo && !m.readAtBy?.[userId]
             ? { ...m, readAtBy: { ...(m.readAtBy ?? {}), [userId]: readAt }, openedAtBy: { ...(m.openedAtBy ?? {}), [userId]: readAt } }
             : m)),
         }));
       });
     } catch { /* live updates are a nicety */ }
     return () => { disposed = true; if (retry) clearTimeout(retry); off?.(); offReads?.(); };
-  }, [remoteLoaded, currentUserForLive, liveEpoch, catchUpMessages]);
+  }, [remoteLoaded, currentUserForLive, liveEpoch, catchUpMessages, refreshChat]);
 
   // Open hits, live: one posted, joined or called off anywhere is on Find
   // Players within seconds, and the list catches up whenever the app comes
@@ -1063,6 +1205,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       void remote.saveUserState(currentUserForLive, {
         mutedIds: s.mutedIds, blockedIds: s.blockedIds, savedQuestionIds: s.saved.questionIds, paymentMethods: s.paymentMethods,
         defaultPaymentId: s.defaultPaymentId, showActivity: s.prefs.showActivity, pushLikes: s.prefs.pushLikes, pushCoach: s.prefs.pushCoach,
+        pushMessages: s.prefs.pushMessages,
       });
     }, 400);
     return () => clearTimeout(t);
@@ -1537,7 +1680,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = requireUser();
     haptics.commit();
     setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.map((h) => (h.id === hitId && !h.joinedIds.includes(me) ? { ...h, joinedIds: [...h.joinedIds, me] } : h)) }));
-    if (!live(me, hitId)) return {};
+    if (!live(me, hitId)) {
+      // The demo has no server to make the hit's chat, so it is made here the
+      // way join_hit makes it (migrations 43 and 54): a group called
+      // "Hit · <court>", started by the poster, with everyone who is in, and
+      // a line saying you are in. A later "I'm in" joins the same chat.
+      const s = stateRef.current;
+      const hit = s.hitRequests.find((h) => h.id === hitId);
+      if (!hit || hit.authorId === me) return {};
+      const had = hit.conversationId ? s.conversations.find((c) => c.id === hit.conversationId) : undefined;
+      const conversationId = had?.id ?? nextId('cv');
+      const now = new Date().toISOString();
+      const line: Message = { id: nextId('m'), conversationId, senderId: me, body: '', createdAt: now, kind: 'system', event: { type: 'joined' } };
+      line.body = eventText(line, s.users, null);
+      const people = Array.from(new Set([hit.authorId, ...hit.joinedIds, me]));
+      setState((prev) => {
+        const exists = prev.conversations.some((c) => c.id === conversationId);
+        const chat: Conversation = {
+          id: conversationId, participantIds: people, isGroup: true, title: `Hit · ${hit.place.name || 'Court'}`,
+          createdBy: hit.authorId, adminIds: [hit.authorId], messageIds: [], updatedAt: now, unreadCount: 0,
+        };
+        return {
+          ...prev,
+          hitRequests: prev.hitRequests.map((h) => (h.id === hitId ? { ...h, conversationId } : h)),
+          messages: [...prev.messages, line],
+          conversations: exists
+            ? prev.conversations.map((c) => (c.id === conversationId
+              ? { ...c, participantIds: c.participantIds.includes(me) ? c.participantIds : [...c.participantIds, me], messageIds: [...c.messageIds, line.id], updatedAt: now }
+              : c))
+            : [{ ...chat, messageIds: [line.id] }, ...prev.conversations],
+        };
+      });
+      return { conversationId };
+    }
     const result = await remote.joinHit(hitId);
     if (result.error) {
       setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.map((h) => (h.id === hitId ? { ...h, joinedIds: h.joinedIds.filter((x) => x !== me) } : h)) }));
@@ -2317,24 +2492,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * default; reacting again with the same emoji takes it back off.
    */
   const reactToMessage = useCallback((messageId: ID, emoji?: string) => {
-    setState((prev) => {
-      const me = prev.currentUserId;
-      if (!me) return prev;
-      const mark = emoji ?? prev.defaultReaction;
-      const message = prev.messages.find((m) => m.id === messageId);
-      const existing = message?.reactions?.[me];
-      existing === mark ? haptics.untap() : haptics.tap();
-      return {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    const message = s.messages.find((m) => m.id === messageId);
+    // Event lines ("Mira added Dev") take no reactions.
+    if (!me || !message || message.kind === 'system') return;
+    const mark = emoji ?? s.defaultReaction;
+    const toggled = (had?: Record<ID, string>) => {
+      const reactions = { ...(had ?? {}) };
+      if (reactions[me] === mark) delete reactions[me];
+      else reactions[me] = mark;
+      return reactions;
+    };
+    message.reactions?.[me] === mark ? haptics.untap() : haptics.tap();
+    const before = message.reactions?.[me];
+    const after = toggled(message.reactions)[me];
+    setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, reactions: toggled(m.reactions) } : m)) }));
+    // Saved after it shows. The server changes only your own reaction, so one
+    // someone else left a moment ago stays; the live update then brings
+    // everyone's reactions as they stand.
+    if (!live(me, messageId)) return;
+    void remote.toggleReaction(messageId, mark, toggled(message.reactions)).catch(() => null).then((saved) => {
+      if (saved) return;
+      // Not saved: your reaction goes back to what it was, unless you have changed it again since.
+      setState((prev) => ({
         ...prev,
         messages: prev.messages.map((m) => {
-          if (m.id !== messageId) return m;
+          if (m.id !== messageId || m.reactions?.[me] !== after) return m;
           const reactions = { ...(m.reactions ?? {}) };
-          if (reactions[me] === mark) delete reactions[me];
-          else reactions[me] = mark;
-          if (live(me, messageId)) void remote.setMessageReactions(messageId, reactions);
+          if (before) reactions[me] = before;
+          else delete reactions[me];
           return { ...m, reactions };
         }),
-      };
+      }));
+      showToast({ title: 'Your reaction didn’t save', body: 'Try again in a moment.', icon: 'alert-circle-outline' });
     });
   }, []);
 
@@ -2414,6 +2605,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const loadSiteFeedback = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchSiteFeedback() : []), []);
   const removeFromWaitlistPage = useCallback(async (table: 'waitlist' | 'site_feedback', id: ID) => (live(stateRef.current.currentUserId, id) ? remote.removeFromWaitlistPage(table, id) : false), []);
   const loadReportedItem = useCallback(async (kind: 'post' | 'hit', id: ID) => (live(stateRef.current.currentUserId, id) ? remote.fetchReportedItem(kind, id) : null), []);
+  const loadReportedChat = useCallback(async (conversationId: ID) => (live(stateRef.current.currentUserId, conversationId) ? remote.fetchReportedChat(conversationId).catch(() => null) : null), []);
   const decideReport = useCallback(async (reportId: ID, decision: 'remove' | 'restore' | 'suspend' | 'unsuspend' | 'dismiss') => {
     if (!live(stateRef.current.currentUserId, reportId)) return false;
     const ok = await remote.moderateReport(reportId, decision);
@@ -2430,21 +2622,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!live(stateRef.current.currentUserId, conversationId)) return false;
     return remote.isChatBlocked(conversationId);
   }, []);
-  // Scrolling up in a chat: the page of messages before the oldest one here.
-  const syncConversation = useCallback(async (conversationId: ID) => {
-    const me = stateRef.current.currentUserId;
-    if (!me || !live(me, conversationId)) return;
-    const got = await remote.fetchConversation(me, conversationId).catch(() => null);
-    if (!got) return;
-    setState((prev) => (prev.conversations.some((c) => c.id === conversationId)
-      ? mergeFetchedMessages(prev, got.messages, me, conversationId)
-      : { ...prev, conversations: [got.conversation, ...prev.conversations], messages: [...prev.messages, ...got.messages.filter((m) => !prev.messages.some((p) => p.id === m.id))] }));
-  }, []);
+  // A chat just opened: fetched as it stands (its people, name, photo and
+  // admins as well as its messages), so it never shows an old copy for long.
+  const syncConversation = useCallback((conversationId: ID) => refreshChat(conversationId, true), [refreshChat]);
   const watchTyping = useCallback((conversationId: ID, onTyping: (userId: ID) => void) => {
     const me = stateRef.current.currentUserId;
     if (!me || !live(me, conversationId)) return { ping: () => undefined, off: () => undefined };
     try { return remote.typing(conversationId, me, onTyping); } catch { return { ping: () => undefined, off: () => undefined }; }
   }, []);
+  // Scrolling up in a chat: the page of messages before the oldest one here.
   const loadOlderMessages = useCallback(async (conversationId: ID) => {
     const me = stateRef.current.currentUserId;
     if (!me || !live(me, conversationId)) return 0;
@@ -2632,13 +2818,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   /* ------------------------------- Messaging ------------------------------ */
 
-  /** Returns the existing 1:1 thread with a user, creating one if needed. */
+  /** Returns the existing 1:1 thread with a user, creating one if needed. A group with just the two of you is never it. */
   const openConversationWith = useCallback(
     (userId: ID): ID => {
       const me = requireUser();
-      const existing = stateRef.current.conversations.find(
-        (c) => c.participantIds.length === 2 && c.participantIds.includes(userId) && c.participantIds.includes(me),
-      );
+      const existing = findDirectChat(stateRef.current.conversations, me, userId);
       if (existing) return existing.id;
 
       const conversation: Conversation = {
@@ -2664,13 +2848,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         if (standing === conversation.id) return;
         // The database already had one: fold this one into it.
-        setState((prev) => ({
-          ...prev,
-          conversations: prev.conversations.some((c) => c.id === standing)
-            ? prev.conversations.filter((c) => c.id !== conversation.id)
-            : prev.conversations.map((c) => (c.id === conversation.id ? { ...c, id: standing } : c)),
-          messages: prev.messages.map((m) => (m.conversationId === conversation.id ? { ...m, conversationId: standing } : m)),
-        }));
+        setState((prev) => foldChatInto(prev, conversation.id, standing));
       });
       return conversation.id;
     },
@@ -2689,8 +2867,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         messages: [...prev.messages, message],
         conversations: prev.conversations.map((c) =>
           c.id === conversationId
-            // A message from the other person counts as unread until the thread is opened.
-            ? { ...c, messageIds: [...c.messageIds, message.id], updatedAt: message.createdAt, unreadCount: senderId === prev.currentUserId ? c.unreadCount : (c.unreadCount ?? 0) + 1 }
+            // A message from the other person counts as unread until the thread is opened (an event line never does).
+            ? { ...c, messageIds: [...c.messageIds, message.id], updatedAt: message.createdAt, unreadCount: senderId === prev.currentUserId || message.kind === 'system' ? c.unreadCount : (c.unreadCount ?? 0) + 1 }
             : c,
         ),
       };
@@ -2717,10 +2895,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
           messages: prev.messages.filter((m) => m.id !== message.id),
           conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, messageIds: c.messageIds.filter((mid) => mid !== message.id) } : c)),
         }));
+        // A block only locks one-to-one chats; in a group the likely reason is no longer being in it.
+        const chat = stateRef.current.conversations.find((c) => c.id === conversationId);
+        // Re-read the group first: if you were taken out, that says so ("You’re no longer in …") and this note would be one too many.
+        if (chat && isGroupChat(chat)) {
+          void refreshChat(conversationId).then(() => {
+            if (stateRef.current.conversations.some((c) => c.id === conversationId)) showToast({ title: 'You can’t send messages in this chat', icon: 'lock-closed-outline' });
+          });
+          return;
+        }
         showToast({ title: "You can't message this account", icon: 'lock-closed-outline' });
       });
     },
-    [requireUser, appendMessage, makeMessage],
+    [requireUser, appendMessage, makeMessage, refreshChat],
   );
 
   const sendCourt = useCallback((conversationId: ID, place: { name: string; lat: number; lng: number }) => {
@@ -2730,8 +2917,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => appendMessage(prev, message));
     if (live(me, conversationId)) void remote.insertMessage(message).catch(() => 'failed' as const).then((result) => {
       if (result === 'failed' || result === 'refused') setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, failed: true } : m)) }));
+      if (result === 'refused') void refreshChat(conversationId);
     });
-  }, [requireUser, appendMessage, makeMessage]);
+  }, [requireUser, appendMessage, makeMessage, refreshChat]);
 
   const sendVoice = useCallback((conversationId: ID, recording: { uri: string; ms: number }) => {
     haptics.commit();
@@ -2749,51 +2937,302 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? hosted : m)) }));
       const result = await remote.insertMessage(hosted).catch(() => 'failed' as const);
       if (result === 'failed' || result === 'refused') setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, failed: true } : m)) }));
+      if (result === 'refused') void refreshChat(conversationId);
     })();
-  }, [requireUser, appendMessage, makeMessage]);
+  }, [requireUser, appendMessage, makeMessage, refreshChat]);
 
-  const openGroup = useCallback((memberIds: ID[], title?: string): ID => {
+  /* Group chats. Each change shows at once and is saved afterwards; when the
+     server says no, it is put back and a note says why (never naming who). A
+     real account's event lines ("You added Dev") come from the server; the
+     demo, with no server, writes its own. */
+
+  /** A demo event line, worded the way the server writes one (the chat words it from `event` for whoever reads it). */
+  const eventLine = useCallback((conversationId: ID, me: ID, event: ChatEvent): Message => {
+    const line: Message = { ...makeMessage(conversationId, me, '', 'system'), event };
+    return { ...line, body: eventText(line, stateRef.current.users, null) };
+  }, [makeMessage]);
+
+  /** A group with the people picked (two or more others) and an optional name. Null, with a note, when it cannot be made. */
+  const createGroup = useCallback((memberIds: ID[], title?: string): ID | null => {
     const me = requireUser();
-    const others = Array.from(new Set(memberIds.filter((id) => id !== me)));
+    const others = Array.from(new Set(memberIds.filter((id) => !!id && id !== me)));
+    if (others.length < 2) return null;
+    if (others.length + 1 > GROUP_CAP) {
+      showToast({ title: `A group can have up to ${GROUP_CAP} people`, icon: 'people-outline' });
+      return null;
+    }
+    const groupTitle = cleanTitle(title);
     const conversation: Conversation = {
       id: nextId('cv'), participantIds: [me, ...others], messageIds: [], updatedAt: new Date().toISOString(), unreadCount: 0,
-      isGroup: true, title: title?.trim() || undefined,
+      isGroup: true, title: groupTitle, createdBy: me, adminIds: [me],
     };
     haptics.commit();
     setState((prev) => ({ ...prev, conversations: [conversation, ...prev.conversations] }));
-    if (live(me, conversation.id)) void remote.openGroup(others, conversation.title, conversation.id).then((result) => {
-      if (result === conversation.id) return;
-      setState((prev) => ({ ...prev, conversations: prev.conversations.filter((c) => c.id !== conversation.id) }));
+    if (!live(me, conversation.id, ...others)) {
+      const line = eventLine(conversation.id, me, { type: 'created', title: groupTitle });
+      setState((prev) => appendMessage(prev, line));
+      return conversation.id;
+    }
+    // Until the server has it, a fetch not finding it is no reason to drop it.
+    pendingChats.current.add(conversation.id);
+    void remote.createGroup(others, groupTitle, conversation.id).catch(() => 'failed' as const).then((result) => {
+      pendingChats.current.delete(conversation.id);
+      if (result === conversation.id) { void refreshChat(conversation.id); return; }
+      if (!isRefusal(result)) { setState((prev) => foldChatInto(prev, conversation.id, result)); return; }
+      setState((prev) => ({
+        ...prev,
+        conversations: prev.conversations.filter((c) => c.id !== conversation.id),
+        messages: prev.messages.filter((m) => m.conversationId !== conversation.id),
+      }));
       showToast({
-        title: result === 'teen' ? 'Someone there can only get messages from people they follow' : result === 'blocked' ? 'You can’t message someone in that group' : 'That group didn’t start. Try again.',
+        title: result === 'teen' ? 'Someone you picked can only be added by people they follow'
+          : result === 'blocked' ? 'Some of the people you picked can’t be in a group together'
+          : result === 'full' ? `A group can have up to ${GROUP_CAP} people`
+          : 'That group didn’t start. Try again.',
         icon: 'lock-closed-outline',
       });
       if (router.canGoBack()) router.back();
     });
     return conversation.id;
-  }, [requireUser]);
+  }, [requireUser, appendMessage, eventLine, refreshChat]);
 
-  const addToGroup = useCallback((conversationId: ID, memberId: ID) => {
+  /** Anyone in a group can add people, up to GROUP_CAP in all. Someone not known to be an adult must follow you (as for a one-to-one chat). */
+  const addGroupMembers = useCallback((conversationId: ID, memberIds: ID[]): Promise<boolean> => {
     const me = requireUser();
-    setState((prev) => ({ ...prev, conversations: prev.conversations.map((c) => (c.id === conversationId && !c.participantIds.includes(memberId) ? { ...c, participantIds: [...c.participantIds, memberId] } : c)) }));
-    if (live(me, conversationId)) void remote.addToGroup(conversationId, memberId).then((result) => {
+    const chat = stateRef.current.conversations.find((c) => c.id === conversationId);
+    if (!chat || !isGroupChat(chat) || !chat.participantIds.includes(me)) return Promise.resolve(false);
+    const newcomers = Array.from(new Set(memberIds.filter((id) => !!id && id !== me && !chat.participantIds.includes(id))));
+    if (!newcomers.length) return Promise.resolve(false);
+    const room = GROUP_CAP - chat.participantIds.length;
+    if (newcomers.length > room) {
+      showToast({ title: room > 0 ? `There’s room for ${room} more` : `That group is full (${GROUP_CAP})`, icon: 'people-outline' });
+      return Promise.resolve(false);
+    }
+    haptics.commit();
+    setState((prev) => ({
+      ...prev,
+      conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, participantIds: [...c.participantIds, ...newcomers.filter((id) => !c.participantIds.includes(id))] } : c)),
+    }));
+    if (!live(me, conversationId, ...newcomers)) {
+      const line = eventLine(conversationId, me, { type: 'added', targetIds: newcomers });
+      setState((prev) => appendMessage(prev, line));
+      return Promise.resolve(true);
+    }
+    return remote.addGroupMembers(conversationId, newcomers).catch(() => 'failed' as const).then((result) => {
+      // In: the server's "added" line follows and brings the group up to date.
+      if (Array.isArray(result)) return true;
+      setState((prev) => ({
+        ...prev,
+        conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, participantIds: c.participantIds.filter((p) => !newcomers.includes(p)) } : c)),
+      }));
+      const one = newcomers.length === 1 ? stateRef.current.users.find((u) => u.id === newcomers[0])?.name.split(' ')[0] : undefined;
+      showToast({
+        title: result === 'teen' ? `${one ?? 'Someone there'} can only be added by people they follow`
+          : result === 'blocked' ? (one ? `${one} can’t be added to this group` : 'Someone there can’t be in a group with them')
+          : result === 'full' ? `That group is full (${GROUP_CAP})`
+          : newcomers.length === 1 ? 'They weren’t added. Try again.' : 'Nobody was added. Try again.',
+        icon: 'lock-closed-outline',
+      });
+      return false;
+    });
+  }, [requireUser, appendMessage, eventLine]);
+
+  /** An admin takes someone out of a group. A hit chat's "I'm in" goes with them (the server does the same). */
+  const removeGroupMember = useCallback((conversationId: ID, memberId: ID) => {
+    const me = requireUser();
+    const s = stateRef.current;
+    const chat = s.conversations.find((c) => c.id === conversationId);
+    if (!chat || !isGroupChat(chat) || memberId === me || !chat.participantIds.includes(memberId)) return;
+    if (!isGroupAdmin(chat, me)) { showToast({ title: 'Only admins can remove people', icon: 'lock-closed-outline' }); return; }
+    const wasAdmin = !!chat.adminIds?.includes(memberId);
+    const hitsJoined = s.hitRequests.filter((h) => h.conversationId === conversationId && h.joinedIds.includes(memberId)).map((h) => h.id);
+    haptics.commit();
+    setState((prev) => ({
+      ...prev,
+      conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, participantIds: c.participantIds.filter((p) => p !== memberId), adminIds: c.adminIds?.filter((p) => p !== memberId) } : c)),
+      hitRequests: hitsJoined.length ? prev.hitRequests.map((h) => (hitsJoined.includes(h.id) ? { ...h, joinedIds: h.joinedIds.filter((x) => x !== memberId) } : h)) : prev.hitRequests,
+    }));
+    if (!live(me, conversationId, memberId)) {
+      const line = eventLine(conversationId, me, { type: 'removed', targetIds: [memberId] });
+      setState((prev) => appendMessage(prev, line));
+      return;
+    }
+    void remote.removeGroupMember(conversationId, memberId).catch(() => 'failed' as const).then((result) => {
       if (result === 'ok') return;
-      setState((prev) => ({ ...prev, conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, participantIds: c.participantIds.filter((p) => p !== memberId) } : c)) }));
-      showToast({ title: result === 'teen' ? 'They can only get messages from people they follow' : result === 'blocked' ? 'You can’t add them' : 'They weren’t added. Try again.', icon: 'lock-closed-outline' });
+      setState((prev) => ({
+        ...prev,
+        conversations: prev.conversations.map((c) => (c.id === conversationId && !c.participantIds.includes(memberId)
+          ? { ...c, participantIds: [...c.participantIds, memberId], adminIds: wasAdmin && c.adminIds ? [...c.adminIds, memberId] : c.adminIds }
+          : c)),
+        hitRequests: hitsJoined.length ? prev.hitRequests.map((h) => (hitsJoined.includes(h.id) && !h.joinedIds.includes(memberId) ? { ...h, joinedIds: [...h.joinedIds, memberId] } : h)) : prev.hitRequests,
+      }));
+      showToast({ title: result === 'not-admin' ? 'Only admins can remove people' : 'They weren’t removed. Try again.', icon: 'lock-closed-outline' });
+    });
+  }, [requireUser, appendMessage, eventLine]);
+
+  /** Anyone in a group can rename it; an empty name takes the name off (it is then called by its people). */
+  const renameGroup = useCallback((conversationId: ID, title: string) => {
+    const me = requireUser();
+    const chat = stateRef.current.conversations.find((c) => c.id === conversationId);
+    if (!chat || !isGroupChat(chat)) return;
+    const before = chat.title;
+    const next = cleanTitle(title);
+    if ((before ?? '') === (next ?? '')) return;
+    const put = (from: string | undefined, to: string | undefined) =>
+      setState((prev) => ({ ...prev, conversations: prev.conversations.map((c) => (c.id === conversationId && c.title === from ? { ...c, title: to } : c)) }));
+    put(before, next);
+    if (!live(me, conversationId)) {
+      const line = eventLine(conversationId, me, { type: 'renamed', title: next });
+      setState((prev) => appendMessage(prev, line));
+      return;
+    }
+    void remote.renameGroup(conversationId, next ?? '').catch(() => false).then((ok) => {
+      if (ok) return;
+      // Put the old name back, unless someone has changed it again meanwhile.
+      put(next, before);
+      showToast({ title: 'The name didn’t change. Try again.', icon: 'alert-circle-outline' });
+    });
+  }, [requireUser, appendMessage, eventLine]);
+
+  /** A group photo picked on this device (uploaded here, into your own folder), or null to take it off. Anyone in the group can. */
+  const setGroupPhoto = useCallback((conversationId: ID, uri: string | null) => {
+    const me = requireUser();
+    const chat = stateRef.current.conversations.find((c) => c.id === conversationId);
+    if (!chat || !isGroupChat(chat)) return;
+    const before = chat.photoUrl;
+    const next = uri || undefined;
+    if (before === next) return;
+    haptics.commit();
+    const put = (from: (string | undefined)[], to: string | undefined) =>
+      setState((prev) => ({ ...prev, conversations: prev.conversations.map((c) => (c.id === conversationId && from.includes(c.photoUrl) ? { ...c, photoUrl: to } : c)) }));
+    // The picked photo shows straight away, from the phone itself.
+    put([before], next);
+    if (!live(me, conversationId)) {
+      const line = eventLine(conversationId, me, { type: 'photo', on: !!next });
+      setState((prev) => appendMessage(prev, line));
+      return;
+    }
+    void (async () => {
+      let hosted: string | undefined = next;
+      if (next && isLocalMedia(next)) {
+        try { hosted = await uploadMedia(me, next, 'photo'); } catch (e) {
+          put([next], before);
+          showToast({ title: 'The photo didn’t upload', body: e instanceof Error ? e.message : 'Try again.', icon: 'alert-circle-outline' });
+          return;
+        }
+        put([next], hosted);
+      }
+      const ok = await remote.setGroupPhoto(conversationId, hosted ?? null).catch(() => false);
+      if (ok) return;
+      put([next, hosted], before);
+      showToast({ title: 'The photo didn’t change. Try again.', icon: 'alert-circle-outline' });
+    })();
+  }, [requireUser, appendMessage, eventLine]);
+
+  /** An admin makes someone an admin, or takes it away. A group always keeps one: the last admin cannot step down (they can leave instead). */
+  const setGroupAdmin = useCallback((conversationId: ID, memberId: ID, admin: boolean) => {
+    const me = requireUser();
+    const chat = stateRef.current.conversations.find((c) => c.id === conversationId);
+    if (!chat || !isGroupChat(chat) || !chat.participantIds.includes(memberId)) return;
+    if (!isGroupAdmin(chat, me)) { showToast({ title: 'Only admins can do that', icon: 'lock-closed-outline' }); return; }
+    const before = chat.adminIds ?? (chat.createdBy ? [chat.createdBy] : []);
+    if (before.includes(memberId) === admin) return;
+    const after = admin ? [...before, memberId] : before.filter((id) => id !== memberId);
+    if (!after.length) {
+      showToast({ title: 'A group needs an admin', body: 'Make someone else an admin first, or leave the group.', icon: 'people-outline' });
+      return;
+    }
+    haptics.commit();
+    setState((prev) => ({ ...prev, conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, adminIds: after } : c)) }));
+    if (!live(me, conversationId, memberId)) {
+      const line = eventLine(conversationId, me, { type: 'admin', targetIds: [memberId], on: admin });
+      setState((prev) => appendMessage(prev, line));
+      return;
+    }
+    void remote.setGroupAdmin(conversationId, memberId, admin).catch(() => 'failed' as const).then((result) => {
+      if (result === 'ok') return;
+      setState((prev) => ({ ...prev, conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, adminIds: before } : c)) }));
+      showToast({ title: result === 'not-admin' ? 'Only admins can do that' : 'That didn’t go through. Try again.', icon: 'lock-closed-outline' });
+    });
+  }, [requireUser, appendMessage, eventLine]);
+
+  /**
+   * Leaving a group: it goes from this phone at once. In a hit's chat your
+   * "I'm in" goes too (the server does the same). If the server says no, it
+   * all comes back, with a note.
+   */
+  const leaveGroup = useCallback((conversationId: ID) => {
+    const me = requireUser();
+    const s = stateRef.current;
+    const chat = s.conversations.find((c) => c.id === conversationId);
+    if (!chat) return;
+    const kept = s.messages.filter((m) => m.conversationId === conversationId);
+    const hitsJoined = s.hitRequests.filter((h) => h.conversationId === conversationId && h.joinedIds.includes(me)).map((h) => h.id);
+    setState((prev) => ({
+      ...prev,
+      conversations: prev.conversations.filter((c) => c.id !== conversationId),
+      messages: prev.messages.filter((m) => m.conversationId !== conversationId),
+      hitRequests: hitsJoined.length ? prev.hitRequests.map((h) => (hitsJoined.includes(h.id) ? { ...h, joinedIds: h.joinedIds.filter((x) => x !== me) } : h)) : prev.hitRequests,
+    }));
+    if (!live(me, conversationId)) return;
+    void remote.leaveGroup(conversationId).catch(() => false).then((ok) => {
+      if (ok) return;
+      setState((prev) => (prev.conversations.some((c) => c.id === conversationId) ? prev : {
+        ...prev,
+        conversations: [chat, ...prev.conversations],
+        messages: [...prev.messages, ...kept.filter((m) => !prev.messages.some((p) => p.id === m.id))],
+        hitRequests: hitsJoined.length ? prev.hitRequests.map((h) => (hitsJoined.includes(h.id) && !h.joinedIds.includes(me) ? { ...h, joinedIds: [...h.joinedIds, me] } : h)) : prev.hitRequests,
+      }));
+      showToast({ title: 'You’re still in the group', body: 'Leaving didn’t go through. Try again.', icon: 'alert-circle-outline' });
     });
   }, [requireUser]);
 
-  const renameGroup = useCallback((conversationId: ID, title: string) => {
+  /** A group someone took you out of, as it last stood here (see refreshChat), for the chat screen to keep showing read-only. */
+  const removedChat = useCallback((conversationId: ID) => {
+    const kept = removedChats.current.get(conversationId);
+    return kept && kept.me === stateRef.current.currentUserId ? kept.chat : undefined;
+  }, []);
+
+  /**
+   * Mutes a chat, a group or a one-to-one, until a moment (MUTED_FOREVER for
+   * "until I turn it back on"), or unmutes it with null. A muted chat sends
+   * no alerts unless someone @mentions you, and stays off the unread badge.
+   * Only you can see it. `quiet`: no Undo toast (an Undo passes it).
+   */
+  const muteChat = useCallback((conversationId: ID, until: string | null, quiet?: boolean) => {
     const me = requireUser();
-    setState((prev) => ({ ...prev, conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, title: title.trim() || undefined } : c)) }));
-    if (live(me, conversationId)) void remote.renameGroup(conversationId, title.trim());
+    const find = () => stateRef.current.conversations.find((c) => c.id === conversationId);
+    const chat = find();
+    if (!chat) return;
+    const before = chat.mutedUntil && Date.parse(chat.mutedUntil) > Date.now() ? chat.mutedUntil : null;
+    const next = until && Date.parse(until) > Date.now() ? until : null;
+    if (before === next) return;
+    haptics.tap();
+    const put = (value: string | null) =>
+      setState((prev) => ({ ...prev, conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, mutedUntil: value ?? undefined } : c)) }));
+    put(next);
+    if (!quiet) {
+      offerUndo(
+        next ? 'Chat muted' : 'Chat unmuted',
+        () => (find()?.mutedUntil ?? null) === next,
+        () => muteChat(conversationId, before, true),
+        { body: next ? 'No alerts from it, unless someone @mentions you' : undefined, icon: next ? 'notifications-off-outline' : 'notifications-outline' },
+      );
+    }
+    if (!live(me, conversationId)) return;
+    void remote.setChatMute(conversationId, next).catch(() => false).then((ok) => {
+      if (ok) return;
+      if ((find()?.mutedUntil ?? null) === next) put(before);
+      showToast({ title: next ? 'This chat wasn’t muted' : 'This chat wasn’t unmuted', body: 'Try again in a moment.', icon: 'alert-circle-outline' });
+    });
   }, [requireUser]);
 
-  const leaveGroup = useCallback((conversationId: ID) => {
-    const me = requireUser();
-    setState((prev) => ({ ...prev, conversations: prev.conversations.filter((c) => c.id !== conversationId), messages: prev.messages.filter((m) => m.conversationId !== conversationId) }));
-    if (live(me, conversationId)) void remote.leaveGroup(conversationId);
-  }, [requireUser]);
+  /** Reports a chat (a group, usually) to CourtSide; a person reviews it. */
+  const reportChat = useCallback((conversationId: ID, reason: string) => {
+    haptics.commit();
+    const me = stateRef.current.currentUserId;
+    if (me && live(me, conversationId)) void remote.insertReport(me, null, `conversation:${conversationId}`, reason);
+  }, []);
 
   /** Sends a message that did not go through, again. */
   const retryMessage = useCallback((messageId: ID) => {
@@ -2873,80 +3312,121 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const s = stateRef.current;
     const me = s.currentUserId;
     if (!me) return false;
-    if (s.conversations.some((c) => c.participantIds.length === 2 && c.participantIds.includes(userId) && c.participantIds.includes(me))) return true;
+    if (findDirectChat(s.conversations, me, userId)) return true;
     const them = s.users.find((u) => u.id === userId);
     if (them?.ageGroup !== 'teen') return true;
     return s.followEdges.some((e) => e.followerId === userId && e.followingId === me);
   }, []);
 
-  /** Share a clip or a thread into one or more DMs, Instagram style. */
-  const shareToUsers = useCallback(
-    (userIds: ID[], kind: 'post' | 'question' | 'profile', sharedId: ID, note?: string) => {
+  /**
+   * Sends something into chats, Instagram style: a post, thread, profile or
+   * hit, a court, or a message forwarded as it is. `conversationIds` are
+   * chats you are in (groups or one-to-one); each of `userIds` gets it in your
+   * one-to-one chat with them, started if need be. Each chat gets the item
+   * and then the note, if there is one.
+   */
+  const shareToChats = useCallback(
+    (targets: { conversationIds?: ID[]; userIds?: ID[] }, item: ShareItem, note?: string) => {
       const me = requireUser();
-      const fresh: Conversation[] = [];
-      const outgoing: Message[] = [];
-      for (const userId of userIds) {
-        let conversation = [...fresh, ...stateRef.current.conversations].find(
-          (c) => c.participantIds.length === 2 && c.participantIds.includes(userId) && c.participantIds.includes(me),
-        );
-        if (!conversation) {
-          conversation = { id: nextId('cv'), participantIds: [me, userId], messageIds: [], updatedAt: new Date().toISOString(), unreadCount: 0 };
-          fresh.push(conversation);
+      const s = stateRef.current;
+      const original = item.kind === 'message' ? s.messages.find((m) => m.id === item.id) : undefined;
+      if (item.kind === 'message') {
+        // An event line is not a message anyone sent, and a voice note still
+        // on this phone (its upload failed) cannot be heard anywhere else.
+        if (!original || original.kind === 'system' || (original.audio && isLocalMedia(original.audio.url))) {
+          showToast({ title: 'That message can’t be forwarded', icon: 'alert-circle-outline' });
+          return;
         }
-        outgoing.push(makeMessage(conversation.id, me, '', kind, sharedId));
-        if (note?.trim()) outgoing.push(makeMessage(conversation.id, me, note.trim()));
       }
+      const chats: Conversation[] = [];
+      const fresh: Conversation[] = [];
+      for (const id of targets.conversationIds ?? []) {
+        const chat = s.conversations.find((c) => c.id === id && c.participantIds.includes(me));
+        if (chat && !chats.includes(chat)) chats.push(chat);
+      }
+      for (const userId of targets.userIds ?? []) {
+        if (userId === me) continue;
+        let chat = findDirectChat([...fresh, ...s.conversations], me, userId);
+        if (!chat) {
+          chat = { id: nextId('cv'), participantIds: [me, userId], messageIds: [], updatedAt: new Date().toISOString(), unreadCount: 0 };
+          fresh.push(chat);
+        }
+        if (!chats.includes(chat)) chats.push(chat);
+      }
+      if (!chats.length) return;
+
+      // The item as it reads in one chat.
+      const itemIn = (conversationId: ID): Message => {
+        if (item.kind === 'court') return { ...makeMessage(conversationId, me, item.place.name, 'court'), place: item.place };
+        if (item.kind === 'message') {
+          // Forwarded as it is: the same kind, words, shared item, court or recording.
+          return original
+            ? { ...makeMessage(conversationId, me, original.body, original.kind, original.sharedId), place: original.place, audio: original.audio }
+            : makeMessage(conversationId, me, '');
+        }
+        return makeMessage(conversationId, me, '', item.kind, item.id);
+      };
+      const outgoing: Message[] = [];
+      for (const chat of chats) {
+        outgoing.push(itemIn(chat.id));
+        if (note?.trim()) outgoing.push(makeMessage(chat.id, me, note.trim()));
+      }
+
+      // A post or thread counts one share per chat it went to (a forward of one too).
+      const sharedKind = item.kind === 'message' ? original?.kind : item.kind;
+      const sharedId = item.kind === 'message' ? original?.sharedId : 'id' in item ? item.id : undefined;
       setState((prev) => {
         let next = fresh.length ? { ...prev, conversations: [...fresh, ...prev.conversations] } : prev;
         for (const message of outgoing) next = appendMessage(next, message);
-
-        // One share tally per send, however many people it went to.
-        if (kind === 'post') {
+        if (sharedKind === 'post' && sharedId) {
           const post = next.posts.find((p) => p.id === sharedId);
-          next = {
-            ...next,
-            posts: next.posts.map((p) =>
-              p.id === sharedId ? { ...p, shares: (p.shares ?? 0) + userIds.length } : p,
-            ),
-          };
-          if (post) {
-            next = withNotification(next, {
-              userId: post.authorId,
-              actorId: me,
-              kind: 'share',
-              targetId: post.id,
-              targetKind: 'post',
-              preview: snippet(post.body),
-            });
-          }
-        } else if (kind === 'question') {
+          next = { ...next, posts: next.posts.map((p) => (p.id === sharedId ? { ...p, shares: (p.shares ?? 0) + chats.length } : p)) };
+          if (post) next = withNotification(next, { userId: post.authorId, actorId: me, kind: 'share', targetId: post.id, targetKind: 'post', preview: snippet(post.body) });
+        } else if (sharedKind === 'question' && sharedId) {
           const question = next.questions.find((q) => q.id === sharedId);
-          next = {
-            ...next,
-            questions: next.questions.map((q) =>
-              q.id === sharedId ? { ...q, shares: (q.shares ?? 0) + userIds.length } : q,
-            ),
-          };
-          if (question) {
-            next = withNotification(next, {
-              userId: question.authorId,
-              actorId: me,
-              kind: 'share',
-              targetId: question.id,
-              targetKind: 'question',
-              preview: snippet(question.title),
-            });
-          }
+          next = { ...next, questions: next.questions.map((q) => (q.id === sharedId ? { ...q, shares: (q.shares ?? 0) + chats.length } : q)) };
+          if (question) next = withNotification(next, { userId: question.authorId, actorId: me, kind: 'share', targetId: question.id, targetKind: 'question', preview: snippet(question.title) });
         }
         return next;
       });
-      // Saved after they show: a new chat is opened first, then its messages go up.
-      if (isSupabaseConfigured && UUID.test(me)) {
-        void (async () => {
-          for (const c of fresh) { const other = c.participantIds.find((p) => p !== me); if (other && UUID.test(other)) await remote.openConversation(other, c.id); }
-          for (const m of outgoing) if (UUID.test(m.conversationId)) await remote.insertMessage(m);
-        })();
-      }
+
+      // Saved after they show: new one-to-one chats are opened first (the
+      // server may already have one with that person, or say no), then the
+      // messages go up. One that does not go through shows its retry.
+      if (!isSupabaseConfigured || !UUID.test(me)) return;
+      void (async () => {
+        const movedTo = new Map<ID, ID>();
+        const refused = new Set<ID>();
+        for (const chat of fresh) {
+          const other = chat.participantIds.find((p) => p !== me);
+          if (!other || !UUID.test(other)) continue;
+          const standing = await remote.openConversation(other, chat.id).catch(() => chat.id);
+          if (standing === null || standing === 'blocked') {
+            refused.add(chat.id);
+            setState((prev) => ({
+              ...prev,
+              conversations: prev.conversations.filter((c) => c.id !== chat.id),
+              messages: prev.messages.filter((m) => m.conversationId !== chat.id),
+            }));
+            const them = stateRef.current.users.find((u) => u.id === other);
+            showToast({ title: standing === 'blocked' ? "You can't message this account" : `Only people ${them?.name.split(' ')[0] ?? 'they'} follows can message them`, icon: 'lock-closed-outline' });
+            continue;
+          }
+          if (standing !== chat.id) {
+            movedTo.set(chat.id, standing);
+            setState((prev) => foldChatInto(prev, chat.id, standing));
+          }
+        }
+        for (const message of outgoing) {
+          if (refused.has(message.conversationId)) continue;
+          const conversationId = movedTo.get(message.conversationId) ?? message.conversationId;
+          if (!UUID.test(conversationId)) continue;
+          const result = await remote.insertMessage({ ...message, conversationId }).catch(() => 'failed' as const);
+          if (result === 'failed' || result === 'refused') {
+            setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, failed: true } : m)) }));
+          }
+        }
+      })();
     },
     [requireUser, appendMessage, makeMessage],
   );
@@ -3409,7 +3889,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  /** Blocking also unfollows, both ways, and drops the conversation. */
+  /**
+   * Blocking also unfollows, both ways, and drops your one-to-one chat. A
+   * group you are both in stays (Instagram's way): both can still write
+   * there, and their messages fold away on your side.
+   */
   const toggleBlock = useCallback((userId: ID, quiet?: boolean) => {
     // Blocking has already been asked about, so only unblocking offers Undo,
     // which blocks again (unblocking put nothing back that blocking took).
@@ -3439,7 +3923,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             )
           : prev.users,
         conversations: blocking
-          ? prev.conversations.filter((c) => !(c.participantIds.includes(userId) && c.participantIds.includes(me)))
+          ? prev.conversations.filter((c) => !(isDirectChat(c) && c.participantIds.includes(userId) && c.participantIds.includes(me)))
           : prev.conversations,
       };
     });
@@ -3489,7 +3973,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, coachQuestions: prev.coachQuestions.map((q) => (q.id === questionId ? { ...q, resolved: !q.resolved } : q)) }));
     if (live(me, questionId)) void remote.upsertCoachQuestion({ ...question, resolved: !question.resolved });
   }, [requireUser]);
-  const setPref = useCallback((key: 'showActivity' | 'pushLikes' | 'pushCoach', value: boolean) => {
+  const setPref = useCallback((key: 'showActivity' | 'pushLikes' | 'pushCoach' | 'pushMessages', value: boolean) => {
     haptics.tap();
     setState((prev) => ({ ...prev, prefs: { ...prev.prefs, [key]: value } }));
   }, []);
@@ -3721,22 +4205,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadSiteFeedback,
       removeFromWaitlistPage,
       loadReportedItem,
+      loadReportedChat,
       decideReport,
       openConversationWith,
       sendMessage,
       sendCourt,
       sendVoice,
-      openGroup,
-      addToGroup,
+      createGroup,
+      addGroupMembers,
+      removeGroupMember,
       renameGroup,
+      setGroupPhoto,
+      setGroupAdmin,
       leaveGroup,
+      removedChat,
+      muteChat,
+      reportChat,
       confirmBirthDate,
       canMessage,
       editMessage,
       retryMessage,
       unsendMessage,
       deleteMessageForMe,
-      shareToUsers,
+      shareToChats,
       markConversationRead,
     }),
     [
@@ -3859,22 +4350,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadSiteFeedback,
       removeFromWaitlistPage,
       loadReportedItem,
+      loadReportedChat,
       decideReport,
       openConversationWith,
       sendMessage,
       sendCourt,
       sendVoice,
-      openGroup,
-      addToGroup,
+      createGroup,
+      addGroupMembers,
+      removeGroupMember,
       renameGroup,
+      setGroupPhoto,
+      setGroupAdmin,
       leaveGroup,
+      removedChat,
+      muteChat,
+      reportChat,
       confirmBirthDate,
       canMessage,
       editMessage,
       retryMessage,
       unsendMessage,
       deleteMessageForMe,
-      shareToUsers,
+      shareToChats,
       markConversationRead,
     ],
   );

@@ -122,6 +122,9 @@ export function NearbyMap(props: NearbyMapProps) {
     if (!actions.canMessage(id)) { showToast({ title: 'Only people they follow can message them', icon: 'lock-closed-outline' }); return; }
     router.push(`/messages/${actions.openConversationWith(id)}`);
   };
+  // Into one of your groups (the sheet says if they can't be), or a court into any of your chats.
+  const addToGroup = (id: string) => router.push({ pathname: '/pick-group', params: { user: id } });
+  const sendCourt = (c: { lat: number; lng: number; name: string }) => router.push({ pathname: '/share', params: { kind: 'court', name: c.name, lat: String(c.lat), lng: String(c.lng) } });
   const directions = (c: { lat: number; lng: number; name: string }) => {
     const url = Platform.OS === 'ios' ? `maps://?daddr=${c.lat},${c.lng}&q=${encodeURIComponent(c.name)}` : `geo:${c.lat},${c.lng}?q=${c.lat},${c.lng}(${encodeURIComponent(c.name)})`;
     void Linking.openURL(url).catch(() => Linking.openURL(`https://maps.apple.com/?daddr=${c.lat},${c.lng}`));
@@ -138,9 +141,9 @@ export function NearbyMap(props: NearbyMapProps) {
         {meOpen ? (
           <YouSheet me={me} open={openToHit} onToggle={actions.setOpenToHit} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} />
         ) : model.selected ? (
-          <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onFollow={() => { const who = model.selected!.user; if (followingIds.includes(who.id)) confirmUnfollow(who, () => actions.toggleFollow(who.id)); else actions.toggleFollow(who.id); }} />
+          <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onAddToGroup={() => addToGroup(model.selected!.user.id)} onFollow={() => { const who = model.selected!.user; if (followingIds.includes(who.id)) confirmUnfollow(who, () => actions.toggleFollow(who.id)); else actions.toggleFollow(who.id); }} />
         ) : model.selectedCourt ? (
-          <CourtSheet court={model.selectedCourt} miles={milesBetween(home, model.selectedCourt)} onClose={() => model.selectCourt(null)} onDirections={() => directions(model.selectedCourt!)} />
+          <CourtSheet court={model.selectedCourt} miles={milesBetween(home, model.selectedCourt)} onClose={() => model.selectCourt(null)} onSend={() => sendCourt(model.selectedCourt!)} onDirections={() => directions(model.selectedCourt!)} />
         ) : !model.homeKnown && !model.place ? (
           <WhereCard locating={locating} onLocation={onToggleLocation} />
         ) : (

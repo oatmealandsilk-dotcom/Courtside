@@ -3,7 +3,18 @@ import { Pressable, Text, View } from 'react-native';
 import { Avatar } from './ui';
 import { useTheme } from '@/theme/ThemeProvider';
 import { colors, font } from '@/theme';
-export function ProfilePhotoPicker({ value, name, onChange }: { value?: string; name: string; onChange: (uri: string) => void }) {
+/**
+ * A round photo with a link under it that opens the computer's files. Your
+ * profile uses it as it is; a group chat passes its own picture (`preview`)
+ * and words (`label`), so the same picker serves both.
+ */
+export function ProfilePhotoPicker({ value, name, onChange, label = 'Change profile photo', preview }: {
+  value?: string; name: string; onChange: (uri: string) => void;
+  /** The link's words under the picture. */
+  label?: string;
+  /** Drawn in place of the default 88px avatar. */
+  preview?: React.ReactNode;
+}) {
   useTheme();
   const input = useRef<HTMLInputElement>(null);
   const [error, setError] = useState('');
@@ -32,9 +43,9 @@ export function ProfilePhotoPicker({ value, name, onChange }: { value?: string; 
       reader.onerror = () => setError('This photo could not be opened.');
       reader.readAsDataURL(file); event.target.value = '';
     }}/>
-    <Pressable accessibilityRole="button" accessibilityLabel="Change profile photo" onPress={() => input.current?.click()} style={{alignItems:'center',gap:12}}>
-      <Avatar name={name} seed="profile-photo-preview" uri={value} size={88}/>
-      <Text style={{color:colors.brand,...font('600')}}>Change profile photo</Text>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={() => input.current?.click()} style={{alignItems:'center',gap:12}}>
+      {preview ?? <Avatar name={name} seed="profile-photo-preview" uri={value} size={88}/>}
+      <Text style={{color:colors.brand,...font('600')}}>{label}</Text>
     </Pressable>
     {!!error && <Text style={{color:colors.danger}}>{error}</Text>}
   </View>;

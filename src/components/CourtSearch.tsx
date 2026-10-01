@@ -13,7 +13,7 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
 export interface ChosenPlace { name: string; lat?: number; lng?: number }
 
 /** Lower case, no accents, single spaces: "Pullen  Park" and "pullen park" are the same search. */
-const plain = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+export const plain = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 /** OpenStreetMap leaves most public courts unnamed; the list calls those "Public courts". */
 const labelOf = (c: Court) => (c.name === 'Tennis courts' ? 'Public courts' : c.name);
 
@@ -23,7 +23,7 @@ const labelOf = (c: Court) => (c.name === 'Tennis courts' ? 'Public courts' : c.
  * with a word starting with it, which beats one that only contains it.
  * Null when it does not match at all.
  */
-function score(name: string, words: string[]): number | null {
+export function score(name: string, words: string[]): number | null {
   const n = plain(name);
   let total = 0;
   for (const w of words) {
@@ -35,15 +35,15 @@ function score(name: string, words: string[]): number | null {
 }
 
 /** The name with the typed words in bold, so you see why each one came up. */
-function Highlighted({ text, words, style, strong }: { text: string; words: string[]; style: object; strong: object }) {
+export function Highlighted({ text, words, style, strong, lines = 2 }: { text: string; words: string[]; style: object; strong: object; lines?: number }) {
   const lower = plain(text);
   // Only the ascii-equivalent positions line up; accents make plain() shorter, so fall back to no highlight.
-  if (lower.length !== text.length || !words.length) return <Text style={style} numberOfLines={2}>{text}</Text>;
+  if (lower.length !== text.length || !words.length) return <Text style={style} numberOfLines={lines}>{text}</Text>;
   const marks = new Array(text.length).fill(false);
   for (const w of words) { let i = lower.indexOf(w); while (i >= 0) { for (let k = i; k < i + w.length; k++) marks[k] = true; i = lower.indexOf(w, i + 1); } }
   const parts: { s: string; on: boolean }[] = [];
   for (let i = 0; i < text.length; i++) { const last = parts[parts.length - 1]; if (last && last.on === marks[i]) last.s += text[i]; else parts.push({ s: text[i], on: marks[i] }); }
-  return <Text style={style} numberOfLines={2}>{parts.map((p, i) => <Text key={i} style={p.on ? strong : undefined}>{p.s}</Text>)}</Text>;
+  return <Text style={style} numberOfLines={lines}>{parts.map((p, i) => <Text key={i} style={p.on ? strong : undefined}>{p.s}</Text>)}</Text>;
 }
 
 /**

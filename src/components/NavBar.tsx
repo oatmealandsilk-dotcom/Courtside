@@ -4,7 +4,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { interpolate, runOnJS, useAnimatedReaction, useAnimatedStyle } from 'react-native-reanimated';
 import { Animated as RNAnimated } from 'react-native';
-import { barCompact, DUCK } from '@/features/navigation/barShrink';
+import { BAR_TUCK, barCompact, DUCK } from '@/features/navigation/barShrink';
 import { useFeedWarm } from '@/features/feed/warmup';
 import { useCallback, useEffect, useRef } from 'react';
 import { Easing, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -18,7 +18,8 @@ import { LAYOUT, useResponsive } from '@/lib/useResponsive';
 import { Glass } from '@/components/ui/Glass';
 import { TAB_BAR_H } from '@/features/navigation/barInset';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography, font } from '@/theme';
+import { unreadChatCount } from '@/features/messages/groupRules';
+import { colors, pageIsDark, radius, spacing, typography, font } from '@/theme';
 
 /**
  * Minimal shape of what react-navigation hands a custom tabBar. Typed locally
@@ -47,7 +48,8 @@ export function NavBar({ state, navigation }: NavBarProps) {
   const styles = useThemedStyles(styleDefinitions);
   const { isPhone, isCompactSidebar } = useResponsive();
   const { conversations, notifications, currentUserId } = useApp();
-  const unread = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
+  // Chats with something new, not messages (Instagram's count); a muted chat never counts.
+  const unread = unreadChatCount(conversations);
   const unseen = notifications.filter((n) => n.userId === currentUserId && !n.read).length;
   const insets = useSafeAreaInsets();
   const activeRoute = state.routes[state.index]?.name ?? 'index';
@@ -90,7 +92,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
   const settle = useAnimatedStyle(() => ({ transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, 7])) }] }));
   const labelFade = useAnimatedStyle(() => ({ opacity: interpolate(barCompact.value, [0, 0.6], [1, 0], 'clamp') }));
   const tuck = useAnimatedStyle(() => ({
-    transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, 12])) }],
+    transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, BAR_TUCK])) }],
   }));
   if (isPhone) {
     return (
@@ -103,7 +105,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
               const active = item.route === activeRoute;
               return (
                 <React.Fragment key={item.route}>
-                {index === 2 && <View style={styles.createSlot}><Animated.View><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={styles.createButton}><BrandWash /><Ionicons name="add" size={28} color={colors.brandInk} /></Pressable></Animated.View></View>}
+                {index === 2 && <View style={styles.createSlot}><Animated.View><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={[styles.createButton, pageIsDark() && styles.createButtonDark]}><BrandWash /><Ionicons name="add" size={28} color={colors.brandInk} /></Pressable></Animated.View></View>}
                 <Pressable
                   onPress={() => navigation.navigate(item.route)}
                   accessibilityRole="tab"
@@ -273,6 +275,8 @@ export function NavBar({ state, navigation }: NavBarProps) {
 const styleDefinitions = StyleSheet.create({
   createSlot: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   createButton: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
+  // On a dark page the button's own colour as a shadow reads as a glow; a plain dark one just lifts it.
+  createButtonDark: { shadowColor: '#000000', shadowOpacity: 0.4 },
   // The bar floats: a glass pill a little above the bottom edge, the page running on beneath it.
   float: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 30 },
   pillWrap: { width: '100%', paddingHorizontal: 14 },

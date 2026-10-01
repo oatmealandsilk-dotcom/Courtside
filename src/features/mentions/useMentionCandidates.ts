@@ -5,17 +5,28 @@ import { useApp } from '@/store/AppContext';
 export interface MentionCandidate {
   user: User;
   /** Why they are near the top: shown as a small tag. */
-  reason: 'Following' | 'Follows you' | 'Interacts with you' | '';
+  reason: 'In this chat' | 'Following' | 'Follows you' | 'Interacts with you' | '';
 }
+
+/**
+ * A chat bigger than this (a busy hit chat) does not count as "interacts with
+ * you" for everyone in it: being in the same big group says little.
+ */
+const SMALL_CHAT = 8;
 
 /**
  * Who to offer when someone types "@": people you follow first, then people
  * who follow you, then people you interact with (likes, comments, messages),
  * then everyone else — the same order Instagram uses. Typing narrows the list
  * by handle or name without changing that order.
+ *
+ * `priorityIds` go before all of them: in a group chat, its own people, since
+ * they are who you are talking to.
  */
-export function useMentionCandidates() {
+export function useMentionCandidates(priorityIds?: string[]) {
   const { users, currentUserId, followingIds, followEdges, posts, comments, conversations, blockedIds } = useApp();
+  // By value, so a new array with the same people does not rank everyone again.
+  const priorityKey = priorityIds?.join(',') ?? '';
 
   const ranked = useMemo<MentionCandidate[]>(() => {
     if (!currentUserId) return [];
@@ -32,14 +43,18 @@ export function useMentionCandidates() {
       if (post?.authorId === currentUserId && comment.authorId !== currentUserId) bump(comment.authorId);
       if (comment.authorId === currentUserId && post && post.authorId !== currentUserId) bump(post.authorId);
     }
-    for (const conversation of conversations) conversation.participantIds.forEach((id) => { if (id !== currentUserId) bump(id); });
+    for (const conversation of conversations) {
+      if (conversation.participantIds.length > SMALL_CHAT) continue;
+      conversation.participantIds.forEach((id) => { if (id !== currentUserId) bump(id); });
+    }
     const hidden = new Set(blockedIds);
-    const tier = (id: string) => (following.has(id) ? 0 : followers.has(id) ? 1 : interacted.has(id) ? 2 : 3);
+    const first = new Set(priorityKey ? priorityKey.split(',') : []);
+    const tier = (id: string) => (first.has(id) ? -1 : following.has(id) ? 0 : followers.has(id) ? 1 : interacted.has(id) ? 2 : 3);
     return users
       .filter((u) => u.id !== currentUserId && !hidden.has(u.id))
       .map((user) => ({
         user,
-        reason: (following.has(user.id) ? 'Following' : followers.has(user.id) ? 'Follows you' : interacted.has(user.id) ? 'Interacts with you' : '') as MentionCandidate['reason'],
+        reason: (first.has(user.id) ? 'In this chat' : following.has(user.id) ? 'Following' : followers.has(user.id) ? 'Follows you' : interacted.has(user.id) ? 'Interacts with you' : '') as MentionCandidate['reason'],
       }))
       .sort((a, b) => {
         const t = tier(a.user.id) - tier(b.user.id);
@@ -49,7 +64,7 @@ export function useMentionCandidates() {
         if (i) return i;
         return a.user.name.localeCompare(b.user.name);
       });
-  }, [users, currentUserId, followingIds, followEdges, posts, comments, conversations, blockedIds]);
+  }, [users, currentUserId, followingIds, followEdges, posts, comments, conversations, blockedIds, priorityKey]);
 
   return useCallback((query: string, limit = 8) => {
     const q = query.trim().toLowerCase();

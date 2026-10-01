@@ -18,6 +18,8 @@ import { PreparingRing } from '@/components/PreparingRing';
 import { TagPlayers } from '@/components/TagPlayers';
 import { addToBank, getBank } from '@/features/compose/mediaBank';
 import { useApp } from '@/store/AppContext';
+import { fetchCourts } from '@/features/players/courts';
+import { homeFor } from '@/features/players/positions';
 import type { TaggedCourt } from '@/data/types';
 import { colors, radius, spacing, typography, font } from '@/theme';
 import { challengeFor } from '@/features/challenge/weekly';
@@ -37,7 +39,7 @@ type Stage = 'choose' | 'library' | 'edit' | 'form';
  */
 export default function Compose() {
   const styles = useThemedStyles(styleDefinitions);
-  const { actions, posts, currentUserId } = useApp();
+  const { actions, posts, currentUserId, currentUser, detectedCoords, lastSeen } = useApp();
 
   // The story rail opens this straight at the library with ?mode=story.
   const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string }>();
@@ -50,6 +52,16 @@ export default function Compose() {
   const shotUri = params.shot === 'pending' ? takePendingShot() : params.shot;
   const isHit = params.mode === 'hit' && !!shotUri;
   const [stage, setStage] = useState<Stage>(isHit ? 'form' : 'choose');
+  // The courts around you start loading while you pick and edit, so Add
+  // location opens on a full list (it asks for the same spot, from the same cache).
+  useEffect(() => {
+    if (!currentUser) return;
+    const mine = lastSeen[currentUser.id];
+    const near = homeFor(currentUser, detectedCoords ?? (mine ? { lat: mine.lat, lng: mine.lng } : null));
+    if (!near) return;
+    void fetchCourts(near).catch(() => undefined);
+    void fetchCourts(near, 25000).catch(() => undefined);
+  }, [currentUser?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // The Create box rises and grows into place with a small spring when it
   // opens, and plays that backwards when it closes, instead of only fading.
   const pop = useSharedValue(0);
@@ -188,17 +200,17 @@ export default function Compose() {
     <Reanimated.View style={[styles.choiceSheet, popStyle]}>
       <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>Create</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeMenu} hitSlop={10}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
       <Reanimated.View entering={arrive(0)}><Pressable accessibilityRole="button" accessibilityLabel={entering ? `Create a clip for the ${challenge.title} challenge` : 'Create a clip'} onPress={() => { setMode('clip'); void openDevice('video'); }} style={[styles.choiceOption, entering && styles.choiceChallenge]}>
-        {preparing === 'video' ? <PreparingRing size={28} done={prepDone} /> : <Ionicons name={entering ? 'trophy-outline' : 'videocam-outline'} size={28} color={entering ? colors.brand : colors.textMuted}/>}<Text style={styles.choiceLabel}>{entering ? 'Clip for the challenge' : 'Clip'}</Text>{preparing === 'video' ? <Text style={styles.note}>Getting your video ready — shrinking it so it posts fast.</Text> : entering ? <Text style={styles.note}>{`${challenge.title}. #${challenge.tag} is already in the caption.`}</Text> : null}
+        {preparing === 'video' ? <PreparingRing size={28} done={prepDone} /> : <Ionicons name={entering ? 'trophy-outline' : 'videocam-outline'} size={28} color={entering ? colors.brand : colors.textMuted}/>}<Text style={styles.choiceLabel}>{entering ? 'Clip for the challenge' : 'Clip'}</Text><Text style={styles.note}>{preparing === 'video' ? 'Getting your video ready — shrinking it so it posts fast.' : entering ? `${challenge.title}. #${challenge.tag} is already in the caption.` : 'Share a video from your device.'}</Text>
       </Pressable></Reanimated.View>
       <Reanimated.View entering={arrive(1)}><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => { setMode('post'); void openDevice('all'); }} style={styles.choiceOption}>
-        {preparing === 'all' ? <PreparingRing size={28} done={prepDone} /> : <Ionicons name="images-outline" size={28} color={colors.textMuted}/>}<Text style={styles.choiceLabel}>Post</Text>{preparing === 'all' ? <Text style={styles.note}>Getting it ready…</Text> : null}
+        {preparing === 'all' ? <PreparingRing size={28} done={prepDone} /> : <Ionicons name="images-outline" size={28} color={colors.textMuted}/>}<Text style={styles.choiceLabel}>Post</Text><Text style={styles.note}>{preparing === 'all' ? 'Getting it ready…' : 'Choose from your photos and videos.'}</Text>
       </Pressable></Reanimated.View>
       {pickError ? <Text style={styles.pickError}>{pickError}</Text> : null}
       <Reanimated.View entering={arrive(2)}><Pressable accessibilityRole="button" accessibilityLabel="Take an instant" onPress={() => router.replace('/hit')} style={styles.choiceOption}>
-        <Ionicons name="camera-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Instant</Text><Text style={styles.note}>Up for 24 hours</Text>
+        <Ionicons name="camera-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Instant</Text><Text style={styles.note}>A photo after you play. Up on the feed for a day.</Text>
       </Pressable></Reanimated.View>
       <Reanimated.View entering={arrive(3)}><Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={styles.choiceOption}>
-        <Ionicons name="chatbubbles-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Thread or question</Text>
+        <Ionicons name="chatbubbles-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Thread or question</Text><Text style={styles.note}>Ask the community or start a conversation.</Text>
       </Pressable></Reanimated.View>
     </Reanimated.View>
   </View>;
@@ -328,8 +340,7 @@ export default function Compose() {
               labelRight={mode !== 'story' && mode !== 'hit' ? <LocationLink value={location} court={!!court} onPress={() => openPlacePicker((value, picked) => { setLocation(value); setCourt(picked ?? null); }, location)} onClear={() => { setLocation(''); setCourt(null); }} /> : undefined}
               value={body}
               onChangeText={setBody}
-              // A post's box has "Caption" written over it; an instant's has no label, so the word goes inside.
-              placeholder={mode === 'story' || mode === 'hit' ? 'Caption (optional)' : undefined}
+              placeholder={mode === 'story' ? 'Add a line (optional)' : mode === 'hit' ? 'How did it go? (optional)' : 'Write a caption…'}
               multiline
               minHeight={64}
               mentions
