@@ -1,5 +1,5 @@
 import { useTheme } from '@/theme/ThemeProvider';
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import Home from './index';
 import Discuss from './discuss';
 import Coaches from './coaches';
@@ -8,9 +8,12 @@ import { Redirect, Tabs, router, usePathname, useGlobalSearchParams } from 'expo
 import { SwipeSurface } from '@/components/SwipeSurface';
 import { setPendingTab } from '@/features/navigation/pendingTab';
 import { requestSection, shownSection, swipeDestination } from '@/features/navigation/swipeOrder';
+import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
+
+const TAB_PATHS = ['/', '/discuss', '/coaches', '/profile'];
 
 export default function TabsLayout() {
   useTheme();
@@ -22,6 +25,16 @@ export default function TabsLayout() {
   };
   const { ready, currentUserId } = useApp();
   const { isPhone } = useResponsive();
+  // Community opens at its top whenever you come to it from another tab (the
+  // tabs stay mounted, so it used to sit wherever you last left it). Coming
+  // back from a thread is not a tab change, so your place is kept. Same rule
+  // as the phone's TabsPager.
+  const lastTab = useRef(pathname);
+  useEffect(() => {
+    if (!TAB_PATHS.includes(pathname)) return;
+    if (pathname === '/discuss' && TAB_PATHS.includes(lastTab.current) && lastTab.current !== '/discuss') requestScrollToTop('/discuss', true);
+    lastTab.current = pathname;
+  }, [pathname]);
   if (ready && !currentUserId) return <Redirect href="/sign-in" />;
   return (
     <SwipeSurface onSwipe={swipe} onCommit={direction => {

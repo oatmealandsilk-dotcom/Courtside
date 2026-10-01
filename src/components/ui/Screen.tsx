@@ -237,8 +237,10 @@ export function Screen({
 
   // "Top" is just under the pull-to-refresh strip: landing on the strip by a
   // tap rather than a pull would show the spinner with nothing to dismiss it.
-  useEffect(() => subscribeScrollToTop((tab) => {
-    if (TAB_FOR_KEY[key] === tab || key === tab) scroller.current?.scrollTo({ y: strip, animated: true });
+  useEffect(() => subscribeScrollToTop((tab, instant) => {
+    if (TAB_FOR_KEY[key] !== tab && key !== tab) return;
+    scroller.current?.scrollTo({ y: strip, animated: !instant });
+    if (instant) scrollMemory.set(key, 0);
   }), [key, strip]);
 
   const showRail = Boolean(rail) && isDesktop;
