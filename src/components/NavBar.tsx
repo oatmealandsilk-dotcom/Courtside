@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { BrandMark } from './BrandMark';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { interpolate, runOnJS, useAnimatedReaction, useAnimatedStyle } from 'react-native-reanimated';
 import { Animated as RNAnimated } from 'react-native';
 import { BAR_TUCK, barCompact, DUCK } from '@/features/navigation/barShrink';
@@ -20,6 +20,9 @@ import { TAB_BAR_H } from '@/features/navigation/barInset';
 import { useApp } from '@/store/AppContext';
 import { unreadChatCount } from '@/features/messages/groupRules';
 import { colors, pageIsDark, radius, spacing, typography, font } from '@/theme';
+
+/** The screen's pixels per point, read once: the bar's moves are rounded to whole pixels. */
+const PX = PixelRatio.get();
 
 /**
  * Minimal shape of what react-navigation hands a custom tabBar. Typed locally
@@ -89,10 +92,13 @@ export function NavBar({ state, navigation }: NavBarProps) {
   // picture of itself and goes soft; moved and faded, it stays sharp.
   const duck = useAnimatedStyle(() => ({ transform: [{ translateY: entrance.value * 96 }] }));
   // Half of a label's line and its gap, so the icon lands in the middle once the label has gone.
-  const settle = useAnimatedStyle(() => ({ transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, 7])) }] }));
+  // Moves land on the screen's real pixels (a third of a point on most
+  // iPhones): sharp icons, but three times finer steps than whole points,
+  // which made the tuck visibly step and drift against the words above it.
+  const settle = useAnimatedStyle(() => ({ transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, 7]) * PX) / PX }] }));
   const labelFade = useAnimatedStyle(() => ({ opacity: interpolate(barCompact.value, [0, 0.6], [1, 0], 'clamp') }));
   const tuck = useAnimatedStyle(() => ({
-    transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, BAR_TUCK])) }],
+    transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, BAR_TUCK]) * PX) / PX }],
   }));
   if (isPhone) {
     return (
