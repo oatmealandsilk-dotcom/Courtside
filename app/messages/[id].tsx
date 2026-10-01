@@ -24,7 +24,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 
-import { Avatar, EmptyState } from '@/components/ui';
+import { Avatar, BrandWash, EmptyState } from '@/components/ui';
 import { GroupAvatar, groupName, isGroupChat, othersIn } from '@/features/messages/groups';
 import { VoiceNote } from '@/components/VoiceNote';
 import { EmojiKeyboard } from '@/components/EmojiKeyboard';
@@ -492,6 +492,7 @@ export default function Thread() {
           <Text style={styles.recText}>Recording · {clock(voice.elapsed)}</Text>
         </View>
         <Tappable immediate onPress={() => { void sendRecording(); }} accessibilityLabel="Send voice note" style={styles.send}>
+          <BrandWash />
           <Ionicons name="arrow-up" size={19} color={colors.brandInk} />
         </Tappable>
       </View>
@@ -740,6 +741,7 @@ function SendButton({ ready, editing = false, onPress, styles }: { ready: boolea
   return (
     <Reanimated.View style={style}>
       <Tappable immediate onPress={onPress} disabled={!ready} accessibilityLabel={editing ? 'Save edit' : 'Send message'} style={[styles.send]}>
+        <BrandWash />
         <Ionicons name={editing ? 'checkmark' : 'arrow-up'} size={19} color={colors.brandInk} />
       </Tappable>
     </Reanimated.View>

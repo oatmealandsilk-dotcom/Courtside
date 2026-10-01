@@ -10,7 +10,6 @@ import { MediaPicker, pickFromDevice, type PickedMedia } from '@/components/Medi
 import { MediaEditor, type EditedMedia } from '@/components/MediaEditor';
 import { takePendingShot } from '@/features/compose/pendingShot';
 import { registerCreateClose } from '@/features/compose/createMenu';
-import { PermissionBanner } from '@/components/PermissionRows';
 import { SheetBackdrop } from '@/components/SheetBackdrop';
 import { TOPIC_META } from '@/components/QuestionCard';
 import { Button, Chip, Field, Screen, Toggle } from '@/components/ui';
@@ -204,9 +203,6 @@ export default function Compose() {
     <Pressable accessibilityRole="button" accessibilityLabel="Close create menu" onPress={closeMenu} style={StyleSheet.absoluteFill}/>
     <Reanimated.View style={[styles.choiceSheet, popStyle]}>
       <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>Create</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeMenu} hitSlop={10}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
-      {/* Catches a Photos problem before it turns into the cryptic iOS 3164
-          error mid-pick, and links straight to the fix. */}
-      <PermissionBanner needs={['photos']} />
       <Reanimated.View entering={arrive(0)}><Pressable accessibilityRole="button" accessibilityLabel={entering ? `Create a clip for the ${challenge.title} challenge` : 'Create a clip'} onPress={() => { setMode('clip'); void openDevice('video'); }} style={[styles.choiceOption, entering && styles.choiceChallenge]}>
         {preparing === 'video' ? <PreparingRing size={28} done={prepDone} /> : <Ionicons name={entering ? 'trophy-outline' : 'videocam-outline'} size={28} color={entering ? colors.brand : colors.textMuted}/>}<Text style={styles.choiceLabel}>{entering ? 'Clip for the challenge' : 'Clip'}</Text><Text style={styles.note}>{preparing === 'video' ? 'Getting your video ready — shrinking it so it posts fast.' : entering ? `${challenge.title}. #${challenge.tag} is already in the caption.` : 'Share a video from your device.'}</Text>
       </Pressable></Reanimated.View>
@@ -238,7 +234,13 @@ export default function Compose() {
           media={source}
           portraitRatio={portraitRatio}
           initial={initial}
-          onBack={() => setStage('choose')}
+          // Back means "wrong one": straight back into your photos to pick again,
+          // not out to the menu. Stories go back to their own library.
+          onBack={() => {
+            if (params.mode === 'story') { setStage('library'); return; }
+            setStage('choose');
+            void openDevice(mode === 'clip' ? 'video' : 'all');
+          }}
           onDone={(result) => {
             setMedia(result.media);
             setOrientation(result.orientation);
@@ -278,7 +280,6 @@ export default function Compose() {
             compactTitle
             onBack={() => (params.mode === 'story' ? router.back() : setStage('choose'))}
           >
-            <PermissionBanner needs={['photos']} />
             <MediaPicker compact selection={mode === 'clip' ? 'video' : 'all'} label={mode === 'clip' ? 'New video from your device' : 'New from your device'} value={null} onChange={pick} />
             <Text style={styles.libraryTitle}>{bank.length ? 'Recent' : 'Nothing here yet'}</Text>
             {bank.length ? (

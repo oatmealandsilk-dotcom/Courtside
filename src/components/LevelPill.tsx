@@ -4,45 +4,54 @@ import { StyleSheet, Text, View } from 'react-native';
 import { levelBadge } from '@/lib/badges';
 import { useTheme } from '@/theme/ThemeProvider';
 import type { PlayerProfile } from '@/data/types';
-import { radius, spacing, typography } from '@/theme';
+import { colors, font, radius } from '@/theme';
 
+/**
+ * A player's level, as a soft tag: a faint fill of the band's colour with the
+ * system ("UTR") set small and the number set bold, so the number is what
+ * reads. Over a clip it is the frosted dark chip every reels feed uses.
+ */
 export function LevelPill({ profile, small = false, onMedia = false }: { profile: PlayerProfile; small?: boolean; onMedia?: boolean }) {
   // Without this the pill keeps the colours of whichever theme it first drew in.
   useTheme();
   const badge = levelBadge(profile);
+  const space = badge.label.indexOf(' ');
+  const system = space > 0 ? badge.label.slice(0, space) : '';
+  const value = space > 0 ? badge.label.slice(space + 1) : badge.label;
+  // The lowest band's colour is the page's tan: fine as a fill, too pale for words.
+  const ink = onMedia ? '#FFFFFF' : badge.tint === colors.borderStrong ? colors.textMuted : badge.tint;
   return (
     <View
-      style={[
-        styles.pill,
-        small && styles.small,
-        // On a page it is an outline in the band's colour. Over a clip it is
-        // the chip every reels feed uses — frosted dark, white text, a faint
-        // edge — with the band's colour kept as a dot at the front.
-        onMedia ? styles.frost : { borderColor: badge.tint },
-      ]}
+      accessible
+      accessibilityLabel={badge.label}
+      style={[styles.pill, small && styles.small, onMedia ? styles.frost : { backgroundColor: tintFill(badge.tint) }]}
     >
-      {onMedia ? <View style={[styles.dot, { backgroundColor: badge.tint }]} /> : null}
-      <Text style={[small ? styles.textSmall : styles.text, { color: onMedia ? '#FFFFFF' : badge.tint }]}>{badge.label}</Text>
+      {system ? <Text style={[styles.system, small && styles.systemSmall, { color: ink }, onMedia && styles.systemOnMedia]}>{system}</Text> : null}
+      <Text style={[styles.value, small && styles.valueSmall, { color: ink }]}>{value}</Text>
     </View>
   );
 }
 
+/** The band's colour at a whisper, for the tag's fill. */
+function tintFill(tint: string): string {
+  return /^#[0-9a-f]{6}$/i.test(tint) ? `${tint}26` : colors.surfaceAlt;
+}
+
 const styles = StyleSheet.create({
-  // The level is written in its band's colour on a hairline, the way the
-  // waitlist's tags are set: colour as a label, not a fill.
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 3,
+    gap: 3,
+    height: 21,
+    paddingHorizontal: 8,
     borderRadius: radius.pill,
-    borderWidth: 1,
     alignSelf: 'flex-start',
   },
-  frost: { backgroundColor: 'rgba(12, 14, 12, 0.48)', borderColor: 'rgba(255, 255, 255, 0.22)', paddingHorizontal: 8 },
-  dot: { width: 6, height: 6, borderRadius: 3 },
-  small: { paddingHorizontal: 7, paddingVertical: 2 },
-  text: { ...typography.caption, letterSpacing: 0.5 },
-  textSmall: { ...typography.caption, fontSize: 10, letterSpacing: 0.5 },
+  small: { height: 19, paddingHorizontal: 7 },
+  frost: { backgroundColor: 'rgba(12, 14, 12, 0.42)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255, 255, 255, 0.22)' },
+  system: { ...font('600'), fontSize: 10.5, letterSpacing: 0.3, opacity: 0.8 },
+  systemSmall: { fontSize: 10 },
+  systemOnMedia: { opacity: 0.75 },
+  value: { ...font('700'), fontSize: 12.5, fontVariant: ['tabular-nums'] },
+  valueSmall: { fontSize: 12 },
 });

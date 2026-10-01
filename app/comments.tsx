@@ -9,7 +9,7 @@ import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSequence, w
 import { CommentRow } from '@/components/CommentRow';
 import { DragSheet } from '@/components/DragSheet';
 import { pickFromDevice } from '@/components/MediaPicker';
-import { Avatar, Field } from '@/components/ui';
+import { Avatar, BrandWash, Field } from '@/components/ui';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -147,6 +147,7 @@ export default function CommentsSheet() {
               ) : null}
               <Animated.View style={[StyleSheet.absoluteFill, styles.center, kind === 'post' ? sendStyle : null]} pointerEvents={canSend ? 'auto' : kind === 'post' ? 'none' : 'auto'}>
                 <Pressable accessibilityRole="button" accessibilityLabel="Post comment" disabled={!canSend} onPress={send} style={[styles.send, !canSend && kind !== 'post' && { opacity: 0.4 }]}>
+                  <BrandWash />
                   <Ionicons name="arrow-up" size={19} color={colors.brandInk} />
                 </Pressable>
               </Animated.View>

@@ -11,6 +11,7 @@ import {
 
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { Tappable } from '@/components/Tappable';
+import { BrandWash } from '@/components/ui/BrandWash';
 import { colors, radius, spacing, typography } from '@/theme';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -54,6 +55,7 @@ export function Button({
         style,
       ]}
     >
+      {variant === 'primary' ? <BrandWash /> : null}
       <View style={styles.inner}>
         {loading ? <CourtSpinner size={18} ink={palette.fg} /> : null}
         <Text style={[styles.label, { color: palette.fg }]}>{label}</Text>

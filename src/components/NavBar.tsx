@@ -11,6 +11,7 @@ import { Easing, useSharedValue, withTiming } from 'react-native-reanimated';
 import { router, usePathname } from 'expo-router';
 import { closeCreateMenu } from '@/features/compose/createMenu';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { BrandWash } from '@/components/ui/BrandWash';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
@@ -102,7 +103,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
               const active = item.route === activeRoute;
               return (
                 <React.Fragment key={item.route}>
-                {index === 2 && <View style={styles.createSlot}><Animated.View><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={styles.createButton}><Ionicons name="add" size={28} color={colors.brandInk} /></Pressable></Animated.View></View>}
+                {index === 2 && <View style={styles.createSlot}><Animated.View><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={styles.createButton}><BrandWash /><Ionicons name="add" size={28} color={colors.brandInk} /></Pressable></Animated.View></View>}
                 <Pressable
                   onPress={() => navigation.navigate(item.route)}
                   accessibilityRole="tab"

@@ -3,6 +3,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radius, spacing, typography } from '@/theme';
+import { BrandWash } from './BrandWash';
 
 interface Props {
   label: string;
@@ -26,6 +27,7 @@ export function Chip({ label, selected = false, onPress, tint, ink, small = fals
         { backgroundColor: background, borderColor: selected ? 'transparent' : colors.border },
       ]}
     >
+      {selected && !tint ? <BrandWash /> : null}
       <Text style={[small ? styles.textSmall : styles.text, { color }]} numberOfLines={1}>
         {label}
       </Text>
