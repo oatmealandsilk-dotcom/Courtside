@@ -74,12 +74,12 @@ export default function EditPost() {
           <Text style={styles.note}>Only the person who posted this can change it.</Text>
         ) : isQuestion ? (
           <>
-            <Field label="Question" value={title} onChangeText={setTitle} placeholder="What would you like to ask?" />
-            <Field label="Details" value={body} onChangeText={setBody} placeholder="Your level, what you have tried, what happens." multiline minHeight={120} mentions />
+            <Field label="Question" value={title} onChangeText={setTitle} />
+            <Field label="Details" value={body} onChangeText={setBody} multiline minHeight={120} mentions />
           </>
         ) : (
           <>
-            <Field label="Caption" labelRight={<LocationLink value={location} court={!!court} onPress={() => openPlacePicker((value, picked) => { setLocation(value); setCourt(picked ?? null); }, location)} onClear={() => { setLocation(''); setCourt(null); }} />} value={body} onChangeText={setBody} placeholder="Write a caption…" multiline minHeight={80} mentions />
+            <Field label="Caption" labelRight={<LocationLink value={location} court={!!court} onPress={() => openPlacePicker((value, picked) => { setLocation(value); setCourt(picked ?? null); }, location)} onClear={() => { setLocation(''); setCourt(null); }} />} value={body} onChangeText={setBody} multiline minHeight={80} mentions />
             <TagPlayers tagged={tagged} onChange={setTagged} />
           </>
         )}

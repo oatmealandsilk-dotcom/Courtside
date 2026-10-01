@@ -10,6 +10,7 @@ import { goBack } from '@/lib/goBack';
 import { relativeTime } from '@/lib/format';
 import { SPECIALTY_LABEL } from '@/features/coaching/bookings';
 import { useApp } from '@/store/AppContext';
+import { confirm } from '@/lib/confirm';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, radius, spacing, typography } from '@/theme';
 
@@ -122,9 +123,9 @@ export default function AdminCoaches() {
                     </View>
                     {a.status === 'submitted' || a.status === 'in-review' ? (
                       <>
-                        <Field label="Note to them (optional)" value={note} onChangeText={setNote} placeholder="Welcome aboard. Set up your studio to start taking bookings." multiline minHeight={60} />
+                        <Field label="Note to them (optional)" value={note} onChangeText={setNote} multiline minHeight={60} />
                         <View style={styles.buttons}>
-                          <View style={{ flex: 1 }}><Button label="Decline" variant="secondary" onPress={() => void decide(a, false)} disabled={!!busy} full /></View>
+                          <View style={{ flex: 1 }}><Button label="Decline" variant="secondary" onPress={() => confirm({ title: 'Decline this application?', message: `${a.fullName} is told it was declined. This can't be undone.`, confirmLabel: 'Decline', destructive: true, onConfirm: () => decide(a, false) })} disabled={!!busy} full /></View>
                           <View style={{ flex: 1 }}><Button label="Approve" onPress={() => void decide(a, true)} loading={busy === a.id} disabled={!!busy} full /></View>
                         </View>
                       </>

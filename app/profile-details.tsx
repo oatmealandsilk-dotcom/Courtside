@@ -12,7 +12,7 @@ import { LevelPill } from '@/components/LevelPill';
 import { Avatar, EmptyState, Meter, Screen } from '@/components/ui';
 import { evaluateAchievements, fitnessLabel, levelBadge, playStyleLabel, surfaceLabel, winRate } from '@/lib/badges';
 import { formatDate, experienceLabel } from '@/lib/format';
-import { confirmAction } from '@/lib/confirm';
+import { confirm } from '@/lib/confirm';
 import { localDay } from '@/features/practice/stats';
 import { CourtGlyph } from '@/components/map/MapChrome';
 import { useStillLoading } from '@/lib/useStillLoading';
@@ -104,7 +104,7 @@ export default function Profile() {
                 {s.kind === 'match' ? <Ionicons name="trophy-outline" size={17} color={colors.textMuted} /> : s.kind === 'fitness' ? <Ionicons name="barbell-outline" size={17} color={colors.textMuted} /> : <CourtGlyph size={14} color={colors.textMuted} />}
                 <Text style={styles.rowText}>{SESSION_KIND[s.kind]}{s.kind === 'match' && s.won !== undefined ? (s.won ? ' · won' : ' · lost') : ''}{s.opponent ? ` vs ${s.opponent}` : ''} · {s.minutes < 60 ? `${s.minutes} min` : `${Math.round(s.minutes / 6) / 10} hr`}</Text>
                 <Text style={styles.rowMeta}>{dayLabel(s.day)}</Text>
-                <Pressable accessibilityRole="button" accessibilityLabel="Remove this session" hitSlop={8} onPress={() => confirmAction('Remove this session?', 'It comes off your streak and totals.', 'Remove', () => actions.deleteSession(s.id))}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Remove this session" hitSlop={8} onPress={() => confirm({ title: 'Remove this session?', message: 'It comes off your streak and totals.', confirmLabel: 'Remove', destructive: true, onConfirm: () => actions.deleteSession(s.id) })}>
                   <Ionicons name="close" size={16} color={colors.textFaint} />
                 </Pressable>
               </View>

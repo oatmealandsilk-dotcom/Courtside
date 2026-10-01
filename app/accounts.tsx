@@ -11,6 +11,7 @@ import { useLeave } from '@/components/LeaveCurtain';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 import { leaveGently } from '@/components/SignOutCurtain';
+import { confirm } from '@/lib/confirm';
 
 /**
  * The logins remembered on this device, Instagram-style: tap one to become
@@ -61,7 +62,7 @@ export default function Accounts() {
                 {busy === account.id ? <Text style={styles.meta}>Switching…</Text> : current ? <Ionicons name="checkmark-circle" size={22} color={colors.brand} /> : null}
               </Pressable>
               {!current ? (
-                <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${account.name} from this device`} onPress={() => { void actions.forgetSavedAccount(account.id); }} hitSlop={8} style={styles.remove}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${account.name} from this device`} onPress={() => confirm({ title: 'Remove this login?', message: `${account.handle ? `@${account.handle}` : 'It'} comes off this device. You'll need to sign in again to add it back.`, confirmLabel: 'Remove', destructive: true, onConfirm: () => actions.forgetSavedAccount(account.id) })} hitSlop={8} style={styles.remove}>
                   <Ionicons name="close" size={18} color={colors.textFaint} />
                 </Pressable>
               ) : null}

@@ -115,7 +115,7 @@ export default function NewMessage() {
         <Screen title="New message" compactTitle onBack={close}>
           <View style={styles.toRow}>
             <Text style={styles.to}>To</Text>
-            <TextInput value={query} onChangeText={setQuery} placeholder="Name or username" placeholderTextColor={colors.textFaint} autoCapitalize="none" autoCorrect={false} autoFocus style={styles.toInput} accessibilityLabel="To" />
+            <TextInput value={query} onChangeText={setQuery} placeholder="Search" placeholderTextColor={colors.textFaint} autoCapitalize="none" autoCorrect={false} autoFocus style={styles.toInput} accessibilityLabel="To" />
           </View>
           {chips}
           {list}

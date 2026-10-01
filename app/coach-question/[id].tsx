@@ -155,7 +155,6 @@ export default function CoachQuestionDetail() {
             label="Your answer"
             value={draft}
             onChangeText={setDraft}
-            placeholder="Be specific. Name the cause, then the fix, then one drill."
             multiline
             onSubmitEditing={() => {
               if (draft.trim().length < 20) return;

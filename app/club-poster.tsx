@@ -47,7 +47,7 @@ export default function ClubPoster() {
     <Screen title="Club poster" onBack={() => goBack()}>
       <View style={styles.body}>
         <Text style={styles.lead}>For your club’s notice board. The QR code is your invite link: players who join from it follow you and show up on your map.</Text>
-        <Field label="Your club or courts" value={club} onChangeText={setClub} placeholder="Griffith Park Tennis Center" autoCapitalize="words" autoCorrect={false} />
+        <Field label="Your club or courts" value={club} onChangeText={setClub} autoCapitalize="words" autoCorrect={false} />
         <PosterPreview html={preview} />
         <View style={styles.actions}>
           {posterActions.includes('print') ? <Button label="Print" onPress={() => { void run('print'); }} loading={busy === 'print'} disabled={busy !== null} style={{ flex: 1 }} /> : null}

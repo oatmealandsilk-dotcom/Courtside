@@ -11,6 +11,12 @@ import { useRevealOnFocus } from '@/lib/keyboardScroll';
 interface Props {
   inputRef?: React.Ref<TextInput>;
   label?: string;
+  /**
+   * What a screen reader calls the box when it has no label of its own (one
+   * sitting under a section title, say). Falls back to the label, then to the
+   * placeholder, so a box with neither still gets a name.
+   */
+  accessibilityLabel?: string;
   /** Something small on the label's line, at the right: a link, a count. */
   labelRight?: React.ReactNode;
   value: string;
@@ -52,6 +58,7 @@ const submitOnEnter = Platform.OS === 'web';
 export function Field({
   inputRef,
   label,
+  accessibilityLabel,
   labelRight,
   value,
   onChangeText,
@@ -103,7 +110,7 @@ export function Field({
       ) : null}
       <TextInput
         ref={inputRef ?? own}
-        accessibilityLabel={label}
+        accessibilityLabel={accessibilityLabel ?? label ?? placeholder}
         value={value}
         onChangeText={(text) => {
           onChangeText(text);

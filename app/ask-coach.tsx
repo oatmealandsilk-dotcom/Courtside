@@ -153,7 +153,8 @@ export default function AskCoach() {
             ref={titleBox}
             value={title}
             onChangeText={setTitle}
-            placeholder="What's going wrong?"
+            // The same words as the Coaching tab's box this page grows out of, so the hand-off reads as one box.
+            placeholder="Your question"
             placeholderTextColor={colors.textFaint}
             multiline
             maxLength={140}
@@ -168,7 +169,7 @@ export default function AskCoach() {
             ref={bodyBox}
             value={body}
             onChangeText={setBody}
-            placeholder="Your level, what you've tried, what actually happens."
+            placeholder="Details"
             placeholderTextColor={colors.textFaint}
             multiline
             textAlignVertical="top"
@@ -184,7 +185,7 @@ export default function AskCoach() {
             <Pressable accessibilityRole="button" accessibilityLabel="Add a clip" onPress={() => setFootage(true)} style={styles.addRow}>
               <Ionicons name="videocam-outline" size={20} color={colors.text} />
               <Text style={styles.addText}>Add a clip</Text>
-              <Text style={styles.addNote}>Optional · helps a coach see it</Text>
+              <Text style={styles.addNote}>Optional</Text>
             </Pressable>
           )}
         </View>
@@ -203,7 +204,7 @@ export default function AskCoach() {
     {/* The box it grew from, fading as the page opens out of it. */}
     {hero && startRect ? (
       <Reanimated.View ref={ghostRef} pointerEvents="none" style={[styles.ghost, { left: startRect.x, top: startRect.y, width: startRect.w, height: startRect.h }, ghost]}>
-        <Text style={styles.ghostText}>What are you stuck on?</Text>
+        <Text style={styles.ghostText}>Your question</Text>
       </Reanimated.View>
     ) : null}
     </View>

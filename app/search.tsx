@@ -12,6 +12,7 @@ import { LevelPill } from '@/components/LevelPill';
 import { QuestionCard } from '@/components/QuestionCard';
 import { Avatar, EmptyState, Field, Screen, SegmentedControl } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
+import { confirm } from '@/lib/confirm';
 import { colors, spacing, typography } from '@/theme';
 
 type Scope = 'all' | 'clips' | 'posts' | 'threads' | 'players' | 'coaches';
@@ -160,7 +161,7 @@ export default function Search() {
               <View style={styles.section}>
                 <View style={styles.sectionHead}>
                   <Text style={styles.sectionTitle}>Recent</Text>
-                  <Pressable accessibilityRole="button" onPress={forgetAll} hitSlop={8}><Text style={styles.clear}>Clear</Text></Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Clear recent searches" onPress={() => confirm({ title: 'Clear recent searches?', message: "This can't be undone.", confirmLabel: 'Clear', destructive: true, onConfirm: forgetAll })} hitSlop={8}><Text style={styles.clear}>Clear</Text></Pressable>
                 </View>
                 <View style={styles.chips}>
                   {recent.map((r) => (

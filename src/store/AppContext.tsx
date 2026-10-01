@@ -309,7 +309,8 @@ interface AppActions {
   removePaymentMethod: (id: ID) => void;
 
   /* People */
-  toggleFollow: (userId: ID) => void;
+  /** `quiet`: no Undo toast. An Undo passes it, so taking a change back does not offer to take that back too. */
+  toggleFollow: (userId: ID, quiet?: boolean) => void;
   /** A private account's owner saying yes or no to someone's ask. */
   acceptFollowRequest: (requesterId: ID) => void;
   declineFollowRequest: (requesterId: ID) => void;
@@ -325,9 +326,10 @@ interface AppActions {
   acceptAnswer: (questionId: ID, answerId: ID) => void;
   /** The asker marks their coach question as answered. */
   resolveCoachQuestion: (questionId: ID) => void;
-  toggleMute: (userId: ID) => void;
-  toggleBlock: (userId: ID) => void;
-  toggleAlerts: (userId: ID) => void;
+  toggleMute: (userId: ID, quiet?: boolean) => void;
+  /** Blocking is asked first, so only unblocking offers Undo. */
+  toggleBlock: (userId: ID, quiet?: boolean) => void;
+  toggleAlerts: (userId: ID, quiet?: boolean) => void;
   reportUser: (userId: ID, reason: string) => void;
   /** A suggestion from an early user, on the board for everyone to vote on. */
   submitTip: (body: string) => Promise<void>;
@@ -382,8 +384,8 @@ interface AppActions {
   toggleLike: (postId: ID) => void;
   addPost: (input: NewPostInput) => ID;
   /** Puts one of your posts away, or brings it back. */
-  toggleArchivePost: (postId: ID) => void;
-  togglePinPost: (postId: ID) => void;
+  toggleArchivePost: (postId: ID, quiet?: boolean) => void;
+  togglePinPost: (postId: ID, quiet?: boolean) => void;
   /** Change your own post's words, tags, who is in it, and where it was. */
   editPost: (postId: ID, patch: { body: string; taggedUserIds: ID[]; location?: string; court?: TaggedCourt | null }) => void;
   /** Change your own thread's question and details. */
@@ -399,7 +401,7 @@ interface AppActions {
 
   /* Stories */
   addStory: (input: NewStoryInput) => ID;
-  toggleArchiveStory: (storyId: ID) => void;
+  toggleArchiveStory: (storyId: ID, quiet?: boolean) => void;
   markStoryViewed: (storyId: ID) => void;
 
   addQuestion: (input: NewQuestionInput) => ID;
@@ -458,8 +460,8 @@ interface AppActions {
   rejectCoachApplication: (applicationId: ID, note?: string) => Promise<void>;
 
   /* Saved */
-  toggleSavePost: (postId: ID) => void;
-  toggleSaveQuestion: (questionId: ID) => void;
+  toggleSavePost: (postId: ID, quiet?: boolean) => void;
+  toggleSaveQuestion: (questionId: ID, quiet?: boolean) => void;
 
   /* Reactions */
   reactToMessage: (messageId: ID, emoji?: string) => void;
@@ -1226,6 +1228,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return me;
   }, []);
 
+  /**
+   * "Muted @sam · Undo", after a one-tap change that is easy to make by
+   * accident (a mute, an unfollow, an unsave, an archive). Undo makes the same
+   * change again, quietly, but only if nothing has moved since: the same
+   * account still signed in, and the thing still the way this tap left it.
+   * A late tap on an old toast then never undoes something done again
+   * somewhere else in the meantime. Fired from inside each action, so every
+   * screen that calls it gets the toast without doing anything.
+   */
+  const offerUndo = (title: string, stillAsLeft: () => boolean, undo: () => void, extra?: { body?: string; icon?: string }) => {
+    const me = stateRef.current.currentUserId;
+    toast.showUndo(title, () => { if (stateRef.current.currentUserId === me && stillAsLeft()) undo(); }, extra);
+  };
+  /** " @sam", for a toast's title; nothing if their account is not loaded. */
+  const atHandle = (userId: ID) => {
+    const handle = stateRef.current.users.find((u) => u.id === userId)?.handle;
+    return handle ? ` @${handle}` : '';
+  };
+
   const signIn = useCallback(async (identity: string, password?: string) => {
     if (isSupabaseConfigured && password !== undefined) {
       const session = await remoteAuth.signIn(identity, password);
@@ -1680,30 +1701,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   }, [requireUser]);
 
-  const toggleArchivePost = useCallback((postId: ID) => {
+  const toggleArchivePost = useCallback((postId: ID, quiet?: boolean) => {
     const me = requireUser();
     haptics.commit();
+    const post = stateRef.current.posts.find((p) => p.id === postId);
     if (live(me, postId)) {
-      const post = stateRef.current.posts.find((p) => p.id === postId);
       if (post?.authorId === me) remote.setPostArchived(postId, !post.archived);
     }
     setState((prev) => ({
       ...prev,
       posts: prev.posts.map((p) => (p.id === postId && p.authorId === me ? { ...p, archived: !p.archived } : p)),
     }));
+    if (quiet || post?.authorId !== me) return;
+    const archiving = !post.archived;
+    offerUndo(
+      archiving ? 'Archived' : 'Back on your profile',
+      () => { const p = stateRef.current.posts.find((x) => x.id === postId); return !!p && !!p.archived === archiving; },
+      () => toggleArchivePost(postId, true),
+      { body: archiving ? 'Only you can see it now' : undefined, icon: 'archive-outline' },
+    );
   }, [requireUser]);
 
-  const togglePinPost = useCallback((postId: ID) => {
+  const togglePinPost = useCallback((postId: ID, quiet?: boolean) => {
     const me = requireUser();
     haptics.commit();
+    const post = stateRef.current.posts.find((p) => p.id === postId);
     if (live(me, postId)) {
-      const post = stateRef.current.posts.find((p) => p.id === postId);
       if (post?.authorId === me) remote.setPostPinned(postId, !post.pinned);
     }
     setState((prev) => ({
       ...prev,
       posts: prev.posts.map((p) => (p.id === postId && p.authorId === me ? { ...p, pinned: !p.pinned } : p)),
     }));
+    if (quiet || post?.authorId !== me) return;
+    const pinning = !post.pinned;
+    offerUndo(
+      pinning ? 'Pinned to your profile' : 'Unpinned',
+      () => { const p = stateRef.current.posts.find((x) => x.id === postId); return !!p && !!p.pinned === pinning; },
+      () => togglePinPost(postId, true),
+      { icon: 'pin-outline' },
+    );
   }, [requireUser]);
 
   const editPost = useCallback((postId: ID, patch: { body: string; taggedUserIds: ID[]; location?: string; court?: TaggedCourt | null }) => {
@@ -1812,17 +1849,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [requireUser],
   );
 
-  const toggleArchiveStory = useCallback((storyId: ID) => {
+  const toggleArchiveStory = useCallback((storyId: ID, quiet?: boolean) => {
     const me = requireUser();
     haptics.commit();
+    const story = stateRef.current.stories.find((st) => st.id === storyId);
     if (live(me, storyId)) {
-      const story = stateRef.current.stories.find((st) => st.id === storyId);
       if (story?.authorId === me) remote.setStoryArchived(storyId, !story.archived);
     }
     setState((prev) => ({
       ...prev,
       stories: prev.stories.map((s) => (s.id === storyId && s.authorId === me ? { ...s, archived: !s.archived } : s)),
     }));
+    if (quiet || story?.authorId !== me) return;
+    const archiving = !story.archived;
+    offerUndo(
+      archiving ? 'Archived' : 'Unarchived',
+      () => { const st = stateRef.current.stories.find((x) => x.id === storyId); return !!st && !!st.archived === archiving; },
+      () => toggleArchiveStory(storyId, true),
+      { icon: 'archive-outline' },
+    );
   }, [requireUser]);
 
   const markStoryViewed = useCallback((storyId: ID) => {
@@ -2522,12 +2567,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  const toggleSavePost = useCallback((postId: ID) => {
+  const toggleSavePost = useCallback((postId: ID, quiet?: boolean) => {
     {
       const me = stateRef.current.currentUserId;
       const saving = !stateRef.current.saved.postIds.includes(postId);
       saving ? haptics.tap() : haptics.untap();
       if (live(me, postId)) remote.setSaved(postId, me!, saving);
+      // Saving says so with the filled bookmark; taking one off can be a slip.
+      if (!saving && !quiet) {
+        offerUndo('Removed from saved', () => !stateRef.current.saved.postIds.includes(postId), () => toggleSavePost(postId, true), { icon: 'bookmark-outline' });
+      }
     }
     setState((prev) => {
       const me = prev.currentUserId;
@@ -2553,7 +2602,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const toggleSaveQuestion = useCallback((questionId: ID) => {
+  const toggleSaveQuestion = useCallback((questionId: ID, quiet?: boolean) => {
+    if (!quiet && stateRef.current.saved.questionIds.includes(questionId)) {
+      offerUndo('Removed from saved', () => !stateRef.current.saved.questionIds.includes(questionId), () => toggleSaveQuestion(questionId, true), { icon: 'bookmark-outline' });
+    }
     setState((prev) => {
       const me = prev.currentUserId;
       const saving = !prev.saved.questionIds.includes(questionId);
@@ -3233,12 +3285,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // The database would not take a follow or an ask (someone you are blocked
   // with): the button goes back, and a note says why.
-  const toggleFollowRef = useRef<(userId: ID) => void>(() => undefined);
+  const toggleFollowRef = useRef<(userId: ID, quiet?: boolean) => void>(() => undefined);
   const followRefused = (userId: ID) => {
     showToast({ title: "You can't follow this account", icon: 'lock-closed-outline' });
-    toggleFollowRef.current(userId);
+    // Quiet: putting the button back is not an unfollow to offer to undo.
+    toggleFollowRef.current(userId, true);
   };
-  const toggleFollow = useCallback((userId: ID) => {
+  const toggleFollow = useCallback((userId: ID, quiet?: boolean) => {
     {
       const me = stateRef.current.currentUserId;
       const target = stateRef.current.users.find((u) => u.id === userId);
@@ -3266,6 +3319,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (live(me, userId) && userId !== me) void remote.setFollow(me!, userId, !following).then((r) => { if (r === 'refused' && !following) followRefused(userId); });
       // The buzz answers the tap itself, not the redraw that follows it.
       if (me && userId !== me) following ? haptics.untap() : haptics.tap();
+      // Unfollowing a public account is one tap, so one tap takes it back.
+      // (A private one is asked about first: following again would be a new
+      // request they have to approve, so there is nothing clean to undo.)
+      if (me && userId !== me && following && !target?.isPrivate && !quiet) {
+        offerUndo(`Unfollowed${atHandle(userId)}`, () => !stateRef.current.followingIds.includes(userId), () => toggleFollow(userId, true), { icon: 'person-remove-outline' });
+      }
     }
     setState((prev) => {
       const me = prev.currentUserId;
@@ -3335,15 +3394,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (live(me)) remote.updateProfile(me, { openToHitUntil: until ?? null });
   }, [requireUser, patchCurrentUser]);
 
-  const toggleMute = useCallback((userId: ID) => {
+  const toggleMute = useCallback((userId: ID, quiet?: boolean) => {
+    const muting = !stateRef.current.mutedIds.includes(userId);
     setState((prev) => {
       prev.mutedIds.includes(userId) ? haptics.untap() : haptics.tap();
       return { ...prev, mutedIds: toggleIn(prev.mutedIds, userId) };
     });
+    if (quiet) return;
+    offerUndo(
+      `${muting ? 'Muted' : 'Unmuted'}${atHandle(userId)}`,
+      () => stateRef.current.mutedIds.includes(userId) === muting,
+      () => toggleMute(userId, true),
+      { body: muting ? 'Their posts won’t show up for you' : undefined, icon: muting ? 'volume-mute-outline' : 'volume-high-outline' },
+    );
   }, []);
 
   /** Blocking also unfollows, both ways, and drops the conversation. */
-  const toggleBlock = useCallback((userId: ID) => {
+  const toggleBlock = useCallback((userId: ID, quiet?: boolean) => {
+    // Blocking has already been asked about, so only unblocking offers Undo,
+    // which blocks again (unblocking put nothing back that blocking took).
+    const me = stateRef.current.currentUserId;
+    if (!quiet && me && userId !== me && stateRef.current.blockedIds.includes(userId)) {
+      offerUndo(`Unblocked${atHandle(userId)}`, () => !stateRef.current.blockedIds.includes(userId), () => toggleBlock(userId, true), { icon: 'checkmark-circle-outline' });
+    }
     setState((prev) => {
       const me = prev.currentUserId;
       if (!me || userId === me) return prev;
@@ -3372,11 +3445,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const toggleAlerts = useCallback((userId: ID) => {
+  const toggleAlerts = useCallback((userId: ID, quiet?: boolean) => {
+    const turningOn = !stateRef.current.alertIds.includes(userId);
     setState((prev) => {
       prev.alertIds.includes(userId) ? haptics.untap() : haptics.tap();
       return { ...prev, alertIds: toggleIn(prev.alertIds, userId) };
     });
+    if (quiet) return;
+    const handle = atHandle(userId);
+    offerUndo(
+      turningOn ? 'Notifications on' : 'Notifications off',
+      () => stateRef.current.alertIds.includes(userId) === turningOn,
+      () => toggleAlerts(userId, true),
+      { body: handle ? `For new posts from${handle}` : undefined, icon: turningOn ? 'notifications-outline' : 'notifications-off-outline' },
+    );
   }, []);
 
   /** A report goes nowhere in the mock build; the feedback is what matters. */

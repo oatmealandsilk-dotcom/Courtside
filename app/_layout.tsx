@@ -19,6 +19,7 @@ import { BrandMark } from '@/components/BrandMark';
 import { installCrashReporting, reportError } from '@/lib/crashReporting';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { SignOutCurtainHost } from '@/components/SignOutCurtain';
+import { ConfirmHost } from '@/components/ConfirmHost';
 import { useInstantUpdates } from '@/lib/instantUpdates';
 
 // Any error the app does not catch itself is filed as a crash report.
@@ -100,6 +101,8 @@ export default function RootLayout() {
           <Stack.Screen name="hit" options={{ presentation: 'fullScreenModal', animation: 'fade', contentStyle: { backgroundColor: '#000' } }} />
         </Stack></AppShell>
         <SignOutCurtainHost />
+        {/* "Delete post?" and the like, in a browser; a phone asks with its own alert. */}
+        <ConfirmHost />
       </AppProvider>
     </SafeAreaProvider></ThemeProvider></GestureHandlerRootView>
   );

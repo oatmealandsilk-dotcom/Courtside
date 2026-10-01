@@ -11,19 +11,18 @@ import { MediaEditor, type EditedMedia } from '@/components/MediaEditor';
 import { takePendingShot } from '@/features/compose/pendingShot';
 import { registerCreateClose } from '@/features/compose/createMenu';
 import { SheetBackdrop } from '@/components/SheetBackdrop';
-import { TOPIC_META } from '@/components/QuestionCard';
-import { Button, Chip, Field, Screen, Toggle } from '@/components/ui';
+import { Button, Field, Screen, Toggle } from '@/components/ui';
 import { LocationLink } from '@/components/LocationChip';
 import { openPlacePicker } from '@/features/places/picker';
 import { PreparingRing } from '@/components/PreparingRing';
 import { TagPlayers } from '@/components/TagPlayers';
 import { addToBank, getBank } from '@/features/compose/mediaBank';
 import { useApp } from '@/store/AppContext';
-import type { QuestionTopic, TaggedCourt } from '@/data/types';
+import type { TaggedCourt } from '@/data/types';
 import { colors, radius, spacing, typography, font } from '@/theme';
 import { challengeFor } from '@/features/challenge/weekly';
 
-type Mode = 'clip' | 'post' | 'story' | 'hit' | 'question';
+type Mode = 'clip' | 'post' | 'story' | 'hit';
 
 const goBackNow = () => router.back();
 /** Each choice in the Create box arrives a moment after the one above it. */
@@ -34,7 +33,7 @@ type Stage = 'choose' | 'library' | 'edit' | 'form';
 /**
  * Instagram-shaped composer: pick media, write a caption, post.
  * A post carries a caption and how long you were on court — nothing else.
- * Questions get their own mode because they need a title and a topic.
+ * Questions are asked from their own sheet (app/ask.tsx), not from here.
  */
 export default function Compose() {
   const styles = useThemedStyles(styleDefinitions);
@@ -101,26 +100,11 @@ export default function Compose() {
   // The court it was played on, when the location was picked from the courts list.
   const [court, setCourt] = useState<TaggedCourt | null>(null);
   const [featureOk, setFeatureOk] = useState(true);
-  const [questionTitle, setQuestionTitle] = useState('');
-  const [topic, setTopic] = useState<QuestionTopic>('gear');
 
-  const canPost = !!media?.uri && (mode !== 'clip' || media.kind === 'video');
-  const canAsk = questionTitle.trim().length >= 3;
-  const canSubmit = mode === 'question' ? canAsk : canPost;
+  const canSubmit = !!media?.uri && (mode !== 'clip' || media.kind === 'video');
 
   const submit = () => {
     if (!canSubmit) return;
-
-    if (mode === 'question') {
-      const id = actions.addQuestion({
-        title: questionTitle.trim(),
-        body: body.trim(),
-        topic,
-        tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
-      });
-      router.replace(`/question/${id}`);
-      return;
-    }
 
     if (mode === 'story' || mode === 'hit') {
       actions.addStory({
@@ -204,17 +188,17 @@ export default function Compose() {
     <Reanimated.View style={[styles.choiceSheet, popStyle]}>
       <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>Create</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeMenu} hitSlop={10}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
       <Reanimated.View entering={arrive(0)}><Pressable accessibilityRole="button" accessibilityLabel={entering ? `Create a clip for the ${challenge.title} challenge` : 'Create a clip'} onPress={() => { setMode('clip'); void openDevice('video'); }} style={[styles.choiceOption, entering && styles.choiceChallenge]}>
-        {preparing === 'video' ? <PreparingRing size={28} done={prepDone} /> : <Ionicons name={entering ? 'trophy-outline' : 'videocam-outline'} size={28} color={entering ? colors.brand : colors.textMuted}/>}<Text style={styles.choiceLabel}>{entering ? 'Clip for the challenge' : 'Clip'}</Text><Text style={styles.note}>{preparing === 'video' ? 'Getting your video ready — shrinking it so it posts fast.' : entering ? `${challenge.title}. #${challenge.tag} is already in the caption.` : 'Share a video from your device.'}</Text>
+        {preparing === 'video' ? <PreparingRing size={28} done={prepDone} /> : <Ionicons name={entering ? 'trophy-outline' : 'videocam-outline'} size={28} color={entering ? colors.brand : colors.textMuted}/>}<Text style={styles.choiceLabel}>{entering ? 'Clip for the challenge' : 'Clip'}</Text>{preparing === 'video' ? <Text style={styles.note}>Getting your video ready — shrinking it so it posts fast.</Text> : entering ? <Text style={styles.note}>{`${challenge.title}. #${challenge.tag} is already in the caption.`}</Text> : null}
       </Pressable></Reanimated.View>
       <Reanimated.View entering={arrive(1)}><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => { setMode('post'); void openDevice('all'); }} style={styles.choiceOption}>
-        {preparing === 'all' ? <PreparingRing size={28} done={prepDone} /> : <Ionicons name="images-outline" size={28} color={colors.textMuted}/>}<Text style={styles.choiceLabel}>Post</Text><Text style={styles.note}>{preparing === 'all' ? 'Getting it ready…' : 'Choose from your photos and videos.'}</Text>
+        {preparing === 'all' ? <PreparingRing size={28} done={prepDone} /> : <Ionicons name="images-outline" size={28} color={colors.textMuted}/>}<Text style={styles.choiceLabel}>Post</Text>{preparing === 'all' ? <Text style={styles.note}>Getting it ready…</Text> : null}
       </Pressable></Reanimated.View>
       {pickError ? <Text style={styles.pickError}>{pickError}</Text> : null}
       <Reanimated.View entering={arrive(2)}><Pressable accessibilityRole="button" accessibilityLabel="Take an instant" onPress={() => router.replace('/hit')} style={styles.choiceOption}>
-        <Ionicons name="camera-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Instant</Text><Text style={styles.note}>A photo after you play. Up on the feed for a day.</Text>
+        <Ionicons name="camera-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Instant</Text><Text style={styles.note}>Up for 24 hours</Text>
       </Pressable></Reanimated.View>
       <Reanimated.View entering={arrive(3)}><Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={styles.choiceOption}>
-        <Ionicons name="chatbubbles-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Thread or question</Text><Text style={styles.note}>Ask the community or start a conversation.</Text>
+        <Ionicons name="chatbubbles-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Thread or question</Text>
       </Pressable></Reanimated.View>
     </Reanimated.View>
   </View>;
@@ -317,95 +301,63 @@ export default function Compose() {
       {mode === 'hit' ? null : <SheetBackdrop />}
       <View style={styles.sheet}>
         <Screen
-          title={mode === 'clip' ? 'New clip' : mode === 'post' ? 'New post' : mode === 'story' ? 'New story' : mode === 'hit' ? 'New instant' : 'Ask the room'}
+          title={mode === 'clip' ? 'New clip' : mode === 'post' ? 'New post' : mode === 'story' ? 'New story' : 'New instant'}
           compactTitle
-          onBack={() => (mode === 'question' ? router.back() : mode === 'hit' ? router.navigate('/hit') : setStage('edit'))}
+          onBack={() => (mode === 'hit' ? router.navigate('/hit') : setStage('edit'))}
           right={<Button label={mode === 'story' || mode === 'hit' ? 'Post instant' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit} />}
         >
           <View style={styles.form}>
-            {mode !== 'question' ? (
-              <>
-                <View style={styles.stage}>
-                  {mode === 'hit' && media?.uri ? (
-                    // The hit is what the camera took, full stop: shown plainly, nothing to click.
-                    <View style={styles.hitFrame}>
-                      <Image source={{ uri: media.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel="Your instant" />
-                    </View>
-                  ) : (
-                    <MediaPicker bare orientation={orientation} portraitRatio={portraitRatio} selection={mode === 'clip' ? 'video' : 'all'} value={media} onChange={setMedia} trim={edit} />
-                  )}
+            <View style={styles.stage}>
+              {mode === 'hit' && media?.uri ? (
+                // The hit is what the camera took, full stop: shown plainly, nothing to click.
+                <View style={styles.hitFrame}>
+                  <Image source={{ uri: media.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel="Your instant" />
                 </View>
-                {mode === 'hit' ? (
-                  <View style={styles.hitMeta}>
-                    <View style={styles.hitPill}><Ionicons name="time-outline" size={13} color={colors.brand} /><Text style={styles.hitPillText}>24 hours</Text></View>
-                    <Text style={styles.hitMetaText}>On the feed for a day, then kept in your archive.</Text>
-                  </View>
-                ) : null}
-                <Field
-                  label={mode !== 'story' && mode !== 'hit' ? 'Caption' : undefined}
-                  labelRight={mode !== 'story' && mode !== 'hit' ? <LocationLink value={location} court={!!court} onPress={() => openPlacePicker((value, picked) => { setLocation(value); setCourt(picked ?? null); }, location)} onClear={() => { setLocation(''); setCourt(null); }} /> : undefined}
-                  value={body}
-                  onChangeText={setBody}
-                  placeholder={mode === 'story' ? 'Add a line (optional)' : mode === 'hit' ? 'How did it go? (optional)' : 'Write a caption…'}
-                  multiline
-                  minHeight={64}
-                  mentions
-                />
-                {inChallenge ? (
-                  <View style={styles.inlineRow}>
-                    <Ionicons name="trophy-outline" size={18} color={colors.brand} />
-                    <Text style={styles.inlineLabel}>Entering this week’s challenge: {challenge.title}</Text>
-                  </View>
-                ) : null}
-                {mode !== 'story' && mode !== 'hit' ? <TagPlayers tagged={tagged} onChange={setTagged} /> : null}
-                {mode !== 'story' && mode !== 'hit' ? (
-                  <View style={styles.inlineRow}>
-                    <Ionicons name="megaphone-outline" size={18} color={colors.textMuted} />
-                    <Text style={styles.inlineLabel}>OK to feature on CourtSide's Instagram</Text>
-                    <Toggle value={featureOk} onChange={setFeatureOk} accessibilityLabel="OK for CourtSide to feature this on its own channels" />
-                  </View>
-                ) : null}
+              ) : (
+                <MediaPicker bare orientation={orientation} portraitRatio={portraitRatio} selection={mode === 'clip' ? 'video' : 'all'} value={media} onChange={setMedia} trim={edit} />
+              )}
+            </View>
+            {mode === 'hit' ? (
+              <View style={styles.hitMeta}>
+                <View style={styles.hitPill}><Ionicons name="time-outline" size={13} color={colors.brand} /><Text style={styles.hitPillText}>24 hours</Text></View>
+                <Text style={styles.hitMetaText}>On the feed for a day, then kept in your archive.</Text>
+              </View>
+            ) : null}
+            <Field
+              label={mode !== 'story' && mode !== 'hit' ? 'Caption' : undefined}
+              labelRight={mode !== 'story' && mode !== 'hit' ? <LocationLink value={location} court={!!court} onPress={() => openPlacePicker((value, picked) => { setLocation(value); setCourt(picked ?? null); }, location)} onClear={() => { setLocation(''); setCourt(null); }} /> : undefined}
+              value={body}
+              onChangeText={setBody}
+              // A post's box has "Caption" written over it; an instant's has no label, so the word goes inside.
+              placeholder={mode === 'story' || mode === 'hit' ? 'Caption (optional)' : undefined}
+              multiline
+              minHeight={64}
+              mentions
+            />
+            {inChallenge ? (
+              <View style={styles.inlineRow}>
+                <Ionicons name="trophy-outline" size={18} color={colors.brand} />
+                <Text style={styles.inlineLabel}>Entering this week’s challenge: {challenge.title}</Text>
+              </View>
+            ) : null}
+            {mode !== 'story' && mode !== 'hit' ? <TagPlayers tagged={tagged} onChange={setTagged} /> : null}
+            {mode !== 'story' && mode !== 'hit' ? (
+              <View style={styles.inlineRow}>
+                <Ionicons name="megaphone-outline" size={18} color={colors.textMuted} />
+                <Text style={styles.inlineLabel}>OK to feature on CourtSide's Instagram</Text>
+                <Toggle value={featureOk} onChange={setFeatureOk} accessibilityLabel="OK for CourtSide to feature this on its own channels" />
+              </View>
+            ) : null}
 
-                {mode !== 'story' && mode !== 'hit' ? (
-                  <View style={styles.inlineRow}>
-                    <Ionicons name="time-outline" size={18} color={colors.textMuted} />
-                    <Text style={styles.inlineLabel}>Minutes on court</Text>
-                    <View style={{ width: 96 }}>
-                      <Field value={minutes} onChangeText={setMinutes} placeholder="optional" keyboardType="number-pad" />
-                    </View>
-                  </View>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <Field
-                  label="Question"
-                  value={questionTitle}
-                  onChangeText={setQuestionTitle}
-                  placeholder="What would you like to ask the community?"
-                />
-                <View style={styles.row}>
-                  {(Object.keys(TOPIC_META) as QuestionTopic[]).map((t) => (
-                    <Chip
-                      key={t}
-                      label={TOPIC_META[t].label}
-                      selected={topic === t}
-                      onPress={() => setTopic(t)}
-                      small
-                    />
-                  ))}
+            {mode !== 'story' && mode !== 'hit' ? (
+              <View style={styles.inlineRow}>
+                <Ionicons name="time-outline" size={18} color={colors.textMuted} />
+                <Text style={styles.inlineLabel}>Minutes on court</Text>
+                <View style={{ width: 96 }}>
+                  <Field value={minutes} onChangeText={setMinutes} placeholder="optional" accessibilityLabel="Minutes on court (optional)" keyboardType="number-pad" />
                 </View>
-                <Field
-                  label="Details"
-                  value={body}
-                  onChangeText={setBody}
-                  placeholder="Your level, what you have already tried, and what actually happens."
-                  multiline
-                  minHeight={140}
-                />
-
-              </>
-            )}
+              </View>
+            ) : null}
           </View>
         </Screen>
       </View>
@@ -439,7 +391,6 @@ const styleDefinitions = StyleSheet.create({
   stage: { marginTop: spacing.xs },
   inlineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   inlineLabel: { ...typography.small, color: colors.textMuted, flex: 1 },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   note: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
   pickError: { ...typography.small, color: colors.danger, lineHeight: 18 },
   hitFrame: { width: '100%', aspectRatio: 4 / 3, maxHeight: 520, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000', alignSelf: 'center' },

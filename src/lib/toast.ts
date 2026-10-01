@@ -8,6 +8,12 @@ export interface ToastMessage {
   icon?: string;
   /** Where a tap on the toast goes. */
   href?: string;
+  /**
+   * A small text button on the right, such as "Undo". Tapping it runs
+   * `onPress` and closes the toast. A toast with one stays up longer, so
+   * there is time to reach it.
+   */
+  action?: { label: string; onPress: () => void };
 }
 
 type Listener = (toast: ToastMessage) => void;
@@ -23,6 +29,15 @@ export function show(toast: Omit<ToastMessage, 'id'>) {
   counter += 1;
   const message = { ...toast, id: counter };
   listeners.forEach((fn) => fn(message));
+}
+
+/**
+ * "Muted @sam · Undo": the note after a one-tap change that is easy to make
+ * by accident (a mute, an unfollow, an unsave). `undo` puts it back; the
+ * caller decides whether there is still anything to put back by then.
+ */
+export function showUndo(title: string, undo: () => void, extra?: { body?: string; icon?: string }) {
+  show({ title, ...extra, action: { label: 'Undo', onPress: undo } });
 }
 
 export function useToast(): ToastMessage | null {

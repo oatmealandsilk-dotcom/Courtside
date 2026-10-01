@@ -53,7 +53,6 @@ export function LocationField({ value, onChange }: { value: string; onChange: (n
           onChangeText={(next) => { setFocused(true); onChange(next, null); }}
           onFocus={() => setFocused(true)}
           onBlur={() => setTimeout(() => setFocused(false), 150)}
-          placeholder="City, state"
           autoCapitalize="words"
           autoCorrect={false}
           flush={focused && options.length > 0}
@@ -78,7 +77,6 @@ export function LocationField({ value, onChange }: { value: string; onChange: (n
           </View>
         ) : null}
       </View>
-      {locationEnabled ? null : <Text style={styles.hint}>Turn on Location in Settings to fill this from your phone or computer.</Text>}
       {showDetected ? (
         <Pressable accessibilityRole="button" onPress={() => { const bank = PLACES.find((p) => p.name === detectedLocation); onChange(detectedLocation, detectedCoords ?? (bank ? { lat: bank.lat, lng: bank.lng } : null)); setFocused(false); }} style={styles.detected}>
           <Ionicons name="navigate" size={16} color={colors.brand} />
@@ -95,7 +93,6 @@ const styleDefinitions = StyleSheet.create({
   detectedText: { ...typography.smallStrong, color: colors.brand },
   box: {},
   boxOpen: {},
-  hint: { ...typography.small, color: colors.textFaint },
   // Continues the input's own frame downward, so the list reads as part of
   // the box rather than a second panel.
   list: {

@@ -7,7 +7,7 @@ import { Button, Chip, EmptyState, Field, Screen, Toggle, SegmentedControl } fro
 import { BookingsPanel } from './coach-bookings';
 import { QuestionsPanel } from './coach-inbox';
 import type { CoachService, CoachSpecialty } from '@/data/types';
-import { confirmAction } from '@/lib/confirm';
+import { confirm } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
 import { money } from '@/lib/format';
 import { isOpen, KIND_LABEL, SPECIALTY_LABEL, turnaround, usePayments } from '@/features/coaching/bookings';
@@ -113,9 +113,9 @@ export default function CoachStudio() {
   };
   const removeDraft = () => {
     if (!draft) return;
-    confirmAction('Remove this service?', 'Players will not be able to book it. Bookings already paid for are not affected.', 'Remove', () => {
+    confirm({ title: 'Remove this service?', message: 'Players will not be able to book it. Bookings already paid for are not affected.', confirmLabel: 'Remove', destructive: true, onConfirm: () => {
       void run('service', async () => { await actions.removeCoachService(draft.id); setDraft(null); });
-    });
+    } });
   };
 
   const openCount = coachingRequests.filter((r) => (r.paidAt || !r.priceCents) && (r.coachId === coach.id || r.coachUserId === currentUserId) && isOpen(r)).length;
@@ -172,8 +172,8 @@ export default function CoachStudio() {
       {/* ------------------------------------------------------- your page */}
       <Text style={styles.sectionTitle}>Your page</Text>
       <View style={styles.form}>
-        <Field label="Headline" value={headline} onChangeText={setHeadline} placeholder="Serve and first-strike tennis for 3.5 to 4.5 players" />
-        <Field label="Credentials, one per line" value={credentials} onChangeText={setCredentials} placeholder={'PTR Professional\nFormer D1, NC State'} multiline minHeight={80} />
+        <Field label="Headline" value={headline} onChangeText={setHeadline} />
+        <Field label="Credentials, one per line" value={credentials} onChangeText={setCredentials} multiline minHeight={80} />
         <Text style={styles.fieldLabel}>What you coach</Text>
         <View style={styles.chips}>
           {SPECIALTIES.map((s) => (
@@ -181,7 +181,7 @@ export default function CoachStudio() {
           ))}
         </View>
         <View style={styles.pair}>
-          <View style={{ width: 120 }}><Field label="Years coaching" value={years} onChangeText={setYears} keyboardType="number-pad" placeholder="6" /></View>
+          <View style={{ width: 120 }}><Field label="Years coaching" value={years} onChangeText={setYears} keyboardType="number-pad" /></View>
           <View style={{ flex: 1, gap: spacing.sm }}>
             <Text style={styles.fieldLabel}>You usually reply within</Text>
             <View style={styles.chips}>{TURNAROUNDS.map((h) => <Chip key={h} small label={turnaround(h)} selected={reply === h} onPress={() => setReply(h)} />)}</View>
@@ -220,19 +220,22 @@ export default function CoachStudio() {
         <View style={[styles.form, styles.editor]}>
           <Text style={styles.fieldLabel}>Kind</Text>
           <View style={styles.chips}>{KINDS.map((k) => <Chip key={k} label={KIND_LABEL[k]} selected={draft.kind === k} onPress={() => setDraft({ ...draft, kind: k })} />)}</View>
-          <Field label="Title" value={draft.title} onChangeText={(v) => setDraft({ ...draft, title: v })} placeholder="Serve video review" />
-          <Field label="What the player gets" value={draft.description} onChangeText={(v) => setDraft({ ...draft, description: v })} placeholder="Send one clip of 10 serves from behind. You get a written breakdown and two drills." multiline minHeight={80} />
+          <Field label="Title" value={draft.title} onChangeText={(v) => setDraft({ ...draft, title: v })} />
+          <Field label="What the player gets" value={draft.description} onChangeText={(v) => setDraft({ ...draft, description: v })} multiline minHeight={80} />
           <View style={styles.pair}>
-            <View style={{ width: 120 }}><Field label="Price ($)" value={draft.price} onChangeText={(v) => setDraft({ ...draft, price: v })} keyboardType="decimal-pad" placeholder="40" /></View>
+            <View style={{ width: 120 }}><Field label="Price ($)" value={draft.price} onChangeText={(v) => setDraft({ ...draft, price: v })} keyboardType="decimal-pad" /></View>
             <View style={{ flex: 1, gap: spacing.sm }}>
               <Text style={styles.fieldLabel}>Answered within</Text>
               <View style={styles.chips}>{TURNAROUNDS.map((h) => <Chip key={h} small label={turnaround(h)} selected={draft.turnaroundHours === h} onPress={() => setDraft({ ...draft, turnaroundHours: h })} />)}</View>
             </View>
           </View>
-          <Text style={styles.meta}>
-            {priceCents && (priceCents < 500 || priceCents > 100000) ? 'Prices run from $5 to $1,000.'
-              : priceCents ? `You receive about ${money(keeps)}. CourtSide keeps ${payments.feePercent}%, and Stripe takes about 2.9% + 30¢ for the card.` : 'Set a price between $5 and $1,000.'}
-          </Text>
+          {/* Nothing under an empty Price box; once there is a number, the range check or the payout. */}
+          {priceCents ? (
+            <Text style={styles.meta}>
+              {priceCents < 500 || priceCents > 100000 ? 'Prices run from $5 to $1,000.'
+                : `You receive about ${money(keeps)}. CourtSide keeps ${payments.feePercent}%, and Stripe takes about 2.9% + 30¢ for the card.`}
+            </Text>
+          ) : null}
           <View style={styles.toggleRow}>
             <Text style={styles.rowTitle}>Offered</Text>
             <Toggle value={draft.active} onChange={(v) => setDraft({ ...draft, active: v })} accessibilityLabel="Offered" />

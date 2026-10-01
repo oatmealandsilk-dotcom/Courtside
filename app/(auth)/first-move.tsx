@@ -18,7 +18,6 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography, lift } from '@/theme';
 
 const enter = (i: number) => FadeInDown.delay(80 + i * 80).duration(420).easing(Easing.out(Easing.cubic));
-const STARTER = "What's the one thing in your game you want fixed?";
 
 /**
  * Right after setup: one thing to do before the feed. Not a gate and not a
@@ -109,7 +108,7 @@ export default function FirstMove() {
                 <TextInput
                   value={answer}
                   onChangeText={setAnswer}
-                  placeholder="Your answer, in a sentence"
+                  placeholder="Your answer"
                   placeholderTextColor={colors.textFaint}
                   multiline
                   accessibilityLabel="Your answer"
@@ -130,7 +129,7 @@ export default function FirstMove() {
               <TextInput
                 value={ask}
                 onChangeText={setAsk}
-                placeholder={STARTER}
+                placeholder="Your question"
                 placeholderTextColor={colors.textFaint}
                 multiline
                 autoFocus

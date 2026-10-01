@@ -47,6 +47,7 @@ import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { relativeTime, timeLeft } from '@/lib/format';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/store/AppContext';
+import { confirmUnfollow } from '@/lib/confirm';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { useSidePanel } from '@/features/feed/sidePanel';
@@ -595,7 +596,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               </View>
               <LevelPill profile={user.profile} small />
             </Pressable>
-            <FollowPill following={followingIds.includes(user.id)} onPress={() => { setFollowedHere((h) => (h.includes(user.id) ? h : [...h, user.id])); actions.toggleFollow(user.id); }} small name={user.name} />
+            <FollowPill following={followingIds.includes(user.id)} onPress={() => { setFollowedHere((h) => (h.includes(user.id) ? h : [...h, user.id])); if (followingIds.includes(user.id)) confirmUnfollow(user, () => actions.toggleFollow(user.id)); else actions.toggleFollow(user.id); }} small name={user.name} />
           </View>
         ))}
       </ScrollView>

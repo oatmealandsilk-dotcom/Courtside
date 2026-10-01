@@ -12,6 +12,7 @@ import { downloadMedia } from '@/lib/downloadMedia';
 import { goBack } from '@/lib/goBack';
 import { colors, radius, spacing, typography } from '@/theme';
 import { shareLink } from '@/lib/shareLink';
+import { confirm, confirmBlock } from '@/lib/confirm';
 
 type Row = {
   key: string;
@@ -19,8 +20,6 @@ type Row = {
   label: string;
   note?: string;
   danger?: boolean;
-  /** Needs a second tap to go through; the row says so after the first. */
-  confirm?: string;
   onPress: () => void | Promise<void>;
 };
 
@@ -42,7 +41,6 @@ export default function PostMenu() {
   const author = users.find((u) => u.id === item?.authorId);
   const mine = !!item && item.authorId === currentUserId;
   const isSaved = saved.postIds.includes(id);
-  const [armed, setArmed] = useState('');
   const [done, setDone] = useState('');
 
   // The same rise and fall as the comments and Send-to sheets.
@@ -80,7 +78,8 @@ export default function PostMenu() {
       { key: 'edit', icon: 'create-outline', label: 'Edit', onPress: () => router.replace({ pathname: '/edit-post', params: { id: post.id, kind: 'post' } }) },
       { key: 'pin', icon: 'pin-outline', label: post.pinned ? 'Unpin from profile' : 'Pin to profile', note: post.pinned ? undefined : 'Shown first on your profile.', onPress: () => { actions.togglePinPost(post.id); close(); } },
       { key: 'archive', icon: 'archive-outline', label: post.archived ? 'Unarchive' : 'Archive', note: post.archived ? undefined : 'Hidden from everyone; kept in your archive.', onPress: () => { actions.toggleArchivePost(post.id); close(); } },
-      { key: 'delete', icon: 'trash-outline', label: 'Delete', danger: true, confirm: 'Tap again to delete for good', onPress: () => { actions.deletePost(post.id); close(); } },
+      // Asked once, the way other apps ask; the menu stays up behind the question, so Cancel leaves you on it.
+      { key: 'delete', icon: 'trash-outline', label: 'Delete', danger: true, onPress: () => confirm({ title: 'Delete post?', message: "This can't be undone.", confirmLabel: 'Delete', destructive: true, onConfirm: () => { actions.deletePost(post.id); close(); } }) },
     );
   } else if (author) {
     const muted = mutedIds.includes(author.id);
@@ -88,14 +87,13 @@ export default function PostMenu() {
     rows.push(
       { key: 'report', icon: 'flag-outline', label: 'Report', note: 'Spam, harassment or something that should not be here.', onPress: () => { actions.reportUser(author.id, `${isHit ? 'hit' : 'post'}:${item.id}`); setDone('Thanks — we will take a look.'); } },
       { key: 'mute', icon: muted ? 'volume-high-outline' : 'volume-mute-outline', label: muted ? `Unmute @${author.handle}` : `Mute @${author.handle}`, note: muted ? undefined : 'Their posts stop showing up for you. They are not told.', onPress: () => { actions.toggleMute(author.id); close(); } },
-      { key: 'block', icon: 'ban-outline', label: blocked ? `Unblock @${author.handle}` : `Block @${author.handle}`, danger: !blocked, confirm: blocked ? undefined : 'Tap again to block', onPress: () => { actions.toggleBlock(author.id); close(); } },
+      // Unblocking is one tap; blocking asks first and says what it does.
+      { key: 'block', icon: 'ban-outline', label: blocked ? `Unblock @${author.handle}` : `Block @${author.handle}`, danger: !blocked, onPress: () => {
+        if (blocked) { actions.toggleBlock(author.id); close(); return; }
+        confirmBlock(author, () => { actions.toggleBlock(author.id); close(); });
+      } },
     );
   }
-
-  const press = (row: Row) => {
-    if (row.confirm && armed !== row.key) { setArmed(row.key); return; }
-    void row.onPress();
-  };
 
   return (
     <View style={styles.backdrop}>
@@ -109,18 +107,15 @@ export default function PostMenu() {
             <Text style={styles.doneText}>{done}</Text>
             <Pressable accessibilityRole="button" onPress={close} style={styles.doneButton}><Text style={styles.doneButtonText}>Done</Text></Pressable>
           </View>
-        ) : rows.map((row) => {
-          const waiting = armed === row.key;
-          return (
-            <Pressable key={row.key} accessibilityRole="button" accessibilityLabel={row.label} onPress={() => press(row)} style={({ pressed }) => [styles.row, pressed && styles.rowPressed, waiting && styles.rowArmed]}>
-              <Ionicons name={row.icon} size={22} color={row.danger ? colors.danger : colors.text} />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.label, row.danger && { color: colors.danger }]}>{waiting ? row.confirm : row.label}</Text>
-                {row.note && !waiting ? <Text style={styles.note}>{row.note}</Text> : null}
-              </View>
-            </Pressable>
-          );
-        })}
+        ) : rows.map((row) => (
+          <Pressable key={row.key} accessibilityRole="button" accessibilityLabel={row.label} onPress={() => { void row.onPress(); }} style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
+            <Ionicons name={row.icon} size={22} color={row.danger ? colors.danger : colors.text} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.label, row.danger && { color: colors.danger }]}>{row.label}</Text>
+              {row.note ? <Text style={styles.note}>{row.note}</Text> : null}
+            </View>
+          </Pressable>
+        ))}
       </Animated.View>
     </View>
   );
@@ -132,7 +127,6 @@ const styleDefinitions = StyleSheet.create({
   grabber: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 13, paddingHorizontal: spacing.sm, borderRadius: radius.md },
   rowPressed: { backgroundColor: colors.surface },
-  rowArmed: { backgroundColor: colors.surface },
   label: { ...typography.body, fontWeight: '600', color: colors.text },
   note: { ...typography.small, color: colors.textMuted, marginTop: 2 },
   doneBox: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },

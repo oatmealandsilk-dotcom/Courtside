@@ -57,7 +57,7 @@ function Coaching() {
         onPress={openAsk}
         style={({ pressed }) => [styles.askField, pressed && styles.askFieldPressed]}
       >
-        <Text style={styles.askPlaceholder}>What are you stuck on?</Text>
+        <Text style={styles.askPlaceholder}>Your question</Text>
         <View style={styles.askGo}><Ionicons name="arrow-forward" size={16} color={colors.brandInk} /></View>
       </Pressable>
       {/* No promise nobody can keep: until coaches are on, the note says what really happens. */}

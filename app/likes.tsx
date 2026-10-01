@@ -9,6 +9,7 @@ import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { PeopleSkeleton } from '@/components/Skeleton';
 import { useApp } from '@/store/AppContext';
+import { confirmUnfollow } from '@/lib/confirm';
 import { colors, spacing, typography } from '@/theme';
 
 /**
@@ -82,7 +83,7 @@ export default function Likes() {
                     </View>
                   </View>
                   {isMe ? <Text style={styles.you}>You</Text> : (
-                    <Button label={following ? 'Following' : 'Follow'} variant={following ? 'secondary' : 'primary'} onPress={() => actions.toggleFollow(user.id)} />
+                    <Button label={following ? 'Following' : 'Follow'} variant={following ? 'secondary' : 'primary'} onPress={following ? () => confirmUnfollow(user, () => actions.toggleFollow(user.id)) : () => actions.toggleFollow(user.id)} />
                   )}
                 </Pressable>
               );

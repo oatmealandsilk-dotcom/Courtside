@@ -16,6 +16,7 @@ import { isOpenToHit } from '@/features/players/openToHit';
 import { useBarInset } from '@/features/navigation/barInset';
 import { useWeather } from '@/features/players/useWeather';
 import { show as showToast } from '@/lib/toast';
+import { confirmUnfollow } from '@/lib/confirm';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
@@ -137,7 +138,7 @@ export function NearbyMap(props: NearbyMapProps) {
         {meOpen ? (
           <YouSheet me={me} open={openToHit} onToggle={actions.setOpenToHit} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} />
         ) : model.selected ? (
-          <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onFollow={() => actions.toggleFollow(model.selected!.user.id)} />
+          <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onFollow={() => { const who = model.selected!.user; if (followingIds.includes(who.id)) confirmUnfollow(who, () => actions.toggleFollow(who.id)); else actions.toggleFollow(who.id); }} />
         ) : model.selectedCourt ? (
           <CourtSheet court={model.selectedCourt} miles={milesBetween(home, model.selectedCourt)} onClose={() => model.selectCourt(null)} onDirections={() => directions(model.selectedCourt!)} />
         ) : !model.homeKnown && !model.place ? (

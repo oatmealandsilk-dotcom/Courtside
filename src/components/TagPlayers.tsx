@@ -34,7 +34,7 @@ export function TagPlayers({ tagged, onChange }: { tagged: string[]; onChange: (
       {/* Closed: one box button. Open: the search box, with Done beside it. */}
       {open ? (
         <View style={styles.searchRow}>
-          <View style={{ flex: 1 }}><Field value={query} onChangeText={setQuery} placeholder="Search by name or @handle" /></View>
+          <View style={{ flex: 1 }}><Field value={query} onChangeText={setQuery} placeholder="Search" /></View>
           <Pressable accessibilityRole="button" accessibilityLabel="Done tagging" onPress={close} hitSlop={8}>
             <Text style={styles.cancel}>Done</Text>
           </Pressable>

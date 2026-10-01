@@ -66,7 +66,7 @@ export default function LogSession() {
         {kind === 'match' ? (
           <Section title="Result">
             <Chips clearable value={won ?? undefined} onChange={(v) => setWon(v ?? null)} options={[{ value: 'won', label: 'Won' }, { value: 'lost', label: 'Lost' }]} />
-            <Field soft value={opponent} onChangeText={setOpponent} placeholder="Who you played (optional)" />
+            <Field soft value={opponent} onChangeText={setOpponent} placeholder="Opponent (optional)" />
           </Section>
         ) : null}
         <Section title="When">

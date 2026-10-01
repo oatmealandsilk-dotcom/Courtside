@@ -16,9 +16,12 @@ export const PERMISSION_META: Record<DevicePermission, { label: string; why: str
   camera: { label: 'Camera', why: 'To take an instant after a session.', icon: 'camera-outline' },
   // "Limited" access looks granted to iOS but breaks handing a video over
   // (error 3164), so the wording says "All Photos" specifically, not just "on".
-  photos: { label: 'Photos', why: 'To pick clips and photos to post. Choose All Photos, not a selection, or videos may fail to open.', icon: 'images-outline' },
-  microphone: { label: 'Microphone', why: 'For voice notes you send in chats.', icon: 'mic-outline' },
-  location: { label: 'Location', why: 'To put you on the map and find players near you.', icon: 'navigate-outline' },
+  // Each reason is one short line: the answer (On, Off, Not asked) is shown
+  // beside the name, so it no longer has to ride on the end of this sentence.
+  photos: { label: 'Photos', why: 'To post clips and photos. Pick All Photos so videos open.', icon: 'images-outline' },
+  microphone: { label: 'Microphone', why: 'For voice notes in chats.', icon: 'mic-outline' },
+  // A map pin rather than the compass arrow, since this is about where you are, not directions.
+  location: { label: 'Location', why: 'For the map and players near you.', icon: 'location-outline' },
 };
 
 export const ALL_PERMISSIONS: DevicePermission[] = ['camera', 'photos', 'microphone', 'location'];
@@ -104,10 +107,14 @@ export async function openPermissionSettings() {
   await Linking.openSettings().catch(() => undefined);
 }
 
-/** Where the "off" side of the switch lives, in words, for the platform in hand. */
+/**
+ * Where the "off" side of the switch lives, in words, for the platform in hand.
+ * Shown once as the footnote under the permissions list, and as the body of
+ * the note a browser shows when a switch is tapped, so it reads for either.
+ */
 export const OFF_HINT = Platform.OS === 'web'
-  ? 'Your browser keeps this setting. Click the lock or tune icon next to the web address to change it.'
-  : 'Switching one off opens your phone’s Settings, because only the phone can take a permission away.';
+  ? 'Your browser keeps these. Change them from the lock or tune icon beside the web address.'
+  : 'Turning one off, or back on after a no, opens your phone’s Settings.';
 
 export async function getAllPermissions(): Promise<Record<DevicePermission, PermissionState>> {
   const [camera, photos, microphone, location] = await Promise.all(ALL_PERMISSIONS.map(getPermission));

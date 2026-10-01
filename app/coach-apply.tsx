@@ -26,11 +26,13 @@ const SPECIALTIES: { value: CoachSpecialty; label: string; icon: keyof typeof Io
   { value: 'juniors', label: 'Juniors', icon: 'people-outline' },
 ];
 
-const STEPS = [
+// A step whose boxes speak for themselves has no lead; the others say why the
+// details are asked for, which the boxes alone cannot.
+const STEPS: { title: string; lead?: string }[] = [
   { title: 'About you', lead: 'How we reach you about your application.' },
   { title: 'Your rating', lead: 'A link to your rating page, so we can check it in one click.' },
-  { title: 'Your coaching', lead: 'Experience, certifications, and what you teach.' },
-  { title: 'Proof', lead: 'A résumé and people who can vouch for you. Both help.' },
+  { title: 'Your coaching' },
+  { title: 'Proof', lead: 'A résumé and two people who can vouch for you. Both help.' },
   { title: 'How you coach', lead: 'The first thing players read on your listing.' },
   { title: 'Review', lead: 'Check it over, then send it in.' },
 ];
@@ -201,7 +203,7 @@ export default function CoachApply() {
           <Animated.View style={[styles.fill, { width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />
         </View>
         <Text style={styles.title}>{STEPS[step].title}</Text>
-        <Text style={styles.lead}>{STEPS[step].lead}</Text>
+        {STEPS[step].lead ? <Text style={styles.lead}>{STEPS[step].lead}</Text> : null}
       </View>
 
       <ScrollView ref={scrollRef} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
@@ -209,15 +211,15 @@ export default function CoachApply() {
           {step === 0 ? (
             <>
               <View>
-                <Field label="Full legal name" value={fullName} onChangeText={setFullName} placeholder="As it appears on your ID" autoCapitalize="words" />
+                <Field label="Full legal name" value={fullName} onChangeText={setFullName} autoCapitalize="words" />
                 {error('fullName')}
               </View>
               <View>
-                <Field label="Email" value={email} onChangeText={setEmail} placeholder="you@example.com" autoCapitalize="none" keyboardType="email-address" />
+                <Field label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
                 {error('email')}
               </View>
               <View>
-                <Field label="Phone" value={phone} onChangeText={setPhone} placeholder="+1 555 010 0100" keyboardType="phone-pad" />
+                <Field label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
                 {error('phone')}
               </View>
               <View style={styles.note}>
@@ -234,9 +236,9 @@ export default function CoachApply() {
                   <View style={styles.ratingBadge}><Text style={styles.ratingBadgeText}>UTR</Text></View>
                   <Text style={styles.ratingTitle}>Universal Tennis Rating</Text>
                 </View>
-                <Field label="Your UTR profile link" value={utrLink} onChangeText={setUtrLink} placeholder="app.utrsports.net/profiles/1234567" autoCapitalize="none" keyboardType="url" />
+                <Field label="Your UTR profile link" value={utrLink} onChangeText={setUtrLink} autoCapitalize="none" keyboardType="url" />
                 {error('utrLink')}
-                <Field label="Your UTR (optional)" value={utr} onChangeText={setUtr} placeholder="e.g. 11.2" keyboardType="decimal-pad" />
+                <Field label="Your UTR (optional)" value={utr} onChangeText={setUtr} keyboardType="decimal-pad" />
                 {isUtrLink(utrLink) ? <LinkCheck url={asLink(utrLink)} styles={styles} /> : null}
               </View>
               <View style={styles.ratingCard}>
@@ -244,9 +246,9 @@ export default function CoachApply() {
                   <View style={styles.ratingBadge}><Text style={styles.ratingBadgeText}>NTRP</Text></View>
                   <Text style={styles.ratingTitle}>USTA NTRP rating</Text>
                 </View>
-                <Field label="Your USTA rating page link" value={ntrpLink} onChangeText={setNtrpLink} placeholder="A page on usta.com showing your rating" autoCapitalize="none" keyboardType="url" />
+                <Field label="Your USTA rating page link" value={ntrpLink} onChangeText={setNtrpLink} autoCapitalize="none" keyboardType="url" />
                 {error('ntrpLink')}
-                <Field label="Your NTRP (optional)" value={ntrp} onChangeText={setNtrp} placeholder="e.g. 5.0" keyboardType="decimal-pad" />
+                <Field label="Your NTRP (optional)" value={ntrp} onChangeText={setNtrp} keyboardType="decimal-pad" />
                 {isUstaLink(ntrpLink) ? <LinkCheck url={asLink(ntrpLink)} styles={styles} /> : null}
               </View>
               {error('rating')}
@@ -268,11 +270,11 @@ export default function CoachApply() {
           {step === 2 ? (
             <>
               <View>
-                <Field label="Years coaching" value={years} onChangeText={setYears} placeholder="e.g. 8" keyboardType="number-pad" />
+                <Field label="Years coaching" value={years} onChangeText={setYears} keyboardType="number-pad" />
                 {error('years')}
               </View>
               <View>
-                <Field label="Certifications" value={certifications} onChangeText={setCertifications} placeholder="PTR Professional, USPTA Elite, ITF Level 2…" multiline minHeight={80} />
+                <Field label="Certifications" value={certifications} onChangeText={setCertifications} multiline minHeight={80} />
                 {error('certifications')}
               </View>
               <View style={styles.group}>
@@ -297,7 +299,7 @@ export default function CoachApply() {
                 </View>
                 {error('specialties')}
               </View>
-              <Field label="Current clients (optional)" value={clients} onChangeText={setClients} placeholder="Roughly how many players, and at what levels." multiline minHeight={70} />
+              <Field label="Current clients (optional)" value={clients} onChangeText={setClients} multiline minHeight={70} />
             </>
           ) : null}
 
@@ -314,13 +316,13 @@ export default function CoachApply() {
                   {resume ? <Ionicons name="close-circle" size={20} color={colors.textMuted} /> : null}
                 </Pressable>
               </View>
-              <Field label="References" value={references} onChangeText={setReferences} placeholder="Two people we can contact: name, role, and email or phone." multiline minHeight={100} />
+              <Field label="References" value={references} onChangeText={setReferences} multiline minHeight={100} />
             </>
           ) : null}
 
           {step === 4 ? (
             <View>
-              <Field label="How you coach" value={about} onChangeText={setAbout} placeholder="What players come to you for, and what actually changes after they work with you." multiline minHeight={180} />
+              <Field label="How you coach" value={about} onChangeText={setAbout} multiline minHeight={180} />
               <Text style={[styles.counter, about.trim().length >= ABOUT_MIN && { color: colors.success }]}>
                 {about.trim().length >= ABOUT_MIN ? '✓ ' : ''}{about.trim().length} characters{about.trim().length < ABOUT_MIN ? ` · ${ABOUT_MIN} minimum` : ''}
               </Text>

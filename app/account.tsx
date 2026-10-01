@@ -15,6 +15,7 @@ import { shareOutside } from '@/lib/shareOutside';
 import { formatDate } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import * as toast from '@/lib/toast';
+import { confirm } from '@/lib/confirm';
 import { useAiCoachOn } from '@/features/aiCoach/switch';
 import { colors, radius, spacing, typography, lift } from '@/theme';
 
@@ -128,7 +129,7 @@ export default function AccountCentre() {
         {row('key-outline', hasEmail ? 'Change password' : 'Set a password', undefined, isSupabaseConfigured ? () => { setPassword(''); setPassword2(''); setSheet('password'); } : undefined, false, 0)}
         {row('logo-google', 'Google', hasGoogle ? 'Connected' : 'Link', !hasGoogle && isSupabaseConfigured ? () => run(() => actions.linkGoogle(), 'Follow the Google prompt to finish linking.') : undefined, false, 1)}
         {row('time-outline', 'Last sign-in', info?.lastSignInAt ? formatDate(info.lastSignInAt) : undefined, undefined, false, 2)}
-        {row('log-out-outline', 'Log out everywhere', undefined, () => run(async () => { await actions.signOutEverywhere(); router.replace('/sign-in'); }, 'Signed out everywhere.'), false, 3)}
+        {row('log-out-outline', 'Log out everywhere', undefined, () => confirm({ title: 'Log out everywhere?', message: "You'll be logged out on every phone and computer, this one included.", confirmLabel: 'Log out', destructive: true, onConfirm: () => run(async () => { await actions.signOutEverywhere(); router.replace('/sign-in'); }, 'Signed out everywhere.') }), false, 3)}
       </View>
 
       <Text style={styles.sectionTitle}>Your data</Text>

@@ -40,6 +40,7 @@ import { MentionSuggestions } from '@/components/MentionSuggestions';
 import { useMentionCandidates } from '@/features/mentions/useMentionCandidates';
 import { activeMention, applyMention } from '@/lib/mentions';
 import { show as showToast } from '@/lib/toast';
+import { confirmAfterMenu } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
 import type { Message } from '@/data/types';
 import Reanimated, { Easing, FadeIn, FadeInDown, FadeInUp, FadeOut, LinearTransition, cancelAnimation, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
@@ -454,8 +455,9 @@ export default function Thread() {
           onReact={(emoji) => actions.reactToMessage(menu.message.id, emoji)}
           onCopy={() => { void Clipboard.setStringAsync(menu.message.body); haptics.tap(); showToast({ title: 'Copied', icon: 'copy-outline' }); }}
           onEdit={() => { setEditing(menu.message); setDraft(menu.message.body); setCaret(menu.message.body.length); setTimeout(() => inputRef.current?.focus(), 60); }}
-          onUnsend={() => actions.unsendMessage(menu.message.id)}
-          onDelete={() => actions.deleteMessageForMe(menu.message.id)}
+          // Both ask first, once the menu has gone, so the question does not land on a menu still fading out.
+          onUnsend={() => { const messageId = menu.message.id; confirmAfterMenu({ title: 'Unsend message?', message: "It's removed for everyone in the chat.", confirmLabel: 'Unsend', destructive: true, onConfirm: () => actions.unsendMessage(messageId) }); }}
+          onDelete={() => { const messageId = menu.message.id; confirmAfterMenu({ title: 'Delete message?', message: menu.mine ? "It's removed for you. Others in the chat still see it." : "It's removed for you only.", confirmLabel: 'Delete', destructive: true, onConfirm: () => actions.deleteMessageForMe(messageId) }); }}
           doubleTap={defaultReaction}
           onDoubleTap={(emoji) => { actions.setDefaultReaction(emoji); showToast({ title: `Double tap now leaves ${emoji}`, icon: 'heart-outline' }); }}
         />
