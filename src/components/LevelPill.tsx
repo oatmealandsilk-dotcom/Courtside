@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { levelBadge } from '@/lib/badges';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -11,7 +11,7 @@ import { colors, font, radius } from '@/theme';
  * system ("UTR") set small and the number set bold, so the number is what
  * reads. Over a clip it is the frosted dark chip every reels feed uses.
  */
-export function LevelPill({ profile, small = false, onMedia = false }: { profile: PlayerProfile; small?: boolean; onMedia?: boolean }) {
+export function LevelPill({ profile, small = false, onMedia = false, style }: { profile: PlayerProfile; small?: boolean; onMedia?: boolean; style?: StyleProp<ViewStyle> }) {
   // Without this the pill keeps the colours of whichever theme it first drew in.
   useTheme();
   const badge = levelBadge(profile);
@@ -24,7 +24,7 @@ export function LevelPill({ profile, small = false, onMedia = false }: { profile
     <View
       accessible
       accessibilityLabel={badge.label}
-      style={[styles.pill, small && styles.small, onMedia ? styles.frost : { backgroundColor: tintFill(badge.tint) }]}
+      style={[styles.pill, small && styles.small, onMedia ? styles.frost : { backgroundColor: tintFill(badge.tint) }, style]}
     >
       {system ? <Text style={[styles.system, small && styles.systemSmall, { color: ink }, onMedia && styles.systemOnMedia]}>{system}</Text> : null}
       <Text style={[styles.value, small && styles.valueSmall, { color: ink }]}>{value}</Text>

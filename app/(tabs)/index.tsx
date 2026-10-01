@@ -1,6 +1,5 @@
 import { asTabRoute } from '@/features/navigation/tabFocus';
-import { openCourtOnMap } from '@/features/players/courtLink';
-import { TaggedLine } from '@/components/TaggedLine';
+import { FoldedWords, ReelCaption, ReelWho, SwipeHint } from '@/components/ReelCaption';
 import { ThreadReplies } from '@/components/ThreadReplies';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -29,7 +28,6 @@ import { Tappable } from '@/components/Tappable';
 import { VerticalPager, type VerticalPagerHandle } from '@/components/VerticalPager';
 import { subscribeReveal, subscribeScrollToTop } from '@/features/navigation/scrollToTop';
 import { LikeButton } from '@/components/LikeButton';
-import { NewHereTag } from '@/components/NewHereTag';
 import { isNewHere } from '@/features/feed/newHere';
 import { wantsOn } from '@/lib/useOptimisticToggle';
 import { setFeedWarm, useCurtainDown } from '@/features/feed/warmup';
@@ -48,7 +46,6 @@ import { ChallengePage } from '@/components/ChallengePage';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { relativeTime, timeLeft } from '@/lib/format';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { FoldingCaption } from '@/components/FoldingCaption';
 import { useApp } from '@/store/AppContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isDesktopBrowser } from '@/lib/browserDevice';
@@ -875,15 +872,12 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     </View>
                     {burst.id === story.id ? <LikeBurst token={burst.n} /> : null}
                     <Reanimated.View style={[StyleSheet.absoluteFill, overlayStyle]} pointerEvents={immersive ? 'none' : 'box-none'}>
-                    <LinearGradient pointerEvents="none" colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.38)', 'rgba(0,0,0,0.66)']} locations={[0, 0.45, 1]} style={styles.bottomFade} />
+                    <LinearGradient pointerEvents="none" colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.22)', 'rgba(0,0,0,0.55)']} locations={[0, 0.5, 1]} style={styles.bottomFade} />
                     <View style={styles.caption}>
-                      <Pressable accessibilityRole="link" onPress={() => { tappedAuthor(`h:${story.id}`); router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`); }} style={styles.author}>
-                        <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={34} />
-                        <Text style={styles.authorName}>@{author.handle}<Text style={styles.authorTime}> · {relativeTime(story.createdAt)}</Text></Text>
-                      </Pressable>
+                      <ReelWho author={author} when={relativeTime(story.createdAt)} onAuthor={() => { tappedAuthor(`h:${story.id}`); router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`); }} />
                       <HitClock expiresAt={story.expiresAt} />
-                      {story.caption ? <FoldingCaption text={story.caption} style={styles.body} moreStyle={styles.more} /> : null}
-                      <Text style={styles.swipeHint}>↑ Next moment   ·   ← Community</Text>
+                      {story.caption ? <FoldedWords text={story.caption} /> : null}
+                      {index === 0 && !scope ? <SwipeHint /> : null}
                     </View>
                     <View style={styles.actions}>
                       <LikeButton ledgerKey={`h:${story.id}`} liked={hitLiked} count={story.likedBy.length} onToggle={() => actions.toggleLikeStory(story.id)} likesRoute={{ pathname: '/likes', params: { id: story.id, kind: 'hit' } }} pop={burst.id === story.id ? burst.n : 0} what="hit" style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
@@ -1066,46 +1060,11 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
 
                   <Reanimated.View style={[StyleSheet.absoluteFill, overlayStyle]} pointerEvents={immersive ? 'none' : 'box-none'}>
 
-                  <LinearGradient pointerEvents="none" colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)']} style={styles.bottomFade} />
+                  <LinearGradient pointerEvents="none" colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.22)', 'rgba(0,0,0,0.55)']} locations={[0, 0.5, 1]} style={styles.bottomFade} />
 
                   <View style={styles.caption}>
-                    <Pressable
-                      accessibilityRole="link"
-                      onPress={() => { tappedAuthor(`p:${post.id}`); router.push(`/user/${author.id}`); }}
-                      style={styles.author}
-                    >
-                      <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={36} />
-                      {/* Who, with their level right beside the name (a rally read
-                          against a rating is the whole point), and when, under it. */}
-                      <View style={styles.authorWords}>
-                        <View style={styles.authorTop}>
-                          <Text style={[styles.authorName, styles.authorFill]} numberOfLines={1}>@{author.handle}</Text>
-                          <LevelPill profile={author.profile} small onMedia />
-                        </View>
-                        <Text style={styles.authorTime} numberOfLines={1}>{relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}</Text>
-                      </View>
-                    </Pressable>
-                    {isNewHere(post) ? <NewHereTag onMedia /> : null}
-                    {post.body ? <FoldingCaption text={post.body} style={styles.body} moreStyle={styles.more} /> : null}
-                    {post.tags.length ? <Text style={styles.tags}>{post.tags.map(t=><Text key={t} accessibilityRole="link" onPress={()=>router.push({pathname:'/search',params:{q:`#${t}`}})}>#{t}{'  '}</Text>)}</Text> : null}
-                    {/* Where and who with, as two small chips under the words: the court opens the map, the names open who was tagged. */}
-                    {post.court || post.location || post.taggedUserIds?.length ? (
-                      <View style={styles.metaChips}>
-                        {post.court ? (
-                          <Pressable accessibilityRole="link" accessibilityLabel={`${post.court.name}, open on the map`} hitSlop={4} onPress={(e) => { e?.stopPropagation?.(); openCourtOnMap(post.court!); }} style={styles.metaChip}>
-                            <Ionicons name="location" size={12} color="#fff" />
-                            <Text style={styles.metaChipText} numberOfLines={1}>{post.court.name}</Text>
-                          </Pressable>
-                        ) : post.location ? (
-                          <View style={styles.metaChip}>
-                            <Ionicons name="location" size={12} color="#fff" />
-                            <Text style={styles.metaChipText} numberOfLines={1}>{post.location}</Text>
-                          </View>
-                        ) : null}
-                        <TaggedLine post={post} onMedia />
-                      </View>
-                    ) : null}
-                    <Text style={styles.swipeHint}>↑ Next moment   ·   ← Community</Text>
+                    <ReelCaption post={post} author={author} onAuthor={() => { tappedAuthor(`p:${post.id}`); router.push(`/user/${author.id}`); }} />
+                    {index === 0 && !scope ? <SwipeHint /> : null}
                   </View>
 
                   <View style={styles.actions}>
@@ -1281,25 +1240,11 @@ const styleDefinitions = StyleSheet.create({
     paddingBottom: 10,
     paddingRight: 70,
     backgroundColor: 'transparent',
-    gap: 8,
+    gap: 6,
   },
   author: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  authorWords: { flexShrink: 1, gap: 1 },
-  authorTop: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  metaChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  // Frosted, like the level chip: readable over any picture without a heavy shadow.
-  metaChip: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 26, paddingHorizontal: 10, borderRadius: 999, backgroundColor: 'rgba(12, 14, 12, 0.42)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255, 255, 255, 0.22)', maxWidth: 220 },
-  metaChipText: { color: '#fff', fontSize: 12.5, ...font('600'), flexShrink: 1 },
-  authorFill: { flexShrink: 1 },
   hitClock: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.45)' },
   hitClockText: { color: 'white', fontSize: 11, ...font('700'), letterSpacing: 0.6 },
-  authorName: { color: 'white', fontSize: 15, ...font('600'), letterSpacing: -0.1, textShadowColor: 'rgba(0, 0, 0, 0.35)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
-  authorTime: { color: 'rgba(255,255,255,0.82)', fontSize: 12.5, ...font('500'), textShadowColor: 'rgba(0, 0, 0, 0.35)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
-  // The tagged court, over the picture like the rest of the line, a touch brighter because it opens the map.
-  courtLink: { color: '#fff', fontSize: 12, ...font('600') },
-  body: { color: 'white', fontSize: 15, lineHeight: 21, ...font('400'), textShadowColor: 'rgba(0, 0, 0, 0.35)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
-  more: { color: 'white', fontSize: 15, lineHeight: 21, ...font('600') },
-  tags: { color: 'rgba(255,255,255,0.9)', fontSize: 13, ...font('500'), textShadowColor: 'rgba(0, 0, 0, 0.35)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
   swipeHint: { color: 'rgba(255,255,255,0.62)', fontSize: 11, ...font('500') },
   bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 280 + BAR_OVERLAY_PX },
   actions: { position: 'absolute', right: 12, bottom: 82 + BAR_OVERLAY_PX, gap: 22 },
