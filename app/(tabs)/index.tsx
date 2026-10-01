@@ -929,10 +929,9 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                           <ThreadReplies questionId={item.question.id} preview/>
                         </View>
                       </Pressable>
+                      {/* The replies run on to the bottom and fade into the page: plainly more below, a tap away, without a line saying so. */}
+                      <LinearGradient pointerEvents="none" colors={[`${colors.bg}00`, colors.bg]} style={styles.threadFade} />
                     </View>
-                    <Pressable accessibilityRole="link" onPress={() => router.push(`/question/${item.question.id}`)}>
-                      <Text style={styles.hint}>Tap to read the full thread</Text>
-                    </Pressable>
                   </View>
                 );
               }
@@ -996,9 +995,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                         clamp={8}
                       />
                     </View>
-                    <Pressable accessibilityRole="link" onPress={() => router.push(`/post/${post.id}`)}>
-                      <Text style={styles.hint}>Tap to view the full post</Text>
-                    </Pressable>
                   </View>
                 );
               }
@@ -1317,7 +1313,7 @@ const styleDefinitions = StyleSheet.create({
   eyebrow: { ...typography.smallStrong, color: colors.textMuted },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   threadMark: { marginRight: 6, marginTop: 6 },
-  hint: { color: colors.textMuted, fontSize: 11, textAlign: 'center', paddingBottom: 10 },
+  threadFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 72 },
   // The theme's own colours, so the page belongs to whichever look is on.
   endPage: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   // Centred in its page on every screen size (it sat to the left on a wide computer window).

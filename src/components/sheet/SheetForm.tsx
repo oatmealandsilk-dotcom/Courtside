@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { Chip } from '@/components/ui';
+import { Chip, BrandWash } from '@/components/ui';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 
@@ -110,7 +110,10 @@ export function Submit({ label, onPress, disabled = false, busy = false, waiting
           <Text style={styles.submitText}>{busyLabel ?? label}</Text>
         </View>
       ) : (
-        <Text style={[styles.submitText, off && styles.submitTextOff]}>{disabled && waiting ? waiting : label}</Text>
+        <>
+          {off ? null : <BrandWash />}
+          <Text style={[styles.submitText, off && styles.submitTextOff]}>{disabled && waiting ? waiting : label}</Text>
+        </>
       )}
     </Pressable>
   );

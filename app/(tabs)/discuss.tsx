@@ -11,6 +11,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { LevelPill } from '@/components/LevelPill';
 import { NearbyMap } from '@/components/NearbyMap';
+import { HitGlyph } from '@/components/HitGlyph';
 import { useLocationToggle } from '@/features/players/useLocationToggle';
 import { QuestionCard, TOPIC_META } from '@/components/QuestionCard';
 import { HitCard } from '@/components/HitCard';
@@ -112,7 +113,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             </View>
             {openHits.length ? openHits.slice(0, 5).map((h) => <HitCard key={h.id} hit={h} />) : (
               <Pressable accessibilityRole="button" onPress={() => router.push('/hit-request/new')} style={styles.hitPrompt}>
-                <Ionicons name="tennisball-outline" size={20} color={colors.brand} />
+                <View style={styles.hitPromptTile}><HitGlyph size={24} color={colors.brand} /></View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.hitPromptTitle}>Looking for someone to play?</Text>
                   <Text style={styles.hitPromptBody}>Say when and where. Players nearby can join.</Text>
@@ -258,6 +259,8 @@ const styleDefinitions = StyleSheet.create({
   hitsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: spacing.sm },
   postHit: { ...typography.smallStrong, color: colors.brand },
   hitPrompt: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
+  // The empty state's tile: the icon on Dim Green, the way the app's feature cards hold the mark.
+  hitPromptTile: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   hitPromptTitle: { ...typography.bodyStrong, color: colors.text },
   hitPromptBody: { ...typography.small, color: colors.textMuted },
   sortRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 5 },

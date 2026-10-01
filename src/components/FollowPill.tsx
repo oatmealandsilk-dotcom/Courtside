@@ -5,6 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import * as haptics from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
+import { BrandWash } from '@/components/ui/BrandWash';
 import { colors, typography } from '@/theme';
 
 const EASE = Easing.bezier(0.22, 1, 0.36, 1);
@@ -28,6 +29,7 @@ export function FollowPill({ following, onPress, small = false, name }: { follow
     transform: [{ scale: bump.value }],
   }));
   const label = useAnimatedStyle(() => ({ color: interpolateColor(on.value, [0, 1], [colors.text, colors.brandInk]) }));
+  const wash = useAnimatedStyle(() => ({ opacity: on.value }));
 
   const press = () => {
     if (!reduced.current) bump.value = withSequence(withTiming(0.92, { duration: 70 }), withSpring(1, { damping: 11, stiffness: 260 }));
@@ -38,6 +40,7 @@ export function FollowPill({ following, onPress, small = false, name }: { follow
   return (
     <Pressable accessibilityRole="button" accessibilityState={{ selected: following }} accessibilityLabel={`${following ? 'Following' : 'Follow'}${name ? ` ${name}` : ''}`} onPress={press} hitSlop={4}>
       <Animated.View style={[styles.pill, small && styles.small, pill]}>
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, wash]}><BrandWash /></Animated.View>
         {following ? <Ionicons name="checkmark" size={14} color={colors.brandInk} /> : null}
         <Animated.Text style={[styles.text, small && styles.textSmall, label]}>{following ? 'Following' : 'Follow'}</Animated.Text>
       </Animated.View>

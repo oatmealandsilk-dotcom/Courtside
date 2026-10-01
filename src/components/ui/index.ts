@@ -1,4 +1,5 @@
 export { Avatar } from './Avatar';
+export { BrandWash } from './BrandWash';
 export { Button } from './Button';
 export { Card } from './Card';
 export { Chip } from './Chip';

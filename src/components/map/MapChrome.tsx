@@ -5,7 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Gesture, GestureDetector, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
 import Animated, { Easing, FadeIn, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
-import { Avatar } from '@/components/ui';
+import { Avatar, BrandWash } from '@/components/ui';
 import { Glass } from '@/components/ui/Glass';
 import { FollowPill } from '@/components/FollowPill';
 import { LevelPill } from '@/components/LevelPill';
@@ -65,6 +65,7 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
       </Glass>
       {onToggleLocation ? (
         <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? 'Turn location off' : 'Turn location on'} onPress={onToggleLocation} style={[styles.round, locationOn && styles.roundOn]}>
+          {locationOn ? <BrandWash /> : null}
           {locating ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={18} color={locationOn ? colors.brandInk : colors.text} />}
         </Pressable>
       ) : null}
@@ -116,7 +117,7 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
     <View style={styles.chipsRow}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={styles.chipsWrap}>
         {measured ? FILTERS.map((f) => { const spot = spots.current[f.key]; return spot ? <View key={`plate-${f.key}`} pointerEvents="none" style={[styles.chipPlate, { left: spot.x, width: spot.w }]} /> : null; }) : null}
-        {measured ? <Animated.View pointerEvents="none" style={[styles.chipPill, pill]} /> : null}
+        {measured ? <Animated.View pointerEvents="none" style={[styles.chipPill, pill]}><BrandWash /></Animated.View> : null}
         {FILTERS.map((f) => (
           <Pressable
             key={f.key}
@@ -433,6 +434,7 @@ export function WhereCard({ locating, onLocation }: { locating?: boolean; onLoca
       </View>
       <View style={[styles.personActions, { marginTop: spacing.xs }]}>
         <Pressable accessibilityRole="button" onPress={onLocation} disabled={locating} style={styles.primary}>
+          <BrandWash />
           {locating ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name="navigate" size={16} color={colors.brandInk} />}
           <Text style={styles.primaryText}>Use my location</Text>
         </Pressable>
@@ -472,6 +474,7 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
       </View>
       <View style={styles.personActions}>
         <Pressable accessibilityRole="button" accessibilityLabel={`Message ${user.name}`} onPress={onMessage} style={styles.primary}>
+          <BrandWash />
           <Ionicons name="paper-plane-outline" size={16} color={colors.brandInk} />
           <Text style={styles.primaryText}>Message</Text>
         </Pressable>
@@ -592,6 +595,7 @@ export function CourtSheet({ court, miles, onClose, onDirections }: { court: Cou
       ) : null}
       <View style={styles.personActions}>
         <Pressable accessibilityRole="link" accessibilityLabel="Directions" onPress={onDirections} style={styles.primary}>
+          <BrandWash />
           <Ionicons name="navigate-outline" size={16} color={colors.brandInk} />
           <Text style={styles.primaryText}>Directions</Text>
         </Pressable>
@@ -621,6 +625,7 @@ export function PreviewOverlay({ cityName, count, weather, locationOn, locating,
       </View>
       {onToggleLocation ? (
         <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? 'Turn location off' : 'Turn location on'} hitSlop={6} onPress={onToggleLocation} style={[styles.previewSwitch, locationOn && styles.roundOn]}>
+          {locationOn ? <BrandWash /> : null}
           {locating ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={15} color={locationOn ? colors.brandInk : colors.text} />}
         </Pressable>
       ) : null}
@@ -648,6 +653,7 @@ export function CitylessCard({ onOpenMap }: { onOpenMap?: () => void }) {
       <Text style={styles.citylessBody}>Add your city to see the players near you.</Text>
       <View style={styles.citylessActions}>
         <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} style={styles.primary}>
+          <BrandWash />
           <Text style={styles.primaryText}>Add my city</Text>
         </Pressable>
         {onOpenMap ? (
