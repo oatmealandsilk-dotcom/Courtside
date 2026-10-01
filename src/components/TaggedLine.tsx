@@ -38,11 +38,11 @@ export function TaggedLine({ post, onMedia = false }: { post: Post; onMedia?: bo
       accessibilityLabel={`Tagged: ${people.map((p) => p.name).join(', ')}`}
       hitSlop={6}
       onPress={(e) => { e?.stopPropagation?.(); open(); }}
-      style={({ pressed }) => [styles.row, pressed && { opacity: 0.7 }]}
+      style={({ pressed }) => [styles.row, onMedia && styles.chip, pressed && { opacity: 0.7 }]}
     >
-      <Ionicons name="person-outline" size={12} color={onMedia ? '#fff' : colors.textMuted} style={onMedia ? styles.shadow : undefined} />
+      <Ionicons name={onMedia ? 'person' : 'person-outline'} size={12} color={onMedia ? '#fff' : colors.textMuted} />
       <Text style={[styles.text, onMedia && styles.onMedia]} numberOfLines={1}>
-        with <Text style={[styles.names, onMedia && styles.onMedia]}>{names}</Text>
+        with <Text style={[styles.names, onMedia && styles.onMediaStrong]}>{names}</Text>
       </Text>
     </Pressable>
   );
@@ -52,7 +52,8 @@ const styleDefinitions = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', maxWidth: '100%' },
   text: { ...typography.small, color: colors.textMuted },
   names: { ...font('600'), color: colors.text },
-  // Over a picture: white, with the same soft shadow as the rest of the caption.
-  onMedia: { color: '#fff', textShadowColor: 'rgba(0, 0, 0, 0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
-  shadow: { textShadowColor: 'rgba(0, 0, 0, 0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  // Over a picture: a frosted chip, like the level and the location beside it, so it reads on any frame.
+  chip: { height: 26, paddingHorizontal: 10, borderRadius: 999, backgroundColor: 'rgba(12, 14, 12, 0.42)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255, 255, 255, 0.22)', maxWidth: 220 },
+  onMedia: { color: 'rgba(255, 255, 255, 0.85)', fontSize: 12.5, ...font('500') },
+  onMediaStrong: { color: '#fff', ...font('600') },
 });

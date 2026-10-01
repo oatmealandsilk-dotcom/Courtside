@@ -875,7 +875,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     </View>
                     {burst.id === story.id ? <LikeBurst token={burst.n} /> : null}
                     <Reanimated.View style={[StyleSheet.absoluteFill, overlayStyle]} pointerEvents={immersive ? 'none' : 'box-none'}>
-                    <LinearGradient pointerEvents="none" colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)']} style={styles.bottomFade} />
+                    <LinearGradient pointerEvents="none" colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.38)', 'rgba(0,0,0,0.66)']} locations={[0, 0.45, 1]} style={styles.bottomFade} />
                     <View style={styles.caption}>
                       <Pressable accessibilityRole="link" onPress={() => { tappedAuthor(`h:${story.id}`); router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`); }} style={styles.author}>
                         <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={34} />
@@ -1074,17 +1074,37 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       onPress={() => { tappedAuthor(`p:${post.id}`); router.push(`/user/${author.id}`); }}
                       style={styles.author}
                     >
-                      <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={34} />
-                      {/* The level belongs on the clip above all: a rally read
-                          against a rating is the whole point, and this was the
-                          one page that left it off. */}
-                      <Text style={[styles.authorName, styles.authorFill]} numberOfLines={1}>@{author.handle}<Text style={styles.authorTime}> · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}{post.court ? <> · <Text accessibilityRole="link" accessibilityLabel={`${post.court.name}, open on the map`} onPress={(e) => { e?.stopPropagation?.(); openCourtOnMap(post.court!); }} style={styles.courtLink}>{post.court.name}</Text></> : post.location ? ` · ${post.location}` : ''}</Text></Text>
-                      <LevelPill profile={author.profile} small onMedia />
+                      <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={36} />
+                      {/* Who, with their level right beside the name (a rally read
+                          against a rating is the whole point), and when, under it. */}
+                      <View style={styles.authorWords}>
+                        <View style={styles.authorTop}>
+                          <Text style={[styles.authorName, styles.authorFill]} numberOfLines={1}>@{author.handle}</Text>
+                          <LevelPill profile={author.profile} small onMedia />
+                        </View>
+                        <Text style={styles.authorTime} numberOfLines={1}>{relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}</Text>
+                      </View>
                     </Pressable>
                     {isNewHere(post) ? <NewHereTag onMedia /> : null}
-                    <TaggedLine post={post} onMedia />
                     {post.body ? <FoldingCaption text={post.body} style={styles.body} moreStyle={styles.more} /> : null}
-                    <Text style={styles.tags}>{post.tags.map(t=><Text key={t} accessibilityRole="link" onPress={()=>router.push({pathname:'/search',params:{q:`#${t}`}})}>#{t}{'  '}</Text>)}</Text>
+                    {post.tags.length ? <Text style={styles.tags}>{post.tags.map(t=><Text key={t} accessibilityRole="link" onPress={()=>router.push({pathname:'/search',params:{q:`#${t}`}})}>#{t}{'  '}</Text>)}</Text> : null}
+                    {/* Where and who with, as two small chips under the words: the court opens the map, the names open who was tagged. */}
+                    {post.court || post.location || post.taggedUserIds?.length ? (
+                      <View style={styles.metaChips}>
+                        {post.court ? (
+                          <Pressable accessibilityRole="link" accessibilityLabel={`${post.court.name}, open on the map`} hitSlop={4} onPress={(e) => { e?.stopPropagation?.(); openCourtOnMap(post.court!); }} style={styles.metaChip}>
+                            <Ionicons name="location" size={12} color="#fff" />
+                            <Text style={styles.metaChipText} numberOfLines={1}>{post.court.name}</Text>
+                          </Pressable>
+                        ) : post.location ? (
+                          <View style={styles.metaChip}>
+                            <Ionicons name="location" size={12} color="#fff" />
+                            <Text style={styles.metaChipText} numberOfLines={1}>{post.location}</Text>
+                          </View>
+                        ) : null}
+                        <TaggedLine post={post} onMedia />
+                      </View>
+                    ) : null}
                     <Text style={styles.swipeHint}>↑ Next moment   ·   ← Community</Text>
                   </View>
 
@@ -1263,19 +1283,25 @@ const styleDefinitions = StyleSheet.create({
     backgroundColor: 'transparent',
     gap: 8,
   },
-  author: { flexDirection: 'row', gap: 9, alignItems: 'center' },
+  author: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  authorWords: { flexShrink: 1, gap: 1 },
+  authorTop: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  metaChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  // Frosted, like the level chip: readable over any picture without a heavy shadow.
+  metaChip: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 26, paddingHorizontal: 10, borderRadius: 999, backgroundColor: 'rgba(12, 14, 12, 0.42)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255, 255, 255, 0.22)', maxWidth: 220 },
+  metaChipText: { color: '#fff', fontSize: 12.5, ...font('600'), flexShrink: 1 },
   authorFill: { flexShrink: 1 },
   hitClock: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.45)' },
   hitClockText: { color: 'white', fontSize: 11, ...font('700'), letterSpacing: 0.6 },
-  authorName: { color: 'white', fontSize: 14, ...font('700') },
-  authorTime: { color: 'rgba(255,255,255,0.75)', fontSize: 12, ...font('500') },
+  authorName: { color: 'white', fontSize: 15, ...font('600'), letterSpacing: -0.1, textShadowColor: 'rgba(0, 0, 0, 0.35)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
+  authorTime: { color: 'rgba(255,255,255,0.82)', fontSize: 12.5, ...font('500'), textShadowColor: 'rgba(0, 0, 0, 0.35)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
   // The tagged court, over the picture like the rest of the line, a touch brighter because it opens the map.
   courtLink: { color: '#fff', fontSize: 12, ...font('600') },
-  body: { color: 'white', fontSize: 13, lineHeight: 19 },
-  more: { color: 'white', fontSize: 13, lineHeight: 19, ...font('600') },
-  tags: { color: 'rgba(255,255,255,0.85)', fontSize: 11 },
-  swipeHint: { color: 'rgba(255,255,255,0.7)', fontSize: 10 },
-  bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 240 + BAR_OVERLAY_PX },
+  body: { color: 'white', fontSize: 15, lineHeight: 21, ...font('400'), textShadowColor: 'rgba(0, 0, 0, 0.35)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
+  more: { color: 'white', fontSize: 15, lineHeight: 21, ...font('600') },
+  tags: { color: 'rgba(255,255,255,0.9)', fontSize: 13, ...font('500'), textShadowColor: 'rgba(0, 0, 0, 0.35)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
+  swipeHint: { color: 'rgba(255,255,255,0.62)', fontSize: 11, ...font('500') },
+  bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 280 + BAR_OVERLAY_PX },
   actions: { position: 'absolute', right: 12, bottom: 82 + BAR_OVERLAY_PX, gap: 22 },
   action: { alignItems: 'center', gap: 4, minWidth: 48 },
   // Instagram's trick: plain white glyphs made bolder by a soft dark shadow
