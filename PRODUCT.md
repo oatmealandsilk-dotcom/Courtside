@@ -72,8 +72,8 @@ Three things at once, all confirmed by the owner:
 
 - The name is CourtSide. The wordmark sits centred at the top of the feed. The tagline is
   "Growing the game".
-- Six themes ship: light, dark, and four Grand Slam palettes — Australian Open, Roland Garros,
-  Wimbledon, US Open. Every palette must supply every colour key, and components take colour from
+- Seven themes ship: CourtSide (light), Night, Clean, and four city court palettes — Melbourne,
+  Paris, London, New York (never the tournament names: trademarks). Every palette must supply every colour key, and components take colour from
   the theme, never a hardcoded hex, or the slam themes break silently.
 - No binary image assets ship with the app. Avatars are generated from initials; photo and video
   placeholders render as tinted court cards.

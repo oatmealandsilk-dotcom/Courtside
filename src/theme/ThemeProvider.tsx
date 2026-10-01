@@ -97,13 +97,16 @@ export const themes: Record<ThemeName, Palette> = {
   'us-open': usOpenColors,
 };
 
+// The four court themes are named for the cities whose courts they borrow from, never the
+// tournaments: those names are trademarks (Apple's rule 5.2.1). The ids stay as they were,
+// so a theme someone already picked survives the rename.
 export const themeList: { name: ThemeName; label: string; blurb: string }[] = [
   { name: 'default', label: 'CourtSide', blurb: 'Warm neutrals, club green' },
   { name: 'night', label: 'Night', blurb: 'Dark, for late sessions' },
-  { name: 'ao', label: 'Australian Open', blurb: 'Blue hard court' },
-  { name: 'roland-garros', label: 'Roland Garros', blurb: 'Crushed brick clay' },
-  { name: 'wimbledon', label: 'Wimbledon', blurb: 'Grass green and purple' },
-  { name: 'us-open', label: 'US Open', blurb: 'Flushing night session' },
+  { name: 'ao', label: 'Melbourne', blurb: 'Blue hard court' },
+  { name: 'roland-garros', label: 'Paris', blurb: 'Crushed brick clay' },
+  { name: 'wimbledon', label: 'London', blurb: 'Grass green and purple' },
+  { name: 'us-open', label: 'New York', blurb: 'Flushing night session' },
   { name: 'clean', label: 'Clean', blurb: 'Plain white, black text' },
 ];
 

@@ -97,8 +97,9 @@ calling anything done.
 
 `src/theme/index.ts` defines the token vocabulary (colors, spacing, radius,
 typography); `src/theme/ThemeProvider.tsx` defines the palettes — light, dark,
-and the four Grand Slam themes (Australian Open, Roland Garros, Wimbledon,
-US Open). Every palette must supply every key of `lightColors`. Components take
+and the four city court themes (Melbourne, Paris, London, New York — ids `ao`,
+`roland-garros`, `wimbledon`, `us-open`; never show the tournament names, they
+are trademarks). Every palette must supply every key of `lightColors`. Components take
 colors from the theme context, never hardcoded hex values, or the slam themes
 break silently.
 
