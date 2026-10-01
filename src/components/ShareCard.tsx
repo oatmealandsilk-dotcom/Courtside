@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BrandMark } from '@/components/BrandMark';
 
 import { Avatar } from '@/components/ui';
 import type { Post, User } from '@/data/types';
@@ -90,7 +91,11 @@ export function ShareCard({ post, author, width }: { post: Post; author?: User; 
       )}
       <LinearGradient colors={['rgba(0,0,0,0.42)', 'rgba(0,0,0,0)']} style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 130 * u }} />
       <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)', 'rgba(0,0,0,0.82)']} locations={[0, 0.45, 1]} style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 380 * u }} />
-      <Text style={{ position: 'absolute', top: 26 * u, left: 24 * u, fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 22 * u, letterSpacing: -0.4 * u, color: 'white' }}>CourtSide</Text>
+      {/* The lockup, quietly: the mark and the name the way the app and the waitlist set them now (Inter at 600, not the old heavy 800). */}
+      <View style={{ position: 'absolute', top: 24 * u, left: 22 * u, flexDirection: 'row', alignItems: 'center', gap: 7 * u, opacity: 0.94 }}>
+        <BrandMark size={Math.round(24 * u)} color="#FFFFFF" />
+        <Text style={{ fontFamily: fontFamily.semibold, fontWeight: '600', fontSize: 18 * u, letterSpacing: -0.45 * u, color: 'white', textShadowColor: 'rgba(0,0,0,0.25)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }}>CourtSide</Text>
+      </View>
       <View style={{ position: 'absolute', left: 22 * u, right: 22 * u, bottom: 24 * u, gap: 14 * u }}>
         {post.match?.sets?.length ? <Scoreboard post={post} author={author} u={u} /> : null}
         {post.body ? <Text numberOfLines={post.match ? 3 : 5} style={{ fontFamily: fontFamily.semibold, fontWeight: '600', fontSize: 17 * u, lineHeight: 23 * u, color: 'white' }}>{post.body}</Text> : null}
