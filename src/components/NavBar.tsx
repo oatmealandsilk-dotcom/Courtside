@@ -25,9 +25,6 @@ import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 /** The screen's pixels per point, read once: the bar's moves are rounded to whole pixels. */
 const PX = PixelRatio.get();
 
-/** The screen's pixels per point, read once: the bar's moves are rounded to whole pixels. */
-const PX = PixelRatio.get();
-
 /**
  * Minimal shape of what react-navigation hands a custom tabBar. Typed locally
  * so the app does not depend on @react-navigation/bottom-tabs directly.
