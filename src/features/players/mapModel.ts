@@ -143,7 +143,18 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
 
   // Your pin: only where you last shared your location (or where the phone says you are now).
   const mePos = where;
-  return { home, homeKnown, homeView, mePos, start, ranked, inTown, filter, setFilter, query, setQuery, place, shown, selected, select, courtsOn, toggleCourts, courts: courtsOn ? courts : [], courtsLoading, loadCourts, selectedCourt, selectCourt };
+
+  // The still card in Find Players shows the city on your profile, the one you
+  // picked at sign-up: never your live spot, and never a guess. No city, no map.
+  const city = useMemo<LatLng | null>(() => {
+    if (me.cityAt) return me.cityAt;
+    const known = placeFor(me.location);
+    return known ? { lat: known.lat, lng: known.lng } : townOf(me);
+  }, [me, townOf]);
+  /** A city typed on the profile that is still being looked up. */
+  const cityPending = !city && !!me.location?.trim() && !townCache.has(townKey(me.location));
+  const inCity = useMemo(() => (city ? ranked.filter((p) => milesBetween(city, p.at) <= IN_TOWN_MILES) : []), [city, ranked]);
+  return { home, homeKnown, homeView, mePos, city, cityPending, inCity, start, ranked, inTown, filter, setFilter, query, setQuery, place, shown, selected, select, courtsOn, toggleCourts, courts: courtsOn ? courts : [], courtsLoading, loadCourts, selectedCourt, selectCourt };
 }
 
 export type MapModel = ReturnType<typeof useMapModel>;

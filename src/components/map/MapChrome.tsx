@@ -592,18 +592,18 @@ export function CourtSheet({ court, miles, onClose, onDirections }: { court: Cou
 }
 
 /**
- * What sits on the still card in the Find Players tab: the city and the
- * count in one small pill, a round location switch, the weather. Nothing
- * says "open" — a map is plainly a thing you tap.
+ * What sits on the still card in the Find Players tab: your city's name in
+ * the middle of its own map, the way a map names a city, with who is around
+ * under it; a round location switch, and the weather. Nothing says "open" —
+ * a map is plainly a thing you tap.
  */
 export function PreviewOverlay({ cityName, count, weather, locationOn, locating, onToggleLocation }: { cityName: string; count: number; weather: Weather | null; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <>
-      <View pointerEvents="none" style={styles.previewTitle}>
-        <Ionicons name="location" size={13} color={colors.brand} />
-        <Text style={styles.previewTitleText}>{cityName}</Text>
-        <Text style={styles.previewCount}>{count ? `· ${count}` : '· no one yet'}</Text>
+      <View pointerEvents="none" style={styles.cityMark}>
+        <Text style={styles.cityName} numberOfLines={1}>{cityName}</Text>
+        <Text style={[styles.cityCount, count > 0 && styles.cityCountOn]}>{count === 1 ? '1 player around' : count ? `${count} players around` : 'No one here yet'}</Text>
       </View>
       {onToggleLocation ? (
         <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? 'Turn location off' : 'Turn location on'} hitSlop={6} onPress={onToggleLocation} style={[styles.previewSwitch, locationOn && styles.roundOn]}>
@@ -617,6 +617,32 @@ export function PreviewOverlay({ cityName, count, weather, locationOn, locating,
         </View>
       ) : null}
     </>
+  );
+}
+
+/**
+ * The Find Players card when the profile has no city: it asks for one
+ * rather than guessing a place you may be nowhere near. The full map is
+ * still a tap away, for anyone who would rather share their location.
+ */
+export function CitylessCard({ onOpenMap }: { onOpenMap?: () => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={styles.cityless}>
+      <View style={styles.citylessDisc}><Ionicons name="location-outline" size={20} color={colors.brand} /></View>
+      <Text style={styles.citylessTitle}>Where do you play?</Text>
+      <Text style={styles.citylessBody}>Add your city to see the players near you.</Text>
+      <View style={styles.citylessActions}>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} style={styles.primary}>
+          <Text style={styles.primaryText}>Add my city</Text>
+        </Pressable>
+        {onOpenMap ? (
+          <Pressable accessibilityRole="button" onPress={onOpenMap} style={styles.secondary}>
+            <Text style={styles.secondaryText}>Open the map</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
   );
 }
 
@@ -714,10 +740,16 @@ const styleDefinitions = StyleSheet.create({
   postedThumb: { width: 66, height: 88, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
   postedPressed: { opacity: 0.85 },
   postedPlay: { position: 'absolute', right: 5, bottom: 5, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
-  // The still card's overlay.
-  previewTitle: { position: 'absolute', left: 12, top: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  previewTitleText: { ...typography.smallStrong, color: colors.text },
-  previewCount: { ...typography.smallStrong, color: colors.brand },
+  // The still card's overlay: the city named the way a map names it, with a soft halo of the page colour so it reads over roads.
+  cityMark: { position: 'absolute', left: spacing.xl, right: spacing.xl, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  cityName: { ...typography.title, fontSize: 26, letterSpacing: -0.6, color: colors.text, textShadowColor: colors.bg, textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },
+  cityCount: { ...typography.smallStrong, color: colors.textMuted, textShadowColor: colors.bg, textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 } },
+  cityCountOn: { color: colors.brand },
+  cityless: { borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: 'center', paddingVertical: spacing.xl, paddingHorizontal: spacing.lg, gap: 4 },
+  citylessDisc: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
+  citylessTitle: { ...typography.heading, color: colors.text, textAlign: 'center' },
+  citylessBody: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
+  citylessActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   previewSwitch: { position: 'absolute', right: 12, top: 12, width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   previewWeather: { position: 'absolute', left: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
 });

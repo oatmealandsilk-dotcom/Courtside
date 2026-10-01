@@ -8,7 +8,7 @@
 // else gets what is already stored.
 //
 // Deploy:   supabase functions deploy courts --no-verify-jwt
-// Secrets:  COURTS_SEED_TOKEN   (optional — lets a script fill in many cities at once; unset it after)
+// Secrets:  COURTS_SEED_TOKEN   (optional — lets a script fill in many cities, or the whole country from a map extract, at once; unset it after)
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -141,11 +141,49 @@ async function saveCell(cell: string, elements: Element[]): Promise<string | nul
   return error ? `area: ${error.message}` : null;
 }
 
+/** One square from the country-wide import: its courts, already named, and whether the square is whole (a square on the border is only partly in the map extract). */
+interface SeedSquare { cell: string; partial?: boolean; rows: { id: string; name: string | null; lat: number; lng: number; lit: boolean | null; surface: string | null }[] }
+
+/** Keeps the import's courts as they come, and notes each whole square as fetched so the app never asks OpenStreetMap about it again for two months. */
+async function saveNamed(squares: SeedSquare[]): Promise<string | null> {
+  const at = new Date().toISOString();
+  const rows = [];
+  for (const sq of squares) {
+    if (typeof sq?.cell !== 'string' || !/^-?[0-9]{1,3}:-?[0-9]{1,4}$/.test(sq.cell) || !Array.isArray(sq.rows)) return 'square?';
+    for (const r of sq.rows) {
+      if (typeof r?.id !== 'string' || !/^(node|way|relation)[0-9]{1,15}$/.test(r.id) || !Number.isFinite(r.lat) || !Number.isFinite(r.lng)) return `court? ${String(r?.id).slice(0, 30)}`;
+      rows.push({
+        id: r.id,
+        name: typeof r.name === 'string' ? r.name.slice(0, 160) : null,
+        lat: r.lat, lng: r.lng,
+        lit: typeof r.lit === 'boolean' ? r.lit : null,
+        surface: typeof r.surface === 'string' ? r.surface.slice(0, 40) : null,
+        updated_at: at,
+      });
+    }
+  }
+  for (let k = 0; k < rows.length; k += 500) {
+    const { error } = await admin.from('courts').upsert(rows.slice(k, k + 500));
+    if (error) return `saving: ${error.message}`;
+  }
+  const whole = squares.filter((sq) => !sq.partial).map((sq) => ({ cell: sq.cell, fetched_at: at, found: sq.rows.length }));
+  for (let k = 0; k < whole.length; k += 500) {
+    const { error } = await admin.from('court_areas').upsert(whole.slice(k, k + 500));
+    if (error) return `area: ${error.message}`;
+  }
+  return null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json({ error: 'post only' }, 405);
-  const body = await req.json().catch(() => ({})) as { lat?: number; lng?: number; km?: number; token?: string; cell?: string; elements?: Element[] };
+  const body = await req.json().catch(() => ({})) as { lat?: number; lng?: number; km?: number; token?: string; cell?: string; elements?: Element[]; batch?: SeedSquare[] };
   const seedToken = Deno.env.get('COURTS_SEED_TOKEN') ?? '';
+  // The country-wide import names its courts itself and hands over many squares at once.
+  if (seedToken && body.token === seedToken && Array.isArray(body.batch)) {
+    const problem = await saveNamed(body.batch.slice(0, 2000));
+    return problem ? json({ error: problem }, 500) : json({ squares: body.batch.length });
+  }
   // The seeding script fetches squares itself and hands them over whole.
   if (seedToken && body.token === seedToken && typeof body.cell === 'string' && Array.isArray(body.elements)) {
     if (!/^-?[0-9]{1,3}:-?[0-9]{1,4}$/.test(body.cell)) return json({ error: 'cell?' }, 400);
