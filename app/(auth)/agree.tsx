@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BrandMark } from '@/components/BrandMark';
 import { useLeave } from '@/components/LeaveCurtain';
@@ -10,6 +9,8 @@ import { Button } from '@/components/ui';
 import { Wash } from '@/components/Wash';
 import { openLegal, TERMS_VERSION } from '@/lib/legal';
 import { useApp } from '@/store/AppContext';
+import { useGateSpace } from '@/lib/useGateSpace';
+import { StatusShade } from '@/components/StatusShade';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography, font, lift } from '@/theme';
 
@@ -35,7 +36,8 @@ const enter = (i: number) => FadeInDown.delay(90 + i * 70).duration(420).easing(
  */
 export default function Agree() {
   const styles = useThemedStyles(styleDefinitions);
-  const insets = useSafeAreaInsets();
+  // Clear of the status bar and the home bar, the same as every page before the app.
+  const space = useGateSpace();
   const { termsVersion, actions } = useApp();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -60,7 +62,7 @@ export default function Agree() {
   return (
     <View style={styles.root}>
       <Wash height={420} />
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: insets.top + spacing.xxl }]}>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: space.top }]}>
         <Animated.View entering={enter(0)}><BrandMark size={40} /></Animated.View>
         <Animated.View entering={enter(1)} style={styles.head}>
           <Text style={styles.title}>Community guidelines</Text>
@@ -83,8 +85,10 @@ export default function Agree() {
           <Text accessibilityRole="link" onPress={() => openLegal('privacy')} style={styles.link}>Privacy Policy</Text>.
         </Animated.Text>
       </ScrollView>
+      {/* The guidelines scroll; they stop at the status bar instead of running under the clock. */}
+      <StatusShade wash={{ height: 420 }} />
 
-      <Animated.View entering={enter(4)} style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
+      <Animated.View entering={enter(4)} style={[styles.footer, { paddingBottom: space.footer }]}>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <Button label="I agree" loading={busy} onPress={agree} full />
         <Pressable accessibilityRole="button" accessibilityLabel="Sign out" hitSlop={8} onPress={() => leave(() => { actions.signOut(); router.replace('/sign-in'); })} style={styles.signOut}>

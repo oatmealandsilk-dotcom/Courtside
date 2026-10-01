@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BrandMark } from '@/components/BrandMark';
 import { BirthDateField } from '@/components/BirthDateField';
@@ -9,6 +8,8 @@ import { Button } from '@/components/ui';
 import { isDeviceBlocked, toBirthDate } from '@/features/age/ageCheck';
 import { useLeave } from '@/components/LeaveCurtain';
 import { useApp } from '@/store/AppContext';
+import { useGateSpace } from '@/lib/useGateSpace';
+import { StatusShade } from '@/components/StatusShade';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography } from '@/theme';
 
@@ -20,7 +21,8 @@ import { colors, spacing, typography } from '@/theme';
 export default function Birthday() {
   const { leave, curtain } = useLeave();
   const styles = useThemedStyles(styleDefinitions);
-  const insets = useSafeAreaInsets();
+  // Clear of the status bar and the home bar, the same as every page before the app.
+  const space = useGateSpace();
   const { currentUserId, actions } = useApp();
   const [date, setDate] = useState({ month: '', day: '', year: '' });
   const [busy, setBusy] = useState(false);
@@ -47,7 +49,7 @@ export default function Birthday() {
 
   if (blocked) {
     return (
-      <View style={[styles.root, styles.centre, { paddingTop: insets.top + spacing.xl }]}>
+      <View style={[styles.root, styles.centre, { paddingTop: space.top }]}>
         <BrandMark size={56} />
         <Text style={styles.title}>CourtSide isn't available to you yet</Text>
         <Text style={styles.lead}>You need to be a bit older to have an account. Nothing you entered has been kept.</Text>
@@ -58,7 +60,7 @@ export default function Birthday() {
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: insets.top + spacing.xxl }]} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: space.top, paddingBottom: space.bottom }]} keyboardShouldPersistTaps="handled">
         <BrandMark size={44} />
         <Text style={styles.title}>When's your birthday?</Text>
         <Text style={styles.lead}>It stays private and never shows on your profile.</Text>
@@ -66,6 +68,8 @@ export default function Birthday() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <Button label="Continue" loading={busy} disabled={!date.month || !date.day || date.year.length !== 4} onPress={submit} full />
       </ScrollView>
+      {/* With the keyboard up the page can scroll; it stops at the status bar, not under the clock. */}
+      <StatusShade />
       {curtain}
     </KeyboardAvoidingView>
   );

@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -17,25 +18,32 @@ export function BirthDateField({ month, day, year, onChange, label = 'Date of bi
   const styles = useThemedStyles(styleDefinitions);
   const dayRef = useRef<TextInput>(null);
   const yearRef = useRef<TextInput>(null);
+  // Tapping a box brings the whole row above the keyboard, the way every Field does.
+  const rowRef = useRef<View>(null);
+  const reveal = useRevealOnFocus();
+  const onFocus = () => reveal(rowRef.current as unknown as Parameters<typeof reveal>[0]);
   const digits = (text: string, max: number) => text.replace(/\D/g, '').slice(0, max);
   return (
     <View style={styles.wrap}>
       <Text style={styles.label}>{label}</Text>
-      <View style={styles.row}>
+      <View ref={rowRef} style={styles.row}>
         <TextInput
           accessibilityLabel="Month" placeholder="MM" placeholderTextColor={colors.textFaint} value={month} keyboardType="number-pad" maxLength={2}
           onChangeText={(t) => { const v = digits(t, 2); onChange({ month: v, day, year }); if (v.length === 2) dayRef.current?.focus(); }}
+          onFocus={onFocus}
           style={[styles.box, styles.short]}
         />
         <TextInput
           ref={dayRef} accessibilityLabel="Day" placeholder="DD" placeholderTextColor={colors.textFaint} value={day} keyboardType="number-pad" maxLength={2}
           onChangeText={(t) => { const v = digits(t, 2); onChange({ month, day: v, year }); if (v.length === 2) yearRef.current?.focus(); }}
+          onFocus={onFocus}
           style={[styles.box, styles.short]}
         />
         <TextInput
           ref={yearRef} accessibilityLabel="Year" placeholder="YYYY" placeholderTextColor={colors.textFaint} value={year} keyboardType="number-pad" maxLength={4}
           onChangeText={(t) => onChange({ month, day, year: digits(t, 4) })}
           onSubmitEditing={onSubmit}
+          onFocus={onFocus}
           style={[styles.box, styles.long]}
         />
       </View>
