@@ -6,6 +6,7 @@ import { goBack } from '@/lib/goBack';
 
 import { NearbyMap } from '@/components/NearbyMap';
 import { useLocationToggle } from '@/features/players/useLocationToggle';
+import { useCourtOpen } from '@/features/players/courtLink';
 import { EmptyState } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
@@ -31,6 +32,9 @@ export default function MapScreen() {
     () => (params.court && params.name && Number.isFinite(lat) && Number.isFinite(lng) ? { id: params.court, name: params.name, lat, lng } : null),
     [params.court, params.name, lat, lng],
   );
+  // A court page's map button, or See all on this court's card, comes back here rather than stacking another copy.
+  const ownHref = useMemo(() => ({ pathname: '/map' as const, params: { court: params.court, lat: params.lat, lng: params.lng, name: params.name } }), [params.court, params.lat, params.lng, params.name]);
+  useCourtOpen('map', focusCourt, focusCourt ? ownHref : null);
   const back = () => goBack(focusCourt ? '/' : '/discuss?section=players');
   return (
     <View style={{ flex: 1, backgroundColor: colors.bgElevated }}>

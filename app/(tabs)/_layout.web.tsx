@@ -9,6 +9,7 @@ import { SwipeSurface } from '@/components/SwipeSurface';
 import { setPendingTab } from '@/features/navigation/pendingTab';
 import { requestSection, shownSection, swipeDestination } from '@/features/navigation/swipeOrder';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
+import { TabFocus } from '@/features/navigation/tabFocus';
 import { useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
@@ -47,7 +48,10 @@ export default function TabsLayout() {
     }} delegateLeft={pathname === "/profile"} settledKey={`${pathname}:${shownSection(pathname) ?? params.section ?? ''}`} renderPreview={direction => {
       const next = swipeDestination(pathname, pathname === "/discuss" || pathname === "/profile" ? shownSection(pathname) ?? params.section : params.section, direction);
       if (!next) return null;
-      if (next.pathname === '/') return <Home/>;
+      // Home slid in under a finger is a picture of the feed, not the feed:
+      // its clip shows its cover and starts only once you have arrived (a
+      // second, live copy played with sound before you got there).
+      if (next.pathname === '/') return <TabFocus active={false}><Home/></TabFocus>;
       if (next.pathname === '/discuss') return <Discuss previewSection={next.section}/>;
       if (next.pathname === '/coaches') return <Coaches/>;
       return <Profile previewSection={next.section}/>;

@@ -7,6 +7,9 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Screen } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { replayTour } from '@/features/tour/tourStore';
+import { TOUR_ON } from '@/features/tour/tourSeen';
+import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 
 const TOPICS: { title: string; body: string }[] = [
@@ -49,6 +52,7 @@ const TOPICS: { title: string; body: string }[] = [
 ];
 
 export default function Help() {
+  const { currentUser } = useApp();
   const styles = useThemedStyles(styleDefinitions);
   const [open, setOpen] = useState<number | null>(null);
 
@@ -75,6 +79,14 @@ export default function Help() {
         })}
       </View>
       <View style={styles.links}>
+        {/* The first-run tour again, from Home (admins only until it is switched on for everyone). */}
+        {TOUR_ON || currentUser?.isAdmin ? (
+          <Pressable accessibilityRole="button" onPress={replayTour} style={styles.link}>
+            <Ionicons name="compass-outline" size={19} color={colors.text} />
+            <Text style={styles.linkText}>Show the tutorial</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+          </Pressable>
+        ) : null}
         <Pressable accessibilityRole="link" onPress={() => router.push('/privacy')} style={styles.link}>
           <Ionicons name="shield-checkmark-outline" size={19} color={colors.text} />
           <Text style={styles.linkText}>Privacy center</Text>

@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { openCourtOnMap } from '@/features/players/courtLink';
+import { openCourt } from '@/features/players/courtLink';
 import { TaggedLine } from '@/components/TaggedLine';
 import React, { useState, memo } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -99,7 +99,7 @@ function PostCardInner({
             {isNewHere(post) ? <NewHereTag /> : null}
           </View>
           <Text style={styles.sub} numberOfLines={1}>
-            @{author.handle} · {relativeTime(post.createdAt)}{post.court ? <> · <Text accessibilityRole="link" accessibilityLabel={`${post.court.name}, open on the map`} onPress={(e) => { e?.stopPropagation?.(); openCourtOnMap(post.court!); }} style={styles.courtLink}>{post.court.name}</Text></> : post.location ? ` · ${post.location}` : ''}
+            @{author.handle} · {relativeTime(post.createdAt)}{post.court ? <> · <Text accessibilityRole="link" accessibilityLabel={`${post.court.name}, see posts from here`} onPress={(e) => { e?.stopPropagation?.(); openCourt(post.court!); }} style={styles.courtLink}>{post.court.name}</Text></> : post.location ? ` · ${post.location}` : ''}
           </Text>
           <TaggedLine post={post} />
         </View>

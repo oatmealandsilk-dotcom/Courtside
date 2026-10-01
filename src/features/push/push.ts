@@ -62,9 +62,20 @@ export async function forgetPushToken() {
 /** A tap on an alert opens what it is about — also when the tap is what opened the app. */
 export function listenForPushTaps(): () => void {
   if (Platform.OS === 'web') return () => undefined;
+  const since = Date.now();
+  let opened: string | null = null;
   const open = (response: Notifications.NotificationResponse | null) => {
     const href = response?.notification.request.content.data?.href;
-    if (typeof href === 'string' && href.startsWith('/')) setTimeout(() => router.push(href as never), 300);
+    if (typeof href !== 'string' || !href.startsWith('/')) return;
+    // At launch the same tap can arrive both ways (asked for, and as an event): it opens one page.
+    const id = response?.notification.request.identifier ?? null;
+    if (id && id === opened) return;
+    opened = id;
+    // The tap that opened the app waits a beat while its pages are set up.
+    // With the app already running the page opens at once: waiting let the
+    // clip on Home start again, with sound, before the page covered it.
+    if (Date.now() - since < 2000) setTimeout(() => router.push(href as never), 300);
+    else router.push(href as never);
   };
   void Notifications.getLastNotificationResponseAsync().then(open).catch(() => undefined);
   const sub = Notifications.addNotificationResponseReceivedListener(open);

@@ -1,9 +1,9 @@
 import { asTabRoute } from '@/features/navigation/tabFocus';
-import { COUNT_EDGE, FoldedWords, GLYPH_EDGE, InstantMeta, MAX_GROW, railCount, ReelCaption, ReelDim, ReelScrim, ReelWho, SwipeHint } from '@/components/ReelCaption';
+import { COUNT_EDGE, FoldedWords, GLYPH_EDGE, InstantMeta, MAX_GROW, RailShade, railCount, ReelCaption, ReelDim, ReelScrim, ReelWho, SwipeHint } from '@/components/ReelCaption';
 import { useSuggestedPlayers } from '@/features/people/suggestions';
 import { ThreadReplies } from '@/components/ThreadReplies';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Animated, AppState, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
@@ -11,6 +11,7 @@ import { useIsFocused } from '@/lib/useIsFocused';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
 import { PinchZone } from '@/components/PinchZone';
 import Reanimated, { runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming } from 'react-native-reanimated';
 import * as haptics from '@/lib/haptics';
@@ -35,6 +36,8 @@ import { setFeedWarm, useCurtainDown } from '@/features/feed/warmup';
 import { connectionIsQuick } from '@/lib/netSpeed';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { subscribeFeedRefresh } from '@/features/feed/feedBus';
+import { localCopyOf, pendingUploads, setShownInFeed, usePendingUploads } from '@/lib/uploads';
+import { PostingChip } from '@/components/PostingChip';
 import { BAR_TUCK, barCompact, setBarCompact } from '@/features/navigation/barShrink';
 import { BAR_OVERLAY_PX, useBarInset } from '@/features/navigation/barInset';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
@@ -65,6 +68,32 @@ import { colors, radius, typography, spacing, font, lift } from '@/theme';
  */
 /** Media the internet can reach: a file:// link only ever worked on the phone that made it. */
 const reachable = (p: { imageUrl?: string; videoUrl?: string }) => [p.imageUrl, p.videoUrl].every((u) => !u || /^(https?:|data:|blob:)/.test(u));
+
+/**
+ * Your own post or Instant from this session plays from the file on this
+ * phone, before it has landed and after: its page never reloads, or jumps,
+ * the moment the hosted copy takes over. Kept per object, so a post that has
+ * not changed is still the same object and its page does not redraw.
+ */
+const withLocalCache = new WeakMap<object, object>();
+function withLocalMedia<T extends { id: string; imageUrl?: string; videoUrl?: string; thumbnailUrl?: string }>(item: T): T {
+  const local = localCopyOf(item.id);
+  if (!local) return item;
+  const kept = withLocalCache.get(item) as T | undefined;
+  if (kept) return kept;
+  const next = { ...item, imageUrl: local.imageUrl ?? item.imageUrl, videoUrl: local.videoUrl ?? item.videoUrl, thumbnailUrl: local.thumbnailUrl ?? item.thumbnailUrl };
+  withLocalCache.set(item, next);
+  return next;
+}
+
+/** When each page's post, thread or Instant was made, for putting new ones newest first. */
+function madeAt(data: { posts: { id: string; createdAt: string }[]; questions: { id: string; createdAt: string }[]; stories: { id: string; createdAt: string }[] }) {
+  const at = new Map<string, number>();
+  for (const p of data.posts) at.set(`p:${p.id}`, Date.parse(p.createdAt));
+  for (const q of data.questions) at.set(`q:${q.id}`, Date.parse(q.createdAt));
+  for (const st of data.stories) at.set(`h:${st.id}`, Date.parse(st.createdAt));
+  return (key: string) => at.get(key) ?? 0;
+}
 
 function TapAway({ onHidden, label, children, style }: { onHidden: () => void; label: string; children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
   const gone = useSharedValue(0);
@@ -128,8 +157,10 @@ function LikeBurst({ token }: { token: number }) {
   );
 }
 
-/** Show one player's things as a feed of their own: their clips, posts, or tagged posts. */
-export interface FeedScope { userId: string; set: 'own' | 'clips' | 'tagged'; start?: string }
+/** Show one player's things as a feed of their own (clips, posts or tagged posts), or a given list of posts in that order (a court's). */
+export type FeedScope =
+  | { userId: string; set: 'own' | 'clips' | 'tagged'; start?: string; ids?: undefined }
+  | { ids: string[]; start?: string; userId?: undefined; set?: undefined };
 
 // On a phone — the app or a phone's browser — a vertical clip fills the whole
 // page, edge to edge. The tall 9:16 box in the middle is for computer windows.
@@ -173,6 +204,14 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const app = useApp();
   const { posts, questions, comments, stories, users, currentUserId, saved, actions, ready, followingIds, mutedIds, blockedIds, conversations } = app;
   const currentUser = users.find((u) => u.id === currentUserId);
+  // Your posts and Instants still going up: not in the store until they have
+  // landed, but at the top of the feed from the moment you post them.
+  const uploads = usePendingUploads();
+  const uploadingIds = useMemo(() => new Set(uploads.filter((u) => u.state === 'uploading').map((u) => u.id)), [uploads]);
+  // Their pages wear the posting chip until it has faded ("Posted" included).
+  const postingIds = useMemo(() => new Set(uploads.filter((u) => u.state !== 'failed').map((u) => u.id)), [uploads]);
+  const uploadingRef = useRef(uploadingIds);
+  uploadingRef.current = uploadingIds;
   // Everyone by id, so each page finds its author in one step rather than scanning every player.
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const [active, setActive] = useState(0);
@@ -250,13 +289,14 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     viewing.current = null;
     if (!view) return;
     const kind = signalKind(view.key);
-    if (!kind) return;
+    // A post still going up is not in the database yet; there is nothing to note against.
+    if (!kind || uploadingRef.current.has(view.key.slice(2))) return;
     const seconds = (Date.now() - view.since) / 1000;
     actions.noteFeedSignal({ kind, id: view.key.slice(2), seen: true, watched: seconds, skipped: seconds < 1.5 });
   };
   const tappedAuthor = (key: string) => {
     const kind = signalKind(key);
-    if (kind) actions.noteFeedSignal({ kind, id: key.slice(2), profileTap: true });
+    if (kind && !uploadingRef.current.has(key.slice(2))) actions.noteFeedSignal({ kind, id: key.slice(2), profileTap: true });
   };
   // A new page on screen (or the feed coming back to the front): the last one
   // is closed off and the new one's clock starts.
@@ -271,15 +311,22 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   // focus — otherwise stepping into a thread and back would reshuffle the feed
   // and throw you to the top.
   const rankedFor = useRef<string | null>(null);
+  // When the main feed was last dealt, so a pull knows what is new since.
+  const dealtAt = useRef<number | null>(null);
   // Builds the page order from whatever is loaded; a pull-to-refresh asks for it again.
   const seen = seenNow;
   const rerank = useCallback((remount = true, fresh = false) => {
       const data = latest.current;
       if (scope) {
-        // One person's things, newest first, opened on the one that was tapped.
-        const mine = data.posts
-          .filter((p) => !p.archived && (scope.set === 'tagged' ? p.taggedUserIds?.includes(scope.userId) : p.authorId === scope.userId && (scope.set !== 'clips' || p.kind === 'clip')))
-          .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+        // One person's things, newest first, opened on the one that was tapped;
+        // or a court's posts, in exactly the order its grid shows them.
+        const { ids, userId, set } = scope;
+        const byId = ids ? new Map(data.posts.map((p) => [p.id, p])) : null;
+        const mine = ids && byId
+          ? ids.flatMap((id) => { const p = byId.get(id); return p && !p.archived ? [p] : []; })
+          : data.posts
+            .filter((p) => !p.archived && (set === 'tagged' ? !!userId && p.taggedUserIds?.includes(userId) : p.authorId === userId && (set !== 'clips' || p.kind === 'clip')))
+            .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
         setOrder(mine.map((p) => `p:${p.id}`));
         setActive(Math.max(0, mine.findIndex((p) => p.id === scope.start)));
         setVisit((v) => v + 1);
@@ -287,15 +334,17 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       }
       // A post whose picture or video is a link only its author's phone could
       // open (an upload that never finished) is left out of the deal.
-      const ranked = rankFeed(data.posts.filter(reachable), data.questions.filter((q) => !q.source), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st))).flatMap((i) =>
+      // (Your own, posted from this phone this session, plays from the phone's copy, so it stays.)
+      const ranked = rankFeed(data.posts.filter((p) => reachable(p) || !!localCopyOf(p.id)), data.questions.filter((q) => !q.source), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st))).flatMap((i) =>
         i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : [],
       );
       // Something of yours from the last few minutes goes first, so a fresh post
-      // is right there. Newest first, that window is a whole day: your own new
-      // post is the first thing you see until tomorrow, however you refresh.
-      const mineFor = NEWEST_FIRST ? 24 * 60 * 60_000 : 5 * 60_000;
-      const justMine = data.posts
-        .filter((p) => p.authorId === data.currentUserId && !p.archived && Date.now() - Date.parse(p.createdAt) < mineFor)
+      // is right there. Newest first there is no such hold: what you post goes
+      // to the top the moment you post it (liftToTop, below), and from then on
+      // it sits by its time like everyone else's. Holding your own day's posts
+      // above everything put other people's newer posts pages down after a pull.
+      const justMine: string[] = NEWEST_FIRST ? [] : data.posts
+        .filter((p) => p.authorId === data.currentUserId && !p.archived && Date.now() - Date.parse(p.createdAt) < 5 * 60_000)
         .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
         .map((p) => `p:${p.id}`);
       // The feed is dealt, not listed: what you have already watched this
@@ -338,18 +387,50 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         if (at >= 0) final.splice(at, 1);
         final.splice(Math.min(final.length, justMine.length + 1 + i * 2), 0, key);
       });
+      // After a pull, everything made since the feed was last dealt leads,
+      // newest first — a new thread or Instant too, not left in its usual slot
+      // a few pages down. Something older that has only just reached this
+      // phone (a profile or a search brought it in) keeps its place by date.
+      if (fresh && dealtAt.current !== null) {
+        const had = new Set(orderRef.current);
+        const made = madeAt(data);
+        const since = dealtAt.current - 30 * 60_000;
+        const lead = final.filter((k) => !had.has(k) && made(k) > since).sort((a, b) => made(b) - made(a));
+        if (lead.length) { const rest = final.filter((k) => !lead.includes(k)); final.splice(0, final.length, ...lead, ...rest); }
+      }
+      dealtAt.current = Date.now();
+      // Anything of yours still going up stays at the very top, whatever deals the feed again.
+      const going = pendingUploads().flatMap((u) => (u.state === 'uploading' && u.key ? [u.key] : [])).reverse();
+      if (going.length) { const rest = final.filter((k) => !going.includes(k)); final.splice(0, final.length, ...going, ...rest); }
       setOrder(final);
       setActive(0);
       if (remount) setVisit((v) => v + 1);
-  }, [scope?.userId, scope?.set, scope?.start]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => subscribeReveal(() => { if (!scope) rerank(); }), [scope, rerank]);
+  }, [scope?.userId, scope?.set, scope?.start, scope?.ids?.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Something of yours just posted (or "Posted — tap to see it" on the
+  // strip): its page goes to the very top — while it is still uploading too —
+  // and the feed is taken there. Only that page moves; nothing else is dealt
+  // again, so when the upload lands the real post takes the same place.
+  const liftToTop = useCallback((key: string) => {
+    setOrder((prev) => [key, ...prev.filter((k) => k !== key)]);
+    setActive(0);
+    setVisit((v) => v + 1);
+    // Its own page shows how the upload is going, so the strip steps aside at once.
+    setShownInFeed(key.slice(2));
+  }, []);
+  useEffect(() => subscribeReveal((id) => {
+    if (scope) return;
+    const data = latest.current;
+    const key = pendingUploads().find((u) => u.id === id && u.key)?.key
+      ?? (data.posts.some((p) => p.id === id) ? `p:${id}` : data.stories.some((st) => st.id === id) ? `h:${id}` : null);
+    if (key) liftToTop(key); else rerank();
+  }), [scope, rerank, liftToTop]);
   useFocusEffect(
     useCallback(() => {
-      const stamp = `${ready}:${currentUserId}:${scope?.userId ?? ''}:${scope?.set ?? ''}`;
+      const stamp = `${ready}:${currentUserId}:${scope?.userId ?? ''}:${scope?.set ?? ''}:${scope?.ids?.join(',') ?? ''}`;
       if (rankedFor.current === stamp) return;
       rankedFor.current = stamp;
       rerank();
-    }, [ready, currentUserId, scope?.userId, scope?.set, rerank]),
+    }, [ready, currentUserId, scope?.userId, scope?.set, scope?.ids?.join(','), rerank]),
   );
   /**
    * Nearing the end of what is loaded: the next page of older posts is asked
@@ -392,20 +473,24 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       .flatMap((i) => (i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : []))
       .filter((k) => !have.has(k));
     if (!fresh.length) return;
-    const dealt = shuffleFeed(fresh);
+    // Newest first, with nothing shown yet (the curtain is still up): the feed
+    // is simply dealt again, so the newest is the first thing you see.
+    // Otherwise the new pages go in right after the one on screen, newest first.
+    if (NEWEST_FIRST && active === 0 && !playable) { rerank(); return; }
+    const made = madeAt(data);
+    const dealt = NEWEST_FIRST ? [...fresh].sort((a, b) => made(b) - made(a)) : shuffleFeed(fresh);
     setOrder((prev) => {
-      const at = Math.min(prev.length, active + 2);
+      const at = Math.min(prev.length, active + (NEWEST_FIRST ? 1 : 2));
       return [...prev.slice(0, at), ...dealt.filter((k) => !prev.includes(k)), ...prev.slice(at)];
     });
   }, [app.remoteLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // A post of yours that just finished uploading: the feed starts over with it on top.
-  // …and the feed is taken back to the top to show it, wherever you had scrolled to.
-  useEffect(() => subscribeFeedRefresh(() => {
+  // Something of yours just posted: straight to the top (see liftToTop). With
+  // no page named, the feed is dealt again.
+  useEffect(() => subscribeFeedRefresh((key) => {
     if (scope) return;
-    rerank();
-    setTimeout(() => pager.current?.scrollToTop(), 60);
-  }), [scope, rerank]);
+    if (key) liftToTop(key); else rerank();
+  }), [scope, rerank, liftToTop]);
   // Pulling down on the first page fetches what is new and starts the feed over from the top.
   // Pull-to-refresh: fetch what is new, rank the pages again in place (the
   // pager is holding the feed down and brings it back itself), and give the
@@ -468,28 +553,34 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const [quick, setQuick] = useState(connectionIsQuick);
   const coverQuick = useRef(new Map<string, boolean>());
   const firstReadyRef = useRef(false);
+  const activeRef = useRef(active);
+  activeRef.current = active;
   const refreshFeed = useCallback(async () => {
-    const before = latest.current;
+    // This resolves only once the fresh load has been drawn (the store waits
+    // for that itself), so the ranking below reads the new posts. Waiting here
+    // for "any change at all" used to give up early — a message or a like
+    // arriving mid-fetch counted — and ranked the old list.
     await actions.refresh();
-    // The fetch has landed in the store, but this page sees it only on its
-    // next render; ranking before that ranked the old list and nothing new
-    // ever appeared. Wait for that render (briefly), then rank.
-    for (let i = 0; i < 20 && latest.current === before; i += 1) await new Promise<void>((r) => setTimeout(r, 25));
     // How to wait is chosen once, here, from how quickly clips have been
     // loading: on a quick connection the feed holds until the new first clip
-    // is ready (a few seconds at most) and lands on it playing; on a slow one
+    // is ready (about a second at most) and lands on it playing; on a slow one
     // it comes straight back and waits on the CourtSide loading page. Either
     // way there is one waiting screen, never two.
     const quickNow = connectionIsQuick();
     coverQuick.current.clear();
     setQuick(quickNow);
     rerank(false, true);
+    // In a browser the scroller snaps back to the page it was resting on —
+    // the old first page, now further down below the new ones — so the feed
+    // is taken back up to the newest. A phone's own scroller never does this.
+    if (Platform.OS === 'web') setTimeout(() => { if (activeRef.current !== 0) pager.current?.scrollToTop(); }, 150);
     await new Promise<void>((resolve) => {
       const done = () => { clearTimeout(t); resolve(); };
-      const t = setTimeout(done, quickNow ? 3000 : 500);
+      // A pull that holds longer than a beat feels stuck: about a second at most, then the feed comes back.
+      const t = setTimeout(done, quickNow ? 1200 : 400);
       setTimeout(() => { if (firstReadyRef.current) done(); else warmWaiters.current.push(done); }, 80);
     });
-    await new Promise<void>((resolve) => setTimeout(resolve, 240));
+    await new Promise<void>((resolve) => setTimeout(resolve, 120));
   }, [actions, rerank]);
 
   /**
@@ -504,10 +595,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   useEffect(() => { setFollowedHere([]); }, [visit]);
   const suggestions = useSuggestedPlayers({ keep: followedHere });
 
-  // Anything you post after the feed was ranked — a clip, a note, a hit —
-  // goes right to the very top and the feed jumps there, so posting reads as
-  // "it's up" instead of leaving you to scroll and find it.
-
   // Blocked and muted players disappear from the feed entirely.
   const feedItems = useMemo<FeedItem[]>(() => {
     const hidden = new Set([...blockedIds, ...mutedIds]);
@@ -518,21 +605,27 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     const postById = new Map(posts.map((p) => [p.id, p]));
     const storyById = new Map(stories.map((st) => [st.id, st]));
     const questionById = new Map(questions.map((q) => [q.id, q]));
+    // Your own things still going up are not in the store yet: their previews stand in until they land.
+    for (const u of uploads) {
+      if (u.state === 'failed') continue;
+      if (u.post && !postById.has(u.id)) postById.set(u.id, u.post);
+      if (u.story && !storyById.has(u.id)) storyById.set(u.id, u.story);
+    }
     return order.flatMap<FeedItem>((key) => {
       const id = key.slice(2);
       if (key.startsWith('p:')) {
         const post = postById.get(id);
-        return post && !hidden.has(post.authorId) && !post.archived ? [{ type: 'post' as const, post }] : [];
+        return post && !hidden.has(post.authorId) && !post.archived ? [{ type: 'post' as const, post: withLocalMedia(post) }] : [];
       }
       if (key.startsWith('h:')) {
         // A hit leaves the feed the moment it expires or is put away.
         const story = storyById.get(id);
-        return story && !hidden.has(story.authorId) && isLive(story) ? [{ type: 'hit' as const, story }] : [];
+        return story && !hidden.has(story.authorId) && isLive(story) ? [{ type: 'hit' as const, story: withLocalMedia(story) }] : [];
       }
       const question = questionById.get(id);
       return question && !hidden.has(question.authorId) ? [{ type: 'question' as const, question }] : [];
     });
-  }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds]);
+  }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds, uploads]);
   // This week's challenge, and its top clips so far. They are settled once
   // per visit: a like arriving mid-scroll must not reshuffle the pages.
   const challenge = useMemo(() => challengeFor(), []);
@@ -552,6 +645,24 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     const at = Math.min(7, withTip.length);
     return [...withTip.slice(0, at), { type: 'challenge' as const }, ...lead, ...withTip.slice(at)];
   }, [feedItems, scope]);
+  // A page above the one you are on went away (an upload that failed, an
+  // Instant that expired): a phone's scroller keeps its place in points, so
+  // every page below would move up one and the next clip would play instead
+  // of yours. The feed is taken back to the page you were on. Arrivals (a
+  // pull, more loaded, a post going to the top) are left alone: those move
+  // the feed on purpose. A browser keeps the page in view by itself.
+  const drawnPages = useRef<{ keys: string[]; visit: number }>({ keys: [], visit: -1 });
+  useLayoutEffect(() => {
+    const keyOf = (i: FeedItem) => (i.type === 'post' ? `p:${i.post.id}` : i.type === 'hit' ? `h:${i.story.id}` : i.type === 'question' ? `q:${i.question.id}` : i.type);
+    const before = drawnPages.current;
+    const keys = feed.map(keyOf);
+    drawnPages.current = { keys, visit };
+    if (scope || Platform.OS === 'web' || before.visit !== visit) return;
+    const had = new Set(before.keys);
+    if (keys.some((k) => !had.has(k))) return;
+    const now = keys.indexOf(before.keys[active] ?? '');
+    if (now >= 0 && now < active) { setActive(now); setVisit((v) => v + 1); }
+  }, [feed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * Which page carries the who-to-follow strip: the first thread or written
@@ -609,12 +720,15 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const likedNow = useRef({ posts, stories: app.stories, me: currentUserId });
   likedNow.current = { posts, stories: app.stories, me: currentUserId };
   const likeByTap = (postId: string, _alreadyLiked?: boolean) => {
+    // Still going up: nothing to like yet, so no heart either.
+    if (uploadingRef.current.has(postId)) return;
     const { posts: all, me } = likedNow.current;
     const post = all.find((p) => p.id === postId);
     if (post && me && !(wantsOn(`p:${postId}`) ?? post.likedBy.includes(me))) actions.toggleLike(postId);
     setBurst((b) => ({ id: postId, n: b.n + 1 }));
   };
   const likeHitByTap = (storyId: string, _alreadyLiked?: boolean) => {
+    if (uploadingRef.current.has(storyId)) return;
     const { stories, me } = likedNow.current;
     const story = stories.find((s) => s.id === storyId);
     if (story && me && !(wantsOn(`h:${storyId}`) ?? story.likedBy.includes(me))) actions.toggleLikeStory(storyId);
@@ -761,11 +875,26 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     if (!focused || !showing) return;
     // A hit counts as watched through the story viewer, not here.
     if (showing.type === 'hit' || showing.type === 'tip' || showing.type === 'challenge') return;
+    // A post still going up is not in the database yet; its view counts once it lands.
+    if (showing.type === 'post' && uploadingIds.has(showing.post.id)) return;
     actions.recordView(
       showing.type === 'post' ? 'post' : 'question',
       showing.type === 'post' ? showing.post.id : showing.question.id,
     );
-  }, [focused, showing, actions]);
+  }, [focused, showing, actions, uploadingIds]);
+
+  // Which page is on screen in the main feed: when it is one of yours still
+  // going up, it shows its own progress and the posting strip steps aside.
+  const onScreenId = !scope && focused && showing ? (showing.type === 'post' ? showing.post.id : showing.type === 'hit' ? showing.story.id : null) : null;
+  useEffect(() => {
+    if (scope) return undefined;
+    if (onScreenId) { setShownInFeed(onScreenId); return undefined; }
+    // A moment's grace: posting closes the Create box over the feed (and may
+    // slide the tabs across to it), and the feed counts as hidden meanwhile.
+    const t = setTimeout(() => setShownInFeed(null), 600);
+    return () => clearTimeout(t);
+  }, [onScreenId, scope]);
+  useEffect(() => () => { if (!scope) setShownInFeed(null); }, [scope]);
 
   // The last page of the main feed: a small congratulations for getting
   // there this early, a way to post, and a way back to the top.
@@ -874,6 +1003,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     <ReelScrim bottom={wordsBottom} />
                     {openWords === `h:${story.id}` ? <ReelDim onClose={() => setOpenWords(null)} /> : null}
                     <Reanimated.View style={[styles.caption, { bottom: wordsBottom }, tuckStyle]}>
+                      {postingIds.has(story.id) ? <PostingChip id={story.id} onPicture /> : null}
                       <View style={styles.words}>
                         <ReelWho author={author} onAuthor={() => { tappedAuthor(`h:${story.id}`); router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`); }} />
                         {story.caption ? <FoldedWords text={story.caption} open={openWords === `h:${story.id}`} onOpenChange={(open) => setOpenWords(open ? `h:${story.id}` : null)} /> : null}
@@ -881,7 +1011,9 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       </View>
                       {index === 0 && !scope ? <SwipeHint /> : null}
                     </Reanimated.View>
-                    <Reanimated.View style={[styles.actions, { bottom: wordsBottom + RAIL_DROP }, tuckStyle]}>
+                    {/* Still going up: no buttons yet, there is nothing on the server to like or answer. */}
+                    {uploadingIds.has(story.id) ? null : <Reanimated.View style={[styles.actions, { bottom: wordsBottom + RAIL_DROP }, tuckStyle]}>
+                      <RailShade />
                       <LikeButton ledgerKey={`h:${story.id}`} liked={hitLiked} count={story.likedBy.length} onToggle={() => actions.toggleLikeStory(story.id)} likesRoute={{ pathname: '/likes', params: { id: story.id, kind: 'hit' } }} pop={burst.id === story.id ? burst.n : 0} what="hit" size={RAIL_ICONS[0][1]} style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
                       <Tappable accessibilityLabel="Hit comments" onPress={() => router.push({ pathname: '/comments', params: { kind: 'hit', id: story.id } })} scaleTo={0.78} style={styles.action}>
                         <Ionicons name="chatbubble-outline" size={RAIL_ICONS[1][1]} color="white" style={styles.actionGlyph} />
@@ -890,7 +1022,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       <Tappable accessibilityLabel="More options" onPress={() => router.push({ pathname: '/post-menu', params: { id: story.id, kind: 'hit' } })} scaleTo={0.78} style={styles.action}>
                         <Ionicons name="ellipsis-horizontal" size={RAIL_ICONS[4][1]} color="white" style={styles.actionGlyph} />
                       </Tappable>
-                    </Reanimated.View>
+                    </Reanimated.View>}
                     </Reanimated.View>
                    </Reanimated.View></PinchZone>
                     {story.videoUrl ? cover(story.id, 'word', story.thumbnailUrl) : null}
@@ -963,6 +1095,10 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       onReady={(ok) => markReady(post.id, ok)}
                     />
                     {cover(post.id, 'mark')}
+                    {/* Still going up: a clear pane over the page takes the taps (there is nothing on the
+                        server yet to like, answer or send), while a swipe still moves the feed on. */}
+                    {uploadingIds.has(post.id) ? <View accessible={false} style={StyleSheet.absoluteFill} /> : null}
+                    {postingIds.has(post.id) ? <View pointerEvents="none" style={[styles.postingDock, { bottom: wordsBottom }]}><PostingChip id={post.id} style={styles.postingDockChip} /></View> : null}
                   </View>
                 );
               }
@@ -1066,12 +1202,15 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                   {openWords === `p:${post.id}` ? <ReelDim onClose={() => setOpenWords(null)} /> : null}
 
                   <Reanimated.View style={[styles.caption, { bottom: wordsBottom }, tuckStyle]}>
+                    {postingIds.has(post.id) ? <PostingChip id={post.id} onPicture /> : null}
                     <ReelCaption post={post} author={author} onAuthor={() => { tappedAuthor(`p:${post.id}`); router.push(`/user/${author.id}`); }} open={openWords === `p:${post.id}`} onOpenChange={(open) => setOpenWords(open ? `p:${post.id}` : null)} />
                     {index === 0 && !scope ? <SwipeHint /> : null}
                   </Reanimated.View>
 
-                  {/* The rail stands on the words' bottom line, as on TikTok and Reels, so it rises only as high as it must. */}
-                  <Reanimated.View style={[styles.actions, { bottom: wordsBottom + RAIL_DROP }, tuckStyle]}>
+                  {/* The rail stands on the words' bottom line, as on TikTok and Reels, so it rises only as high as it must.
+                      Still going up: no rail yet, there is nothing on the server to like, answer or send. */}
+                  {uploadingIds.has(post.id) ? null : <Reanimated.View style={[styles.actions, { bottom: wordsBottom + RAIL_DROP }, tuckStyle]}>
+                    <RailShade />
                     <LikeButton ledgerKey={`p:${post.id}`} liked={liked} count={post.likedBy.length} onToggle={() => actions.toggleLike(post.id)} likesRoute={{ pathname: '/likes', params: { id: post.id } }} pop={burst.id === post.id ? burst.n : 0} what="clip" size={RAIL_ICONS[0][1]} style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
                     <Tappable
                       accessibilityLabel="Clip comments"
@@ -1108,7 +1247,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     >
                       <Ionicons name="ellipsis-horizontal" size={RAIL_ICONS[4][1]} color="white" style={styles.actionGlyph} />
                     </Tappable>
-                  </Reanimated.View>
+                  </Reanimated.View>}
                   </Reanimated.View>
                  </Reanimated.View></PinchZone>
                   {post.videoUrl ? cover(post.id, 'word', post.thumbnailUrl, post.orientation === 'landscape') : null}
@@ -1151,11 +1290,16 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
           </VerticalPager>
 
           {scope ? (
-            // The same plain chevron every other page has, white only when it sits over a picture.
-            <Pressable accessibilityRole="button" accessibilityLabel="Go back" hitSlop={10} onPress={() => goBack()} style={[styles.scopeBack, { top: insets.top + 10 }]}>
-              <Ionicons name="chevron-back" size={22} color={activeOnPicture ? '#FFFFFF' : colors.text} />
+            // The same plain chevron every other page has. Over a picture it sits on the mark's tile, in
+            // the mark's ink: a bare white arrow vanished on a bright sky or a white ceiling.
+            <Pressable accessibilityRole="button" accessibilityLabel="Go back" hitSlop={10} onPress={() => goBack()} style={[styles.scopeBack, activeOnPicture && styles.scopeBackTile, { top: insets.top + (activeOnPicture ? 7 : 10) }]}>
+              <Ionicons name="chevron-back" size={22} color={activeOnPicture ? (theme === 'us-open' ? '#FFFFFF' : colors.brand) : colors.text} />
             </Pressable>
           ) : null}
+          {/* Over a clip or an Instant the phone's clock and battery turn white, as on TikTok, Reels and Shorts:
+              the theme's dark clock sank into a dark court, and the top shade keeps a white one clear of a bright sky.
+              Only once the picture is in (the cover before it is the page's own ground), and only while this page is in front. */}
+          {focused && activeOnPicture && showing && (showing.type === 'hit' ? inNow(showing.story.id) : showing.type === 'post' && inNow(showing.post.id)) ? <StatusBar style="light" animated /> : null}
         </View>
       )}
     </View>
@@ -1166,6 +1310,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
 const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, alignItems: 'center' },
   scopeBack: { position: 'absolute', left: 12, padding: 6, zIndex: 6 },
+  // Over a picture: the mark's tile, 40 square (the sound disc's size), the chevron nudged right of centre to sit centred by eye.
+  scopeBackTile: { width: 40, height: 40, padding: 0, paddingRight: 2, borderRadius: 12, backgroundColor: `${colors.bg}E6`, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   wordmarkOverlay: {
     // top comes from the safe-area inset at render; a fixed value put the
     // wordmark under the Dynamic Island on a phone.
@@ -1182,8 +1328,9 @@ const styleDefinitions = StyleSheet.create({
   // used to live here was doing more harm than good.
   // Over a clip: the mark alone, top left, with the same soft shadow the caption wears.
   clipMarkOverlay: { alignItems: 'flex-start', paddingLeft: 34 },
-  // The mark sits in the same pale pill the wordmark used to, the same one the sound disc wears.
-  markPill: { width: 46, height: 46, borderRadius: 13, backgroundColor: colors.bg, opacity: 0.76, alignItems: 'center', justifyContent: 'center' },
+  // The mark sits in the same pale tile the sound disc wears: nearly solid, so the green mark stays
+  // crisp (fading the whole tile faded the mark too), with a hairline so it holds on a white sky.
+  markPill: { width: 46, height: 46, borderRadius: 13, backgroundColor: `${colors.bg}E6`, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   viewer: { flex: 1, width: '100%', minHeight: 0 },
   clip: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
   holdPage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
@@ -1236,6 +1383,9 @@ const styleDefinitions = StyleSheet.create({
     gap: 8,
   },
   words: { gap: 6 },
+  // A photo post still going up: its posting chip, centred over where its buttons will be.
+  postingDock: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  postingDockChip: { alignSelf: 'center' },
   author: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   // The rail: 12 from the edge, one item every 63pt or so (TikTok's and Reels' rhythm). `bottom` is set per phone.
   actions: { position: 'absolute', right: 12, gap: 16 },
@@ -1243,8 +1393,8 @@ const styleDefinitions = StyleSheet.create({
   // Plain white outlines with a crisp dark edge, as Reels sets them, rather than a heavier icon or a soft smudge.
   actionGlyph: GLYPH_EDGE,
   // Counts in the name's weight (TikTok's newest rail), figures all one width so "9" to "10" does not shift.
-  // They sit where the shade has barely begun, so they wear the darkest edge (COUNT_EDGE); the heart's count takes this too.
-  actionLabel: { color: 'white', fontSize: 12.5, lineHeight: 15, ...font('600'), letterSpacing: 0.1, fontVariant: ['tabular-nums'], ...COUNT_EDGE },
+  // They sit high, where the words' shade is lightest (the rail's own shade is behind them), so they wear the darkest edge (COUNT_EDGE); the heart's count takes this too.
+  actionLabel: { color: 'white', fontSize: 13, lineHeight: 16, ...font('600'), letterSpacing: 0.1, fontVariant: ['tabular-nums'], ...COUNT_EDGE },
   // The feed's pages hold their size while the bar ducks, so the bottom few
   // points can sit under a full-size bar: written pages keep that much clear.
   article: { flex: 1, backgroundColor: colors.bg, padding: 20, paddingTop: 64, paddingBottom: 32, gap: 20 },

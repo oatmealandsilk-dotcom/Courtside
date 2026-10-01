@@ -1,5 +1,5 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { AppState, StyleSheet, View } from 'react-native';
 import { VideoView, createVideoPlayer } from 'expo-video';
 import { videoSource } from '@/lib/videoSource';
 
@@ -86,9 +86,22 @@ export const VideoSurface = forwardRef<VideoSurfaceHandle, {
     return () => { status.remove(); time.remove(); };
   }, [player, from, to, paused, onTime, onDuration]);
   useEffect(() => {
-    safely(() => { if (paused) player.pause(); else player.play(); });
+    // Not while the app is out of the front; coming back starts it (below).
+    safely(() => { if (paused) player.pause(); else if (AppState.currentState !== 'background' && AppState.currentState !== 'inactive') player.play(); });
     return () => safely(() => player.pause());
   }, [player, paused]);
+  // The app leaves the front (home, lock, the app switcher, Control Centre, a
+  // call): the preview stops where it is, and plays on from there when the
+  // app is back — unless it was meant to be holding still.
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'background' || state === 'inactive') safely(() => player.pause());
+      else if (state === 'active' && !pausedRef.current) safely(() => player.play());
+    });
+    return () => sub.remove();
+  }, [player]); // eslint-disable-line react-hooks/exhaustive-deps
   useImperativeHandle(ref, () => ({
     seek: (seconds) => safely(() => { player.currentTime = seconds; }),
     play: () => safely(() => player.play()),

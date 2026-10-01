@@ -20,6 +20,10 @@ import { TAB_BAR_H } from '@/features/navigation/barInset';
 import { useApp } from '@/store/AppContext';
 import { unreadChatCount } from '@/features/messages/groupRules';
 import { colors, pageIsDark, radius, spacing, typography, font } from '@/theme';
+import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
+
+/** The screen's pixels per point, read once: the bar's moves are rounded to whole pixels. */
+const PX = PixelRatio.get();
 
 /** The screen's pixels per point, read once: the bar's moves are rounded to whole pixels. */
 const PX = PixelRatio.get();
@@ -60,6 +64,16 @@ export function NavBar({ state, navigation }: NavBarProps) {
   // separate bell and inbox entries the way the sidebar does, so Profile
   // carries the lot — it is where both of those live.
   const profileAlerts = unread + unseen;
+  // The first-run tour points at these; each button puts itself on its list. Nothing here looks any different.
+  const tourDiscuss = useTourTarget('tab-discuss');
+  const tourCoaches = useTourTarget('tab-coaches');
+  const tourProfile = useTourTarget('tab-profile');
+  const tourCreate = useTourTarget('create');
+  const tourMessages = useTourTarget('side-messages');
+  const tourRef = (route: string) => (route === 'discuss' ? tourDiscuss : route === 'coaches' ? tourCoaches : route === 'profile' ? tourProfile : undefined);
+  // While the tour is up, a screen reader reads only the tour, not the bar under the dim.
+  const touring = useTourOpen();
+  const hideFromReader = touring ? 'no-hide-descendants' as const : 'auto' as const;
 
   // Scrolling down ducks the bar: a touch shorter, everything on it a touch
   // smaller. Scrolling up brings it straight back. Never small enough to miss.
@@ -102,7 +116,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
   }));
   if (isPhone) {
     return (
-      <Animated.View pointerEvents="box-none" style={[styles.float, { bottom: Math.max(insets.bottom, 12) }, duck]}>
+      <Animated.View pointerEvents="box-none" importantForAccessibility={hideFromReader} style={[styles.float, { bottom: Math.max(insets.bottom, 12) }, duck]}>
         <Animated.View style={[styles.pillWrap, tuck]}>
           {/* The shadow lives on a rounded layer of its own: on the square wrapper its corners showed past the pill's ends. */}
           <View style={styles.pillShadow}>
@@ -111,8 +125,9 @@ export function NavBar({ state, navigation }: NavBarProps) {
               const active = item.route === activeRoute;
               return (
                 <React.Fragment key={item.route}>
-                {index === 2 && <View style={styles.createSlot}><Animated.View><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={[styles.createButton, pageIsDark() && styles.createButtonDark]}><BrandWash /><Ionicons name="add" size={28} color={colors.brandInk} /></Pressable></Animated.View></View>}
+                {index === 2 && <View style={styles.createSlot}><Animated.View><Pressable ref={tourCreate} accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={[styles.createButton, pageIsDark() && styles.createButtonDark]}><BrandWash /><Ionicons name="add" size={28} color={colors.brandInk} /></Pressable></Animated.View></View>}
                 <Pressable
+                  ref={tourRef(item.route)}
                   onPress={() => navigation.navigate(item.route)}
                   accessibilityRole="tab"
                   accessibilityState={{ selected: active }}
@@ -149,6 +164,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
 
   return (
     <View
+      importantForAccessibility={hideFromReader}
       style={[
         styles.sidebar,
         { width: compact ? LAYOUT.sidebarCompact : LAYOUT.sidebar, paddingTop: insets.top + spacing.xl },
@@ -169,6 +185,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
           return (
             <Pressable
               key={item.route}
+              ref={tourRef(item.route)}
               onPress={() => navigation.navigate(item.route)}
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
@@ -234,6 +251,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
         </Pressable>
 
         <Pressable
+          ref={tourMessages}
           onPress={() => router.push('/messages')}
           accessibilityRole="button"
           accessibilityLabel={unread ? `Messages, ${unread} unread` : 'Messages'}
@@ -257,6 +275,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
         </Pressable>
 
         <Pressable
+          ref={tourCreate}
           onPress={openCreate}
           accessibilityRole="button"
           accessibilityLabel="Create a post"

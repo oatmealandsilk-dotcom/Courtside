@@ -7,6 +7,8 @@ import { NavBar } from './NavBar';
 import { setInstantExit } from '@/features/navigation/instantExit';
 import { UploadBar } from '@/components/UploadBar';
 import { WarmCurtain } from '@/components/WarmCurtain';
+import { TourOverlay } from '@/components/TourOverlay';
+import { isTourOpen, useTourOpen } from '@/features/tour/tourStore';
 import { Toast } from './Toast';
 import { RouteTransition } from './RouteTransition';
 import { useResponsive } from '@/lib/useResponsive';
@@ -51,6 +53,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const onKey = (e: KeyboardEvent) => {
+      // The tour has the keyboard while it is up.
+      if (isTourOpen()) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
       if (e.key === 'Escape' && SHEETS.has(pathname)) { e.preventDefault(); goBack('/'); return; }
@@ -93,6 +97,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const needsTerms = isSupabaseConfigured && !!currentUserId && remoteLoaded && termsVersion !== undefined
     && termsVersion !== TERMS_VERSION && !needsBirthday && !['/agree', '/birthday', '/sign-in'].includes(pathname);
   const { isPhone } = useResponsive();
+  const tourOpen = useTourOpen();
   const selected = useRef(0);
   if (shown === '/') selected.current = 0;
   else if (shown === '/discuss' || shown.startsWith('/question/') || shown.startsWith('/user/')) selected.current = 1;
@@ -161,9 +166,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   } }} />;
   return <View style={{ flex: 1, minHeight: 0, backgroundColor: colors.bg, flexDirection: isPhone ? 'column' : 'row' }}>
     {showNav && !isPhone && nav}
-    <View style={{ flex: 1, minWidth: 0, minHeight: 0 }}><RouteTransition>{children}</RouteTransition><Toast /><UploadBar /></View>
+    {/* While the tour is up, TalkBack reads only the tour, not the page under the dim. */}
+    <View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={{ flex: 1, minWidth: 0, minHeight: 0 }}><RouteTransition>{children}</RouteTransition><Toast /><UploadBar /></View>
     {showNav && isPhone && nav}
     {!!currentUserId && !hideEverywhere && (pathname === '/' || pathname === '/index') ? <WarmCurtain /> : null}
+    {/* The first-run tour: over the bar, so it can light the bar's own buttons. */}
+    {currentUserId ? <TourOverlay eligible={showNav && !detour && !onSplash} /> : null}
     {/* On its way to a gate (sign-in, birthday, terms): the page underneath is covered for the moment it takes. */}
     {detour ? <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.bg }} /> : null}
   </View>;
