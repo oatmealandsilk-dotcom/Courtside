@@ -111,8 +111,8 @@ export function NearbyMap(props: NearbyMapProps) {
     return (
       <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of players near you" onPress={onExpand} disabled={!onExpand} style={styles.card}>
         {mapView}
-        <MapCredit style={{ position: 'absolute', right: 10, bottom: 10 }} />
         <PreviewOverlay cityName={cityName} count={model.inCity.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} />
+        <MapCredit align="right" style={{ position: 'absolute', right: 10, bottom: 10 }} />
       </Pressable>
     );
   }
