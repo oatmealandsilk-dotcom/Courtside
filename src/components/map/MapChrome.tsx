@@ -1,8 +1,8 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
 import Animated, { Easing, FadeIn, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
 import { Avatar } from '@/components/ui';
@@ -202,40 +202,115 @@ export function MapCredit({ style }: { style?: object }) {
   );
 }
 
-/** The strip of players along the bottom, nearest first — tap one and the map goes to them. */
-export function NearbyRail({ items, cityName, selectedId, onSelect, weather }: { items: Placed[]; cityName: string; selectedId: string | null; onSelect: (id: string) => void; /** Beside the city's name: what it's like to play there today. */ weather?: Weather | null }) {
+/** Where the players tray was left: it opens there again after a player's card closes. 0 tucked, 1 the row, 2 the list. */
+let trayStop: 0 | 1 | 2 = 1;
+/*
+ * Scrolling lists inside the tray. On a phone, the gesture library's own
+ * scroll view, so a swipe sideways along the faces and a drag up or down on
+ * the tray never fight. In a browser its stand-in claims every touch before
+ * the tray can, so there the plain one.
+ */
+const GHScrollView = Platform.OS === 'web' ? ScrollView : GestureScrollView;
+const TRAY_SPRING = { damping: 26, stiffness: 260, mass: 0.9, overshootClamping: true } as const;
+
+/**
+ * The players tray along the bottom, nearest first. It rests in three
+ * places, like Apple Maps' sheet: tucked down to its title, the row of faces
+ * (where it opens), or pulled up into the full list. Drag it from anywhere —
+ * the title, the faces, the list's top — or tap the title to step it up.
+ * Tap a player and the map goes to them.
+ */
+export function NearbyRail({ items, cityName, onSelect, weather }: { items: Placed[]; cityName: string; selectedId?: string | null; onSelect: (id: string) => void; /** Beside the city's name: what it's like to play there today. */ weather?: Weather | null }) {
   const styles = useThemedStyles(styleDefinitions);
+  const { height: windowH } = useWindowDimensions();
+  const hasList = items.length > 0;
+  // The row's own height, and the list's: measured, then kept on the animation
+  // thread too so a drag never waits on JavaScript (busy with pins).
   const [railH, setRailH] = useState(0);
-  const railHRef = useRef(0);
-  // The tray's height lives on the animation thread too, so a drag and its
-  // settle never wait for the JavaScript side (which may be busy with pins).
-  const railHUI = useSharedValue(0);
-  const drop = useSharedValue(0);
-  const start = useSharedValue(0);
-  const tuckedUI = useSharedValue(0);
-  const [tucked, setTucked] = useState(false);
-  const settleUI = (down: boolean, velocity = 0) => {
+  const [listContentH, setListContentH] = useState(0);
+  // Tall enough to be a list, never so tall it buries the map or the buttons over it.
+  const listMax = Math.max(160, Math.min(Math.round(windowH * 0.45), windowH - 420));
+  const listH = railH ? Math.max(railH, Math.min(listMax, listContentH || listMax)) : 0;
+  const railHV = useSharedValue(0);
+  const listHV = useSharedValue(0);
+  const hasListV = useSharedValue(hasList ? 1 : 0);
+  const h = useSharedValue(0);
+  const startH = useSharedValue(0);
+  const [stop, setStop] = useState<0 | 1 | 2>(trayStop === 2 && !hasList ? 1 : trayStop);
+  const placed = useRef(false);
+  const land = (next: 0 | 1 | 2) => { trayStop = next; setStop(next); };
+
+  // Measured (or the players changed): the tray goes to the height its stop now needs.
+  useEffect(() => {
+    if (!railH) return;
+    railHV.value = railH;
+    listHV.value = listH;
+    hasListV.value = hasList ? 1 : 0;
+    const at = stop === 2 && !hasList ? 1 : stop;
+    if (at !== stop) land(at);
+    const target = at === 0 ? 0 : at === 1 ? railH : listH;
+    if (!placed.current) { placed.current = true; h.value = target; }
+    else h.value = withSpring(target, TRAY_SPRING);
+  }, [railH, listH, hasList]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const settleTo = (next: 0 | 1 | 2, velocity = 0) => {
     'worklet';
-    drop.value = withSpring(down ? railHUI.value : 0, { damping: 26, stiffness: 260, mass: 0.9, velocity, overshootClamping: true });
-    tuckedUI.value = down ? 1 : 0;
-    runOnJS(setTucked)(down);
+    const target = next === 0 ? 0 : next === 1 ? railHV.value : listHV.value;
+    h.value = withSpring(target, { ...TRAY_SPRING, velocity });
+    runOnJS(land)(next);
   };
-  const drag = Gesture.Pan()
-    .activeOffsetY([-6, 6])
-    .onBegin(() => { start.value = drop.value; })
-    .onUpdate((e) => { drop.value = Math.max(0, Math.min(railHUI.value, start.value + e.translationY)); })
+  // One drag for the title and one for the faces (a gesture can only be on one view).
+  const makePan = () => Gesture.Pan()
+    // Up or down moves the tray; sideways belongs to the row of faces.
+    .activeOffsetY([-8, 8])
+    .failOffsetX([-14, 14])
+    .onStart(() => { startH.value = h.value; })
+    .onUpdate((e) => {
+      const top = hasListV.value ? listHV.value : railHV.value;
+      const raw = startH.value - e.translationY;
+      // Past the top it gives a little and pulls back: the tray is there, just full.
+      h.value = raw > top ? top + Math.min(48, (raw - top) * 0.25) : Math.max(0, raw);
+    })
     .onEnd((e) => {
-      const down = e.velocityY > 500 || (e.velocityY > -500 && drop.value > railHUI.value / 2);
-      settleUI(down, e.velocityY);
+      // Where a flick would carry it, then the nearest resting place to that.
+      const aim = h.value - e.velocityY * 0.12;
+      const spots = hasListV.value ? [0, railHV.value, listHV.value] : [0, railHV.value];
+      let best = 0;
+      for (let i = 1; i < spots.length; i++) if (Math.abs(spots[i] - aim) < Math.abs(spots[best] - aim)) best = i;
+      settleTo(best as 0 | 1 | 2, -e.velocityY);
     });
-  const tap = Gesture.Tap().onEnd(() => { settleUI(tuckedUI.value === 0); });
-  const body = useAnimatedStyle(() => (railH ? { height: Math.max(0, railH - drop.value), opacity: 1 - (drop.value / Math.max(1, railH)) * 0.6 } : {}));
+  const headPan = makePan();
+  // In the list, the list scrolls; the title still drags, and pulling down past its top tucks it back to the row.
+  const bodyPan = makePan().enabled(stop !== 2);
+  const step = () => {
+    haptics.tap();
+    settleTo(stop === 0 ? 1 : stop === 1 ? (hasList ? 2 : 0) : 1);
+  };
+  const headTap = Gesture.Tap().onEnd(() => { runOnJS(step)(); });
+
+  const body = useAnimatedStyle(() => (railHV.value ? { height: Math.max(0, h.value) } : {}));
+  // Between the row and the list, one fades into the other; tucking, the row fades as it goes.
+  const railLook = useAnimatedStyle(() => {
+    const r = railHV.value || 1;
+    const span = Math.max(1, listHV.value - r);
+    const toList = Math.min(1, Math.max(0, (h.value - r) / span));
+    const toTuck = Math.min(1, Math.max(0, h.value / r));
+    return { opacity: (1 - toList) * (0.35 + 0.65 * toTuck) };
+  });
+  const listLook = useAnimatedStyle(() => {
+    const r = railHV.value || 1;
+    const span = Math.max(1, listHV.value - r);
+    return { opacity: Math.min(1, Math.max(0, (h.value - r) / span)) };
+  });
+
   // A new filter deals a new set: the row fades in as one, rather than thirty avatars springing about.
   const dealt = items.slice(0, 30).map((p) => p.user.id).join(',');
+  const label = stop === 0 ? 'Show players' : stop === 1 ? (hasList ? 'Show the full list' : 'Tuck players away') : 'Back to the row';
+  const upward = stop === 0 || (stop === 1 && hasList);
   return (
     <View style={styles.sheet}>
-      <GestureDetector gesture={Gesture.Exclusive(drag, tap)}>
-        <View accessibilityRole="button" accessibilityLabel={tucked ? 'Show players' : 'Tuck players away'}>
+      <GestureDetector gesture={Gesture.Exclusive(headPan, headTap)}>
+        <View accessibilityRole="button" accessibilityLabel={label} style={styles.trayHead}>
           <View style={styles.grabber} />
           <View style={styles.sheetHead}>
             <View style={styles.sheetTitleRow}>
@@ -249,32 +324,62 @@ export function NearbyRail({ items, cityName, selectedId, onSelect, weather }: {
             </View>
             <View style={styles.sheetHeadRight}>
               <Text style={styles.sheetCount}>{items.length === 1 ? '1 player' : `${items.length} players`}</Text>
-              <Ionicons name={tucked ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textFaint} />
+              <Ionicons name={upward ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textFaint} />
             </View>
           </View>
         </View>
       </GestureDetector>
-      <Animated.View style={[styles.railBody, body]}>
-        <View onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h && h !== railHRef.current) { railHRef.current = h; railHUI.value = h; setRailH(h); } }}>
-          {items.length ? (
-            <Animated.View key={dealt} entering={FadeIn.duration(200).easing(Easing.out(Easing.cubic))}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
-              {items.slice(0, 30).map((p) => (
-                <View key={p.user.id}>
-                  <Tappable accessibilityLabel={`${p.user.name}, ${formatMiles(p.miles)}`} onPress={() => onSelect(p.user.id)} scaleTo={0.96} style={[styles.railItem, selectedId === p.user.id && styles.railItemOn]}>
-                    <View style={[styles.railRing, isOpenToHit(p.user) && styles.railRingOn]}><Avatar name={p.user.name} seed={p.user.avatarSeed} size={46} ring={p.user.isCoach} /></View>
-                    <Text style={styles.railName} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text>
-                    <Text style={styles.railMeta} numberOfLines={1}>{formatMiles(p.miles)}{p.seenAt ? ` · ${agoShort(p.seenAt)}` : ''}</Text>
-                  </Tappable>
-                </View>
-              ))}
-            </ScrollView>
+      <GestureDetector gesture={bodyPan}>
+        <Animated.View style={[styles.railBody, body]}>
+          <Animated.View style={railLook} pointerEvents={stop === 2 ? 'none' : 'auto'}>
+            <View onLayout={(e) => { const next = Math.round(e.nativeEvent.layout.height); if (next && next !== railH) setRailH(next); }}>
+              {items.length ? (
+                <Animated.View key={dealt} entering={FadeIn.duration(200).easing(Easing.out(Easing.cubic))}>
+                  <GHScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail} style={styles.railScroll}>
+                    {items.slice(0, 30).map((p) => (
+                      <View key={p.user.id}>
+                        <Tappable accessibilityLabel={`${p.user.name}, ${formatMiles(p.miles)}`} onPress={() => onSelect(p.user.id)} scaleTo={0.96} style={styles.railItem}>
+                          <View style={[styles.railRing, isOpenToHit(p.user) && styles.railRingOn]}><Avatar name={p.user.name} seed={p.user.avatarSeed} size={46} ring={p.user.isCoach} /></View>
+                          <Text style={styles.railName} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text>
+                          <Text style={styles.railMeta} numberOfLines={1}>{formatMiles(p.miles)}{p.seenAt ? ` · ${agoShort(p.seenAt)}` : ''}</Text>
+                        </Tappable>
+                      </View>
+                    ))}
+                  </GHScrollView>
+                </Animated.View>
+              ) : (
+                <Animated.Text entering={FadeIn.duration(180)} style={styles.sheetEmpty}>No one here right now. Players show up once they share their location.</Animated.Text>
+              )}
+            </View>
+          </Animated.View>
+          {hasList ? (
+            <Animated.View style={[styles.listLayer, { height: listH || undefined }, listLook]} pointerEvents={stop === 2 ? 'auto' : 'none'}>
+              <GHScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={styles.list}
+                showsVerticalScrollIndicator={false}
+                onContentSizeChange={(_, next) => { const v = Math.round(next); if (v !== listContentH) setListContentH(v); }}
+                scrollEventThrottle={16}
+                onScrollEndDrag={(e) => { if (e.nativeEvent.contentOffset.y < -48) settleTo(1); }}
+              >
+                {items.map((p, i) => (
+                  <Pressable key={p.user.id} accessibilityRole="button" accessibilityLabel={`${p.user.name}, ${formatMiles(p.miles)}`} onPress={() => onSelect(p.user.id)} style={({ pressed }) => [styles.listRow, i > 0 && styles.listRule, pressed && styles.listPressed]}>
+                    <View style={[styles.railRing, isOpenToHit(p.user) && styles.railRingOn]}><Avatar name={p.user.name} seed={p.user.avatarSeed} size={40} ring={p.user.isCoach} /></View>
+                    <View style={styles.listWords}>
+                      <View style={styles.personTop}>
+                        <Text style={styles.listName} numberOfLines={1}>{p.user.name}</Text>
+                        <LevelPill profile={p.user.profile} small />
+                      </View>
+                      <Text style={styles.personMeta} numberOfLines={1}>{[formatMiles(p.miles), p.seenAt ? agoShort(p.seenAt) : null, isOpenToHit(p.user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+                  </Pressable>
+                ))}
+              </GHScrollView>
             </Animated.View>
-          ) : (
-            <Animated.Text entering={FadeIn.duration(180)} style={styles.sheetEmpty}>No one here right now. Players show up once they share their location.</Animated.Text>
-          )}
-        </View>
-      </Animated.View>
+          ) : null}
+        </Animated.View>
+      </GestureDetector>
     </View>
   );
 }
@@ -550,6 +655,16 @@ const styleDefinitions = StyleSheet.create({
   sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingBottom: 2 },
   sheetHeadRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   railBody: { overflow: 'hidden' },
+  trayHead: { paddingTop: spacing.sm, marginTop: -spacing.sm },
+  // A sideways swipe scrolls the faces; an up-or-down one is the tray's (a phone browser must not take it for a page scroll).
+  railScroll: Platform.OS === 'web' ? ({ touchAction: 'pan-x' } as object) : {},
+  listLayer: { position: 'absolute', left: 0, right: 0, top: 0 },
+  list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  listRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 10 },
+  listRule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  listPressed: { opacity: 0.7 },
+  listWords: { flex: 1, gap: 2 },
+  listName: { ...typography.bodyStrong, color: colors.text, flexShrink: 1 },
   sheetTitle: { ...typography.heading, color: colors.text, flexShrink: 1 },
   sheetTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
   sheetWeather: { flexDirection: 'row', alignItems: 'center', gap: 4 },
