@@ -7,6 +7,27 @@ import type { PlayerProfile } from '@/data/types';
 import { colors, font, radius } from '@/theme';
 
 /**
+ * Each rating system keeps one colour wherever it shows: UTR blue, NTRP
+ * green, ITF clay. Fixed on purpose rather than theme slots: the court themes
+ * repaint their blue and green slots (London's is purple, New York's yellow),
+ * and the badge must still say which system it is at a glance. Over a picture
+ * the colour is a light tint on a dark frosted chip, so it holds up on a blue
+ * court or green grass alike.
+ */
+const SYSTEM_INK: Record<string, { light: string; dark: string; media: string }> = {
+  UTR: { light: '#2F6F9F', dark: '#82B6DE', media: '#93CBF6' },
+  NTRP: { light: '#3D7A4B', dark: '#88C697', media: '#A3DFAE' },
+  ITF: { light: '#A0643F', dark: '#D9A07E', media: '#F2BC96' },
+};
+/** Whether the page under the badge is dark (Night, New York): the light inks go there. */
+function pageIsDark(): boolean {
+  const hex = colors.bg.replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(hex)) return false;
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return (r * 299 + g * 587 + b * 114) / 1000 < 128;
+}
+
+/**
  * A player's level, as a soft tag: a faint fill of the band's colour with the
  * system ("UTR") set small and the number set bold, so the number is what
  * reads. Over a clip it is the frosted dark chip every reels feed uses.
@@ -18,21 +39,23 @@ export function LevelPill({ profile, small = false, onMedia = false, style }: { 
   const space = badge.label.indexOf(' ');
   const system = space > 0 ? badge.label.slice(0, space) : '';
   const value = space > 0 ? badge.label.slice(space + 1) : badge.label;
-  // The lowest band's colour is the page's tan: fine as a fill, too pale for words.
-  const ink = onMedia ? '#FFFFFF' : badge.tint === colors.borderStrong ? colors.textMuted : badge.tint;
+  const system_ = SYSTEM_INK[system] ?? SYSTEM_INK.NTRP;
+  const tone = onMedia ? system_.media : pageIsDark() ? system_.dark : system_.light;
+  // Over a picture the number is white and the system wears its colour; on a page both do.
+  const ink = onMedia ? '#FFFFFF' : tone;
   return (
     <View
       accessible
       accessibilityLabel={badge.label}
-      style={[styles.pill, small && styles.small, onMedia ? styles.frost : { backgroundColor: tintFill(badge.tint) }, style]}
+      style={[styles.pill, small && styles.small, onMedia ? styles.frost : { backgroundColor: tintFill(tone) }, style]}
     >
-      {system ? <Text style={[styles.system, small && styles.systemSmall, { color: ink }, onMedia && styles.systemOnMedia]}>{system}</Text> : null}
+      {system ? <Text style={[styles.system, small && styles.systemSmall, { color: onMedia ? tone : ink }, onMedia && styles.systemOnMedia]}>{system}</Text> : null}
       <Text style={[styles.value, small && styles.valueSmall, { color: ink }]}>{value}</Text>
     </View>
   );
 }
 
-/** The band's colour at a whisper, for the tag's fill. */
+/** The system's colour at a whisper, for the tag's fill. */
 function tintFill(tint: string): string {
   return /^#[0-9a-f]{6}$/i.test(tint) ? `${tint}26` : colors.surfaceAlt;
 }
@@ -48,10 +71,11 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   small: { height: 19, paddingHorizontal: 7 },
-  frost: { backgroundColor: 'rgba(12, 14, 12, 0.42)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255, 255, 255, 0.22)' },
+  // Dark enough to hold its colours on any frame, a blue court or green grass included.
+  frost: { backgroundColor: 'rgba(10, 12, 10, 0.55)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255, 255, 255, 0.26)' },
   system: { ...font('600'), fontSize: 10.5, letterSpacing: 0.3, opacity: 0.8 },
   systemSmall: { fontSize: 10 },
-  systemOnMedia: { opacity: 0.75 },
+  systemOnMedia: { opacity: 1 },
   value: { ...font('700'), fontSize: 12.5, fontVariant: ['tabular-nums'] },
   valueSmall: { fontSize: 12 },
 });
