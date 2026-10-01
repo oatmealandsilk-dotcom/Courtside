@@ -1479,10 +1479,14 @@ export const remote = {
     if (error) fail('post pin')(error);
   },
 
+  // Likes, saves, views and follows are one row per person: a repeat (another
+  // phone, a tap that raced a refresh) leaves the row already there alone
+  // (ignoreDuplicates). A plain upsert tries to rewrite it, which these tables'
+  // rules never allow, so a second like or follow came back refused.
   async setLike(postId: ID, me: ID, liked: boolean) {
     const db = need();
     const { error } = liked
-      ? await db.from('post_likes').upsert({ post_id: postId, user_id: me })
+      ? await db.from('post_likes').upsert({ post_id: postId, user_id: me }, { ignoreDuplicates: true })
       : await db.from('post_likes').delete().match({ post_id: postId, user_id: me });
     if (error) fail('like')(error);
   },
@@ -1490,7 +1494,7 @@ export const remote = {
   async setSaved(postId: ID, me: ID, saved: boolean) {
     const db = need();
     const { error } = saved
-      ? await db.from('post_saves').upsert({ post_id: postId, user_id: me })
+      ? await db.from('post_saves').upsert({ post_id: postId, user_id: me }, { ignoreDuplicates: true })
       : await db.from('post_saves').delete().match({ post_id: postId, user_id: me });
     if (error) fail('save')(error);
   },
@@ -1526,7 +1530,7 @@ export const remote = {
   async setStoryLike(storyId: ID, me: ID, liked: boolean) {
     const db = need();
     const { error } = liked
-      ? await db.from('story_likes').upsert({ story_id: storyId, user_id: me })
+      ? await db.from('story_likes').upsert({ story_id: storyId, user_id: me }, { ignoreDuplicates: true })
       : await db.from('story_likes').delete().match({ story_id: storyId, user_id: me });
     if (error) fail('hit like')(error);
   },
@@ -1536,7 +1540,7 @@ export const remote = {
     const db = need();
     const table = onHit ? 'story_comment_likes' : 'comment_likes';
     const { error } = liked
-      ? await db.from(table).upsert({ comment_id: commentId, user_id: me })
+      ? await db.from(table).upsert({ comment_id: commentId, user_id: me }, { ignoreDuplicates: true })
       : await db.from(table).delete().match({ comment_id: commentId, user_id: me });
     if (error) fail('comment like')(error);
   },
@@ -1549,13 +1553,15 @@ export const remote = {
   },
 
   async recordStoryView(storyId: ID, me: ID) {
-    const { error } = await need().from('story_views').upsert({ story_id: storyId, user_id: me });
+    const { error } = await need().from('story_views').upsert({ story_id: storyId, user_id: me }, { ignoreDuplicates: true });
     if (error) fail('story view')(error);
   },
 
   /** Asking to follow a private account, and what happens to the ask. */
   async sendFollowRequest(me: ID, userId: ID): Promise<'refused' | void> {
-    const { error } = await need().from('follow_requests').upsert({ requester_id: me, target_id: userId });
+    // An ask already waiting (from an earlier tap or another phone) simply stands: "do nothing" on a repeat.
+    // A plain upsert would rewrite the row, which the rules only let the database itself do, and came back refused.
+    const { error } = await need().from('follow_requests').upsert({ requester_id: me, target_id: userId }, { onConflict: 'requester_id,target_id', ignoreDuplicates: true });
     if (error && error.code === '42501') return 'refused';
     if (error) fail('follow request')(error);
   },
@@ -1581,7 +1587,7 @@ export const remote = {
   async setFollow(me: ID, userId: ID, following: boolean): Promise<'refused' | void> {
     const db = need();
     const { error } = following
-      ? await db.from('follows').upsert({ follower_id: me, following_id: userId })
+      ? await db.from('follows').upsert({ follower_id: me, following_id: userId }, { ignoreDuplicates: true })
       : await db.from('follows').delete().match({ follower_id: me, following_id: userId });
     if (error && error.code === '42501') return 'refused';
     if (error) fail('follow')(error);

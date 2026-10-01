@@ -97,7 +97,8 @@ export default function UserProfile() {
     setTimeout(() => setNotice(''), 2200);
   };
 
-  const followLabel = following ? 'Following' : requested ? 'Requested' : user.isPrivate ? 'Request to follow' : 'Follow';
+  // One word, as on every app: a private account's Follow sends an ask, and the button then says so.
+  const followLabel = following ? 'Following' : requested ? 'Requested' : 'Follow';
   // Unblock, notifications and mute announce themselves, in a toast with Undo.
   const menu: { icon: keyof typeof Ionicons.glyphMap; label: string; danger?: boolean; onPress: () => void }[] = blocked
     ? [{ icon: 'checkmark-circle-outline', label: 'Unblock', onPress: () => actions.toggleBlock(user.id) }]
@@ -171,7 +172,7 @@ export default function UserProfile() {
         <View style={styles.lockedBox}>
           <Ionicons name="lock-closed-outline" size={26} color={colors.textMuted} />
           <Text style={styles.lockedTitle}>This account is private</Text>
-          <Text style={styles.lockedBody}>{requested ? `Your request is with ${user.name.split(' ')[0]}. Once they say yes, their posts, instants and tennis profile show up here.` : `Follow ${user.name.split(' ')[0]} to see their posts, instants and tennis profile.`}</Text>
+          <Text style={styles.lockedBody}>{requested ? `Requested. You’ll see their posts once ${user.name.split(' ')[0]} accepts.` : 'Follow to see their posts.'}</Text>
         </View>
       ) : (
         <>

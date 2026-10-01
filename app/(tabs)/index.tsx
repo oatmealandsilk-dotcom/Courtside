@@ -596,7 +596,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               </View>
               <LevelPill profile={user.profile} small />
             </Pressable>
-            <FollowPill following={followingIds.includes(user.id)} onPress={() => { setFollowedHere((h) => (h.includes(user.id) ? h : [...h, user.id])); if (followingIds.includes(user.id)) confirmUnfollow(user, () => actions.toggleFollow(user.id)); else actions.toggleFollow(user.id); }} small name={user.name} />
+            <FollowPill following={followingIds.includes(user.id)} userId={user.id} onPress={() => { setFollowedHere((h) => (h.includes(user.id) ? h : [...h, user.id])); if (followingIds.includes(user.id)) confirmUnfollow(user, () => actions.toggleFollow(user.id)); else actions.toggleFollow(user.id); }} small name={user.name} />
           </View>
         ))}
       </ScrollView>

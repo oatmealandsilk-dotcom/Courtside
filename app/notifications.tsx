@@ -304,7 +304,7 @@ export default function Notifications() {
                     router.push(`/messages/${actions.openConversationWith(first)}`);
                   }} style={styles.accept}><Text style={styles.acceptText}>Message</Text></Pressable>
                 ) : (group.kind === 'follow' || group.kind === 'joined') && first && first !== currentUserId ? (
-                  <FollowPill small following={followingIds.includes(first)} onPress={() => { const who = users.find((u) => u.id === first); if (who && followingIds.includes(first)) confirmUnfollow(who, () => actions.toggleFollow(first)); else actions.toggleFollow(first); }} name={nameOf(first).split(' ')[0]} />
+                  <FollowPill small following={followingIds.includes(first)} userId={first} onPress={() => { const who = users.find((u) => u.id === first); if (who && followingIds.includes(first)) confirmUnfollow(who, () => actions.toggleFollow(first)); else actions.toggleFollow(first); }} name={nameOf(first).split(' ')[0]} />
                 ) : thumb ? (
                   <View style={[styles.thumb, !thumb.uri && !thumb.words && { backgroundColor: surfaceColorFor(thumb.seed) }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
                     {thumb.uri ? <ExpoImage source={{ uri: thumb.uri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={120} />

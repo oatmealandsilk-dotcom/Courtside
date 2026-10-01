@@ -481,7 +481,7 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
         <Pressable accessibilityRole="link" accessibilityLabel="Open profile" onPress={onProfile} style={styles.secondary}>
           <Text style={styles.secondaryText}>Profile</Text>
         </Pressable>
-        <FollowPill following={following} onPress={onFollow} name={user.name.split(' ')[0]} />
+        <FollowPill following={following} userId={user.id} onPress={onFollow} name={user.name.split(' ')[0]} />
       </View>
     </Animated.View>
     </GestureDetector>
