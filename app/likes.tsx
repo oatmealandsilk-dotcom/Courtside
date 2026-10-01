@@ -14,11 +14,13 @@ import { colors, spacing, typography } from '@/theme';
 /**
  * Who liked a post or a hit, the way Instagram shows it: opened by holding
  * the heart. Newest likes first, with the people you follow at the top, a
- * search box, and a Follow button on each row.
+ * search box, and a Follow button on each row. With `set=tagged`, the same
+ * list shows everyone tagged in the post instead.
  */
 export default function Likes() {
   const styles = useThemedStyles(styleDefinitions);
-  const params = useLocalSearchParams<{ id?: string; kind?: string }>();
+  const params = useLocalSearchParams<{ id?: string; kind?: string; set?: string }>();
+  const tagged = params.set === 'tagged';
   const { users, posts, stories, currentUserId, followingIds, blockedIds, ready, actions } = useApp();
   // Opened from a link before the app has the post: fetch it, and only then decide it is gone.
   const [looked, setLooked] = useState(false);
@@ -34,24 +36,26 @@ export default function Likes() {
   const people = useMemo(() => {
     if (!item) return [];
     // Likes are stored oldest first; the newest go on top, and within that the people you follow lead.
-    const newestFirst = [...item.likedBy].reverse().filter((id) => !blockedIds.includes(id));
+    // Tagged people keep the order they were tagged in.
+    const source = tagged ? ('taggedUserIds' in item ? item.taggedUserIds ?? [] : []) : [...item.likedBy].reverse();
+    const newestFirst = source.filter((id) => !blockedIds.includes(id));
     const ordered = [...newestFirst.filter((id) => followingIds.includes(id) || id === currentUserId), ...newestFirst.filter((id) => !followingIds.includes(id) && id !== currentUserId)];
     return ordered.map((id) => users.find((u) => u.id === id)).filter((u): u is NonNullable<typeof u> => Boolean(u));
-  }, [item, users, followingIds, blockedIds, currentUserId]);
+  }, [item, users, followingIds, blockedIds, currentUserId, tagged]);
 
   const wanted = search.trim().toLowerCase().replace(/^@/, '');
   const shown = wanted ? people.filter((u) => `${u.name} ${u.handle}`.toLowerCase().includes(wanted)) : people;
-  const count = item?.likedBy.length ?? 0;
+  const count = tagged ? people.length : item?.likedBy.length ?? 0;
 
   return (
-    <Screen title="Likes" compactTitle onBack={() => goBack()}>
+    <Screen title={tagged ? 'Tagged' : 'Likes'} compactTitle onBack={() => goBack()}>
       {!item && !looked ? (
         <PeopleSkeleton />
       ) : !item ? (
         <EmptyState icon="lock-closed-outline" title="This post isn't available" body="It was deleted, or it's from a private account you don't follow." />
       ) : (
         <>
-          <Text style={styles.count}>{count === 1 ? '1 like' : `${count.toLocaleString()} likes`}</Text>
+          <Text style={styles.count}>{tagged ? (count === 1 ? '1 person tagged' : `${count} people tagged`) : count === 1 ? '1 like' : `${count.toLocaleString()} likes`}</Text>
           {people.length > 6 ? (
             <View style={styles.searchWrap}>
               <Field value={search} onChangeText={setSearch} placeholder="Search" autoCapitalize="none" />
@@ -59,9 +63,9 @@ export default function Likes() {
           ) : null}
           {shown.length === 0 ? (
             <EmptyState
-              icon="heart-outline"
-              title={wanted ? 'No one by that name' : 'No likes yet'}
-              body={wanted ? 'Try another name or @handle.' : `When people like this ${isHit ? 'instant' : 'post'}, they show up here.`}
+              icon={tagged ? 'person-outline' : 'heart-outline'}
+              title={wanted ? 'No one by that name' : tagged ? 'No one tagged' : 'No likes yet'}
+              body={wanted ? 'Try another name or @handle.' : tagged ? 'People tagged in this post show up here.' : `When people like this ${isHit ? 'instant' : 'post'}, they show up here.`}
             />
           ) : (
             shown.map((user) => {

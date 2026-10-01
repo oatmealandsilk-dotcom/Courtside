@@ -1,5 +1,6 @@
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { openCourtOnMap } from '@/features/players/courtLink';
+import { TaggedLine } from '@/components/TaggedLine';
 import { ThreadReplies } from '@/components/ThreadReplies';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -1085,6 +1086,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       <LevelPill profile={author.profile} small onMedia />
                     </Pressable>
                     {isNewHere(post) ? <NewHereTag onMedia /> : null}
+                    <TaggedLine post={post} onMedia />
                     {post.body ? <FoldingCaption text={post.body} style={styles.body} moreStyle={styles.more} /> : null}
                     <Text style={styles.tags}>{post.tags.map(t=><Text key={t} accessibilityRole="link" onPress={()=>router.push({pathname:'/search',params:{q:`#${t}`}})}>#{t}{'  '}</Text>)}</Text>
                     <Text style={styles.swipeHint}>↑ Next moment   ·   ← Community</Text>
