@@ -1262,6 +1262,23 @@ export const remote = {
     };
   },
 
+  /** Open hits from an hour ago on, with who is in: the list the app loads at the start. Null when it could not be asked. */
+  async fetchHits(): Promise<HitRequest[] | null> {
+    const { data, error } = await need().from('hit_requests').select('*, hit_joins(user_id)').eq('cancelled', false)
+      .gte('starts_at', new Date(Date.now() - 3_600_000).toISOString()).order('starts_at', { ascending: true }).limit(100);
+    if (error) { fail('hits')(error); return null; }
+    return (data as HitRow[]).map(toHit);
+  },
+  /** A hit posted, changed, joined or left anywhere (migration 53): the caller asks for the list again. Also once on connecting, to catch up. */
+  onHits(changed: () => void): () => void {
+    const db = need();
+    const channel = db.channel('hits-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hit_requests' }, () => changed())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hit_joins' }, () => changed())
+      .subscribe((status) => { if (status === 'SUBSCRIBED') changed(); });
+    return () => { void db.removeChannel(channel); };
+  },
+
   onMessages(handle: { added: (message: Message) => void; changed: (message: Message) => void; removed: (messageId: ID) => void; connected?: () => void; dropped?: () => void }): () => void {
     const db = need();
     const one = (row: MessageRow) => toConversations('', [{ id: row.conversation_id, updated_at: row.created_at }], [row]).messages[0];

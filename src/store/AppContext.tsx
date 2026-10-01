@@ -1024,6 +1024,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => { disposed = true; if (retry) clearTimeout(retry); off?.(); offReads?.(); };
   }, [remoteLoaded, currentUserForLive, liveEpoch, catchUpMessages]);
 
+  // Open hits, live: one posted, joined or called off anywhere is on Find
+  // Players within seconds, and the list catches up whenever the app comes
+  // back to the front (the subscription reconnects with liveEpoch).
+  useEffect(() => {
+    if (!isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive)) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let on = true;
+    // A burst of changes (a join adds a row and touches the hit) is one ask.
+    const refetch = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void remote.fetchHits().then((hits) => { if (on && hits) setState((prev) => ({ ...prev, hitRequests: hits })); }).catch(() => undefined);
+      }, 400);
+    };
+    let off: (() => void) | undefined;
+    try { off = remote.onHits(refetch); } catch { /* live updates are a nicety */ }
+    return () => { on = false; if (timer) clearTimeout(timer); off?.(); };
+  }, [remoteLoaded, currentUserForLive, liveEpoch]);
+
   // Notifications for other people are never sent from this phone: the
   // database files them itself when the real like, comment or follow is
   // saved (migration 18), so nobody can make one up. The ones filed in state

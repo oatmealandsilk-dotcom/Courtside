@@ -662,7 +662,9 @@ export type NotificationKind =
   /** A new player near you just joined. Actor is them. */
   | 'joined'
   /** Someone said "I'm in" to your Looking-for-a-hit post. */
-  | 'hit-join';
+  | 'hit-join'
+  /** Someone nearby posted a hit much like yours (or like what your open-to-hit ring says). Actor is them; the target is their hit (migration 53). */
+  | 'hit-match';
 
 export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application' | 'report' | 'coaching-request' | 'profile' | 'hit-request';
 

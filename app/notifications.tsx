@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { router } from 'expo-router';
+import { show as showToast } from '@/lib/toast';
 import { requestSection } from '@/features/navigation/swipeOrder';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -51,6 +52,7 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap; tin
   milestone: { name: 'flame', tint: 'warning' },
   joined: { name: 'hand-right', tint: 'court' },
   'hit-join': { name: 'tennisball', tint: 'brand' },
+  'hit-match': { name: 'people', tint: 'brand' },
 };
 
 const VERB: Record<NotificationKind, string> = {
@@ -75,6 +77,7 @@ const VERB: Record<NotificationKind, string> = {
   milestone: 'just passed',
   joined: 'just joined CourtSide near you',
   'hit-join': 'is in for your hit',
+  'hit-match': 'is also looking for a hit',
 };
 
 interface Group {
@@ -293,7 +296,13 @@ export default function Notifications() {
                 </View>
 
                 {/* Follow back, right from the row, the way Instagram's inbox does it. */}
-                {(group.kind === 'follow' || group.kind === 'joined') && first && first !== currentUserId ? (
+                {group.kind === 'hit-match' && first && first !== currentUserId ? (
+                  // Someone after the same game: the message is one tap away.
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Message ${nameOf(first)}`} onPress={() => {
+                    if (!actions.canMessage(first)) { showToast({ title: 'Only people they follow can message them', icon: 'lock-closed-outline' }); return; }
+                    router.push(`/messages/${actions.openConversationWith(first)}`);
+                  }} style={styles.accept}><Text style={styles.acceptText}>Message</Text></Pressable>
+                ) : (group.kind === 'follow' || group.kind === 'joined') && first && first !== currentUserId ? (
                   <FollowPill small following={followingIds.includes(first)} onPress={() => actions.toggleFollow(first)} name={nameOf(first).split(' ')[0]} />
                 ) : thumb ? (
                   <View style={[styles.thumb, !thumb.uri && !thumb.words && { backgroundColor: surfaceColorFor(thumb.seed) }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
