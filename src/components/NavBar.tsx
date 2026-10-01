@@ -80,16 +80,16 @@ export function NavBar({ state, navigation }: NavBarProps) {
     const t = setTimeout(() => { entrance.value = withTiming(0, { duration: 480, easing: Easing.out(Easing.cubic) }); }, 7000);
     return () => clearTimeout(t);
   }, [behindCurtain, entrance]);
-  // Ducking tucks the pill a little toward the edge and shrinks what is on
-  // it; the page beneath never moves, because the bar floats over it.
+  // Ducking tucks the pill a little toward the edge and lets the labels go,
+  // leaving the icons centred: the page beneath never moves, because the bar
+  // floats over it. Nothing is scaled. A scaled icon on iPhone is a resampled
+  // picture of itself and goes soft; moved and faded, it stays sharp.
   const duck = useAnimatedStyle(() => ({ transform: [{ translateY: entrance.value * 96 }] }));
-  const shrink = useAnimatedStyle(() => ({
-    transform: [{ scale: interpolate(barCompact.value, [0, 1], [1, 0.86]) }],
-  }));
-  const rowShrink = useAnimatedStyle(() => ({ minHeight: 48 }));
-
+  // Half of a label's line and its gap, so the icon lands in the middle once the label has gone.
+  const settle = useAnimatedStyle(() => ({ transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, 7])) }] }));
+  const labelFade = useAnimatedStyle(() => ({ opacity: interpolate(barCompact.value, [0, 0.6], [1, 0], 'clamp') }));
   const tuck = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(barCompact.value, [0, 1], [0, 14]) }, { scale: interpolate(barCompact.value, [0, 1], [1, 0.96]) }],
+    transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, 12])) }],
   }));
   if (isPhone) {
     return (
@@ -102,7 +102,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
               const active = item.route === activeRoute;
               return (
                 <React.Fragment key={item.route}>
-                {index === 2 && <View style={styles.createSlot}><Animated.View style={shrink}><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={styles.createButton}><Ionicons name="add" size={28} color={colors.brandInk} /></Pressable></Animated.View></View>}
+                {index === 2 && <View style={styles.createSlot}><Animated.View><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={styles.createButton}><Ionicons name="add" size={28} color={colors.brandInk} /></Pressable></Animated.View></View>}
                 <Pressable
                   onPress={() => navigation.navigate(item.route)}
                   accessibilityRole="tab"
@@ -110,7 +110,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
                   accessibilityLabel={item.label}
                   style={styles.bottomItem}
                 >
-                  <Animated.View style={[styles.bottomInner, shrink]}>
+                  <Animated.View style={[styles.bottomInner, settle]}>
                   <View>
                     <Ionicons
                       name={active ? item.activeIcon : item.icon}
@@ -123,7 +123,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
                       </View>
                     ) : null}
                   </View>
-                  <Text style={[styles.bottomLabel, active && { color: item.route === 'coaches' ? colors.info : item.route === 'discuss' ? colors.warning : colors.brand }]}>{item.label}</Text>
+                  <Animated.Text style={[styles.bottomLabel, active && { color: item.route === 'coaches' ? colors.info : item.route === 'discuss' ? colors.warning : colors.brand }, labelFade]}>{item.label}</Animated.Text>
                   </Animated.View>
                 </Pressable>
                 </React.Fragment>
