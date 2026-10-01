@@ -46,7 +46,8 @@ export function ReelCaption({ post, author, onAuthor }: { post: Post; author: Us
       </Pressable>
       {text ? <FoldedWords text={text} /> : null}
       <View style={styles.meta}>
-        <Text style={styles.metaText}>{relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}</Text>
+        {/* The time never gives up room: a long court name is what shortens, never "11h" breaking onto two lines. */}
+        <Text style={[styles.metaText, styles.metaKeep]} numberOfLines={1}>{relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}</Text>
         {place ? (
           <Pressable
             accessibilityRole={post.court ? 'link' : undefined}
