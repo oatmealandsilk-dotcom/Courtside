@@ -103,6 +103,9 @@ export function Screen({
   // Pull-to-refresh: the spinner while it runs, then a small note that
   // slides in under the header and fades — enough to know it happened.
   const [refreshing, setRefreshing] = useState(false);
+  // The page's own height. A short page must still be able to scroll past the
+  // pull strip, or it rests on the strip and its spinner shows for good.
+  const [viewH, setViewH] = useState(0);
   const updated = useRef(new Animated.Value(0)).current;
   // In a browser there is no pull-to-refresh, so the page listens for the
   // pull itself: a trackpad or wheel pushed up past the top, or a finger
@@ -311,7 +314,8 @@ export function Screen({
         <Reanimated.ScrollView
           ref={(node: unknown) => { scroller.current = node as unknown as ScrollView | null; if (scrollRef) scrollRef.current = node as unknown as ScrollView | null; webPull(node as unknown as ScrollView | null); }}
           style={styles.flex}
-          contentContainerStyle={[styles.scrollContent, verticalOnlyTouch]}
+          contentContainerStyle={[styles.scrollContent, verticalOnlyTouch, strip > 0 && viewH > 0 ? { minHeight: viewH + strip } : null]}
+          onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h > 0 && h !== viewH) setViewH(h); }}
           scrollEnabled={!swiping}
           directionalLockEnabled
           keyboardShouldPersistTaps="handled"
@@ -325,6 +329,11 @@ export function Screen({
           contentOffset={{ x: 0, y: strip + initial.current }}
           onScroll={onScrollAnimated}
           onContentSizeChange={(_width, height) => {
+            // A page that was too short to rest below the pull strip (so the
+            // strip and its spinner showed) settles below it once it is tall enough.
+            if (strip > 0 && !busy.current && scrollY.value < strip - 1 && viewH > 0 && height >= viewH + strip - 1) {
+              scroller.current?.scrollTo({ y: strip, animated: false });
+            }
             if (restored.current) return;
             // Wait until the content is tall enough to hold the position,
             // otherwise the scroll clamps to the bottom of a half-built page.
