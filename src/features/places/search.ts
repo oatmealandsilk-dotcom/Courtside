@@ -89,3 +89,31 @@ export async function searchCitiesRemote(query: string, near?: LatLng | null, si
   }
   return out;
 }
+
+/** Town names already asked for, by spot, for the session. */
+const areas = new Map<string, Promise<string | null>>();
+
+/**
+ * The town a spot is in, the way a profile's city reads: "Town, ST" in the
+ * US, "Town, Country" elsewhere. From Photon's reverse lookup, the same free
+ * service the place picker uses. Null when it cannot say, or cannot be reached.
+ */
+export function areaOf(at: LatLng): Promise<string | null> {
+  const key = `${at.lat.toFixed(3)},${at.lng.toFixed(3)}`;
+  const known = areas.get(key);
+  if (known) return known;
+  const ask = (async () => {
+    const res = await fetch(`https://photon.komoot.io/reverse?lat=${at.lat.toFixed(5)}&lon=${at.lng.toFixed(5)}&lang=en`);
+    if (!res.ok) return null;
+    const json = (await res.json()) as { features?: { properties: PhotonProps & { district?: string; county?: string } }[] };
+    const p = json.features?.[0]?.properties;
+    const town = p?.city ?? p?.district ?? p?.county;
+    if (!p || !town) return null;
+    const region = p.countrycode === 'US' ? (p.state ? US_STATES[p.state] ?? p.state : null) : p.country;
+    return region ? `${town}, ${region}` : town;
+  })().catch(() => null);
+  areas.set(key, ask);
+  // A failed ask may be asked again next time.
+  void ask.then((v) => { if (v === null) areas.delete(key); });
+  return ask;
+}

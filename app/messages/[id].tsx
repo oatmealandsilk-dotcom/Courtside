@@ -33,7 +33,7 @@ import { VoiceNote } from '@/components/VoiceNote';
 import { EmojiKeyboard } from '@/components/EmojiKeyboard';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { VOICE_LIMIT_MS, clock, useVoiceRecorder } from '@/features/voice/useVoiceRecorder';
-import { openInMaps } from '@/features/players/openInMaps';
+import { openCourt } from '@/features/players/courtLink';
 import { Tappable, useDoubleTap } from '@/components/Tappable';
 import { chatStamp } from '@/lib/format';
 import { RichText } from '@/components/RichText';
@@ -476,13 +476,13 @@ export default function Thread() {
             const place = message.place;
             body = (
               <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles}>
-                <Tappable accessibilityRole="link" accessibilityLabel={`${place.name}. Open in Maps`} scaleTo={0.97} onPress={() => openInMaps(place)} style={[styles.sharedCard, styles.courtCard]}>
+                <Tappable accessibilityRole="link" accessibilityLabel={`${place.name}. See the court`} scaleTo={0.97} onPress={() => openCourt({ name: place.name, lat: place.lat, lng: place.lng })} style={[styles.sharedCard, styles.courtCard]}>
                   <View style={styles.sharedHead}>
                     <Ionicons name="location" size={16} color={colors.brand} />
                     <Text style={styles.sharedKind}>Court</Text>
                   </View>
                   <Text numberOfLines={2} style={styles.courtName}>{place.name}</Text>
-                  <Text style={styles.courtOpen}>Open in Maps</Text>
+                  <Text style={styles.courtOpen}>See the court</Text>
                 </Tappable>
               </Row>
             );

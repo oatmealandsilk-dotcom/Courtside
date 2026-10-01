@@ -1,9 +1,11 @@
-import { barCompact } from '@/features/navigation/barShrink';
-import { withTiming } from 'react-native-reanimated';
-import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { barCompact, glideBar } from '@/features/navigation/barShrink';
+import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { pagerStep } from '@/lib/pagerGesture';
 import { isDesktopBrowser } from '@/lib/browserDevice';
-import { CourtSpinner } from '@/components/CourtSpinner';
+import { PullDisc, usePullDisc } from '@/components/PullDisc';
+import * as haptics from '@/lib/haptics';
+import { PULL_DISARM, PULL_DISC, PULL_GAP, PULL_MIN_SPIN, PULL_RETURN, WEB_HOME_PULL_LINE, fingerFor, pullFetch, pullRowLift, pullRowOpacity, rubberBand } from '@/lib/pullRefresh';
 import { colors } from '@/theme';
 import { useTheme } from '@/theme/ThemeProvider';
 
@@ -26,24 +28,44 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   /** Shown in the gap the pull opens, beside the disc. */
   pullHeader?: React.ReactNode;
 }>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0, onRefresh, pullHeader }, ref) {
-  // The pull: how far (0..1 of the line), and whether the fetch is running.
   // The scrollbar is part of the design too: reading the theme here is what
   // redraws it when the palette changes.
   useTheme();
-  const [pullAmount, setPullAmount] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
+  // Pull-to-refresh, the same as on the phone (numbers in lib/pullRefresh):
+  // the feed comes down with the finger against a growing give, the disc
+  // draws round in step and closes at the line, letting go past it holds the
+  // feed a little way down while the fetch runs, then it springs back up.
+  // `gap` is how far the feed is down; everything follows it, frame by frame,
+  // without re-drawing the feed.
   const refreshRef = useRef(onRefresh); refreshRef.current = onRefresh;
   const refreshingRef = useRef(false);
-  const [heldDown, setHeldDown] = useState(false);
-  const fireRefresh = async () => { if (!refreshRef.current || refreshingRef.current) return; refreshingRef.current = true; setRefreshing(true); setHeldDown(true); setPullAmount(1); try { await refreshRef.current(); } finally { refreshingRef.current = false; setRefreshing(false); setHeldDown(false); setPullAmount(0); } };
-  const HOLD = 64;
-  const down = heldDown ? HOLD : pullAmount * 56;
+  const gap = useSharedValue(0);
+  const disc = usePullDisc();
+  const fireRefresh = async () => {
+    if (refreshingRef.current) return;
+    // Nothing to fetch after all: straight back up.
+    if (!refreshRef.current) { gap.value = withSpring(0, PULL_RETURN, (done) => { if (done) disc.rest(); }); return; }
+    refreshingRef.current = true;
+    const began = Date.now();
+    // A fetch that fails leaves the feed as it was; one that hangs is let go
+    // of after a few seconds and finishes behind.
+    await pullFetch(refreshRef.current);
+    // A quick fetch still shows the disc turning for a moment.
+    const left = PULL_MIN_SPIN - (Date.now() - began);
+    if (left > 0) await new Promise<void>((resolve) => setTimeout(resolve, left));
+    refreshingRef.current = false;
+    gap.value = withSpring(0, PULL_RETURN, (done) => { if (done) disc.rest(); });
+  };
+  const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: gap.value }], borderTopLeftRadius: gap.value > 2 ? 22 : 0, borderTopRightRadius: gap.value > 2 ? 22 : 0 }));
+  const rowStyle = useAnimatedStyle(() => ({ opacity: pullRowOpacity(gap.value), transform: [{ translateY: pullRowLift(gap.value) }] }));
   const pager = useRef<HTMLDivElement>(null);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Position as a fraction of a page: the bar ducking changes this box's
   // height, which shifts the pixel position by itself; fractions stay put,
   // so that shift never reads as a swipe (which would lift the bar again).
   const lastFrac = useRef(-1);
+  // Which way the bar was last sent (1 tucked, -1 up, 0 not yet); cleared once a page lands.
+  const barDir = useRef(0);
   const lastHeight = useRef(0);
   useImperativeHandle(ref, () => ({ scrollToTop: () => { if (pager.current) settle(pager.current, 0); } }), []);
   const drag = useRef<{y:number;x:number;top:number;active:boolean;target:HTMLElement;scroll?:HTMLElement;scrollTop?:number;lastY:number;lastTime:number;velocity:number} | null>(null);
@@ -100,38 +122,63 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
       el.style.scrollSnapType = 'y mandatory';
     };
     el.addEventListener('wheel', wheel, { passive: true });
-    // Pull-to-refresh on the first page: wheel or finger, the disc grows with the pull and the fetch goes when you let go past the line.
-    const THRESHOLD = 110;
-    let pulled = 0;
+    // Pull-to-refresh on the first page, by finger or wheel. The finger's
+    // travel goes through the same give the phone has, so the feed moves about
+    // half as far at first and less after; the line ticks once on the way
+    // past, and only letting go past it fetches.
+    let finger = 0;
+    let armed = false;
     let idle: ReturnType<typeof setTimeout> | null = null;
     let touchStart: number | null = null;
-    const show = (amount: number) => { pulled = Math.max(0, amount); setPullAmount(Math.min(1, pulled / THRESHOLD)); };
-    const letGo = () => { if (pulled >= THRESHOLD) { pulled = 0; void fireRefresh(); return; } if (pulled > 0) show(0); };
+    const follow = (amount: number) => {
+      finger = Math.max(0, amount);
+      gap.value = rubberBand(finger, el.clientHeight);
+      if (!armed && gap.value >= WEB_HOME_PULL_LINE) { armed = true; disc.arm(); haptics.tap(); }
+      else if (armed && gap.value < WEB_HOME_PULL_LINE - PULL_DISARM) { armed = false; disc.disarm(); }
+    };
+    // Picks the feed up wherever it is, even part way back.
+    const pickUp = () => { cancelAnimation(gap); finger = fingerFor(gap.value, el.clientHeight); if (!refreshingRef.current) disc.rest(); };
+    const letGo = () => {
+      if (idle) { clearTimeout(idle); idle = null; }
+      if (armed) {
+        armed = false;
+        disc.start();
+        gap.value = withSpring(PULL_GAP, PULL_RETURN);
+        void fireRefresh();
+      } else if (gap.value > 0) gap.value = withSpring(0, PULL_RETURN);
+      finger = 0;
+    };
     const pullWheel = (e: WheelEvent) => {
       if (!refreshRef.current || refreshingRef.current) return;
-      if (el.scrollTop > 0 || e.deltaY >= 0) { if (pulled) letGo(); return; }
-      show(pulled + (pulled >= THRESHOLD ? -e.deltaY * 0.25 : -e.deltaY));
+      if (el.scrollTop > 0 || (e.deltaY >= 0 && finger <= 0)) return;
+      if (finger <= 0 && gap.value > 0) pickUp();
+      follow(finger - e.deltaY);
       if (idle) clearTimeout(idle);
       idle = setTimeout(letGo, 220);
     };
-    const touchS = (e: TouchEvent) => { touchStart = el.scrollTop <= 0 && refreshRef.current && !refreshingRef.current ? e.touches[0].clientY : null; };
-    const touchM = (e: TouchEvent) => { if (touchStart === null) return; const dy = e.touches[0].clientY - touchStart; if (dy <= 0) { show(0); return; } show(dy * 0.8); };
-    const touchE = () => { touchStart = null; letGo(); };
+    const touchS = (e: TouchEvent) => {
+      touchStart = el.scrollTop <= 0 && refreshRef.current && !refreshingRef.current ? e.touches[0].clientY : null;
+      if (touchStart !== null) { pickUp(); touchStart -= finger; }
+    };
+    const touchM = (e: TouchEvent) => { if (touchStart === null) return; follow(e.touches[0].clientY - touchStart); };
+    const touchE = () => { if (touchStart === null) return; touchStart = null; letGo(); };
     el.addEventListener('wheel', pullWheel, { passive: true });
     el.addEventListener('touchstart', touchS, { passive: true });
     el.addEventListener('touchmove', touchM, { passive: true });
     el.addEventListener('touchend', touchE);
-    return () => { stop(); el.removeEventListener('wheel', wheel); el.removeEventListener('wheel', pullWheel); el.removeEventListener('touchstart', touchS); el.removeEventListener('touchmove', touchM); el.removeEventListener('touchend', touchE); };
+    el.addEventListener('touchcancel', touchE);
+    return () => { stop(); if (idle) clearTimeout(idle); el.removeEventListener('wheel', wheel); el.removeEventListener('wheel', pullWheel); el.removeEventListener('touchstart', touchS); el.removeEventListener('touchmove', touchM); el.removeEventListener('touchend', touchE); el.removeEventListener('touchcancel', touchE); };
   }, [children.length]);
 
   return <div style={{ position: 'relative', height: '100%', width: '100%' }}>
-    {onRefresh && (pullAmount > 0 || refreshing) ? (
-      <div style={{ position: 'absolute', top: 14, left: 0, right: 0, opacity: Math.min(1, pullAmount * 1.5), height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, zIndex: 0, transition: 'opacity 120ms', pointerEvents: 'none' }}>
+    {/* Behind the feed, in the gap the pull opens: the greeting and the disc, riding in its middle. */}
+    {onRefresh ? (
+      <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: PULL_DISC, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, zIndex: 0 }, rowStyle]}>
         {pullHeader}
-        {refreshing ? <CourtSpinner size={28} /> : <div style={{ width: 24, height: 24, borderRadius: 12, border: `2.5px solid ${colors.brand}`, borderTopColor: 'transparent', opacity: 0.9 }} />}
-      </div>
+        <PullDisc gap={gap} disc={disc} line={WEB_HOME_PULL_LINE} />
+      </Animated.View>
     ) : null}
-  <div style={{ position: 'absolute', inset: 0, transform: `translateY(${down}px)`, transition: heldDown ? 'transform 180ms ease-out' : pullAmount === 0 ? 'transform 360ms cubic-bezier(0.22, 0.61, 0.36, 1)' : 'none', borderTopLeftRadius: down > 2 ? 22 : 0, borderTopRightRadius: down > 2 ? 22 : 0, overflow: 'hidden', zIndex: 1 }}>
+  <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden', zIndex: 1 }, sheetStyle]}>
   <div ref={pager} tabIndex={0} role="region" aria-label="Clips feed"
     onPointerDown={event=>{
       if(event.button!==0 || !event.isPrimary || (event.target as HTMLElement).closest('input,textarea,select')) return;
@@ -190,13 +237,14 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
       lastHeight.current = el.clientHeight;
       if (lastFrac.current >= 0 && !resized) {
         const dy = (frac - lastFrac.current) * el.clientHeight;
-        if (Math.abs(dy) >= el.clientHeight * 0.6) barCompact.value = withTiming(dy > 0 ? 1 : 0, { duration: 200 });
-        else if (Math.abs(dy) > 0.3) barCompact.value = Math.max(0, Math.min(1, barCompact.value + dy / 150));
+        // One glide per swipe and direction, as on the phone (see glideBar).
+        const dir = Math.abs(dy) > 0.3 ? (dy > 0 ? 1 : -1) : 0;
+        if (dir !== 0 && dir !== barDir.current) { barDir.current = dir; glideBar(dir > 0); }
       }
       lastFrac.current = frac;
       // Quiet for a beat after the last movement means the page has landed.
       if (settleTimer.current) clearTimeout(settleTimer.current);
-      settleTimer.current = setTimeout(() => { settleTimer.current = null; onSettled?.(Math.round(el.scrollTop / Math.max(1, el.clientHeight))); }, 160);
+      settleTimer.current = setTimeout(() => { settleTimer.current = null; barDir.current = 0; onSettled?.(Math.round(el.scrollTop / Math.max(1, el.clientHeight))); }, 160);
       if (index === reported.current) return;
       reported.current = index;
       onIndex(index);
@@ -208,6 +256,6 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
       height: '100%', width: '100%', scrollSnapAlign: 'start', scrollSnapStop: 'always',
       position: 'relative', overflow: 'hidden' }}>{child}</div>)}
   </div>
-  </div>
+  </Animated.View>
   </div>;
 });

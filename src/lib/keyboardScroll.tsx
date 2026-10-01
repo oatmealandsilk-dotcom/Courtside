@@ -1,5 +1,5 @@
-import React, { createContext, useContext } from 'react';
-import { Keyboard, Platform } from 'react-native';
+import React, { createContext, useCallback, useContext, useRef } from 'react';
+import { Dimensions, Keyboard, Platform, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView } from 'react-native';
 
 /** Something that can be measured on screen — a TextInput, a View. */
 export interface Measurable {
@@ -41,4 +41,31 @@ export function afterKeyboard(work: () => void) {
   const sub = Keyboard.addListener('keyboardDidShow', () => { sub.remove(); setTimeout(work, 30); });
   // A hardware keyboard shows nothing; do not wait forever.
   setTimeout(() => { sub.remove(); work(); }, 600);
+}
+
+/**
+ * The same "bring the box you tapped above the keyboard" that every Screen
+ * gives its pages, for a page that scrolls on its own instead: sign-in and
+ * the reset-password page. Wrap the page in
+ * <KeyboardScrollContext.Provider value={reveal}> and hand its ScrollView
+ * `ref={scroller}` and `onScroll={onScroll}`; each text box inside then asks
+ * for it as it gains focus. Once the keyboard is up, the box is measured and
+ * the page scrolls just far enough to clear it.
+ */
+export function useKeyboardReveal() {
+  const scroller = useRef<ScrollView | null>(null);
+  const offset = useRef(0);
+  const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => { offset.current = e.nativeEvent.contentOffset.y; }, []);
+  const reveal = useCallback((node: Measurable | null) => {
+    if (!node?.measureInWindow || !scroller.current) return;
+    afterKeyboard(() => {
+      node.measureInWindow?.((_x, y, _w, h) => {
+        const visibleBottom = Dimensions.get('window').height - keyboardHeight - 24;
+        const overflow = y + h - visibleBottom;
+        if (overflow <= 0) return;
+        scroller.current?.scrollTo({ y: offset.current + overflow, animated: true });
+      });
+    });
+  }, []);
+  return { scroller, onScroll, reveal };
 }

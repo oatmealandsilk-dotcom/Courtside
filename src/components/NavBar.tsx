@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { BrandMark } from './BrandMark';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { interpolate, runOnJS, useAnimatedReaction, useAnimatedStyle } from 'react-native-reanimated';
 import { Animated as RNAnimated } from 'react-native';
 import { BAR_TUCK, barCompact, DUCK } from '@/features/navigation/barShrink';
@@ -20,6 +20,10 @@ import { TAB_BAR_H } from '@/features/navigation/barInset';
 import { useApp } from '@/store/AppContext';
 import { unreadChatCount } from '@/features/messages/groupRules';
 import { colors, pageIsDark, radius, spacing, typography, font } from '@/theme';
+import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
+
+/** The screen's pixels per point, read once: the bar's moves are rounded to whole pixels. */
+const PX = PixelRatio.get();
 
 /**
  * Minimal shape of what react-navigation hands a custom tabBar. Typed locally
@@ -57,6 +61,16 @@ export function NavBar({ state, navigation }: NavBarProps) {
   // separate bell and inbox entries the way the sidebar does, so Profile
   // carries the lot — it is where both of those live.
   const profileAlerts = unread + unseen;
+  // The first-run tour points at these; each button puts itself on its list. Nothing here looks any different.
+  const tourDiscuss = useTourTarget('tab-discuss');
+  const tourCoaches = useTourTarget('tab-coaches');
+  const tourProfile = useTourTarget('tab-profile');
+  const tourCreate = useTourTarget('create');
+  const tourMessages = useTourTarget('side-messages');
+  const tourRef = (route: string) => (route === 'discuss' ? tourDiscuss : route === 'coaches' ? tourCoaches : route === 'profile' ? tourProfile : undefined);
+  // While the tour is up, a screen reader reads only the tour, not the bar under the dim.
+  const touring = useTourOpen();
+  const hideFromReader = touring ? 'no-hide-descendants' as const : 'auto' as const;
 
   // Scrolling down ducks the bar: a touch shorter, everything on it a touch
   // smaller. Scrolling up brings it straight back. Never small enough to miss.
@@ -89,14 +103,17 @@ export function NavBar({ state, navigation }: NavBarProps) {
   // picture of itself and goes soft; moved and faded, it stays sharp.
   const duck = useAnimatedStyle(() => ({ transform: [{ translateY: entrance.value * 96 }] }));
   // Half of a label's line and its gap, so the icon lands in the middle once the label has gone.
-  const settle = useAnimatedStyle(() => ({ transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, 7])) }] }));
+  // Moves land on the screen's real pixels (a third of a point on most
+  // iPhones): sharp icons, but three times finer steps than whole points,
+  // which made the tuck visibly step and drift against the words above it.
+  const settle = useAnimatedStyle(() => ({ transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, 7]) * PX) / PX }] }));
   const labelFade = useAnimatedStyle(() => ({ opacity: interpolate(barCompact.value, [0, 0.6], [1, 0], 'clamp') }));
   const tuck = useAnimatedStyle(() => ({
-    transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, BAR_TUCK])) }],
+    transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, BAR_TUCK]) * PX) / PX }],
   }));
   if (isPhone) {
     return (
-      <Animated.View pointerEvents="box-none" style={[styles.float, { bottom: Math.max(insets.bottom, 12) }, duck]}>
+      <Animated.View pointerEvents="box-none" importantForAccessibility={hideFromReader} style={[styles.float, { bottom: Math.max(insets.bottom, 12) }, duck]}>
         <Animated.View style={[styles.pillWrap, tuck]}>
           {/* The shadow lives on a rounded layer of its own: on the square wrapper its corners showed past the pill's ends. */}
           <View style={styles.pillShadow}>
@@ -105,8 +122,9 @@ export function NavBar({ state, navigation }: NavBarProps) {
               const active = item.route === activeRoute;
               return (
                 <React.Fragment key={item.route}>
-                {index === 2 && <View style={styles.createSlot}><Animated.View><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={[styles.createButton, pageIsDark() && styles.createButtonDark]}><BrandWash /><Ionicons name="add" size={28} color={colors.brandInk} /></Pressable></Animated.View></View>}
+                {index === 2 && <View style={styles.createSlot}><Animated.View><Pressable ref={tourCreate} accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={[styles.createButton, pageIsDark() && styles.createButtonDark]}><BrandWash /><Ionicons name="add" size={28} color={colors.brandInk} /></Pressable></Animated.View></View>}
                 <Pressable
+                  ref={tourRef(item.route)}
                   onPress={() => navigation.navigate(item.route)}
                   accessibilityRole="tab"
                   accessibilityState={{ selected: active }}
@@ -143,6 +161,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
 
   return (
     <View
+      importantForAccessibility={hideFromReader}
       style={[
         styles.sidebar,
         { width: compact ? LAYOUT.sidebarCompact : LAYOUT.sidebar, paddingTop: insets.top + spacing.xl },
@@ -163,6 +182,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
           return (
             <Pressable
               key={item.route}
+              ref={tourRef(item.route)}
               onPress={() => navigation.navigate(item.route)}
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
@@ -228,6 +248,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
         </Pressable>
 
         <Pressable
+          ref={tourMessages}
           onPress={() => router.push('/messages')}
           accessibilityRole="button"
           accessibilityLabel={unread ? `Messages, ${unread} unread` : 'Messages'}
@@ -251,6 +272,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
         </Pressable>
 
         <Pressable
+          ref={tourCreate}
           onPress={openCreate}
           accessibilityRole="button"
           accessibilityLabel="Create a post"

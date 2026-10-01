@@ -27,6 +27,14 @@ import { challengeFor } from '@/features/challenge/weekly';
 type Mode = 'clip' | 'post' | 'story' | 'hit';
 
 const goBackNow = () => router.back();
+/**
+ * Posting lands you on the feed, whichever tab the Create box was opened
+ * over, the way Instagram does: what you just posted is at the very top there
+ * (still uploading, counting itself up), and the feed has been taken to it.
+ */
+// Back to the tabs, on Home. Not '/': that address is also the splash
+// screen's, which would open a second copy of the whole app on top.
+const landOnFeed = () => router.dismissTo('/(tabs)');
 /** Each choice in the Create box arrives a moment after the one above it. */
 const arrive = (index: number) => FadeInDown.delay(90 + index * 55).duration(260).easing(Easing.out(Easing.cubic));
 /** choose → library → form, with back always stepping one page left. */
@@ -42,7 +50,7 @@ export default function Compose() {
   const { actions, posts, currentUserId, currentUser, detectedCoords, lastSeen } = useApp();
 
   // The story rail opens this straight at the library with ?mode=story.
-  const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string }>();
+  const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string }>();
   // Opened from the weekly challenge: its tag starts the caption, which is what makes the clip an entry.
   const challenge = useMemo(() => challengeFor(), []);
   const entering = params.challenge === challenge.tag;
@@ -108,15 +116,22 @@ export default function Compose() {
   const [minutes, setMinutes] = useState('');
   // People tagged in the post: chips under the caption, added from a short search.
   const [tagged, setTagged] = useState<string[]>([]);
-  const [location, setLocation] = useState('');
+  // Opened from a court's page ("Post from here"): that court is already the place.
+  const [location, setLocation] = useState(params.courtName?.trim() ?? '');
   // The court it was played on, when the location was picked from the courts list.
-  const [court, setCourt] = useState<TaggedCourt | null>(null);
+  const [court, setCourt] = useState<TaggedCourt | null>(() => {
+    const lat = Number(params.lat); const lng = Number(params.lng); const name = params.courtName?.trim();
+    return params.courtId && name && params.lat && params.lng && Number.isFinite(lat) && Number.isFinite(lng) ? { id: params.courtId, name, lat, lng } : null;
+  });
   const [featureOk, setFeatureOk] = useState(true);
 
   const canSubmit = !!media?.uri && (mode !== 'clip' || media.kind === 'video');
 
+  // A quick second tap on Share would post it twice.
+  const sent = useRef(false);
   const submit = () => {
-    if (!canSubmit) return;
+    if (!canSubmit || sent.current) return;
+    sent.current = true;
 
     if (mode === 'story' || mode === 'hit') {
       actions.addStory({
@@ -126,8 +141,7 @@ export default function Compose() {
         mediaLabel: mode === 'hit' ? 'Instant' : media?.label,
         thumbnailUrl: media?.thumbnailUrl ?? (media?.kind === 'photo' ? media.uri : undefined),
       });
-      // A hit came in over the camera page, which has already gone; land on the feed.
-      if (mode === 'hit') router.replace('/'); else router.back();
+      landOnFeed();
       return;
     }
 
@@ -155,7 +169,7 @@ export default function Compose() {
     // The first post is the moment to ask who they hit with, but only after
     // they have seen it go up: a light nudge on the feed, not a whole screen.
     const firstPost = !posts.some((p) => p.authorId === currentUserId);
-    router.back();
+    landOnFeed();
     if (firstPost) setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800);
   };
 

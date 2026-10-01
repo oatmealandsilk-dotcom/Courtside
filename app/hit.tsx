@@ -101,7 +101,8 @@ export default function Hit() {
     if (!shot || posting) return;
     setPosting(true);
     actions.addStory({ caption: caption.trim() || undefined, imageUrl: shot, mediaLabel: 'Instant', thumbnailUrl: shot });
-    router.replace('/');
+    // Back to the tabs, on Home ('/' is also the splash screen's address).
+    router.dismissTo('/(tabs)');
   };
   // Another go: the count starts again the moment the camera is back.
   const retake = () => { setShot(null); setCount(null); };

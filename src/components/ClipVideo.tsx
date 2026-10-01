@@ -3,6 +3,7 @@ import { AppState, StyleSheet, View } from 'react-native';
 import { VideoView, createVideoPlayer, type VideoPlayer } from 'expo-video';
 import { videoSource } from '@/lib/videoSource';
 import { noteClipLoad } from '@/lib/netSpeed';
+import { useIsFocused } from '@/lib/useIsFocused';
 
 /** How many seconds of a clip are fetched before it counts as loaded and may start. */
 const PRELOAD_SECONDS = 3;
@@ -23,6 +24,16 @@ export interface ClipVideoHandle { seek: (seconds: number) => void; /** The nati
  */
 const livePlayers = new Set<VideoPlayer>();
 
+/**
+ * The app is not in front: on its way to the background, or covered by the
+ * phone itself — the app switcher, Control Centre, Notification Centre, Siri,
+ * a call taking the whole screen. The toolkit stops its players only once
+ * the app is fully in the background, so until then a clip would carry on,
+ * sound and all, behind whatever the phone is showing. An unknown state (the
+ * first instant of a launch) counts as in front, so nothing waits on it.
+ */
+const away = () => AppState.currentState === 'background' || AppState.currentState === 'inactive';
+
 export const ClipVideo = forwardRef<ClipVideoHandle, {
   uri: string; poster?: string; active?: boolean; muted?: boolean; paused?: boolean; fit?: 'cover' | 'contain';
   trimStart?: number; trimEnd?: number; speed?: number; volume?: number;
@@ -30,7 +41,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   onReady?: (ready: boolean) => void;
   onSize?: (width: number, height: number) => void;
   onGone?: () => void;
-}>(function ClipVideo({ uri, active = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, speed, volume, onProgress, onReady, onSize, onGone }: {
+}>(function ClipVideo({ uri, active: wanted = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, speed, volume, onProgress, onReady, onSize, onGone }: {
   uri: string; poster?: string; active?: boolean; muted?: boolean; paused?: boolean; fit?: 'cover' | 'contain';
   trimStart?: number; trimEnd?: number;
   /** The author's playback edits, honoured by the player rather than cut into the file: a rate (1 is normal) and a level (0–1). */
@@ -44,6 +55,12 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   /** Its player was freed (the page left, or the clip changed): whatever it had fetched is gone with it. */
   onGone?: () => void;
 }, ref) {
+  // Plays only on the screen you are looking at: a page pushed over this one
+  // (a profile, a thread, the comments) or a tab slid off screen holds it,
+  // whatever the page that drew it asked for, and it carries on when you
+  // come back. A clip's own page needs to say nothing for this.
+  const onTop = useIsFocused();
+  const active = wanted && onTop;
   // The player is made and freed by hand rather than by the toolkit's hook:
   // the hook freed a still-playing player when a page left the feed, and
   // its sound could run on after. Here it is silenced and stopped first,
@@ -145,9 +162,10 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
     const sub = player.addListener('statusChange', check);
     return () => { clearInterval(timer); sub.remove(); };
   }, [player, trimStart]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A clip that is not the one on screen is silent, whatever it was asked for.
   useEffect(() => {
-    safely(() => { player.muted = muted; });
-  }, [player, muted]);
+    safely(() => { player.muted = muted || !active; });
+  }, [player, muted, active]);
   // Speed keeps the voice's pitch; a level under full is the author's choice, silence is `muted`.
   useEffect(() => { safely(() => { player.playbackRate = speed ?? 1; player.preservesPitch = true; }); }, [player, speed]);
   useEffect(() => { safely(() => { player.volume = volume ?? 1; }); }, [player, volume]);
@@ -158,11 +176,12 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   useEffect(() => {
     safely(() => { player.bufferOptions = { preferredForwardBufferDuration: PRELOAD_SECONDS }; });
   }, [player]);
-  // The end of the clip starts it over from the trim's start.
+  // The end of the clip starts it over from the trim's start — and, if the
+  // app has just left the front, waits there instead of playing on.
   useEffect(() => {
     const sub = player.addListener('playToEnd', () => {
       if (!wantPlay.current) return;
-      safely(() => { player.currentTime = trimStart; player.play(); });
+      safely(() => { player.currentTime = trimStart; if (!away()) player.play(); });
     });
     return () => sub.remove();
   }, [player, trimStart]);
@@ -196,7 +215,10 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
     player,
   }), [player]); // eslint-disable-line react-hooks/exhaustive-deps
   begin.current = () => {
-    if (started.current) return;
+    // Not while the app is out of the front: the wish is kept, and coming
+    // back (below) starts it. A clip that finished loading just after you
+    // left must not start playing behind the phone's home screen.
+    if (started.current || away()) return;
     started.current = true;
     for (const other of livePlayers) if (other !== player) { try { other.pause(); } catch { /* released */ } }
     if (playFromHere.current) {
@@ -239,13 +261,17 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
     }
   }, [player, active, paused, trimStart]);
   useEffect(() => { livePlayers.add(player); return () => { livePlayers.delete(player); }; }, [player]);
-  // Back from the background (or a phone call): the toolkit paused every
-  // player on the way out and starts none of them again, so the clip that was
-  // playing would sit on a still frame with no sound. It carries on from
-  // where it stopped, and it alone makes sound.
+  // The app leaves the front (home, lock, the app switcher, Control Centre, a
+  // call): the clip stops right there, picture and sound, where it stood.
+  // Back in front, the clip that was playing carries on from that spot, and
+  // it alone makes sound; one that was still loading when you left starts
+  // now. A clip you had paused yourself stays paused, and one that is no
+  // longer the clip on screen (wantPlay is false for it) stays still.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state !== 'active' || !wantPlay.current || !started.current) return;
+      if (state === 'background' || state === 'inactive') { safely(() => player.pause()); return; }
+      if (state !== 'active' || !wantPlay.current) return;
+      if (!started.current) { if (readyRef.current) begin.current(); return; }
       for (const other of livePlayers) if (other !== player) { try { other.pause(); } catch { /* released */ } }
       safely(() => player.play());
     });

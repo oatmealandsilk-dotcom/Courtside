@@ -5,9 +5,11 @@ import * as haptics from '@/lib/haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { ClipVideo } from './ClipVideo';
 import { CourtSpinner } from './CourtSpinner';
+import { TOP_SHADE } from './ReelCaption';
 import { cropLayer } from '@/lib/crop';
 import type { MediaCrop } from '@/data/types';
 import { colors } from '@/theme';
@@ -28,7 +30,12 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   silent?: boolean;
   /** Nothing over the picture at all: no sound disc, no length line. */
   bare?: boolean;
-  /** Colour of the sound icon; with it the disc wears the page colour, like the wordmark pill. */
+  /**
+   * Colour of the sound icon; with it the disc wears the page colour, like the
+   * mark's tile. Only the feed passes it, and only the feed has the mark, the
+   * disc and the phone's clock over the top of the picture, so it also brings
+   * the light top shade that keeps them readable on a bright sky.
+   */
   discInk?: string;
   /** Keep the sound disc showing instead of fading it — the very first reel, so it is found. */
   discPinned?: boolean;
@@ -122,6 +129,8 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
           <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent || !active} paused={paused} fit={fit} trimStart={trimStart} trimEnd={trimEnd} speed={(speed ?? 1) * (fast ? 2 : 1)} volume={volume} onProgress={onProgress} onReady={setReady} onGone={gone} />
         </View>
       )}
+      {/* Over the picture, under the disc: the top shade darkens the video, never the disc. */}
+      {discInk && !bare ? <LinearGradient pointerEvents="none" colors={TOP_SHADE.colors} locations={TOP_SHADE.locations} style={[styles.topShade, { height: insets.top + TOP_SHADE.below }]} /> : null}
       {!ready && active ? <View pointerEvents="none" style={styles.centre}><CourtSpinner ink={discInk ?? 'white'} /></View> : null}
       {fast ? (
         <View pointerEvents="none" style={[styles.fastWrap, { top: insets.top + 24 }]}>
@@ -171,9 +180,12 @@ const styleDefinitions = StyleSheet.create({
   // behind the bottom bar. A quiet disc, not a button that shouts.
   soundHit: { position: 'absolute', right: 16, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   sound: { width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
-  // Level with the wordmark and in the same pill: the page colour, the theme's ink.
-  // The same rounded square as the mark's pill at the other corner.
-  soundThemed: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.bg, opacity: 0.76 },
+  // Level with the mark and in the same tile: the page colour, the theme's ink.
+  // The same rounded square as the mark's tile at the other corner, nearly
+  // solid so its icon stays crisp, with a hairline so it holds on a white sky.
+  // (Its fade-in sets its opacity, so none is set here.)
+  soundThemed: { width: 40, height: 40, borderRadius: 12, backgroundColor: `${colors.bg}E6`, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  topShade: { position: 'absolute', left: 0, right: 0, top: 0 },
   track: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
   bar: { height: 2, backgroundColor: 'rgba(255,255,255,0.9)' },
 });

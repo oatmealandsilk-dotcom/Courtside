@@ -5,20 +5,30 @@ import React, { useEffect, useRef, useState, memo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@/theme';
 import { onSpaceBar } from '@/features/feed/keyboard';
+import { forgetHeld, holdUntilBack, pageAway } from '@/features/feed/pauseWhenHidden';
 import { CourtSpinner } from './CourtSpinner';
+import { TOP_SHADE } from './ReelCaption';
 import { cropCss } from '@/lib/crop';
 import type { MediaCrop } from '@/data/types';
+import { useIsFocused } from '@/lib/useIsFocused';
 
 /** Swipe away and back within this long and the clip picks up where it was; longer and it starts over. */
 const RESUME_WINDOW_MS = 3000;
+/** The feed's top shade (see TOP_SHADE) as a browser gradient. */
+const TOP_SHADE_CSS = `linear-gradient(${TOP_SHADE.colors.map((c, i) => `${c} ${TOP_SHADE.locations[i] * 100}%`).join(', ')})`;
 
-function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop }: {
+function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop }: {
   uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void; fit?: 'cover' | 'contain'; trimStart?: number; trimEnd?: number; silent?: boolean;
   /** The author's rate (1 is normal) and level (0–1), honoured at playback. */
   speed?: number; volume?: number;
   /** Nothing over the picture at all: no sound disc, no length line. */
   bare?: boolean;
-  /** Colour of the sound icon; with it the disc wears the page colour, like the wordmark pill. */
+  /**
+   * Colour of the sound icon; with it the disc wears the page colour, like the
+   * mark's tile. Only the feed passes it, and only the feed has the mark and
+   * the disc over the top of the picture, so it also brings the light top
+   * shade that keeps them readable on a bright sky.
+   */
   discInk?: string;
   /** Keep the sound disc showing instead of fading it — the very first reel, so it is found. */
   discPinned?: boolean;
@@ -35,6 +45,11 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
 }) {
   // Hears a theme change, so its own colours never lag the page's.
   useTheme();
+  // Plays only on the screen you are looking at: a page pushed over this one,
+  // or a tab slid away, holds it until you come back (the phone's player does
+  // the same in ClipVideo).
+  const onTop = useIsFocused();
+  const active = wanted && onTop;
   const insets = useSafeAreaInsets();
   const video = useRef<HTMLVideoElement>(null);
   const bar = useRef<HTMLDivElement>(null);
@@ -84,10 +99,15 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
       left.current = null;
       if (!back || Date.now() - back.at > RESUME_WINDOW_MS) el.currentTime = trimStart;
       else el.currentTime = back.time;
+      // The page is away (another tab, or on a phone the app switcher and the
+      // like): it waits there and starts once the page is back.
+      if (pageAway()) holdUntilBack(el);
       // Browsers refuse a video that starts with sound until the page has been tapped: fall back to silent, and the disc says so.
-      el.play().catch(() => { el.muted = true; setMuted(true); el.play().catch(() => setPaused(true)); });
+      else el.play().catch(() => { el.muted = true; setMuted(true); el.play().catch(() => setPaused(true)); });
     } else {
       if (!active) left.current = { time: el.currentTime, at: Date.now() };
+      // Stopped by the app (no longer on screen, or covered): coming back to the page does not start it again.
+      forgetHeld(el);
       el.pause();
     }
     return () => el.pause();
@@ -128,6 +148,8 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
       <video ref={video} src={uri} poster={poster} loop muted={muted || silent} playsInline preload={active || preload ? 'auto' : 'none'} onError={fail} onLoadedData={() => setReady(true)} onCanPlay={() => setReady(true)} onWaiting={() => setReady(false)} onPlaying={() => setReady(true)} style={{ width: '100%', height: '100%', objectFit: letterbox ? 'contain' : fit, pointerEvents: 'none' }} />
       {failed ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><span style={{ padding: '8px 14px', borderRadius: 999, background: 'rgba(0,0,0,0.55)', color: 'white', font: '600 13px Inter_600SemiBold, system-ui, sans-serif' }}>This video didn’t load</span></div> : null}
     </div>
+    {/* Over the picture, under the disc: the top shade darkens the video, never the disc. */}
+    {discInk && !bare ? <div aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: 0, height: insets.top + TOP_SHADE.below, background: TOP_SHADE_CSS, pointerEvents: 'none' }} /> : null}
     <button aria-label={paused ? 'Play clip' : 'Pause clip'}
       onPointerDown={(e) => {
         const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -153,7 +175,15 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
     }} style={{ position: 'absolute', inset: 0, width: '100%', background: 'transparent', border: 0, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       {paused && ready ? <span style={{ width: 64, height: 64, borderRadius: 32, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', paddingLeft: 4 }}><Ionicons name="play" size={30} color="white" /></span> : null}
     </button>
-    {silent || bare ? null : <button aria-label={muted ? 'Unmute clip' : 'Mute clip'} onClick={() => { setMuted((v) => !v); if (!discPinned) showDisc(); }} style={{ position: 'absolute', right: 18, top: insets.top + (discInk ? 25 : 22), width: discInk ? 34 : 30, height: discInk ? 34 : 30, border: 0, borderRadius: 17, padding: 0, background: discInk ? colors.bg : 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: discOn ? (discInk ? 0.88 : 1) : 0, transform: discOn ? 'scale(1)' : 'scale(0.86)', transition: discOn ? 'opacity 160ms ease-out, transform 160ms ease-out' : 'opacity 140ms ease-in, transform 140ms ease-in' }}><Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={17} color={discInk ?? 'white'} /></button>}
+    {silent || bare ? null : <button aria-label={muted ? 'Unmute clip' : 'Mute clip'} onClick={() => { setMuted((v) => !v); if (!discPinned) showDisc(); }} style={{
+      position: 'absolute', right: 18, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxSizing: 'border-box',
+      // In the feed: the phone's tile, the same rounded square as the mark's at the other corner, centred level with it,
+      // nearly solid so its icon stays crisp, with a hairline so it holds on a white sky. Elsewhere: a small dark disc.
+      ...(discInk
+        ? { top: insets.top + 27, width: 40, height: 40, borderRadius: 12, background: `${colors.bg}E6`, border: `0.5px solid ${colors.border}` }
+        : { top: insets.top + 22, width: 30, height: 30, borderRadius: 15, background: 'rgba(0,0,0,0.55)', border: 0 }),
+      opacity: discOn ? 1 : 0, transform: discOn ? 'scale(1)' : 'scale(0.86)', transition: discOn ? 'opacity 160ms ease-out, transform 160ms ease-out' : 'opacity 140ms ease-in, transform 140ms ease-in',
+    }}><Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={discInk ? 19 : 17} color={discInk ?? 'white'} /></button>}
     {bare ? null : <div aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, background: 'rgba(255,255,255,0.25)' }}>
       <div ref={bar} style={{ height: 2, width: '0%', background: 'rgba(255,255,255,0.9)' }} />
     </div>}

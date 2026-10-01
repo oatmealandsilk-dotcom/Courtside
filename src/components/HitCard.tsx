@@ -7,7 +7,7 @@ import { Avatar } from '@/components/ui';
 import { CourtGlyph } from '@/components/map/MapChrome';
 import type { HitRequest } from '@/data/types';
 import { FORMAT_LABEL, hitWhen, levelText } from '@/features/hits/format';
-import { openInMaps } from '@/features/players/openInMaps';
+import { openCourt } from '@/features/players/courtLink';
 import { confirm } from '@/lib/confirm';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -52,7 +52,7 @@ export function HitCard({ hit }: { hit: HitRequest }) {
           <Ionicons name="paper-plane-outline" size={18} color={colors.textMuted} />
         </Pressable>
       </View>
-      <Pressable accessibilityRole="link" accessibilityLabel={`${hit.place.name}. Open in Maps`} disabled={hit.place.lat === undefined} onPress={(e) => { e.stopPropagation?.(); if (hit.place.lat !== undefined && hit.place.lng !== undefined) openInMaps({ name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={styles.place}>
+      <Pressable accessibilityRole="link" accessibilityLabel={`${hit.place.name}. See the court`} disabled={hit.place.lat === undefined} onPress={(e) => { e.stopPropagation?.(); if (hit.place.lat !== undefined && hit.place.lng !== undefined) openCourt({ name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={styles.place}>
         <CourtGlyph size={13} color={colors.brand} />
         <Text style={styles.placeText} numberOfLines={1}>{hit.place.name}</Text>
       </Pressable>

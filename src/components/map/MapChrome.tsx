@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Gesture, GestureDetector, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
@@ -20,7 +20,10 @@ import { formatMiles } from '@/features/players/geo';
 import { relativeTime } from '@/lib/format';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { LevelPill as Level } from '@/components/LevelPill';
-import type { Post, User } from '@/data/types';
+import type { User } from '@/data/types';
+import { countLabel } from '@/features/places/court';
+import { useCourtPosts } from '@/features/places/useCourtPosts';
+import { openCourt, openCourtReel } from '@/features/players/courtLink';
 import { Toggle } from '@/components/ui';
 import type { MapFilter, Placed } from '@/features/players/mapModel';
 import type { Weather } from '@/lib/weather';
@@ -549,29 +552,31 @@ export function CourtSheet({ court, miles, onClose, onDirections, onSend }: { co
   const styles = useThemedStyles(styleDefinitions);
   const pull = useDragToClose(onClose);
   const { courtNotes, currentUserId, actions } = useApp();
-  useEffect(() => { void actions.loadCourtNotes(court.id).catch(() => undefined); }, [court.id, actions]);
-  const notes = courtNotes[court.id] ?? [];
+  // Only a court OpenStreetMap knows can carry notes; a place sent without one
+  // (a hit's place, a court from a chat) has nothing to load and nothing to add to.
+  const noteable = /^(node|way|relation)\d{1,15}$/.test(court.id);
+  useEffect(() => { if (noteable) void actions.loadCourtNotes(court.id).catch(() => undefined); }, [court.id, noteable, actions]);
+  const notes = noteable ? courtNotes[court.id] ?? [] : [];
   const said = summarizeCourt(notes);
   const mine = notes.some((n) => n.userId === currentUserId);
   const facts = [court.count > 1 ? `${court.count} courts` : '1 court', court.surface ? court.surface.replace(/_/g, ' ') : null, court.lit ? 'lit at night' : null].filter(Boolean).join(' · ');
   // Clips and photos people tagged here: the best proof a court gets played on.
-  const [posted, setPosted] = useState<Post[]>([]);
-  useEffect(() => {
-    let on = true;
-    setPosted([]);
-    void actions.loadCourtPosts({ lat: court.lat, lng: court.lng }).then((list) => { if (on) setPosted(list.filter((p) => p.thumbnailUrl || p.imageUrl)); });
-    return () => { on = false; };
-  }, [court.lat, court.lng, actions]);
+  // The same posts, in the same order, as the court's own page and its reel.
+  const place = useMemo(() => ({ id: noteable ? court.id : undefined, name: court.name, lat: court.lat, lng: court.lng }), [noteable, court.id, court.name, court.lat, court.lng]);
+  const { posts: here, more } = useCourtPosts(place);
+  const strip = here.filter((p) => p.thumbnailUrl || p.imageUrl).slice(0, 12);
   return (
     <GestureDetector gesture={pull.gesture}>
     <Animated.View style={[styles.sheet, pull.style]}>
       <View style={styles.grabber} />
       <View style={styles.personRow}>
-        <View style={styles.courtDisc}><BrandWash /><Ionicons name="tennisball" size={22} color={colors.brandInk} /></View>
-        <View style={styles.personWords}>
-          <Text style={styles.personName} numberOfLines={1}>{court.name}</Text>
-          <Text style={styles.personMeta} numberOfLines={1}>{facts} · {formatMiles(miles)}</Text>
-        </View>
+        <Pressable accessibilityRole="link" accessibilityLabel={`Open ${court.name}'s page`} onPress={() => openCourt(place)} style={({ pressed }) => [styles.courtOpen, pressed && styles.postedPressed]}>
+          <View style={styles.courtDisc}><BrandWash /><Ionicons name="tennisball" size={22} color={colors.brandInk} /></View>
+          <View style={styles.personWords}>
+            <Text style={styles.personName} numberOfLines={1}>{court.name}</Text>
+            <Text style={styles.personMeta} numberOfLines={1}>{facts} · {formatMiles(miles)}</Text>
+          </View>
+        </Pressable>
         {/* Send sits beside Close, the way a maps app's place card puts Share there. */}
         {onSend ? (
           <Pressable accessibilityRole="button" accessibilityLabel={`Send ${court.name} to a chat`} hitSlop={8} onPress={onSend} style={styles.close}>
@@ -602,17 +607,22 @@ export function CourtSheet({ court, miles, onClose, onDirections, onSend }: { co
           {said.latest ? <Text style={styles.saysQuote} numberOfLines={2}>“{said.latest}”</Text> : null}
         </View>
       ) : null}
-      {posted.length ? (
+      {here.length ? (
         <View style={styles.posted}>
-          <Text style={styles.postedTitle}>Played here <Text style={styles.postedCount}>· {posted.length}</Text></Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.postedRow}>
-            {posted.map((p) => (
-              <Pressable key={p.id} accessibilityRole="button" accessibilityLabel={p.kind === 'clip' ? 'A clip from this court' : 'A post from this court'} onPress={() => router.push(`/post/${p.id}`)} style={({ pressed }) => [styles.postedThumb, pressed && styles.postedPressed]}>
+          <View style={styles.postedHead}>
+            <Text style={styles.postedTitle}>Played here <Text style={styles.postedCount}>· {countLabel(here, more)}</Text></Text>
+            <Pressable accessibilityRole="link" accessibilityLabel={`See all posts from ${court.name}`} hitSlop={8} onPress={() => openCourt(place)} style={({ pressed }) => pressed && styles.postedPressed}>
+              <Text style={styles.postedAll}>See all</Text>
+            </Pressable>
+          </View>
+          {strip.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.postedRow}>
+            {strip.map((p) => (
+              <Pressable key={p.id} accessibilityRole="button" accessibilityLabel={p.kind === 'clip' ? 'A clip from this court' : 'A post from this court'} onPress={() => openCourtReel(place, p.id)} style={({ pressed }) => [styles.postedThumb, pressed && styles.postedPressed]}>
                 <ExpoImage source={{ uri: p.thumbnailUrl ?? p.imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
                 {p.kind === 'clip' || p.videoUrl ? <View style={styles.postedPlay}><Ionicons name="play" size={11} color="#fff" /></View> : null}
               </Pressable>
             ))}
-          </ScrollView>
+          </ScrollView> : null}
         </View>
       ) : null}
       <View style={styles.personActions}>
@@ -621,11 +631,13 @@ export function CourtSheet({ court, miles, onClose, onDirections, onSend }: { co
           <Ionicons name="navigate-outline" size={16} color={colors.brandInk} />
           <Text style={styles.primaryText}>Directions</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={mine ? 'Update what you said about this court' : 'Add what you know about this court'} onPress={() => router.push({ pathname: '/court-report', params: { id: court.id, name: court.name } })} style={styles.secondary}>
-          <Text style={styles.secondaryText}>{mine ? 'Update yours' : 'Add what you know'}</Text>
-        </Pressable>
+        {noteable ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={mine ? 'Update what you said about this court' : 'Add what you know about this court'} onPress={() => router.push({ pathname: '/court-report', params: { id: court.id, name: court.name } })} style={styles.secondary}>
+            <Text style={styles.secondaryText}>{mine ? 'Update yours' : 'Add what you know'}</Text>
+          </Pressable>
+        ) : null}
       </View>
-      <Text style={styles.courtSource}>{said.players ? `From ${said.players} ${said.players === 1 ? 'player' : 'players'} and OpenStreetMap` : 'From OpenStreetMap. Know it? Add the lights, nets and how busy it gets.'}</Text>
+      {noteable ? <Text style={styles.courtSource}>{said.players ? `From ${said.players} ${said.players === 1 ? 'player' : 'players'} and OpenStreetMap` : 'From OpenStreetMap. Know it? Add the lights, nets and how busy it gets.'}</Text> : null}
     </Animated.View>
     </GestureDetector>
   );
@@ -780,7 +792,11 @@ const styleDefinitions = StyleSheet.create({
   saysPhoto: { width: 96, height: 72, borderRadius: 12, backgroundColor: colors.surfaceAlt },
   saysQuote: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   posted: { gap: spacing.sm, paddingBottom: spacing.md },
-  postedTitle: { ...typography.smallStrong, color: colors.text, paddingHorizontal: spacing.lg },
+  postedHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.lg },
+  postedTitle: { ...typography.smallStrong, color: colors.text, flexShrink: 1 },
+  postedAll: { ...typography.smallStrong, color: colors.brand },
+  // The court's disc and name open its page.
+  courtOpen: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   postedCount: { color: colors.textFaint },
   postedRow: { gap: spacing.sm, paddingHorizontal: spacing.lg },
   // Upright, like the clips themselves, and a touch taller than the players' court photos above.

@@ -1294,6 +1294,26 @@ export const remote = {
     if (error || !data) return [];
     return (data as PostRow[]).map(toPost);
   },
+  /**
+   * A court's own page: the posts tagged there, a page at a time, newest
+   * first. Whole posts (likes, saves, comments), so they join the app's and
+   * open in a reel. The box is just past 0.15 mi each way, on the court-spot
+   * index; the app then keeps only those within 0.15 mi. `oldest` is the
+   * next page's cursor, taken before removed posts are dropped.
+   */
+  async fetchCourtPage(at: { lat: number; lng: number }, before?: string): Promise<{ posts: Post[]; comments: Comment[]; more: boolean; oldest: string | null } | null> {
+    const dLat = 0.0022; // ≈ 245 m, just past 0.15 mi
+    const dLng = dLat / Math.max(0.2, Math.cos((at.lat * Math.PI) / 180));
+    let q = need().from('posts').select(POST_SELECT)
+      .gte('court_lat', at.lat - dLat).lte('court_lat', at.lat + dLat)
+      .gte('court_lng', at.lng - dLng).lte('court_lng', at.lng + dLng)
+      .eq('archived', false);
+    if (before) q = q.lt('created_at', before);
+    const { data, error } = await q.order('created_at', { ascending: false }).limit(POST_PAGE);
+    if (error) { fail('court posts')(error); return null; }
+    const rows = (data ?? []) as FullPostRow[];
+    return { ...toPosts(rows), more: rows.length === POST_PAGE, oldest: rows.length ? rows[rows.length - 1].created_at : null };
+  },
   /** One post by id, for a page opened from a link before the feed has it. */
   async fetchPost(id: ID): Promise<{ posts: Post[]; comments: Comment[] } | null> {
     if (!UUID_RE.test(id)) return null;
@@ -1401,6 +1421,25 @@ export const remote = {
     if (error) { fail('more posts')(error); return null; }
     const rows = (data ?? []) as FullPostRow[];
     return { ...toPosts(rows), more: rows.length === POST_PAGE };
+  },
+
+  /**
+   * Search, for posts the app has not loaded yet: the 30 newest whose words
+   * or place contain what was typed, or that carry it as a tag. Characters
+   * the query language reserves (and the wildcards) become "any one
+   * character", so "4.0" or "Pullen, Park" still find themselves.
+   */
+  async searchPosts(term: string): Promise<{ posts: Post[]; comments: Comment[] } | null> {
+    const words = term.trim().replace(/^#/, '');
+    const like = words.replace(/[%_*,.:()"'\\]/g, '_');
+    if (like.replace(/_/g, '').length < 2) return null;
+    const tag = words.toLowerCase().replace(/[^\p{L}\p{N}_-]/gu, '');
+    const either = [`body.ilike.%${like}%`, `location.ilike.%${like}%`, ...(tag ? [`tags.cs.{${tag}}`] : [])].join(',');
+    const { data, error } = await need().from('posts').select(POST_SELECT)
+      .eq('archived', false).or(either)
+      .order('created_at', { ascending: false }).limit(30);
+    if (error) { fail('search posts')(error); return null; }
+    return toPosts((data ?? []) as FullPostRow[]);
   },
 
   /**

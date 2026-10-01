@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { openCourtOnMap } from '@/features/players/courtLink';
+import { openCourt } from '@/features/players/courtLink';
 import { TaggedLine } from '@/components/TaggedLine';
 import { Wash } from '@/components/Wash';
 import React, { useEffect, useRef, useState, memo } from 'react';
@@ -193,7 +193,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
               <LevelPill profile={author.profile} small />
               {isNewHere(post) ? <NewHereTag /> : null}
             </View>
-            <Text style={styles.sub} numberOfLines={1}>@{author.handle} · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}{post.court ? <> · <Text accessibilityRole="link" accessibilityLabel={`${post.court.name}, open on the map`} onPress={(e) => { e?.stopPropagation?.(); openCourtOnMap(post.court!); }} style={styles.courtLink}>{post.court.name}</Text></> : post.location ? ` · ${post.location}` : ''}</Text>
+            <Text style={styles.sub} numberOfLines={1}>@{author.handle} · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}{post.court ? <> · <Text accessibilityRole="link" accessibilityLabel={`${post.court.name}, see posts from here`} onPress={(e) => { e?.stopPropagation?.(); openCourt(post.court!); }} style={styles.courtLink}>{post.court.name}</Text></> : post.location ? ` · ${post.location}` : ''}</Text>
             <TaggedLine post={post} />
           </View>
         </Pressable>

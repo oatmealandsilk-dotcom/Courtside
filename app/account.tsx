@@ -17,6 +17,9 @@ import { useApp } from '@/store/AppContext';
 import * as toast from '@/lib/toast';
 import { confirm } from '@/lib/confirm';
 import { useAiCoachOn } from '@/features/aiCoach/switch';
+import { useGateSpace } from '@/lib/useGateSpace';
+import { KeyboardScrollContext, useKeyboardReveal } from '@/lib/keyboardScroll';
+import { StatusShade } from '@/components/StatusShade';
 import { colors, radius, spacing, typography, lift } from '@/theme';
 
 type Sheet = 'password' | 'email' | 'delete' | null;
@@ -226,6 +229,10 @@ function PasswordFields({ password, again, onPassword, onAgain, onSubmit }: { pa
  */
 function ResetPage({ email, onSave }: { email?: string; onSave: (password: string) => Promise<void> }) {
   const styles = useThemedStyles(styleDefinitions);
+  // No header bar here either: the same clearance from the status bar and home bar as sign-in.
+  const space = useGateSpace();
+  // The phone scrolls the box you tapped above the keyboard, as every Screen does.
+  const keyboard = useKeyboardReveal();
   const [password, setPassword] = useState('');
   const [again, setAgain] = useState('');
   const [busy, setBusy] = useState(false);
@@ -241,9 +248,20 @@ function ResetPage({ email, onSave }: { email?: string; onSave: (password: strin
     finally { setBusy(false); }
   };
   return (
+    <KeyboardScrollContext.Provider value={keyboard.reveal}>
     <View style={styles.page}>
       <Wash height={420} strength={0.85} />
-      <ScrollView contentContainerStyle={styles.pageScroll} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        ref={keyboard.scroller}
+        onScroll={keyboard.onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={[styles.pageScroll, { paddingTop: space.top, paddingBottom: space.bottom }]}
+        keyboardShouldPersistTaps="handled"
+        // The keyboard adds room below the fields, so the box you tapped and the
+        // Update button can be scrolled clear of it; a drag down puts it away.
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+        keyboardDismissMode="interactive"
+      >
         <Animated.View key={done ? 'done' : 'form'} entering={FadeIn.duration(320)} style={styles.column}>
           {done ? (
             <>
@@ -275,7 +293,9 @@ function ResetPage({ email, onSave }: { email?: string; onSave: (password: strin
           )}
         </Animated.View>
       </ScrollView>
+      <StatusShade wash={{ height: 420, strength: 0.85 }} />
     </View>
+    </KeyboardScrollContext.Provider>
   );
 }
 
@@ -305,7 +325,8 @@ const styleDefinitions = StyleSheet.create({
   show: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 2 },
   showText: { ...typography.smallStrong, color: colors.textMuted },
   page: { flex: 1, backgroundColor: colors.bg },
-  pageScroll: { flexGrow: 1, paddingHorizontal: spacing.xl, paddingVertical: spacing.xxl, justifyContent: 'center' },
+  // Top and bottom padding come from useGateSpace, clear of the status bar and the home bar.
+  pageScroll: { flexGrow: 1, paddingHorizontal: spacing.xl, justifyContent: 'center' },
   column: { width: '100%', maxWidth: 420, alignSelf: 'center', gap: spacing.xxl },
   pageTitle: { ...typography.display, fontSize: 32, letterSpacing: -1.1, color: colors.text },
   pageLine: { ...typography.body, fontSize: 16, lineHeight: 23, color: colors.textMuted },

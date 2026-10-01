@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { router } from 'expo-router';
 
@@ -15,6 +16,7 @@ import type { Post, User } from '@/data/types';
 import { openCourtOnMap } from '@/features/players/courtLink';
 import { compactNumber, relativeTime, timeLeft } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
+import { useTourBusy } from '@/features/tour/tourStore';
 import { font } from '@/theme';
 
 /*
@@ -27,22 +29,30 @@ import { font } from '@/theme';
 
 /** The caption's line height. Two of these is a folded caption. */
 const LINE = 19;
-/** The dark edge every word 14pt and up wears: tight, so white still reads on a white wall without looking smudged. */
-const EDGE = { textShadowColor: 'rgba(0, 0, 0, 0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 1.5 } as const;
-/** Small words (13pt and under) and small icons get a slightly darker edge. */
-export const EDGE_SMALL = { textShadowColor: 'rgba(0, 0, 0, 0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 1.5 } as const;
-/** The rail's icons: the same edge plus a short halo, so a thin outline holds on a bright court. */
-export const GLYPH_EDGE = { textShadowColor: 'rgba(0, 0, 0, 0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2.5 } as const;
 /**
- * The rail's counts sit high, where the shade has barely begun, so they get
- * the darkest edge of all: a "3" under the heart still reads on a white wall
- * or a bright sky without darkening the court around it.
+ * The dark edge every word 14pt and up wears: dark and tight, so white still
+ * reads on a white wall or a bright sky without looking smudged. (Darker
+ * rather than wider: a wider blur spreads thin and draws no edge at all.)
  */
-export const COUNT_EDGE = { textShadowColor: 'rgba(0, 0, 0, 0.7)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 } as const;
+const EDGE = { textShadowColor: 'rgba(0, 0, 0, 0.62)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 1.25 } as const;
+/** Small words (13pt and under) and small icons get a slightly darker edge. */
+export const EDGE_SMALL = { textShadowColor: 'rgba(0, 0, 0, 0.7)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 1.25 } as const;
+/** The rail's icons: a firm edge with a short halo, so a thin outline holds on a bright court. */
+export const GLYPH_EDGE = { textShadowColor: 'rgba(0, 0, 0, 0.75)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 } as const;
+/**
+ * The rail's counts sit high, where the shade is lightest, so they get the
+ * darkest edge of all: a "3" under the heart still reads on a white wall or a
+ * bright sky without darkening the court around it.
+ */
+export const COUNT_EDGE = { textShadowColor: 'rgba(0, 0, 0, 0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 1.5 } as const;
 /** How far very large accessibility text may grow these words: enough to help, never so much they climb into the picture. */
 export const MAX_GROW = 1.2;
-/** The small line's ink: the time, the place, who with. One strength for its words and its icons alike. */
-const META_INK = 'rgba(255, 255, 255, 0.86)';
+/**
+ * The small line's ink: the time, the place, who with. One strength for its
+ * words and its icons alike, and nearly full white: any fainter and a bright
+ * frame takes back what the shade under it gives.
+ */
+const META_INK = 'rgba(255, 255, 255, 0.94)';
 /**
  * The place and "with" are 16pt tall, so their tap area reaches past them:
  * further down, where only the tab bar's 16pt of air is, and a little less
@@ -173,9 +183,9 @@ export function FoldedWords({ text, open: openFromPage, onOpenChange }: { text: 
   const shown = useMemo(() => {
     if (!folds) return text;
     const at = settled ? cut!.lo : Math.min(text.length, Math.round(text.length * 0.55));
-    // End on a whole word when one is close, and never on a comma or a dash right before the "…".
+    // End on a whole word when one is close, and never on a comma, a dash or a full stop right before the "…" ("shoulder.…" read as four dots).
     const space = text.lastIndexOf(' ', at);
-    return text.slice(0, space > at - 14 && space > 0 ? space : at).trimEnd().replace(/[\s,;:–—-]+$/u, '');
+    return text.slice(0, space > at - 14 && space > 0 ? space : at).trimEnd().replace(/[\s,;:.–—-]+$/u, '');
   }, [folds, settled, cut, text]);
   const more = <Text style={styles.more} onPress={() => setOpen(true)}>{MORE_TAIL}</Text>;
   return (
@@ -237,13 +247,29 @@ export function InstantMeta({ expiresAt }: { expiresAt: string }) {
 /**
  * How dark the shade behind the words is, as [points above the words' bottom
  * line, darkness]. Nothing up in the picture, easing in so there is no band
- * where it starts, darkest where the caption and the small line sit (about
- * 0.33 behind the name, 0.4 behind the caption, 0.46 behind the time). It is
- * measured from the words, not the screen, so it sits right on every phone.
+ * where it starts (its top 80pt stay at 0.12 or less), darkest where the words
+ * sit: about 0.40 behind the name, 0.46 behind the caption, 0.52 behind the
+ * time. That holds white words above 3:1 on a white wall or a bright sky. It
+ * starts high enough to reach the bottom of the rail too. It is measured from
+ * the words, not the screen, so it sits right on every phone.
  */
-const SHADE: readonly (readonly [number, number])[] = [[260, 0], [210, 0.03], [160, 0.1], [120, 0.21], [90, 0.3], [60, 0.37], [30, 0.43], [0, 0.47]];
+const SHADE: readonly (readonly [number, number])[] = [[340, 0], [300, 0.05], [260, 0.12], [210, 0.21], [160, 0.3], [120, 0.37], [90, 0.42], [60, 0.47], [30, 0.51], [0, 0.54]];
 /** Below the words, down to the screen's edge, behind the tab bar. */
-const SHADE_FLOOR = 0.5;
+const SHADE_FLOOR = 0.56;
+
+/**
+ * A light shade down from the top edge of a clip in the feed, under the mark,
+ * the sound disc, the back arrow and the phone's clock, so they hold on a
+ * bright sky or a white ceiling (Instagram's is 0.35 at the edge). It reaches
+ * `below` points under the safe area and is gone well before the picture's
+ * middle. The player draws it, between the video and the sound disc, so it
+ * darkens the picture and never the disc.
+ */
+export const TOP_SHADE = {
+  colors: ['rgba(0, 0, 0, 0.32)', 'rgba(0, 0, 0, 0.21)', 'rgba(0, 0, 0, 0.1)', 'rgba(0, 0, 0, 0.03)', 'rgba(0, 0, 0, 0)'],
+  locations: [0, 0.3, 0.6, 0.85, 1],
+  below: 150,
+} as const;
 
 /**
  * The shade behind the words, pure black (a tint reads muddy over a blue
@@ -258,6 +284,36 @@ export function ReelScrim({ bottom }: { bottom: number }) {
     return { height, colors, locations };
   }, [bottom]);
   return <LinearGradient pointerEvents="none" colors={shade.colors} locations={shade.locations} style={[styles.scrim, { height: shade.height }]} />;
+}
+
+/**
+ * A soft dark glow behind the top of the rail, as [how far out from its
+ * centre, darkness]. The shade behind the words is gone by the height of the
+ * heart and the bubble, so on a bright court they had nothing behind them.
+ */
+const RAIL_SHADE = [[0, 0.3], [0.35, 0.22], [0.65, 0.09], [1, 0]] as const;
+
+/**
+ * The rail's own shade: half an oval, 112pt wide and 340pt tall, centred on
+ * the screen's right edge about 40pt below the heart, darkest there and gone
+ * by its rim, so it never reads as a band or a box. It goes first inside the
+ * rail, so it slides, tucks and hides with the buttons. (The oval is a circle
+ * in a stretched 100 x 200 box: browsers ignore an oval gradient's two radii.)
+ */
+export function RailShade() {
+  const id = `rail${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+  return (
+    <View pointerEvents="none" style={styles.railShade}>
+      <Svg width="100%" height="100%" viewBox="0 0 100 200" preserveAspectRatio="none">
+        <Defs>
+          <RadialGradient id={id} cx="100" cy="100" r="100" gradientUnits="userSpaceOnUse">
+            {RAIL_SHADE.map(([at, alpha]) => <Stop key={at} offset={at} stopColor="black" stopOpacity={alpha} />)}
+          </RadialGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100" height="200" fill={`url(#${id})`} />
+      </Svg>
+    </View>
+  );
 }
 
 /**
@@ -288,6 +344,8 @@ let hintShown = false;
  */
 export function SwipeHint() {
   const [shown, setShown] = useState(false);
+  // The first-run tour teaches the same swipes; the hint keeps out of its way, and out from under it.
+  const touring = useTourBusy();
   useEffect(() => {
     let on = true;
     let t: ReturnType<typeof setTimeout> | undefined;
@@ -307,7 +365,7 @@ export function SwipeHint() {
     });
     return () => { on = false; if (t) clearTimeout(t); };
   }, []);
-  if (!shown) return null;
+  if (!shown || touring) return null;
   return <Animated.Text exiting={FadeOut.duration(400)} style={styles.hint} maxFontSizeMultiplier={MAX_GROW}>↑ Next moment   ·   ← Community</Animated.Text>;
 }
 
@@ -335,5 +393,7 @@ const styles = StyleSheet.create({
   // Out of the words' layout, 10 above the name, in the words' column (16 in from the left, clear of the rail).
   hint: { position: 'absolute', left: 16, right: 72, bottom: '100%', marginBottom: 10, color: 'rgba(255,255,255,0.8)', fontSize: 12, lineHeight: 15, ...font('500'), letterSpacing: 0.1, ...EDGE_SMALL },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+  // From the rail's top, up past the heart and down past the bookmark, to the screen's right edge (the rail stands 12 in).
+  railShade: { position: 'absolute', top: -115, right: -12, width: 112, height: 340 },
   dim: { backgroundColor: 'rgba(0, 0, 0, 0.5)' },
 });

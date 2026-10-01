@@ -15,7 +15,7 @@ import { computeStats, localDay, streakAtRisk } from '@/features/practice/stats'
 import { planStreakReminder } from '@/features/practice/reminder';
 import { TERMS_VERSION } from '@/lib/legal';
 
-import { fetchBootstrap, signIn as apiSignIn, type Bootstrap } from '@/data/api';
+import { fetchBootstrap, searchPosts as apiSearchPosts, signIn as apiSignIn, type Bootstrap } from '@/data/api';
 import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ReportedChat, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type RemoteData } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
@@ -394,7 +394,8 @@ interface AppActions {
   /** Change your own thread's question and details. */
   editQuestion: (questionId: ID, patch: { title: string; body: string }) => void;
   /** Pull-to-refresh: fetches everything again from the server. */
-  refresh: () => Promise<void>;
+  /** Fetches what is new. False when it could not (no connection, a failed load), so a page does not say "Updated". */
+  refresh: () => Promise<boolean>;
   deletePost: (postId: ID) => void;
   /** A comment on a post; `photo` is a picture picked on this device, shrunk and uploaded here. */
   addComment: (postId: ID, body: string, photo?: string) => void;
@@ -490,6 +491,8 @@ interface AppActions {
   loadMorePosts: () => Promise<Post[]>;
   /** One player's own posts, loaded when their profile is opened. */
   loadPostsOf: (userId: ID) => Promise<void>;
+  /** Search reaching past what is loaded: posts matching the words, fetched and kept. Each term is asked once per session. */
+  searchPosts: (term: string) => Promise<void>;
   /** Brings one post into memory (a page opened from a link). Resolves true when it exists. */
   loadPost: (postId: ID) => Promise<boolean>;
   /** Everything bookmarked, loaded when Saved is opened. */
@@ -506,6 +509,8 @@ interface AppActions {
   loadPostThumbs: (ids: ID[]) => Promise<Record<ID, { thumb?: string; kind: PostKind }>>;
   /** Posts tagged at a court (within a few hundred feet), newest first, for its card on the map. */
   loadCourtPosts: (at: { lat: number; lng: number }) => Promise<Post[]>;
+  /** A court's page: its posts into the app a page at a time ('first' once per 5 minutes, 'fresh' on a pull, 'older' for the next page). Throws when it fails. */
+  loadCourtPage: (at: { lat: number; lng: number }, how?: 'first' | 'older' | 'fresh') => Promise<{ more: boolean }>;
   /** The beta invite email: counts, or send it to everyone on the waitlist still waiting. Admins only. */
   betaInvites: (send: boolean) => Promise<BetaInviteStatus | null>;
   /** Everyone's first post from the last month, for the founder to welcome. */
@@ -1261,7 +1266,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Now the profile is known, the saved login gets its name and picture.
       const who = data.users.find((u) => u.id === me);
       if (who) rememberAccount({ id: me, handle: who.handle, name: who.name, avatarUrl: who.avatarUrl }).then((savedAccounts) => setState((prev) => ({ ...prev, savedAccounts })));
+      return true;
     } catch (err) {
+      // A later load that fails (a pull-to-refresh on a weak signal) leaves a
+      // working session exactly as it was: what is on screen stays, the live
+      // updates keep running, and the next pull simply tries again. Marking
+      // it "not loaded" here used to turn every later pull into a no-op.
+      if (stateRef.current.remoteLoaded && stateRef.current.currentUserId === me) return false;
       // The account is signed in even if its data did not come down — usually
       // a token that expired while the tab slept and had not refreshed yet.
       // Stand in for the profile so the screens render, and the auth
@@ -1278,6 +1289,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
       // Opened on the saved copy with no connection: say so, rather than an error page.
       if (stateRef.current.snapshotShown) showToast({ title: 'Can’t refresh right now', body: 'Showing what you saw last. It updates once the connection is back.', icon: 'cloud-offline-outline' });
+      return false;
     }
   }, []);
 
@@ -1813,13 +1825,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       );
       const tellAll = (state: AppState) => notifyMentions(tell(state), post.body, me, post.id, 'post');
       if (uploading) {
-        // The strip across the top counts the upload up. The post is not in
-        // the feed until it has actually landed; then it appears at the top.
-        startUpload(post.id, label, post.thumbnailUrl ?? post.imageUrl);
+        // The post is not in the store until it has actually landed (a like or
+        // a comment on it before then would have nothing to attach to). The
+        // feed shows it at the top straight away all the same, counting the
+        // upload up on its own page, from the preview handed over here.
+        startUpload(post.id, label, post.thumbnailUrl ?? post.imageUrl, { post });
       } else {
-        if (post.videoUrl || post.imageUrl) simulateUpload(post.id, label, post.thumbnailUrl ?? post.imageUrl);
+        if (post.videoUrl || post.imageUrl) simulateUpload(post.id, label, post.thumbnailUrl ?? post.imageUrl, { post });
         setState((prev) => tellAll(celebratePosted({ ...prev, posts: [post, ...prev.posts] }, { ...celebration, quiet: !!(post.videoUrl || post.imageUrl) })));
       }
+      // Whatever you post is at the very top of Home the moment you post it, and the feed is taken there.
+      requestFeedRefresh(`p:${post.id}`);
       if (live(me)) {
         (async () => {
           try {
@@ -1838,9 +1854,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             const hosted = { ...post, imageUrl, videoUrl, thumbnailUrl };
             await remote.insertPost(hosted);
             if (uploading) {
+              // Its page is already at the top of the feed: the real post takes
+              // its place there without the feed being dealt again.
               finishUpload(post.id);
               setState((prev) => tellAll(celebratePosted({ ...prev, posts: [hosted, ...prev.posts.filter((p) => p.id !== post.id)] }, { ...celebration, quiet: true })));
-              requestFeedRefresh();
             } else {
               setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === post.id ? { ...p, imageUrl, videoUrl, thumbnailUrl } : p)) }));
             }
@@ -1961,11 +1978,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (live(me, questionId)) void remote.upsertQuestion({ ...question, acceptedAnswerId: next });
   }, [requireUser]);
 
+  // A caller that reads the store the moment an action resolves (the feed
+  // deals its pages straight after a pull) waits here until the new data has
+  // actually been drawn, not just handed to React. Capped, so it never hangs.
+  const drawWaiters = useRef<{ ready: () => boolean; resolve: () => void }[]>([]);
+  useEffect(() => {
+    if (!drawWaiters.current.length) return;
+    drawWaiters.current = drawWaiters.current.filter((w) => { if (!w.ready()) return true; w.resolve(); return false; });
+  }, [state]);
+  const drawn = useCallback((ready: () => boolean) => new Promise<void>((resolve) => {
+    if (ready()) { resolve(); return; }
+    const timer = setTimeout(() => { drawWaiters.current = drawWaiters.current.filter((w) => w !== waiter); resolve(); }, 2000);
+    const waiter = { ready, resolve: () => { clearTimeout(timer); resolve(); } };
+    drawWaiters.current.push(waiter);
+  }), []);
+
   const refresh = useCallback(async () => {
     const me = stateRef.current.currentUserId;
-    if (me && isSupabaseConfigured && stateRef.current.remoteLoaded) await loadRemote(me);
-    else await new Promise((resolve) => setTimeout(resolve, 500));
-  }, [loadRemote]);
+    // Any signed-in account fetches, one whose last load failed included: a
+    // pull is exactly how someone asks it to try again.
+    if (!me || !live(me)) { await new Promise((resolve) => setTimeout(resolve, 500)); return true; }
+    const before = stateRef.current.feed;
+    if (await loadRemote(me)) { await drawn(() => stateRef.current.feed !== before); return true; }
+    // An open on the saved copy that could not refresh has already said so.
+    if (stateRef.current.remoteLoaded || !stateRef.current.snapshotShown) showToast({ title: 'Can’t refresh right now', body: 'Check your connection, then pull down to try again.', icon: 'cloud-offline-outline' });
+    return false;
+  }, [loadRemote, drawn]);
 
   const addStory = useCallback(
     (input: NewStoryInput): ID => {
@@ -1989,12 +2027,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       };
       if (!live(me)) {
         setState((prev) => celebratePosted({ ...prev, stories: [story, ...prev.stories] }, celebration));
+        requestFeedRefresh(`h:${story.id}`);
         return story.id;
       }
-      // The hit is not in the feed until it has landed: the strip across the
-      // top counts the upload up, and a failure says so instead of leaving a
-      // hit only this phone can see.
-      startUpload(story.id, 'Posting instant', story.thumbnailUrl ?? story.imageUrl);
+      // The hit is not in the store until it has landed, and a failure says
+      // so instead of leaving a hit only this phone can see. The feed shows
+      // it at the top straight away all the same, counting the upload up.
+      startUpload(story.id, 'Posting instant', story.thumbnailUrl ?? story.imageUrl, { story });
+      requestFeedRefresh(`h:${story.id}`);
       (async () => {
         try {
           const local = [isLocalMedia(story.imageUrl), isLocalMedia(story.videoUrl), isLocalMedia(story.thumbnailUrl) && story.thumbnailUrl !== story.imageUrl];
@@ -2012,7 +2052,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
           await remote.insertStory(hosted);
           finishUpload(story.id);
           setState((prev) => celebratePosted({ ...prev, stories: [hosted, ...prev.stories] }, { ...celebration, quiet: true }));
-          requestFeedRefresh();
         } catch (error) {
           console.warn('[remote] hit did not land', error);
           finishUpload(story.id, false, error instanceof Error ? error.message : 'Something went wrong.');
@@ -2576,6 +2615,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // One page of posts at a time, and one ask per profile per session.
   const loadingMore = useRef(false);
   const loadedProfiles = useRef(new Set<ID>());
+  const searchedTerms = useRef(new Set<string>());
   const loadedSaved = useRef(false);
   // Reports, for admins. The database decides who may read and act on them.
   const loadReports = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchReports() : []), []);
@@ -2588,6 +2628,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const fetched = live(stateRef.current.currentUserId) ? await remote.fetchCourtPosts(at).catch(() => []) : [];
     const seen = new Set<ID>();
     return [...local, ...fetched].filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true))).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 12);
+  }, []);
+  // A court's page: where its paging got to, per spot, and the asks under way,
+  // so the map's card and the page asking at once share one request.
+  const courtPages = useRef(new Map<string, { cursor: string | null; more: boolean; at: number }>());
+  const courtAsks = useRef(new Map<string, Promise<{ more: boolean }>>());
+  const loadCourtPage = useCallback(async (at: { lat: number; lng: number }, how: 'first' | 'older' | 'fresh' = 'first') => {
+    // The demo has no database: the page shows the posts already here.
+    const me = stateRef.current.currentUserId;
+    if (!live(me)) return { more: false };
+    // Per account, so a switch of account never reuses (or receives) another's answer.
+    const key = `${me}|${at.lat.toFixed(4)},${at.lng.toFixed(4)}`;
+    const asking = courtAsks.current.get(`${key}:${how}`);
+    if (asking) return asking;
+    const ask = (async () => {
+      const page = courtPages.current.get(key);
+      if (how === 'first' && page && Date.now() - page.at < 5 * 60_000) return { more: page.more };
+      if (how === 'older' && (!page?.more || !page.cursor)) return { more: page?.more ?? false };
+      const got = await remote.fetchCourtPage(at, how === 'older' ? page?.cursor ?? undefined : undefined);
+      if (!got) throw new Error('court posts');
+      if (stateRef.current.currentUserId !== me) return { more: false };
+      setState((prev) => addPosts(prev, got));
+      const now = courtPages.current.get(key);
+      // A first page or a pull leaves a deeper "Show older" place where it was.
+      const deeper = how !== 'older' && !!now?.cursor && !!got.oldest && now.cursor < got.oldest;
+      const next = how === 'older'
+        ? { cursor: got.oldest ?? now?.cursor ?? null, more: got.more, at: now?.at ?? Date.now() }
+        : deeper && now ? { ...now, at: Date.now() } : { cursor: got.oldest, more: got.more, at: Date.now() };
+      courtPages.current.set(key, next);
+      return { more: next.more };
+    })().finally(() => courtAsks.current.delete(`${key}:${how}`));
+    courtAsks.current.set(`${key}:${how}`, ask);
+    return ask;
   }, []);
   const betaInvites = useCallback(async (send: boolean) => (live(stateRef.current.currentUserId) ? remote.betaInvites(send) : null), []);
   const loadFirstDayStats = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchFirstDayStats() : null), []);
@@ -2693,6 +2765,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     loadedProfiles.current.add(userId);
     const got = await remote.fetchUserPosts(userId);
     if (!got) return;
+    setState((prev) => addPosts(prev, got));
+  }, []);
+  /**
+   * Search looking past the posts the app happens to hold (the newest page,
+   * plus feed pages scrolled and profiles opened): the matching posts are
+   * fetched and kept like any others, so the search page finds them in place.
+   */
+  const searchPosts = useCallback(async (term: string) => {
+    const key = term.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (key.length < 2 || searchedTerms.current.has(key)) return;
+    searchedTerms.current.add(key);
+    const got = live(stateRef.current.currentUserId) ? await remote.searchPosts(key).catch(() => null) : await apiSearchPosts(key);
+    // A failed ask may be asked again on the next keystroke.
+    if (!got) { searchedTerms.current.delete(key); return; }
     setState((prev) => addPosts(prev, got));
   }, []);
   /** Opening Saved: everything bookmarked, however far back, not only what the feed holds. */
@@ -4190,6 +4276,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadThread,
       loadMorePosts,
       loadPostsOf,
+      searchPosts,
       loadPost,
       loadSavedPosts,
       isChatBlocked,
@@ -4197,6 +4284,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadReports,
       loadWaitlist,
       loadCourtPosts,
+      loadCourtPage,
       loadPostThumbs,
       betaInvites,
       loadFirstPosts,
@@ -4335,6 +4423,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadThread,
       loadMorePosts,
       loadPostsOf,
+      searchPosts,
       loadPost,
       loadSavedPosts,
       isChatBlocked,
@@ -4342,6 +4431,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadReports,
       loadWaitlist,
       loadCourtPosts,
+      loadCourtPage,
       loadPostThumbs,
       betaInvites,
       loadFirstPosts,

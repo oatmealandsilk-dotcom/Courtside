@@ -3,7 +3,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LocationField } from '@/components/LocationField';
 import { PermissionRows } from '@/components/PermissionRows';
@@ -11,6 +10,7 @@ import { Button, Collapse, Field, SegmentedControl, Toggle } from '@/components/
 import { writeSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
+import { useGateSpace } from '@/lib/useGateSpace';
 import type {
   Backhand,
   FitnessLevel,
@@ -132,7 +132,8 @@ const round = (n: number, decimals: number) => Number(n.toFixed(decimals));
 export default function Onboarding() {
   const styles = useThemedStyles(styleDefinitions);
   const { currentUser, currentUserId, posts, questions, answers, actions } = useApp();
-  const insets = useSafeAreaInsets();
+  // The progress bar sits a calm step below the status bar; the buttons clear the home bar.
+  const space = useGateSpace();
   // The profile's "finish setting up" card lands straight on the step it names.
   const params = useLocalSearchParams<{ step?: string; from?: string }>();
   const editing = params.from === 'edit';
@@ -275,7 +276,7 @@ export default function Onboarding() {
   const canContinue = step === 0 ? name.trim().length > 0 && ratingValid : true;
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top + spacing.sm }]}>
+    <View style={[styles.root, { paddingTop: space.header }]}>
       <View style={styles.head}>
         <View style={styles.track}>
           <Animated.View style={[styles.fill, { width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />
@@ -456,7 +457,7 @@ export default function Onboarding() {
         </Animated.View>
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
+      <View style={[styles.footer, { paddingBottom: space.footer }]}>
         {position > 0 ? <Button label="Back" variant="ghost" onPress={back} />
           : editing ? <Button label="Cancel" variant="ghost" onPress={() => goBack('/profile-details')} /> : <View />}
         <View style={styles.footerRight}>

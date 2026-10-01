@@ -3,7 +3,6 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, KeyboardAvoid
 import { router } from 'expo-router';
 import Animated, { Easing, FadeIn, FadeInDown } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useLeave } from '@/components/LeaveCurtain';
 import { LevelPill } from '@/components/LevelPill';
@@ -14,6 +13,8 @@ import { levelBadge } from '@/lib/badges';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
+import { useGateSpace } from '@/lib/useGateSpace';
+import { StatusShade } from '@/components/StatusShade';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography, lift } from '@/theme';
 
@@ -27,7 +28,8 @@ const enter = (i: number) => FadeInDown.delay(80 + i * 80).duration(420).easing(
  */
 export default function FirstMove() {
   const styles = useThemedStyles(styleDefinitions);
-  const insets = useSafeAreaInsets();
+  // Clear of the status bar and the home bar, the same as every page before the app.
+  const space = useGateSpace();
   const { currentUser, currentUserId, questions, users, actions } = useApp();
   const { leave, curtain } = useLeave();
 
@@ -71,7 +73,7 @@ export default function FirstMove() {
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Wash height={420} />
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.scroll, { paddingTop: insets.top + spacing.xxl, paddingBottom: insets.bottom + spacing.xl }]}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.scroll, { paddingTop: space.top, paddingBottom: space.bottom }]}>
         <Animated.View entering={enter(0)} style={styles.head}>
           <Text style={styles.title}>You're in{currentUser?.name ? `, ${currentUser.name.split(' ')[0]}` : ''}.</Text>
           <Text style={styles.lead}>Start with one thing. It's how players near you find you.</Text>
@@ -153,6 +155,8 @@ export default function FirstMove() {
           </Pressable>
         </Animated.View>
       </ScrollView>
+      {/* What scrolls up stops at the status bar instead of running under the clock. */}
+      <StatusShade wash={{ height: 420 }} />
       {curtain}
     </KeyboardAvoidingView>
   );

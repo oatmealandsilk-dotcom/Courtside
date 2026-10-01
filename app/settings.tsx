@@ -13,6 +13,8 @@ import { Wash } from '@/components/Wash';
 import { colors, radius, spacing, typography, lift } from '@/theme';
 import { leaveGently } from '@/components/SignOutCurtain';
 import { confirm } from '@/lib/confirm';
+import { replayTour } from '@/features/tour/tourStore';
+import { TOUR_ON } from '@/features/tour/tourSeen';
 
 interface Row {
   icon: keyof typeof Ionicons.glyphMap;
@@ -90,6 +92,9 @@ export default function Settings() {
     {
       title: 'Support',
       rows: [
+        // Back to Home, where the first-run tour plays again from the start.
+        // Until the tour is switched on for everyone, only admins see this (to review it).
+        ...(TOUR_ON || currentUser?.isAdmin ? [{ icon: 'compass-outline' as const, label: 'Show the tutorial', onPress: replayTour }] : []),
         { icon: 'help-circle-outline', label: 'Help', onPress: () => router.push('/help') },
         { icon: 'information-circle-outline', label: 'About', onPress: () => router.push('/about') },
       ],

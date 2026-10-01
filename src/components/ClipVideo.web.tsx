@@ -1,4 +1,6 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { useIsFocused } from '@/lib/useIsFocused';
+import { forgetHeld, holdUntilBack, pageAway } from '@/features/feed/pauseWhenHidden';
 
 export interface ClipVideoHandle { seek: (seconds: number) => void; player: null }
 
@@ -13,7 +15,11 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   onSize?: (width: number, height: number) => void;
   /** The clip left the page (or was swapped for another): whatever it had fetched is gone with it. */
   onGone?: () => void;
-}>(function ClipVideo({ uri, poster, active = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, speed, volume, onProgress, onReady, onSize, onGone }, ref) {
+}>(function ClipVideo({ uri, poster, active: wanted = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, speed, volume, onProgress, onReady, onSize, onGone }, ref) {
+  // Plays only on the screen you are looking at, as on a phone: a page pushed
+  // over this one, or a tab slid away, holds it until you come back.
+  const onTop = useIsFocused();
+  const active = wanted && onTop;
   const el = useRef<HTMLVideoElement>(null);
   // Rate and level are set on the element, and set again whenever it reloads
   // its file (Safari does on some seeks), so a half-speed clip stays half speed.
@@ -40,7 +46,10 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   useEffect(() => {
     const video = el.current;
     if (!video) return;
-    if (active && !paused) { toKeptStart(video); video.play().catch(() => undefined); } else video.pause();
+    // While the page is away (another tab, or on a phone the app switcher and
+    // the like) it waits and starts once the page is back; a clip stopped
+    // meanwhile is not started again then.
+    if (active && !paused) { toKeptStart(video); if (pageAway()) holdUntilBack(video); else video.play().catch(() => undefined); } else { forgetHeld(video); video.pause(); }
   }, [active, paused]); // eslint-disable-line react-hooks/exhaustive-deps
   const latest = useRef({ onProgress, onReady, onSize, onGone });
   latest.current = { onProgress, onReady, onSize, onGone };

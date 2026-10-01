@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -68,6 +69,7 @@ export function TabsPager({ pathname }: { pathname: string }) {
     const from = activeRef.current;
     activeRef.current = target;
     setActive(target);
+    arrived(target, from);
     if (Math.abs(target - from) <= 1) { position.value = withTiming(target, { duration: 260, easing: EASE }); return; }
     const dir = target > from ? 1 : -1;
     jumpTab.value = target;
@@ -92,6 +94,7 @@ export function TabsPager({ pathname }: { pathname: string }) {
     if (index === 3) requestSection('/profile', 'Posts');
   };
   const land = (index: number) => {
+    arrived(index, activeRef.current);
     activeRef.current = index;
     setActive(index);
     setPendingTab(TAB_PATHS[index]);
@@ -99,6 +102,13 @@ export function TabsPager({ pathname }: { pathname: string }) {
   };
   const pathnameRef = useRef(pathname);
   pathnameRef.current = pathname;
+  // Community opens at its top every time you come to it from another tab
+  // (all four tabs stay mounted, so it used to sit wherever you last left it,
+  // and the threads were above you). Coming back from a thread you opened
+  // does not count: that never changes the tab, so your place is kept.
+  const arrived = (index: number, from: number) => {
+    if (index !== from && TAB_PATHS[index] === '/discuss') requestScrollToTop('/discuss', true);
+  };
 
   // Shared values, not plain variables: the animation thread only ever sees a
   // frozen copy of a plain variable, so nothing set on touch-down would survive.

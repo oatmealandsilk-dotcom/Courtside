@@ -16,6 +16,18 @@ export const BAR_DUCK_PX = DUCK * 2.5;
  */
 export const BAR_TUCK = 12;
 
+/**
+ * The feed's swipes move the bar in one steady glide, the same length
+ * whatever the finger's speed: started once per swipe in each direction,
+ * rather than nudged frame by frame (which tucked it in the first sliver of
+ * a fast flick and then stopped, and read as choppy).
+ */
+export const BAR_GLIDE = 260;
+export function glideBar(on: boolean) {
+  'worklet';
+  barCompact.value = withTiming(on ? 1 : 0, { duration: BAR_GLIDE, easing: Easing.out(Easing.cubic) });
+}
+
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
 let current = false;
 

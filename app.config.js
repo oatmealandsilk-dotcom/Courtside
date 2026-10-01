@@ -56,7 +56,12 @@ module.exports = {
       ['expo-location', { locationWhenInUsePermission: 'CourtSide uses your location to show players near you on the map.' }],
       ['expo-notifications', { color: '#3F7049' }],
       'expo-apple-authentication',
-      ['expo-audio', { microphonePermission: 'CourtSide uses the microphone for voice notes you send in chats.' }],
+      // No playing on in the background: nothing in the app is meant to be
+      // heard once you leave it (clips and voice notes both stop), and without
+      // this the plugin quietly asks iOS for background audio, so a clip that
+      // started a moment after you left could still be heard. Takes effect
+      // from the next App Store build.
+      ['expo-audio', { microphonePermission: 'CourtSide uses the microphone for voice notes you send in chats.', enableBackgroundPlayback: false }],
       // Apple Health, in the App Store build only (Expo Go has no HealthKit).
       ['react-native-health', { healthSharePermission: 'CourtSide reads your sleep, heart rate variability, resting heart rate, steps and active energy so the AI coach can plan around how recovered you are.', healthUpdatePermission: 'CourtSide does not write to Health.' }],
     ],
