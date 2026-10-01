@@ -56,10 +56,20 @@ export function confirm(options: ConfirmOptions) {
  */
 const MENU_GONE_MS = 350;
 
+/**
+ * Runs something chosen in a menu that closes in the same tap (opening a
+ * sheet, asking a question) once the menu has gone. On a phone a new screen
+ * presented while the menu is still fading out can fail to appear; a browser
+ * has nothing to wait for.
+ */
+export function afterMenu(run: () => void) {
+  if (Platform.OS === 'web') run();
+  else setTimeout(run, MENU_GONE_MS);
+}
+
 /** `confirm`, for a choice made in a menu that closes in the same tap. */
 export function confirmAfterMenu(options: ConfirmOptions) {
-  if (Platform.OS === 'web') confirm(options);
-  else setTimeout(() => confirm(options), MENU_GONE_MS);
+  afterMenu(() => confirm(options));
 }
 
 /**

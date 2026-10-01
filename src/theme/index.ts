@@ -12,6 +12,14 @@ export const lightColors = {
 
 export const colors: Record<keyof typeof lightColors, string> = { ...lightColors };
 
+/** Whether the current page is dark (Night, New York): shadows there are plain dark, never a coloured glow. */
+export function pageIsDark(): boolean {
+  const hex = colors.bg.replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(hex)) return false;
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return (r * 299 + g * 587 + b * 114) / 1000 < 128;
+}
+
 /**
  * The lift under a grouped list or card: a soft, wide shadow, so a box a
  * shade lighter than the page reads as sitting on it, not as a smudge.

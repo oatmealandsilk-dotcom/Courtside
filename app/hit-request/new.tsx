@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -11,6 +11,7 @@ import { ChipStrip, Chips, Fine, Section, SheetTitle, Submit, Tiles, formBody } 
 import type { HitRequest } from '@/data/types';
 import { fetchCourts, type Court } from '@/features/players/courts';
 import { homeFor } from '@/features/players/positions';
+import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
@@ -25,6 +26,8 @@ const FORMAT_LABEL: Record<HitRequest['format'], string> = { singles: 'Singles',
  * Looking for a hit: when (a day and an hour), where (a court near you, or
  * typed), what level, singles or doubles or just hitting, and how many spots.
  * It goes up on Find Players; whoever says "I'm in" lands in a chat with you.
+ * Once it is up, a note offers to send it into your chats and groups too,
+ * for the friends who might want the spot.
  */
 export default function NewHit() {
   const styles = useThemedStyles(styleDefinitions);
@@ -56,6 +59,8 @@ export default function NewHit() {
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  // The hit just posted, so the note after the sheet has gone can offer to send it.
+  const posted = useRef<string | null>(null);
 
   const start = new Date(days[day]); start.setHours(hour, half ? 30 : 0, 0, 0);
   const past = start.getTime() < Date.now() - 30 * 60_000;
@@ -72,7 +77,7 @@ export default function NewHit() {
     setError('');
     try {
       const step = currentUser?.profile.skillSystem === 'UTR' ? 1 : 0.5;
-      await actions.postHit({
+      posted.current = await actions.postHit({
         startsAt: start.toISOString(), place: where, format, spots, note: note.trim() || undefined,
         levelMin: level === 'mine' && rating ? Math.max(1, rating - step) : undefined,
         levelMax: level === 'mine' && rating ? rating + step : undefined,
@@ -84,8 +89,21 @@ export default function NewHit() {
     }
   };
 
+  // Away first, then the note: its "Send to a chat" opens the Send-to sheet over the page, never over this sheet on its way out.
+  const done = () => {
+    router.back();
+    const id = posted.current;
+    if (!id) return;
+    showToast({
+      title: 'Your hit is up',
+      body: 'Players nearby see it on Find Players',
+      icon: 'checkmark-circle-outline',
+      action: { label: 'Send to a chat', onPress: () => router.push({ pathname: '/share', params: { kind: 'hit-request', id } }) },
+    });
+  };
+
   return (
-    <DragSheet fitContent closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.86}
+    <DragSheet fitContent closeSignal={closeSignal} onDismissed={done} peekFraction={0.86}
       header={<SheetTitle title="Looking for a hit" line={summary} lineTone="brand" onClose={() => setCloseSignal((n) => n + 1)} />}>
       <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled">
         <Section title="When">

@@ -56,6 +56,8 @@ export default function Settings() {
     ...(Platform.OS === 'web' ? [] : [{
       title: 'Notifications',
       rows: [
+        // Every chat, groups included; a single chat is muted from its own details page instead.
+        { icon: 'paper-plane-outline' as const, label: 'Messages', detail: 'To quiet just one chat, mute it from its details', toggle: { value: prefs.pushMessages, onChange: (v: boolean) => actions.setPref('pushMessages', v) } },
         { icon: 'heart-outline' as const, label: 'Likes and comments', toggle: { value: prefs.pushLikes, onChange: (v: boolean) => actions.setPref('pushLikes', v) } },
         { icon: 'chatbubble-ellipses-outline' as const, label: 'Coach replies', toggle: { value: prefs.pushCoach, onChange: (v: boolean) => actions.setPref('pushCoach', v) } },
       ],

@@ -1,5 +1,6 @@
 import { asTabRoute } from '@/features/navigation/tabFocus';
-import { FoldedWords, ReelCaption, ReelWho, SwipeHint } from '@/components/ReelCaption';
+import { COUNT_EDGE, FoldedWords, GLYPH_EDGE, InstantMeta, MAX_GROW, railCount, ReelCaption, ReelDim, ReelScrim, ReelWho, SwipeHint } from '@/components/ReelCaption';
+import { useSuggestedPlayers } from '@/features/people/suggestions';
 import { ThreadReplies } from '@/components/ThreadReplies';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -34,8 +35,8 @@ import { setFeedWarm, useCurtainDown } from '@/features/feed/warmup';
 import { connectionIsQuick } from '@/lib/netSpeed';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { subscribeFeedRefresh } from '@/features/feed/feedBus';
-import { setBarCompact } from '@/features/navigation/barShrink';
-import { BAR_OVERLAY_PX } from '@/features/navigation/barInset';
+import { BAR_TUCK, barCompact, setBarCompact } from '@/features/navigation/barShrink';
+import { BAR_OVERLAY_PX, useBarInset } from '@/features/navigation/barInset';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { TipPage } from '@/components/TipPage';
 import { isLive } from '@/features/stories/stories';
@@ -44,7 +45,6 @@ import { NEWEST_FIRST, rankFeed, shuffleFeed, type FeedItem } from '@/features/f
 import { challengeFor, entriesFor } from '@/features/challenge/weekly';
 import { ChallengePage } from '@/components/ChallengePage';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
-import { relativeTime, timeLeft } from '@/lib/format';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/store/AppContext';
 import { confirmUnfollow } from '@/lib/confirm';
@@ -136,6 +136,15 @@ export interface FeedScope { userId: string; set: 'own' | 'clips' | 'tagged'; st
 const phone = Platform.OS !== 'web' || !isDesktopBrowser();
 
 /**
+ * The rail's icons and their sizes, matched by eye rather than by number: a
+ * heart, a bubble, an arrow, a bookmark and three dots each read as about
+ * 26pt of glyph at these sizes, where equal sizes made the heart look biggest.
+ */
+const RAIL_ICONS = [['heart-outline', 31], ['chatbubble-outline', 29], ['arrow-redo-outline', 30], ['bookmark-outline', 28], ['ellipsis-horizontal', 26]] as const;
+/** The rail's last item (the three dots) centres on the words' small bottom line rather than standing on its baseline. */
+const RAIL_DROP = -6;
+
+/**
  * A hit's photo at its own shape. A tall one fills the page; a wide one (a
  * computer's camera, say) sits in a wide box across the middle rather than
  * being cropped down to a strip of it.
@@ -168,6 +177,20 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const [active, setActive] = useState(0);
   const orderRef = useRef<string[]>([]);
+  // The words over a clip end 16pt above the floating tab bar on every phone:
+  // the bar stands on the home-indicator inset, which differs phone to phone,
+  // so the words (and the rail beside them) are placed from the same number.
+  // A computer has no bar there and keeps the phone's usual spot.
+  const barInset = useBarInset();
+  const wordsBottom = (barInset || BAR_OVERLAY_PX) + 6;
+  // A swipe on to the next clip tucks the bar down a little (labels fade); the
+  // words and the rail go down with it, so the gap stays 16 rather than
+  // growing to 28 and lifting the words into the picture. Phones only.
+  const follow = barInset > 0 ? BAR_TUCK : 0;
+  const tuckStyle = useAnimatedStyle(() => ({ transform: [{ translateY: follow * barCompact.value }] }));
+  // The page whose caption is open ("p:<id>" or "h:<id>"), so the picture behind it dims; moving on folds it.
+  const [openWords, setOpenWords] = useState<string | null>(null);
+  useEffect(() => { setOpenWords(null); }, [active]);
   useEffect(() => { const k = orderRef.current[active]; if (k) seenNow.current.add(k); setQuick(connectionIsQuick()); }, [active]);
 
   // Pinch out on a clip or hit and everything but the picture goes away —
@@ -417,27 +440,26 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const skeletonClip = useMemo(() => (
     <>
       {holdWord}
-      {/* The same boxes the live page uses, so every stand-in sits exactly where the real thing lands. */}
-      <View style={styles.caption}>
+      {/* The same boxes the live page uses, so every stand-in sits exactly where the real thing lands (tucked with the bar, too). */}
+      <Reanimated.View style={[styles.caption, { bottom: wordsBottom }, tuckStyle]}>
         <View style={styles.author}>
           <View style={styles.boneAvatar} />
           <View style={[styles.bone, { width: 110, height: 14 }]} />
         </View>
         <View style={{ gap: 6 }}><View style={[styles.bone, { width: '85%' }]} /><View style={[styles.bone, { width: '55%' }]} /></View>
         <View style={[styles.bone, { width: 90, height: 10 }]} />
-        <Text style={styles.swipeHint}> </Text>
-      </View>
-      <View style={styles.actions}>
-        {([['heart-outline', 36], ['chatbubble-outline', 33], ['arrow-redo-outline', 32], ['bookmark-outline', 31], ['ellipsis-horizontal', 30]] as const).map(([name, size]) => (
+      </Reanimated.View>
+      <Reanimated.View style={[styles.actions, { bottom: wordsBottom + RAIL_DROP }, tuckStyle]}>
+        {RAIL_ICONS.map(([name, size]) => (
           <View key={name} style={styles.action}>
             {/* No shadow here: the shadow lifts white glyphs off a video, and on the plain page it only reads as a smudge. */}
             <Ionicons name={name} size={size} color={colors.textFaint} />
             <Text style={styles.actionLabel}> </Text>
           </View>
         ))}
-      </View>
+      </Reanimated.View>
     </>
-  ), [styles, holdWord]);
+  ), [styles, holdWord, wordsBottom, tuckStyle]);
   const warmWaiters = useRef<(() => void)[]>([]);
   // Quick or slow connection, read again whenever a new page comes up. Each
   // page's cover takes the reading once, the first time it is drawn (off
@@ -480,35 +502,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   // The strip forgets them when the feed is dealt again.
   const [followedHere, setFollowedHere] = useState<string[]>([]);
   useEffect(() => { setFollowedHere([]); }, [visit]);
-  const suggestions = useMemo(() => {
-    if (!currentUserId) return [];
-    const me = users.find((u) => u.id === currentUserId);
-    const following = new Set(followingIds);
-    const blocked = new Set(blockedIds);
-    const interacted = new Set<string>();
-    for (const post of posts) {
-      if (post.authorId === currentUserId) post.likedBy.forEach((id) => interacted.add(id));
-      else if (post.likedBy.includes(currentUserId)) interacted.add(post.authorId);
-    }
-    const postById = new Map(posts.map((p) => [p.id, p]));
-    for (const comment of comments) {
-      const post = postById.get(comment.postId);
-      if (post?.authorId === currentUserId) interacted.add(comment.authorId);
-    }
-    for (const conversation of conversations) conversation.participantIds.forEach((id) => interacted.add(id));
-    const city = (location: string) => location.split(',')[0].trim();
-    return users
-      .filter((u) => u.id !== currentUserId && (!following.has(u.id) || followedHere.includes(u.id)) && !blocked.has(u.id))
-      .map((user) => {
-        const local = !!me && city(user.location) === city(me.location);
-        const reason = interacted.has(user.id) ? 'Interacted with you'
-          : user.isCoach ? 'Coach on CourtSide'
-          : local ? `Plays in ${city(user.location)}`
-          : 'Suggested for you';
-        return { user, reason, score: (interacted.has(user.id) ? 2 : 0) + (local ? 1 : 0) + (user.isCoach ? 0.5 : 0) };
-      })
-      .sort((a, b) => b.score - a.score);
-  }, [users, posts, comments, conversations, currentUserId, followingIds, blockedIds, followedHere]);
+  const suggestions = useSuggestedPlayers({ keep: followedHere });
 
   // Anything you post after the feed was ranked — a clip, a note, a hit —
   // goes right to the very top and the feed jumps there, so posting reads as
@@ -804,7 +798,10 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         />
       ) : (
         <View ref={viewer} style={styles.viewer}>
-          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onRefresh={scope || isDesktopBrowser() ? undefined : refreshFeed} pullHeader={scope || !currentUser ? undefined : (
+          {/* Pull-to-refresh is for phones: the app and a phone's browser (`phone`, above). Asking
+              isDesktopBrowser() alone took it off the iPhone app: the app has no browser to read,
+              so the check answered "computer" there, and the pull strip was never built. */}
+          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onRefresh={scope || !phone ? undefined : refreshFeed} pullHeader={scope || !currentUser ? undefined : (
             <View style={styles.pullGreeting}>
               <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={28} />
               <Text style={styles.pullGreetingText}>{`${currentUser.name.split(' ')[0]}'s homepage`}</Text>
@@ -873,23 +870,27 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     </View>
                     {burst.id === story.id ? <LikeBurst token={burst.n} /> : null}
                     <Reanimated.View style={[StyleSheet.absoluteFill, overlayStyle]} pointerEvents={immersive ? 'none' : 'box-none'}>
-                    <LinearGradient pointerEvents="none" colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.22)', 'rgba(0,0,0,0.55)']} locations={[0, 0.5, 1]} style={styles.bottomFade} />
-                    <View style={styles.caption}>
-                      <ReelWho author={author} when={relativeTime(story.createdAt)} onAuthor={() => { tappedAuthor(`h:${story.id}`); router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`); }} />
-                      <HitClock expiresAt={story.expiresAt} />
-                      {story.caption ? <FoldedWords text={story.caption} /> : null}
+                    {/* An Instant's words are set exactly like a clip's: the same shade, the same who-line, the same small line. */}
+                    <ReelScrim bottom={wordsBottom} />
+                    {openWords === `h:${story.id}` ? <ReelDim onClose={() => setOpenWords(null)} /> : null}
+                    <Reanimated.View style={[styles.caption, { bottom: wordsBottom }, tuckStyle]}>
+                      <View style={styles.words}>
+                        <ReelWho author={author} onAuthor={() => { tappedAuthor(`h:${story.id}`); router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`); }} />
+                        {story.caption ? <FoldedWords text={story.caption} open={openWords === `h:${story.id}`} onOpenChange={(open) => setOpenWords(open ? `h:${story.id}` : null)} /> : null}
+                        <InstantMeta expiresAt={story.expiresAt} />
+                      </View>
                       {index === 0 && !scope ? <SwipeHint /> : null}
-                    </View>
-                    <View style={styles.actions}>
-                      <LikeButton ledgerKey={`h:${story.id}`} liked={hitLiked} count={story.likedBy.length} onToggle={() => actions.toggleLikeStory(story.id)} likesRoute={{ pathname: '/likes', params: { id: story.id, kind: 'hit' } }} pop={burst.id === story.id ? burst.n : 0} what="hit" style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
+                    </Reanimated.View>
+                    <Reanimated.View style={[styles.actions, { bottom: wordsBottom + RAIL_DROP }, tuckStyle]}>
+                      <LikeButton ledgerKey={`h:${story.id}`} liked={hitLiked} count={story.likedBy.length} onToggle={() => actions.toggleLikeStory(story.id)} likesRoute={{ pathname: '/likes', params: { id: story.id, kind: 'hit' } }} pop={burst.id === story.id ? burst.n : 0} what="hit" size={RAIL_ICONS[0][1]} style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
                       <Tappable accessibilityLabel="Hit comments" onPress={() => router.push({ pathname: '/comments', params: { kind: 'hit', id: story.id } })} scaleTo={0.78} style={styles.action}>
-                        <Ionicons name="chatbubble-outline" size={33} color="white" style={styles.actionGlyph} />
-                        <Text style={styles.actionLabel}>{story.commentIds.length}</Text>
+                        <Ionicons name="chatbubble-outline" size={RAIL_ICONS[1][1]} color="white" style={styles.actionGlyph} />
+                        <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(story.commentIds.length)}</Text>
                       </Tappable>
                       <Tappable accessibilityLabel="More options" onPress={() => router.push({ pathname: '/post-menu', params: { id: story.id, kind: 'hit' } })} scaleTo={0.78} style={styles.action}>
-                        <Ionicons name="ellipsis-horizontal" size={30} color="white" style={styles.actionGlyph} />
+                        <Ionicons name="ellipsis-horizontal" size={RAIL_ICONS[4][1]} color="white" style={styles.actionGlyph} />
                       </Tappable>
-                    </View>
+                    </Reanimated.View>
                     </Reanimated.View>
                    </Reanimated.View></PinchZone>
                     {story.videoUrl ? cover(story.id, 'word', story.thumbnailUrl) : null}
@@ -1061,23 +1062,25 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
 
                   <Reanimated.View style={[StyleSheet.absoluteFill, overlayStyle]} pointerEvents={immersive ? 'none' : 'box-none'}>
 
-                  <LinearGradient pointerEvents="none" colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.22)', 'rgba(0,0,0,0.55)']} locations={[0, 0.5, 1]} style={styles.bottomFade} />
+                  <ReelScrim bottom={wordsBottom} />
+                  {openWords === `p:${post.id}` ? <ReelDim onClose={() => setOpenWords(null)} /> : null}
 
-                  <View style={styles.caption}>
-                    <ReelCaption post={post} author={author} onAuthor={() => { tappedAuthor(`p:${post.id}`); router.push(`/user/${author.id}`); }} />
+                  <Reanimated.View style={[styles.caption, { bottom: wordsBottom }, tuckStyle]}>
+                    <ReelCaption post={post} author={author} onAuthor={() => { tappedAuthor(`p:${post.id}`); router.push(`/user/${author.id}`); }} open={openWords === `p:${post.id}`} onOpenChange={(open) => setOpenWords(open ? `p:${post.id}` : null)} />
                     {index === 0 && !scope ? <SwipeHint /> : null}
-                  </View>
+                  </Reanimated.View>
 
-                  <View style={styles.actions}>
-                    <LikeButton ledgerKey={`p:${post.id}`} liked={liked} count={post.likedBy.length} onToggle={() => actions.toggleLike(post.id)} likesRoute={{ pathname: '/likes', params: { id: post.id } }} pop={burst.id === post.id ? burst.n : 0} what="clip" style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
+                  {/* The rail stands on the words' bottom line, as on TikTok and Reels, so it rises only as high as it must. */}
+                  <Reanimated.View style={[styles.actions, { bottom: wordsBottom + RAIL_DROP }, tuckStyle]}>
+                    <LikeButton ledgerKey={`p:${post.id}`} liked={liked} count={post.likedBy.length} onToggle={() => actions.toggleLike(post.id)} likesRoute={{ pathname: '/likes', params: { id: post.id } }} pop={burst.id === post.id ? burst.n : 0} what="clip" size={RAIL_ICONS[0][1]} style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
                     <Tappable
                       accessibilityLabel="Clip comments"
                       onPress={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id } })}
                       scaleTo={0.78}
                       style={styles.action}
                     >
-                      <Ionicons name="chatbubble-outline" size={33} color="white" style={styles.actionGlyph} />
-                      <Text style={styles.actionLabel}>{post.commentIds.length}</Text>
+                      <Ionicons name="chatbubble-outline" size={RAIL_ICONS[1][1]} color="white" style={styles.actionGlyph} />
+                      <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.commentIds.length)}</Text>
                     </Tappable>
                     <Tappable
                       accessibilityLabel="Send this clip to someone"
@@ -1085,8 +1088,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       scaleTo={0.78}
                       style={styles.action}
                     >
-                      <Ionicons name="arrow-redo-outline" size={32} color="white" style={styles.actionGlyph} />
-                      <Text style={styles.actionLabel}>{post.shares ?? 0}</Text>
+                      <Ionicons name="arrow-redo-outline" size={RAIL_ICONS[2][1]} color="white" style={styles.actionGlyph} />
+                      <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.shares ?? 0)}</Text>
                     </Tappable>
                     <Tappable
                       accessibilityLabel={isSaved ? 'Remove from saved' : 'Save this clip'}
@@ -1094,8 +1097,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       scaleTo={0.78}
                       style={styles.action}
                     >
-                      <Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={31} color="white" style={styles.actionGlyph} />
-                      <Text style={styles.actionLabel}>{post.savedBy?.length ?? 0}</Text>
+                      <Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={RAIL_ICONS[3][1]} color="white" style={styles.actionGlyph} />
+                      <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.savedBy?.length ?? 0)}</Text>
                     </Tappable>
                     <Tappable
                       accessibilityLabel="More options"
@@ -1103,9 +1106,9 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       scaleTo={0.78}
                       style={styles.action}
                     >
-                      <Ionicons name="ellipsis-horizontal" size={30} color="white" style={styles.actionGlyph} />
+                      <Ionicons name="ellipsis-horizontal" size={RAIL_ICONS[4][1]} color="white" style={styles.actionGlyph} />
                     </Tappable>
-                  </View>
+                  </Reanimated.View>
                   </Reanimated.View>
                  </Reanimated.View></PinchZone>
                   {post.videoUrl ? cover(post.id, 'word', post.thumbnailUrl, post.orientation === 'landscape') : null}
@@ -1160,18 +1163,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
 }
 
 /** "INSTANT · 22h left", ticking once a minute so it never reads stale. */
-function HitClock({ expiresAt }: { expiresAt: string }) {
-  const styles = useThemedStyles(styleDefinitions);
-  const [, tick] = useState(0);
-  useEffect(() => { const id = setInterval(() => tick((n) => n + 1), 60_000); return () => clearInterval(id); }, []);
-  return (
-    <View style={styles.hitClock}>
-      <Ionicons name="time-outline" size={13} color="white" />
-      <Text style={styles.hitClockText}>INSTANT · {timeLeft(expiresAt)}</Text>
-    </View>
-  );
-}
-
 const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, alignItems: 'center' },
   scopeBack: { position: 'absolute', left: 12, padding: 6, zIndex: 6 },
@@ -1232,28 +1223,28 @@ const styleDefinitions = StyleSheet.create({
     maxWidth: 230,
     backgroundColor: '#203E2ACC',
   },
+  // The words' column: 16 in from the left, as Reels and Shorts sit, and
+  // stopping 72 from the right (the rail's 48, its 12 from the edge, 12 of
+  // air), so a caption never runs under the rail. `bottom` is set per phone.
   caption: {
     position: 'absolute',
-    bottom: BAR_OVERLAY_PX - 4,
     left: 0,
     right: 0,
-    padding: 18,
-    paddingBottom: 10,
-    paddingRight: 70,
+    paddingLeft: 16,
+    paddingRight: 72,
     backgroundColor: 'transparent',
-    gap: 6,
+    gap: 8,
   },
+  words: { gap: 6 },
   author: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  hitClock: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.45)' },
-  hitClockText: { color: 'white', fontSize: 11, ...font('700'), letterSpacing: 0.6 },
-  swipeHint: { color: 'rgba(255,255,255,0.62)', fontSize: 11, ...font('500') },
-  bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 280 + BAR_OVERLAY_PX },
-  actions: { position: 'absolute', right: 12, bottom: 82 + BAR_OVERLAY_PX, gap: 22 },
-  action: { alignItems: 'center', gap: 4, minWidth: 48 },
-  // Instagram's trick: plain white glyphs made bolder by a soft dark shadow
-  // rather than a heavier icon, so they hold up over bright footage.
-  actionGlyph: { textShadowColor: 'rgba(0, 0, 0, 0.55)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
-  actionLabel: { color: 'white', fontSize: 13, ...font('700'), textShadowColor: 'rgba(0, 0, 0, 0.55)', textShadowRadius: 4 },
+  // The rail: 12 from the edge, one item every 63pt or so (TikTok's and Reels' rhythm). `bottom` is set per phone.
+  actions: { position: 'absolute', right: 12, gap: 16 },
+  action: { alignItems: 'center', gap: 2, minWidth: 48 },
+  // Plain white outlines with a crisp dark edge, as Reels sets them, rather than a heavier icon or a soft smudge.
+  actionGlyph: GLYPH_EDGE,
+  // Counts in the name's weight (TikTok's newest rail), figures all one width so "9" to "10" does not shift.
+  // They sit where the shade has barely begun, so they wear the darkest edge (COUNT_EDGE); the heart's count takes this too.
+  actionLabel: { color: 'white', fontSize: 12.5, lineHeight: 15, ...font('600'), letterSpacing: 0.1, fontVariant: ['tabular-nums'], ...COUNT_EDGE },
   // The feed's pages hold their size while the bar ducks, so the bottom few
   // points can sit under a full-size bar: written pages keep that much clear.
   article: { flex: 1, backgroundColor: colors.bg, padding: 20, paddingTop: 64, paddingBottom: 32, gap: 20 },

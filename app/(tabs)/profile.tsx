@@ -16,6 +16,7 @@ import { Tappable } from '@/components/Tappable';
 import { reportSection, requestSection, subscribeSectionRequest, swipeDestination } from '@/features/navigation/swipeOrder';
 import { LevelPill } from '@/components/LevelPill';
 import { useApp } from '@/store/AppContext';
+import { unreadChatCount } from '@/features/messages/groupRules';
 import { playStyleLabel, surfaceLabel } from '@/lib/badges';
 import { compactNumber } from '@/lib/format';
 import { TileViews } from '@/components/TileViews';
@@ -62,7 +63,8 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    Clips: own.filter(p => p.kind === 'clip').length,
    Tagged: user ? posts.filter(p => p.taggedUserIds?.includes(user.id) && !p.archived).length : 0,
  };
- const unread = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
+ // Chats with something new, not messages (Instagram's count); a muted chat never counts.
+ const unread = unreadChatCount(conversations);
  const unseen = notifications.filter(n => n.userId === currentUserId && !n.read).length;
  const savedCount = saved.postIds.length + saved.questionIds.length;
  const swipe = (direction: 1 | -1) => {

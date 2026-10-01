@@ -137,6 +137,7 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
         {/* Courts is an on/off switch, not one of the choices: a hairline sets it apart, and it scrolls with the row so nothing is ever tucked behind it. */}
         <View style={styles.chipGap} />
         <Pressable accessibilityRole="switch" accessibilityState={{ checked: courtsOn }} accessibilityLabel="Show courts" onPress={() => { haptics.tap(); onCourts(); }} style={[styles.chip, courtsOn && styles.chipOn]}>
+          {courtsOn ? <BrandWash /> : null}
           {courtsLoading ? <ActivityIndicator size="small" color={courtsOn ? colors.brandInk : colors.text} /> : <CourtGlyph size={15} color={courtsOn ? colors.brandInk : colors.text} />}
           <Text style={[styles.chipText, courtsOn && styles.chipTextOn]}>Courts</Text>
         </Pressable>
@@ -446,8 +447,12 @@ export function WhereCard({ locating, onLocation }: { locating?: boolean; onLoca
   );
 }
 
-/** One player, picked on the map: who they are, how far, and what to do about it. */
-export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, onFollow }: { placed: Placed; following: boolean; onClose: () => void; onProfile: () => void; onMessage: () => void; onFollow: () => void }) {
+/**
+ * One player, picked on the map: who they are, how far, and what to do about
+ * it. Message opens your one-to-one chat with them; "Add to a group" (when
+ * given) puts them in one of your groups instead.
+ */
+export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, onFollow, onAddToGroup }: { placed: Placed; following: boolean; onClose: () => void; onProfile: () => void; onMessage: () => void; onFollow: () => void; onAddToGroup?: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const pull = useDragToClose(onClose);
   const { user, miles, seenAt, seenCity } = placed;
@@ -483,6 +488,13 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
         </Pressable>
         <FollowPill following={following} userId={user.id} onPress={onFollow} name={user.name.split(' ')[0]} />
       </View>
+      {/* A quiet link of its own: a fourth pill does not fit beside the three on a phone. */}
+      {onAddToGroup ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={`Add ${user.name} to a group`} onPress={onAddToGroup} hitSlop={6} style={({ pressed }) => [styles.groupLink, pressed && { opacity: 0.6 }]}>
+          <Ionicons name="people-outline" size={16} color={colors.textMuted} />
+          <Text style={styles.groupLinkText}>Add to a group</Text>
+        </Pressable>
+      ) : null}
     </Animated.View>
     </GestureDetector>
   );
@@ -528,8 +540,12 @@ export function YouSheet({ me, open, onToggle, onProfile, onClose }: { me: User;
   );
 }
 
-/** A court, picked on the map: what OpenStreetMap knows, then what players say, and a way to add to it. */
-export function CourtSheet({ court, miles, onClose, onDirections }: { court: Court; miles: number; onClose: () => void; onDirections: () => void }) {
+/**
+ * A court, picked on the map: what OpenStreetMap knows, then what players
+ * say, and a way to add to it. The send button beside Close (when given)
+ * puts the court in any of your chats, groups included: "meet here".
+ */
+export function CourtSheet({ court, miles, onClose, onDirections, onSend }: { court: Court; miles: number; onClose: () => void; onDirections: () => void; onSend?: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const pull = useDragToClose(onClose);
   const { courtNotes, currentUserId, actions } = useApp();
@@ -551,11 +567,17 @@ export function CourtSheet({ court, miles, onClose, onDirections }: { court: Cou
     <Animated.View style={[styles.sheet, pull.style]}>
       <View style={styles.grabber} />
       <View style={styles.personRow}>
-        <View style={styles.courtDisc}><Ionicons name="tennisball" size={22} color={colors.brandInk} /></View>
+        <View style={styles.courtDisc}><BrandWash /><Ionicons name="tennisball" size={22} color={colors.brandInk} /></View>
         <View style={styles.personWords}>
           <Text style={styles.personName} numberOfLines={1}>{court.name}</Text>
           <Text style={styles.personMeta} numberOfLines={1}>{facts} · {formatMiles(miles)}</Text>
         </View>
+        {/* Send sits beside Close, the way a maps app's place card puts Share there. */}
+        {onSend ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={`Send ${court.name} to a chat`} hitSlop={8} onPress={onSend} style={styles.close}>
+            <Ionicons name="paper-plane-outline" size={16} color={colors.textMuted} />
+          </Pressable>
+        ) : null}
         <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
           <Ionicons name="close" size={18} color={colors.textMuted} />
         </Pressable>
@@ -738,6 +760,8 @@ const styleDefinitions = StyleSheet.create({
   primaryText: { ...typography.smallStrong, color: colors.brandInk },
   secondary: { height: 40, paddingHorizontal: 16, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
   secondaryText: { ...typography.smallStrong, color: colors.text },
+  groupLink: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginHorizontal: spacing.lg, marginTop: -spacing.xs, paddingBottom: spacing.sm },
+  groupLinkText: { ...typography.smallStrong, color: colors.textMuted },
   openRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
   openDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.brand },
   openText: { ...typography.smallStrong, color: colors.brand },

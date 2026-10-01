@@ -4,7 +4,7 @@ import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-na
 import { levelBadge } from '@/lib/badges';
 import { useTheme } from '@/theme/ThemeProvider';
 import type { PlayerProfile } from '@/data/types';
-import { colors, font, radius } from '@/theme';
+import { colors, font, pageIsDark, radius } from '@/theme';
 
 /**
  * Each rating system keeps one colour wherever it shows: UTR blue, NTRP
@@ -15,17 +15,11 @@ import { colors, font, radius } from '@/theme';
  * court or green grass alike.
  */
 const SYSTEM_INK: Record<string, { light: string; dark: string; media: string }> = {
-  UTR: { light: '#2F6F9F', dark: '#82B6DE', media: '#93CBF6' },
+  // A clear, saturated blue (not steel): UTR's own colour should read at a glance.
+  UTR: { light: '#2370C2', dark: '#7DBEF5', media: '#6EC1FF' },
   NTRP: { light: '#3D7A4B', dark: '#88C697', media: '#A3DFAE' },
   ITF: { light: '#A0643F', dark: '#D9A07E', media: '#F2BC96' },
 };
-/** Whether the page under the badge is dark (Night, New York): the light inks go there. */
-function pageIsDark(): boolean {
-  const hex = colors.bg.replace('#', '');
-  if (!/^[0-9a-f]{6}$/i.test(hex)) return false;
-  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
-  return (r * 299 + g * 587 + b * 114) / 1000 < 128;
-}
 
 /**
  * A player's level, as a soft tag: a faint fill of the band's colour with the
@@ -47,12 +41,17 @@ export function LevelPill({ profile, small = false, onMedia = false, style }: { 
     <View
       accessible
       accessibilityLabel={badge.label}
-      style={[styles.pill, small && styles.small, onMedia ? styles.frost : { backgroundColor: tintFill(tone) }, style]}
+      style={[styles.pill, small && styles.small, onMedia ? [styles.frost, { borderColor: edge(tone) }] : { backgroundColor: tintFill(tone) }, style]}
     >
       {system ? <Text style={[styles.system, small && styles.systemSmall, { color: onMedia ? tone : ink }, onMedia && styles.systemOnMedia]}>{system}</Text> : null}
       <Text style={[styles.value, small && styles.valueSmall, { color: ink }]}>{value}</Text>
     </View>
   );
+}
+
+/** Over a picture, the chip's rim wears the system's colour faintly, so the colour reads before the letters do. */
+function edge(tint: string): string {
+  return /^#[0-9a-f]{6}$/i.test(tint) ? `${tint}80` : 'rgba(255, 255, 255, 0.26)';
 }
 
 /** The system's colour at a whisper, for the tag's fill. */
@@ -72,7 +71,7 @@ const styles = StyleSheet.create({
   },
   small: { height: 19, paddingHorizontal: 7 },
   // Dark enough to hold its colours on any frame, a blue court or green grass included.
-  frost: { backgroundColor: 'rgba(10, 12, 10, 0.55)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255, 255, 255, 0.26)' },
+  frost: { backgroundColor: 'rgba(10, 12, 10, 0.55)', borderWidth: 1 },
   system: { ...font('600'), fontSize: 10.5, letterSpacing: 0.3, opacity: 0.8 },
   systemSmall: { fontSize: 10 },
   systemOnMedia: { opacity: 1 },

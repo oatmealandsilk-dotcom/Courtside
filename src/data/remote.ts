@@ -17,7 +17,7 @@ import { shrinkPhoto } from '@/lib/shrinkPhoto';
 import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, TaggedCourt, Question, Story, Tip, User, CoachApplication } from './types';
+import type { Answer, ChatEvent, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, TaggedCourt, Question, Story, Tip, User, CoachApplication } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
 
 /** What a new player did first, after setup. */
@@ -283,6 +283,8 @@ const toTip = (r: TipRow): Tip => ({ id: r.id, authorId: r.user_id, body: r.body
 export interface UserState {
   mutedIds: ID[]; blockedIds: ID[]; savedQuestionIds: ID[]; paymentMethods: PaymentMethod[]; defaultPaymentId: ID | null;
   showActivity: boolean; pushLikes: boolean; pushCoach: boolean;
+  /** The "Message alerts" switch (migration 54). Undefined on a database without it, which means on. */
+  pushMessages?: boolean;
   /** What the coach works around (injuries, schedule, gear): kept in this private row, never on the public profile. Undefined on a database without migration 19. */
   constraints?: PlayerProfile['constraints'];
 }
@@ -323,7 +325,7 @@ const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
   listed: r.listed, payoutsReady: r.payouts_ready, payoutsStarted: r.payouts_started,
 });
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
-interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; private_profile?: { constraints?: PlayerProfile['constraints'] } | null }
+interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints'] } | null }
 
 interface PollRow { question_id: string; options: string[]; counts: number[] | null }
 /** Each thread's poll, with the totals and your own vote, laid onto the threads. */
@@ -365,6 +367,7 @@ const toNotification = (r: NotificationRow): Notification => ({
 const toUserState = (r: UserStateRow): UserState => ({
   mutedIds: r.muted_ids ?? [], blockedIds: r.blocked_ids ?? [], savedQuestionIds: r.saved_question_ids ?? [], paymentMethods: r.payment_methods ?? [],
   defaultPaymentId: r.default_payment_id, showActivity: r.show_activity, pushLikes: r.push_likes, pushCoach: r.push_coach,
+  pushMessages: typeof r.push_messages === 'boolean' ? r.push_messages : undefined,
   constraints: Array.isArray(r.private_profile?.constraints) ? r.private_profile!.constraints : undefined,
 });
 
@@ -382,20 +385,42 @@ const toCoachApplication = (r: CoachApplicationRow): CoachApplication => ({
   resumePath: r.resume_path ?? undefined, reviewNote: r.review_note ?? undefined,
 });
 
-interface ConversationRow { id: string; updated_at: string; title?: string | null; is_group?: boolean | null; conversation_members?: { user_id: string; last_read_at: string | null }[]; messages?: MessageRow[] }
-interface MessageRow { id: string; conversation_id: string; sender_id: string; body: string; kind: string; shared_id: string | null; reactions: Record<string, string> | null; created_at: string; edited_at?: string | null; place?: { name: string; lat: number; lng: number } | null; audio_url?: string | null; audio_ms?: number | null }
+/** A chat member's row. `role` came with migration 54 (admin or member); a database without it leaves it out. */
+interface MemberRow { user_id: string; last_read_at: string | null; role?: string | null }
+interface ConversationRow { id: string; updated_at: string; title?: string | null; is_group?: boolean | null; created_by?: string | null; photo_url?: string | null; conversation_members?: MemberRow[]; messages?: MessageRow[] }
+interface MessageRow { id: string; conversation_id: string; sender_id: string; body: string; kind: string; shared_id: string | null; reactions: Record<string, string> | null; created_at: string; edited_at?: string | null; place?: { name: string; lat: number; lng: number } | null; audio_url?: string | null; audio_ms?: number | null; event?: { type?: string; targets?: unknown; title?: string | null; on?: boolean | null } | null }
 
-/** Conversations and messages as the app holds them: who has read what comes from each member's last_read_at. */
-export function toConversations(me: ID, convRows: ConversationRow[], messageRows: MessageRow[]): { conversations: Conversation[]; messages: Message[] } {
+const EVENT_TYPES: ChatEvent['type'][] = ['created', 'added', 'removed', 'left', 'renamed', 'photo', 'admin', 'joined'];
+/** An event line's `event` as the server wrote it ({type, targets, title, on}), in the app's shape. Anything unexpected is left out, and the line shows its plain sentence. */
+function toChatEvent(raw: MessageRow['event']): ChatEvent | undefined {
+  if (!raw || typeof raw !== 'object' || !EVENT_TYPES.includes(raw.type as ChatEvent['type'])) return undefined;
+  const targets = Array.isArray(raw.targets) ? raw.targets.filter((t): t is string => typeof t === 'string') : [];
+  return {
+    type: raw.type as ChatEvent['type'],
+    targetIds: targets.length ? targets : undefined,
+    title: typeof raw.title === 'string' && raw.title ? raw.title : undefined,
+    on: typeof raw.on === 'boolean' ? raw.on : undefined,
+  };
+}
+
+/**
+ * Conversations and messages as the app holds them: who has read what comes
+ * from each member's last_read_at, and `mutedUntil` (your own chat settings,
+ * by chat id) says which chats you muted. Event lines ("Mira added Dev") are
+ * never unread and never "read by" anyone.
+ */
+export function toConversations(me: ID, convRows: ConversationRow[], messageRows: MessageRow[], mutedUntil?: Map<ID, string>): { conversations: Conversation[]; messages: Message[] } {
   const readAt = new Map<string, Map<string, string>>();
   for (const c of convRows) readAt.set(c.id, new Map((c.conversation_members ?? []).filter((m) => m.last_read_at).map((m) => [m.user_id, m.last_read_at as string])));
   const messages: Message[] = messageRows.map((row) => {
-    const readers = readAt.get(row.conversation_id);
+    const system = row.kind === 'system';
+    const readers = system ? undefined : readAt.get(row.conversation_id);
     const readAtBy: Record<string, string> = {};
     if (readers) for (const [user, at] of readers) if (user !== row.sender_id && at >= row.created_at) readAtBy[user] = at;
     return {
       id: row.id, conversationId: row.conversation_id, senderId: row.sender_id, body: row.body, createdAt: row.created_at,
       kind: (row.kind as Message['kind']) || 'text', sharedId: row.shared_id ?? undefined,
+      event: system ? toChatEvent(row.event) : undefined,
       reactions: row.reactions && Object.keys(row.reactions).length ? row.reactions : undefined,
       editedAt: row.edited_at ?? undefined,
       audio: row.audio_url ? { url: row.audio_url, ms: row.audio_ms ?? 0 } : undefined,
@@ -407,17 +432,44 @@ export function toConversations(me: ID, convRows: ConversationRow[], messageRows
   const conversations: Conversation[] = convRows.map((c) => {
     const mine = messages.filter((m) => m.conversationId === c.id);
     const myRead = readAt.get(c.id)?.get(me) ?? '';
+    const members = c.conversation_members ?? [];
+    const admins = members.filter((m) => m.role === 'admin').map((m) => m.user_id);
+    // A database with roles (migration 54) always has an admin in a group;
+    // without roles the list stays unknown rather than empty.
+    const hasRoles = members.some((m) => typeof m.role === 'string');
+    const muted = mutedUntil?.get(c.id);
     return {
       id: c.id,
-      participantIds: (c.conversation_members ?? []).map((m) => m.user_id),
+      participantIds: members.map((m) => m.user_id),
       isGroup: c.is_group ?? undefined,
       title: c.title ?? undefined,
+      createdBy: c.created_by ?? undefined,
+      adminIds: hasRoles && c.is_group ? admins : undefined,
+      photoUrl: c.photo_url ?? undefined,
+      mutedUntil: muted && Date.parse(muted) > Date.now() ? muted : undefined,
       messageIds: mine.map((m) => m.id),
       updatedAt: c.updated_at,
-      unreadCount: mine.filter((m) => m.senderId !== me && m.createdAt > myRead).length,
+      unreadCount: mine.filter((m) => m.senderId !== me && m.kind !== 'system' && m.createdAt > myRead).length,
     };
   });
   return { conversations, messages };
+}
+
+/**
+ * The columns asked for each chat member. `role` came with migration 54; a
+ * database without it refuses the whole ask, so the chats are asked for
+ * again without it (and still load).
+ */
+const MEMBERS_NOW = 'conversation_members(user_id, last_read_at, role)';
+const MEMBERS_BEFORE_54 = 'conversation_members(user_id, last_read_at)';
+
+/** Your own chat settings (mute), by chat id. A database without them yet (migration 54) just gives none. */
+function toMutes(rows: unknown): Map<ID, string> {
+  const out = new Map<ID, string>();
+  for (const r of (Array.isArray(rows) ? rows : []) as { conversation_id?: string; muted_until?: string | null }[]) {
+    if (r.conversation_id && r.muted_until) out.set(r.conversation_id, r.muted_until);
+  }
+  return out;
 }
 
 type Edge = { follower_id: string; following_id: string };
@@ -435,12 +487,21 @@ export interface AdminReport {
   reporterId: ID;
   /** The account the report is about. */
   userId?: ID;
-  kind: 'post' | 'hit' | 'profile';
+  /** What was reported: a post, a hit, an account, or a chat ("Report group"). */
+  kind: 'post' | 'hit' | 'profile' | 'conversation';
   targetId?: ID;
   reason?: string;
   createdAt: string;
   status: 'open' | 'removed' | 'suspended' | 'dismissed';
   reviewedAt?: string;
+}
+
+/** A reported chat as an admin sees it (report_chat_context, migration 54): its name, who is in it, and its last messages, oldest first. */
+export interface ReportedChat {
+  title?: string;
+  isGroup: boolean;
+  memberIds: ID[];
+  messages: { senderId: ID; body: string; kind: string; createdAt: string }[];
 }
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /**
@@ -474,7 +535,19 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // Coaches load alongside everything else rather than after it: one round
   // trip to the server fewer on every open. A failure just means no coaches.
   const coachingLoad = fetchCoaching(me).catch(() => ({ coaches: [], coachReviews: [], coachResults: [] }));
-  const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows, sessionRows, pollRows, myPollVotes, hitRows] = await Promise.all([
+  // Direct messages: every chat, each with only its newest messages (older
+  // ones load as you scroll up in the chat), the way Instagram does it. A
+  // database without the tables yet just gives none; one without each
+  // member's role (migration 54) is asked again without it.
+  const chatList = (members: string) => db.from('conversations').select(`*, ${members}, messages(*)`)
+    .order('updated_at', { ascending: false })
+    .order('created_at', { referencedTable: 'messages', ascending: false })
+    .limit(MESSAGE_PAGE, { referencedTable: 'messages' });
+  const chatsLoad = (async () => {
+    const now = await chatList(MEMBERS_NOW);
+    return now.error ? chatList(MEMBERS_BEFORE_54) : now;
+  })();
+  const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows, sessionRows, pollRows, myPollVotes, hitRows, prefRows] = await Promise.all([
     // Every profile, in chunks, so nobody is left out past the first 1,000.
     allRows<ProfileRow>((from, to) => db.from('profiles').select('*').order('created_at', { ascending: true }).range(from, to)),
     db.from('posts').select(POST_SELECT).order('created_at', { ascending: false }).limit(POST_PAGE),
@@ -483,13 +556,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     allRows<Edge>((from, to) => db.from('follows').select('follower_id, following_id').or(`follower_id.eq.${me},following_id.eq.${me}`).range(from, to)),
     // Only the ones that involve you come back; a database without the table yet just gives none.
     db.from('follow_requests').select('requester_id, target_id, created_at'),
-    // Direct messages: every chat, each with only its newest messages (older
-    // ones load as you scroll up in the chat), the way Instagram does it. A
-    // database without the tables yet just gives none.
-    db.from('conversations').select('*, conversation_members(user_id, last_read_at), messages(*)')
-      .order('updated_at', { ascending: false })
-      .order('created_at', { referencedTable: 'messages', ascending: false })
-      .limit(MESSAGE_PAGE, { referencedTable: 'messages' }),
+    chatsLoad,
     // Threads and coach questions, each with its own newest replies (all of
     // them load when the thread is opened), so no app-wide cap cuts replies off.
     db.from('questions').select('*, answers(*)').order('created_at', { ascending: false }).limit(300)
@@ -514,6 +581,8 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     db.from('poll_votes').select('question_id, option').eq('user_id', me),
     // Hits still ahead (or just started), with who is in.
     db.from('hit_requests').select('*, hit_joins(user_id)').eq('cancelled', false).gte('starts_at', new Date(Date.now() - 3_600_000).toISOString()).order('starts_at', { ascending: true }).limit(100),
+    // Which chats you muted: only your own rows come back (migration 54; none without it).
+    db.from('conversation_prefs').select('conversation_id, muted_until'),
   ]);
   const coaching = await coachingLoad;
   if (qs.error) console.warn('[remote] community tables missing; run the pending migrations', qs.error.message);
@@ -524,9 +593,10 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   const replyRows = coachQuestionRows.flatMap((q) => q.coach_replies ?? []).sort(byTime);
   if (convs.error) console.warn('[remote] messages tables missing; run the pending migrations', convs.error.message);
   const hidden = new Set(((hiddenRows.data ?? []) as { message_id: string }[]).map((r) => r.message_id));
-  const convRows = (convs.data ?? []) as ConversationRow[];
+  // The member columns are picked at run time (with or without role), so the query's own typing cannot see the shape.
+  const convRows = (convs.data ?? []) as unknown as ConversationRow[];
   const messageRows = convRows.flatMap((c) => c.messages ?? []).filter((m) => !hidden.has(m.id)).sort(byTime);
-  const dm = toConversations(me, convRows, messageRows);
+  const dm = toConversations(me, convRows, messageRows, toMutes(prefRows.error ? [] : prefRows.data));
   if (requests.error) console.warn('[remote] follow requests table missing; run the pending migrations', requests.error.message);
   const stories = storiesTry.error ? await storiesPlain() : storiesTry;
   if (storiesTry.error) console.warn('[remote] hit likes/comments tables missing; run the pending migrations', storiesTry.error.message);
@@ -620,6 +690,34 @@ const fail = (what: string) => (error: unknown) => {
   console.warn(`[remote] ${what} failed`, error);
 };
 
+/**
+ * Why a group chat function said no, from the exact words it raises
+ * (migration 54; 42's older wording for a full group too). Null for anything
+ * else, which the app treats as "didn't go through".
+ */
+export type GroupRefusal = 'blocked' | 'teen' | 'full' | 'not-admin';
+function groupRefusal(message: string): GroupRefusal | null {
+  if (/teen_closed/.test(message)) return 'teen';
+  if (/group_full|up to 16 people/.test(message)) return 'full';
+  if (/not_admin/.test(message)) return 'not-admin';
+  if (/blocked/.test(message)) return 'blocked';
+  return null;
+}
+
+/**
+ * The database does not have the function asked for: it has not had the
+ * migration that adds it yet. PostgREST answers "Could not find the function
+ * … in the schema cache" (PGRST202); Postgres itself says "function … does not exist".
+ */
+const missingFunction = (error: { code?: string; message: string }) =>
+  error.code === 'PGRST202' || error.code === '42883' || /could not find the function|function .* does not exist/i.test(error.message);
+
+/** Set once a settings save finds no push_messages column (a database before migration 54). */
+let userStateLacksPushMessages = false;
+
+/** A note for whoever reads the logs: this needs the group chat update in Supabase first. */
+const needs54 = (what: string) => console.warn(`[remote] ${what} needs the group chat update. Open Supabase → SQL Editor → New query, paste the file supabase/migrations/20261001000054_group_chats.sql and press Run. It is safe to run more than once.`);
+
 /** The edits a post can carry, and the migration file that adds each one's column. */
 const OPTIONAL_COLUMNS = /trim_|muted|crop|location|speed|volume|feature_ok|court_/;
 const MIGRATION_FOR: Record<string, string> = {
@@ -688,10 +786,20 @@ export const remote = {
     if (error) fail('report')(error);
   },
   async saveUserState(me: ID, s: UserState) {
-    const { error } = await need().from('user_state').upsert({
+    const row: Record<string, unknown> = {
       user_id: me, muted_ids: s.mutedIds, blocked_ids: s.blockedIds, saved_question_ids: s.savedQuestionIds, payment_methods: s.paymentMethods,
       default_payment_id: s.defaultPaymentId, show_activity: s.showActivity, push_likes: s.pushLikes, push_coach: s.pushCoach, updated_at: new Date().toISOString(),
-    });
+    };
+    // The "Message alerts" switch has its own column (migration 54). A
+    // database without it refuses the whole save, so the rest is saved
+    // without it, and it is not sent again this session.
+    const withAlerts = s.pushMessages !== undefined && !userStateLacksPushMessages;
+    let { error } = await need().from('user_state').upsert(withAlerts ? { ...row, push_messages: s.pushMessages } : row);
+    if (error && withAlerts && /push_messages/.test(error.message)) {
+      userStateLacksPushMessages = true;
+      needs54('The Message alerts switch');
+      ({ error } = await need().from('user_state').upsert(row));
+    }
     if (error) fail('settings save')(error);
   },
 
@@ -708,26 +816,128 @@ export const remote = {
     return (data as string) || wanted;
   },
 
-  /** A new group chat; the same refusals as a one-to-one chat, for anyone in it. */
-  async openGroup(members: ID[], title: string | undefined, wanted: ID): Promise<ID | 'blocked' | 'teen' | 'failed'> {
-    const { data, error } = await need().rpc('open_group', { members, group_title: title ?? null, wanted });
-    if (error && /teen_closed/.test(error.message)) return 'teen';
-    if (error && /blocked/.test(error.message)) return 'blocked';
-    if (error) { fail('open group')(error); return 'failed'; }
+  /* Group chats. Migration 54 does the work on the server (who may join,
+     admins, event lines, alerts); on a database that has not had it yet, the
+     older functions from migration 42 stand in where there is one, and the
+     newer abilities (remove, admins, photo, mute) simply say no. */
+
+  /**
+   * A new group with the people picked (two to fifteen others) and an
+   * optional name, under the id the app already shows, so a retry returns
+   * the same group. Refused when someone you picked is blocked with someone
+   * else in it ('blocked'), when someone not known to be an adult does not
+   * follow you ('teen'), or past 16 people ('full').
+   */
+  async createGroup(memberIds: ID[], title: string | undefined, wanted: ID): Promise<ID | GroupRefusal | 'failed'> {
+    const db = need();
+    let { data, error } = await db.rpc('create_group', { group_title: title ?? null, member_ids: memberIds, wanted });
+    if (error && missingFunction(error)) ({ data, error } = await db.rpc('open_group', { members: memberIds, group_title: title ?? null, wanted }));
+    if (error) { const why = groupRefusal(error.message); if (why) return why; fail('create group')(error); return 'failed'; }
     return (data as string) || wanted;
   },
-  async addToGroup(conversationId: ID, member: ID): Promise<'ok' | 'blocked' | 'teen' | 'failed'> {
-    const { error } = await need().rpc('add_to_group', { conv: conversationId, member });
-    if (error && /teen_closed/.test(error.message)) return 'teen';
-    if (error && /blocked/.test(error.message)) return 'blocked';
-    if (error) { fail('add to group')(error); return 'failed'; }
-    return 'ok';
-  },
-  async leaveGroup(conversationId: ID) { const { error } = await need().rpc('leave_group', { conv: conversationId }); if (error) fail('leave group')(error); },
-  async renameGroup(conversationId: ID, title: string) { const { error } = await need().rpc('rename_group', { conv: conversationId, new_title: title }); if (error) fail('rename group')(error); },
 
-  /** Resolves 'refused' when the database will not take it (a chat with someone you are blocked with). */
+  /**
+   * Adds people to a group you are in. Resolves with who was actually added
+   * (anyone already in it is skipped), or why not, as createGroup.
+   */
+  async addGroupMembers(conversationId: ID, memberIds: ID[]): Promise<ID[] | GroupRefusal | 'failed'> {
+    const db = need();
+    const { data, error } = await db.rpc('add_group_members', { conv: conversationId, member_ids: memberIds });
+    if (!error) return Array.isArray(data) ? (data as string[]) : [];
+    if (!missingFunction(error)) { const why = groupRefusal(error.message); if (why) return why; fail('add to group')(error); return 'failed'; }
+    // Before migration 54: one at a time, stopping at the first refusal.
+    const added: ID[] = [];
+    for (const member of memberIds) {
+      const one = await db.rpc('add_to_group', { conv: conversationId, member });
+      if (!one.error) { added.push(member); continue; }
+      if (added.length) return added;
+      const why = groupRefusal(one.error.message);
+      if (why) return why;
+      fail('add to group')(one.error);
+      return 'failed';
+    }
+    return added;
+  },
+
+  /** An admin takes someone out of a group. */
+  async removeGroupMember(conversationId: ID, memberId: ID): Promise<'ok' | 'not-admin' | 'failed'> {
+    const { error } = await need().rpc('remove_group_member', { conv: conversationId, member: memberId });
+    if (!error) return 'ok';
+    if (missingFunction(error)) { needs54('Removing someone from a group'); return 'failed'; }
+    if (groupRefusal(error.message) === 'not-admin') return 'not-admin';
+    fail('remove from group')(error);
+    return 'failed';
+  },
+
+  /** An admin makes someone an admin, or takes it away. */
+  async setGroupAdmin(conversationId: ID, memberId: ID, admin: boolean): Promise<'ok' | 'not-admin' | 'failed'> {
+    const { error } = await need().rpc('set_group_admin', { conv: conversationId, member: memberId, make: admin });
+    if (!error) return 'ok';
+    if (missingFunction(error)) { needs54('Group admins'); return 'failed'; }
+    if (groupRefusal(error.message) === 'not-admin') return 'not-admin';
+    fail('group admin')(error);
+    return 'failed';
+  },
+
+  /** A group's photo (already uploaded to the media bucket, in your own folder), or null to take it off. True when it took. */
+  async setGroupPhoto(conversationId: ID, url: string | null): Promise<boolean> {
+    const { error } = await need().rpc('set_group_photo', { conv: conversationId, photo: url });
+    if (!error) return true;
+    if (missingFunction(error)) needs54('A group photo'); else fail('group photo')(error);
+    return false;
+  },
+
+  /** Leaving a group. True when it took (false: you are still in it). */
+  async leaveGroup(conversationId: ID): Promise<boolean> {
+    const { error } = await need().rpc('leave_group', { conv: conversationId });
+    if (error) { fail('leave group')(error); return false; }
+    return true;
+  },
+
+  /** A group's new name ('' takes the name off). True when it took. */
+  async renameGroup(conversationId: ID, title: string): Promise<boolean> {
+    const { error } = await need().rpc('rename_group', { conv: conversationId, new_title: title });
+    if (error) { fail('rename group')(error); return false; }
+    return true;
+  },
+
+  /**
+   * Mutes a chat you are in (a group or a one-to-one) until a moment, or
+   * unmutes it with null. Only you can see it. True when it took.
+   */
+  async setChatMute(conversationId: ID, until: string | null): Promise<boolean> {
+    const { error } = await need().rpc('set_chat_mute', { conv: conversationId, until });
+    if (!error) return true;
+    if (missingFunction(error)) needs54('Muting a chat'); else fail('mute chat')(error);
+    return false;
+  },
+
+  /**
+   * Your reaction on a message, or taken back by sending the same one again.
+   * Only your own reaction changes, so two people reacting at once both
+   * stick; resolves with everyone's reactions as they now stand. On a
+   * database without migration 54, `whole` (every reaction as this phone now
+   * has it) is written the old way instead, and it resolves with that.
+   * Resolves null when it was not saved.
+   */
+  async toggleReaction(messageId: ID, emoji: string, whole: Record<ID, string>): Promise<Record<ID, string> | null> {
+    const db = need();
+    const { data, error } = await db.rpc('toggle_reaction', { msg: messageId, emoji });
+    if (!error) return data && typeof data === 'object' ? (data as Record<ID, string>) : {};
+    if (!missingFunction(error)) { fail('message reaction')(error); return null; }
+    const old = await db.from('messages').update({ reactions: whole }).eq('id', messageId);
+    if (old.error) { fail('message reaction')(old.error); return null; }
+    return whole;
+  },
+
+  /**
+   * Resolves 'refused' when the database will not take it (a one-to-one chat
+   * with someone you are blocked with, or a group you are no longer in).
+   * Event lines ('system') are only ever written by the server, so one is
+   * never sent from here.
+   */
   async insertMessage(message: Message): Promise<'refused' | 'failed' | void> {
+    if (message.kind === 'system') return 'refused';
     const { error } = await need().from('messages').insert({
       id: message.id, conversation_id: message.conversationId, sender_id: message.senderId, body: message.body,
       kind: message.kind, shared_id: message.sharedId ?? null, created_at: message.createdAt,
@@ -811,20 +1021,31 @@ export const remote = {
     if (error) fail('message delete')(error);
   },
 
-  async setMessageReactions(messageId: ID, reactions: Record<string, string>) {
-    const { error } = await need().from('messages').update({ reactions }).eq('id', messageId);
-    if (error) fail('message reaction')(error);
+  /** One conversation with its messages — for one that just started on another phone. Null when it cannot be had, for whatever reason. */
+  async fetchConversation(me: ID, conversationId: ID): Promise<{ conversation: Conversation; messages: Message[] } | null> {
+    const got = await remote.fetchConversationState(me, conversationId);
+    return got === 'gone' ? null : got;
   },
 
-  /** One conversation with its messages — for one that just started on another phone. */
-  async fetchConversation(me: ID, conversationId: ID): Promise<{ conversation: Conversation; messages: Message[] } | null> {
+  /**
+   * One conversation as it stands now: its people, name, photo, admins, your
+   * mute and its newest messages. 'gone' when the database answered and it
+   * is not there for you (you were taken out of the group, or everyone left);
+   * null when there was no answer (no signal), which says nothing either way.
+   */
+  async fetchConversationState(me: ID, conversationId: ID): Promise<{ conversation: Conversation; messages: Message[] } | 'gone' | null> {
     const db = need();
-    const [conv, msgs] = await Promise.all([
-      db.from('conversations').select('*, conversation_members(user_id, last_read_at)').eq('id', conversationId).maybeSingle(),
+    const chat = (members: string) => db.from('conversations').select(`*, ${members}`).eq('id', conversationId).maybeSingle();
+    const [first, msgs, pref] = await Promise.all([
+      chat(MEMBERS_NOW),
       db.from('messages').select('*').eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(MESSAGE_PAGE),
+      db.from('conversation_prefs').select('conversation_id, muted_until').eq('conversation_id', conversationId),
     ]);
-    if (conv.error || msgs.error || !conv.data) return null;
-    const dm = toConversations(me, [conv.data as ConversationRow], ((msgs.data ?? []) as MessageRow[]).reverse());
+    // A database without member roles (migration 54) is asked again without them.
+    const conv = first.error ? await chat(MEMBERS_BEFORE_54) : first;
+    if (conv.error || msgs.error) return null;
+    if (!conv.data) return 'gone';
+    const dm = toConversations(me, [conv.data as unknown as ConversationRow], ((msgs.data ?? []) as MessageRow[]).reverse(), toMutes(pref.error ? [] : pref.data));
     return dm.conversations[0] ? { conversation: dm.conversations[0], messages: dm.messages } : null;
   },
 
@@ -1124,7 +1345,7 @@ export const remote = {
       const [kind, id] = (r.target ?? '').split(':');
       return {
         id: r.id, reporterId: r.reporter_id, userId: r.target_user_id ?? undefined,
-        kind: kind === 'post' || kind === 'hit' ? kind : 'profile', targetId: id || undefined,
+        kind: kind === 'post' || kind === 'hit' || kind === 'conversation' ? kind : 'profile', targetId: id || undefined,
         reason: r.reason || undefined, createdAt: r.created_at, status: (r.status ?? 'open') as AdminReport['status'], reviewedAt: r.reviewed_at ?? undefined,
       };
     });
@@ -1136,6 +1357,27 @@ export const remote = {
     if (error || !data) return null;
     const row = data as { body?: string; caption?: string | null; image_url?: string | null; thumbnail_url?: string | null; removed_at?: string | null };
     return { body: row.body ?? row.caption ?? '', picture: row.thumbnail_url ?? row.image_url ?? undefined, removed: !!row.removed_at };
+  },
+  /**
+   * A reported chat, for the admin's Reports screen: admins cannot read
+   * chats they are not in, so the database hands over just this much, and
+   * only for a chat someone reported. Null when it is gone, or on a
+   * database without it yet (migration 54).
+   */
+  async fetchReportedChat(conversationId: ID): Promise<ReportedChat | null> {
+    const { data, error } = await need().rpc('report_chat_context', { conv: conversationId });
+    if (error) { if (!missingFunction(error)) fail('reported chat')(error); return null; }
+    if (!data || typeof data !== 'object') return null;
+    const raw = data as { title?: unknown; is_group?: unknown; members?: unknown; messages?: unknown };
+    const lines = Array.isArray(raw.messages) ? raw.messages as { sender?: unknown; body?: unknown; kind?: unknown; created_at?: unknown }[] : [];
+    return {
+      title: typeof raw.title === 'string' && raw.title.trim() ? raw.title : undefined,
+      isGroup: raw.is_group === true,
+      memberIds: Array.isArray(raw.members) ? raw.members.filter((m): m is string => typeof m === 'string') : [],
+      messages: lines
+        .filter((m) => typeof m.sender === 'string' && typeof m.created_at === 'string')
+        .map((m) => ({ senderId: m.sender as string, body: typeof m.body === 'string' ? m.body : '', kind: typeof m.kind === 'string' ? m.kind : 'text', createdAt: m.created_at as string })),
+    };
   },
   /** An admin's decision on a report. Resolves false when the database refused. */
   async moderateReport(reportId: ID, decision: 'remove' | 'restore' | 'suspend' | 'unsuspend' | 'dismiss'): Promise<boolean> {
@@ -1349,6 +1591,8 @@ export const remote = {
     if (error) {
       if (/teen_closed/.test(error.message)) return { error: 'You can join once you follow each other.' };
       if (/blocked/.test(error.message)) return { error: 'You can’t join this one.' };
+      // An admin took you out of this hit's chat (migration 54): only someone in it can add you back. Never says who.
+      if (/\bremoved\b/.test(error.message)) return { error: 'You were removed from this hit’s chat, so you can’t rejoin it.' };
       const plain = error.message.match(/That hit[^.]*\.|That is your own hit\./);
       return { error: plain ? plain[0] : 'That didn’t go through. Try again.' };
     }

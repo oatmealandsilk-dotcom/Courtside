@@ -5,6 +5,8 @@ import { CURRENT_USER_ID } from './users';
 /**
  * Seed DM threads. Instagram-shaped: one thread per person, newest last,
  * with a couple of shared posts so the share flow has something to render.
+ * One group too ("Saturday hitters", which you started), so the demo shows
+ * an event line, a court, a shared post, several voices and "Seen by".
  */
 export const messages: Message[] = [
   {
@@ -83,9 +85,86 @@ export const messages: Message[] = [
     createdAt: isoDaysAgo(4),
     kind: 'text',
   },
+
+  {
+    id: 'm-sat-1',
+    conversationId: 'cv-saturday',
+    senderId: CURRENT_USER_ID,
+    // The sentence the server would have written; the chat words it from `event`.
+    body: 'Alex created the group "Saturday hitters"',
+    createdAt: isoDaysAgo(1, 9),
+    kind: 'system',
+    event: { type: 'created', title: 'Saturday hitters' },
+  },
+  {
+    id: 'm-sat-2',
+    conversationId: 'cv-saturday',
+    senderId: 'u-mira',
+    body: 'Courts 3 and 4 are ours from 9 on Saturday. Who’s in?',
+    createdAt: isoDaysAgo(1, 8),
+    kind: 'text',
+  },
+  {
+    id: 'm-sat-3',
+    conversationId: 'cv-saturday',
+    senderId: 'u-dev',
+    body: 'In. I’ll bring a fresh can.',
+    createdAt: isoDaysAgo(1, 7),
+    kind: 'text',
+  },
+  {
+    id: 'm-sat-4',
+    conversationId: 'cv-saturday',
+    senderId: 'u-mira',
+    body: 'Griffith Park Riverside Courts',
+    createdAt: isoDaysAgo(1, 7),
+    kind: 'court',
+    place: { name: 'Griffith Park Riverside Courts', lat: 34.1105, lng: -118.2721 },
+  },
+  {
+    id: 'm-sat-5',
+    conversationId: 'cv-saturday',
+    senderId: 'u-dev',
+    body: '',
+    createdAt: isoDaysAgo(1, 6),
+    kind: 'post',
+    sharedId: 'p3',
+  },
+  {
+    id: 'm-sat-7',
+    conversationId: 'cv-saturday',
+    senderId: 'u-june',
+    body: 'Running ten minutes late, but count me in.',
+    createdAt: isoDaysAgo(0, 6),
+    kind: 'text',
+  },
+  {
+    id: 'm-sat-6',
+    conversationId: 'cv-saturday',
+    senderId: CURRENT_USER_ID,
+    body: 'I’m in. Doubles first, then king of the court?',
+    createdAt: isoDaysAgo(0, 1),
+    kind: 'text',
+    // Yours is the newest, so the line under it shows: Mira and Dev have
+    // read it and June has not yet, so it says "Seen by Mira, Dev".
+    readAtBy: { 'u-mira': isoDaysAgo(0), 'u-dev': isoDaysAgo(0) },
+    openedAtBy: { 'u-mira': isoDaysAgo(0), 'u-dev': isoDaysAgo(0) },
+  },
 ];
 
 export const conversations: Conversation[] = [
+  {
+    id: 'cv-saturday',
+    participantIds: [CURRENT_USER_ID, 'u-mira', 'u-dev', 'u-june'],
+    isGroup: true,
+    title: 'Saturday hitters',
+    createdBy: CURRENT_USER_ID,
+    adminIds: [CURRENT_USER_ID],
+    messageIds: ['m-sat-1', 'm-sat-2', 'm-sat-3', 'm-sat-4', 'm-sat-5', 'm-sat-7', 'm-sat-6'],
+    updatedAt: isoDaysAgo(0, 1),
+    // You answered after June's message, so nothing in it is new to you.
+    unreadCount: 0,
+  },
   {
     id: 'cv-mira',
     participantIds: [CURRENT_USER_ID, 'u-mira'],
