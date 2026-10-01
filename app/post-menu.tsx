@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Dimensions, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -50,8 +50,19 @@ export default function PostMenu() {
     Animated.timing(rise, { toValue: 0, duration: 320, easing: EASE, useNativeDriver: true }).start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rise]);
+  // How far the sheet travels: its own height, so it leaves the screen
+  // entirely. A fixed 420 left most of a tall menu on screen until the very
+  // end, when it vanished at once, which read as a lag after the tap.
+  const [sheetH, setSheetH] = useState(Dimensions.get('window').height);
+  const [leaving, setLeaving] = useState(false);
+  const closing = useRef(false);
   const close = () => {
-    Animated.timing(rise, { toValue: 1, duration: 220, easing: EASE, useNativeDriver: true }).start(() => goBack('/'));
+    if (closing.current) return;
+    closing.current = true;
+    // Moves on the tap itself, fastest in its first frames (an easing that
+    // starts slowly reads as a delay), with the dim fading alongside.
+    setLeaving(true);
+    Animated.timing(rise, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(() => goBack('/'));
   };
 
   if (!item) return <View style={styles.backdrop}><SheetBackdrop /><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => goBack('/')} style={StyleSheet.absoluteFill} /></View>;
@@ -97,9 +108,9 @@ export default function PostMenu() {
 
   return (
     <View style={styles.backdrop}>
-      <SheetBackdrop />
-      <Pressable accessibilityRole="button" accessibilityLabel="Close menu" onPress={close} style={StyleSheet.absoluteFill} />
-      <Animated.View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md, transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [0, 420] }) }] }]}>
+      <SheetBackdrop leaving={leaving} />
+      <Pressable accessibilityRole="button" accessibilityLabel="Close menu" onPressIn={close} style={StyleSheet.absoluteFill} />
+      <Animated.View onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); if (h > 0) setSheetH(h + 24); }} style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md, transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [0, sheetH] }) }] }]}>
         <View style={styles.grabber} />
         {done ? (
           <View style={styles.doneBox}>
