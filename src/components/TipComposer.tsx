@@ -12,12 +12,14 @@ const MAX = 500;
  * up once there is something to send: a shade off the page, no outline.
  * Tips use it (the feed's tip page and the board), and so does the AI coach.
  */
-export function TipComposer({ onSubmit, onSent, initial = '', placeholder = 'What would make CourtSide better?' }: {
+export function TipComposer({ onSubmit, onSent, initial = '', placeholder = 'Your tip', accessibilityLabel = 'Your tip' }: {
   onSubmit: (body: string) => Promise<void> | void;
   onSent?: () => void;
   /** Text to start with (a suggestion tapped above it). */
   initial?: string;
   placeholder?: string;
+  /** What a screen reader calls the box: a tip by default, but the same box takes a coach's answer and an AI coach question. */
+  accessibilityLabel?: string;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const input = useRef<TextInput>(null);
@@ -53,7 +55,7 @@ export function TipComposer({ onSubmit, onSent, initial = '', placeholder = 'Wha
           placeholderTextColor={colors.textFaint}
           multiline
           maxLength={MAX}
-          accessibilityLabel="Your tip"
+          accessibilityLabel={accessibilityLabel}
           onFocus={() => reveal(input.current as unknown as Parameters<typeof reveal>[0])}
           style={styles.input}
         />
@@ -61,7 +63,7 @@ export function TipComposer({ onSubmit, onSent, initial = '', placeholder = 'Wha
           <Text style={styles.left}>{body.length > MAX - 80 ? `${MAX - body.length} left` : ''}</Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Send tip"
+            accessibilityLabel="Send"
             accessibilityState={{ disabled: !ready, busy }}
             disabled={!ready}
             onPress={send}

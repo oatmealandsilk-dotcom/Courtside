@@ -8,7 +8,7 @@ import { CourtGlyph } from '@/components/map/MapChrome';
 import type { HitRequest } from '@/data/types';
 import { FORMAT_LABEL, hitWhen, levelText } from '@/features/hits/format';
 import { openInMaps } from '@/features/players/openInMaps';
-import { confirmAction } from '@/lib/confirm';
+import { confirm } from '@/lib/confirm';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -65,7 +65,7 @@ export function HitCard({ hit }: { hit: HitRequest }) {
         {mine ? (
           <View style={styles.actions}>
             {hit.conversationId ? <Pressable accessibilityRole="button" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={styles.secondary}><Text style={styles.secondaryText}>Chat</Text></Pressable> : null}
-            <Pressable accessibilityRole="button" onPress={(e) => { e.stopPropagation?.(); confirmAction('Call off this hit?', 'It comes off Find Players. Anyone who joined still has the chat.', 'Call it off', () => actions.cancelHit(hit.id)); }} style={styles.secondary}><Text style={[styles.secondaryText, { color: colors.danger }]}>Call off</Text></Pressable>
+            <Pressable accessibilityRole="button" onPress={(e) => { e.stopPropagation?.(); confirm({ title: 'Call off this hit?', message: 'It comes off Find Players. Anyone who joined still has the chat.', confirmLabel: 'Call it off', destructive: true, onConfirm: () => actions.cancelHit(hit.id) }); }} style={styles.secondary}><Text style={[styles.secondaryText, { color: colors.danger }]}>Call off</Text></Pressable>
           </View>
         ) : inIt ? (
           <Pressable accessibilityRole="button" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={styles.secondary}><Ionicons name="chatbubble-ellipses-outline" size={15} color={colors.text} /><Text style={styles.secondaryText}>You’re in · Chat</Text></Pressable>

@@ -98,7 +98,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const content = (section:string) => (section === 'players' ? <View style={{ gap: 16 }}>
         <View style={styles.searchWrap}>
           <Ionicons name="search" size={17} color={colors.textFaint} style={styles.searchIcon} />
-          <TextInput accessibilityLabel="Search players" placeholder="Name, handle or city" placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} style={styles.search} />
+          <TextInput accessibilityLabel="Search players" placeholder="Search" placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} style={styles.search} />
         </View>
         {currentUser && !search ? (section === 'players'
           ? <NearbyMap me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} />

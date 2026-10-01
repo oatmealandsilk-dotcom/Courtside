@@ -212,6 +212,7 @@ function Train() {
             key={draft?.n ?? 0}
             initial={draft?.text}
             placeholder="What would you like help with?"
+            accessibilityLabel="Message the AI coach"
             onSubmit={(text) => { void ask(text); }}
           />
           <View style={styles.footRow}>

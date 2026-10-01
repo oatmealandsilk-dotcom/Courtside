@@ -8,6 +8,7 @@ import { goBack } from '@/lib/goBack';
 import { LevelPill } from '@/components/LevelPill';
 import { Avatar, Button, EmptyState, Field, Screen, SegmentedControl } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
+import { confirmUnfollow } from '@/lib/confirm';
 import { colors, spacing, typography } from '@/theme';
 
 type Tab = 'followers' | 'following';
@@ -79,7 +80,7 @@ export default function Follows() {
                 </View>
               </View>
               {isMe ? null : (
-                <Button label={following ? 'Following' : 'Follow'} variant={following ? 'secondary' : 'primary'} onPress={() => actions.toggleFollow(user.id)} />
+                <Button label={following ? 'Following' : 'Follow'} variant={following ? 'secondary' : 'primary'} onPress={following ? () => confirmUnfollow(user, () => actions.toggleFollow(user.id)) : () => actions.toggleFollow(user.id)} />
               )}
             </Pressable>
           );

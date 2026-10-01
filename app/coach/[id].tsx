@@ -177,7 +177,6 @@ export default function CoachDetail() {
             label={service.kind === 'live-session' ? 'What do you want to work on? Suggest a few times that suit you.' : 'What do you want looked at?'}
             value={question}
             onChangeText={setQuestion}
-            placeholder="What happens, when it happens, and what you have tried."
             multiline
             minHeight={110}
           />
@@ -244,14 +243,14 @@ export default function CoachDetail() {
       </View>
       {isOwner && addingResult ? (
         <View style={styles.form}>
-          <Field label="Player (first name or handle)" value={result.client} onChangeText={(v) => setResult((r) => ({ ...r, client: v }))} placeholder="Priya" autoCapitalize="words" />
-          <Field label="What you worked on" value={result.focus} onChangeText={(v) => setResult((r) => ({ ...r, focus: v }))} placeholder="Second serves in" />
+          <Field label="Player (first name or handle)" value={result.client} onChangeText={(v) => setResult((r) => ({ ...r, client: v }))} autoCapitalize="words" />
+          <Field label="What you worked on" value={result.focus} onChangeText={(v) => setResult((r) => ({ ...r, focus: v }))} />
           <View style={styles.pair}>
-            <View style={{ flex: 1 }}><Field label="Before" value={result.before} onChangeText={(v) => setResult((r) => ({ ...r, before: v }))} placeholder="41%" /></View>
-            <View style={{ flex: 1 }}><Field label="After" value={result.after} onChangeText={(v) => setResult((r) => ({ ...r, after: v }))} placeholder="63%" /></View>
-            <View style={{ width: 84 }}><Field label="Weeks" value={result.weeks} onChangeText={(v) => setResult((r) => ({ ...r, weeks: v }))} placeholder="6" keyboardType="number-pad" /></View>
+            <View style={{ flex: 1 }}><Field label="Before" value={result.before} onChangeText={(v) => setResult((r) => ({ ...r, before: v }))} /></View>
+            <View style={{ flex: 1 }}><Field label="After" value={result.after} onChangeText={(v) => setResult((r) => ({ ...r, after: v }))} /></View>
+            <View style={{ width: 84 }}><Field label="Weeks" value={result.weeks} onChangeText={(v) => setResult((r) => ({ ...r, weeks: v }))} keyboardType="number-pad" /></View>
           </View>
-          <Field label="One line on how (optional)" value={result.note} onChangeText={(v) => setResult((r) => ({ ...r, note: v }))} placeholder="Fixed the toss first; the rest followed." />
+          <Field label="One line on how (optional)" value={result.note} onChangeText={(v) => setResult((r) => ({ ...r, note: v }))} />
           <Button label="Add to my page" onPress={saveResult} disabled={!canAddResult} full />
         </View>
       ) : null}
@@ -283,7 +282,7 @@ export default function CoachDetail() {
               </Pressable>
             ))}
           </View>
-          <Field value={reviewBody} onChangeText={setReviewBody} placeholder="What changed for you?" multiline minHeight={70} />
+          <Field value={reviewBody} onChangeText={setReviewBody} placeholder="Your review" multiline minHeight={70} />
           <Button label="Post review" disabled={!reviewStars || !reviewBody.trim()} onPress={postReview} full />
         </View>
       ) : null}

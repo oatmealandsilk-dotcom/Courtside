@@ -7,7 +7,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { TipComposer } from '@/components/TipComposer';
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
-import { confirmAction } from '@/lib/confirm';
+import { confirm } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
 import { money, relativeTime } from '@/lib/format';
 import { dueText, isOpen, isOverdue, KIND_LABEL, statusLabel } from '@/features/coaching/bookings';
@@ -60,16 +60,18 @@ export default function Booking() {
   const open = isOpen(request);
 
   const refund = () => {
-    confirmAction(
-      asCoach ? 'Decline and refund?' : 'Get your money back?',
-      asCoach ? `${otherFirst} gets the full price back and the booking closes.` : 'The full price goes back to your card and the booking closes.',
-      asCoach ? 'Decline' : 'Refund',
-      async () => {
+    confirm({
+      title: asCoach ? 'Decline and refund?' : 'Get your money back?',
+      message: asCoach ? `${otherFirst} gets the full price back and the booking closes.` : 'The full price goes back to your card and the booking closes.',
+      confirmLabel: asCoach ? 'Decline' : 'Refund',
+      // The coach turning a booking down is red; a player getting their money back is not.
+      destructive: asCoach,
+      onConfirm: async () => {
         setBusy(true);
         setError('');
         try { await actions.refundBooking(request.id); } catch (e) { setError(e instanceof Error ? e.message : 'That did not go through.'); } finally { setBusy(false); }
       },
-    );
+    });
   };
   const watch = () => {
     if (!request.videoUrl) return;
@@ -114,8 +116,10 @@ export default function Booking() {
         <Text style={styles.note}>{request.status === 'declined' ? `${asCoach ? 'You' : otherFirst} declined this one. ` : 'This one was not answered in time. '}The full price went back{asCoach ? ' to the player' : ' to your card'}.</Text>
       ) : asCoach ? (
         <View style={{ gap: spacing.md }}>
+          {/* "Your answer" sits right above, so the box starts empty (an empty string, not left out, which would bring back the tips wording). */}
           <TipComposer
-            placeholder={service?.kind === 'live-session' ? 'Say when and where you can meet, and what you will work on.' : 'Write your answer. Be as specific as you would be on court.'}
+            placeholder=""
+            accessibilityLabel="Your answer"
             onSubmit={(text) => actions.answerBooking(request.id, text)}
           />
           <Pressable accessibilityRole="button" onPress={refund} disabled={busy} hitSlop={6} style={styles.quiet}>

@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, EmptyState, Screen } from '@/components/ui';
 import { GroupAvatar, groupName, othersIn } from '@/features/messages/groups';
-import { confirmAction } from '@/lib/confirm';
+import { confirm } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -25,6 +25,7 @@ export default function GroupInfo() {
   useEffect(() => { setTitle(conversation?.title ?? ''); }, [conversation?.title]);
   const [adding, setAdding] = useState(false);
   const [query, setQuery] = useState('');
+  const nameBox = useRef<TextInput>(null);
 
   if (!conversation) {
     return <Screen title="Group" compactTitle onBack={() => goBack('/messages')}><EmptyState icon="people-outline" title="This group is gone" body="You may have left it." /></Screen>;
@@ -41,27 +42,35 @@ export default function GroupInfo() {
     actions.addToGroup(conversation.id, userId);
     setQuery('');
   };
-  const leave = () => confirmAction('Leave this group?', 'You stop getting its messages. Someone in it can add you back.', 'Leave', () => {
+  const leave = () => confirm({ title: 'Leave this group?', message: 'You stop getting its messages. Someone in it can add you back.', confirmLabel: 'Leave', destructive: true, onConfirm: () => {
     actions.leaveGroup(conversation.id);
     router.replace('/messages');
-  });
+  } });
 
   return (
     <Screen title="Group" compactTitle onBack={() => goBack(`/messages/${conversation.id}`)}>
       <View style={styles.top}>
         <GroupAvatar people={people} size={72} />
-        <TextInput
-          value={title}
-          onChangeText={(v) => setTitle(v.slice(0, 60))}
-          onBlur={saveTitle}
-          onSubmitEditing={saveTitle}
-          placeholder={groupName({ ...conversation, title: undefined }, users, currentUserId)}
-          placeholderTextColor={colors.textFaint}
-          style={styles.title}
-          accessibilityLabel="Group name"
-          returnKeyType="done"
-        />
-        <Text style={styles.hint}>Tap the name to change it. Everyone sees the new one.</Text>
+        {/* A small pencil says the name can be changed, in place of a sentence saying so.
+            An empty spacer on the other side keeps the name centred under the picture. */}
+        <View style={styles.nameRow}>
+          <View style={styles.pencil} />
+          <TextInput
+            ref={nameBox}
+            value={title}
+            onChangeText={(v) => setTitle(v.slice(0, 60))}
+            onBlur={saveTitle}
+            onSubmitEditing={saveTitle}
+            placeholder={groupName({ ...conversation, title: undefined }, users, currentUserId)}
+            placeholderTextColor={colors.textFaint}
+            style={styles.title}
+            accessibilityLabel="Group name"
+            returnKeyType="done"
+          />
+          <Pressable accessibilityRole="button" accessibilityLabel="Rename the group" hitSlop={10} onPress={() => nameBox.current?.focus()} style={styles.pencil}>
+            <Ionicons name="pencil" size={15} color={colors.textFaint} />
+          </Pressable>
+        </View>
       </View>
 
       <Text style={styles.section}>{people.length + 1} people</Text>
@@ -87,7 +96,7 @@ export default function GroupInfo() {
 
       {adding ? (
         <View style={{ gap: spacing.sm, marginTop: spacing.lg }}>
-          <TextInput value={query} onChangeText={setQuery} placeholder="Name or username" placeholderTextColor={colors.textFaint} autoFocus autoCapitalize="none" autoCorrect={false} style={styles.search} accessibilityLabel="Find someone to add" />
+          <TextInput value={query} onChangeText={setQuery} placeholder="Search" placeholderTextColor={colors.textFaint} autoFocus autoCapitalize="none" autoCorrect={false} style={styles.search} accessibilityLabel="Find someone to add" />
           <View style={styles.group}>
             {candidates.map((u, i) => (
               <Pressable key={u.id} accessibilityRole="button" accessibilityLabel={`Add ${u.name}`} onPress={() => add(u.id, u.name)} style={({ pressed }) => [styles.row, i > 0 && styles.line, pressed && { backgroundColor: colors.surfaceAlt }]}>
@@ -110,8 +119,10 @@ export default function GroupInfo() {
 
 const styleDefinitions = StyleSheet.create({
   top: { alignItems: 'center', gap: spacing.sm, paddingBottom: spacing.lg },
-  title: { ...typography.title, color: colors.text, textAlign: 'center', minWidth: 200, paddingVertical: 4, outlineStyle: 'none' } as object,
-  hint: { ...typography.small, color: colors.textFaint },
+  title: { ...typography.title, color: colors.text, textAlign: 'center', minWidth: 200, flexShrink: 1, paddingVertical: 4, outlineStyle: 'none' } as object,
+  // A long name narrows rather than pushing the pencil off the screen.
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, maxWidth: '100%' },
+  pencil: { width: 18, alignItems: 'center' },
   section: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingTop: spacing.md, paddingBottom: spacing.sm },
   group: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 11, paddingHorizontal: spacing.lg },

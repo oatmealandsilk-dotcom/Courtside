@@ -299,7 +299,8 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
       </Modal>
       <Ionicons name={selection === 'video' ? 'videocam-outline' : 'images-outline'} size={30} color={colors.textMuted}/>
       <Text style={{ color: colors.text, fontSize: 16, ...font('600') }}>{value ? describe(value) : label ?? (compact ? 'Photo or video' : 'Select a photo or video')}</Text>
-      <Text style={{ color: colors.textMuted }}>{value ? 'Tap to replace' : 'Choose from your photos and videos.'}</Text>
+      {/* An empty box's title already says what it does; the line under it is only for a filled one. */}
+      {value ? <Text style={{ color: colors.textMuted }}>Tap to replace</Text> : null}
     </Pressable>
     {value?.kind === 'video' && !noCover && <Pressable accessibilityRole="button" accessibilityLabel="Choose a cover image" onPress={chooseCover}
       style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>

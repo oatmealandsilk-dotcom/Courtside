@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -102,11 +102,16 @@ const WINDOWS = [
   { label: '3 months', value: 90 },
 ];
 
-/** Steps, in order. `skip` names the reminder the profile shows if it is skipped. */
-const STEPS: { title: string; lead: string; skip?: SetupStep }[] = [
-  { title: 'About you', lead: 'Name, city, level.' },
-  { title: 'Your game', lead: 'How you play now.' },
-  { title: 'Permissions', lead: 'What CourtSide may use on this phone.', skip: 'permissions' },
+/**
+ * Steps, in order. `skip` names the reminder the profile shows if it is skipped.
+ * A step whose boxes speak for themselves has no lead: a line that only lists
+ * the boxes below it is one more thing to read.
+ */
+const STEPS: { title: string; lead?: string; skip?: SetupStep }[] = [
+  { title: 'About you' },
+  { title: 'Your game' },
+  // Said the same way as the Permissions page, which knows a browser is not a phone.
+  { title: 'Permissions', lead: Platform.OS === 'web' ? 'What CourtSide may use in this browser.' : 'What CourtSide may use on this phone.', skip: 'permissions' },
   { title: 'Body and goals', lead: 'Shapes your weekly plan.', skip: 'body' },
   { title: 'Calendar', lead: 'Optional. Gives the plan a target.', skip: 'calendar' },
   { title: 'Review', lead: 'What the coach works from.' },
@@ -279,18 +284,16 @@ export default function Onboarding() {
           <Text style={styles.title}>{STEPS[step].title}</Text>
           <Text style={styles.stepLabel}>{position + 1} / {order.length}</Text>
         </View>
-        <Text style={styles.lead}>{STEPS[step].lead}</Text>
+        {STEPS[step].lead ? <Text style={styles.lead}>{STEPS[step].lead}</Text> : null}
       </View>
 
       <ScrollView ref={scrollRef} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Animated.View style={{ gap: spacing.lg, opacity: fade }}>
           {step === 0 ? (
             <>
-              <Field label="Name" value={name} onChangeText={setName} placeholder="Your name" autoCapitalize="words" />
-              <View style={styles.group}>
-                <Text style={styles.groupLabel}>Where you play</Text>
-                <LocationField value={location} onChange={(next, at) => { setLocation(next); setCityAt(at); }} />
-              </View>
+              <Field label="Name" value={name} onChangeText={setName} autoCapitalize="words" />
+              {/* The box carries its own "Location" label; a second heading over it said the same thing twice. */}
+              <LocationField value={location} onChange={(next, at) => { setLocation(next); setCityAt(at); }} />
               {currentUser?.ageGroup === 'teen' ? (
                 // Under 18 starts private; the choice is right here, not buried in Settings.
                 <View style={styles.privacyRow}>
@@ -316,7 +319,6 @@ export default function Onboarding() {
                     label="Rating"
                     value={ratingText}
                     onChangeText={typeRating}
-                    placeholder={skillSystem === 'UTR' ? '6.4' : '3.5'}
                     keyboardType="decimal-pad"
                     selectTextOnFocus
                   />
@@ -370,12 +372,8 @@ export default function Onboarding() {
             </>
           ) : null}
 
-          {step === 2 ? (
-            <>
-              <PermissionRows />
-              <Text style={styles.note}>Say no to any of these and CourtSide still works; you can allow them later from Settings, or when you go to post.</Text>
-            </>
-          ) : null}
+          {/* The reassurance sits as the list's own footnote, set the same way as on the Permissions page. */}
+          {step === 2 ? <PermissionRows footnote="CourtSide works without these. Allow them anytime in Settings." /> : null}
 
           {step === 3 ? (
             <>
@@ -389,7 +387,7 @@ export default function Onboarding() {
                   segments={[1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: String(n), label: String(n) }))}
                 />
               </Group>
-              <Field label="Goal" value={goalOne} onChangeText={setGoalOne} placeholder="What are you working toward?" />
+              <Field label="Goal" value={goalOne} onChangeText={setGoalOne} />
               <View style={styles.chips}>
                 {GOAL_IDEAS.map((idea) => {
                   const on = goalOne === idea;
@@ -405,7 +403,7 @@ export default function Onboarding() {
 
           {step === 4 ? (
             <>
-              <Field label="Next tournament" value={tournamentName} onChangeText={setTournamentName} placeholder="e.g. LA Metro Open" />
+              <Field label="Next tournament" value={tournamentName} onChangeText={setTournamentName} />
               <Group label="Starts in">
                 <SegmentedControl<string>
                   value={String(tournamentDays)}

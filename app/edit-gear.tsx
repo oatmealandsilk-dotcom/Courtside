@@ -33,12 +33,12 @@ export default function EditGear() {
     <Screen title="Gear bag" onBack={() => goBack('/profile-details')}>
       <View style={styles.body}>
         <Text style={styles.lead}>Shows on your tennis profile. Fill in what you like; blanks stay hidden.</Text>
-        <Field label="Racket" value={racket} onChangeText={setRacket} placeholder="Babolat Pure Aero 98" autoCapitalize="words" />
+        <Field label="Racket" value={racket} onChangeText={setRacket} autoCapitalize="words" />
         <View style={styles.pair}>
-          <View style={{ flex: 1 }}><Field label="Strings" value={strings} onChangeText={setStrings} placeholder="RPM Blast 17" autoCapitalize="words" /></View>
-          <View style={{ width: 110 }}><Field label="Tension" value={tension} onChangeText={setTension} placeholder="52 lbs" /></View>
+          <View style={{ flex: 1 }}><Field label="Strings" value={strings} onChangeText={setStrings} autoCapitalize="words" /></View>
+          <View style={{ width: 110 }}><Field label="Tension" value={tension} onChangeText={setTension} placeholder="lbs" /></View>
         </View>
-        <Field label="Shoes" value={shoes} onChangeText={setShoes} placeholder="Asics Gel-Resolution 9" autoCapitalize="words" />
+        <Field label="Shoes" value={shoes} onChangeText={setShoes} autoCapitalize="words" />
         <Button label="Save" onPress={save} full />
       </View>
     </Screen>

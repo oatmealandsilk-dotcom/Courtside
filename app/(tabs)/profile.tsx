@@ -19,6 +19,7 @@ import { useApp } from '@/store/AppContext';
 import { playStyleLabel, surfaceLabel } from '@/lib/badges';
 import { compactNumber } from '@/lib/format';
 import { TileViews } from '@/components/TileViews';
+import { TilePin } from '@/components/TilePin';
 import { colors, spacing, typography, font, lift } from '@/theme';
 import { wrappedYear } from '@/features/wrapped/yearInTennis';
 
@@ -83,13 +84,14 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    // Pinned first, then newest.
    const items = (selected === 'Tagged' ? posts.filter(p => p.taggedUserIds?.includes(user.id) && !p.archived) : own.filter(p => selected !== 'Clips' || p.kind === 'clip')).sort((a,b) => Number(!!b.pinned) - Number(!!a.pinned) || Date.parse(b.createdAt)-Date.parse(a.createdAt));
    return <View style={{ minHeight: 320, backgroundColor: colors.bg }}>
-     <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>{items.map(p => <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: selected === 'Clips' ? 'clips' : selected === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
+     <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>{items.map(p => <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.pinned && selected !== 'Tagged' ? 'pinned ' : ''}${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: selected === 'Clips' ? 'clips' : selected === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
        <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
        {p.thumbnailUrl ? <ExpoImage accessibilityIgnoresInvertColors source={{uri:p.thumbnailUrl}} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120}/> : null}
        {p.kind==='clip' && <Ionicons name="play" size={14} color="#FFFFFF" style={styles.tilePlay}/>}
        {/* Views, bottom left, the way Reels and TikTok grids show them. */}
        {(p.videoUrl || p.kind === 'clip') && (p.views ?? 0) > 0 ? <TileViews views={p.views ?? 0} /> : null}
-       {p.pinned && selected !== 'Tagged' && <Ionicons name="pin" size={13} color="#FFFFFF" style={styles.tilePin}/>}
+       {/* Pinned, top left; the tile's own label says "pinned" to a screen reader. */}
+       {p.pinned && selected !== 'Tagged' ? <TilePin /> : null}
      </Pressable>)}</View>
      {!items.length && <EmptyState title={selected==='Tagged'?'No tagged posts yet':`No ${selected.toLowerCase()} yet`} body="Your shared moments will appear here."/>}
    </View>;
@@ -227,7 +229,6 @@ const styleDefinitions = StyleSheet.create({
  tilePlay:{position:'absolute',top:6,right:6,textShadowColor:'rgba(0,0,0,0.6)',textShadowRadius:3},
  tileViews:{position:'absolute',left:6,bottom:5,flexDirection:'row',alignItems:'center',gap:3},
  tileViewsText:{fontSize:12,...font('600'),color:'#FFFFFF',textShadowColor:'rgba(0,0,0,0.6)',textShadowRadius:3},
- tilePin:{position:'absolute',top:6,left:6,textShadowColor:'rgba(0,0,0,0.6)',textShadowRadius:3},
 });
 
 export default asTabRoute<{ previewSection?: string }>(Profile);

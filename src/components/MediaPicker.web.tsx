@@ -525,7 +525,6 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
         <Ionicons name={selection === 'video' ? 'videocam-outline' : 'images-outline'} size={30} color={colors.textMuted} />
       </View>
       <Text style={styles.dropTitle}>{busy ? 'Reading file…' : label ?? (compact ? 'Photo or video' : 'Select a photo or video')}</Text>
-      <Text style={styles.dropHint}>{selection === 'video' ? 'Share a video from your device.' : 'Choose from your photos and videos.'}</Text>
     </Pressable>
   );
 }
@@ -545,7 +544,6 @@ const styleDefinitions = StyleSheet.create({
   },
   dropIcon: { marginBottom: spacing.xs },
   dropTitle: { ...typography.bodyStrong, color: colors.text },
-  dropHint: { ...typography.small, color: colors.textFaint, textAlign: 'center' },
   preview: {
     gap: spacing.md,
     padding: spacing.md,

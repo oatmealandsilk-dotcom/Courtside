@@ -114,7 +114,7 @@ export function CourtSearch({ home, nearby, chosen, onChoose, typed, onType }: {
     <View style={{ gap: spacing.sm }}>
       <View style={styles.search}>
         <Ionicons name="search" size={16} color={colors.textFaint} />
-        <TextInput ref={input} value={typed} onChangeText={onType} placeholder="Search courts, or type a place" placeholderTextColor={colors.textFaint} style={styles.searchInput} accessibilityLabel="Where" autoCorrect={false} returnKeyType="done" onSubmitEditing={() => { if (rows[0] && query) onChoose({ name: labelOf(rows[0].c), lat: rows[0].c.lat, lng: rows[0].c.lng }); }} />
+        <TextInput ref={input} value={typed} onChangeText={onType} placeholder="Search courts" placeholderTextColor={colors.textFaint} style={styles.searchInput} accessibilityLabel="Where" autoCorrect={false} returnKeyType="done" onSubmitEditing={() => { if (rows[0] && query) onChoose({ name: labelOf(rows[0].c), lat: rows[0].c.lat, lng: rows[0].c.lng }); }} />
         {loadingWide ? <ActivityIndicator size="small" color={colors.textFaint} /> : typed ? (
           <Pressable accessibilityRole="button" accessibilityLabel="Clear" hitSlop={8} onPress={() => onType('')}><Ionicons name="close-circle" size={17} color={colors.textFaint} /></Pressable>
         ) : null}
@@ -146,7 +146,7 @@ export function CourtSearch({ home, nearby, chosen, onChoose, typed, onType }: {
 }
 
 const styleDefinitions = StyleSheet.create({
-  // The same lifted pill as the Coaching page's "What are you stuck on?".
+  // The same lifted pill as the Coaching page's ask box.
   search: { ...lift, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: spacing.lg, height: 50, borderRadius: radius.pill, backgroundColor: colors.surface },
   searchInput: { flex: 1, minWidth: 0, height: 50, fontSize: 16, color: colors.text, outlineStyle: 'none' } as object,
   list: { borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md, overflow: 'hidden' },

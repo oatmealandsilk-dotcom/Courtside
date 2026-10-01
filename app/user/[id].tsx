@@ -15,9 +15,11 @@ import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
 import { evaluateAchievements, playStyleLabel, surfaceLabel, tierColor } from '@/lib/badges';
 import { compactNumber, experienceLabel } from '@/lib/format';
 import { TileViews } from '@/components/TileViews';
+import { TilePin } from '@/components/TilePin';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font, lift } from '@/theme';
 import { useStillLoading } from '@/lib/useStillLoading';
+import { confirmBlock, confirmUnfollow } from '@/lib/confirm';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { ProfileSkeleton } from '@/components/Skeleton';
 import { isDesktopBrowser } from '@/lib/browserDevice';
@@ -76,12 +78,13 @@ export default function UserProfile() {
         <View style={{ minHeight: 320 }}>
             <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>
               {itemsFor(section).map((p) => (
-                <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: section === 'Clips' ? 'clips' : section === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
+                <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.pinned && section !== 'Tagged' ? 'pinned ' : ''}${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: section === 'Clips' ? 'clips' : section === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
                   <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
                   {p.thumbnailUrl ? <ExpoImage accessibilityIgnoresInvertColors source={{ uri: p.thumbnailUrl }} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120} /> : null}
                   {p.kind === 'clip' && <Ionicons name="play" size={14} color="#FFFFFF" style={styles.tilePlay} />}
                   {(p.videoUrl || p.kind === 'clip') && (p.views ?? 0) > 0 ? <TileViews views={p.views ?? 0} /> : null}
-                  {p.pinned && section !== 'Tagged' && <Ionicons name="pin" size={13} color="#FFFFFF" style={styles.tilePin} />}
+                  {/* Pinned, top left; the tile's own label says "pinned" to a screen reader. */}
+                  {p.pinned && section !== 'Tagged' ? <TilePin /> : null}
                 </Pressable>
               ))}
             </View>
@@ -95,14 +98,15 @@ export default function UserProfile() {
   };
 
   const followLabel = following ? 'Following' : requested ? 'Requested' : user.isPrivate ? 'Request to follow' : 'Follow';
+  // Unblock, notifications and mute announce themselves, in a toast with Undo.
   const menu: { icon: keyof typeof Ionicons.glyphMap; label: string; danger?: boolean; onPress: () => void }[] = blocked
-    ? [{ icon: 'checkmark-circle-outline', label: 'Unblock', onPress: () => { actions.toggleBlock(user.id); say(`Unblocked ${user.name}`); } }]
+    ? [{ icon: 'checkmark-circle-outline', label: 'Unblock', onPress: () => actions.toggleBlock(user.id) }]
     : [
-        { icon: following ? 'person-remove-outline' : 'person-add-outline', label: following ? 'Unfollow' : requested ? 'Cancel request' : followLabel, onPress: () => actions.toggleFollow(user.id) },
-        { icon: alerts ? 'notifications-off-outline' : 'notifications-outline', label: alerts ? 'Turn off notifications' : 'Turn on notifications', onPress: () => { actions.toggleAlerts(user.id); say(alerts ? 'You will not be told about new posts' : `You will be told when ${user.name.split(' ')[0]} posts`); } },
-        { icon: muted ? 'volume-high-outline' : 'volume-mute-outline', label: muted ? 'Unmute' : 'Mute', onPress: () => { actions.toggleMute(user.id); say(muted ? 'Posts are back in your feed' : 'Posts hidden from your feed'); } },
+        { icon: following ? 'person-remove-outline' : 'person-add-outline', label: following ? 'Unfollow' : requested ? 'Cancel request' : followLabel, onPress: following ? () => confirmUnfollow(user, () => actions.toggleFollow(user.id), true) : () => actions.toggleFollow(user.id) },
+        { icon: alerts ? 'notifications-off-outline' : 'notifications-outline', label: alerts ? 'Turn off notifications' : 'Turn on notifications', onPress: () => actions.toggleAlerts(user.id) },
+        { icon: muted ? 'volume-high-outline' : 'volume-mute-outline', label: muted ? 'Unmute' : 'Mute', onPress: () => actions.toggleMute(user.id) },
         { icon: 'flag-outline', label: 'Report', danger: true, onPress: () => { actions.reportUser(user.id, 'profile'); say('Thanks — a person will review this'); } },
-        { icon: 'ban-outline', label: 'Block', danger: true, onPress: () => { actions.toggleBlock(user.id); say(`Blocked ${user.name}`); } },
+        { icon: 'ban-outline', label: 'Block', danger: true, onPress: () => confirmBlock(user, () => { actions.toggleBlock(user.id); say(`Blocked ${user.name}`); }, true) },
       ];
 
   return (
@@ -147,7 +151,7 @@ export default function UserProfile() {
         ) : !isMe ? (
           <View style={styles.buttons}>
             <View style={{ flex: 1 }}>
-              <Button label={followLabel} variant={following || requested ? 'secondary' : 'primary'} onPress={() => actions.toggleFollow(user.id)} full />
+              <Button label={followLabel} variant={following || requested ? 'secondary' : 'primary'} onPress={following ? () => confirmUnfollow(user, () => actions.toggleFollow(user.id)) : () => actions.toggleFollow(user.id)} full />
             </View>
             <View style={{ flex: 1 }}>
               <Button label="Message" variant="secondary" onPress={() => { if (!actions.canMessage(user.id)) { showToast({ title: `Only people ${user.name.split(' ')[0]} follows can message them`, icon: 'lock-closed-outline' }); return; } router.push(`/messages/${actions.openConversationWith(user.id)}`); }} full />
@@ -278,7 +282,6 @@ const styleDefinitions = StyleSheet.create({
   tilePlay: { position: 'absolute', top: 6, right: 6, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
   tileViews: { position: 'absolute', left: 6, bottom: 5, flexDirection: 'row', alignItems: 'center', gap: 3 },
   tileViewsText: { fontSize: 12, ...font('600'), color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
-  tilePin: { position: 'absolute', top: 6, left: 6, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
   backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: colors.bg,

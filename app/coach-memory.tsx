@@ -9,7 +9,7 @@ import { fetchCoachMemory, clearCoachMemory, type CoachMemory } from '@/data/api
 import { useAiCoachOn } from '@/features/aiCoach/switch';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { relativeTime } from '@/lib/format';
-import { confirmAction } from '@/lib/confirm';
+import { confirm } from '@/lib/confirm';
 import { colors, radius, spacing, typography, lift } from '@/theme';
 
 /** Nothing is kept until the coach is switched on, so the screen says so. */
@@ -41,7 +41,7 @@ function CoachMemoryScreen() {
   }, []);
 
   const clear = () => {
-    confirmAction('Clear what the coach remembers?', 'Its notes and your recent conversations are deleted. The coach starts fresh next time.', 'Clear', async () => {
+    confirm({ title: 'Clear what the coach remembers?', message: 'Its notes and your recent conversations are deleted. The coach starts fresh next time.', confirmLabel: 'Clear', destructive: true, onConfirm: async () => {
       setBusy(true);
       setError('');
       try {
@@ -52,7 +52,7 @@ function CoachMemoryScreen() {
       } finally {
         setBusy(false);
       }
-    });
+    } });
   };
 
   const empty = !memory || (!memory.summary && memory.exchanges.length === 0);

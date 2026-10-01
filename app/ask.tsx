@@ -55,18 +55,19 @@ export default function Ask() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
           <Section title="Your question">
-            <Field soft value={title} onChangeText={setTitle} placeholder="What do you want to know?" />
+            {/* The section title already says what goes here, so the box stays empty. */}
+            <Field soft value={title} onChangeText={setTitle} accessibilityLabel="Your question" />
           </Section>
           <Section title="Topic">
             <Chips options={TOPICS.map((t) => ({ value: t, label: TOPIC_META[t].label }))} value={topic} onChange={(t) => { if (t) setTopic(t); }} />
           </Section>
           <Section title="Details">
-            <Field soft value={body} onChangeText={setBody} placeholder="Your level, what you have tried, what happens (optional)" multiline minHeight={96} mentions />
+            <Field soft value={body} onChangeText={setBody} placeholder="Optional" accessibilityLabel="Details" multiline minHeight={96} mentions />
           </Section>
           {poll ? (
             <Section title="Poll" right={<Pressable accessibilityRole="button" accessibilityLabel="Remove the poll" hitSlop={8} onPress={() => setPoll(null)}><Text style={styles.remove}>Remove</Text></Pressable>}>
               {poll.map((option, i) => (
-                <Field key={i} soft value={option} onChangeText={(v) => setPoll((p) => p && p.map((o, j) => (j === i ? v.slice(0, 80) : o)))} placeholder={i === 0 ? 'Option 1, e.g. Full poly' : i === 1 ? 'Option 2, e.g. Hybrid' : `Option ${i + 1}`} />
+                <Field key={i} soft value={option} onChangeText={(v) => setPoll((p) => p && p.map((o, j) => (j === i ? v.slice(0, 80) : o)))} placeholder={`Option ${i + 1}`} />
               ))}
               {poll.length < 4 ? (
                 <Pressable accessibilityRole="button" onPress={() => setPoll((p) => (p && p.length < 4 ? [...p, ''] : p))} style={styles.link}>

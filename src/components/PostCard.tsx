@@ -6,6 +6,7 @@ import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native
 import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
 import * as haptics from '@/lib/haptics';
+import { confirmAfterMenu } from '@/lib/confirm';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { ClipVideo } from '@/components/ClipVideo';
@@ -122,7 +123,7 @@ function PostCardInner({
                 </Pressable>
               ) : null}
               {onDelete ? (
-                <Pressable accessibilityRole="button" onPress={() => { setMenuOpen(false); onDelete(); }} style={[styles.menuRow, styles.menuBorder]}>
+                <Pressable accessibilityRole="button" onPress={() => { setMenuOpen(false); confirmAfterMenu({ title: 'Delete post?', message: "This can't be undone.", confirmLabel: 'Delete', destructive: true, onConfirm: onDelete }); }} style={[styles.menuRow, styles.menuBorder]}>
                   <Ionicons name="trash-outline" size={21} color={colors.danger} />
                   <Text style={[styles.menuLabel, { color: colors.danger }]}>Delete</Text>
                 </Pressable>

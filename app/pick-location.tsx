@@ -86,7 +86,7 @@ export default function PickLocation() {
           ref={input}
           value={query}
           onChangeText={setQuery}
-          placeholder="Search for a place"
+          placeholder="Search"
           placeholderTextColor={colors.textFaint}
           autoCapitalize="words"
           autoCorrect={false}
@@ -128,7 +128,6 @@ export default function PickLocation() {
             <View style={styles.words}><Text style={styles.title}>Use “{typed}”</Text><Text style={styles.sub}>Exactly as typed</Text></View>
           </Pressable>
         ) : null}
-        {!typed ? <Text style={styles.hint}>Cities, parks, clubs — anywhere in the world.</Text> : null}
         {typed && offline && !remote.length ? <Text style={styles.hint}>Could not reach the place search. Check your connection.</Text> : null}
       </ScrollView>
     </Screen>

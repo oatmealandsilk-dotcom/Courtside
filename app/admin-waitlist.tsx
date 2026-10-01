@@ -8,6 +8,7 @@ import { Button, EmptyState, Screen, SegmentedControl } from '@/components/ui';
 import type { BetaInviteStatus, SiteFeedback, WaitlistEntry } from '@/data/remote';
 import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
+import { confirm } from '@/lib/confirm';
 import { colors, radius, spacing, typography } from '@/theme';
 
 type Tab = 'list' | 'feedback';
@@ -26,10 +27,9 @@ export default function AdminWaitlist() {
   const [notes, setNotes] = useState<SiteFeedback[] | null>(null);
   const [copied, setCopied] = useState('');
   const [removing, setRemoving] = useState<string | null>(null);
-  // The beta invite email: where it stands, and a send that takes two taps.
+  // The beta invite email: where it stands, and a send that asks first.
   const [beta, setBeta] = useState<BetaInviteStatus | null | undefined>(undefined);
   const [betaBusy, setBetaBusy] = useState(false);
-  const [betaArmed, setBetaArmed] = useState(false);
 
   const load = useCallback(async () => {
     const [list, feedback, invites] = await Promise.all([actions.loadWaitlist(), actions.loadSiteFeedback(), actions.betaInvites(false)]);
@@ -38,20 +38,19 @@ export default function AdminWaitlist() {
     setBeta(invites);
   }, [actions]);
 
-  // The first tap asks; a second within a few seconds sends. Emails cannot be taken back.
-  useEffect(() => {
-    if (!betaArmed) return;
-    const t = setTimeout(() => setBetaArmed(false), 5000);
-    return () => clearTimeout(t);
-  }, [betaArmed]);
   const sendBeta = async () => {
-    if (!betaArmed) { setBetaArmed(true); return; }
-    setBetaArmed(false);
     setBetaBusy(true);
     const result = await actions.betaInvites(true);
     setBetaBusy(false);
     setBeta(result ?? (await actions.betaInvites(false)));
   };
+  // Emails cannot be taken back, so the send asks once first, saying how many it will reach.
+  const askSendBeta = (waiting: number) => confirm({
+    title: `Email ${waiting} ${waiting === 1 ? 'person' : 'people'}?`,
+    message: "The beta invite goes out now. Emails can't be taken back.",
+    confirmLabel: 'Send',
+    onConfirm: sendBeta,
+  });
   const betaLine = beta === undefined ? 'Checking…'
     : beta === null ? 'Could not check. Try again in a moment.'
     : !beta.live ? `Turns on the day Apple approves the beta. ${beta.waiting} on the list will get it, top of the list first.`
@@ -127,10 +126,10 @@ export default function AdminWaitlist() {
               <Text style={styles.muted} accessibilityLiveRegion="polite">{betaLine}</Text>
               {beta?.live && beta.waiting > 0 ? (
                 <Button
-                  label={betaBusy ? 'Sending…' : betaArmed ? `Tap again to email ${beta.waiting} ${beta.waiting === 1 ? 'person' : 'people'}` : 'Send beta invites'}
+                  label={betaBusy ? 'Sending…' : 'Send beta invites'}
                   loading={betaBusy}
-                  variant={betaArmed ? 'primary' : 'secondary'}
-                  onPress={() => void sendBeta()}
+                  variant="secondary"
+                  onPress={() => askSendBeta(beta.waiting)}
                 />
               ) : null}
             </View>
@@ -155,7 +154,7 @@ export default function AdminWaitlist() {
                       ].filter(Boolean).join(' · ')}
                     </Text>
                   </View>
-                  <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${entry.email} from the waitlist`} disabled={removing === entry.id} onPress={() => void remove('waitlist', entry.id)} hitSlop={8}>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${entry.email} from the waitlist`} disabled={removing === entry.id} onPress={() => confirm({ title: 'Remove from the waitlist?', message: `${entry.email} comes off the list for good.`, confirmLabel: 'Remove', destructive: true, onConfirm: () => remove('waitlist', entry.id) })} hitSlop={8}>
                     <Text style={styles.remove}>{removing === entry.id ? 'Removing…' : 'Remove'}</Text>
                   </Pressable>
                 </View>
@@ -177,7 +176,7 @@ export default function AdminWaitlist() {
                   {[note.email ?? 'No email left', relativeTime(note.createdAt)].join(' · ')}
                 </Text>
               </View>
-              <Pressable accessibilityRole="button" accessibilityLabel="Remove this feedback note" disabled={removing === note.id} onPress={() => void remove('site_feedback', note.id)} hitSlop={8}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Remove this feedback note" disabled={removing === note.id} onPress={() => confirm({ title: 'Remove this note?', message: "It's deleted for good.", confirmLabel: 'Remove', destructive: true, onConfirm: () => remove('site_feedback', note.id) })} hitSlop={8}>
                 <Text style={styles.remove}>{removing === note.id ? 'Removing…' : 'Remove'}</Text>
               </Pressable>
             </View>

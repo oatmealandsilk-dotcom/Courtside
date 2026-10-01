@@ -304,12 +304,12 @@ export default function SignIn() {
                     <>
               {mode === 'sign-up' ? (
                 <>
-                  <Field soft value={name} onChangeText={setName} placeholder="Your name" autoCapitalize="words" />
+                  <Field soft value={name} onChangeText={setName} placeholder="Name" autoCapitalize="words" />
                   <Field
                     soft
                     value={handle}
                     onChangeText={setHandle}
-                    placeholder="Handle, e.g. miraplays"
+                    placeholder="Handle"
                     autoCapitalize="none"
                     hint={handleGone ? `@${cleanHandle} is taken. Try another.`
                       : handleStatus === 'ok' ? `@${cleanHandle} is free`
@@ -334,7 +334,6 @@ export default function SignIn() {
               label="Handle"
               value={demoHandle}
               onChangeText={setDemoHandle}
-              placeholder="you"
               autoCapitalize="none"
               hint='Demo build — no accounts, no database. Try "you", "miraplays", "devbackhand" or "tomascoach".'
             />

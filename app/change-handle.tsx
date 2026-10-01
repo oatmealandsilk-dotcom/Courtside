@@ -6,7 +6,7 @@ import { router } from 'expo-router';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { Button, Screen } from '@/components/ui';
 import type { HandleStatus } from '@/data/remote';
-import { confirmAction } from '@/lib/confirm';
+import { confirm } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -61,11 +61,11 @@ export default function ChangeHandle() {
   const canSave = !locked && !busy && handle !== current && (status === 'ok' || status === null);
   const save = () => {
     if (!canSave) return;
-    confirmAction(
-      `Change to @${handle}?`,
-      `You won't be able to change it again for ${WAIT_DAYS} days. @${current} is held for you for 14 days in case you change your mind.`,
-      'Change',
-      async () => {
+    confirm({
+      title: `Change to @${handle}?`,
+      message: `You won't be able to change it again for ${WAIT_DAYS} days. @${current} is held for you for 14 days in case you change your mind.`,
+      confirmLabel: 'Change',
+      onConfirm: async () => {
         setBusy(true);
         setError('');
         try {
@@ -77,7 +77,7 @@ export default function ChangeHandle() {
           setBusy(false);
         }
       },
-    );
+    });
   };
 
   const note = (() => {
