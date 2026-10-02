@@ -11,8 +11,13 @@ const CHECK_EVERY_MS = 10 * 60_000;
 const AWAY_MS = 30_000;
 /** After posting, this long with no restart: the post's landing and its "Posted" are seen. */
 const QUIET_AFTER_POST_MS = 2 * 60_000;
-/** Pages where someone is in the middle of writing or making something a restart would throw away. */
-const BUSY_PAGES = ['/compose', '/ask', '/hit', '/edit-post', '/edit-profile', '/log-session', '/court-report', '/hit-request/new', '/comments', '/ask-coach', '/coach-apply', '/pick-location'];
+/**
+ * Pages where someone is in the middle of writing or making something a
+ * restart would throw away. Sign-in and setup are on it too: a restart while
+ * the Google sheet was open threw away a new player's sign-in, and they had
+ * to start again from the welcome page (Oct 1).
+ */
+const BUSY_PAGES = ['/sign-in', '/birthday', '/agree', '/onboarding', '/first-move', '/compose', '/ask', '/hit', '/edit-post', '/edit-profile', '/log-session', '/court-report', '/hit-request/new', '/comments', '/ask-coach', '/coach-apply', '/pick-location'];
 
 /**
  * Whether a restart now would throw something away: a post or Instant still

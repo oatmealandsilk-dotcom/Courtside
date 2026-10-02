@@ -189,7 +189,10 @@ export default function SignIn() {
       const done = await actions.signInWithGoogle();
       // On the web a success leaves the page for Google's; on a phone the app opens here.
       if (done && Platform.OS !== 'web') { leave(() => router.replace('/')); return; }
-      if (!done) { if (carried === 'carried') dropCarriedBirthDate(); setVia(null); }
+      // Back from Google without a sign-in: say so on the phone, rather than leaving
+      // the person on the form wondering whether it worked (one new player went
+      // round again through "I already have an account" after this, Oct 1).
+      if (!done) { if (carried === 'carried') dropCarriedBirthDate(); setVia(null); if (Platform.OS !== 'web') setProviderError('Google didn’t finish signing you in. Tap Google again to carry on.'); }
     } catch (err) {
       setProviderError(err instanceof Error ? err.message : 'Could not sign in with Google.');
       if (carried === 'carried') dropCarriedBirthDate();
