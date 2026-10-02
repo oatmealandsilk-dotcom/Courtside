@@ -316,7 +316,6 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             <View style={styles.hitsHead}>
               <Text style={styles.playersTitle}>Open hits</Text>
               <View style={styles.hitsLinks}>
-                <Pressable accessibilityRole="link" accessibilityLabel="See open hits on the map" onPress={() => router.push('/map')} hitSlop={8}><Text style={styles.postHit}>Map</Text></Pressable>
                 {/* "Post a hit", not just "Post": a post elsewhere is a photo or clip. */}
                 <Pressable accessibilityRole="button" onPress={() => router.push('/hit-request/new')} hitSlop={8}><Text style={styles.postHit}>Post a hit</Text></Pressable>
               </View>

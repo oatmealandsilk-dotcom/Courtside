@@ -47,7 +47,7 @@ export function HitCard({ hit, miles }: { hit: HitRequest; miles?: number }) {
       <View style={styles.head}>
         <Avatar name={author?.name ?? '?'} seed={author?.avatarSeed ?? hit.id} uri={author?.avatarUrl} size={36} />
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.who} numberOfLines={1}>{mine ? 'You' : author?.name ?? 'A player'} <Text style={styles.wants}>{mine ? 'are looking for a hit' : 'is looking for a hit'}</Text></Text>
+          <Text style={styles.who} numberOfLines={1}>{mine ? 'Your hit' : author?.name ?? 'A player'}{mine ? null : <Text style={styles.wants}> is looking for a hit</Text>}</Text>
           <Text style={styles.when}>{hitWhen(hit.startsAt)}</Text>
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Send this hit to a chat" hitSlop={8} onPress={(e) => { e.stopPropagation?.(); router.push({ pathname: '/share', params: { kind: 'hit-request', id: hit.id } }); }} style={({ pressed }) => [styles.send, pressed && { opacity: 0.6 }]}>
@@ -58,16 +58,15 @@ export function HitCard({ hit, miles }: { hit: HitRequest; miles?: number }) {
         <CourtGlyph size={13} color={colors.brand} />
         <Text style={styles.placeText} numberOfLines={1}>{hit.place.name}{miles !== undefined ? <Text style={styles.placeMiles}>{` · ${formatMiles(miles)}`}</Text> : null}</Text>
       </Pressable>
-      <View style={styles.tags}>
-        <View style={styles.tag}><Text style={styles.tagText}>{FORMAT_LABEL[hit.format]}</Text></View>
-        <View style={styles.tag}><Text style={styles.tagText}>{levelText(hit)}</Text></View>
-        <View style={styles.tag}><Text style={styles.tagText}>{left ? `${left} ${left === 1 ? 'spot' : 'spots'} left` : 'Full'}</Text></View>
-      </View>
+      {/* One quiet line, not three chips: the format, the level, and how many can still join. */}
+      <Text style={styles.details} numberOfLines={1}>
+        {FORMAT_LABEL[hit.format]} · {levelText(hit)} · <Text style={left ? styles.detailsLeft : undefined}>{left ? `${left} ${left === 1 ? 'spot' : 'spots'} left` : 'Full'}</Text>
+      </Text>
       {hit.note ? <Text style={styles.note} numberOfLines={3}>{hit.note}</Text> : null}
       <View style={styles.foot}>
         <View style={styles.joined}>
           {joined.slice(0, 4).map((u, i) => <Avatar key={u.id} name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={24} style={[styles.face, { marginLeft: i ? -8 : 0 }]} />)}
-          <Text style={styles.joinedText}>{joined.length ? `${joined.length} in` : 'Nobody yet'}</Text>
+          <Text style={styles.joinedText}>{joined.length ? `${joined.length} in` : 'No one in yet'}</Text>
         </View>
         {mine ? (
           <View style={styles.actions}>
@@ -94,9 +93,8 @@ const styleDefinitions = StyleSheet.create({
   place: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.brandDim, maxWidth: '100%' },
   placeText: { ...typography.smallStrong, color: colors.brand, flexShrink: 1 },
   placeMiles: { ...typography.small, color: colors.brand },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  tag: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: colors.bgElevated },
-  tagText: { ...typography.small, ...font('600'), color: colors.textMuted },
+  details: { ...typography.small, ...font('600'), color: colors.textMuted },
+  detailsLeft: { color: colors.brand },
   note: { ...typography.body, color: colors.text, lineHeight: 21 },
   foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   joined: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
