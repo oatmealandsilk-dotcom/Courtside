@@ -9,6 +9,7 @@ import { ClipPlayback } from './ClipPlayback';
 import { ClipVideo } from './ClipVideo';
 import { ZoomableMedia } from './ZoomableMedia';
 import { cropCss } from '@/lib/crop';
+import { show as showToast } from '@/lib/toast';
 import { framesAt } from '@/features/compose/frames';
 import { CoverPage } from './CoverPage';
 
@@ -121,6 +122,48 @@ function describe(media: PickedMedia): string {
   const duration = media.label.match(/\d+:\d{2}$/)?.[0];
   if (media.kind === 'video') return duration ? `Video · ${duration}` : 'Video';
   return 'Photo';
+}
+
+/** A photo picked for a chat: the file in this browser and its size in pixels. */
+export interface PickedPhoto { uri: string; width: number; height: number }
+
+/**
+ * The browser twin of the camera-roll picker for chats: the file dialog,
+ * photos only, several at once, up to `limit` (any past that are left out).
+ * Must be called from a click. Null when nothing was chosen. A photo this
+ * browser cannot open (an iPhone's HEIC in Chrome, say) is left out with a
+ * note: it could not be shown, nor re-drawn as the JPEG a chat sends.
+ */
+export function pickPhotos(limit: number): Promise<PickedPhoto[] | null> {
+  const most = Math.max(1, Math.min(10, limit));
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = most > 1;
+    input.style.display = 'none';
+    let settled = false;
+    const finish = (value: PickedPhoto[] | null) => { if (!settled) { settled = true; resolve(value); input.remove(); } };
+    input.onchange = async () => {
+      const files = Array.from(input.files ?? []).filter((f) => f.type.startsWith('image/')).slice(0, most);
+      if (!files.length) return finish(null);
+      const opened = await Promise.all(files.map((file) => new Promise<PickedPhoto | null>((done) => {
+        const uri = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => done(img.naturalWidth && img.naturalHeight ? { uri, width: img.naturalWidth, height: img.naturalHeight } : null);
+        img.onerror = () => { URL.revokeObjectURL(uri); done(null); };
+        img.src = uri;
+      })));
+      const picked = opened.filter((p): p is PickedPhoto => !!p);
+      const skipped = opened.length - picked.length;
+      if (skipped) showToast({ title: skipped === 1 ? 'One photo couldn’t be opened' : `${skipped} photos couldn’t be opened`, body: 'This browser can’t read that kind of photo. Try a JPEG or PNG.', icon: 'image-outline' });
+      finish(picked.length ? picked : null);
+    };
+    // Cancelling the dialog fires no change event; a focus return is the cue.
+    window.addEventListener('focus', () => setTimeout(() => { if (!input.files?.length) finish(null); }, 800), { once: true });
+    document.body.appendChild(input);
+    input.click();
+  });
 }
 
 /**

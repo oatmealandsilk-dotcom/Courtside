@@ -143,6 +143,16 @@ export function cardLook(look: Look): Look {
  */
 const AT_ONCE = { duration: 0, delay: 0 };
 
+/**
+ * The court card's little map in a chat: the same map with every name taken
+ * off. A street name in a picture that small is mostly cut off at its edges,
+ * and the court's badge in the middle is the thing to read.
+ */
+export function thumbLook(look: Look): Look {
+  const hidden = { hide: true };
+  return { ...cardLook(look), 'highway-name-major': hidden, 'highway-name-minor': hidden, 'highway-name-path': hidden, water_name_point_label: hidden };
+}
+
 /** Recolours the loaded style layer by layer; anything the style lacks is skipped. */
 export function applyLook(map: LookMap, look: Look) {
   for (const [id, rule] of Object.entries(look)) {

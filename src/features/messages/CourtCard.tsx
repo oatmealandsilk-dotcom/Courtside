@@ -1,0 +1,118 @@
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+
+import { CourtMapThumb } from '@/components/map/CourtMapThumb';
+import { CourtGlyph } from '@/components/map/CourtGlyph';
+import { Tappable } from '@/components/Tappable';
+import { nearestPlace } from '@/data/locations';
+import type { Message } from '@/data/types';
+import { formatMiles, milesBetween } from '@/features/players/geo';
+import type { LatLng } from '@/features/players/positions';
+import { colors, font, spacing, typography } from '@/theme';
+import { useThemedStyles } from '@/theme/ThemeProvider';
+
+/** The card's width, and its map's height: a wide strip of map, the way iMessage and Instagram show a place. */
+export const COURT_CARD_W = 248;
+const MAP_H = 118;
+/** A court further than this from the nearest city we know is not named after it. */
+const CITY_MILES = 35;
+
+/**
+ * "Los Angeles · 6 courts · 1.2 mi": where the court is (the nearest city
+ * the app knows, when it is close enough to say so), how many courts stand
+ * there when the sender's list knew it, and how far it is from you when the
+ * app knows where you are. Any part it cannot say is left out.
+ */
+export function courtLine(place: NonNullable<Message['place']>, from?: LatLng | null): string {
+  const city = nearestPlace(place.lat, place.lng);
+  const parts = [
+    milesBetween(city, place) <= CITY_MILES ? city.name.split(',')[0] : null,
+    place.count && place.count > 1 ? `${place.count} courts` : place.count === 1 ? '1 court' : null,
+    from ? formatMiles(milesBetween(from, place)) : null,
+  ];
+  return parts.filter(Boolean).join(' · ');
+}
+
+/**
+ * A court sent in a chat: a still map of the spot with the court's badge on
+ * it, the court's name, a quiet line under it, and "See the court". The
+ * whole card opens the court's page. Sent and received look the same; the
+ * row puts yours on the right. Its corners match the chat's bubbles, the
+ * last of a run keeping the small tail corner.
+ */
+export function CourtCard({ place, width = COURT_CARD_W, mine, tail, from, onPress, onLongPress }: {
+  place: NonNullable<Message['place']>;
+  /** Narrower on a small phone; the map is drawn at this width. */
+  width?: number;
+  mine: boolean;
+  /** Last of a run of messages from the same person: the tail corner, like a bubble. */
+  tail: boolean;
+  /** Where you are, when the app knows (for the distance). */
+  from?: LatLng | null;
+  onPress: () => void;
+  onLongPress?: () => void;
+}) {
+  const styles = useThemedStyles(styleDefinitions);
+  const line = courtLine(place, from);
+  return (
+    <Tappable
+      accessibilityRole="link"
+      accessibilityLabel={`Court: ${place.name}${line ? `, ${line}` : ''}. See the court`}
+      scaleTo={0.98}
+      hoverTo={1.01}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={320}
+      style={[styles.card, { width }, tail && (mine ? styles.tailMine : styles.tailTheirs)]}
+    >
+      <View style={styles.map}>
+        <CourtMapThumb lat={place.lat} lng={place.lng} width={width - 2} height={MAP_H} />
+        {/* The court's own badge, on its spot, as the big map marks a court. */}
+        <View pointerEvents="none" style={styles.pinWrap}>
+          <View style={styles.halo} />
+          <View style={styles.pin}><CourtGlyph size={12} color={colors.brandInk} /></View>
+        </View>
+        <Text pointerEvents="none" style={styles.credit}>© OpenStreetMap</Text>
+      </View>
+      <View style={styles.words}>
+        <Text style={styles.name} numberOfLines={2}>{place.name}</Text>
+        {line ? <Text style={styles.line} numberOfLines={1}>{line}</Text> : null}
+      </View>
+      <View style={styles.action}>
+        <Text style={styles.actionText}>See the court</Text>
+        <Ionicons name="chevron-forward" size={15} color={colors.brand} />
+      </View>
+    </Tappable>
+  );
+}
+
+const styleDefinitions = StyleSheet.create({
+  card: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    overflow: 'hidden',
+  },
+  tailMine: { borderBottomRightRadius: 6 },
+  tailTheirs: { borderBottomLeftRadius: 6 },
+  map: { height: MAP_H, backgroundColor: colors.bgElevated, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  pinWrap: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
+  halo: { position: 'absolute', width: 46, height: 46, borderRadius: 23, backgroundColor: `${colors.court}33` },
+  pin: {
+    width: 30, height: 30, borderRadius: 15, backgroundColor: colors.court, borderWidth: 2.5, borderColor: colors.surface,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 3,
+  },
+  credit: { position: 'absolute', right: 6, bottom: 4, fontSize: 8, lineHeight: 10, color: colors.textFaint, opacity: 0.85 },
+  words: { paddingHorizontal: spacing.md + 2, paddingTop: spacing.md, gap: 3 },
+  name: { ...typography.bodyStrong, ...font('700'), color: colors.text, lineHeight: 20 },
+  line: { ...typography.small, fontSize: 12.5, color: colors.textMuted },
+  action: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginTop: spacing.md, marginHorizontal: spacing.md + 2, paddingTop: 10, paddingBottom: 12,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border,
+  },
+  actionText: { ...typography.smallStrong, color: colors.brand },
+});

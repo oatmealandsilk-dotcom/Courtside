@@ -15,13 +15,14 @@ import { planStreakReminder } from '@/features/practice/reminder';
 import { TERMS_VERSION } from '@/lib/legal';
 
 import { fetchBootstrap, searchPosts as apiSearchPosts, signIn as apiSignIn, type Bootstrap } from '@/data/api';
-import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ReportedChat, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type RemoteData } from '@/data/remote';
+import { CHAT_PHOTO_UNREADABLE, auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ReportedChat, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type RemoteData } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { markMessagesOpened } from '@/features/messaging/readReceipts';
 import { GROUP_CAP, chatLockNote, eventText, findDirectChat, groupName, isDirectChat, isGroupAdmin, isGroupChat, named } from '@/features/messages/groupRules';
 import { heardMessage, heardUnsent } from '@/features/messages/incoming';
+import { MAX_CHAT_PHOTOS, clearSendProgress, keepLocalCopy, setSendProgress } from '@/features/messages/chatPhotos';
 import { readReceiptPreference, saveReceiptPreference } from '@/features/messaging/preferences';
 import { connectProvider, disconnectProvider } from '@/lib/integrations';
 import { appleHealthAvailable, connectAppleHealth, readAppleHealth, readAppleNutrition } from '@/features/health/appleHealth';
@@ -82,6 +83,7 @@ import type {
   LastSeen,
   HitRequest,
   ChatEvent,
+  ChatPhoto,
   ShareItem,
   Story,
   User,
@@ -601,6 +603,8 @@ interface AppActions {
   /** Admins only: a reported chat's name, people and last 30 messages (admins cannot otherwise read a chat they are not in). */
   loadReportedChat: (conversationId: ID) => Promise<ReportedChat | null>;
   decideReport: (reportId: ID, decision: 'remove' | 'restore' | 'suspend' | 'unsuspend' | 'dismiss') => Promise<boolean>;
+  /** Admins only: takes one message (a photo, say) out of a reported chat, for everyone in it, and its photos off the shelf. */
+  removeReportedMessage: (messageId: ID) => Promise<boolean>;
 
   /* Messaging */
   openConversationWith: (userId: ID) => ID;
@@ -641,10 +645,17 @@ interface AppActions {
   muteChat: (conversationId: ID, until: string | null, quiet?: boolean) => void;
   /** Reports a chat to CourtSide for a person to review. */
   reportChat: (conversationId: ID, reason: string) => void;
-  /** Send a court in a chat: where to meet. */
-  sendCourt: (conversationId: ID, place: { id?: string; name: string; lat: number; lng: number }) => void;
+  /** Send a court in a chat: where to meet (with how many courts stand there, when known). */
+  sendCourt: (conversationId: ID, place: { id?: string; name: string; lat: number; lng: number; count?: number }) => void;
   /** Send a voice note recorded on this device (uploaded first). */
   sendVoice: (conversationId: ID, recording: { uri: string; ms: number }) => void;
+  /**
+   * Send photos from the camera roll in a chat (up to 10), with an optional
+   * caption. They show at once; each is shrunk on the phone and put on the
+   * chat's private shelf, then the message is saved. One that fails offers a
+   * retry, which sends only what has not gone up yet.
+   */
+  sendPhotos: (conversationId: ID, photos: { uri: string; width: number; height: number }[], caption?: string) => void;
   /**
    * The age check: records a date of birth ("2009-04-17") once. Under 13 the
    * account is removed and this phone will not ask again; 13 to 17 becomes a
@@ -3034,6 +3045,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (ok) haptics.commit();
     return ok;
   }, []);
+  const removeReportedMessage = useCallback(async (messageId: ID) => {
+    if (!live(stateRef.current.currentUserId, messageId)) return false;
+    const ok = await remote.removeReportedMessage(messageId);
+    if (ok) haptics.commit();
+    return ok;
+  }, []);
   // Opening someone's followers or following: their follows come in then.
   const loadFollowsOf = useCallback(async (userId: ID) => {
     if (!live(stateRef.current.currentUserId, userId)) return;
@@ -3381,7 +3398,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [requireUser, appendMessage, makeMessage, refreshChat],
   );
 
-  const sendCourt = useCallback((conversationId: ID, place: { id?: string; name: string; lat: number; lng: number }) => {
+  const sendCourt = useCallback((conversationId: ID, place: { id?: string; name: string; lat: number; lng: number; count?: number }) => {
     haptics.commit();
     const me = requireUser();
     const message: Message = { ...makeMessage(conversationId, me, place.name), kind: 'court', place };
@@ -3411,6 +3428,65 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (result === 'refused') void refreshChat(conversationId);
     })();
   }, [requireUser, appendMessage, makeMessage, refreshChat]);
+
+  /**
+   * Puts a photo message's photos up, one after another (the bubble's ring
+   * fills as they go), then saves the message. Photos already up (a retry
+   * after a failure part way) are not sent again. If the message was
+   * unsent while its photos were still going up, they are taken back down
+   * and nothing is saved.
+   */
+  const deliverPhotos = useCallback(async (message: Message) => {
+    const me = stateRef.current.currentUserId;
+    const photos = message.photos ?? [];
+    if (!me || !photos.length) return;
+    const setFailed = () => setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, failed: true } : m)) }));
+    const stillThere = () => stateRef.current.messages.some((m) => m.id === message.id);
+    const sent: ChatPhoto[] = [];
+    setSendProgress(message.id, 0);
+    try {
+      for (let i = 0; i < photos.length; i += 1) {
+        const photo = photos[i];
+        // Unsent part way: stop sending, and see to the ones already up below.
+        if (!stillThere()) break;
+        if (!isLocalMedia(photo.path)) { sent.push(photo); continue; }
+        const up = await uploadChatPhoto(me, message.conversationId, photo, (f) => setSendProgress(message.id, (i + f) / photos.length));
+        keepLocalCopy(up.path, photo.path);
+        sent.push(up);
+        // Kept on the message as each lands, so a retry only sends the rest.
+        const now = [...sent, ...photos.slice(i + 1)];
+        setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, photos: now } : m)) }));
+      }
+    } catch (error) {
+      clearSendProgress(message.id);
+      setFailed();
+      // A photo the phone could not re-draw will not go on a retry either: say so.
+      if (error instanceof Error && error.message === CHAT_PHOTO_UNREADABLE) showToast({ title: 'Couldn’t send that photo', body: 'This photo couldn’t be prepared. Try another one.', icon: 'image-outline' });
+      return;
+    }
+    if (!stillThere()) {
+      clearSendProgress(message.id);
+      const hosted = sent.map((p) => p.path).filter((path) => !isLocalMedia(path));
+      if (hosted.length) void remote.removeChatPhotos(hosted);
+      return;
+    }
+    const hosted: Message = { ...message, photos: sent, failed: undefined };
+    const result = await remote.insertMessage(hosted).catch(() => 'failed' as const);
+    clearSendProgress(message.id);
+    if (result === 'failed' || result === 'refused') setFailed();
+    if (result === 'refused') void refreshChat(message.conversationId);
+  }, [refreshChat]);
+
+  const sendPhotos = useCallback((conversationId: ID, picked: { uri: string; width: number; height: number }[], caption = '') => {
+    const photos: ChatPhoto[] = picked.slice(0, MAX_CHAT_PHOTOS).map((p) => ({ path: p.uri, w: Math.max(1, p.width), h: Math.max(1, p.height) }));
+    if (!photos.length) return;
+    haptics.commit();
+    const me = requireUser();
+    const message: Message = { ...makeMessage(conversationId, me, caption.trim(), 'photo'), photos };
+    setState((prev) => appendMessage(prev, message));
+    // The demo has nowhere to put them: they stay as they are, on this device.
+    if (live(me, conversationId)) void deliverPhotos(message);
+  }, [requireUser, appendMessage, makeMessage, deliverPhotos]);
 
   /* Group chats. Most changes show at once and are saved afterwards; when the
      server says no, it is put back and a note says why. Starting a group and
@@ -3746,10 +3822,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!message?.failed || message.senderId !== me) return;
     haptics.tap();
     setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, failed: false } : m)) }));
+    // Photos go up again first (only the ones that had not yet), then the message.
+    if (message.kind === 'photo') { void deliverPhotos({ ...message, failed: undefined }); return; }
     void remote.insertMessage({ ...message, failed: undefined }).catch(() => 'failed' as const).then((result) => {
       if (result === 'failed') setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, failed: true } : m)) }));
     });
-  }, [requireUser]);
+  }, [requireUser, deliverPhotos]);
 
   const editMessage = useCallback((messageId: ID, body: string) => {
     const me = requireUser();
@@ -3774,14 +3852,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!message || message.senderId !== me) return;
     haptics.untap();
     setState((prev) => dropMessage(prev, messageId));
-    if (live(me, messageId)) void remote.unsendMessage(messageId);
+    if (!live(me, messageId)) return;
+    // A photo message's photos come down with it (any still on their way up are seen to by deliverPhotos).
+    const hosted = (message.photos ?? []).map((p) => p.path).filter((path) => !isLocalMedia(path));
+    void remote.unsendMessage(messageId).then(() => { if (hosted.length) void remote.removeChatPhotos(hosted); });
   }, [requireUser]);
 
   const deleteMessageForMe = useCallback((messageId: ID) => {
     const me = requireUser();
+    const message = stateRef.current.messages.find((m) => m.id === messageId);
     haptics.untap();
     setState((prev) => dropMessage(prev, messageId));
-    if (live(me, messageId)) void remote.hideMessage(me, messageId);
+    if (!live(me, messageId)) return;
+    // Your own photo message that never went (it shows "Not sent"): only this
+    // phone has it, so its photos already up are simply taken back down.
+    if (message?.failed && message.senderId === me && message.kind === 'photo') {
+      const hosted = (message.photos ?? []).map((p) => p.path).filter((path) => !isLocalMedia(path));
+      if (hosted.length) void remote.removeChatPhotos(hosted);
+      return;
+    }
+    void remote.hideMessage(me, messageId);
   }, [requireUser]);
 
   const confirmBirthDate = useCallback(async (birthDate: string): Promise<AgeGroup | 'under13'> => {
@@ -3852,7 +3942,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (item.kind === 'message') {
         // An event line is not a message anyone sent, and a voice note still
         // on this phone (its upload failed) cannot be heard anywhere else.
-        if (!original || original.kind === 'system' || (original.audio && isLocalMedia(original.audio.url))) {
+        // Photos sit on the chat's own private shelf, so they cannot be passed on to another chat (yet).
+        if (!original || original.kind === 'system' || original.kind === 'photo' || (original.audio && isLocalMedia(original.audio.url))) {
           showToast({ title: 'That message can’t be forwarded', icon: 'alert-circle-outline' });
           return;
         }
@@ -4889,10 +4980,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadReportedItem,
       loadReportedChat,
       decideReport,
+      removeReportedMessage,
       openConversationWith,
       sendMessage,
       sendCourt,
       sendVoice,
+      sendPhotos,
       createGroup,
       addGroupMembers,
       removeGroupMember,
@@ -5049,10 +5142,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadReportedItem,
       loadReportedChat,
       decideReport,
+      removeReportedMessage,
       openConversationWith,
       sendMessage,
       sendCourt,
       sendVoice,
+      sendPhotos,
       createGroup,
       addGroupMembers,
       removeGroupMember,

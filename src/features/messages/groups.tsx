@@ -25,6 +25,7 @@ export {
   isMutedFor,
   leaveGroupMessage,
   messageSummary,
+  photoWords,
   nameList,
   removeMemberMessage,
   named,

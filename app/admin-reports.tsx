@@ -9,8 +9,10 @@ import { TileCover } from '@/components/TileCover';
 import { Avatar, Button, EmptyState, Screen, SegmentedControl } from '@/components/ui';
 import type { AdminReport, ReportedChat } from '@/data/remote';
 import { GroupAvatar, groupName } from '@/features/messages/groups';
+import { ChatPhotoImage, PhotoViewer } from '@/features/messages/ChatPhotoViews';
+import { confirm } from '@/lib/confirm';
 import { relativeTime } from '@/lib/format';
-import type { User } from '@/data/types';
+import type { ChatPhoto, User } from '@/data/types';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -29,7 +31,9 @@ const CHAT_PREVIEW = 8;
  *
  * A reported group chat ("Report group") shows its name, who is in it and
  * its last 30 messages, which admins can read only because it was reported
- * (report_chat_context, migration 54).
+ * (report_chat_context, migration 54). Its photos show too, and any message
+ * in it can be removed for everyone (migration 61: chat photos sit on a
+ * private shelf, which admins may open only for a reported chat).
  */
 export default function AdminReports() {
   const styles = useThemedStyles(styleDefinitions);
@@ -43,6 +47,8 @@ export default function AdminReports() {
   // Suspensions decided here, before the next app open brings them in.
   const [suspended, setSuspended] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  // A reported photo opened full screen.
+  const [viewing, setViewing] = useState<{ photos: ChatPhoto[]; index: number; caption?: string } | null>(null);
 
   const load = useCallback(async () => {
     const list = await actions.loadReports();
@@ -57,6 +63,20 @@ export default function AdminReports() {
     setChats(Object.fromEntries(chatReports.map((r, i) => [r.id, gotChats[i]])));
   }, [actions]);
   useEffect(() => { void load(); }, [load]);
+
+  // Takes one message out of a reported chat, for everyone in it (its photos come off the shelf too).
+  const removeLine = (messageId: string, what: string) => confirm({
+    title: `Remove this ${what}?`,
+    message: 'It’s removed for everyone in the chat. This can’t be undone.',
+    confirmLabel: 'Remove',
+    destructive: true,
+    onConfirm: async () => {
+      setBusy(`line:${messageId}`);
+      await actions.removeReportedMessage(messageId);
+      await load();
+      setBusy(null);
+    },
+  });
 
   const decide = async (report: AdminReport, decision: Decision) => {
     setBusy(`${report.id}:${decision}`);
@@ -114,7 +134,12 @@ export default function AdminReports() {
                   <Text style={styles.muted}>{relativeTime(report.createdAt)}</Text>
                   {report.status !== 'open' ? <Text style={styles.status}>{report.status === 'dismissed' ? 'Dismissed' : 'Reviewed'}</Text> : null}
                 </View>
-                <ReportedChatCard chat={chat} showAll={showAll} lines={lines} onShowAll={() => setChatOpen((o) => ({ ...o, [report.id]: true }))} styles={styles} users={users} />
+                <ReportedChatCard
+                  chat={chat} showAll={showAll} lines={lines} onShowAll={() => setChatOpen((o) => ({ ...o, [report.id]: true }))} styles={styles} users={users}
+                  busy={busy}
+                  onOpenPhotos={(photos, index, caption) => setViewing({ photos, index, caption })}
+                  onRemove={removeLine}
+                />
                 <Text style={styles.muted}>Reported by {reporter ? `@${reporter.handle}` : 'someone'}{report.reason ? ` · ${report.reason}` : ''}</Text>
                 {report.status === 'open' ? (
                   <View style={styles.actions}>
@@ -172,18 +197,21 @@ export default function AdminReports() {
           );
         })
       )}
+      {viewing ? <PhotoViewer photos={viewing.photos} start={viewing.index} caption={viewing.caption} onClose={() => setViewing(null)} /> : null}
     </Screen>
   );
 }
 
 /** What a reported chat said, in a few words for a line: a shared item or a voice note has no words of its own. */
-function chatLineWords(kind: string, body: string): string {
+function chatLineWords(kind: string, body: string, photos = 1): string {
   if (kind === 'post') return 'Sent a clip';
   if (kind === 'question') return 'Sent a thread';
   if (kind === 'profile') return 'Sent a profile';
   if (kind === 'court') return body ? `Sent a court: ${body}` : 'Sent a court';
   if (kind === 'voice') return 'Sent a voice message';
   if (kind === 'hit-request') return 'Sent a hit';
+  // The photos show under the line (an admin may open them for a reported chat); the caption, if any, is what it said.
+  if (kind === 'photo') { const sent = photos > 1 ? `Sent ${photos} photos` : 'Sent a photo'; return body ? `${sent}: ${body}` : sent; }
   return body || '(no words)';
 }
 
@@ -192,9 +220,13 @@ function chatLineWords(kind: string, body: string): string {
  * messages, oldest first (each person tappable for their profile). Event
  * lines ("Mira added Dev") show as they were written, in grey.
  */
-function ReportedChatCard({ chat, showAll, lines, onShowAll, styles, users }: {
+function ReportedChatCard({ chat, showAll, lines, onShowAll, styles, users, busy, onOpenPhotos, onRemove }: {
   chat: ReportedChat | null | undefined; showAll: boolean; lines: ReportedChat['messages']; onShowAll: () => void;
   styles: typeof styleDefinitions; users: User[];
+  /** Which removal is under way ("line:<id>"). */
+  busy: string | null;
+  onOpenPhotos: (photos: ChatPhoto[], index: number, caption?: string) => void;
+  onRemove: (messageId: string, what: string) => void;
 }) {
   if (chat === undefined) return <Text style={styles.muted}>Loading the chat…</Text>;
   if (chat === null) {
@@ -230,11 +262,28 @@ function ReportedChatCard({ chat, showAll, lines, onShowAll, styles, users }: {
           m.kind === 'system' ? (
             <Text key={`${m.createdAt}-${i}`} style={styles.chatEvent}>{m.body}</Text>
           ) : (
-            <Text key={`${m.createdAt}-${i}`} style={styles.chatLine}>
-              <Text style={styles.chatWho} onPress={() => router.push(`/user/${m.senderId}`)}>{firstName(m.senderId)}</Text>
-              <Text style={styles.muted}>{` · ${relativeTime(m.createdAt)}  `}</Text>
-              {chatLineWords(m.kind, m.body)}
-            </Text>
+            <View key={`${m.createdAt}-${i}`} style={styles.chatItem}>
+              <Text style={styles.chatLine}>
+                <Text style={styles.chatWho} onPress={() => router.push(`/user/${m.senderId}`)}>{firstName(m.senderId)}</Text>
+                <Text style={styles.muted}>{` · ${relativeTime(m.createdAt)}  `}</Text>
+                {chatLineWords(m.kind, m.body, m.photos?.length)}
+              </Text>
+              {m.photos?.length ? (
+                // The photos themselves, small; a tap opens them full screen.
+                <View style={styles.photoRow}>
+                  {m.photos.map((p, j) => (
+                    <Pressable key={j} accessibilityRole="imagebutton" accessibilityLabel={`Photo ${j + 1} of ${m.photos!.length}. Open`} onPress={() => onOpenPhotos(m.photos!, j, m.body || undefined)} style={styles.photoThumb}>
+                      <ChatPhotoImage photo={p} />
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+              {m.id && m.kind === 'photo' ? (
+                <View style={styles.lineActions}>
+                  <Button label={m.photos && m.photos.length > 1 ? 'Remove these photos' : 'Remove this photo'} variant="danger" loading={busy === `line:${m.id}`} onPress={() => onRemove(m.id!, m.photos && m.photos.length > 1 ? 'message and its photos' : 'photo')} />
+                </View>
+              ) : null}
+            </View>
           )
         ))}
       </View>
@@ -258,6 +307,10 @@ const styleDefinitions = StyleSheet.create({
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chatBox: { gap: 6, padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
   chatLine: { ...typography.small, color: colors.text },
+  chatItem: { gap: 6 },
+  photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  photoThumb: { width: 64, height: 64, borderRadius: radius.sm, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
+  lineActions: { flexDirection: 'row' },
   chatWho: { ...typography.smallStrong, color: colors.text },
   chatEvent: { ...typography.small, color: colors.textMuted, fontStyle: 'italic', textAlign: 'center' },
   showAll: { ...typography.smallStrong, color: colors.brand },

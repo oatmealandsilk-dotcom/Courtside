@@ -2,11 +2,17 @@ import { isoDaysAgo } from '@/lib/format';
 import type { Conversation, Message } from '../types';
 import { CURRENT_USER_ID } from './users';
 
+/** A moment `m` minutes ago, for messages a few minutes apart. */
+const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
+
 /**
  * Seed DM threads. Instagram-shaped: one thread per person, newest last,
  * with a couple of shared posts so the share flow has something to render.
  * One group too ("Saturday hitters", which you started), so the demo shows
- * an event line, a court, a shared post, several voices and "Seen by".
+ * an event line, courts (one from Mira, one from you), a shared post,
+ * photos (two from Mira side by side, one of yours), several voices and
+ * "Seen by". The photos are drawn by the app ("demo:" addresses, see
+ * src/features/messages/DemoPhoto.tsx): the demo ships no picture files.
  */
 export const messages: Message[] = [
   {
@@ -119,7 +125,7 @@ export const messages: Message[] = [
     body: 'Griffith Park Riverside Courts',
     createdAt: isoDaysAgo(1, 7),
     kind: 'court',
-    place: { name: 'Griffith Park Riverside Courts', lat: 34.1105, lng: -118.2721 },
+    place: { name: 'Griffith Park Riverside Courts', lat: 34.1105, lng: -118.2721, count: 12 },
   },
   {
     id: 'm-sat-5',
@@ -137,6 +143,37 @@ export const messages: Message[] = [
     body: 'Running ten minutes late, but count me in.',
     createdAt: isoDaysAgo(0, 6),
     kind: 'text',
+  },
+  {
+    id: 'm-sat-8',
+    conversationId: 'cv-saturday',
+    senderId: 'u-mira',
+    body: 'From last Saturday. Same again?',
+    createdAt: isoDaysAgo(0, 4),
+    kind: 'photo',
+    photos: [
+      { path: 'demo:clay-sunset', w: 1200, h: 1600 },
+      { path: 'demo:balls', w: 1400, h: 1400 },
+    ],
+    reactions: { 'u-dev': '🔥' },
+  },
+  {
+    id: 'm-sat-9',
+    conversationId: 'cv-saturday',
+    senderId: CURRENT_USER_ID,
+    body: '',
+    createdAt: minutesAgo(76),
+    kind: 'photo',
+    photos: [{ path: 'demo:court-night', w: 1600, h: 1200 }],
+  },
+  {
+    id: 'm-sat-10',
+    conversationId: 'cv-saturday',
+    senderId: CURRENT_USER_ID,
+    body: 'Cypress Hollow Park',
+    createdAt: minutesAgo(75),
+    kind: 'court',
+    place: { id: 'way9003000001', name: 'Cypress Hollow Park', lat: 34.0736, lng: -118.23, count: 6 },
   },
   {
     id: 'm-sat-6',
@@ -160,7 +197,7 @@ export const conversations: Conversation[] = [
     title: 'Saturday hitters',
     createdBy: CURRENT_USER_ID,
     adminIds: [CURRENT_USER_ID],
-    messageIds: ['m-sat-1', 'm-sat-2', 'm-sat-3', 'm-sat-4', 'm-sat-5', 'm-sat-7', 'm-sat-6'],
+    messageIds: ['m-sat-1', 'm-sat-2', 'm-sat-3', 'm-sat-4', 'm-sat-5', 'm-sat-7', 'm-sat-8', 'm-sat-9', 'm-sat-10', 'm-sat-6'],
     updatedAt: isoDaysAgo(0, 1),
     // You answered after June's message, so nothing in it is new to you.
     unreadCount: 0,

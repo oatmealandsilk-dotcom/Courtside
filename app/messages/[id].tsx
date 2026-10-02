@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Keyboard,
   KeyboardAvoidingView,
+  LayoutAnimation,
   Modal,
   Platform,
   Animated,
@@ -34,6 +35,11 @@ import { EmojiKeyboard } from '@/components/EmojiKeyboard';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { VOICE_LIMIT_MS, clock, useVoiceRecorder } from '@/features/voice/useVoiceRecorder';
 import { openCourt } from '@/features/players/courtLink';
+import { COURT_CARD_W, CourtCard } from '@/features/messages/CourtCard';
+import { CourtMapSnapshots } from '@/components/map/CourtMapThumb';
+import { PHOTO_W, PhotoStack, PhotoTray, PhotoViewer, type TileRect, type TrayPhoto } from '@/features/messages/ChatPhotoViews';
+import { MAX_CHAT_PHOTOS, useChatPhotosReady, useSendProgress } from '@/features/messages/chatPhotos';
+import { pickPhotos } from '@/components/MediaPicker';
 import { Tappable, useDoubleTap } from '@/components/Tappable';
 import { chatStamp } from '@/lib/format';
 import { RichText } from '@/components/RichText';
@@ -67,8 +73,15 @@ export default function Thread() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-  const { conversations, messages, users, posts, questions, hitRequests, currentUserId, defaultReaction, actions, blockedIds } = useApp();
+  const { width: winW } = useWindowDimensions();
+  const { conversations, messages, users, posts, questions, hitRequests, currentUserId, currentUser, detectedCoords, defaultReaction, actions, blockedIds } = useApp();
   const [draft, setDraft] = useState('');
+  // Photos picked from the camera roll, waiting above the box for Send (the box becomes their caption).
+  const [picked, setPicked] = useState<TrayPhoto[]>([]);
+  // A photo opened full screen: which message, which of its photos, and where it sits in the chat.
+  const [viewing, setViewing] = useState<{ message: Message; index: number; rects: (TileRect | undefined)[] } | null>(null);
+  // The photo button only shows once the server can keep chat photos (migration 61).
+  const photosOn = useChatPhotosReady();
   // Holding a message opens its menu over the chat; Edit puts its words back in the box.
   const [menu, setMenu] = useState<MenuTarget | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
@@ -96,6 +109,22 @@ export default function Thread() {
   useEffect(() => { const t = setTimeout(() => { settled.current = true; }, 400); return () => clearTimeout(t); }, []);
   const inputRef = useRef<TextInput>(null);
   const focused = useIsFocused();
+  const focusedRef = useRef(focused);
+  focusedRef.current = focused;
+  // On iPhone the keyboard slides down over about a quarter of a second, but
+  // the chat's room for it (the KeyboardAvoidingView below) is given back in
+  // one go the moment it starts: the bar dropped to the bottom and the
+  // keyboard uncovered it. Given the keyboard's own timing, the bar and the
+  // messages ride down with the keyboard instead.
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return undefined;
+    const sub = Keyboard.addListener('keyboardWillHide', (e) => {
+      if (!focusedRef.current) return;
+      const duration = Math.max(10, e.duration || 250);
+      LayoutAnimation.configureNext({ duration, update: { duration, type: LayoutAnimation.Types[e.easing] ?? LayoutAnimation.Types.keyboard } });
+    });
+    return () => sub.remove();
+  }, []);
 
   const liveConversation = conversations.find((c) => c.id === id);
   // Someone took you out of this group (found out while it was open, or on
@@ -115,7 +144,10 @@ export default function Thread() {
   const blockedInGroup = group ? people.filter((u) => blockedIds.includes(u.id)) : [];
   // Folded messages you chose to see, by id, for as long as the chat is open.
   const [shownIds, setShownIds] = useState<string[]>([]);
-  useEffect(() => { setShownIds([]); }, [id]);
+  useEffect(() => { setShownIds([]); setPicked([]); setViewing(null); }, [id]);
+  // The picked photos' row takes room from the bottom of the chat: the newest message stays in view above it.
+  const hasTray = picked.length > 0;
+  useEffect(() => { if (hasTray) requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true })); }, [hasTray]);
 
   // Opening a chat fetches it fresh, so it never sits on an old copy waiting for the next refresh.
   useEffect(() => { if (id) void actions.syncConversation(id); }, [id, actions]);
@@ -163,6 +195,9 @@ export default function Thread() {
     return () => clearInterval(t);
   }, [typing]);
   const lastMessage = thread[thread.length - 1];
+  // Your newest message's photos still going up: its line says "Sending…", not "Sent".
+  const lastRealId = useMemo(() => [...thread].reverse().find((m) => m.kind !== 'system')?.id ?? '', [thread]);
+  const lastSending = useSendProgress(lastRealId) !== null;
   useEffect(() => {
     if (!lastMessage) return;
     setTyping((cur) => { if (!cur[lastMessage.senderId]) return cur; const next = { ...cur }; delete next[lastMessage.senderId]; return next; });
@@ -267,12 +302,16 @@ export default function Thread() {
   // everyone" in a group, counting only people who let read receipts show.
   const lastReal = [...thread].reverse().find((m) => m.kind !== 'system');
   const readLine = !typers.length && lastReal && lastReal.senderId === currentUserId && !lastReal.failed
-    ? group
+    ? lastSending ? 'Sending…' : group
       ? seenByLabel(lastReal, conversation, users, currentUserId)
       : other && other.readReceiptsEnabled !== false && lastReal.readAtBy?.[other.id] ? 'Read' : 'Sent'
     : null;
   const firstName = (u?: User) => u?.name.trim().split(/\s+/)[0] ?? 'Someone';
   const faceOf = (uid: string) => users.find((u) => u.id === uid);
+  // How far a court card or photos may reach across the chat: most of its
+  // width (less the face beside others' messages in a group), so they never
+  // run off the side of a small phone.
+  const reach = (beside: boolean) => Math.floor((Math.min(700, winW) - spacing.lg * 2 - (beside ? FACE + spacing.sm : 0)) * 0.84);
   // An emoji goes in where the cursor is, and the cursor moves past it.
   const placeCaret = (at: number) => { setCaret(at); setTimeout(() => inputRef.current?.setNativeProps?.({ selection: { start: at, end: at } }), 0); };
   const insertEmoji = (emoji: string) => {
@@ -303,8 +342,52 @@ export default function Thread() {
     setTimeout(() => inputRef.current?.setNativeProps?.({ selection: { start: next.caret, end: next.caret } }), 0);
   };
 
+  /*
+   * The court and photo buttons. Each lets go of the box first, so the
+   * keyboard goes down behind the sheet or picker as it rises, and stays
+   * down when it closes. (Left focused, the phone put the keyboard back on
+   * the way out, and the whole bar dropped and rose again.) The emoji
+   * keyboard, being part of the page, simply stays open underneath: taking
+   * it away would drop the bar in one jump.
+   */
+  const letGo = () => { inputRef.current?.blur(); Keyboard.dismiss(); };
+  const openCourtPicker = () => {
+    const go = () => router.push({ pathname: '/pick-court', params: { conversation: conversation.id } });
+    if (Platform.OS === 'ios' && Keyboard.isVisible()) {
+      // The sheet opens the moment the keyboard starts down, together with the
+      // bar riding down with it (above). Opened any sooner, the chat stopped
+      // making room for the keyboard before the keyboard knew it was going,
+      // and the bar fell in one jump behind the sheet.
+      let done = false;
+      const run = () => { if (done) return; done = true; sub.remove(); clearTimeout(timer); go(); };
+      const sub = Keyboard.addListener('keyboardWillHide', run);
+      const timer = setTimeout(run, 400);
+      letGo();
+      return;
+    }
+    letGo();
+    go();
+  };
+  const choosePhotos = () => {
+    const room = MAX_CHAT_PHOTOS - picked.length;
+    if (room <= 0) { showToast({ title: `Up to ${MAX_CHAT_PHOTOS} photos at a time`, icon: 'images-outline' }); return; }
+    letGo();
+    // Straight from the tap: a browser only opens its file box from one.
+    pickPhotos(room)
+      .then((got) => { if (got?.length) setPicked((now) => [...now, ...got].slice(0, MAX_CHAT_PHOTOS)); })
+      .catch((e: unknown) => showToast({ title: 'Couldn’t open your photos', body: e instanceof Error ? e.message : undefined, icon: 'alert-circle-outline' }));
+  };
+
   const send = () => {
     const body = draft.trim();
+    // Picked photos go with whatever is in the box as their caption.
+    if (picked.length && !editing) {
+      actions.sendPhotos(conversation.id, picked, body);
+      setPicked([]);
+      setDraft('');
+      requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+      return;
+    }
     if (!body) return;
     if (editing) {
       actions.editMessage(editing.id, body);
@@ -320,7 +403,11 @@ export default function Thread() {
   };
 
   return (
-    <KeyboardAvoidingView style={[styles.root, { paddingTop: insets.top }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    // Only while the chat is the page in front: the court sheet's own search box
+    // brings the keyboard up over it, and the bar here must not rise and fall under the sheet.
+    <KeyboardAvoidingView style={[styles.root, { paddingTop: insets.top }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined} enabled={focused}>
+      {/* First, so everything else covers it: where the court cards' little maps are drawn. */}
+      <CourtMapSnapshots />
       <Wash height={320} strength={0.7} />
       <View style={styles.header}>
         {/* Back to the inbox even when this chat was the first page opened (a link, a reload). */}
@@ -482,18 +569,48 @@ export default function Thread() {
               </>
             );
           } else if (message.kind === 'court' && message.place) {
+            // A court: a still map of the spot, its name and where it is; the whole card opens the court's page.
             const place = message.place;
+            const card = { place, width: Math.min(COURT_CARD_W, reach(gutter)), mine, tail: lastOfRun, from: detectedCoords ?? currentUser?.cityAt ?? null };
             body = (
-              <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles}>
-                <Tappable accessibilityRole="link" accessibilityLabel={`${place.name}. See the court`} scaleTo={0.97} onPress={() => openCourt({ id: place.id, name: place.name, lat: place.lat, lng: place.lng })} style={[styles.sharedCard, styles.courtCard]}>
-                  <View style={styles.sharedHead}>
-                    <Ionicons name="location" size={16} color={colors.brand} />
-                    <Text style={styles.sharedKind}>Court</Text>
-                  </View>
-                  <Text numberOfLines={2} style={styles.courtName}>{place.name}</Text>
-                  <Text style={styles.courtOpen}>See the court</Text>
-                </Tappable>
-              </Row>
+              <>
+                <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles}>
+                  {/* Held, the menu draws it lifted and bright above the dimmed chat, so this one steps out of sight. */}
+                  <HoldArea onHold={(rect) => openMenu({ message, mine, rect, copy: <CourtCard {...card} onPress={() => {}} /> })} style={[styles.cardArea, menu?.message.id === message.id && styles.heldAway]}>
+                    {(hold) => (
+                      <CourtCard
+                        {...card}
+                        onPress={() => openCourt({ id: place.id, name: place.name, lat: place.lat, lng: place.lng })}
+                        onLongPress={hold}
+                      />
+                    )}
+                  </HoldArea>
+                </Row>
+                {message.failed ? (
+                  <Pressable accessibilityRole="button" accessibilityLabel="Not sent. Tap to try again" onPress={() => actions.retryMessage(message.id)} hitSlop={8} style={styles.notSentWrap}>
+                    <Text style={[styles.edited, styles.notSent]}>Not sent · Tap to retry</Text>
+                  </Pressable>
+                ) : null}
+              </>
+            );
+          } else if (message.kind === 'photo' && message.photos?.length) {
+            body = (
+              <PhotoMessage
+                message={message}
+                mine={mine}
+                inRun={inRun}
+                tail={lastOfRun}
+                arrive={arrive}
+                leading={leading}
+                styles={styles}
+                me={currentUserId}
+                width={Math.min(PHOTO_W, reach(gutter))}
+                held={menu?.message.id === message.id}
+                onHold={(rect, copy) => openMenu({ message, mine, rect, copy })}
+                onReact={(emoji) => { if (!removed) actions.reactToMessage(message.id, emoji); }}
+                onRetry={() => actions.retryMessage(message.id)}
+                onOpen={(index, rects) => { Keyboard.dismiss(); setViewing({ message, index, rects }); }}
+              />
             );
           } else if (message.kind === 'hit-request') {
             // A "Looking for a hit" post sent into the chat: when, where, how
@@ -635,6 +752,17 @@ export default function Thread() {
         />
       ) : null}
 
+      {viewing ? (
+        <PhotoViewer
+          photos={viewing.message.photos ?? []}
+          start={viewing.index}
+          homes={viewing.rects}
+          caption={viewing.message.body || undefined}
+          who={`${viewing.message.senderId === currentUserId ? 'You' : firstName(faceOf(viewing.message.senderId))} · ${chatStamp(viewing.message.createdAt)}`}
+          onClose={() => setViewing(null)}
+        />
+      ) : null}
+
       {editing ? (
         <View style={styles.editBar}>
           <Ionicons name="create-outline" size={16} color={colors.brand} />
@@ -690,19 +818,29 @@ export default function Thread() {
       </View>
       ) : (
       <>
-      <View style={[styles.composer, { paddingBottom: emojiOpen ? spacing.sm : Math.max(insets.bottom, spacing.md) + keyboardInset }]}>
-        <Tappable
-          accessibilityLabel={emojiOpen ? 'Show the keyboard' : 'Add an emoji'}
-          onPress={toggleEmoji}
-          style={styles.emojiToggle}
-        >
+      {picked.length ? (
+        <View style={styles.trayWrap}>
+          <PhotoTray photos={picked} max={MAX_CHAT_PHOTOS} onRemove={(i) => setPicked((now) => now.filter((_, j) => j !== i))} onAdd={choosePhotos} />
+        </View>
+      ) : null}
+      <View style={[styles.composer, picked.length ? styles.composerUnderTray : null, { paddingBottom: emojiOpen ? spacing.sm : Math.max(insets.bottom, spacing.md) + keyboardInset }]}>
+        {/* The tools sit still: a press only dims them, nothing moves or grows. */}
+        <ComposerTool label={emojiOpen ? 'Show the keyboard' : 'Add an emoji'} onPress={toggleEmoji} styles={styles}>
           {emojiOpen && !desktopWeb
             ? <KeyboardGlyph size={24} color={colors.textMuted} />
             : <Ionicons name={emojiOpen ? 'happy' : 'happy-outline'} size={23} color={emojiOpen ? colors.brand : colors.textMuted} />}
-        </Tappable>
-        <Tappable accessibilityLabel="Send a court" onPress={() => router.push({ pathname: '/pick-court', params: { conversation: conversation.id } })} style={styles.emojiToggle}>
+        </ComposerTool>
+        {photosOn === 'on' ? (
+          <ComposerTool label="Send photos" onPress={choosePhotos} disabled={!!editing} styles={styles}>
+            <Ionicons name="image-outline" size={23} color={colors.textMuted} />
+          </ComposerTool>
+        ) : photosOn === 'unknown' ? (
+          // Its room is kept while the server is asked (first start only), so the court button never moves.
+          <View style={styles.tool} />
+        ) : null}
+        <ComposerTool label="Send a court" onPress={openCourtPicker} disabled={!!editing} styles={styles}>
           <Ionicons name="location-outline" size={23} color={colors.textMuted} />
-        </Tappable>
+        </ComposerTool>
         <TextInput
           ref={inputRef}
           value={draft}
@@ -710,7 +848,7 @@ export default function Thread() {
           onSelectionChange={(e) => setCaret(e.nativeEvent.selection.end)}
           // Tapping into the words brings the phone keyboard back in the emoji keyboard's place.
           onFocus={() => { if (emojiOpen && !desktopWeb) setEmojiOpen(false); }}
-          placeholder="Message…"
+          placeholder={picked.length ? 'Add a caption…' : 'Message…'}
           placeholderTextColor={colors.textFaint}
           style={styles.input}
           onSubmitEditing={send}
@@ -720,11 +858,11 @@ export default function Thread() {
           returnKeyType="send"
           accessibilityLabel="Message text"
         />
-        {!draft.trim() && !editing ? (
+        {!draft.trim() && !editing && !picked.length ? (
           <Tappable immediate onPress={() => { void startRecording(); }} accessibilityLabel="Record a voice note" style={styles.mic}>
             <Ionicons name="mic-outline" size={21} color={colors.text} />
           </Tappable>
-        ) : <SendButton ready={!!draft.trim() && (!editing || draft.trim() !== editing.body)} editing={!!editing} onPress={send} styles={styles} />}
+        ) : <SendButton ready={(!!picked.length && !editing) || (!!draft.trim() && (!editing || draft.trim() !== editing.body))} editing={!!editing} onPress={send} styles={styles} />}
       </View>
       {emojiOpen ? <EmojiKeyboard height={keyboardHeight.current} bottomInset={insets.bottom} onPick={insertEmoji} onDelete={deleteBack} /> : null}
       </>
@@ -851,8 +989,110 @@ function Bubble({ message, mine, inRun, tail, arrive, leading, styles, me, held 
   );
 }
 
+/**
+ * A photo message: the photos (one at its own shape, several in a grid),
+ * then the caption in a bubble of its own under them, as iMessage does. A
+ * tap opens a photo full screen; a double tap leaves your reaction, as on a
+ * message; a hold opens the menu. While the photos go up, a ring fills over
+ * them; one that did not go offers a retry.
+ */
+function PhotoMessage({ message, mine, inRun, tail, arrive, leading, styles, me, width, held = false, onHold, onReact, onRetry, onOpen }: {
+  message: Message; mine: boolean; inRun: boolean; tail: boolean; arrive?: FadeInUp; leading?: React.ReactNode; styles: any; me: string | null;
+  /** How wide the photos sit (narrower on a small phone, and beside a face in a group). */
+  width: number;
+  /** Its menu is open: the lifted copy stands in for it, so it steps out of sight. */
+  held?: boolean;
+  /** A hold: where it sits, and the copy the menu lifts above the dimmed chat. */
+  onHold: (rect: Rect, copy: React.ReactNode) => void; onReact: (emoji?: string) => void; onRetry: () => void; onOpen: (index: number, rects: (TileRect | undefined)[]) => void;
+}) {
+  const progress = useSendProgress(message.id);
+  // A single tap waits out the double-tap window, so a double tap never opens the photo too.
+  const tapped = useRef<{ index: number; rects: (TileRect | undefined)[] }>({ index: 0, rects: [] });
+  const tap = useDoubleTap(() => onReact(), () => onOpen(tapped.current.index, tapped.current.rects));
+  // The caption answers like any message: a double tap leaves your reaction.
+  const captionTap = useDoubleTap(() => onReact());
+  const reactions = message.reactions ?? {};
+  const mineMark = me ? reactions[me] : undefined;
+  const tally = Object.values(reactions).reduce<Record<string, number>>((acc, emoji) => { acc[emoji] = (acc[emoji] ?? 0) + 1; return acc; }, {});
+  const reacted = Object.keys(tally).length > 0;
+  const caption = message.body.trim();
+  const photos = message.photos ?? [];
+  const captionStyle = [styles.bubble, mine ? styles.mine : styles.theirs, styles.caption, !tail && styles.noTail];
+  const captionText = <RichText style={[styles.bubbleText, mine && { color: colors.brandInk }]} mentionStyle={mine ? { color: colors.brandInk, textDecorationLine: 'underline' } : undefined}>{caption}</RichText>;
+  // What the menu lifts while it is held: the same photos and caption, bright, taking no taps.
+  const copy = (
+    <View style={mine ? styles.mineAlign : styles.theirsAlign}>
+      <PhotoStack photos={photos} width={width} mine={mine} tail={tail && !caption} progress={null} idKey={message.id} onTile={() => {}} />
+      {caption ? <View style={captionStyle}>{captionText}</View> : null}
+    </View>
+  );
+  return (
+    <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles}>
+      <HoldArea onHold={(rect) => onHold(rect, copy)} style={[styles.photoWrap, mine ? styles.mineAlign : styles.theirsAlign, reacted && styles.bubbleWrapReacted, held && styles.heldAway]}>
+        {(hold) => (
+          <>
+            <View style={{ opacity: message.failed ? 0.6 : 1 }}>
+              <PhotoStack
+                photos={photos}
+                width={width}
+                mine={mine}
+                tail={tail && !caption}
+                progress={progress}
+                failed={message.failed}
+                idKey={message.id}
+                onTile={(index, rects) => { tapped.current = { index, rects }; tap(); }}
+                onHold={hold}
+              />
+            </View>
+            {caption ? (
+              <Pressable onPress={captionTap} onLongPress={hold} delayLongPress={320} accessibilityRole="button" accessibilityLabel={`Caption: ${caption}. Double tap to react, hold for more.`} style={captionStyle}>
+                {captionText}
+              </Pressable>
+            ) : null}
+            {reacted ? (
+              <View style={[styles.reactions, mine ? styles.reactionsMine : styles.reactionsTheirs]}>
+                {Object.entries(tally).map(([emoji, count]) => (
+                  <ReactionChip key={emoji} emoji={emoji} count={count} mine={mineMark === emoji} onPress={() => onReact(emoji)} style={[styles.chip, mineMark === emoji && styles.chipMine]} />
+                ))}
+              </View>
+            ) : null}
+          </>
+        )}
+      </HoldArea>
+      {message.editedAt ? <Text style={styles.edited}>Edited</Text> : null}
+      {message.failed && progress === null ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Not sent. Tap to try again" onPress={onRetry} hitSlop={8}>
+          <Text style={[styles.edited, styles.notSent]}>Not sent · Tap to retry</Text>
+        </Pressable>
+      ) : null}
+    </Row>
+  );
+}
+
+/**
+ * A tool beside the message box (emoji, photos, court). A press only dims
+ * it, the way iOS's own bar buttons answer: no dip, no spring, so the bar
+ * stays perfectly still while a sheet or the photo picker opens over it.
+ */
+function ComposerTool({ label, onPress, disabled = false, styles, children }: { label: string; onPress: () => void; disabled?: boolean; styles: any; children: React.ReactNode }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      hitSlop={4}
+      style={(state) => [styles.tool, (state as { hovered?: boolean }).hovered && !disabled && styles.toolHover, state.pressed && styles.toolPressed, disabled && styles.toolOff]}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
 interface Rect { x: number; y: number; w: number; h: number }
-interface MenuTarget { message: Message; mine: boolean; rect: Rect }
+/** A held message: where it sits, and (for photos and court cards) the copy the menu lifts in its place. */
+interface MenuTarget { message: Message; mine: boolean; rect: Rect; copy?: React.ReactNode }
 
 /** Wraps a message so a hold can tell the menu exactly where the message sits on screen. */
 function HoldArea({ onHold, style, children }: { onHold: (rect: Rect) => void; style?: any; children: (hold: () => void) => React.ReactNode }) {
@@ -882,11 +1122,14 @@ function MessageMenu({ target, me, styles, onClose, onReact, onCopy, onEdit, onF
   const insets = useSafeAreaInsets();
   const { message, mine, rect } = target;
   const text = message.kind === 'text';
+  // A photo's caption can be copied like any message's words.
+  const caption = message.kind === 'photo' && !!message.body.trim();
   const actions = [
-    ...(text ? [{ key: 'copy', label: 'Copy', icon: 'copy-outline' as const, run: onCopy }] : []),
+    ...(text || caption ? [{ key: 'copy', label: caption ? 'Copy caption' : 'Copy', icon: 'copy-outline' as const, run: onCopy }] : []),
     ...(mine && text ? [{ key: 'edit', label: 'Edit', icon: 'create-outline' as const, run: onEdit }] : []),
-    // Anything anyone sent can go on to other chats; an event line ("Mira added Dev") is not a message.
-    ...(message.kind !== 'system' ? [{ key: 'forward', label: 'Forward', icon: 'arrow-redo-outline' as const, run: onForward }] : []),
+    // Anything anyone sent can go on to other chats; an event line ("Mira added Dev") is not a message,
+    // and photos stay on their own chat's private shelf.
+    ...(message.kind !== 'system' && message.kind !== 'photo' ? [{ key: 'forward', label: 'Forward', icon: 'arrow-redo-outline' as const, run: onForward }] : []),
     ...(mine ? [{ key: 'unsend', label: 'Unsend', icon: 'arrow-undo-outline' as const, run: onUnsend }] : []),
     { key: 'delete', label: mine ? 'Delete for you' : 'Delete', icon: 'trash-outline' as const, run: onDelete, danger: true },
   ];
@@ -909,7 +1152,12 @@ function MessageMenu({ target, me, styles, onClose, onReact, onCopy, onEdit, onF
     <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
       <Reanimated.View entering={FadeIn.duration(140)} style={StyleSheet.absoluteFill}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close menu" onPress={onClose} style={[StyleSheet.absoluteFill, styles.menuBackdrop]} />
-        {message.kind === 'text' ? (
+        {target.copy ? (
+          // Photos and court cards stay bright above the dimmed chat, lifted where they were, as iMessage keeps a held photo.
+          <View pointerEvents="none" style={[styles.liftedCopy, { position: 'absolute', left: rect.x, top: rect.y - shift, width: rect.w }]}>
+            {target.copy}
+          </View>
+        ) : message.kind === 'text' ? (
           <View pointerEvents="none" style={[styles.bubble, mine ? styles.mine : styles.theirs, styles.lifted, { position: 'absolute', left: rect.x, top: rect.y - shift, width: rect.w, alignSelf: 'auto' }]}>
             <RichText style={[styles.bubbleText, mine && { color: colors.brandInk }]}>{message.body}</RichText>
           </View>
@@ -1100,6 +1348,8 @@ const styleDefinitions = StyleSheet.create({
   edited: { ...typography.caption, color: colors.textFaint, letterSpacing: 0, marginTop: 3, marginHorizontal: 6 },
   menuBackdrop: { backgroundColor: colors.overlay },
   lifted: { transform: [{ scale: 1.03 }], shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
+  // A held photo or court card only lifts: a shadow on its see-through frame drew a box around it in a browser.
+  liftedCopy: { transform: [{ scale: 1.03 }] },
   menuReactions: { position: 'absolute', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, borderRadius: radius.pill, backgroundColor: colors.bgElevated, shadowColor: '#000', shadowOpacity: 0.16, shadowRadius: 14, shadowOffset: { width: 0, height: 4 } },
   menuReaction: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
   menuReactionOn: { backgroundColor: colors.brandDim },
@@ -1128,6 +1378,22 @@ const styleDefinitions = StyleSheet.create({
   },
   chipMine: { backgroundColor: colors.brandDim },
   emojiToggle: { padding: 4 },
+  // The tools beside the box: a fixed square each, so nothing around them ever shifts.
+  tool: { width: 34, height: 40, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  toolHover: { backgroundColor: colors.surfaceAlt },
+  toolPressed: { opacity: 0.4 },
+  toolOff: { opacity: 0.35 },
+  // A court card or photos take the same reach as a shared card.
+  cardArea: { maxWidth: '86%' },
+  photoWrap: { maxWidth: '86%' },
+  // A held photo or court card: the menu's lifted copy stands in for it.
+  heldAway: { opacity: 0 },
+  caption: { marginTop: 3 },
+  notSent: { color: colors.danger },
+  notSentWrap: { alignSelf: 'flex-end', marginRight: spacing.xs },
+  // The photos picked to send, above the box; the line the box usually carries moves up to sit over them.
+  trayWrap: { maxWidth: 700, width: '100%', alignSelf: 'center', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  composerUnderTray: { borderTopWidth: 0, paddingTop: spacing.sm },
   mineAlign: { alignSelf: 'flex-end' },
   // Bubbles in one run sit closer than the list's usual gap.
   inRun: { marginTop: -4 },
@@ -1147,7 +1413,6 @@ const styleDefinitions = StyleSheet.create({
   sharedBody: { ...typography.small, color: colors.text, lineHeight: 19 },
   courtCard: { minWidth: 220 },
   courtName: { ...typography.bodyStrong, color: colors.text },
-  courtOpen: { ...typography.smallStrong, color: colors.brand },
   sender: { ...typography.caption, letterSpacing: 0, color: colors.textMuted, marginLeft: spacing.lg, marginTop: spacing.sm, marginBottom: 2 },
   // A sender's name in a group: over their first bubble, past the face column, and it opens their profile.
   senderLink: { alignSelf: 'flex-start' },

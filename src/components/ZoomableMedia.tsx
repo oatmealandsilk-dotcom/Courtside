@@ -1,4 +1,4 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useMemo } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -10,6 +10,20 @@ const TRAVEL = { duration: 280, easing: Easing.out(Easing.cubic) };
 export interface HomeRect { x: number; y: number; width: number; height: number; radius?: number }
 export interface ZoomableMediaHandle { close: () => void }
 
+export interface ZoomableMediaProps {
+  children: React.ReactNode;
+  onDismiss?: () => void;
+  home?: HomeRect;
+  /** Whether it grows out of `home` on opening (on by default). Off, it opens already full screen and only goes back into `home` on closing. */
+  grow?: boolean;
+  /**
+   * Which swipe puts it away: sideways (the feed's viewer), or down, as in
+   * Photos and iMessage, when it sits in a row of pictures that a sideways
+   * swipe moves between. Down leaves sideways swipes to the row.
+   */
+  dismissOn?: 'sideways' | 'down';
+}
+
 /**
  * The full-screen viewer. Pinch to look closer and it snaps straight back;
  * one finger slides the picture, and a sideways swipe pushes the whole
@@ -17,7 +31,10 @@ export interface ZoomableMediaHandle { close: () => void }
  * picture's home on the page, it grows out of that spot on opening and, on
  * closing, travels back into it with its rounded corners, rather than fading.
  */
-export const ZoomableMedia = forwardRef<ZoomableMediaHandle, { children: React.ReactNode; onDismiss?: () => void; home?: HomeRect }>(function ZoomableMedia({ children, onDismiss, home }, ref) {
+export const ZoomableMedia = forwardRef<ZoomableMediaHandle, ZoomableMediaProps>(function ZoomableMedia({ children, onDismiss, home, grow = true, dismissOn = 'sideways' }, ref) {
+  const down = dismissOn === 'down';
+  // Read once: a page that opened full screen never grows again when its row re-draws.
+  const [growIn] = useState(!!home && grow);
   const scale = useSharedValue(1);
   const focalX = useSharedValue(0);
   const focalY = useSharedValue(0);
@@ -25,20 +42,20 @@ export const ZoomableMedia = forwardRef<ZoomableMediaHandle, { children: React.R
   const driftY = useSharedValue(0);
   const panX = useSharedValue(0);
   const panY = useSharedValue(0);
-  const backdrop = useSharedValue(home ? 0 : 1);
+  const backdrop = useSharedValue(growIn ? 0 : 1);
   const leaving = useSharedValue(false);
   // 1 = sitting in its home on the page, 0 = filling the screen.
-  const settle = useSharedValue(home ? 1 : 0);
+  const settle = useSharedValue(growIn ? 1 : 0);
   // 1 while the window is being pushed aside: the corners round the moment it starts moving.
   const pushing = useSharedValue(0);
   const width = useSharedValue(1);
   const height = useSharedValue(1);
 
   useEffect(() => {
-    if (!home) return;
+    if (!growIn) return;
     settle.value = withTiming(0, TRAVEL);
     backdrop.value = withTiming(1, TRAVEL);
-  }, [home, settle, backdrop]);
+  }, [growIn, settle, backdrop]);
 
   const goHome = () => {
     'worklet';
@@ -58,9 +75,16 @@ export const ZoomableMedia = forwardRef<ZoomableMediaHandle, { children: React.R
     panY.value = withTiming(dy * 1.3, { duration: 240, easing: Easing.out(Easing.cubic) });
     backdrop.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) }, (finished) => { if (finished && onDismiss) runOnJS(onDismiss)(); });
   };
+  // Down and out of sight, for a picture with no home on the page to go back to.
+  const dropAway = (dy: number) => {
+    'worklet';
+    leaving.value = true;
+    panY.value = withTiming(Math.sign(dy || 1) * height.value * 1.05, { duration: 240, easing: Easing.out(Easing.cubic) });
+    backdrop.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) }, (finished) => { if (finished && onDismiss) runOnJS(onDismiss)(); });
+  };
   useImperativeHandle(ref, () => ({
-    close: () => { if (home) goHome(); else slideOff(1, 0); },
-  }), [home]); // eslint-disable-line react-hooks/exhaustive-deps
+    close: () => { if (home) goHome(); else if (down) dropAway(1); else slideOff(1, 0); },
+  }), [home, down]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pinch = useMemo(() => Gesture.Pinch()
     .onStart((e) => {
@@ -84,13 +108,24 @@ export const ZoomableMedia = forwardRef<ZoomableMediaHandle, { children: React.R
       driftY.value = withTiming(0, SNAP);
     }), [scale, focalX, focalY, driftX, driftY]);
 
-  const pan = useMemo(() => Gesture.Pan()
-    .minDistance(6)
-    .maxPointers(1)
+  const pan = useMemo(() => {
+    const base = Gesture.Pan().minDistance(6).maxPointers(1);
+    // Swiping down to close: the pan only starts on an up-or-down move and
+    // gives way at once to a sideways one, which belongs to the row of pictures.
+    const g = down ? base.activeOffsetY([-10, 10]).failOffsetX([-14, 14]) : base;
+    return g
     .onUpdate((e) => {
       'worklet';
       if (e.numberOfPointers !== 1 || leaving.value) return;
-      const sideways = Math.abs(e.translationX) > Math.abs(e.translationY) * 0.7;
+      if (down && onDismiss && scale.value <= 1.02) {
+        // The picture follows the finger down, and the page behind shows through the further it goes.
+        panX.value = e.translationX * 0.25;
+        panY.value = e.translationY;
+        backdrop.value = 1 - Math.min(1, Math.abs(e.translationY) / (height.value * 0.6)) * 0.9;
+        if (pushing.value === 0) pushing.value = withTiming(1, { duration: 140 });
+        return;
+      }
+      const sideways = !down && Math.abs(e.translationX) > Math.abs(e.translationY) * 0.7;
       if (onDismiss && scale.value <= 1.02 && sideways) {
         // A window being pushed aside: it follows the finger, and the page
         // behind shows through more the further it goes.
@@ -107,6 +142,18 @@ export const ZoomableMedia = forwardRef<ZoomableMediaHandle, { children: React.R
     .onEnd((e) => {
       'worklet';
       if (leaving.value) return;
+      if (down) {
+        if (onDismiss && scale.value <= 1.02 && (Math.abs(e.translationY) > 100 || Math.abs(e.velocityY) > 900)) {
+          // Swiped away: back into its place on the page if it has one, else down off the screen.
+          if (home) goHome(); else dropAway(e.translationY);
+          return;
+        }
+        panX.value = withTiming(0, SNAP);
+        panY.value = withTiming(0, SNAP);
+        backdrop.value = withTiming(1, SNAP);
+        pushing.value = withTiming(0, SNAP);
+        return;
+      }
       const away = Math.abs(e.translationX) > 90 || Math.abs(e.velocityX) > 900;
       if (onDismiss && scale.value <= 1.02 && away && Math.abs(e.translationX) > Math.abs(e.translationY) * 0.7) {
         // Swiped away: back into its place on the page if it has one, else off the edge.
@@ -128,7 +175,8 @@ export const ZoomableMedia = forwardRef<ZoomableMediaHandle, { children: React.R
       scale.value = withTiming(1, SNAP);
       driftX.value = withTiming(0, SNAP);
       driftY.value = withTiming(0, SNAP);
-    }), [panX, panY, scale, driftX, driftY, onDismiss, backdrop, leaving, width, home, pushing]); // eslint-disable-line react-hooks/exhaustive-deps
+    });
+  }, [panX, panY, scale, driftX, driftY, onDismiss, backdrop, leaving, width, height, home, pushing, down]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const gesture = useMemo(() => Gesture.Simultaneous(pinch, pan), [pinch, pan]);
 

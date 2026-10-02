@@ -48,11 +48,13 @@ export function isMutedFor(c: Conversation, m: Message, myHandle: string | undef
 
 /**
  * What a message was, in a few words: its own words, or "Sent a court",
- * "Sent a voice message" for the kinds with none. The inbox's second line
- * and the message banner both say it this way.
+ * "Sent a voice message", "Sent 3 photos" for the kinds with none. The
+ * inbox's second line and the message banner both say it this way (and the
+ * phone alert, from migration 61, in the same words).
  */
 export function messageSummary(m?: Message): string {
   if (!m) return 'Say hello';
+  if (m.kind === 'photo') return photoWords(m.photos?.length ?? 1);
   if (m.kind === 'court') return 'Sent a court';
   if (m.kind === 'post') return 'Sent a clip';
   if (m.kind === 'question') return 'Sent a discussion';
@@ -61,6 +63,9 @@ export function messageSummary(m?: Message): string {
   if (m.kind === 'hit-request') return 'Sent a hit';
   return m.body || 'Say hello';
 }
+
+/** "Sent a photo", "Sent 3 photos". */
+export const photoWords = (count: number) => (count > 1 ? `Sent ${count} photos` : 'Sent a photo');
 
 /**
  * The number on the Messages badge: how many chats have something new in

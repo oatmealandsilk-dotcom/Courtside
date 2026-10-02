@@ -79,6 +79,37 @@ export async function pickFromDevice(selection: 'video' | 'photo' | 'all'): Prom
   }
 }
 
+/** A photo picked for a chat: the file on this phone and its size in pixels. */
+export interface PickedPhoto { uri: string; width: number; height: number }
+
+/**
+ * Opens the camera roll for photos to send in a chat, up to `limit` at once,
+ * numbered in the order they were tapped. Apple's own photo picker runs
+ * outside the app and asks no permission: only what you choose is handed
+ * over (iOS's way since iOS 14), so there is nothing to allow or refuse.
+ * The photos come as JPEG (an iPhone's HEIC is converted) at full size; they
+ * are shrunk just before they go up. Null when nothing was chosen.
+ */
+export async function pickPhotos(limit: number): Promise<PickedPhoto[] | null> {
+  const most = Math.max(1, Math.min(10, limit));
+  try {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: most > 1,
+      selectionLimit: most,
+      orderedSelection: true,
+      quality: 1,
+      exif: false,
+      preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+      shouldDownloadFromNetwork: true,
+    });
+    if (result.canceled || !result.assets.length) return null;
+    return result.assets.slice(0, most).map((a) => ({ uri: a.uri, width: a.width || 1, height: a.height || 1 }));
+  } catch (err) {
+    throw new Error(explainPickError(err));
+  }
+}
+
 /**
  * In Expo Go a picked video is converted by the iPhone itself to standard
  * 720p H.264 before it is handed over: several times smaller than the raw

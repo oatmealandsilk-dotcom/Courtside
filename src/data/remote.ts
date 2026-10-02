@@ -14,13 +14,13 @@ import * as WebBrowser from 'expo-web-browser';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
-import { shrinkCover, shrinkPhoto } from '@/lib/shrinkPhoto';
+import { shrinkCover, shrinkPhoto, shrinkPhotoSized } from '@/lib/shrinkPhoto';
 import { COVER_MARK, smallName } from '@/lib/smallCover';
 import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, ChatEvent, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, TaggedCourt, Question, Story, Tip, User, CoachApplication } from './types';
+import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, TaggedCourt, Question, Story, Tip, User, CoachApplication } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
 import { isMapCourtId } from '@/features/places/courtName';
 
@@ -447,7 +447,23 @@ const toCoachApplication = (r: CoachApplicationRow): CoachApplication => ({
 /** A chat member's row. `role` came with migration 54 (admin or member); a database without it leaves it out. */
 interface MemberRow { user_id: string; last_read_at: string | null; role?: string | null }
 interface ConversationRow { id: string; updated_at: string; title?: string | null; is_group?: boolean | null; created_by?: string | null; photo_url?: string | null; conversation_members?: MemberRow[]; messages?: MessageRow[] }
-interface MessageRow { id: string; conversation_id: string; sender_id: string; body: string; kind: string; shared_id: string | null; reactions: Record<string, string> | null; created_at: string; edited_at?: string | null; place?: { id?: string; name: string; lat: number; lng: number } | null; audio_url?: string | null; audio_ms?: number | null; event?: { type?: string; targets?: unknown; title?: string | null; on?: boolean | null } | null }
+interface MessageRow { id: string; conversation_id: string; sender_id: string; body: string; kind: string; shared_id: string | null; reactions: Record<string, string> | null; created_at: string; edited_at?: string | null; place?: { id?: string; name: string; lat: number; lng: number; count?: unknown } | null; audio_url?: string | null; audio_ms?: number | null; event?: { type?: string; targets?: unknown; title?: string | null; on?: boolean | null } | null; photos?: unknown }
+
+/**
+ * A photo message's photos as the server keeps them ([{path, w, h}], migration
+ * 61), in the app's shape. Anything malformed is left out; a message with
+ * none left reads as having no photos.
+ */
+function toChatPhotos(raw: unknown): ChatPhoto[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out = raw.flatMap((p): ChatPhoto[] => {
+    if (!p || typeof p !== 'object') return [];
+    const { path, w, h } = p as { path?: unknown; w?: unknown; h?: unknown };
+    if (typeof path !== 'string' || !path || typeof w !== 'number' || typeof h !== 'number' || w <= 0 || h <= 0) return [];
+    return [{ path, w, h }];
+  });
+  return out.length ? out.slice(0, 10) : undefined;
+}
 
 const EVENT_TYPES: ChatEvent['type'][] = ['created', 'added', 'removed', 'left', 'renamed', 'photo', 'admin', 'joined'];
 /** An event line's `event` as the server wrote it ({type, targets, title, on}), in the app's shape. Anything unexpected is left out, and the line shows its plain sentence. */
@@ -483,7 +499,12 @@ export function toConversations(me: ID, convRows: ConversationRow[], messageRows
       reactions: row.reactions && Object.keys(row.reactions).length ? row.reactions : undefined,
       editedAt: row.edited_at ?? undefined,
       audio: row.audio_url ? { url: row.audio_url, ms: row.audio_ms ?? 0 } : undefined,
-      place: row.place && typeof row.place.lat === 'number' && typeof row.place.lng === 'number' ? { id: isMapCourtId(row.place.id) ? row.place.id : undefined, name: String(row.place.name ?? 'Court').slice(0, 80), lat: row.place.lat, lng: row.place.lng } : undefined,
+      place: row.place && typeof row.place.lat === 'number' && typeof row.place.lng === 'number' ? {
+        id: isMapCourtId(row.place.id) ? row.place.id : undefined, name: String(row.place.name ?? 'Court').slice(0, 80), lat: row.place.lat, lng: row.place.lng,
+        // How many courts stand there, when the sender's list knew it (newer builds send it).
+        count: typeof row.place.count === 'number' && row.place.count >= 1 && row.place.count < 100 ? Math.round(row.place.count) : undefined,
+      } : undefined,
+      photos: row.kind === 'photo' ? toChatPhotos(row.photos) : undefined,
       readAtBy: Object.keys(readAtBy).length ? readAtBy : undefined,
       openedAtBy: Object.keys(readAtBy).length ? readAtBy : undefined,
     };
@@ -560,7 +581,8 @@ export interface ReportedChat {
   title?: string;
   isGroup: boolean;
   memberIds: ID[];
-  messages: { senderId: ID; body: string; kind: string; createdAt: string }[];
+  /** `id` and `photos` came with migration 61 (a photo message's photos, which admins may open for a reported chat). */
+  messages: { id?: ID; senderId: ID; body: string; kind: string; createdAt: string; photos?: ChatPhoto[] }[];
 }
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /**
@@ -1024,6 +1046,8 @@ export const remote = {
       kind: message.kind, shared_id: message.sharedId ?? null, created_at: message.createdAt,
       ...(message.place ? { place: message.place } : {}),
       ...(message.audio ? { audio_url: message.audio.url, audio_ms: Math.round(message.audio.ms) } : {}),
+      // Only the shelf addresses and sizes go: never a file still on this phone.
+      ...(message.photos ? { photos: message.photos.map((p) => ({ path: p.path, w: Math.round(p.w), h: Math.round(p.h) })) } : {}),
     });
     if (error && error.code === '42501') return 'refused';
     // Sent twice (a retry after a slow first try that did land): it is there.
@@ -1100,6 +1124,43 @@ export const remote = {
   async hideMessage(me: ID, messageId: ID) {
     const { error } = await need().from('hidden_messages').insert({ user_id: me, message_id: messageId });
     if (error) fail('message delete')(error);
+  },
+
+  /**
+   * Whether the database can take photos in chats yet (migration 61): asked
+   * by looking for the photos column, which costs nothing and reads no rows.
+   * Null when there was no answer (no signal), which says nothing either way.
+   */
+  async chatPhotosReady(): Promise<boolean | null> {
+    const { error } = await need().from('messages').select('photos').limit(0);
+    if (!error) return true;
+    if (error.code === '42703' || error.code === 'PGRST204' || /photos/.test(error.message)) {
+      console.warn('[remote] Photos in chats need the chat photos update. Open Supabase → SQL Editor → New query, paste the file supabase/migrations/20261002000061_chat_photos.sql and press Run. It is safe to run more than once.');
+      return false;
+    }
+    return null;
+  },
+
+  /**
+   * Links that open chat photos for the next hour, by where each is kept.
+   * The storage server only gives one to someone in that chat (migration 61);
+   * a photo it will not open is simply missing from the answer. Null when
+   * there was no answer at all (no signal).
+   */
+  async signChatPhotos(paths: string[]): Promise<Record<string, string> | null> {
+    if (!paths.length) return {};
+    const { data, error } = await need().storage.from(CHAT_PHOTOS).createSignedUrls(paths, CHAT_PHOTO_LINK_SECONDS);
+    if (error) { fail('chat photo links')(error); return null; }
+    const out: Record<string, string> = {};
+    for (const row of data ?? []) if (row.path && row.signedUrl && !row.error) out[row.path] = row.signedUrl;
+    return out;
+  },
+
+  /** Takes your own chat photos down (after an unsend). Best effort: a photo left behind is still only for that chat. */
+  async removeChatPhotos(paths: string[]) {
+    if (!paths.length) return;
+    const { error } = await need().storage.from(CHAT_PHOTOS).remove(paths);
+    if (error) fail('chat photo remove')(error);
   },
 
   /** One conversation with its messages — for one that just started on another phone. Null when it cannot be had, for whatever reason. */
@@ -1507,15 +1568,36 @@ export const remote = {
     if (error) { if (!missingFunction(error)) fail('reported chat')(error); return null; }
     if (!data || typeof data !== 'object') return null;
     const raw = data as { title?: unknown; is_group?: unknown; members?: unknown; messages?: unknown };
-    const lines = Array.isArray(raw.messages) ? raw.messages as { sender?: unknown; body?: unknown; kind?: unknown; created_at?: unknown }[] : [];
+    const lines = Array.isArray(raw.messages) ? raw.messages as { id?: unknown; sender?: unknown; body?: unknown; kind?: unknown; created_at?: unknown; photos?: unknown }[] : [];
     return {
       title: typeof raw.title === 'string' && raw.title.trim() ? raw.title : undefined,
       isGroup: raw.is_group === true,
       memberIds: Array.isArray(raw.members) ? raw.members.filter((m): m is string => typeof m === 'string') : [],
       messages: lines
         .filter((m) => typeof m.sender === 'string' && typeof m.created_at === 'string')
-        .map((m) => ({ senderId: m.sender as string, body: typeof m.body === 'string' ? m.body : '', kind: typeof m.kind === 'string' ? m.kind : 'text', createdAt: m.created_at as string })),
+        .map((m) => ({
+          id: typeof m.id === 'string' ? m.id : undefined,
+          senderId: m.sender as string, body: typeof m.body === 'string' ? m.body : '', kind: typeof m.kind === 'string' ? m.kind : 'text', createdAt: m.created_at as string,
+          photos: m.kind === 'photo' ? toChatPhotos(m.photos) : undefined,
+        })),
     };
+  },
+  /**
+   * An admin takes one message out of a reported chat (an abusive photo,
+   * say): gone for everyone in it at once, then its photos are taken off the
+   * private shelf (migration 61 lets an admin do both, for a reported chat
+   * only). False when the database refused.
+   */
+  async removeReportedMessage(messageId: ID): Promise<boolean> {
+    const { data, error } = await need().rpc('remove_reported_message', { msg: messageId });
+    if (error) { fail('remove reported message')(error); return false; }
+    const paths = Array.isArray(data) ? data.filter((p): p is string => typeof p === 'string') : [];
+    if (paths.length) {
+      // Already closed to everyone with the message gone; this only frees the space.
+      const { error: gone } = await need().storage.from(CHAT_PHOTOS).remove(paths);
+      if (gone) fail('remove reported photos')(gone);
+    }
+    return true;
   },
   /** An admin's decision on a report. Resolves false when the database refused. */
   async moderateReport(reportId: ID, decision: 'remove' | 'restore' | 'suspend' | 'unsuspend' | 'dismiss'): Promise<boolean> {
@@ -2205,6 +2287,9 @@ function guessType(uri: string, kind: 'photo' | 'video' | 'audio'): string {
   return known[ext] ?? (kind === 'video' ? 'video/mp4' : kind === 'audio' ? 'audio/mp4' : 'image/jpeg');
 }
 
+/** How long a public upload may be kept by phones, browsers and the storage server's cache: a year (names are never reused). */
+const YEAR_SECONDS = 31536000;
+
 /**
  * Sends one file to the bucket with a running report of how much has gone
  * (the posting strip's percentage). Supabase's own upload call gives no
@@ -2212,7 +2297,7 @@ function guessType(uri: string, kind: 'photo' | 'video' | 'audio'): string {
  * refused for any reason, the plain upload runs instead, and the bar simply
  * jumps to the end.
  */
-async function uploadWithProgress(path: string, uri: string, contentType: string, onProgress?: (fraction: number) => void): Promise<void> {
+async function uploadWithProgress(path: string, uri: string, contentType: string, onProgress?: (fraction: number) => void, bucket = 'media', cacheSeconds = YEAR_SECONDS): Promise<void> {
   const db = need();
   const base = process.env.EXPO_PUBLIC_SUPABASE_URL;
   const apikey = process.env.EXPO_PUBLIC_SUPABASE_KEY;
@@ -2220,8 +2305,8 @@ async function uploadWithProgress(path: string, uri: string, contentType: string
   if (!base || !apikey || !token || typeof XMLHttpRequest === 'undefined') throw new Error('no direct upload');
   const form = new FormData();
   const name = path.split('/').pop() ?? 'upload';
-  // How long phones and browsers may keep it (a year; names are never reused). Must come before the file.
-  form.append('cacheControl', '31536000');
+  // How long phones, browsers and the storage server's cache may keep it. Must come before the file.
+  form.append('cacheControl', String(cacheSeconds));
   if (Platform.OS === 'web') {
     const blob = await (await fetch(uri)).blob();
     form.append('', blob, name);
@@ -2231,13 +2316,14 @@ async function uploadWithProgress(path: string, uri: string, contentType: string
   }
   await new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${base}/storage/v1/object/media/${path}`);
+    xhr.open('POST', `${base}/storage/v1/object/${bucket}/${path}`);
     xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     xhr.setRequestHeader('apikey', apikey);
     xhr.setRequestHeader('x-upsert', 'false');
-    // Every upload has its own name and is never replaced, so it can be kept
-    // by phones and browsers for a year instead of re-checked on every view.
-    xhr.setRequestHeader('cache-control', 'max-age=31536000');
+    // A public upload has its own name and is never replaced, so it can be
+    // kept for a year instead of re-checked on every view. A private chat
+    // photo is kept no longer than its link works (see uploadChatPhoto).
+    xhr.setRequestHeader('cache-control', `max-age=${cacheSeconds}`);
     xhr.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total); };
     xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`upload ${xhr.status}: ${xhr.responseText.slice(0, 200)}`)));
     xhr.onerror = () => reject(new Error('upload failed'));
@@ -2362,7 +2448,7 @@ export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'vid
       await noteStep(`sending a ${megabytes(size)} ${kind} from memory (the direct send failed)`);
       const response = await fetch(sent);
       const bytes = await response.arrayBuffer();
-      const { error } = await db.storage.from('media').upload(path, bytes, { contentType, upsert: false, cacheControl: '31536000' });
+      const { error } = await db.storage.from('media').upload(path, bytes, { contentType, upsert: false, cacheControl: String(YEAR_SECONDS) });
       if (error) throw error;
     }
     // The bar is full once the post's own file is up; the small copy is extra.
@@ -2374,6 +2460,56 @@ export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'vid
     fail('media upload')(error);
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(/exceeded the maximum allowed size/i.test(message) ? `This ${kind} is over the ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB limit. Pick a shorter one — about a minute or less.` : message);
+  }
+}
+
+/** The private shelf chat photos go on (migration 61), and how long a link to one keeps working. */
+const CHAT_PHOTOS = 'chat-photos';
+const CHAT_PHOTO_LINK_SECONDS = 60 * 60;
+/** A chat photo's long edge once shrunk on the phone, and its JPEG quality: sharp full screen, a few hundred KB. */
+const CHAT_PHOTO_EDGE = 1600;
+const CHAT_PHOTO_QUALITY = 0.8;
+/** What a chat photo's sender is told when the phone could not re-draw it (an odd format, or too big for memory). */
+export const CHAT_PHOTO_UNREADABLE = 'Couldn’t prepare this photo. Try another one.';
+
+/**
+ * Puts one picked photo on the private chat shelf, shrunk on the phone first
+ * (1600 px on its long edge, JPEG at 80%), at "<chat>/<you>/<name>.jpg" (the
+ * shape migration 61's rules read), and says where it went and its size in
+ * pixels. Throws with plain words if it cannot.
+ *
+ * Only the re-drawn JPEG ever goes up: re-drawing leaves behind what the
+ * camera wrote into the file, above all where the photo was taken (often
+ * someone's home). A photo that cannot be re-drawn is refused rather than
+ * sent as it is (the shelf only takes JPEGs anyway).
+ */
+export async function uploadChatPhoto(me: ID, conversationId: ID, picked: ChatPhoto, onProgress?: (fraction: number) => void): Promise<ChatPhoto> {
+  const original = picked.path;
+  try {
+    const db = need();
+    const shrunk = await shrinkPhotoSized(original, CHAT_PHOTO_EDGE, CHAT_PHOTO_QUALITY);
+    if (!shrunk.width || !shrunk.height || shrunk.uri === original) throw new Error(CHAT_PHOTO_UNREADABLE);
+    onProgress?.(0.1);
+    const contentType = 'image/jpeg';
+    const path = `${conversationId.toLowerCase()}/${me.toLowerCase()}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+    const sending = (f: number) => onProgress?.(0.1 + 0.9 * f);
+    // Kept by caches no longer than a link to it works: a photo that is unsent,
+    // or someone taken out of the chat, must not go on being served from a
+    // copy kept along the way. The app keeps its own copy on the phone.
+    const cacheSeconds = CHAT_PHOTO_LINK_SECONDS;
+    try {
+      await uploadWithProgress(path, shrunk.uri, contentType, sending, CHAT_PHOTOS, cacheSeconds);
+    } catch (direct) {
+      console.warn('[remote] direct chat photo upload fell back', direct);
+      const bytes = await (await fetch(shrunk.uri)).arrayBuffer();
+      const { error } = await db.storage.from(CHAT_PHOTOS).upload(path, bytes, { contentType, upsert: false, cacheControl: String(cacheSeconds) });
+      if (error) throw error;
+    }
+    onProgress?.(1);
+    return { path, w: shrunk.width, h: shrunk.height };
+  } catch (error) {
+    fail('chat photo upload')(error);
+    throw new Error(error instanceof Error ? error.message : String(error));
   }
 }
 

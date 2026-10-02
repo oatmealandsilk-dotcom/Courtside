@@ -12,19 +12,28 @@ export const PHOTO_EDGE = 1440;
  * screen. Anything that goes wrong returns the original untouched.
  */
 export async function shrinkPhoto(uri: string, edge = PHOTO_EDGE, quality = 0.82): Promise<string> {
+  return (await shrinkPhotoSized(uri, edge, quality)).uri;
+}
+
+/**
+ * The same, and the size it came out at, in pixels (0 × 0 when it could not
+ * be read, and the original untouched). A chat photo's bubble takes its
+ * shape from these before the picture itself has arrived.
+ */
+export async function shrinkPhotoSized(uri: string, edge = PHOTO_EDGE, quality = 0.82): Promise<{ uri: string; width: number; height: number }> {
   try {
     const context = ImageManipulator.manipulate(uri);
     const probe = await context.renderAsync();
     const { width, height } = probe;
-    if (!width || !height) return uri;
+    if (!width || !height) return { uri, width: 0, height: 0 };
     const long = Math.max(width, height);
     const shrink = ImageManipulator.manipulate(uri);
     if (long > edge) shrink.resize(width >= height ? { width: edge } : { height: edge });
     const image = await shrink.renderAsync();
     const saved = await image.saveAsync({ format: SaveFormat.JPEG, compress: quality });
-    return saved.uri;
+    return { uri: saved.uri, width: saved.width, height: saved.height };
   } catch {
-    return uri;
+    return { uri, width: 0, height: 0 };
   }
 }
 

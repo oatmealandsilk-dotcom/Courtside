@@ -43,7 +43,7 @@ const routes = Object.keys(paths).map(name => ({ key: name, name }));
  * The comments close themselves on Escape, with their own animation (see
  * DragSheet.web), so they are not here: a second step back closed the page under them too.
  */
-const SHEETS = new Set(['/compose', '/share', '/pick-group', '/ask', '/post-menu', '/edit-post', '/messages/new', '/log-session', '/pick-session', '/hit-request/new', '/court-report']);
+const SHEETS = new Set(['/compose', '/share', '/pick-group', '/pick-court', '/ask', '/post-menu', '/edit-post', '/messages/new', '/log-session', '/pick-session', '/hit-request/new', '/court-report']);
 const TAB_ORDER: string[] = Object.values(paths);
 export function AppShell({ children }: { children: React.ReactNode }) {
   useTheme();

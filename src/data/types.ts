@@ -631,8 +631,26 @@ export interface Tip {
  * What a message is. 'hit-request' is a shared "Looking for a hit" post (not
  * 'hit', which already means an Instant). 'system' is an event line in a
  * group ("Mira added Dev"): only the server writes those (migration 54).
+ * 'photo' is one to ten pictures from the camera roll (migration 61).
  */
-export type MessageKind = 'text' | 'post' | 'question' | 'profile' | 'court' | 'voice' | 'hit-request' | 'system';
+export type MessageKind = 'text' | 'post' | 'question' | 'profile' | 'court' | 'voice' | 'hit-request' | 'system' | 'photo';
+
+/**
+ * One picture in a chat. Chat photos sit on a private shelf only the chat's
+ * own members can open (migration 61), so a message keeps where the file is
+ * kept, never a public address; the app asks for a short-lived link to show it.
+ */
+export interface ChatPhoto {
+  /**
+   * Where it is kept: "<chat id>/<sender id>/<name>.jpg" on the chat-photos
+   * shelf. Until it has gone up, the picked file on this phone instead (and,
+   * in the demo, a "demo:" picture drawn by the app).
+   */
+  path: string;
+  /** Its size in pixels, so the bubble has the right shape before the picture arrives. */
+  w: number;
+  h: number;
+}
 
 /**
  * What an event line in a group is about, so the app can word it for whoever
@@ -668,10 +686,16 @@ export interface Message {
   editedAt?: string;
   /** It never reached the server (no signal, or a server error); the chat offers a retry. */
   failed?: boolean;
-  /** Set when kind is 'court': where to meet, with the map's id for the court when it came from the courts list, so the card opens that court's page. */
-  place?: { id?: string; name: string; lat: number; lng: number };
+  /**
+   * Set when kind is 'court': where to meet, with the map's id for the court
+   * when it came from the courts list, so the card opens that court's page,
+   * and how many courts stand there when the list knew it.
+   */
+  place?: { id?: string; name: string; lat: number; lng: number; count?: number };
   /** Set when kind is 'voice': the recording and how long it runs. */
   audio?: { url: string; ms: number };
+  /** Set when kind is 'photo': the pictures, in the order they were picked. The words (`body`) are the caption, if any. */
+  photos?: ChatPhoto[];
 }
 
 export interface Conversation {
