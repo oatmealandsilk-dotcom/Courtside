@@ -1,11 +1,14 @@
 import type { HitRequest } from '../types';
 import { DEMO_PARK } from './courts';
+import { CURRENT_USER_ID } from './users';
 
 const hoursFromNow = (h: number) => { const d = new Date(); d.setMinutes(0, 0, 0); d.setHours(d.getHours() + h); return d.toISOString(); };
 /** A few hours from now, but never before 7am: a demo opened after midnight still shows a hit at a sensible hour. */
 const laterToday = (h: number) => { const d = new Date(); d.setMinutes(0, 0, 0); d.setHours(Math.max(d.getHours() + h, 7)); return d.toISOString(); };
 const tomorrowAt = (hour: number) => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(hour, 0, 0, 0); return d.toISOString(); };
 const daysFromNowAt = (days: number, hour: number) => { const d = new Date(); d.setDate(d.getDate() + days); d.setHours(hour, 0, 0, 0); return d.toISOString(); };
+/** Some minutes ago, to the minute: a hit that has just been played. */
+const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
 const at = (n: number) => { const c = DEMO_PARK(n); return { id: c.id, name: c.name ?? 'Public courts', lat: c.lat, lng: c.lng }; };
 
 /**
@@ -22,4 +25,10 @@ export const demoHits: HitRequest[] = [
   { id: 'hit-demo-3', authorId: 'u-priya', startsAt: daysFromNowAt(2, 18), place: { name: 'Oak Knoll school courts' }, levelMin: 4.0, levelMax: 5.0, format: 'hit', spots: 1, createdAt: hoursFromNow(-20), joinedIds: [] },
   { id: 'hit-demo-4', authorId: 'u-tomas', startsAt: daysFromNowAt(3, 8), place: { name: 'Harbor View Park', lat: 32.72, lng: -117.16 }, format: 'singles', spots: 1, note: 'In San Diego for the weekend.', createdAt: hoursFromNow(-30), joinedIds: [] },
   { id: 'hit-demo-5', authorId: 'u-ella', startsAt: laterToday(5), place: at(2), format: 'singles', spots: 1, createdAt: hoursFromNow(-1), joinedIds: [] },
+  // Mira's hit that you joined, played and over (it started six and a half
+  // hours ago), so "How was the hit?" shows in the demo. No list shows it:
+  // a hit leaves them an hour after it starts. Well clear of the demo's
+  // WHOOP session (act-demo-1, three hours ago): one that overlapped would
+  // be logged as that session instead, so it shows the hit filled in by hand.
+  { id: 'hit-demo-6', authorId: 'u-mira', startsAt: minutesAgo(390), place: at(1), format: 'hit', spots: 1, createdAt: hoursFromNow(-26), joinedIds: [CURRENT_USER_ID] },
 ];

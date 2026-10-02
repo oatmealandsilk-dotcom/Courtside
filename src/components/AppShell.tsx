@@ -11,6 +11,7 @@ import { TourOverlay } from '@/components/TourOverlay';
 import { isTourOpen, useTourOpen } from '@/features/tour/tourStore';
 import { Toast } from './Toast';
 import { MessageBanner } from './MessageBanner';
+import { HitFollowUp } from './HitFollowUp';
 import { RouteTransition } from './RouteTransition';
 import { useResponsive } from '@/lib/useResponsive';
 import { getPendingTab, setPendingTab, subscribePendingTab } from '@/features/navigation/pendingTab';
@@ -35,7 +36,7 @@ import { colors } from '@/theme';
 const paths = { discuss: '/discuss', index: '/', coaches: '/coaches', profile: '/profile' } as const;
 const routes = Object.keys(paths).map(name => ({ key: name, name }));
 /** The pages that slide up over the app; Escape closes them on a computer. */
-const SHEETS = new Set(['/compose', '/share', '/pick-group', '/pick-court', '/ask', '/comments', '/post-menu', '/edit-post', '/messages/new', '/log-session', '/hit-request/new', '/court-report']);
+const SHEETS = new Set(['/compose', '/share', '/pick-group', '/pick-court', '/ask', '/comments', '/post-menu', '/edit-post', '/messages/new', '/log-session', '/pick-session', '/hit-request/new', '/court-report']);
 const TAB_ORDER: string[] = Object.values(paths);
 export function AppShell({ children }: { children: React.ReactNode }) {
   useTheme();
@@ -159,13 +160,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (shown === paths.index) selected.current = TAB_ORDER.indexOf(paths.index);
   else if (shown === paths.discuss || shown.startsWith('/question/') || shown.startsWith('/user/')) selected.current = TAB_ORDER.indexOf(paths.discuss);
   else if (shown === paths.coaches || shown.startsWith('/coach/') || shown.startsWith('/coach-') || shown === '/ai-coach' || shown === '/booking-done') selected.current = TAB_ORDER.indexOf(paths.coaches);
-  else if (shown === paths.profile || ['/settings', '/edit-profile', '/change-handle', '/profile-details'].includes(shown)) selected.current = TAB_ORDER.indexOf(paths.profile);
+  else if (shown === paths.profile || ['/settings', '/edit-profile', '/change-handle', '/profile-details', '/your-sessions'].includes(shown)) selected.current = TAB_ORDER.indexOf(paths.profile);
   // Pages with their own bottom controls (a composer, an editor, a thread's
   // message box) run without the phone's floating bar. On a computer the
   // menu sits at the side, out of their way, so it stays, the way
   // Instagram's does behind its Create box. Sign-in, setup and the camera
   // hide it everywhere.
-  const phoneOnlyHide = ['/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/invite', '/comments', '/share', '/pick-group', '/likes', '/post-menu', '/log-session', '/hit-request/new', '/court-report', '/wrapped'].includes(pathname) || pathname.startsWith('/messages/');
+  const phoneOnlyHide = ['/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/invite', '/comments', '/share', '/pick-group', '/likes', '/post-menu', '/log-session', '/pick-session', '/hit-request/new', '/court-report', '/wrapped'].includes(pathname) || pathname.startsWith('/messages/');
   // Arriving from the password-reset email is its own calm page, with no app around it yet.
   const { reset } = useGlobalSearchParams<{ reset?: string }>();
   const hideEverywhere = ['/sign-in', '/onboarding', '/agree', '/birthday', '/first-move', '/hit'].includes(pathname) || pathname.startsWith('/story/') || (pathname === '/account' && !!reset);
@@ -232,6 +233,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     {showNav && isPhone && nav}
     {/* A new message drops in at the top, over the bar too; never on the pages the app keeps to themselves. */}
     <MessageBanner enabled={!!currentUserId && !hideEverywhere && !onSplash && !detour} />
+    {/* "How was the hit?", once, after a hit you played; only for a set-up account, never on the pages the app keeps to themselves. */}
+    <HitFollowUp enabled={!!currentUserId && onboardingComplete && (remoteLoaded || !isSupabaseConfigured) && !hideEverywhere && !onSplash && !detour} />
     {/* The splash curtain, from the splash's hand-over until the page the app opens on has drawn (see warmup). */}
     {!curtainDown && !!currentUserId && !hideEverywhere && (onSplash || isStartTab(pathname)) ? <WarmCurtain /> : null}
     {/* The first-run tour: over the bar, so it can light the bar's own buttons. */}

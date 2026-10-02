@@ -97,6 +97,8 @@ export default function RootLayout() {
           <Stack.Screen name="pick-group" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           {/* "Send a court" from a chat: a sheet over the chat, so the chat (and its message bar) never moves under it. */}
           <Stack.Screen name="pick-court" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+          {/* "Add session stats" from a new Post or Clip: a sheet over the post, with its own rise (DragSheet). */}
+          <Stack.Screen name="pick-session" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           {/* The question page grows out of the Coaching tab's box itself (see ask-coach), so no stock animation. */}
           <Stack.Screen name="ask-coach" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           {/* On a computer, New message is a box over the inbox (Instagram's way); on a phone it is a page. */}
