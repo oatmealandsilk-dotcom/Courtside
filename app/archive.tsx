@@ -1,12 +1,12 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
+import { TileCover } from '@/components/TileCover';
 import { EmptyState, Screen, SegmentedControl } from '@/components/ui';
 import { archivedStories } from '@/features/stories/stories';
 import { useApp } from '@/store/AppContext';
@@ -61,7 +61,7 @@ export default function Archive() {
                 style={styles.storyTile}
               >
                 {story.thumbnailUrl || story.imageUrl ? (
-                  <ExpoImage accessibilityIgnoresInvertColors source={{ uri: story.thumbnailUrl ?? story.imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
+                  <TileCover accessibilityIgnoresInvertColors uri={story.thumbnailUrl ?? story.imageUrl} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
                 ) : (
                   <View style={StyleSheet.absoluteFill}>
                     <MediaPlaceholder label={story.mediaLabel ?? 'Instant'} seed={story.id} portrait />
@@ -88,7 +88,7 @@ export default function Archive() {
               >
                 <View style={styles.postThumb}>
                   {post.thumbnailUrl ? (
-                    <ExpoImage accessibilityIgnoresInvertColors source={{ uri: post.thumbnailUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
+                    <TileCover accessibilityIgnoresInvertColors uri={post.thumbnailUrl} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
                   ) : (
                     <Ionicons name={post.kind === 'clip' ? 'play' : 'document-text-outline'} size={18} color={colors.textMuted} />
                   )}

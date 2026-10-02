@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Image as ExpoImage } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 
+import { TileCover } from '@/components/TileCover';
 import type { Post } from '@/data/types';
 import { compactNumber } from '@/lib/format';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -25,7 +25,7 @@ export function ChallengeEntries({ entries, from = 1 }: { entries: Post[]; from?
         return (
           <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Number ${place}, ${p.likedBy.length} likes: ${p.body}`} onPress={() => router.push(`/post/${p.id}`)} style={({ pressed }) => [styles.tile, { width: tileW, height: Math.round((tileW * 4) / 3) }, pressed && { opacity: 0.85 }]}>
             <View style={[StyleSheet.absoluteFill, styles.blank]}><Text numberOfLines={4} style={styles.blankText}>{p.body}</Text></View>
-            {p.thumbnailUrl || p.imageUrl ? <ExpoImage accessibilityIgnoresInvertColors source={{ uri: p.thumbnailUrl || p.imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" recyclingKey={p.id} transition={120} /> : null}
+            {p.thumbnailUrl || p.imageUrl ? <TileCover accessibilityIgnoresInvertColors uri={p.thumbnailUrl || p.imageUrl} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" recyclingKey={p.id} transition={120} /> : null}
             <View style={[styles.place, place === 1 && styles.placeFirst]}><Text style={[styles.placeText, place === 1 && styles.placeTextFirst]}>{place}</Text></View>
             <View style={styles.likes}><Ionicons name="heart" size={12} color="#FFFFFF" /><Text style={styles.likesText}>{compactNumber(p.likedBy.length)}</Text></View>
           </Pressable>

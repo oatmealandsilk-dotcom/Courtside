@@ -14,7 +14,8 @@ import * as WebBrowser from 'expo-web-browser';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
-import { shrinkPhoto } from '@/lib/shrinkPhoto';
+import { shrinkCover, shrinkPhoto } from '@/lib/shrinkPhoto';
+import { COVER_MARK, smallName } from '@/lib/smallCover';
 import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
@@ -2235,11 +2236,57 @@ async function sizeOf(uri: string): Promise<number> {
 }
 
 /**
+ * Makes and sends a post's small cover (see smallCover.ts) next to the full
+ * one just sent, unless the player is near the daily upload limit (see
+ * roomForSmallCover). Never throws: a tile with no small cover quietly shows
+ * the full one. It is waited for, so a tile usually finds it the moment the post
+ * appears, but for two and a half seconds at most, making and sending
+ * together: on a slow phone or connection the post goes ahead and the small
+ * copy carries on by itself.
+ */
+async function sendSmallCover(me: ID, path: string, picture: string): Promise<void> {
+  const work = (async () => {
+    const [small, room] = await Promise.all([shrinkCover(picture), roomForSmallCover(me)]);
+    if (!small || !room) return;
+    const target = smallName(path);
+    await uploadWithProgress(target, small, 'image/jpeg').catch(async () => {
+      // A few dozen KB, so the plain upload (from memory) is fine on a phone too.
+      const bytes = await (await fetch(small)).arrayBuffer();
+      const { error } = await need().storage.from('media').upload(target, bytes, { contentType: 'image/jpeg', upsert: false, cacheControl: '31536000' });
+      if (error) throw error;
+    });
+  })().catch((error) => console.warn('[remote] small cover not sent', error));
+  await Promise.race([work, new Promise((resolve) => setTimeout(resolve, 2_500))]);
+}
+
+/**
+ * The bucket takes at most 60 files from each player in any 24 hours (the
+ * "upload into your folder" rule), and a small copy uses one of them like
+ * any other file. So once a player has sent 40 in the last 24 hours, covers
+ * go up without a small copy and the last 20 are kept for real posts; a tile
+ * without one just shows the full cover. If the count cannot be read, no
+ * small copy is sent, to be safe.
+ */
+const SMALL_COVERS_A_DAY_UNTIL = 40;
+async function roomForSmallCover(me: ID): Promise<boolean> {
+  const { data, error } = await need().storage.from('media')
+    .list(me, { limit: SMALL_COVERS_A_DAY_UNTIL, sortBy: { column: 'created_at', order: 'desc' } })
+    .catch((thrown: unknown) => ({ data: null, error: thrown }));
+  if (error || !data) {
+    console.warn('[remote] could not count today\'s uploads', error);
+    return false;
+  }
+  const dayAgo = Date.now() - 86_400_000;
+  return data.filter((file) => file.created_at && Date.parse(file.created_at) > dayAgo).length < SMALL_COVERS_A_DAY_UNTIL;
+}
+
+/**
  * Sends a picked file to the bucket and returns its public address. Throws
  * with a plain-words message if it cannot — a post must never be saved
- * pointing at a file that only exists on one phone.
+ * pointing at a file that only exists on one phone. With `smallCover`, a
+ * photo that will be a post's cover also gets its small copy for grid tiles.
  */
-export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'video' | 'audio', onProgress?: (fraction: number) => void): Promise<string> {
+export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'video' | 'audio', onProgress?: (fraction: number) => void, options?: { smallCover?: boolean }): Promise<string> {
   try {
     const db = need();
     // A photo goes up at the size a feed shows it (1440 on its long edge),
@@ -2268,7 +2315,9 @@ export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'vid
     // The bucket enforces the same list; checking here gives a readable message.
     if (!ALLOWED_MEDIA.test(contentType)) throw new Error('Only photos and videos can be posted.');
     const ext = contentType.split('/')[1] || (kind === 'video' ? 'mp4' : 'jpg');
-    const path = `${me}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    // A cover that gets a small copy says so in its name, which is how tiles know to ask for it.
+    const withSmall = kind === 'photo' && !!options?.smallCover;
+    const path = `${me}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}${withSmall ? COVER_MARK : ''}.${ext}`;
     await noteStep(`sending a ${megabytes(size)} ${kind}${shrinking && sent === uri ? ' that could not be shrunk' : ''}`);
     try {
       await uploadWithProgress(path, sent, contentType, upload);
@@ -2284,7 +2333,10 @@ export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'vid
       const { error } = await db.storage.from('media').upload(path, bytes, { contentType, upsert: false, cacheControl: '31536000' });
       if (error) throw error;
     }
+    // The bar is full once the post's own file is up; the small copy is extra.
     onProgress?.(1);
+    // Made from the photo just sent (already shrunk), so it is quick.
+    if (withSmall) await sendSmallCover(me, path, uri);
     return db.storage.from('media').getPublicUrl(path).data.publicUrl;
   } catch (error) {
     fail('media upload')(error);

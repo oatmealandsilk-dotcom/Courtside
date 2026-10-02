@@ -1457,7 +1457,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           try {
             const frame = (await framesAt(post.videoUrl!, [post.trimStart ?? 0], 1080))[0]?.uri;
             if (!frame) return;
-            const hosted = await uploadMedia(me, frame, 'photo');
+            const hosted = await uploadMedia(me, frame, 'photo', undefined, { smallCover: true });
             await remote.updatePostThumbnail(post.id, hosted);
             setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === post.id ? { ...p, thumbnailUrl: hosted } : p)) }));
           } catch (error) { console.warn('[remote] cover repair failed', error); }
@@ -2131,10 +2131,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
             const total = weights.reduce((a, b) => a + b, 0) || 1;
             const before = (i: number) => weights.slice(0, i).reduce((a, b) => a + b, 0) / total;
             const report = (i: number) => (f: number) => setUploadProgress(post.id, before(i) + (weights[i] / total) * f);
-            const imageUrl = local[0] ? await uploadMedia(me, post.imageUrl!, 'photo', report(0)) : post.imageUrl;
+            // Whichever picture is the cover also gets a small copy for grid tiles (see smallCover.ts).
+            const photoIsCover = !post.thumbnailUrl || post.thumbnailUrl === post.imageUrl;
+            const imageUrl = local[0] ? await uploadMedia(me, post.imageUrl!, 'photo', report(0), { smallCover: photoIsCover }) : post.imageUrl;
             const videoUrl = local[1] ? await uploadMedia(me, post.videoUrl!, 'video', report(1)) : post.videoUrl;
             const thumbnailUrl = post.thumbnailUrl === post.imageUrl ? imageUrl
-              : local[2] ? await uploadMedia(me, post.thumbnailUrl!, 'photo', report(2)) : post.thumbnailUrl;
+              : local[2] ? await uploadMedia(me, post.thumbnailUrl!, 'photo', report(2), { smallCover: true }) : post.thumbnailUrl;
             const hosted = { ...post, imageUrl, videoUrl, thumbnailUrl };
             // Saved under the id made on this phone when Share was tapped:
             // sent twice, it is still one post (see remote.insertPost).
@@ -2336,12 +2338,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const total = weights.reduce((a, b) => a + b, 0) || 1;
           let done = 0;
           const report = (i: number) => (fraction: number) => setUploadProgress(story.id, (done + weights[i] * fraction) / total);
-          const imageUrl = local[0] ? await uploadMedia(me, story.imageUrl!, 'photo', report(0)) : story.imageUrl;
+          // The cover gets a small copy too, for the archive's grid.
+          const photoIsCover = !story.thumbnailUrl || story.thumbnailUrl === story.imageUrl;
+          const imageUrl = local[0] ? await uploadMedia(me, story.imageUrl!, 'photo', report(0), { smallCover: photoIsCover }) : story.imageUrl;
           done += weights[0];
           const videoUrl = local[1] ? await uploadMedia(me, story.videoUrl!, 'video', report(1)) : story.videoUrl;
           done += weights[1];
           const thumbnailUrl = story.thumbnailUrl === story.imageUrl ? imageUrl
-            : local[2] ? await uploadMedia(me, story.thumbnailUrl!, 'photo', report(2)) : story.thumbnailUrl;
+            : local[2] ? await uploadMedia(me, story.thumbnailUrl!, 'photo', report(2), { smallCover: true }) : story.thumbnailUrl;
           const hosted = { ...story, imageUrl, videoUrl, thumbnailUrl };
           await remote.insertStory(hosted);
           finishUpload(story.id);

@@ -1,11 +1,11 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Image as ExpoImage } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Highlighted, plain } from '@/components/CourtSearch';
 import { snippet, startsWord } from '@/features/search/match';
 import { TileViews } from '@/components/TileViews';
+import { TileCover } from '@/components/TileCover';
 import type { Post } from '@/data/types';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font } from '@/theme';
@@ -60,7 +60,7 @@ export function PostTile({ post, width, height, onPress, label, words }: {
           <Text numberOfLines={5} style={styles.text}>{post.body}</Text>
         </View>
       )}
-      {picture ? <ExpoImage accessibilityIgnoresInvertColors source={{ uri: picture }} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={post.id} transition={120} /> : null}
+      {picture ? <TileCover accessibilityIgnoresInvertColors uri={picture} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={post.id} transition={120} /> : null}
       {clip ? <Ionicons name="play" size={14} color="#FFFFFF" style={styles.play} /> : null}
       {clip && (post.views ?? 0) > 0 ? <TileViews views={post.views ?? 0} /> : null}
     </Pressable>

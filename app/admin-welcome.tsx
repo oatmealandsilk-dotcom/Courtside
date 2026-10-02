@@ -1,9 +1,10 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
+import { TileCover } from '@/components/TileCover';
 import { EmptyState, Avatar, Screen } from '@/components/ui';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import type { Post } from '@/data/types';
@@ -57,7 +58,7 @@ export default function AdminWelcome() {
                   <Text style={styles.meta} numberOfLines={1}>{[author?.handle ? `@${author.handle}` : null, author?.location?.split(',')[0] || null, relativeTime(post.createdAt)].filter(Boolean).join(' · ')}</Text>
                   {post.body ? <Text style={styles.body} numberOfLines={1}>{post.body}</Text> : null}
                 </View>
-                {picture ? <Image accessibilityIgnoresInvertColors source={{ uri: picture }} style={styles.thumb} /> : null}
+                {picture ? <TileCover accessibilityIgnoresInvertColors uri={picture} style={styles.thumb} /> : null}
                 {done ? (
                   <View style={styles.done}><Ionicons name="checkmark" size={14} color={colors.brand} /><Text style={styles.doneText}>Said hi</Text></View>
                 ) : (
