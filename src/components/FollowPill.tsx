@@ -13,7 +13,7 @@ const EASE = Easing.bezier(0.22, 1, 0.36, 1);
 
 /**
  * Follow, and then Following: the pill dips slightly on the tap, settles, and
- * fills with the brand colour as the check slides in. Under Reduce Motion the
+ * goes quiet (the brand colour drains away) as the check slides in. Under Reduce Motion the
  * colour still changes; nothing moves. A private account (given `userId`)
  * does exactly the same and reads "Requested" until they accept; tapping
  * it again takes the ask back.
@@ -33,13 +33,15 @@ export function FollowPill({ following, onPress, small = false, name, userId, wi
   // Read inside it, they were copied once, from whichever theme the pill first drew in (it stayed
   // Paris orange in every other theme until the app restarted).
   const { surfaceAlt, brand, borderStrong, text, brandInk } = colors;
+  // Follow is the coloured one, the thing to tap; once you follow (or have asked to), the pill
+  // goes quiet, the way Instagram does it (Oct 2, William: reverse the colours).
   const pill = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(on.value, [0, 1], [surfaceAlt, brand]),
-    borderColor: interpolateColor(on.value, [0, 1], [borderStrong, brand]),
+    backgroundColor: interpolateColor(on.value, [0, 1], [brand, surfaceAlt]),
+    borderColor: interpolateColor(on.value, [0, 1], [brand, surfaceAlt]),
     transform: [{ scale: bump.value }],
   }), [surfaceAlt, brand, borderStrong]);
-  const label = useAnimatedStyle(() => ({ color: interpolateColor(on.value, [0, 1], [text, brandInk]) }), [text, brandInk]);
-  const wash = useAnimatedStyle(() => ({ opacity: on.value }));
+  const label = useAnimatedStyle(() => ({ color: interpolateColor(on.value, [0, 1], [brandInk, text]) }), [text, brandInk]);
+  const wash = useAnimatedStyle(() => ({ opacity: 1 - on.value }));
 
   const press = () => {
     // A small, quick press: a slight dip and a settle with no wobble (a deeper dip and a loose spring read as a bounce).
@@ -52,7 +54,7 @@ export function FollowPill({ following, onPress, small = false, name, userId, wi
     <Pressable accessibilityRole="button" accessibilityState={{ selected: filled }} accessibilityLabel={`${following ? 'Following' : requested ? 'Requested' : 'Follow'}${name ? ` ${name}` : ''}`} onPress={press} hitSlop={6} style={wide ? styles.wide : undefined}>
       <Animated.View style={[styles.pill, small && styles.small, wide && styles.wide, pill]}>
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, wash]}><BrandWash /></Animated.View>
-        {filled ? <Ionicons name="checkmark" size={14} color={colors.brandInk} /> : null}
+        {filled ? <Ionicons name="checkmark" size={14} color={colors.text} /> : null}
         <Animated.Text style={[styles.text, small && styles.textSmall, label]}>{following ? 'Following' : requested ? 'Requested' : 'Follow'}</Animated.Text>
       </Animated.View>
     </Pressable>

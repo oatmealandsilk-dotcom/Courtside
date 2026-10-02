@@ -4,6 +4,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { HereTag } from '@/components/place/CourtLife';
 import type { FollowedCourt } from '@/data/types';
+import { HitGlyph } from '@/components/HitGlyph';
 import { hitShort } from '@/features/hits/format';
 import { openCourt } from '@/features/players/courtLink';
 import { nowStatus } from '@/features/players/courtSummary';
@@ -13,13 +14,13 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 
-const CARD = 150;
+const CARD = 168;
 
 /** What is new at a court you follow, as a card's small badges: new posts, the next hit, how it is right now. */
 function whatsNew(c: FollowedCourt): { hit?: string; posts?: string; now?: string } {
   const now = nowStatus(c);
   return {
-    ...(c.nextHitAt ? { hit: `Hit ${hitShort(c.nextHitAt).replace(/^(Today|Tomorrow)/, (w) => w.toLowerCase())}` } : {}),
+    ...(c.nextHitAt ? { hit: hitShort(c.nextHitAt).replace(/^Tomorrow/, 'Tmrw') } : {}),
     ...(c.newPosts ? { posts: `${c.newPosts} new ${c.newPosts === 1 ? 'post' : 'posts'}` } : {}),
     ...(now ? { now: now.line } : {}),
   };
@@ -64,20 +65,23 @@ export function YourCourts({ from = null }: { from?: LatLng | null }) {
             <Pressable
               key={c.courtId}
               accessibilityRole="link"
-              accessibilityLabel={[name, here ? 'you’re checked in here' : null, news.posts, news.hit, news.now, quiet ? 'nothing new this week' : null].filter(Boolean).join(', ')}
+              accessibilityLabel={[name, here ? 'you’re checked in here' : null, news.posts, news.hit ? `hit ${news.hit}` : null, news.now, quiet ? 'nothing new this week' : null].filter(Boolean).join(', ')}
               onPress={() => openCourt({ id: c.courtId, name, lat: c.lat, lng: c.lng })}
               style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
             >
-              <View style={styles.tile}><Ionicons name="heart" size={17} color={colors.brand} /></View>
+              {/* The heart with the court's biggest news beside it (the next hit, else new posts), the
+                  rest as one quiet line under the name, so the card stays short (Oct 2). */}
+              <View style={styles.top}>
+                <View style={styles.tile}><Ionicons name="heart" size={16} color={colors.brand} /></View>
+                {news.hit ? <View style={[styles.badge, styles.badgeNew, styles.badgeRow]}><HitGlyph size={11} color={colors.brand} /><Text style={[styles.badgeText, styles.badgeNewText]} numberOfLines={1}>{news.hit}</Text></View>
+                  : news.posts ? <View style={[styles.badge, styles.badgeNew]}><Text style={[styles.badgeText, styles.badgeNewText]} numberOfLines={1}>{news.posts}</Text></View> : null}
+              </View>
               <Text style={styles.name} numberOfLines={2}>{name}</Text>
               {here ? <HereTag small onCheckOut={() => { void actions.checkOutOfCourt(); }} /> : null}
-              {quiet ? <Text style={styles.meta}>Nothing new this week</Text> : (
-                <View style={styles.badges}>
-                  {news.posts ? <View style={[styles.badge, styles.badgeNew]}><Text style={[styles.badgeText, styles.badgeNewText]} numberOfLines={1}>{news.posts}</Text></View> : null}
-                  {news.hit ? <View style={[styles.badge, styles.badgeNew]}><Text style={[styles.badgeText, styles.badgeNewText]} numberOfLines={1}>{news.hit}</Text></View> : null}
-                  {news.now ? <View style={styles.badge}><Text style={styles.badgeText} numberOfLines={1}>{news.now}</Text></View> : null}
-                </View>
-              )}
+              {quiet ? <Text style={styles.meta}>Nothing new this week</Text> : (() => {
+                const rest = [news.now, news.hit ? news.posts : null].filter(Boolean).join(' · ');
+                return rest ? <Text style={styles.meta} numberOfLines={1}>{rest}</Text> : null;
+              })()}
             </Pressable>
           );
         })}
@@ -96,12 +100,14 @@ const styleDefinitions = StyleSheet.create({
   row: { gap: spacing.sm, paddingTop: spacing.xs, paddingBottom: spacing.lg },
   card: { ...lift, width: CARD, padding: spacing.md, gap: 4, borderRadius: radius.lg, backgroundColor: colors.surface },
   cardPressed: { opacity: 0.9 },
-  tile: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  top: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  tile: { width: 36, height: 36, borderRadius: 11, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   name: { ...typography.bodyStrong, color: colors.text, lineHeight: 20 },
   meta: { ...typography.small, color: colors.textMuted },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 2 },
-  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.bgElevated, maxWidth: CARD - spacing.md * 2 },
+  badge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.bgElevated, maxWidth: CARD - spacing.md * 2, flexShrink: 1 },
   badgeText: { ...typography.caption, letterSpacing: 0, color: colors.textMuted },
   badgeNew: { backgroundColor: colors.brandDim },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   badgeNewText: { color: colors.brand },
 });

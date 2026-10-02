@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtGlyph } from '@/components/map/CourtGlyph';
+import { HitGlyph } from '@/components/HitGlyph';
 import { hitShort } from '@/features/hits/format';
 import { canSeeHitAt, hitsAtCourt, openHits } from '@/features/hits/visible';
 import { countLabel, sameCourt } from '@/features/places/court';
@@ -18,7 +19,7 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 
-const CARD = 150;
+const CARD = 168;
 const MOST = 8;
 
 /**
@@ -78,7 +79,7 @@ export function CourtsNear({ center }: { center: LatLng | null }) {
     return new Map(rows.map(({ c }) => {
       const next = hitsAtCourt(hits, c)[0];
       const here = tagged.filter((p) => sameCourt(p.court!, c));
-      return [c.id, { hit: next ? `Hit ${hitShort(next.startsAt).replace(/^(Today|Tomorrow)/, (w) => w.toLowerCase())}` : null, posts: here.length ? countLabel(here, false) : null }];
+      return [c.id, { hit: next ? hitShort(next.startsAt).replace(/^Tomorrow/, 'Tmrw') : null, posts: here.length ? countLabel(here, false) : null }];
     }));
   }, [rows, hitRequests, posts, users, followingIds, currentUserId, blockedIds, mutedIds]);
 
@@ -87,9 +88,6 @@ export function CourtsNear({ center }: { center: LatLng | null }) {
     <View style={styles.wrap}>
       <View style={styles.head}>
         <Text accessibilityRole="header" style={styles.title}>Courts near you</Text>
-        <Pressable accessibilityRole="link" accessibilityLabel="See courts on the map" hitSlop={8} onPress={() => router.push('/map')} style={({ pressed }) => pressed && styles.pressed}>
-          <Text style={styles.headLink}>Map</Text>
-        </Pressable>
       </View>
       {/* Starts and ends at the page's margins like the topic strip (the pane clips anything wider), so a card cut at the edge says there are more; a drag along it never turns the page. */}
       <ScrollView nativeID="courts-near-strip" horizontal showsHorizontalScrollIndicator={false} style={styles.scroller} contentContainerStyle={styles.row}>
@@ -100,19 +98,18 @@ export function CourtsNear({ center }: { center: LatLng | null }) {
             <Pressable
               key={c.id}
               accessibilityRole="link"
-              accessibilityLabel={[labelOf(c), meta, badge?.hit, badge?.posts].filter(Boolean).join(', ')}
+              accessibilityLabel={[labelOf(c), meta, badge?.hit ? `hit ${badge.hit}` : null, badge?.posts].filter(Boolean).join(', ')}
               onPress={() => openCourt({ id: c.id, name: labelOf(c), lat: c.lat, lng: c.lng })}
               style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
             >
-              <View style={styles.tile}><CourtGlyph size={18} color={colors.brand} /></View>
+              {/* The court's icon with what's on there beside it (a hit first, else its posts), so the card stays short. */}
+              <View style={styles.top}>
+                <View style={styles.tile}><CourtGlyph size={18} color={colors.brand} /></View>
+                {badge?.hit ? <View style={[styles.badge, styles.badgeHit, styles.badgeRow]}><HitGlyph size={11} color={colors.brand} /><Text style={[styles.badgeText, styles.badgeHitText]} numberOfLines={1}>{badge.hit}</Text></View>
+                  : badge?.posts ? <View style={styles.badge}><Text style={styles.badgeText} numberOfLines={1}>{badge.posts}</Text></View> : null}
+              </View>
               <Text style={styles.name} numberOfLines={2}>{labelOf(c)}</Text>
-              <Text style={styles.meta} numberOfLines={2}>{meta}</Text>
-              {badge?.hit || badge?.posts ? (
-                <View style={styles.badges}>
-                  {badge.hit ? <View style={[styles.badge, styles.badgeHit]}><Text style={[styles.badgeText, styles.badgeHitText]} numberOfLines={1}>{badge.hit}</Text></View> : null}
-                  {badge.posts ? <View style={styles.badge}><Text style={styles.badgeText} numberOfLines={1}>{badge.posts}</Text></View> : null}
-                </View>
-              ) : null}
+              <Text style={styles.meta} numberOfLines={1}>{meta}</Text>
             </Pressable>
           );
         })}
@@ -137,13 +134,15 @@ const styleDefinitions = StyleSheet.create({
   card: { ...lift, width: CARD, padding: spacing.md, gap: 4, borderRadius: radius.lg, backgroundColor: colors.surface },
   cardPressed: { opacity: 0.9 },
   // The quiet court tile of the search rows and the map's results: solid brand stays for buttons.
-  tile: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  top: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  tile: { width: 36, height: 36, borderRadius: 11, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   name: { ...typography.bodyStrong, color: colors.text, lineHeight: 20 },
   meta: { ...typography.small, color: colors.textMuted },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
-  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.bgElevated, maxWidth: CARD - spacing.md * 2 },
+  badge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.bgElevated, maxWidth: CARD - spacing.md * 2 , flexShrink: 1 },
   badgeText: { ...typography.caption, letterSpacing: 0, color: colors.textMuted },
   badgeHit: { backgroundColor: colors.brandDim },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   badgeHitText: { color: colors.brand },
   allCard: { alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   allDisc: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
