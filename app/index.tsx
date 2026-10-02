@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Redirect, useNavigation } from 'expo-router';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -46,6 +46,16 @@ export default function Index() {
   // springing back in (that blink read as a flash). The browser has no
   // launch picture, so there it still rises in.
   const rise = useRef(new Animated.Value(Platform.OS === 'web' ? 0 : 1)).current;
+  // On a phone the iPhone's launch picture (always cream: it shows before any
+  // code runs and cannot know the theme) hands over to this screen, which is in
+  // your own theme. A copy of the launch picture sits on top and fades away, so
+  // cream melts into, say, New York's navy instead of snapping (Oct 2).
+  const cover = useRef(new Animated.Value(1)).current;
+  const [launchCover, setLaunchCover] = useState(Platform.OS !== 'web');
+  useEffect(() => {
+    if (!launchCover) return;
+    Animated.timing(cover, { toValue: 0, duration: 380, delay: 60, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(() => setLaunchCover(false));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Opened on top of the app that is already running: something went to '/'
   // (this splash's address, which Home shares) from a page over the tabs.
@@ -132,18 +142,22 @@ export default function Index() {
   }
 
   return (
-    // The launch screen is always CourtSide's own cream, whatever the theme:
-    // it has to match the iPhone's launch picture (app.config.js splash), which
-    // shows before any code runs and cannot know the theme. A themed launch
-    // screen snapped from cream to, say, New York's navy and read as a white
-    // flash. Now the two are one picture, and it fades into the theme as it goes.
-    <Animated.View style={[styles.splash, launchStyles.launch, { opacity }]}>
-      <StatusBar style="dark" />
+    <Animated.View style={[styles.splash, { opacity }]}>
       <Animated.View style={[styles.brand, { opacity: rise, transform: [{ scale: rise.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] }) }] }]}>
-        <BrandMark size={84} color={lightColors.brand} />
-        <Text style={[styles.wordmark, launchStyles.wordmark]}>CourtSide</Text>
+        <BrandMark size={84} />
+        <Text style={styles.wordmark}>CourtSide</Text>
       </Animated.View>
-      <Text style={[styles.tagline, launchStyles.tagline]}>Growing the game</Text>
+      <Text style={styles.tagline}>Growing the game</Text>
+      {launchCover ? (
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.splash, launchStyles.launch, { opacity: cover }]}>
+          <StatusBar style="dark" />
+          <View style={styles.brand}>
+            <BrandMark size={84} color={lightColors.brand} />
+            <Text style={[styles.wordmark, launchStyles.wordmark]}>CourtSide</Text>
+          </View>
+          <Text style={[styles.tagline, launchStyles.tagline]}>Growing the game</Text>
+        </Animated.View>
+      ) : null}
     </Animated.View>
   );
 }
@@ -171,8 +185,8 @@ const styleDefinitions = StyleSheet.create({
 });
 
 /**
- * The launch picture's own colours (see the comment on the launch screen).
- * Kept out of the themed styles on purpose: those swap every light-palette
+ * The launch picture's own colours, for the copy of it that fades away on a
+ * phone (see `cover`). Kept out of the themed styles on purpose: those swap every light-palette
  * colour for the theme's own, which would turn this cream back into navy.
  */
 const launchStyles = StyleSheet.create({
