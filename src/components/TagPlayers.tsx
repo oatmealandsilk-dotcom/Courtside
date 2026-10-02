@@ -1,9 +1,11 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Field } from '@/components/ui';
+import { FormRow } from '@/components/FormRow';
+import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useMentionCandidates } from '@/features/mentions/useMentionCandidates';
 import { useApp } from '@/store/AppContext';
 import * as haptics from '@/lib/haptics';
@@ -15,8 +17,18 @@ import { colors, radius, spacing, typography } from '@/theme';
  * tags them; the list stays open so you can tag several in a row, and a
  * second tap unchecks. Done closes the search. × on a chip takes one off.
  * Each tagged player is told, and the post shows up on their Tagged tab.
+ *
+ * `variant="row"` is the composer's look: one line of its settings list
+ * ("Tag players   Maya, Jonah ›") that opens into the search in place, with
+ * the tagged people as chips only while it is open.
  */
-export function TagPlayers({ tagged, onChange }: { tagged: string[]; onChange: (ids: string[]) => void }) {
+export function TagPlayers({ tagged, onChange, variant = 'button', line = false }: {
+  tagged: string[];
+  onChange: (ids: string[]) => void;
+  variant?: 'button' | 'row';
+  /** As a row: the thin line above it (any row but the first). */
+  line?: boolean;
+}) {
   const styles = useThemedStyles(styleDefinitions);
   const { users } = useApp();
   const candidates = useMentionCandidates();
@@ -29,6 +41,76 @@ export function TagPlayers({ tagged, onChange }: { tagged: string[]; onChange: (
     haptics.tap();
     onChange(tagged.includes(id) ? tagged.filter((t) => t !== id) : [...tagged, id]);
   };
+  const search = useRef<TextInput>(null);
+  const block = useRef<View>(null);
+  const reveal = useRevealOnFocus();
+  // As a row, the search takes the keyboard as it opens, and once names are
+  // listed the whole block (box, chips, names) is lifted above the keys.
+  useEffect(() => {
+    if (!open || variant !== 'row') return undefined;
+    const t = setTimeout(() => search.current?.focus(), 60);
+    return () => clearTimeout(t);
+  }, [open, variant]);
+  useEffect(() => {
+    if (open && variant === 'row' && matches.length) reveal(block.current);
+  }, [open, variant, matches.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const chips = tagged.length ? (
+    <View style={styles.row}>
+      {tagged.map((id) => {
+        const who = users.find((u) => u.id === id);
+        if (!who) return null;
+        return (
+          <Pressable key={id} accessibilityRole="button" accessibilityLabel={`Remove ${who.name}`} onPress={() => onChange(tagged.filter((t) => t !== id))} style={styles.tagChip}>
+            <Avatar name={who.name} seed={who.avatarSeed} uri={who.avatarUrl} size={22} />
+            <Text style={styles.tagChipText}>{who.name}</Text>
+            <Ionicons name="close" size={14} color={colors.textMuted} />
+          </Pressable>
+        );
+      })}
+    </View>
+  ) : null;
+  const results = matches.map(({ user, reason }) => {
+    const on = tagged.includes(user.id);
+    return (
+      <Pressable key={user.id} accessibilityRole="button" accessibilityState={{ checked: on }} accessibilityLabel={on ? `Untag ${user.name}` : `Tag ${user.name}`} onPress={() => tag(user.id)} style={styles.tagResult}>
+        <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={32} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.tagName}>{user.name}</Text>
+          <Text style={styles.tagHandle}>@{user.handle}{reason ? ` · ${reason}` : ''}</Text>
+        </View>
+        <View style={[styles.check, on && styles.checkOn]}>{on ? <Ionicons name="checkmark" size={15} color={colors.brandInk} /> : null}</View>
+      </Pressable>
+    );
+  });
+  const empty = !matches.length ? <Text style={styles.tagHandle}>{query ? 'No one by that name.' : 'Start typing a name.'}</Text> : null;
+
+  if (variant === 'row') {
+    if (!open) {
+      // First names: "Maya", "Maya, Jonah", then "Maya, Jonah +1".
+      const names = tagged.map((id) => users.find((u) => u.id === id)?.name.split(' ')[0]).filter((n): n is string => !!n);
+      const summary = names.length > 2 ? `${names.slice(0, 2).join(', ')} +${names.length - 2}` : names.join(', ');
+      return <FormRow line={line} icon="pricetag-outline" label="Tag players" value={summary || undefined} chevron onPress={() => { setOpen(true); setQuery(''); }} />;
+    }
+    return (
+      <View ref={block} style={[styles.rowBlock, line && styles.rowLine]}>
+        <View style={styles.searchRow}>
+          <View style={{ flex: 1 }}><Field inputRef={search} value={query} onChangeText={setQuery} placeholder="Search players" accessibilityLabel="Search for players to tag" autoCapitalize="none" autoCorrect={false} /></View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Done tagging" onPress={close} hitSlop={8}>
+            <Text style={styles.cancel}>Done</Text>
+          </Pressable>
+        </View>
+        {chips}
+        <View style={styles.resultsBox}>
+          <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" contentContainerStyle={styles.resultsInner}>
+            {results}
+            {empty}
+          </ScrollView>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.tagBlock}>
       {/* Closed: one box button. Open: the search box, with Done beside it. */}
@@ -46,37 +128,11 @@ export function TagPlayers({ tagged, onChange }: { tagged: string[]; onChange: (
           {tagged.length ? <Text style={styles.count}>{tagged.length}</Text> : null}
         </Pressable>
       )}
-      {tagged.length ? (
-        <View style={styles.row}>
-          {tagged.map((id) => {
-            const who = users.find((u) => u.id === id);
-            if (!who) return null;
-            return (
-              <Pressable key={id} accessibilityRole="button" accessibilityLabel={`Remove ${who.name}`} onPress={() => onChange(tagged.filter((t) => t !== id))} style={styles.tagChip}>
-                <Avatar name={who.name} seed={who.avatarSeed} uri={who.avatarUrl} size={22} />
-                <Text style={styles.tagChipText}>{who.name}</Text>
-                <Ionicons name="close" size={14} color={colors.textMuted} />
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
+      {chips}
       {open ? (
         <View style={styles.tagSearch}>
-          {matches.map(({ user, reason }) => {
-            const on = tagged.includes(user.id);
-            return (
-              <Pressable key={user.id} accessibilityRole="button" accessibilityState={{ checked: on }} accessibilityLabel={on ? `Untag ${user.name}` : `Tag ${user.name}`} onPress={() => tag(user.id)} style={styles.tagResult}>
-                <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={32} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.tagName}>{user.name}</Text>
-                  <Text style={styles.tagHandle}>@{user.handle}{reason ? ` · ${reason}` : ''}</Text>
-                </View>
-                <View style={[styles.check, on && styles.checkOn]}>{on ? <Ionicons name="checkmark" size={15} color={colors.brandInk} /> : null}</View>
-              </Pressable>
-            );
-          })}
-          {!matches.length ? <Text style={styles.tagHandle}>{query ? 'No one by that name.' : 'Start typing a name.'}</Text> : null}
+          {results}
+          {empty}
         </View>
       ) : null}
     </View>
@@ -99,4 +155,9 @@ const styleDefinitions = StyleSheet.create({
   tagResult: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 8 },
   tagName: { ...typography.smallStrong, color: colors.text },
   tagHandle: { ...typography.small, color: colors.textMuted },
+  // The open row: the search, the chips, then at most 240 of names that scroll.
+  rowBlock: { gap: spacing.sm, paddingVertical: spacing.sm },
+  rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  resultsBox: { maxHeight: 240, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
+  resultsInner: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
 });

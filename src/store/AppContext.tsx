@@ -10,7 +10,6 @@ import React, {
 } from 'react';
 import { AppState as DeviceState, Platform } from 'react-native';
 import { randomUUID } from 'expo-crypto';
-import { router } from 'expo-router';
 import { computeStats, localDay, streakAtRisk } from '@/features/practice/stats';
 import { planStreakReminder } from '@/features/practice/reminder';
 import { TERMS_VERSION } from '@/lib/legal';
@@ -21,7 +20,7 @@ import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, s
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { markMessagesOpened } from '@/features/messaging/readReceipts';
-import { GROUP_CAP, eventText, findDirectChat, groupName, isDirectChat, isGroupAdmin, isGroupChat } from '@/features/messages/groupRules';
+import { GROUP_CAP, chatLockNote, eventText, findDirectChat, groupName, isDirectChat, isGroupAdmin, isGroupChat, named } from '@/features/messages/groupRules';
 import { readReceiptPreference, saveReceiptPreference } from '@/features/messaging/preferences';
 import { connectProvider, disconnectProvider } from '@/lib/integrations';
 import { appleHealthAvailable, connectAppleHealth, readAppleHealth, readAppleNutrition } from '@/features/health/appleHealth';
@@ -132,6 +131,17 @@ interface NewCoachQuestionInput {
 }
 
 export type CoachApplicationInput = Omit<CoachApplication, 'id' | 'userId' | 'status' | 'createdAt'>;
+
+/**
+ * How putting people in a group went: in (with the group's id), or why not.
+ * 'teen': someone not known to be an adult does not follow you; 'blocked':
+ * a block between someone being added and someone else in it; 'full': past
+ * GROUP_CAP people; 'failed': anything else (no connection, say). `who` is
+ * the people it was about when the app can tell (the server never says): for
+ * 'teen', the picked people who don't follow you, re-checked just now; for
+ * 'blocked', the one person being added. Empty when it can't tell.
+ */
+export type GroupOutcome = { ok: true; id: ID } | { ok: false; why: 'teen' | 'blocked' | 'full' | 'failed'; who: ID[] };
 
 interface NewQuestionInput {
   title: string;
@@ -567,16 +577,17 @@ interface AppActions {
   sendMessage: (conversationId: ID, body: string) => void;
   /**
    * A group chat with the people picked (two or more others, GROUP_CAP people
-   * in all) and an optional name; you are its admin. Returns its id, or null
-   * (with a note on screen) when it cannot be made.
+   * in all) and an optional name; you are its admin. A real one shows once
+   * the server has said yes, so a no leaves the picker as it was. Resolves
+   * with how it went (the screen that asked says why not; nothing else does),
+   * or null when the picks make no group (fewer than two others).
    */
-  createGroup: (memberIds: ID[], title?: string) => ID | null;
+  createGroup: (memberIds: ID[], title?: string) => Promise<GroupOutcome | null>;
   /**
-   * Adds people to a group you are in; anyone in it can. Resolves true once
-   * they are in (the server agreed), false when nobody was added (a note on
-   * screen says why).
+   * Adds people to a group you are in; anyone in it can. Resolves once the
+   * server has answered: in, or why not (the screen that asked says so).
    */
-  addGroupMembers: (conversationId: ID, memberIds: ID[]) => Promise<boolean>;
+  addGroupMembers: (conversationId: ID, memberIds: ID[]) => Promise<GroupOutcome>;
   /** An admin takes someone out of a group. */
   removeGroupMember: (conversationId: ID, memberId: ID) => void;
   /** Anyone in a group can rename it; an empty name takes the name off. */
@@ -610,8 +621,33 @@ interface AppActions {
    * teen account, private to start with.
    */
   confirmBirthDate: (birthDate: string) => Promise<AgeGroup | 'under13'>;
-  /** Whether you may start a new chat with someone: a teen only gets new chats from people they follow. */
+  /**
+   * Whether you may message someone one-to-one: always in a chat you already
+   * have; otherwise someone not known to be an adult (a teen, or no birthday
+   * given yet) only gets new chats from people they follow.
+   */
   canMessage: (userId: ID) => boolean;
+  /**
+   * Whether you may put someone in a group (a new one or one you are in):
+   * someone known to be an adult, or anyone who follows you. Unlike
+   * canMessage, a one-to-one chat you already have with them does not count;
+   * the server's rule for groups has no such exception.
+   */
+  canAddToGroup: (userId: ID) => boolean;
+  /**
+   * Asks the server again which of these people follow you, and keeps the
+   * answer, so a lock lifts as soon as they do. The app's copy of who follows
+   * you is from when it opened; nothing updates it live. Resolves with those
+   * of them who follow you now. The demo, with no server, answers from what
+   * it has.
+   */
+  recheckFollows: (userIds: ID[]) => Promise<ID[]>;
+  /**
+   * Before opening a one-to-one chat from a button: null when you may
+   * message them (asking the server again first if the app's copy says no);
+   * otherwise why not, naming them, ready to show in a long note.
+   */
+  messageLock: (userId: ID) => Promise<string | null>;
   /** New words for a message of yours; it then shows as edited. */
   editMessage: (messageId: ID, body: string) => void;
   /** Sends a message that did not go through, again. */
@@ -729,6 +765,25 @@ const isRefusal = (result: string): result is GroupRefusal | 'failed' => ['block
 // which collects the sign-in (connectWhoop). Every other page load: nothing.
 if (Platform.OS === 'web' && typeof window !== 'undefined' && /[?&]whoop=pending/.test(window.location?.search ?? '')) {
   try { WebBrowser.maybeCompleteAuthSession(); } catch { /* the opener has gone; trying again starts afresh */ }
+}
+
+/**
+ * The server's rule for who you may reach (migration 54: group_fits for
+ * groups, open_conversation for a new one-to-one chat): someone known to be
+ * an adult, or anyone who follows you. Everyone else, a teen or an account
+ * with no birthday given yet, waits until they follow you. The demo has no
+ * server and its fixtures carry no ages, so there only someone marked as a
+ * teen is closed; otherwise the whole demo would be locked.
+ */
+function openToYou(userId: ID, them: User | undefined, me: ID, edges: { followerId: ID; followingId: ID }[], real: boolean): boolean {
+  const known = real ? them?.ageGroup === 'adult' : them?.ageGroup !== 'teen';
+  return known || edges.some((e) => e.followerId === userId && e.followingId === me);
+}
+
+/** Why a new one-to-one chat was refused, naming who when the app knows them (see chatLockNote). */
+function chatLockNoteFor(users: User[], userId: ID): string {
+  const them = users.find((u) => u.id === userId);
+  return chatLockNote(them ? named(them, users) : undefined);
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -906,6 +961,12 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
     // settings row and goes back into your profile here, on your phone only.
     const ownConstraints = data.userState?.constraints;
     if (ownConstraints) users = users.map((u) => (u.id === me ? { ...u, profile: { ...u.profile, constraints: ownConstraints } } : u));
+    // Your age, once known, never goes back to unknown on the server. A load
+    // that set off just before your birthday was saved (sign-up starts one
+    // the moment the account exists) must not wipe it here, or the age
+    // check would ask again.
+    const ownAge = prev.users.find((u) => u.id === me)?.ageGroup;
+    if (ownAge) users = users.map((u) => (u.id === me && !u.ageGroup ? { ...u, ageGroup: ownAge } : u));
     // The profile row is created by a trigger; if it has not landed yet,
     // stand in for it so the screens have someone to show.
     if (!remoteUsers.has(me) && !fromSnapshot) {
@@ -1132,9 +1193,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Bumped to reconnect: after the connection drops, and whenever the app comes back to the front.
   const [liveEpoch, setLiveEpoch] = useState(0);
   const dropRetries = useRef(0);
-  // Chats made on this phone that the server may not have yet (a group whose
-  // start is still on its way): a fetch that does not find one says nothing.
-  const pendingChats = useRef(new Set<ID>());
   // Groups someone took you out of, as they last stood here, for a chat that
   // is open on screen when it happens (see removedChat). Kept with who you
   // were, so another account on this phone never sees them.
@@ -1153,7 +1211,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!got || stateRef.current.currentUserId !== me) return;
     if (got === 'gone') {
       const had = stateRef.current.conversations.find((c) => c.id === conversationId);
-      if (!had || !isGroupChat(had) || pendingChats.current.has(conversationId)) return;
+      if (!had || !isGroupChat(had)) return;
       removedChats.current.set(conversationId, { me, chat: { conversation: had, messages: stateRef.current.messages.filter((m) => m.conversationId === conversationId) } });
       setState((prev) => ({
         ...prev,
@@ -1528,7 +1586,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [signIn]);
 
   const signUp = useCallback(async (email: string, password: string, name: string, handle: string, birthDate?: string) => {
-    const session = await remoteAuth.signUp(email, password, name, handle);
+    const session = await remoteAuth.signUp(email, password, name, handle, birthDate);
     if (!session) return 'confirm' as const;
     // The birthday typed on the sign-up form is kept before the account
     // opens, so it is never asked for a second time.
@@ -3096,14 +3154,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (live(me, userId)) void remote.openConversation(userId, conversation.id).then((standing) => {
         if (standing === 'blocked') {
           setState((prev) => ({ ...prev, conversations: prev.conversations.filter((c) => c.id !== conversation.id) }));
-          showToast({ title: "You can't message this account", icon: 'lock-closed-outline' });
+          showToast({ title: "You can't message this account", icon: 'lock-closed-outline', long: true });
           return;
         }
         if (standing === null) {
-          // The database said no: a teen who does not follow you. The empty chat goes.
+          // The database said no: someone not known to be an adult who does
+          // not follow you. The empty chat goes, and the note stays to be read.
           setState((prev) => ({ ...prev, conversations: prev.conversations.filter((c) => c.id !== conversation.id) }));
-          const them = stateRef.current.users.find((u) => u.id === userId);
-          showToast({ title: `Only people ${them?.name.split(' ')[0] ?? 'they'} follows can message them`, icon: 'lock-closed-outline' });
+          showToast({ title: chatLockNoteFor(stateRef.current.users, userId), icon: 'lock-closed-outline', long: true });
           return;
         }
         if (standing === conversation.id) return;
@@ -3201,10 +3259,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     })();
   }, [requireUser, appendMessage, makeMessage, refreshChat]);
 
-  /* Group chats. Each change shows at once and is saved afterwards; when the
-     server says no, it is put back and a note says why (never naming who). A
-     real account's event lines ("You added Dev") come from the server; the
-     demo, with no server, writes its own. */
+  /* Group chats. Most changes show at once and are saved afterwards; when the
+     server says no, it is put back and a note says why. Starting a group and
+     adding people are the exceptions: they wait for the server, so a no
+     leaves the picker as it was and the picker itself says why, naming who
+     when the app can tell. A real account's event lines ("You added Dev")
+     come from the server; the demo, with no server, writes its own. */
 
   /** A demo event line, worded the way the server writes one (the chat words it from `event` for whoever reads it). */
   const eventLine = useCallback((conversationId: ID, me: ID, event: ChatEvent): Message => {
@@ -3212,90 +3272,121 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return { ...line, body: eventText(line, stateRef.current.users, null) };
   }, [makeMessage]);
 
-  /** A group with the people picked (two or more others) and an optional name. Null, with a note, when it cannot be made. */
-  const createGroup = useCallback((memberIds: ID[], title?: string): ID | null => {
+  /**
+   * Who of these people follow you, asked of the server again (see
+   * recheckFollows in AppActions). Their follows of you are swapped for the
+   * fresh answer, so one taken back since the app opened goes and a new one
+   * arrives; the state is only touched when something changed.
+   */
+  const recheckFollows = useCallback(async (userIds: ID[]): Promise<ID[]> => {
+    const me = stateRef.current.currentUserId;
+    if (!me) return [];
+    const want = Array.from(new Set(userIds.filter((id) => !!id && id !== me)));
+    const followingMe = (edges: { followerId: ID; followingId: ID }[]) => want.filter((id) => edges.some((e) => e.followerId === id && e.followingId === me));
+    const asked = want.filter((id) => live(me, id));
+    if (!asked.length) return followingMe(stateRef.current.followEdges);
+    const fresh = await remote.fetchFollowersAmong(me, asked).catch(() => null);
+    // No answer (no connection): what the app already had stands.
+    if (!fresh || stateRef.current.currentUserId !== me) return followingMe(stateRef.current.followEdges);
+    const askedSet = new Set(asked);
+    const stale = (e: { followerId: ID; followingId: ID }) => askedSet.has(e.followerId) && e.followingId === me;
+    const before = stateRef.current.followEdges.filter(stale).map((e) => e.followerId).sort().join();
+    const toMe = Array.from(new Set(fresh)).map((id) => ({ followerId: id, followingId: me }));
+    if (before !== toMe.map((e) => e.followerId).sort().join()) {
+      setState((prev) => ({ ...prev, followEdges: [...prev.followEdges.filter((e) => !stale(e)), ...toMe] }));
+    }
+    return followingMe([...stateRef.current.followEdges.filter((e) => !stale(e)), ...toMe]);
+  }, []);
+
+  /**
+   * After the server refused to put people in a group, who it was about, when
+   * the app can tell. For 'teen' it first re-reads whom those people follow:
+   * the likely reason it got past the picker is that one of them unfollowed
+   * you since the app loaded, and the fresh follows also put the lock back
+   * on them in the pickers. For 'blocked' it can only name the one person
+   * being added (who they are blocked with stays private).
+   */
+  const whoCantJoin = useCallback(async (why: 'teen' | 'blocked' | 'full' | 'failed', ids: ID[]): Promise<ID[]> => {
+    const me = stateRef.current.currentUserId;
+    if (!me) return [];
+    if (why === 'blocked') return ids.length === 1 ? ids : [];
+    if (why !== 'teen') return [];
+    const following = await recheckFollows(ids);
+    const users = stateRef.current.users;
+    // Anyone who doesn't follow you and isn't known to be an adult.
+    return ids.filter((id) => !following.includes(id) && !openToYou(id, users.find((u) => u.id === id), me, [], live(me, id)));
+  }, [recheckFollows]);
+
+  /** A group with the people picked (two or more others) and an optional name. */
+  const createGroup = useCallback(async (memberIds: ID[], title?: string): Promise<GroupOutcome | null> => {
     const me = requireUser();
     const others = Array.from(new Set(memberIds.filter((id) => !!id && id !== me)));
     if (others.length < 2) return null;
-    if (others.length + 1 > GROUP_CAP) {
-      showToast({ title: `A group can have up to ${GROUP_CAP} people`, icon: 'people-outline' });
-      return null;
-    }
+    if (others.length + 1 > GROUP_CAP) return { ok: false, why: 'full', who: [] };
     const groupTitle = cleanTitle(title);
-    const conversation: Conversation = {
-      id: nextId('cv'), participantIds: [me, ...others], messageIds: [], updatedAt: new Date().toISOString(), unreadCount: 0,
+    const wanted = nextId('cv');
+    const made = (id: ID): Conversation => ({
+      id, participantIds: [me, ...others], messageIds: [], updatedAt: new Date().toISOString(), unreadCount: 0,
       isGroup: true, title: groupTitle, createdBy: me, adminIds: [me],
-    };
-    haptics.commit();
-    setState((prev) => ({ ...prev, conversations: [conversation, ...prev.conversations] }));
-    if (!live(me, conversation.id, ...others)) {
-      const line = eventLine(conversation.id, me, { type: 'created', title: groupTitle });
-      setState((prev) => appendMessage(prev, line));
-      return conversation.id;
-    }
-    // Until the server has it, a fetch not finding it is no reason to drop it.
-    pendingChats.current.add(conversation.id);
-    void remote.createGroup(others, groupTitle, conversation.id).catch(() => 'failed' as const).then((result) => {
-      pendingChats.current.delete(conversation.id);
-      if (result === conversation.id) { void refreshChat(conversation.id); return; }
-      if (!isRefusal(result)) { setState((prev) => foldChatInto(prev, conversation.id, result)); return; }
-      setState((prev) => ({
-        ...prev,
-        conversations: prev.conversations.filter((c) => c.id !== conversation.id),
-        messages: prev.messages.filter((m) => m.conversationId !== conversation.id),
-      }));
-      showToast({
-        title: result === 'teen' ? 'Someone you picked can only be added by people they follow'
-          : result === 'blocked' ? 'Some of the people you picked can’t be in a group together'
-          : result === 'full' ? `A group can have up to ${GROUP_CAP} people`
-          : 'That group didn’t start. Try again.',
-        icon: 'lock-closed-outline',
-      });
-      if (router.canGoBack()) router.back();
     });
-    return conversation.id;
-  }, [requireUser, appendMessage, eventLine, refreshChat]);
+    // Once each: the server's own copy may have arrived first, live.
+    const put = (id: ID) => setState((prev) => (prev.conversations.some((c) => c.id === id) ? prev : { ...prev, conversations: [made(id), ...prev.conversations] }));
+    if (!live(me, wanted, ...others)) {
+      haptics.commit();
+      put(wanted);
+      const line = eventLine(wanted, me, { type: 'created', title: groupTitle });
+      setState((prev) => appendMessage(prev, line));
+      return { ok: true, id: wanted };
+    }
+    // A real group waits for the server's yes before it shows. Opening it at
+    // once and then taking it away on a no threw the picks away and left only
+    // a toast that was gone before it could be read.
+    const result = await remote.createGroup(others, groupTitle, wanted).catch(() => 'failed' as const);
+    if (stateRef.current.currentUserId !== me) return { ok: false, why: 'failed', who: [] };
+    if (isRefusal(result)) {
+      const why = result === 'not-admin' ? 'failed' : result;
+      return { ok: false, why, who: await whoCantJoin(why, others) };
+    }
+    haptics.commit();
+    put(result);
+    // Its "created" line and anything else the server added.
+    void refreshChat(result);
+    return { ok: true, id: result };
+  }, [requireUser, appendMessage, eventLine, refreshChat, whoCantJoin]);
 
   /** Anyone in a group can add people, up to GROUP_CAP in all. Someone not known to be an adult must follow you (as for a one-to-one chat). */
-  const addGroupMembers = useCallback((conversationId: ID, memberIds: ID[]): Promise<boolean> => {
+  const addGroupMembers = useCallback(async (conversationId: ID, memberIds: ID[]): Promise<GroupOutcome> => {
     const me = requireUser();
     const chat = stateRef.current.conversations.find((c) => c.id === conversationId);
-    if (!chat || !isGroupChat(chat) || !chat.participantIds.includes(me)) return Promise.resolve(false);
+    if (!chat || !isGroupChat(chat) || !chat.participantIds.includes(me)) return { ok: false, why: 'failed', who: [] };
     const newcomers = Array.from(new Set(memberIds.filter((id) => !!id && id !== me && !chat.participantIds.includes(id))));
-    if (!newcomers.length) return Promise.resolve(false);
-    const room = GROUP_CAP - chat.participantIds.length;
-    if (newcomers.length > room) {
-      showToast({ title: room > 0 ? `There’s room for ${room} more` : `That group is full (${GROUP_CAP})`, icon: 'people-outline' });
-      return Promise.resolve(false);
-    }
-    haptics.commit();
-    setState((prev) => ({
+    // Everyone picked is in already: nothing to do, and nothing went wrong.
+    if (!newcomers.length) return { ok: true, id: conversationId };
+    if (newcomers.length > GROUP_CAP - chat.participantIds.length) return { ok: false, why: 'full', who: [] };
+    const put = (ids: ID[]) => setState((prev) => ({
       ...prev,
-      conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, participantIds: [...c.participantIds, ...newcomers.filter((id) => !c.participantIds.includes(id))] } : c)),
+      conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, participantIds: [...c.participantIds, ...ids.filter((id) => !c.participantIds.includes(id))] } : c)),
     }));
     if (!live(me, conversationId, ...newcomers)) {
+      haptics.commit();
+      put(newcomers);
       const line = eventLine(conversationId, me, { type: 'added', targetIds: newcomers });
       setState((prev) => appendMessage(prev, line));
-      return Promise.resolve(true);
+      return { ok: true, id: conversationId };
     }
-    return remote.addGroupMembers(conversationId, newcomers).catch(() => 'failed' as const).then((result) => {
-      // In: the server's "added" line follows and brings the group up to date.
-      if (Array.isArray(result)) return true;
-      setState((prev) => ({
-        ...prev,
-        conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, participantIds: c.participantIds.filter((p) => !newcomers.includes(p)) } : c)),
-      }));
-      const one = newcomers.length === 1 ? stateRef.current.users.find((u) => u.id === newcomers[0])?.name.split(' ')[0] : undefined;
-      showToast({
-        title: result === 'teen' ? `${one ?? 'Someone there'} can only be added by people they follow`
-          : result === 'blocked' ? (one ? `${one} can’t be added to this group` : 'Someone there can’t be in a group with them')
-          : result === 'full' ? `That group is full (${GROUP_CAP})`
-          : newcomers.length === 1 ? 'They weren’t added. Try again.' : 'Nobody was added. Try again.',
-        icon: 'lock-closed-outline',
-      });
-      return false;
-    });
-  }, [requireUser, appendMessage, eventLine]);
+    // Waits for the server, so a no leaves the picker open with the picks still ticked.
+    const result = await remote.addGroupMembers(conversationId, newcomers).catch(() => 'failed' as const);
+    // In: only those the server actually added show here (a database before
+    // migration 54 stops at its first no); its "added" line then brings the
+    // group fully up to date.
+    if (Array.isArray(result)) { haptics.commit(); put(result); return { ok: true, id: conversationId }; }
+    const why = result === 'not-admin' ? 'failed' : result;
+    // Full by the server's count but not by this phone's: people were added
+    // from somewhere else meanwhile. Re-read the group so the room left that
+    // the picker shows is the real one.
+    if (why === 'full') await refreshChat(conversationId);
+    return { ok: false, why, who: await whoCantJoin(why, newcomers) };
+  }, [requireUser, appendMessage, eventLine, refreshChat, whoCantJoin]);
 
   /** An admin takes someone out of a group. A hit chat's "I'm in" goes with them (the server does the same). */
   const removeGroupMember = useCallback((conversationId: ID, memberId: ID) => {
@@ -3326,7 +3417,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           : c)),
         hitRequests: hitsJoined.length ? prev.hitRequests.map((h) => (hitsJoined.includes(h.id) && !h.joinedIds.includes(memberId) ? { ...h, joinedIds: [...h.joinedIds, memberId] } : h)) : prev.hitRequests,
       }));
-      showToast({ title: result === 'not-admin' ? 'Only admins can remove people' : 'They weren’t removed. Try again.', icon: 'lock-closed-outline' });
+      const name = stateRef.current.users.find((u) => u.id === memberId)?.name.trim().split(/\s+/)[0];
+      showToast({ title: result === 'not-admin' ? 'Only admins can remove people' : name ? `${name} wasn’t removed. Try again.` : 'They weren’t removed. Try again.', icon: 'lock-closed-outline', long: true });
     });
   }, [requireUser, appendMessage, eventLine]);
 
@@ -3412,7 +3504,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void remote.setGroupAdmin(conversationId, memberId, admin).catch(() => 'failed' as const).then((result) => {
       if (result === 'ok') return;
       setState((prev) => ({ ...prev, conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, adminIds: before } : c)) }));
-      showToast({ title: result === 'not-admin' ? 'Only admins can do that' : 'That didn’t go through. Try again.', icon: 'lock-closed-outline' });
+      showToast({ title: result === 'not-admin' ? 'Only admins can do that' : 'That didn’t go through. Try again.', icon: 'lock-closed-outline', long: true });
     });
   }, [requireUser, appendMessage, eventLine]);
 
@@ -3572,11 +3664,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const s = stateRef.current;
     const me = s.currentUserId;
     if (!me) return false;
+    // A chat you already have carries on: the server hands it back before it checks anything (open_conversation).
     if (findDirectChat(s.conversations, me, userId)) return true;
-    const them = s.users.find((u) => u.id === userId);
-    if (them?.ageGroup !== 'teen') return true;
-    return s.followEdges.some((e) => e.followerId === userId && e.followingId === me);
+    return openToYou(userId, s.users.find((u) => u.id === userId), me, s.followEdges, live(me, userId));
   }, []);
+
+  // The group rule has no "already chatting" exception: a teen you message
+  // one-to-one still has to follow you before you can put them in a group.
+  const canAddToGroup = useCallback((userId: ID) => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    if (!me || userId === me) return false;
+    return openToYou(userId, s.users.find((u) => u.id === userId), me, s.followEdges, live(me, userId));
+  }, []);
+
+  // A lock on a Message button is checked with the server before it is final.
+  const messageLock = useCallback(async (userId: ID): Promise<string | null> => {
+    if (canMessage(userId) || (await recheckFollows([userId])).includes(userId)) return null;
+    return chatLockNoteFor(stateRef.current.users, userId);
+  }, [canMessage, recheckFollows]);
 
   /**
    * Sends something into chats, Instagram style: a post, thread, profile or
@@ -3668,8 +3774,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               conversations: prev.conversations.filter((c) => c.id !== chat.id),
               messages: prev.messages.filter((m) => m.conversationId !== chat.id),
             }));
-            const them = stateRef.current.users.find((u) => u.id === other);
-            showToast({ title: standing === 'blocked' ? "You can't message this account" : `Only people ${them?.name.split(' ')[0] ?? 'they'} follows can message them`, icon: 'lock-closed-outline' });
+            showToast({ title: standing === 'blocked' ? "You can't message this account" : chatLockNoteFor(stateRef.current.users, other), icon: 'lock-closed-outline', long: true });
             continue;
           }
           if (standing !== chat.id) {
@@ -4644,6 +4749,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       reportChat,
       confirmBirthDate,
       canMessage,
+      canAddToGroup,
+      recheckFollows,
+      messageLock,
       editMessage,
       retryMessage,
       unsendMessage,
@@ -4798,6 +4906,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       reportChat,
       confirmBirthDate,
       canMessage,
+      canAddToGroup,
+      recheckFollows,
+      messageLock,
       editMessage,
       retryMessage,
       unsendMessage,

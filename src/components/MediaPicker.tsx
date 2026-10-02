@@ -1,6 +1,6 @@
 import { useTheme } from '@/theme/ThemeProvider';
 import React, { useRef, useState } from 'react';
-import { Image, Modal, Pressable, Text, View } from 'react-native';
+import { Image, Modal, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { ZoomableMedia } from './ZoomableMedia';
@@ -8,9 +8,8 @@ import { cropLayer } from '@/lib/crop';
 import type { MediaCrop } from '@/data/types';
 import { ClipVideo } from '@/components/ClipVideo';
 import { framesAt } from '@/features/compose/frames';
-import { CoverScrubber } from '@/components/CoverScrubber';
-import { VideoSurface, type VideoSurfaceHandle } from '@/components/VideoSurface';
-import { colors, typography, font } from '@/theme';
+import { CoverPage } from '@/components/CoverPage';
+import { colors, font } from '@/theme';
 import { canShrinkVideo } from '@/lib/shrinkVideo';
 
 export interface PickedMedia {
@@ -38,9 +37,15 @@ export interface MediaPickerProps {
   /** Width over height of the portrait stage: 4:5 for a post, 9:16 (the default) for a clip. */
   portraitRatio?: number;
   /** What the edit step decided: the previews play only the part kept, and honour the sound choice. */
-  trim?: { trimStart?: number; trimEnd?: number; muted?: boolean; crop?: MediaCrop; speed?: number; volume?: number };
+  trim?: { trimStart?: number; trimEnd?: number; muted?: boolean; crop?: MediaCrop; speed?: number; volume?: number; coverAt?: number };
   /** No cover-picking controls — for places where the video is just evidence, not a post. */
   noCover?: boolean;
+  /**
+   * The moment the cover was taken from, once Done is tapped on the Cover
+   * page (left out for an uploaded photo), so the editor's own Cover tool
+   * reopens on the same frame.
+   */
+  onCoverAt?: (seconds: number | undefined) => void;
 }
 /** "clip-final-2 · 0:24" is a filename. "Video · 0:24" is information. */
 function describe(media: PickedMedia): string {
@@ -106,24 +111,70 @@ function explainPickError(err: unknown): string {
   return `Could not open your library: ${reason}`;
 }
 
-export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false, orientation = 'portrait', portraitRatio = 9 / 16, trim, noCover = false }: MediaPickerProps) {
+export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false, orientation = 'portrait', portraitRatio = 9 / 16, trim, noCover = false, onCoverAt }: MediaPickerProps) {
   useTheme();
+  const { height: screenHeight } = useWindowDimensions();
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
-  // The cover chooser under the preview, opened by its Edit cover button: a
-  // strip to drag along. While it is open the preview holds still on the
-  // moment under the bar; letting go makes that frame the cover.
+  // The Cover page, opened from the Edit cover pill on the preview. It keeps
+  // the moment the cover came from, and whether the cover is a photo of
+  // your own rather than a frame; ✕ there puts all of it back as it was.
   const [coverOpen, setCoverOpen] = useState(false);
   const [coverAt, setCoverAt] = useState<number | null>(null);
-  const [clipLength, setClipLength] = useState(0);
-  const still = useRef<VideoSurfaceHandle>(null);
+  const [uploaded, setUploaded] = useState(false);
+  const remembered = useRef<{ thumb?: string; at: number | null; uploaded: boolean } | null>(null);
+  // Each frame cut (or photo chosen) takes a number; a cut that comes back
+  // after a later choice, or after ✕, is dropped rather than landing late.
+  const captureSeq = useRef(0);
+  // The frame being cut right now, if any. Done waits for it (a moment at
+  // most), so a Share tapped straight after carries the frame you chose.
+  const capture = useRef<Promise<void> | null>(null);
   const keepFrom = Math.max(0, trim?.trimStart ?? 0);
-  const keepTo = trim?.trimEnd && trim.trimEnd > keepFrom ? trim.trimEnd : clipLength;
-  const scrubCover = (seconds: number) => { setCoverAt(seconds); still.current?.seek(seconds); };
+  const keepTo = trim?.trimEnd && trim.trimEnd > keepFrom ? trim.trimEnd : undefined;
+  // The cover page opens where the cover came from: its last choice here,
+  // else the moment picked in the editor's Cover tool, else the clip's start.
+  const coverStart = Math.max(keepFrom, coverAt ?? trim?.coverAt ?? keepFrom);
+  const openCover = () => {
+    remembered.current = { thumb: value?.thumbnailUrl, at: coverAt, uploaded };
+    setCoverOpen(true);
+  };
   const settleCover = (seconds: number) => {
     if (!value?.uri) return;
+    setCoverAt(seconds);
+    setUploaded(false);
     const picked = value;
-    framesAt(picked.uri!, [seconds], 1080).then((got) => { if (got[0]) onChange({ ...picked, thumbnailUrl: got[0].uri }); });
+    const mine = ++captureSeq.current;
+    const job: Promise<void> = framesAt(picked.uri!, [seconds], 1080)
+      .then((got) => { if (got[0] && mine === captureSeq.current) onChange({ ...picked, thumbnailUrl: got[0].uri }); })
+      .catch(() => undefined)
+      .finally(() => { if (capture.current === job) capture.current = null; });
+    capture.current = job;
+  };
+  const cancelCover = () => {
+    if (!coverOpen) return;
+    captureSeq.current += 1;
+    const was = remembered.current;
+    if (was && value && value.thumbnailUrl !== was.thumb) onChange({ ...value, thumbnailUrl: was.thumb });
+    if (was) { setCoverAt(was.at); setUploaded(was.uploaded); }
+    setCoverOpen(false);
+  };
+  const doneCover = () => {
+    const seq = captureSeq.current;
+    let finished = false;
+    const finish = () => {
+      // ✕, or a newer choice, since Done was tapped: that one decides instead.
+      if (finished || seq !== captureSeq.current) return;
+      finished = true;
+      setCoverOpen(false);
+      const at = uploaded ? undefined : coverAt ?? trim?.coverAt;
+      if (at !== trim?.coverAt) onCoverAt?.(at);
+    };
+    const pending = capture.current;
+    if (!pending) { finish(); return; }
+    // The chosen frame is still being cut: close once it lands, or after a
+    // second and a half regardless, so Done never feels stuck.
+    void pending.finally(finish);
+    setTimeout(finish, 1500);
   };
   /**
    * Opens the library. Apple's current picker needs no permission prompt and
@@ -172,63 +223,71 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
       setError('');
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85 });
       if (result.canceled) return;
+      captureSeq.current += 1;
+      setUploaded(true);
       onChange({ ...value, thumbnailUrl: result.assets[0].uri });
     } catch { setError('Unable to open your library. Please try again.'); }
   };
 
   if (bare && value?.uri) {
-    // The media is the whole box: cover frame (or the photo itself) edge to
-    // edge, a play badge for video, and nothing else to tap except the cover.
+    // The media is the whole box: the clip playing (or the photo) edge to
+    // edge, the Edit cover pill on a video, and nothing else to tap.
     const poster = value.kind === 'photo' ? value.uri : value.thumbnailUrl;
+    const withCover = value.kind === 'video' && !noCover;
+    // A clip's preview leaves room under it for the caption on a short phone:
+    // 480 tall at most, and never more than about half the screen.
+    const clipHeight = Math.min(480, Math.round(screenHeight * 0.55));
     return <View style={{ gap: 12 }}>
       {/* The box takes the media's own shape — tall for portrait, wide for
           landscape — with rounded corners on the theme's ground, so there is
           nothing black around it. The media fills it edge to edge. */}
-      <Pressable accessibilityRole="button" accessibilityLabel="Open a larger preview" onPress={() => { if (!coverOpen) setExpanded(true); }}
+      <Pressable accessibilityRole="button" accessibilityLabel="Open a larger preview" onPress={() => setExpanded(true)}
         style={orientation === 'landscape'
           ? { width: '100%', aspectRatio: 16 / 9, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt }
           : portraitRatio > 0.6
             ? { width: '100%', aspectRatio: portraitRatio, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt }
-            : { height: 480, aspectRatio: portraitRatio, alignSelf: 'center', borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt }}>
-        {value.kind === 'video' && value.uri && coverOpen
-          // Choosing a cover: the picture holds on the moment under the bar.
-          ? <View style={cropLayer(trim?.crop)}><VideoSurface ref={still} uri={value.uri} muted paused fit="cover" from={keepFrom} onDuration={(d) => { setClipLength(d); still.current?.seek(coverAt ?? keepFrom); }} /></View>
-          : value.kind === 'video' && value.uri
-          ? <View style={cropLayer(trim?.crop)}><ClipVideo uri={value.uri} poster={value.thumbnailUrl} active muted fit="cover" trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} speed={trim?.speed} volume={trim?.volume} /></View>
+            : { height: clipHeight, aspectRatio: portraitRatio, alignSelf: 'center', borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt }}>
+        {value.kind === 'video' && value.uri
+          // Holds still while the Cover page is up over it.
+          ? <View style={cropLayer(trim?.crop)}><ClipVideo uri={value.uri} poster={value.thumbnailUrl} active={!coverOpen} muted fit="cover" trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} speed={trim?.speed} volume={trim?.volume} /></View>
           : poster
             ? <Image source={{ uri: poster }} resizeMode="cover" style={{ width: '100%', height: '100%' }}/>
             : <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="videocam" size={48} color={colors.textMuted}/></View>}
-        {/* Edit cover: a dark see-through pill over the video, like the editor's
-            Sound button; CourtSide blue while the cover strip is open. */}
-        {value.kind === 'video' && !noCover ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={coverOpen ? 'Done choosing a cover' : 'Edit cover'} accessibilityState={{ expanded: coverOpen }} onPress={() => setCoverOpen((o) => !o)} hitSlop={6}
-            style={({ pressed }) => ({ position: 'absolute', right: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: coverOpen || !value.thumbnailUrl ? 11 : 6, paddingRight: 14, paddingVertical: coverOpen || !value.thumbnailUrl ? 8 : 5, borderRadius: 999, borderWidth: 1, borderColor: coverOpen ? 'transparent' : 'rgba(255,255,255,0.28)', backgroundColor: coverOpen ? colors.brand : 'rgba(10,14,20,0.55)', opacity: pressed ? 0.85 : 1, shadowColor: '#000', shadowOpacity: 0.28, shadowRadius: 7, shadowOffset: { width: 0, height: 3 } })}>
-            {/* The cover itself, small, so you can see which frame people will see first. */}
-            {coverOpen || !value.thumbnailUrl
-              ? <Ionicons name={coverOpen ? 'checkmark' : 'image-outline'} size={15} color={coverOpen ? colors.brandInk : 'white'} />
-              : <Image source={{ uri: value.thumbnailUrl }} resizeMode="cover" style={{ width: 22, height: 28, borderRadius: 5, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.9)' }} />}
-            <Text style={{ ...typography.caption, fontWeight: '600', letterSpacing: 0.1, color: coverOpen ? colors.brandInk : 'white' }}>{coverOpen ? 'Done' : 'Edit cover'}</Text>
-          </Pressable>
-        ) : null}
-        <View pointerEvents="none" style={{ position: 'absolute', right: 10, top: 10, width: 30, height: 30, borderRadius: 15, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' }}>
-          <Ionicons name="expand-outline" size={16} color={colors.brandInk} />
-        </View>
-      </Pressable>
-      {coverOpen && value.kind === 'video' && !noCover ? (
-        <View style={{ gap: 4 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={{ color: colors.text, fontSize: 14, ...font('600') }}>Cover</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Upload your own cover image" onPress={chooseCover} hitSlop={8}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, borderWidth: 1, borderColor: colors.brand }}>
-              <Ionicons name="image-outline" size={15} color={colors.brand} />
-              <Text style={{ color: colors.brand, fontSize: 13, ...font('600') }}>Upload</Text>
+        {/* Edit cover: a small dark glass pill, centred low on the picture,
+            carrying the cover itself so you can see which frame people get
+            first. It opens the Cover page and never changes on the picture. */}
+        {withCover ? (
+          <View pointerEvents="box-none" style={{ position: 'absolute', left: 0, right: 0, bottom: 12, alignItems: 'center' }}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Edit cover" onPress={openCover} hitSlop={6}
+              style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 7, minHeight: 36, paddingLeft: value.thumbnailUrl ? 5 : 11, paddingRight: 13, paddingVertical: value.thumbnailUrl ? 4 : 8, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)', backgroundColor: 'rgba(10,14,20,0.52)', opacity: pressed ? 0.8 : 1, boxShadow: '0px 4px 14px rgba(0, 0, 0, 0.28)' })}>
+              {value.thumbnailUrl
+                ? <Image source={{ uri: value.thumbnailUrl }} resizeMode="cover" style={{ width: 20, height: 26, borderRadius: 4, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.9)' }} />
+                : <Ionicons name="image-outline" size={15} color="white" />}
+              <Text numberOfLines={1} style={{ fontSize: 13, ...font('600'), color: 'white' }}>Edit cover</Text>
             </Pressable>
           </View>
-          <Text style={{ color: colors.textFaint, fontSize: 13 }}>Drag along the strip to choose the frame people see before it plays.</Text>
-          {keepTo > keepFrom
-            ? <CoverScrubber uri={value.uri} from={keepFrom} to={keepTo} at={coverAt ?? keepFrom} onScrub={scrubCover} onSettle={settleCover} />
-            : <Text style={{ color: colors.textMuted, fontSize: 12, paddingVertical: 18 }}>Reading the clip…</Text>}
+        ) : null}
+        {/* The larger-preview mark, in the same dark glass, so the only colour on the picture is the picture. */}
+        <View pointerEvents="none" style={{ position: 'absolute', right: 10, top: 10, width: 30, height: 30, borderRadius: 15, borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)', backgroundColor: 'rgba(10,14,20,0.52)', alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name="expand-outline" size={15} color="white" />
         </View>
+      </Pressable>
+      {withCover ? (
+        <CoverPage
+          visible={coverOpen}
+          uri={value.uri}
+          from={keepFrom}
+          to={keepTo}
+          start={coverStart}
+          photo={uploaded ? value.thumbnailUrl : undefined}
+          ratio={orientation === 'landscape' ? 16 / 9 : portraitRatio}
+          fit={orientation === 'landscape' ? 'contain' : 'cover'}
+          crop={trim?.crop}
+          onSettle={settleCover}
+          onUpload={() => { void chooseCover(); }}
+          onDone={doneCover}
+          onCancel={cancelCover}
+        />
       ) : null}
       {/* Full screen, the clip playing with sound. One tap anywhere brings it back. */}
       <Modal visible={expanded} transparent animationType="none" statusBarTranslucent onRequestClose={() => setExpanded(false)}>

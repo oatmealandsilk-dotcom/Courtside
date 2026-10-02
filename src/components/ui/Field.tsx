@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useRef, useState } from 'react';
-import { Platform, StyleSheet, Text, TextInput, View, type KeyboardTypeOptions } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Platform, StyleSheet, Text, TextInput, View, useWindowDimensions, type KeyboardTypeOptions } from 'react-native';
 
 import { colors, lift, radius, spacing, typography } from '@/theme';
 import { MentionSuggestions } from '@/components/MentionSuggestions';
@@ -91,6 +91,23 @@ export function Field({
   const box = () => ((inputRef && typeof inputRef === 'object' && inputRef.current) || own.current) as unknown as Parameters<typeof reveal>[0];
   const mention = mentions ? activeMention(value, caret) : null;
   const candidates = mention ? candidatesFor(mention.query) : [];
+  // When the @ list opens under the box, the box and the list together are
+  // lifted above the keyboard: lifting only the box left the names behind the keys.
+  const wrap = useRef<View>(null);
+  const listing = focused && !!mention && candidates.length > 0;
+  // On a short phone (an iPhone SE) the box and a full list do not fit
+  // between the top of the screen and the keyboard: the list shows about
+  // three names and scrolls for the rest.
+  const { height: windowHeight } = useWindowDimensions();
+  const listHeight = windowHeight < 700 ? 150 : undefined;
+  useEffect(() => {
+    if (!listing) return undefined;
+    if (Platform.OS !== 'web') { reveal(wrap.current); return undefined; }
+    // A browser only moves the page if the list is not already in view.
+    const node = wrap.current as unknown as { scrollIntoView?: (options: object) => void } | null;
+    const t = setTimeout(() => node?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }), 30);
+    return () => clearTimeout(t);
+  }, [listing]); // eslint-disable-line react-hooks/exhaustive-deps
   const pick = (handle: string) => {
     if (!mention) return;
     const next = applyMention(value, mention.start, caret, handle);
@@ -101,7 +118,7 @@ export function Field({
     setTimeout(() => box?.setNativeProps?.({ selection: { start: next.caret, end: next.caret } }), 0);
   };
   return (
-    <View style={styles.wrap}>
+    <View ref={wrap} style={styles.wrap}>
       {label || labelRight ? (
         <View style={styles.labelRow}>
           {label ? <Text style={styles.label}>{label}</Text> : <View />}
@@ -143,7 +160,7 @@ export function Field({
           flush && { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
         ]}
       />
-      {mention && candidates.length ? <MentionSuggestions candidates={candidates} onPick={pick} /> : null}
+      {mention && candidates.length ? <MentionSuggestions candidates={candidates} onPick={pick} maxHeight={listHeight} /> : null}
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
     </View>
   );

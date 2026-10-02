@@ -1162,6 +1162,20 @@ export const remote = {
     return data.map((e) => ({ followerId: e.follower_id, followingId: e.following_id }));
   },
 
+  /**
+   * Which of these people follow you right now. Whether a teen account is
+   * open to you depends on it, and the app's own copy is from when it
+   * opened, so the pickers ask again before showing a lock as final.
+   */
+  async fetchFollowersAmong(me: ID, userIds: ID[]): Promise<ID[]> {
+    const ids = userIds.filter((id) => UUID_RE.test(id)).slice(0, 150);
+    if (!ids.length || !UUID_RE.test(me)) return [];
+    const { data, error } = await need().from('follows').select('follower_id').eq('following_id', me).in('follower_id', ids);
+    // Thrown, not passed over: an empty answer would read as "nobody follows you" and lock them.
+    if (error) { fail('follows')(error); throw error; }
+    return ((data ?? []) as { follower_id: string }[]).map((r) => r.follower_id);
+  },
+
   /* ------------------------------ reports (admins) ------------------------------ */
 
   /** Everyone on the waitlist, newest first. Only admins can read it; for anyone else it is empty. */
@@ -2297,13 +2311,17 @@ export const auth = {
     if (error) throw new Error(error.message);
     return data.session;
   },
-  async signUp(email: string, password: string, name: string, handle: string) {
+  async signUp(email: string, password: string, name: string, handle: string, birthDate?: string) {
     const { data, error } = await need().auth.signUp({
       email: email.trim(),
       password,
       // The sign-up form cannot be sent without ticking the terms, so the
-      // agreement is written onto the account as it is made.
-      options: { data: { name: name.trim(), handle: handle.trim().toLowerCase(), terms_version: TERMS_VERSION, terms_accepted_at: new Date().toISOString() } },
+      // agreement is written onto the account as it is made. The birthday
+      // typed on the form rides along too: the account can open before it is
+      // saved, or only from the email link (on any phone or browser), and the
+      // age check saves it from here instead of asking again. It still goes
+      // through set_birth_date, and comes off once the age is on file.
+      options: { data: { name: name.trim(), handle: handle.trim().toLowerCase(), terms_version: TERMS_VERSION, terms_accepted_at: new Date().toISOString(), ...(birthDate ? { birth_date: birthDate } : {}) } },
     });
     if (error) throw new Error(error.message);
     // With email confirmation on, there is no session yet; the screen says so.
@@ -2406,6 +2424,22 @@ export const auth = {
     const base = (process.env.EXPO_BASE_URL ?? '').replace(/\/$/, '');
     const redirectTo = Platform.OS === 'web' ? `${window.location.origin}${base}/account?reset=1` : 'https://app.courtsidebase.com/account?reset=1';
     const { error } = await need().auth.resetPasswordForEmail(email.trim(), { redirectTo });
+    if (error) throw new Error(error.message);
+  },
+  /**
+   * The signed-in account as this phone's login has it, for the age check:
+   * when it was made, and the birthday its sign-up form carried, if any. No
+   * trip to the server.
+   */
+  async signedInUser(): Promise<{ id: string; createdAt: string; birthDate: string | null } | null> {
+    const user = (await need().auth.getSession()).data.session?.user;
+    if (!user) return null;
+    const dob: unknown = user.user_metadata?.birth_date;
+    return { id: user.id, createdAt: user.created_at, birthDate: typeof dob === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dob) ? dob : null };
+  },
+  /** Takes the sign-up form's birthday off the account once the age check has it (set_birth_date keeps its own private copy). */
+  async forgetSignUpBirthDate() {
+    const { error } = await need().auth.updateUser({ data: { birth_date: null } });
     if (error) throw new Error(error.message);
   },
   /** Records that this account agreed to the current terms, on the account itself. */

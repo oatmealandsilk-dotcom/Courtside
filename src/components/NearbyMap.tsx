@@ -125,8 +125,10 @@ export function NearbyMap(props: NearbyMapProps) {
     );
   }
 
-  const message = (id: string) => {
-    if (!actions.canMessage(id)) { showToast({ title: 'Only people they follow can message them', icon: 'lock-closed-outline' }); return; }
+  // Locked (checked with the server first), it says why in a note that stays to be read.
+  const message = async (id: string) => {
+    const lock = await actions.messageLock(id);
+    if (lock) { showToast({ title: lock, icon: 'lock-closed-outline', long: true }); return; }
     router.push(`/messages/${actions.openConversationWith(id)}`);
   };
   // Into one of your groups (the sheet says if they can't be), or a court into any of your chats.
