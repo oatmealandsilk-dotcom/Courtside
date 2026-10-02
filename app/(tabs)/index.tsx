@@ -1076,7 +1076,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     <Wash height={300} strength={0.6} />
                     {/* Inside one person's posts the feed label means nothing, and the back chevron wants the room. */}
                     {scope ? null : <Text style={styles.eyebrow}>
-                      {post.kind === 'match' ? 'Set play' : post.kind.charAt(0).toUpperCase() + post.kind.slice(1)} · For you
+                      {post.session?.activityId || (post.session?.sessionId && post.session.kind !== 'fitness') ? 'Tennis' : post.kind === 'match' ? 'Set play' : post.kind.charAt(0).toUpperCase() + post.kind.slice(1)} · For you
                     </Text>}
                     {strip}
                     <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: 'flex-start' }}>
