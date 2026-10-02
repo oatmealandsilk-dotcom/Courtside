@@ -375,7 +375,8 @@ const styles = StyleSheet.create({
   // The caption sits close under the name (one post's words); the small line keeps a little more air.
   wrap: { gap: 6 },
   who: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', maxWidth: '100%' },
-  avatarRing: { borderRadius: 17, borderWidth: 1, borderColor: 'rgba(255,255,255,0.8)' },
+  // No ring: the photo sits on the clip as it is (the owner's call, Oct 1).
+  avatarRing: { borderRadius: 16 },
   avatarSpace: { width: 34, height: 34 },
   // The level and the welcome tag never shrink and sit centred on the name's line, 6 apart.
   badge: { alignSelf: 'center', flexShrink: 0, marginLeft: -2 },

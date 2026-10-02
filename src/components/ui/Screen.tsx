@@ -74,6 +74,14 @@ interface Props {
   onRefresh?: () => Promise<boolean | void> | boolean | void;
   /** The colour wash behind the top of the page. Every page carries it; pass false to go without. */
   wash?: boolean;
+  /**
+   * Whether the phone's floating tab bar shows over this page. A page that
+   * AppShell hides the bar on (its phoneOnlyHide list) passes false, so no
+   * room is kept for a bar that is not there. Said by the page itself rather
+   * than read from the address: a tab stays drawn underneath the pages opened
+   * over it, and its bottom must not move when one opens.
+   */
+  bar?: boolean;
 }
 
 export function Screen({
@@ -91,6 +99,7 @@ export function Screen({
   scrollRef,
   onRefresh,
   wash = true,
+  bar = true,
 }: Props) {
   // The floating tab bar covers this much of the bottom; a page's last line stays above it.
   const barInset = useBarInset();
@@ -111,18 +120,58 @@ export function Screen({
   // The page's own height. A short page must still be able to scroll past the
   // pull strip, or it rests on the strip and its disc shows for good.
   const [viewH, setViewH] = useState(0);
-  // With the keyboard up the phone lets a page scroll past its content, so the
-  // box you type in clears the keys. The stop at the page's top (below) would
-  // pull every let-go back inside the content, so it stands down until the
-  // keys go; a fling into the strip meanwhile is still caught as it scrolls.
+  // Whether the keyboard is up. An iPhone says so as the keys start to move;
+  // Android only once they have, since its "will" events never fire. Two
+  // kinds of page listen. One with a pull strip on an iPhone: with the keys
+  // up the phone lets a page scroll past its content, so the box you type in
+  // clears them, and the stop at the page's top (below) would pull every
+  // let-go back inside the content, so it stands down until the keys go; a
+  // fling into the strip meanwhile is still caught as it scrolls. And one
+  // that does not scroll, for the room at its bottom.
   const [keysUp, setKeysUp] = useState(false);
+  // On a fixed page on an iPhone, how far the keys reach up into the page:
+  // truly, and as the keyboard avoider (KeyboardAvoidingView, below) works it out.
+  const [keysCover, setKeysCover] = useState<{ truly: number; avoided: number } | null>(null);
+  // The avoider's place in its parent: the same layout it does its own sum with.
+  const avoiderFrame = useRef<{ y: number; height: number } | null>(null);
+  const watchKeys = Platform.OS !== 'web' && (!scroll || (IOS && strip > 0));
   useEffect(() => {
-    if (Platform.OS !== 'ios' || !strip) return;
+    if (!watchKeys) return;
     setKeysUp(Keyboard.isVisible());
-    const up = Keyboard.addListener('keyboardWillShow', () => setKeysUp(true));
-    const down = Keyboard.addListener('keyboardWillHide', () => setKeysUp(false));
-    return () => { up.remove(); down.remove(); setKeysUp(false); };
-  }, [strip]);
+    const up = Keyboard.addListener(IOS ? 'keyboardWillShow' : 'keyboardDidShow', (e) => {
+      setKeysUp(true);
+      if (!IOS || scroll) return;
+      const top = e.endCoordinates.screenY;
+      const f = avoiderFrame.current;
+      // Some settings report keys with no position; the avoider ignores those too.
+      if (!(top > 0) || !f) { setKeysCover(null); return; }
+      // A fixed page runs to the bottom of the screen (a sheet is pinned
+      // there), so the keys truly cover it from their top edge down. The
+      // page's own place on screen can't be asked for: inside a sheet the
+      // phone reports it as if the sheet started at the very top. The avoider
+      // does its sum against its parent, which is where it falls short.
+      setKeysCover({ truly: Math.max(0, Dimensions.get('screen').height - top), avoided: Math.max(0, f.y + f.height - top) });
+    });
+    const down = Keyboard.addListener(IOS ? 'keyboardWillHide' : 'keyboardDidHide', () => { setKeysUp(false); setKeysCover(null); });
+    return () => { up.remove(); down.remove(); setKeysUp(false); setKeysCover(null); };
+  }, [watchKeys, scroll]);
+  // The room the page keeps at its bottom: the floating bar's, or on a page
+  // the bar is hidden on, just the home-indicator strip's. A page that does
+  // not scroll gives it up while the keys are up. On an iPhone they cover the
+  // bar and the strip, and the avoider lifts the page by the keys' height, so
+  // keeping the room as well left an empty band sitting on top of the keys.
+  // What it keeps instead is what the avoider misses: measuring against its
+  // parent, it comes up short on a page in a sheet (the location picker) by
+  // the sheet's distance from the top. Keys shorter than the room (a hardware
+  // keyboard's slim strip) leave the rest of it kept. On Android the window
+  // itself shrinks above the keys and lifts the bar with it, so only a page
+  // that shows the bar keeps room, for the bar.
+  const barRoom = !isPhone ? 0 : bar ? barInset : insets.bottom;
+  let room = barRoom;
+  if (!scroll && isPhone) {
+    if (IOS && keysCover) room = Math.max(keysCover.truly, barRoom) - keysCover.avoided;
+    else if (!IOS && keysUp) room = bar ? barInset : 0;
+  }
   // Pull-to-refresh: the disc while it runs, then a small note that
   // slides in under the header and fades — enough to know it happened.
   const updated = useRef(new Animated.Value(0)).current;
@@ -415,7 +464,7 @@ export function Screen({
     ) : null;
 
   const main = (
-    <View style={[padded && styles.padded, { paddingBottom: (scroll ? spacing.xxxl : 0) + barInset, flex: showRail || !scroll ? 1 : undefined }]}>
+    <View style={[padded && styles.padded, { paddingBottom: (scroll ? spacing.xxxl : 0) + room, flex: showRail || !scroll ? 1 : undefined }]}>
       {children}
     </View>
   );
@@ -439,6 +488,7 @@ export function Screen({
       // A scrolling page moves the box itself; a fixed page lifts everything.
       behavior={Platform.OS === 'ios' && !scroll ? 'padding' : undefined}
       enabled={Platform.OS === 'ios' && !scroll}
+      onLayout={(e) => { avoiderFrame.current = e.nativeEvent.layout; }}
     >
       {wash ? <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, washStyle]}><Wash height={360} strength={0.85} /></Reanimated.View> : null}
       {headerWrapper ? headerWrapper(header) : header}

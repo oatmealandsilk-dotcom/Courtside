@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { goBack } from '@/lib/goBack';
@@ -23,6 +23,17 @@ const SPECIALTIES: { value: CoachSpecialty; label: string }[] = [
   { value: 'fitness', label: 'Fitness' },
   { value: 'juniors', label: 'Juniors' },
 ];
+
+/**
+ * Around the page's header: with the keyboard up, a tap on the title or the
+ * space around it closes it. The back arrow inside still takes its own tap
+ * first. Not a button, so a screen reader passes it by. A browser closes the
+ * keyboard by itself on a tap off the box, so there it is left out.
+ */
+function closesKeys(header: React.ReactNode) {
+  if (Platform.OS === 'web') return header;
+  return <View accessible={false} onStartShouldSetResponder={() => Keyboard.isVisible()} onResponderRelease={() => Keyboard.dismiss()}>{header}</View>;
+}
 
 /**
  * A free, public question to every coach on CourtSide. Written like a
@@ -113,7 +124,8 @@ export default function AskCoach() {
   const veil = useAnimatedStyle(() => ({ opacity: hero && !web ? grow.value : 1 }));
   const close = () => {
     if (!hero) { goBack(); return; }
-    titleBox.current?.blur();
+    // Whichever box has the cursor, the keys go down as the page shrinks away.
+    Keyboard.dismiss();
     if (web && startRect) {
       root.current?.measureInWindow((_rx, _ry, rw, rh) => playWeb(startRect, rw, rh, true, () => goBack()));
       return;
@@ -134,12 +146,19 @@ export default function AskCoach() {
     <Reanimated.View ref={veilRef} pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg }, veil, hero && !placed && { opacity: 0 }]} />
     <Reanimated.View ref={cardRef} style={[hero && !web ? null : StyleSheet.absoluteFill, { backgroundColor: colors.bg, overflow: 'hidden' }, card, !placed && { opacity: 0 }]}>
     <Reanimated.View ref={contentRef} style={[{ flex: 1 }, content]}>
-    <Screen title="Ask a coach" compactTitle scroll={false} padded={false} onBack={close}>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.page}>
-        <Text style={styles.lead}>Free, and public. {watching ? `${watching} verified ${watching === 1 ? 'coach' : 'coaches'} read this board and usually answer within a day.` : 'Coaches are joining now, and your question stays up until one answers.'}</Text>
+    <Screen title="Ask a coach" compactTitle scroll={false} padded={false} bar={false} onBack={close} headerWrapper={closesKeys}>
+      {/* A tap on anything here that is not a box or a button closes the
+          keyboard, so the whole page shows again (the scroller does that for
+          taps it does not hand on); on a phone, dragging the page down closes
+          it too. Not in a browser, which scrolls a box into view by itself
+          as you type, and that scroll would close the keyboard at once. */}
+      <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : Platform.OS === 'android' ? 'on-drag' : 'none'} contentContainerStyle={styles.page}>
+        {/* The two things worth knowing; no count of coaches, which said little. */}
+        <Text style={styles.lead}>{watching ? 'Free and public. Coaches usually answer within a day.' : 'Free and public. Your question stays up until a coach answers.'}</Text>
 
-        {/* What it is about: one scrolling row, no heading — the words say it. */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.topics} style={styles.topicsWrap}>
+        {/* What it is about: one scrolling row, no heading — the words say it.
+            It hands taps on to the topics, so one tap picks one even with the keyboard up. */}
+        <ScrollView horizontal keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} contentContainerStyle={styles.topics} style={styles.topicsWrap}>
           {SPECIALTIES.map((item) => (
             <Pressable key={item.value} accessibilityRole="tab" accessibilityState={{ selected: specialty === item.value }} onPress={() => setSpecialty(item.value)} style={[styles.topic, specialty === item.value && styles.topicOn]}>
               <Text style={[styles.topicText, specialty === item.value && styles.topicTextOn]}>{item.label}</Text>

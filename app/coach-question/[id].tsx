@@ -1,17 +1,23 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
-import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { ClipVideo } from '@/components/ClipVideo';
+import { CourtSpinner } from '@/components/CourtSpinner';
+import { Tappable } from '@/components/Tappable';
 import { Avatar, Button, Chip, EmptyState, Field, Screen } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
+import { confirmAfterMenu } from '@/lib/confirm';
+import { show as showToast } from '@/lib/toast';
+import { useStillLoading } from '@/lib/useStillLoading';
 import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
+import type { CoachQuestion, CoachReply } from '@/data/types';
 import { SPECIALTY_LABEL } from '@/features/coaching/bookings';
 import { colors, radius, spacing, typography, font } from '@/theme';
 
@@ -19,28 +25,68 @@ import { colors, radius, spacing, typography, font } from '@/theme';
 export default function CoachQuestionDetail() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { coachQuestions, coachReplies, users, coaches, currentUser, currentUserId, actions } = useApp();
+  const { coachQuestions, coachReplies, users, coaches, currentUser, currentUserId, error, actions } = useApp();
   const [draft, setDraft] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
+  // A link opened cold waits for the data before saying the question is gone;
+  // a load that failed stops the wait, so it never spins for ever.
+  const loading = useStillLoading() && !error;
+  // What the page last showed, kept while it slides away after its own
+  // delete, so it leaves as it was instead of flashing "gone" on the way out.
+  const shown = useRef<{ question: CoachQuestion; replies: CoachReply[] } | null>(null);
+  const leaving = useRef(false);
 
-  const question = coachQuestions.find((q) => q.id === id);
-  if (!question) {
+  const found = coachQuestions.find((q) => q.id === id);
+  if (found) {
+    shown.current = {
+      question: found,
+      replies: found.replyIds
+        .map((rid) => coachReplies.find((r) => r.id === rid))
+        .filter((r): r is NonNullable<typeof r> => Boolean(r))
+        .sort((a, b) => b.helpfulBy.length - a.helpfulBy.length),
+    };
+  }
+  const view = found || leaving.current ? shown.current : null;
+  if (!view) {
     return (
       <Screen title="Question" compactTitle onBack={() => goBack()}>
-        <EmptyState title="Question not found" body="It may have been removed." />
+        {loading
+          ? <View style={styles.wait}><CourtSpinner size={28} /></View>
+          : <EmptyState icon="alert-circle-outline" title="This question is gone" body="Whoever asked it may have deleted it." />}
       </Screen>
     );
   }
+  const { question, replies } = view;
 
   const author = users.find((u) => u.id === question.authorId);
-  const replies = question.replyIds
-    .map((rid) => coachReplies.find((r) => r.id === rid))
-    .filter((r): r is NonNullable<typeof r> => Boolean(r))
-    .sort((a, b) => b.helpfulBy.length - a.helpfulBy.length);
-
   const iAmCoach = Boolean(currentUser?.isCoach);
+  const mine = question.authorId === currentUserId;
+
+  // Asked once, after the menu has gone, the way a post's Delete asks.
+  const askToDelete = () => confirmAfterMenu({
+    title: 'Delete this question?',
+    message: 'Your question and any coach answers are removed for everyone. This can’t be undone.',
+    confirmLabel: 'Delete',
+    destructive: true,
+    onConfirm: () => {
+      leaving.current = true;
+      actions.deleteCoachQuestion(question.id);
+      goBack('/coaches');
+      showToast({ title: 'Question deleted', icon: 'trash-outline' });
+    },
+  });
 
   return (
-    <Screen title="Ask a coach" compactTitle onBack={() => goBack()}>
+    <Screen
+      title="Ask a coach"
+      compactTitle
+      onBack={() => goBack()}
+      right={mine ? (
+        <Tappable accessibilityRole="button" accessibilityLabel="More options" onPress={() => setMenuOpen(true)} hitSlop={10} style={styles.more}>
+          <Ionicons name="ellipsis-horizontal" size={24} color={colors.text} />
+        </Tappable>
+      ) : undefined}
+    >
       <View style={styles.head}>
         <View style={styles.authorRow}>
           <Avatar name={author?.name ?? '?'} seed={author?.avatarSeed ?? question.id} size={38} />
@@ -184,6 +230,25 @@ export default function CoachQuestionDetail() {
           <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
         </Pressable>
       )}
+
+      {/* The asker's own menu, the same sheet a profile's "…" opens. */}
+      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+        {/* The backdrop is a plain surface, not a button: a button here would
+            wrap the menu's button, which the web refuses to nest. */}
+        <Pressable accessibilityLabel="Close menu" onPress={() => setMenuOpen(false)} style={styles.backdrop}>
+          <View style={styles.sheet}>
+            <View style={styles.grabber} />
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => { setMenuOpen(false); askToDelete(); }}
+              style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: colors.surfaceAlt }]}
+            >
+              <Ionicons name="trash-outline" size={21} color={colors.danger} />
+              <Text style={[styles.menuLabel, { color: colors.danger }]}>Delete question</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
     </Screen>
   );
 }
@@ -220,4 +285,20 @@ const styleDefinitions = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   applyText: { ...typography.small, color: colors.text, flex: 1 },
+  wait: { paddingVertical: 60, alignItems: 'center' },
+  more: { padding: 4 },
+  backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: colors.bg,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    paddingBottom: spacing.xxl,
+    paddingTop: spacing.sm,
+    maxWidth: 520,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  grabber: { width: 36, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, alignSelf: 'center', marginBottom: spacing.md },
+  menuRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingHorizontal: spacing.xl, paddingVertical: spacing.lg },
+  menuLabel: { ...typography.body, color: colors.text },
 });

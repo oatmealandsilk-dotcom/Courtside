@@ -53,6 +53,19 @@ export function finishUpload(id: string, ok = true, reason?: string) {
   timers.set(id, setTimeout(() => { jobs = jobs.filter((j) => j.id !== id); timers.delete(id); emit(); }, ok ? 4500 : 6000));
 }
 
+/**
+ * Takes a job off the strip straight away, with no "Posted" or "Could not
+ * post": for something deleted while it was still going up, so the strip
+ * never points at a thing that no longer exists.
+ */
+export function cancelUpload(id: string) {
+  const old = timers.get(id);
+  if (old) clearTimeout(old);
+  timers.delete(id);
+  jobs = jobs.filter((j) => j.id !== id);
+  emit();
+}
+
 /** The demo build has nowhere to upload to: walk the bar up so the moment still reads. */
 export function simulateUpload(id: string, label: string, thumb?: string, tags?: string[]) {
   startUpload(id, label, thumb, tags);

@@ -36,7 +36,7 @@ import * as haptics from '@/lib/haptics';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import * as toast from '@/lib/toast';
-import { anyUploading, finishUpload, setUploadProgress, simulateUpload, startUpload } from '@/lib/uploads';
+import { anyUploading, cancelUpload, finishUpload, setUploadProgress, simulateUpload, startUpload } from '@/lib/uploads';
 import { requestFeedRefresh } from '@/features/feed/feedBus';
 import { blockDevice, groupFor, rememberAnswered, yearsOld, type AgeGroup } from '@/features/age/ageCheck';
 import { show as showToast } from '@/lib/toast';
@@ -437,6 +437,8 @@ interface AppActions {
   askCoach: (input: NewCoachQuestionInput) => ID;
   replyToCoachQuestion: (questionId: ID, body: string) => void;
   toggleReplyHelpful: (replyId: ID) => void;
+  /** The asker deletes their question, and the coaches' answers with it. Puts it back with a toast if the server refuses. */
+  deleteCoachQuestion: (questionId: ID) => void;
 
   /* Become a coach */
   /** Files a coach application (and its résumé file, if any). Rejects with a readable message when it could not be sent. */
@@ -838,6 +840,8 @@ function idsIn(data: RemoteData): Set<string> {
   const add = (list: { id: string }[]) => list.forEach((x) => ids.add(x.id));
   add(data.users); add(data.posts); add(data.comments); add(data.stories); add(data.questions); add(data.answers);
   add(data.notifications); add(data.tips);
+  // A coach question its asker deleted on another phone comes off here too, answers and all.
+  add(data.coachQuestions); add(data.coachReplies);
   return ids;
 }
 
@@ -896,8 +900,8 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       // Saved discussions, coaching and notifications take the place of any local copy with the same id.
       questions: [...data.questions, ...prev.questions.filter((q) => !data.questions.some((r) => r.id === q.id) && !gone(q.id))],
       answers: [...data.answers, ...prev.answers.filter((a) => !data.answers.some((r) => r.id === a.id) && !gone(a.id))],
-      coachQuestions: [...data.coachQuestions, ...prev.coachQuestions.filter((q) => !data.coachQuestions.some((r) => r.id === q.id))],
-      coachReplies: [...data.coachReplies, ...prev.coachReplies.filter((r) => !data.coachReplies.some((x) => x.id === r.id))],
+      coachQuestions: [...data.coachQuestions, ...prev.coachQuestions.filter((q) => !data.coachQuestions.some((r) => r.id === q.id) && !gone(q.id))],
+      coachReplies: [...data.coachReplies, ...prev.coachReplies.filter((r) => !data.coachReplies.some((x) => x.id === r.id) && !gone(r.id))],
       coachingRequests: [...data.coachingRequests, ...prev.coachingRequests.filter((r) => !data.coachingRequests.some((x) => x.id === r.id))],
       // Real coaches, with their services, reviews and results.
       coaches: data.coaches,
@@ -2499,6 +2503,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   /* ------------------------------ Ask a coach ----------------------------- */
 
+  // A question with a clip is only saved once the clip has uploaded. These
+  // two let one be deleted in the meantime: nothing to delete on the server
+  // yet, and the upload, when it finishes, must not save it after all.
+  const coachClipsUploading = useRef(new Set<ID>());
+  const coachQuestionsDeleted = useRef(new Set<ID>());
+
   const askCoach = useCallback(
     (input: NewCoachQuestionInput): ID => {
       const me = requireUser();
@@ -2518,8 +2528,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (!local) void remote.upsertCoachQuestion(question);
         else {
           startUpload(question.id, 'Uploading your clip');
+          coachClipsUploading.current.add(question.id);
           void uploadMedia(me, local, 'video', (f) => setUploadProgress(question.id, f))
             .then((videoUrl) => {
+              coachClipsUploading.current.delete(question.id);
+              // Deleted while it went up: the strip is already gone (see
+              // deleteCoachQuestion), so no "Posted" for a question that isn't there.
+              if (coachQuestionsDeleted.current.has(question.id)) return;
               finishUpload(question.id);
               const saved = { ...question, videoUrl };
               setState((prev) => ({ ...prev, coachQuestions: prev.coachQuestions.map((q) => (q.id === question.id ? saved : q)) }));
@@ -2527,6 +2542,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             })
             .catch((e: Error) => {
               // The question still goes up, without the clip, rather than not at all.
+              coachClipsUploading.current.delete(question.id);
+              if (coachQuestionsDeleted.current.has(question.id)) return;
               finishUpload(question.id, false, e.message);
               const saved = { ...question, videoUrl: undefined, mediaLabel: undefined };
               setState((prev) => ({ ...prev, coachQuestions: prev.coachQuestions.map((q) => (q.id === question.id ? saved : q)) }));
@@ -4169,6 +4186,50 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, coachQuestions: prev.coachQuestions.map((q) => (q.id === questionId ? { ...q, resolved: !q.resolved } : q)) }));
     if (live(me, questionId)) void remote.upsertCoachQuestion({ ...question, resolved: !question.resolved });
   }, [requireUser]);
+  /**
+   * Your own public coach question, gone for everyone along with the coaches'
+   * answers to it. Only the asker can. It leaves the screen at once; if the
+   * database says no (or the connection drops) it all comes back exactly as
+   * it was and a toast says so, rather than vanishing here while it stays up
+   * for everyone else.
+   */
+  const deleteCoachQuestion = useCallback((questionId: ID) => {
+    const me = requireUser();
+    const s = stateRef.current;
+    const question = s.coachQuestions.find((q) => q.id === questionId);
+    if (!question || question.authorId !== me) return;
+    const at = s.coachQuestions.indexOf(question);
+    const replies = s.coachReplies.filter((r) => r.questionId === questionId);
+    const takeOff = (prev: AppState): AppState => ({
+      ...prev,
+      coachQuestions: prev.coachQuestions.filter((q) => q.id !== questionId),
+      coachReplies: prev.coachReplies.filter((r) => r.questionId !== questionId),
+    });
+    haptics.commit();
+    setState(takeOff);
+    // The demo, or a question whose clip is still uploading: not on the server
+    // yet, so there is nothing more to do. The upload sees this and never
+    // saves it, and its strip leaves now rather than ending on "Posted".
+    if (!live(me, questionId) || coachClipsUploading.current.has(questionId)) {
+      coachQuestionsDeleted.current.add(questionId);
+      if (coachClipsUploading.current.has(questionId)) cancelUpload(questionId);
+      return;
+    }
+    remote.deleteCoachQuestion(questionId).then(
+      // A refresh that started before the delete may have brought it back meanwhile.
+      () => setState((prev) => (prev.coachQuestions.some((q) => q.id === questionId) ? takeOff(prev) : prev)),
+      (err: unknown) => {
+        void reportError(err, { where: 'coach question delete' });
+        setState((prev) => (prev.coachQuestions.some((q) => q.id === questionId) ? prev : {
+          ...prev,
+          // Back in its old place in the list, with every answer it had.
+          coachQuestions: [...prev.coachQuestions.slice(0, at), question, ...prev.coachQuestions.slice(at)],
+          coachReplies: [...prev.coachReplies, ...replies.filter((r) => !prev.coachReplies.some((x) => x.id === r.id))],
+        }));
+        showToast({ title: 'Couldn’t delete your question. Try again.', icon: 'alert-circle-outline' });
+      },
+    );
+  }, [requireUser]);
   const setPref = useCallback((key: 'showActivity' | 'pushLikes' | 'pushCoach' | 'pushMessages', value: boolean) => {
     haptics.tap();
     setState((prev) => ({ ...prev, prefs: { ...prev.prefs, [key]: value } }));
@@ -4372,6 +4433,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       askCoach,
       replyToCoachQuestion,
       toggleReplyHelpful,
+      deleteCoachQuestion,
       submitCoachApplication,
       toggleSavePost,
       toggleSaveQuestion,
@@ -4520,6 +4582,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       askCoach,
       replyToCoachQuestion,
       toggleReplyHelpful,
+      deleteCoachQuestion,
       submitCoachApplication,
       toggleSavePost,
       toggleSaveQuestion,

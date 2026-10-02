@@ -41,7 +41,7 @@ function Coaching() {
   const shown = coaches.filter((c) => c.listed !== false);
 
   return (
-    <Screen memoryKey="coaches" title="Coaching" subtitle="Real coaches, approved one by one." wash onRefresh={isDesktopBrowser() ? undefined : actions.refresh}>
+    <Screen memoryKey="coaches" title="Coaching" wash onRefresh={isDesktopBrowser() ? undefined : actions.refresh}>
       {/* ------------------------------ Ask a coach ----------------------------- */}
       <View style={[styles.section, styles.sectionFirst]}>
         <View style={styles.sectionRow}>
@@ -60,15 +60,17 @@ function Coaching() {
         <Text style={styles.askPlaceholder}>Your question</Text>
         <View style={styles.askGo}><Ionicons name="arrow-forward" size={16} color={colors.brandInk} /></View>
       </Pressable>
-      {/* No promise nobody can keep: until coaches are on, the note says what really happens. */}
-      <Text style={styles.askNote}>{shown.length ? 'Public. A verified coach answers, usually within a day.' : 'Public. Coaches are joining now, and your question stays up until one answers.'}</Text>
+      {/* No promise nobody can keep: until coaches are on, the note says what really happens.
+          This is the one place the tab says asking is public (and, once coaches are on, that
+          they are verified), so the header and the Coaches section don't repeat it. */}
+      <Text style={styles.askNote}>{shown.length ? 'Public. A verified coach answers, usually within a day.' : 'Public. Your question stays up until a coach answers.'}</Text>
       {/* The AI coach shows up here once it is switched on (its key added on the server). */}
       {aiCoachOn ? (
         <Pressable accessibilityRole="link" accessibilityLabel="AI coach" onPress={() => router.push('/ai-coach')} style={({ pressed }) => [styles.ai, pressed && styles.pressed]}>
           <View style={styles.aiMark}><Ionicons name="sparkles" size={16} color={colors.brand} /></View>
           <View style={styles.rowWords}>
             <Text style={styles.footTitle}>AI coach</Text>
-            <Text style={styles.meta}>A plan for your week, and answers any time.</Text>
+            <Text style={styles.meta}>A weekly plan, and answers any time.</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
         </Pressable>
@@ -79,12 +81,11 @@ function Coaching() {
           <Text style={styles.sectionTitle}>Coaches</Text>
           <Text style={styles.sectionCount}>{shown.length}</Text>
         </View>
-        <Text style={styles.sectionBody}>Checked by hand, one by one.</Text>
       </View>
       {shown.length === 0 ? (
         <View style={styles.none}>
-          <Text style={styles.noneTitle}>No coaches on CourtSide yet</Text>
-          <Text style={styles.noneBody}>We’re approving the first ones now. You can still ask above, and the question stays up until a coach answers.</Text>
+          <Text style={styles.noneTitle}>No coaches yet</Text>
+          <Text style={styles.noneBody}>We’re approving the first ones now.</Text>
           {currentUser?.isCoach ? null : (
             <Button label="Apply to coach" variant="secondary" onPress={() => router.push('/coach-apply')} />
           )}
@@ -137,7 +138,7 @@ function Coaching() {
               <Text style={styles.sectionTitle}>Questions</Text>
               <Text style={styles.sectionCount}>{unanswered ? `${unanswered} waiting` : 'all answered'}</Text>
             </View>
-            <Text style={styles.sectionBody}>What players have asked. Yours to one coach are marked private.</Text>
+            {/* No explainer line: a private booking already says "Private, with <coach>" and carries a lock. */}
           </View>
           <View style={styles.group}>
             {[
@@ -199,7 +200,7 @@ function Coaching() {
         <Pressable accessibilityRole="link" onPress={() => router.push(openBookings ? '/coach-bookings' : '/coach-studio')} style={({ pressed }) => [styles.foot, pressed && styles.pressed]}>
           <View style={styles.rowWords}>
             <Text style={styles.footTitle}>{openBookings ? `${openBookings} ${openBookings === 1 ? 'booking needs' : 'bookings need'} an answer` : 'Your coach studio'}</Text>
-            <Text style={styles.meta}>{myCoach.listed ? 'You are listed. Your page, services and payouts.' : 'Finish your page, services and payouts to get listed.'}</Text>
+            <Text style={styles.meta}>{myCoach.listed ? 'You’re listed.' : 'Finish setting up to get listed.'}</Text>
           </View>
           <Ionicons name="arrow-forward" size={18} color={colors.text} />
         </Pressable>
@@ -208,7 +209,6 @@ function Coaching() {
         <Pressable accessibilityRole="link" onPress={() => router.push('/coach-inbox')} style={({ pressed }) => [styles.foot, pressed && styles.pressed]}>
           <View style={styles.rowWords}>
             <Text style={styles.footTitle}>{unanswered} {unanswered === 1 ? 'question needs' : 'questions need'} an answer</Text>
-            <Text style={styles.meta}>Answering publicly is how players find you.</Text>
           </View>
           <Ionicons name="arrow-forward" size={18} color={colors.text} />
         </Pressable>
@@ -216,7 +216,7 @@ function Coaching() {
         <Pressable accessibilityRole="link" accessibilityLabel="Apply to be a coach" onPress={() => router.push('/coach-apply')} style={({ pressed }) => [styles.foot, pressed && styles.pressed]}>
           <View style={styles.rowWords}>
             <Text style={styles.footTitle}>Coach on CourtSide</Text>
-            <Text style={styles.meta}>A badge and a listing, verified by hand.</Text>
+            <Text style={styles.meta}>Apply to get listed.</Text>
           </View>
           <Ionicons name="arrow-forward" size={18} color={colors.text} />
         </Pressable>
@@ -251,7 +251,6 @@ const styleDefinitions = StyleSheet.create({
   sectionCount: { ...typography.small, color: colors.textFaint },
   group: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   sectionTitle: { ...typography.heading, color: colors.text },
-  sectionBody: { ...typography.small, color: colors.textMuted },
   none: { gap: spacing.sm, paddingVertical: spacing.lg, alignItems: 'flex-start' },
   noneTitle: { ...typography.heading, color: colors.text },
   noneBody: { ...typography.small, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.sm },

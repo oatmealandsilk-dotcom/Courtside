@@ -264,7 +264,7 @@ export default function PickLocation() {
   );
 
   return (
-    <Screen title="Add location" compactTitle scroll={false} onBack={() => router.back()}>
+    <Screen title="Add location" compactTitle scroll={false} bar={false} onBack={() => router.back()}>
       <View style={styles.search}>
         <Ionicons name="search" size={17} color={colors.textFaint} />
         <TextInput

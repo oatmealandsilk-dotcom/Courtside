@@ -800,6 +800,17 @@ export const remote = {
     });
     if (error) fail('coach question save')(error);
   },
+  /**
+   * Deletes your own public coach question; the coaches' answers go with it
+   * (migration 57). Throws when nothing was deleted: the database answers a
+   * refused delete with zero rows, not an error, so an empty answer is the
+   * only sign it did not happen.
+   */
+  async deleteCoachQuestion(id: ID) {
+    const { data, error } = await need().from('coach_questions').delete().eq('id', id).select('id');
+    if (error) throw new Error(error.message);
+    if (!(data ?? []).length) throw new Error('coach question not deleted');
+  },
   async insertCoachReply(r: CoachReply) {
     const { error } = await need().from('coach_replies').upsert({ id: r.id, question_id: r.questionId, coach_user_id: r.coachUserId, body: r.body, created_at: r.createdAt });
     if (error) fail('coach reply save')(error);
