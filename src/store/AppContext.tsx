@@ -422,6 +422,15 @@ interface AppActions {
   joinHit: (hitId: ID) => Promise<{ conversationId?: ID; error?: string }>;
   leaveHit: (hitId: ID) => void;
   cancelHit: (hitId: ID) => void;
+  /** Your hits, posted or joined, from the last two days, called-off ones included: for "How was the hit?". The demo's are already loaded. */
+  recentHits: () => Promise<HitRequest[]>;
+  /**
+   * Your posts that carry a session, fresh from the server and kept with the
+   * rest, so "Already posted" is right however few of your posts the app
+   * holds (one session, one post). False when they could not be read. The
+   * demo's are already loaded.
+   */
+  loadMySessionPosts: () => Promise<boolean>;
 
   toggleLike: (postId: ID) => void;
   addPost: (input: NewPostInput) => ID;
@@ -2023,6 +2032,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.map((h) => (h.id === hitId ? { ...h, joinedIds: h.joinedIds.filter((x) => x !== me) } : h)) }));
     if (live(me, hitId)) void remote.leaveHit(hitId);
   }, [requireUser]);
+
+  const recentHits = useCallback(async (): Promise<HitRequest[]> => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me)) return stateRef.current.hitRequests;
+    return remote.fetchMyRecentHits(me!).catch(() => []);
+  }, []);
+
+  const loadMySessionPosts = useCallback(async (): Promise<boolean> => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me)) return true;
+    const got = await remote.fetchMySessionPosts(me!).catch(() => null);
+    if (!got) return false;
+    setState((prev) => addPosts(prev, got));
+    return true;
+  }, []);
 
   const cancelHit = useCallback((hitId: ID) => {
     const me = requireUser();
@@ -4789,6 +4813,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       joinHit,
       leaveHit,
       cancelHit,
+      recentHits,
+      loadMySessionPosts,
       updateIdentity,
       toggleLike,
       addPost,
@@ -4947,6 +4973,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       joinHit,
       leaveHit,
       cancelHit,
+      recentHits,
+      loadMySessionPosts,
       updateIdentity,
       toggleLike,
       addPost,
