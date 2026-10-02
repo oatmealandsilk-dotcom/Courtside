@@ -196,6 +196,13 @@ export interface SessionDetail {
   drills: string[];
   /** Missing when the player didn't rate it. */
   intensity?: 1 | 2 | 3 | 4 | 5;
+  /** The tracker session it came from (migration 58); the server rebuilds the numbers from it. */
+  activityId?: ID;
+  /** Where the numbers came from, for the label under them. */
+  source?: StatsSource;
+  /** Only when the author chose to show heart rate, and only for adults. */
+  maxHr?: number;
+  avgHr?: number;
 }
 
 /** scale ≥ 1; x and y are the picture's centre offset as fractions of the frame's width and height. */

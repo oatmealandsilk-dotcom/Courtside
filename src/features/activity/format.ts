@@ -1,5 +1,6 @@
-import type { DetectedActivity, StatsSource } from '@/data/types';
+import type { DetectedActivity, SessionDetail, StatsSource } from '@/data/types';
 import { localDay } from '@/features/practice/stats';
+import { duration } from '@/lib/format';
 
 /*
  * How a tracker's tennis session is put into words: its name, its day, its
@@ -57,13 +58,17 @@ export function statsSourceOf(a: DetectedActivity): StatsSource {
   return 'health-connect';
 }
 
-/** Where the numbers came from, in words only: never a logo. */
+/**
+ * Where a post's numbers came from, in words only, never a logo: WHOOP's
+ * own attribution wording, and "From …" for Apple's, so it reads as the
+ * source rather than a device tag.
+ */
 export function sourceLabel(s: StatsSource): string {
   switch (s) {
     case 'whoop': return 'Data by WHOOP';
-    case 'apple-watch': return 'Apple Watch';
-    case 'apple-health': return 'Apple Health';
-    default: return 'Health Connect';
+    case 'apple-watch': return 'From Apple Watch';
+    case 'apple-health': return 'From Apple Health';
+    default: return 'From Health Connect';
   }
 }
 
@@ -85,4 +90,27 @@ export function privateLine(a: DetectedActivity): string {
     a.kcal ? `${a.kcal} kcal` : null,
     a.source === 'whoop' && a.strain != null ? `Strain ${a.strain.toFixed(1)}` : null,
   ].filter(Boolean).join(' · ');
+}
+
+/**
+ * The stats a post carries from a tracker session: time on court always,
+ * heart rate only when the author switched it on and is a confirmed adult.
+ * It is the same shape the server rebuilds from the private record
+ * (fill_post_session_stats, migration 58), so the copy shown straight away
+ * matches what is saved. Sending maxHr is how the post asks for heart rate.
+ */
+export function sessionFromActivity(a: DetectedActivity, showHr: boolean, adult: boolean): SessionDetail {
+  return {
+    focus: 'Tennis',
+    minutes: a.minutes,
+    drills: [],
+    activityId: a.id,
+    source: statsSourceOf(a),
+    ...(showHr && adult && a.maxHr ? { maxHr: a.maxHr, ...(a.avgHr ? { avgHr: a.avgHr } : {}) } : {}),
+  };
+}
+
+/** "1h 24m · 171 max bpm · Data by WHOOP": a post's stats in one line of words. */
+export function statsLine(s: SessionDetail): string {
+  return [duration(s.minutes), s.maxHr ? `${s.maxHr} max bpm` : null, sourceLabel(s.source ?? 'apple-health')].filter(Boolean).join(' · ');
 }

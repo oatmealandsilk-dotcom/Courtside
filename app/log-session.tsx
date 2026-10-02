@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
@@ -7,6 +7,7 @@ import { DragSheet } from '@/components/DragSheet';
 import { Field } from '@/components/ui';
 import { Chips, Section, SheetTitle, Submit, Tiles, formBody } from '@/components/sheet/SheetForm';
 import { activityDay, activityWhen, fromWho, privateLine, statsSourceOf } from '@/features/activity/format';
+import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { localDay } from '@/features/practice/stats';
 import type { DetectedActivity, PracticeSession } from '@/data/types';
 import { confirm } from '@/lib/confirm';
@@ -15,7 +16,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography } from '@/theme';
 
 const KINDS: { value: PracticeSession['kind']; label: string }[] = [
   { value: 'practice', label: 'Practice' },
@@ -42,7 +43,9 @@ function lengthsFor(a: DetectedActivity) {
  * Opened from a "Tennis detected" alert (?activity=), it comes filled in
  * from the tracker's session: its day, its exact length, and a private line
  * of its numbers. Save counts it toward the streak, once; "Not tennis?"
- * hides it instead (migration 58).
+ * hides it instead (migration 58). "Save and post" (or "Post it", once
+ * logged) saves the same way, then opens a new post with the session's stats
+ * on it: nothing from the tracker is public until that post is shared.
  */
 export default function LogSession() {
   const styles = useThemedStyles(styleDefinitions);
@@ -50,6 +53,11 @@ export default function LogSession() {
   const { actions, detectedActivities, remoteLoaded } = useApp();
   const [closeSignal, setCloseSignal] = useState(0);
   const close = () => setCloseSignal((n) => n + 1);
+  // The session to post once the sheet has slid away, when the player chose to post it.
+  const next = useRef<string | null>(null);
+  // Posting is offered only while the server has tennis sessions switched on for its source.
+  const flags = useTennisFlags();
+  const postable = (x: DetectedActivity) => (x.source === 'whoop' ? flags.whoop : x.source === 'apple-health' ? flags.apple : false);
 
   // The tracker session it was opened for. A copy of one already waiting
   // (the same game from the watch and from WHOOP) opens that one instead.
@@ -88,17 +96,24 @@ export default function LogSession() {
   const [opponent, setOpponent] = useState('');
   const [when, setWhen] = useState<'today' | 'yesterday'>('today');
   const [saving, setSaving] = useState(false);
+  // Which button the save came from, so only that one spins.
+  const [andPost, setAndPost] = useState(false);
   const [error, setError] = useState('');
 
-  const save = async () => {
+  const save = async (post = false) => {
     if (!minutes || saving) return;
     setSaving(true);
+    setAndPost(post);
     setError('');
     const day = fresh ? activityDay(fresh) : when === 'today' ? localDay(new Date()) : localDay(Date.now() - 86_400_000);
     if (fresh) setFrozen(fresh);
     try {
       await actions.logSession({ minutes, kind, won: won === 'won' ? true : won === 'lost' ? false : undefined, opponent, day, ...(fresh ? { activityId: fresh.id } : {}) });
-      showToast({ title: 'Session logged', body: 'Your streak and numbers are up to date.', icon: 'checkmark-circle-outline' });
+      // Posting goes straight on to the new post, which only opens once the
+      // save went through, and says "Posted" when shared. A toast there would
+      // sit over its Share button for a few seconds.
+      if (post && fresh) next.current = fresh.id;
+      else showToast({ title: 'Session logged', body: 'Your streak and numbers are up to date.', icon: 'checkmark-circle-outline' });
       close();
     } catch (e) {
       setFrozen(null);
@@ -128,14 +143,25 @@ export default function LogSession() {
     <SheetTitle title="Log a session" line="Keeps your streak, hours and win rate. Only you see it." onClose={close} />
   );
   const numbers = fresh ? privateLine(fresh) : '';
+  // Once the sheet is gone: the new post with this session's stats, in this page's place, or back where it was opened from.
+  const dismissed = () => (next.current ? router.replace({ pathname: '/compose', params: { activity: next.current } }) : router.back());
 
   return (
-    <DragSheet fitContent closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.7} header={header}>
+    <DragSheet fitContent closeSignal={closeSignal} onDismissed={dismissed} peekFraction={0.7} header={header}>
       {waiting ? (
         <View style={styles.wait}><CourtSpinner size={34} /></View>
       ) : done ? (
         <ScrollView contentContainerStyle={formBody}>
-          <Submit label="Close" onPress={close} />
+          {done.status === 'logged' && postable(done) ? (
+            <>
+              <Submit label="Post it" onPress={() => { next.current = done.id; close(); }} />
+              <Pressable accessibilityRole="button" onPress={close} style={({ pressed }) => [styles.second, pressed && styles.pressed]}>
+                <Text style={styles.secondText}>Close</Text>
+              </Pressable>
+            </>
+          ) : (
+            <Submit label="Close" onPress={close} />
+          )}
         </ScrollView>
       ) : (
         <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled">
@@ -161,7 +187,20 @@ export default function LogSession() {
             </Section>
           )}
           {error ? <Text style={styles.error}>{error}</Text> : null}
-          <Submit label="Save" onPress={() => { void save(); }} disabled={!minutes} busy={saving} waiting="Pick how long" />
+          <Submit label="Save" onPress={() => { void save(); }} disabled={!minutes} busy={saving && !andPost} waiting="Pick how long" />
+          {fresh && postable(fresh) ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Save and post"
+              accessibilityState={{ disabled: !minutes || saving, busy: saving && andPost }}
+              disabled={!minutes || saving}
+              onPress={() => { void save(true); }}
+              style={({ pressed }) => [styles.second, (!minutes || (saving && !andPost)) && styles.secondOff, pressed && styles.pressed]}
+            >
+              {saving && andPost ? <ActivityIndicator size="small" color={colors.text} /> : null}
+              <Text style={styles.secondText}>Save and post</Text>
+            </Pressable>
+          ) : null}
           {fresh ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Not tennis? Hide this session" hitSlop={8} onPress={() => hide(fresh)} style={({ pressed }) => [styles.hide, pressed && { opacity: 0.6 }]}>
               <Text style={styles.hideText}>Not tennis? Hide it</Text>
@@ -181,4 +220,9 @@ const styleDefinitions = StyleSheet.create({
   hint: { ...typography.small, color: colors.textFaint },
   hide: { alignSelf: 'center', paddingVertical: spacing.xs },
   hideText: { ...typography.smallStrong, color: colors.textMuted },
+  // The quieter of the two buttons: Save's size and shape, outlined rather than filled.
+  second: { flexDirection: 'row', gap: 10, height: 54, marginTop: -spacing.sm, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface },
+  secondOff: { opacity: 0.5 },
+  secondText: { ...typography.bodyStrong, fontSize: 16, color: colors.text },
+  pressed: { opacity: 0.7 },
 });

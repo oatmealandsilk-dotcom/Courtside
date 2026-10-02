@@ -1,6 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { show as showToast } from '@/lib/toast';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
@@ -17,6 +18,8 @@ import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { openPlacePicker } from '@/features/places/picker';
 import { PreparingRing } from '@/components/PreparingRing';
 import { TagPlayers } from '@/components/TagPlayers';
+import { AttachSessionStats } from '@/components/AttachSessionStats';
+import { activityTitle, sessionFromActivity } from '@/features/activity/format';
 import { addToBank, getBank } from '@/features/compose/mediaBank';
 import { useApp } from '@/store/AppContext';
 import { courtRows, fetchCourts, peekCourts, type Court } from '@/features/players/courts';
@@ -46,6 +49,12 @@ const goBackNow = () => router.back();
 const landOnFeed = () => { if (router.canDismiss()) goHome(); else router.replace('/(tabs)'); };
 /** Each choice in the Create box arrives a moment after the one above it. */
 const arrive = (index: number) => FadeInDown.delay(90 + index * 55).duration(260).easing(Easing.out(Easing.cubic));
+/**
+ * "Show heart rate" is remembered on this phone for the next session posted,
+ * one choice per account: switching accounts on a shared phone must not
+ * switch someone else's heart rate on for them.
+ */
+const showHrKey = (userId: string) => `courtside-activity-show-hr:${userId}`;
 /** choose → library → form, with back always stepping one page left. */
 type Stage = 'choose' | 'library' | 'edit' | 'form';
 
@@ -53,13 +62,40 @@ type Stage = 'choose' | 'library' | 'edit' | 'form';
  * Instagram-shaped composer: pick media, write a caption, post.
  * A post carries a caption and how long you were on court — nothing else.
  * Questions are asked from their own sheet (app/ask.tsx), not from here.
+ *
+ * Opened from a logged tennis session (?activity=, "Save and post"), it
+ * starts on the form with the session's stats at the top; a photo or video
+ * is optional then. That path lives in its own `activity` branches below,
+ * so a normal post, a clip and a challenge entry are untouched by it.
  */
 export default function Compose() {
   const styles = useThemedStyles(styleDefinitions);
-  const { actions, posts, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled } = useApp();
+  const { actions, posts, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions } = useApp();
 
   // The story rail opens this straight at the library with ?mode=story.
-  const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string }>();
+  const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string; activity?: string }>();
+  // The tracker session being posted, held from the moment the page opens so
+  // a refresh of your sessions in the meantime cannot change what is posted.
+  const [activity] = useState(() => (params.activity ? detectedActivities.find((x) => x.id === params.activity) : undefined));
+  // Heart rate only ever goes on a confirmed adult's post.
+  const adult = currentUser?.ageGroup === 'adult';
+  const [attached, setAttached] = useState(!!activity);
+  const [showHr, setShowHr] = useState(false);
+  const hrTouched = useRef(false);
+  useEffect(() => {
+    if (!activity || !currentUserId) return;
+    let live = true;
+    try {
+      void AsyncStorage.getItem(showHrKey(currentUserId)).then((v) => { if (live && !hrTouched.current) setShowHr(v === '1'); }).catch(() => undefined);
+    } catch { /* storage unavailable: it starts off */ }
+    return () => { live = false; };
+  }, [activity, currentUserId]);
+  const flipHr = (on: boolean) => {
+    hrTouched.current = true;
+    setShowHr(on);
+    if (!currentUserId) return;
+    try { void AsyncStorage.setItem(showHrKey(currentUserId), on ? '1' : '0').catch(() => undefined); } catch { /* not remembered, still applied */ }
+  };
   // Opened from the weekly challenge: its tag starts the caption, which is what makes the clip an entry.
   // A challenge takes a clip and nothing else: no Post, Instant or Thread here,
   // the phone's videos open straight away, and a photo is never taken.
@@ -70,7 +106,8 @@ export default function Compose() {
   // The camera's photo travels in memory; the address only says one is waiting.
   const shotUri = params.shot === 'pending' ? takePendingShot() : params.shot;
   const isHit = params.mode === 'hit' && !!shotUri;
-  const [stage, setStage] = useState<Stage>(isHit ? 'form' : 'choose');
+  // A tracker session goes straight to the form too: the photo is optional.
+  const [stage, setStage] = useState<Stage>(isHit ? 'form' : activity ? 'form' : 'choose');
   // The courts around you start loading while you pick and edit, so Add
   // location opens on a full list (it asks for the same spot, from the same cache).
   useEffect(() => {
@@ -176,7 +213,8 @@ export default function Compose() {
     return () => { on = false; };
   }, [canSuggest, hereLat, hereLng]);
 
-  const canSubmit = !!media?.uri && (mode !== 'clip' || media.kind === 'video');
+  // A tracker session's post needs its stats or a picture; anything else needs a picture.
+  const canSubmit = activity ? attached || !!media?.uri : !!media?.uri && (mode !== 'clip' || media.kind === 'video');
 
   // A quick second tap on Share would post it twice.
   const sent = useRef(false);
@@ -193,6 +231,31 @@ export default function Compose() {
         thumbnailUrl: media?.thumbnailUrl ?? (media?.kind === 'photo' ? media.uri : undefined),
       });
       landOnFeed();
+      return;
+    }
+
+    if (activity) {
+      // The stats go on only while attached, and such a post is never offered
+      // for CourtSide's Instagram (the server holds both rules too).
+      actions.addPost({
+        kind: attached ? 'session' : 'note',
+        orientation,
+        trimStart: edit.trimStart, trimEnd: edit.trimEnd, muted: edit.muted, volume: edit.volume, speed: edit.speed, crop: edit.crop,
+        body: body.trim() || (attached ? activityTitle(activity) : ''),
+        tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
+        taggedUserIds: tagged.length ? tagged : undefined,
+        location: location.trim() || undefined,
+        court: location.trim() && court ? court : undefined,
+        featureOk: attached ? false : featureOk ? undefined : false,
+        imageUrl: media?.kind === 'photo' ? media.uri : undefined,
+        videoUrl: media?.kind === 'video' ? media.uri : undefined,
+        mediaLabel: media?.label,
+        thumbnailUrl: media?.thumbnailUrl ?? (media?.kind === 'photo' ? media.uri : undefined),
+        session: attached ? sessionFromActivity(activity, showHr, adult) : undefined,
+      });
+      const firstPost = !posts.some((p) => p.authorId === currentUserId);
+      landOnFeed();
+      if (firstPost) setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800);
       return;
     }
 
@@ -330,6 +393,8 @@ export default function Compose() {
           // Back means "wrong one": straight back into your photos to pick again,
           // not out to the menu. Stories go back to their own library.
           onBack={() => {
+            // A tracker session's photo is optional: back drops it and returns to the post.
+            if (activity) { setMedia(null); setPicked(null); setStage('form'); return; }
             if (params.mode === 'story') { setStage('library'); return; }
             setStage('choose');
             void openDevice(mode === 'clip' ? 'video' : 'all');
@@ -412,12 +477,39 @@ export default function Compose() {
         <Screen
           title={mode === 'clip' ? 'New clip' : mode === 'post' ? 'New post' : mode === 'story' ? 'New story' : 'New instant'}
           compactTitle
-          onBack={() => (mode === 'hit' ? router.navigate('/hit') : setStage('edit'))}
+          onBack={() => (mode === 'hit' ? router.navigate('/hit') : activity && !media ? router.back() : setStage('edit'))}
           right={<Button label={mode === 'story' || mode === 'hit' ? 'Post instant' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit} />}
         >
           <View style={mode === 'story' || mode === 'hit' ? styles.form : null}>
+            {activity ? (
+              <AttachSessionStats
+                activity={activity}
+                attached={attached}
+                onAttach={setAttached}
+                adult={adult}
+                showHr={showHr}
+                onShowHr={flipHr}
+                posted={posts.some((p) => p.authorId === currentUserId && p.session?.activityId === activity.id)}
+                loggedMinutes={sessions.find((x) => x.activityId === activity.id)?.minutes}
+              />
+            ) : null}
             <View style={styles.stage}>
-              {mode === 'hit' && media?.uri ? (
+              {activity && !media ? (
+                // No picture yet: an invitation to add one, not an empty frame to fill.
+                // It is optional only while the stats are on: without them, the picture is the post.
+                <>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={attached ? 'Add a photo or video (optional)' : 'Add a photo or video'}
+                    onPress={() => { void openDevice('all'); }}
+                    style={({ pressed }) => [styles.addMedia, pressed && { opacity: 0.6 }]}
+                  >
+                    {preparing ? <PreparingRing size={22} done={prepDone} /> : <Ionicons name="images-outline" size={22} color={colors.textMuted} />}
+                    <Text style={styles.addMediaText}>{preparing ? 'Getting it ready…' : attached ? 'Add a photo or video (optional)' : 'Add a photo or video'}</Text>
+                  </Pressable>
+                  {pickError ? <Text style={[styles.pickError, styles.addMediaError]}>{pickError}</Text> : null}
+                </>
+              ) : mode === 'hit' && media?.uri ? (
                 // The hit is what the camera took, full stop: shown plainly, nothing to click.
                 <View style={styles.hitFrame}>
                   <Image source={{ uri: media.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel="Your instant" />
@@ -445,7 +537,7 @@ export default function Compose() {
               <>
                 {/* The caption, with no label over it: the box says what it is. */}
                 <View style={styles.caption}>
-                  <Field accessibilityLabel="Caption" value={body} onChangeText={setBody} placeholder="Write a caption…" multiline minHeight={88} mentions />
+                  <Field accessibilityLabel="Caption" value={body} onChangeText={setBody} placeholder={activity ? `${activityTitle(activity)} — how did it go?` : 'Write a caption…'} multiline minHeight={88} mentions />
                 </View>
                 {inChallenge ? (
                   <View style={styles.challengeChip} accessible accessibilityLabel={`Entering this week's challenge: ${challenge.title}`}>
@@ -486,7 +578,8 @@ export default function Compose() {
                   ) : (
                     <FormRow line icon="location-outline" label="Add location" chevron onPress={() => openPlacePicker((value, picked) => { setLocation(value); setCourt(picked ?? null); }, location)} />
                   )}
-                  <FormRow
+                  {/* A tracker session already knows its time on court. */}
+                  {activity ? null : <FormRow
                     ref={minutesRow}
                     line
                     icon="time-outline"
@@ -509,8 +602,9 @@ export default function Compose() {
                         style={styles.minutesInput}
                       />
                     }
-                  />
-                  <FormRow
+                  />}
+                  {/* Tracker stats are never offered for CourtSide's Instagram. */}
+                  {activity && attached ? null : <FormRow
                     line
                     icon="megaphone-outline"
                     label="Feature on CourtSide's Instagram"
@@ -520,7 +614,7 @@ export default function Compose() {
                     onPress={() => setFeatureOk((on) => !on)}
                     // The row is the switch: the toggle only shows its state, so one tap flips it once.
                     accessory={<View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><Toggle value={featureOk} onChange={setFeatureOk} /></View>}
-                  />
+                  />}
                 </View>
               </>
             )}
@@ -564,6 +658,10 @@ const styleDefinitions = StyleSheet.create({
   minutesInput: { ...typography.body, color: colors.text, textAlign: 'right', width: 88, alignSelf: 'stretch', paddingVertical: 0, paddingHorizontal: 0, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
   note: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
   pickError: { ...typography.small, color: colors.danger, lineHeight: 18 },
+  // A tracker session's optional picture: a dashed space to add one.
+  addMedia: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 56, paddingHorizontal: spacing.lg, borderRadius: radius.lg, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderStrong },
+  addMediaText: { ...typography.body, color: colors.textMuted, flexShrink: 1 },
+  addMediaError: { marginTop: spacing.sm },
   hitFrame: { width: '100%', aspectRatio: 4 / 3, maxHeight: 520, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000', alignSelf: 'center' },
   hitMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   hitPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: colors.brand, backgroundColor: colors.brandDim },

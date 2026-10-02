@@ -14,6 +14,7 @@ import { isNewHere } from '@/features/feed/newHere';
 import { RichText } from '@/components/RichText';
 import type { Post, User } from '@/data/types';
 import { openCourt } from '@/features/players/courtLink';
+import { statsLine } from '@/features/activity/format';
 import { compactNumber, relativeTime, timeLeft } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useTourBusy } from '@/features/tour/tourStore';
@@ -118,6 +119,13 @@ export function ReelCaption({ post, author, onAuthor, open, onOpenChange }: { po
           </Pressable>
         ) : null}
       </View>
+      {/* The app never posts a clip with tracker stats, but one that carries them still says where they came from. */}
+      {post.session?.activityId ? (
+        <View style={styles.metaItem}>
+          <Ionicons name="tennisball-outline" size={12} color={META_INK} style={EDGE_SMALL} />
+          <Text style={styles.metaText} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{statsLine(post.session)}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
