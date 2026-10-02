@@ -1,5 +1,7 @@
 import { Alert, Platform } from 'react-native';
 
+import { holdTour } from '@/features/tour/tourHold';
+
 export interface ConfirmOptions {
   /** A short question, the way other apps ask it: "Delete post?" */
   title: string;
@@ -37,15 +39,17 @@ export function confirm(options: ConfirmOptions) {
     else if (window.confirm(options.message ? `${options.title}\n${options.message}` : options.title)) yes();
     return;
   }
+  // The tutorial never starts under the question; it waits for the answer.
+  const answered = holdTour();
   Alert.alert(
     options.title,
     options.message,
     [
-      { text: 'Cancel', style: 'cancel' },
-      { text: options.confirmLabel, style: options.destructive ? 'destructive' : 'default', onPress: yes },
+      { text: 'Cancel', style: 'cancel', onPress: answered },
+      { text: options.confirmLabel, style: options.destructive ? 'destructive' : 'default', onPress: () => { answered(); yes(); } },
     ],
     // Android: a tap outside the alert counts as Cancel, as it does everywhere else.
-    { cancelable: true },
+    { cancelable: true, onDismiss: answered },
   );
 }
 

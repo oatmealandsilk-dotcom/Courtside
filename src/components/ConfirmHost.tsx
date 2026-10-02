@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
+import { useHoldTour } from '@/features/tour/tourHold';
 import { setConfirmHost, type ConfirmOptions } from '@/lib/confirm';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -23,6 +24,8 @@ export function ConfirmHost() {
   // words while it fades out, instead of going blank on the way.
   const [request, setRequest] = useState<ConfirmOptions | null>(null);
   const [open, setOpen] = useState(false);
+  // The tutorial never starts under the question; it waits for the answer.
+  useHoldTour(open);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return undefined;

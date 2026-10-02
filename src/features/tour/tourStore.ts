@@ -41,8 +41,9 @@ export function useTourOpen(): boolean {
 }
 
 /**
- * Set while the tour is on its way (the short wait on the start page before
- * the dim arrives), so the feed's own swipe hint keeps out of its way.
+ * Set while the tour is on its way (the short wait before the dim arrives,
+ * on whichever tab the player is), so the feed's own swipe hint keeps out of
+ * its way.
  */
 let pending = false;
 export function setTourPending(on: boolean): void {
@@ -71,12 +72,16 @@ export function nextStep(): void {
   emit();
 }
 
-/** Skip, Back on Android, Escape on a keyboard: over at once, no "are you sure?". */
+/**
+ * Skip, Back on Android, Escape on a keyboard: over at once, no "are you
+ * sure?". The player stays on the page under the dim, the one they were
+ * just looking at; nothing slides away after they asked it to stop.
+ */
 export function skipTour(): void {
   close();
 }
 
-/** Ended by something else (the player left Community, signed out): no fuss. */
+/** Ended by something else (a page opened over the tabs, signed out): no fuss. */
 export function endTourQuietly(): void {
   close();
 }
@@ -92,7 +97,7 @@ function close() {
 export interface TourRequest {
   /** Skip the "new account" and "already seen" checks, and write nothing. */
   force: boolean;
-  /** Which of the five tips to open on, counted from 0. */
+  /** Which tip to open on, counted from 0 (see TOUR_STEPS). */
   startAt: number;
   /** ?tour=new: the real automatic start, pretending only that the account is new. */
   pretendNew?: boolean;
@@ -102,10 +107,10 @@ export interface TourRequest {
 
 /**
  * The demo switch, in a browser only, read once as the page loads, the way
- * ?as= is: ?tour=1 to ?tour=5 (one per tip) open the tour at that tip
- * whoever is signed in, and ?tour=new runs the real first-run check as if
- * the account were new. It does nothing the Settings row doesn't, so it is
- * harmless anywhere.
+ * ?as= is: ?tour=1 to ?tour=6 (one per tip, as many as TOUR_STEPS holds)
+ * open the tour at that tip whoever is signed in, and ?tour=new runs the
+ * real first-run check as if the account were new. It does nothing the
+ * Settings row doesn't, so it is harmless anywhere.
  */
 let request: TourRequest | null = (() => {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return null;

@@ -22,6 +22,8 @@ import { compactNumber, duration, relativeTime } from '@/lib/format';
 import type { Post, QuestionTopic, User } from '@/data/types';
 import { RichText } from '@/components/RichText';
 import { requestSection } from '@/features/navigation/swipeOrder';
+import { goToTab } from '@/features/navigation/startTab';
+import { useHoldTour } from '@/features/tour/tourHold';
 import { colors, radius, spacing, typography } from '@/theme';
 import { tagsNotInCaption } from '@/features/feed/tags';
 
@@ -81,6 +83,8 @@ function PostCardInner({
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const [menuOpen, setMenuOpen] = useState(false);
+  // The tutorial never starts under this menu.
+  useHoldTour(menuOpen);
   const meta = KIND_META[post.kind];
   // The heart fills on the tap; the store's own redraw follows without changing anything on screen.
   const like = useOptimisticToggle(`p:${post.id}`, liked, onToggleLike);
@@ -144,7 +148,7 @@ function PostCardInner({
       <Pressable onPress={onPress} style={styles.body}>
         <Tappable
           accessibilityLabel={`${meta.label}: see discussions about this in Community`}
-          onPress={() => { requestSection('/discuss', 'discussions'); requestSection('/discuss#topic', KIND_TOPIC[post.kind]); router.push('/discuss'); }}
+          onPress={() => { requestSection('/discuss', 'discussions'); requestSection('/discuss#topic', KIND_TOPIC[post.kind]); goToTab('/discuss'); }}
           style={[styles.kindRow, { borderColor: `${meta.tint}55` }]}
         >
           <Ionicons name={meta.icon} size={13} color={meta.tint} />

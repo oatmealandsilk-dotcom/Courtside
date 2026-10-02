@@ -4,6 +4,7 @@ import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { router } from 'expo-router';
 import { show as showToast } from '@/lib/toast';
 import { requestSection } from '@/features/navigation/swipeOrder';
+import { goToTab } from '@/features/navigation/startTab';
 import { goBack, goHome } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image as ExpoImage } from 'expo-image';
@@ -254,7 +255,7 @@ export default function Notifications() {
           icon="notifications-outline"
           title="Nothing yet"
           body="Likes, replies and shares on your posts land here. Following players is the quickest way to get some."
-          action={{ label: 'Find players near you', onPress: () => { requestSection('/discuss', 'players'); router.push('/discuss'); } }}
+          action={{ label: 'Find players near you', onPress: () => { requestSection('/discuss', 'players'); goToTab('/discuss'); } }}
         />
       ) : (
         <View style={styles.list}>

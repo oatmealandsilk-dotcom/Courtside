@@ -17,6 +17,7 @@ import { CommentThread, threadsOf } from '@/components/CommentThread';
 import { useApp } from '@/store/AppContext';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
+import { useHoldTour } from '@/features/tour/tourHold';
 import { BAR_OVERLAY_PX } from '@/features/navigation/barInset';
 import { allowTurning, stayUpright } from '@/lib/orientation';
 import { Tappable } from '@/components/Tappable';
@@ -87,6 +88,8 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
   // back), two taps like it. The single tap waits out the double-tap window.
   const insets = useSafeAreaInsets();
   const [full, setFull] = useState(false);
+  // The tutorial never starts under a photo opened full screen.
+  useHoldTour(full);
   const frameRef = useRef<View>(null);
   const zoom = useRef<ZoomableMediaHandle>(null);
   const [home, setHome] = useState<HomeRect | undefined>(undefined);
