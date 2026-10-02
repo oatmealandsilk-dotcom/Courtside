@@ -24,7 +24,7 @@ module.exports = {
     backgroundColor: '#F8F7F2',
     // Shown by Expo Go and native builds while the JS loads; matches app/index.tsx
     // so the loader fades straight into the in-app splash.
-    icon: green ? './assets/icon.png' : './assets/icon-beige.png',
+    icon: green ? './assets/icon.png' : './assets/icon-glow.png',
     splash: { image: './assets/splash.png', resizeMode: 'contain', backgroundColor: '#F8F7F2' },
     newArchEnabled: true,
     ios: {
@@ -36,7 +36,9 @@ module.exports = {
         ITSAppUsesNonExemptEncryption: false,
         NSCameraUsageDescription: 'CourtSide uses the camera to take an instant — one photo right after your session.',
         NSPhotoLibraryUsageDescription: 'CourtSide needs your photo library to choose clips and photos to post.',
-        NSLocationWhenInUseUsageDescription: 'CourtSide uses your location while the app is open to show players near you, and to put you on the map for the people you chose.',
+        NSLocationWhenInUseUsageDescription: 'CourtSide uses your location while the app is open to show courts and players near you. You choose who can see you.',
+        // Saving a chat photo to your camera roll from the share sheet (from build 11).
+        NSPhotoLibraryAddUsageDescription: 'CourtSide saves the photos you choose to your library.',
       },
     },
     android: {
@@ -53,7 +55,7 @@ module.exports = {
       ['expo-camera', { cameraPermission: 'CourtSide uses the camera to take an instant — one photo right after your session.', microphonePermission: 'CourtSide uses the microphone for voice notes you send in chats.', recordAudioAndroid: false }],
       ['expo-image-picker', { photosPermission: 'CourtSide needs your photo library to choose clips and photos to post.', microphonePermission: 'CourtSide uses the microphone for voice notes you send in chats.' }],
       'expo-video',
-      ['expo-location', { locationWhenInUsePermission: 'CourtSide uses your location while the app is open to show players near you, and to put you on the map for the people you chose.' }],
+      ['expo-location', { locationWhenInUsePermission: 'CourtSide uses your location while the app is open to show courts and players near you. You choose who can see you.' }],
       ['expo-notifications', { color: '#3F7049' }],
       'expo-apple-authentication',
       // No playing on in the background: nothing in the app is meant to be
@@ -74,7 +76,9 @@ module.exports = {
     // version, so bump `version` above whenever something native changes (a new
     // package with phone code, a permission, a plugin) and make a new build.
     runtimeVersion: { policy: 'appVersion' },
-    updates: { url: 'https://u.expo.dev/ce2e922d-6122-47f6-97b7-58a7fad4b3ef', checkAutomatically: 'ON_LOAD', fallbackToCacheTimeout: 0 },
+    // The phone waits up to 3 s while opening for a newer version and opens straight into it,
+    // so testers don't need to close and reopen twice (from build 11, Oct 2).
+    updates: { url: 'https://u.expo.dev/ce2e922d-6122-47f6-97b7-58a7fad4b3ef', checkAutomatically: 'ON_LOAD', fallbackToCacheTimeout: 3000 },
     // The app's home on Expo's build service (the robertzchen account), for builds and push alerts.
     extra: { eas: { projectId: process.env.EAS_PROJECT_ID ?? 'ce2e922d-6122-47f6-97b7-58a7fad4b3ef' } },
   },

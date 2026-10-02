@@ -85,8 +85,8 @@ const wimbledonColors: Palette = {
 const usOpenColors: Palette = {
   bg: '#14283D', bgElevated: '#1B3350', surface: '#1F3A5A', surfaceAlt: '#2A4A6E',
   border: '#32557A', borderStrong: '#5C82AC', text: '#E9F0F8', textMuted: '#BDCDDE', textFaint: '#A9B9CA',
-  brand: '#F5D547', brandInk: '#1B1A0A', brandDim: '#4A4A2C', court: '#4E87C4', clay: '#D08A5E',
-  hard: '#4E87C4', grass: '#5C9BD8', info: '#5C9BD8', success: '#FFE066', warning: '#E3B85A', danger: '#E07E72',
+  brand: '#F5D460', brandInk: '#1B1A0A', brandDim: '#4A4A2C', court: '#4E87C4', clay: '#D08A5E',
+  hard: '#4E87C4', grass: '#5C9BD8', info: '#5C9BD8', success: '#FFDF79', warning: '#E3B85A', danger: '#E07E72',
   // The one green on this court, kept for Open to hit: the ring a player wears reads as green, as promised.
   open: '#4FD487',
   overlay: 'rgba(4, 12, 22, 0.7)',

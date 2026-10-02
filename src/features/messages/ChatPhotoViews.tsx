@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import Constants from 'expo-constants';
 import { Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { GestureHandlerRootView, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
 import { Image as ExpoImage } from 'expo-image';
@@ -212,7 +213,10 @@ async function photoFile(source: string): Promise<string> {
 async function sharePhoto(source: string) {
   if (Platform.OS === 'web') { window.open(source, '_blank', 'noopener'); return; }
   const url = await photoFile(source);
-  await Share.share({ url }, { excludedActivityTypes: ['com.apple.UIKit.activity.SaveToCameraRoll'] });
+  // Save Image needs the photo-library-add permission line, which builds from 11 on carry;
+  // on older builds the share sheet leaves it out (it would close the app).
+  const build = Number(Constants.platform?.ios?.buildNumber ?? 0);
+  await Share.share({ url }, build >= 11 ? undefined : { excludedActivityTypes: ['com.apple.UIKit.activity.SaveToCameraRoll'] });
 }
 
 /**

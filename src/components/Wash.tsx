@@ -1,5 +1,5 @@
 import React, { useId } from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Defs, LinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { useTheme, type ThemeName } from '@/theme/ThemeProvider';
@@ -35,8 +35,16 @@ export const WASHES: Record<ThemeName, readonly [left: Glow, right: Glow]> = {
   // London: grass, and the club's purple.
   wimbledon: [[78, 138, 74, 0.26], [79, 38, 131, 0.20]],
   // New York: the warm lights low, the yellow ball high, on the night-blue ground.
-  'us-open': [[208, 138, 94, 0.42], [245, 213, 71, 0.26]],
+  'us-open': [[208, 138, 94, 0.42], [245, 212, 96, 0.26]],
 };
+/**
+ * An oval glow. Phones draw an SVG radial gradient's rx/ry as an oval; browsers ignore
+ * rx/ry and draw a circle, so on the web the same oval is drawn with a gradientTransform.
+ */
+const ellipse = (cx: number, cy: number, rx: number, ry: number) => (Platform.OS === 'web'
+  ? { cx: 0, cy: 0, r: 1, gradientTransform: `translate(${cx} ${cy}) scale(${rx} ${ry})` }
+  : { cx, cy, rx, ry });
+
 const rgb = (g: Glow) => `rgb(${g[0]}, ${g[1]}, ${g[2]})`;
 
 /**
@@ -57,11 +65,11 @@ export function Wash({ height = 320, strength = 1, style, fade, theme: wanted }:
     <View pointerEvents="none" style={[styles.wrap, { height }, style]}>
       <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
         <Defs>
-          <RadialGradient id={`a${id}`} cx="6" cy="58" rx="62" ry="58" gradientUnits="userSpaceOnUse">
+          <RadialGradient id={`a${id}`} {...ellipse(6, 58, 62, 58)} gradientUnits="userSpaceOnUse">
             <Stop offset="0" stopColor={rgb(l)} stopOpacity={l[3] * strength} />
             <Stop offset="1" stopColor={rgb(l)} stopOpacity={0} />
           </RadialGradient>
-          <RadialGradient id={`b${id}`} cx="94" cy="12" rx="60" ry="64" gradientUnits="userSpaceOnUse">
+          <RadialGradient id={`b${id}`} {...ellipse(94, 12, 60, 64)} gradientUnits="userSpaceOnUse">
             <Stop offset="0" stopColor={rgb(r)} stopOpacity={r[3] * strength} />
             <Stop offset="1" stopColor={rgb(r)} stopOpacity={0} />
           </RadialGradient>
