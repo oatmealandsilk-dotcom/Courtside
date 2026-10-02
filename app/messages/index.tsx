@@ -5,7 +5,7 @@ import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { GroupAvatar, eventText, groupName, hasGroupControls, holdsHitSpot, isGroupChat, isMuted, leaveGroupMessage, othersIn } from '@/features/messages/groups';
+import { GroupAvatar, eventText, groupName, hasGroupControls, isGroupChat, isMuted, leaveGroupMessage, othersIn } from '@/features/messages/groups';
 import { ChatSheet, type SheetOption } from '@/features/messages/ChatSheet';
 import { MUTE_CHOICES, muteUntil } from '@/features/messages/mute';
 import { Avatar, Chip, EmptyState, Screen } from '@/components/ui';
@@ -117,7 +117,7 @@ export default function Inbox() {
           key: 'leave', label: 'Leave group', icon: 'exit-outline' as const, danger: true,
           onPress: () => {
             const conversationId = held.conversation.id;
-            const message = leaveGroupMessage(holdsHitSpot(hitRequests, conversationId, currentUserId));
+            const message = leaveGroupMessage(held.conversation, hitRequests, currentUserId);
             confirmAfterMenu({ title: 'Leave this group?', message, confirmLabel: 'Leave', destructive: true, onConfirm: () => actions.leaveGroup(conversationId) });
           },
         }]

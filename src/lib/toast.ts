@@ -14,6 +14,12 @@ export interface ToastMessage {
    * there is time to reach it.
    */
   action?: { label: string; onPress: () => void };
+  /**
+   * A note that has to be read, not glanced at: why something was refused.
+   * It stays up much longer, its words wrap onto more lines instead of being
+   * cut off with "…", and a tap puts it away once read.
+   */
+  long?: boolean;
 }
 
 type Listener = (toast: ToastMessage) => void;

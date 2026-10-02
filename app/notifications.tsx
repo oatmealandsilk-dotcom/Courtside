@@ -330,8 +330,10 @@ export default function Notifications() {
                 {/* Follow back, right from the row, the way Instagram's inbox does it. */}
                 {group.kind === 'hit-match' && first && first !== currentUserId ? (
                   // Someone after the same game: the message is one tap away.
-                  <Pressable accessibilityRole="button" accessibilityLabel={`Message ${nameOf(first)}`} onPress={() => {
-                    if (!actions.canMessage(first)) { showToast({ title: 'Only people they follow can message them', icon: 'lock-closed-outline' }); return; }
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Message ${nameOf(first)}`} onPress={async () => {
+                    // Locked (checked with the server first), it says why in a note that stays to be read.
+                    const lock = await actions.messageLock(first);
+                    if (lock) { showToast({ title: lock, icon: 'lock-closed-outline', long: true }); return; }
                     router.push(`/messages/${actions.openConversationWith(first)}`);
                   }} style={styles.accept}><Text style={styles.acceptText}>Message</Text></Pressable>
                 ) : hitChat ? (

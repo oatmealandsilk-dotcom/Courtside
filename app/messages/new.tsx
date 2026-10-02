@@ -4,11 +4,12 @@ import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, EmptyState, Screen } from '@/components/ui';
-import { GROUP_CAP, GroupAvatar, groupName, isGroupChat, othersIn } from '@/features/messages/groups';
+import { GROUP_CAP, GroupAvatar, chatLockNote, groupLockNote, groupName, isGroupChat, named, othersIn } from '@/features/messages/groups';
+import { LockBadge, LockNote } from '@/features/messages/LockNote';
+import type { User } from '@/data/types';
 import { goBack } from '@/lib/goBack';
-import { show as showToast } from '@/lib/toast';
 import { useResponsive } from '@/lib/useResponsive';
-import { useApp } from '@/store/AppContext';
+import { useApp, type GroupOutcome } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, spacing, typography } from '@/theme';
 
@@ -26,6 +27,14 @@ import { colors, font, lift, spacing, typography } from '@/theme';
  *
  * `?with=<id>` opens with that person already picked: "Create a group with
  * Mira" from a one-to-one chat's details.
+ *
+ * Someone you can't reach shows a small lock on their face (the Send-to
+ * sheet's look). Tapping them first asks the server again (they may have
+ * followed you since the app opened), then either ticks them or says why in
+ * a note above the button that stays until things change, never in a toast
+ * that is gone before it is read. On its own a lock follows the one-to-one
+ * rule; once someone is ticked, the group rule, which has no "already
+ * chatting" exception.
  */
 export default function NewMessage() {
   const styles = useThemedStyles(styleDefinitions);
@@ -39,6 +48,16 @@ export default function NewMessage() {
     return first && first !== currentUserId && !blockedIds.includes(first) && users.some((u) => u.id === first) ? [first] : [];
   });
   const [title, setTitle] = useState('');
+  // Why the last tap or Create group did not go through, until the picks change.
+  const [note, setNote] = useState<{ text: string; alert?: boolean } | null>(null);
+  // Waiting on the server's yes for a new group (a real account only).
+  const [busy, setBusy] = useState(false);
+  // Opening: ask the server again whether the locked people follow you now,
+  // so the locks shown are today's rather than from when the app opened.
+  useEffect(() => {
+    const locked = users.filter((u) => u.id !== currentUserId && !blockedIds.includes(u.id) && !actions.canAddToGroup(u.id)).map((u) => u.id);
+    if (locked.length) void actions.recheckFollows(locked);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const term = query.trim().replace(/^@/, '').toLowerCase();
   const recent = [...conversations].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)).flatMap((c) => c.participantIds.filter((id) => id !== currentUserId));
   const matches = users
@@ -80,40 +99,82 @@ export default function NewMessage() {
     const out = node(backdrop)?.animate?.([{ opacity: 1 }, { opacity: 0 }], { duration: 150, easing: 'ease-in', fill: 'forwards' });
     if (out) out.onfinish = () => goBack('/messages'); else goBack('/messages');
   };
-  const toggle = (id: string, name: string) => {
-    if (picked.includes(id)) { setPicked((p) => p.filter((x) => x !== id)); return; }
-    // A teen can only be messaged, or put in a group, by people they follow.
-    if (!actions.canMessage(id)) { showToast({ title: `Only people ${name.split(' ')[0]} follows can message them`, icon: 'lock-closed-outline' }); return; }
-    if (picked.length >= GROUP_CAP - 1) { showToast({ title: `A group can have up to ${GROUP_CAP} people`, icon: 'people-outline' }); return; }
-    setPicked((p) => [...p, id]);
+  const firstName = (u?: User) => u?.name.trim().split(/\s+/)[0] ?? 'They';
+  // How notes name people: a first name, with the @handle when it's shared.
+  const namesOf = (ids: string[]) => ids.map((id) => users.find((u) => u.id === id)).filter((u): u is User => !!u).map((u) => named(u, users));
+  // With nobody ticked, a tap starts a one-to-one chat; with anyone ticked, it makes a group.
+  const lockedFor = (id: string) => !picked.includes(id) && (picked.length ? !actions.canAddToGroup(id) : !actions.canMessage(id));
+  // Ticked people who can't be put in a new group: one you chat with, say,
+  // who doesn't follow you. A group you already have with them just opens.
+  const blockers = picked.length > 1 && !sameGroup ? picked.filter((id) => !actions.canAddToGroup(id)) : [];
+  const toggle = async (id: string) => {
+    if (picked.includes(id)) { setPicked((p) => p.filter((x) => x !== id)); setNote(null); return; }
+    // Locked, unless they have followed you since the app opened: ask before saying no.
+    if (lockedFor(id) && !(await actions.recheckFollows([id])).includes(id)) {
+      const [who] = namesOf([id]);
+      setNote({ text: picked.length ? groupLockNote(who ? [who] : []) : chatLockNote(who) });
+      return;
+    }
+    if (picked.length >= GROUP_CAP - 1) { setNote({ text: `A group can have up to ${GROUP_CAP} people, you included.` }); return; }
+    setNote(null);
+    setPicked((p) => (p.includes(id) ? p : [...p, id]));
     setQuery('');
   };
-  const start = () => {
-    if (!picked.length) return;
-    const id = picked.length === 1 ? actions.openConversationWith(picked[0]) : sameGroup?.id ?? actions.createGroup(picked, title);
-    if (!id) return;
-    router.replace(`/messages/${id}`);
+  // The server's no, in words that name who when the app can tell.
+  const refusal = (outcome: Extract<GroupOutcome, { ok: false }>) => {
+    switch (outcome.why) {
+      case 'teen': return groupLockNote(namesOf(outcome.who), true);
+      case 'blocked': return 'Some of the people you picked can’t be in a group together. Take someone out and try again.';
+      case 'full': return `A group can have up to ${GROUP_CAP} people, you included.`;
+      default: return 'That group didn’t start. Check your connection and try again.';
+    }
+  };
+  const start = async () => {
+    if (!picked.length || busy || blockers.length) return;
+    if (picked.length === 1) { router.replace(`/messages/${actions.openConversationWith(picked[0])}`); return; }
+    if (sameGroup) { router.replace(`/messages/${sameGroup.id}`); return; }
+    setBusy(true);
+    const outcome = await actions.createGroup(picked, title);
+    setBusy(false);
+    if (!outcome) return;
+    if (outcome.ok) { router.replace(`/messages/${outcome.id}`); return; }
+    // Stay here with the picks as they were, so whoever is in the way can be taken out.
+    setNote({ text: refusal(outcome), alert: true });
   };
   const pickedUsers = picked.map((id) => users.find((u) => u.id === id)).filter((u): u is NonNullable<typeof u> => !!u);
   const chips = pickedUsers.length ? (
     <View style={styles.chips}>
-      {pickedUsers.map((u) => (
-        <Pressable key={u.id} accessibilityRole="button" accessibilityLabel={`Remove ${u.name}`} onPress={() => setPicked((p) => p.filter((x) => x !== u.id))} style={styles.chip}>
-          <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={20} />
-          <Text style={styles.chipText} numberOfLines={1}>{u.name.split(' ')[0]}</Text>
-          <Ionicons name="close" size={13} color={colors.brand} />
-        </Pressable>
-      ))}
+      {pickedUsers.map((u) => {
+        // Someone ticked who can't be in the group shows the lock here too, beside the way to take them out.
+        const stuck = blockers.includes(u.id);
+        return (
+          <Pressable key={u.id} accessibilityRole="button" accessibilityLabel={`Remove ${u.name}`} onPress={() => { void toggle(u.id); }} style={[styles.chip, stuck && styles.chipStuck]}>
+            <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={20} />
+            {stuck ? <Ionicons name="lock-closed" size={11} color={colors.textMuted} /> : null}
+            <Text style={[styles.chipText, stuck && styles.chipTextStuck]} numberOfLines={1}>{firstName(u)}</Text>
+            <Ionicons name="close" size={13} color={stuck ? colors.textMuted : colors.brand} />
+          </Pressable>
+        );
+      })}
     </View>
   ) : null;
-  const footer = picked.length ? (
+  // The notes sit above the button, pinned with it, so they are on screen wherever the list is scrolled.
+  const blockersText = blockers.length ? groupLockNote(namesOf(blockers), true) : null;
+  const notes = [blockersText, note && note.text !== blockersText ? note.text : null].filter((t): t is string => !!t);
+  const held = !!blockers.length || busy;
+  const footer = picked.length || notes.length ? (
     <View style={styles.footer}>
+      {notes.map((text) => (
+        <LockNote key={text} text={text} tone={note?.alert && text === note.text ? 'alert' : 'lock'} onClose={text === note?.text ? () => setNote(null) : undefined} />
+      ))}
       {picked.length > 1 ? (
         <TextInput value={title} onChangeText={(v) => setTitle(v.slice(0, 60))} placeholder="Group name (optional)" placeholderTextColor={colors.textFaint} style={styles.groupName} accessibilityLabel="Group name" />
       ) : null}
-      <Pressable accessibilityRole="button" onPress={start} style={({ pressed }) => [styles.start, pressed && { opacity: 0.85 }]}>
-        <Text style={styles.startText}>{picked.length === 1 ? 'Chat' : sameGroup ? 'Open group' : `Create group · ${picked.length + 1}`}</Text>
-      </Pressable>
+      {picked.length ? (
+        <Pressable accessibilityRole="button" accessibilityState={{ disabled: held, busy }} disabled={held} onPress={() => { void start(); }} style={({ pressed }) => [styles.start, held && styles.startHeld, pressed && { opacity: 0.85 }]}>
+          <Text style={styles.startText}>{picked.length === 1 ? 'Chat' : sameGroup ? 'Open group' : busy ? 'Creating group…' : `Create group · ${picked.length + 1}`}</Text>
+        </Pressable>
+      ) : null}
     </View>
   ) : null;
 
@@ -144,23 +205,31 @@ export default function NewMessage() {
         </>
       ) : null}
       {matches.length ? <Text style={styles.label}>{groups.length ? (term ? 'People' : 'Suggested') : term ? 'Results' : 'Suggested'}</Text> : null}
-      {matches.map((user) => (
-        <Pressable
-          key={user.id}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: picked.includes(user.id) }}
-          accessibilityLabel={user.name}
-          onPress={() => toggle(user.id, user.name)}
-          style={(state) => [styles.row, ((state as { hovered?: boolean }).hovered || state.pressed) && styles.rowOn]}
-        >
-          <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={44} />
-          <View style={styles.words}>
-            <Text style={styles.name} numberOfLines={1}>{user.name}</Text>
-            <Text style={styles.handle} numberOfLines={1}>@{user.handle}</Text>
-          </View>
-          <View style={[styles.tick, picked.includes(user.id) && styles.tickOn]}>{picked.includes(user.id) ? <Ionicons name="checkmark" size={15} color={colors.brandInk} /> : null}</View>
-        </Pressable>
-      ))}
+      {matches.map((user) => {
+        const on = picked.includes(user.id);
+        const locked = lockedFor(user.id);
+        return (
+          <Pressable
+            key={user.id}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: on }}
+            accessibilityLabel={locked ? `${user.name}. Locked` : user.name}
+            accessibilityHint={locked ? `Shows why you can’t ${picked.length ? 'add' : 'message'} ${firstName(user)}` : undefined}
+            onPress={() => { void toggle(user.id); }}
+            style={(state) => [styles.row, ((state as { hovered?: boolean }).hovered || state.pressed) && styles.rowOn]}
+          >
+            <View style={locked && styles.locked}>
+              <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={44} />
+              {locked ? <LockBadge /> : null}
+            </View>
+            <View style={[styles.words, locked && styles.locked]}>
+              <Text style={styles.name} numberOfLines={1}>{user.name}</Text>
+              <Text style={styles.handle} numberOfLines={1}>@{user.handle}</Text>
+            </View>
+            {locked ? null : <View style={[styles.tick, on && styles.tickOn]}>{on ? <Ionicons name="checkmark" size={15} color={colors.brandInk} /> : null}</View>}
+          </Pressable>
+        );
+      })}
       {!matches.length && !groups.length ? <EmptyState title="No players found" body="Try their name or username." /> : null}
     </>
   );
@@ -175,7 +244,8 @@ export default function NewMessage() {
           </View>
           {chips}
           {list}
-          <View style={{ height: picked.length ? 140 : 0 }} />
+          {/* Room under the list for the footer pinned over it (taller with a note in it). */}
+          <View style={{ height: picked.length || notes.length ? 140 + notes.length * 90 : 0 }} />
         </Screen>
         {footer}
       </View>
@@ -198,7 +268,7 @@ export default function NewMessage() {
           <TextInput value={query} onChangeText={setQuery} placeholder="Search" placeholderTextColor={colors.textFaint} autoCapitalize="none" autoCorrect={false} autoFocus style={styles.toInput} accessibilityLabel="To" />
         </View>
         {chips}
-        <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollBody, picked.length ? { paddingBottom: 150 } : null]}>{list}</ScrollView>
+        <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollBody, picked.length || notes.length ? { paddingBottom: 150 + notes.length * 90 } : null]}>{list}</ScrollView>
         {footer}
       </View>
     </View>
@@ -229,8 +299,14 @@ const styleDefinitions = StyleSheet.create({
   // The face sits 5px in from the pill's round end, so the pill hugs it.
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 5, paddingRight: 9, height: 30, borderRadius: 15, backgroundColor: colors.brandDim },
   chipText: { ...typography.smallStrong, color: colors.brand, maxWidth: 120 },
+  // A ticked person who can't be in the group: greyed, with the lock.
+  chipStuck: { backgroundColor: colors.surfaceAlt },
+  chipTextStuck: { color: colors.textMuted },
+  // Someone you can't pick right now, dimmed the way the Send-to sheet's locked tiles are.
+  locked: { opacity: 0.45 },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, gap: spacing.sm, padding: spacing.lg, paddingBottom: spacing.xl, backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   groupName: { ...typography.body, color: colors.text, height: 44, paddingHorizontal: 14, borderRadius: 12, backgroundColor: colors.bgElevated, outlineStyle: 'none' } as object,
   start: { height: 48, borderRadius: 24, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  startHeld: { opacity: 0.5 },
   startText: { ...typography.bodyStrong, color: colors.brandInk },
 });

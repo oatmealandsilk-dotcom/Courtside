@@ -61,9 +61,89 @@ export const hasGroupControls = (c: Conversation) => !isGroupChat(c) || c.adminI
 export const holdsHitSpot = (hits: HitRequest[], conversationId: ID, me: ID | null | undefined) =>
   !!me && hits.some((h) => h.conversationId === conversationId && h.joinedIds.includes(me));
 
-/** What "Leave this group?" says; in the chat of a hit you are in, that leaving also gives up your spot. */
-export const leaveGroupMessage = (givesUpSpot: boolean) =>
-  `Everyone sees that you left. Someone in it can add you back.${givesUpSpot ? ' You’ll also give up your spot in the hit.' : ''}`;
+/**
+ * You are a group's only admin and others are still in it. Leaving then
+ * hands the admin role on: the server gives it to whoever has been in the
+ * group longest (ensure_group_admin, migration 54).
+ */
+export const isOnlyAdmin = (c: Conversation, me: ID | null | undefined) =>
+  !!me && isGroupChat(c) && hasGroupControls(c) && isGroupAdmin(c, me) && (c.adminIds?.length ?? 0) === 1 && c.participantIds.length > 1;
+
+/**
+ * What "Leave this group?" says, honest about what leaving does there. The
+ * last one in it: the server deletes the group (leave_group, migration 54),
+ * so nobody is left to see it or add you back. Its only admin: whoever has
+ * been in it longest runs it next. In the chat of a hit you are in: your
+ * spot in the hit goes too.
+ */
+export function leaveGroupMessage(c: Conversation, hits: HitRequest[], me: ID | null | undefined): string {
+  const spot = holdsHitSpot(hits, c.id, me) ? ' You’ll also give up your spot in the hit.' : '';
+  if (c.participantIds.length <= 1) return `You’re the only one here. Leaving deletes the group and its messages.${spot}`;
+  return `Everyone sees that you left. Someone in it can add you back.${isOnlyAdmin(c, me) ? ' Whoever has been in it longest becomes the admin.' : ''}${spot}`;
+}
+
+/**
+ * What "Remove June?" says. In a hit's chat, June's "I'm in" goes with them
+ * (remove_group_member does the same) and adding June back doesn't bring it
+ * back, so it says so rather than suggesting it can all be undone.
+ */
+export const removeMemberMessage = (who: Named, givesUpSpot: boolean) =>
+  `${who.first} won’t get new messages. Someone in the group can add ${who.first} back.${givesUpSpot ? ` ${who.first}’s spot in the hit goes too.` : ''}`;
+
+/** First names in a sentence: "Dev", "Dev and June", "Dev, June and Mira", "Dev, June and 3 others". */
+export function nameList(firsts: string[]): string {
+  if (!firsts.length) return 'someone';
+  if (firsts.length === 1) return firsts[0];
+  if (firsts.length <= 3) return `${firsts.slice(0, -1).join(', ')} and ${firsts[firsts.length - 1]}`;
+  return `${firsts[0]}, ${firsts[1]} and ${firsts.length - 2} others`;
+}
+
+/**
+ * How a note names someone: `first` is their first name; `label` is the same
+ * with their @handle beside it when someone else here (you included) has
+ * that first name too, so a note about one of two William Goodwins, read by
+ * a William, says which one. A sentence uses `label` the first time and
+ * `first` after that.
+ */
+export type Named = { first: string; label: string };
+
+const firstNameOf = (u: User) => u.name.trim().split(/\s+/)[0] || u.handle;
+
+export function named(u: User, users: User[]): Named {
+  const first = firstNameOf(u);
+  const twin = users.some((x) => x.id !== u.id && firstNameOf(x).toLowerCase() === first.toLowerCase());
+  return { first, label: twin ? `${first} (@${u.handle})` : first };
+}
+
+/*
+ * Why someone can't be picked, said where it can be read (the pickers show it
+ * as a note that stays, not a toast that slips away). The rule is the
+ * server's: someone not known to be an adult (a teen, or an account with no
+ * birthday given yet) can only be messaged or put in a group by people they
+ * follow. The words name the person and never guess at "he" or "she"; they
+ * never say why the account is protected, since that would tell everyone
+ * it belongs to a teen. Nor do they tell you to go and ask for a follow: the
+ * rule is there to keep strangers from reaching these accounts, so the note
+ * only says what the rule is.
+ */
+
+/** "Only people Dev follows can message Dev." Without a name: "This player…". */
+export const chatLockNote = (who?: Named) =>
+  (who ? `Only people ${who.label} follows can message ${who.first}.` : 'This player can only be messaged by people they follow.');
+
+/**
+ * "Only people Dev follows can add Dev to a group." With `pickedAlready`,
+ * they are among the people ticked, so it also says the way on: take them
+ * out. With nobody named (the app couldn't tell who), the rule alone.
+ */
+export function groupLockNote(whos: Named[], pickedAlready = false): string {
+  if (!whos.length) return 'Someone you picked can only be added to a group by people they follow.';
+  if (whos.length === 1) {
+    const [w] = whos;
+    return `Only people ${w.label} follows can add ${w.first} to a group.${pickedAlready ? ` Take ${w.first} out to carry on.` : ''}`;
+  }
+  return `${nameList(whos.map((w) => w.label))} can only be added to a group by people they follow.${pickedAlready ? ' Take them out to carry on.' : ''}`;
+}
 
 /** The others in a chat, as people. */
 export const othersIn = (c: Conversation, users: User[], me: ID | null) =>
@@ -86,13 +166,7 @@ function who(id: ID, users: User[], me: ID | null, start: boolean): string {
 }
 
 /** Names in a sentence: "Dev", "Dev and June", "Dev, June and Mira", "Dev, June and 3 others" (the server words it the same way). */
-function names(ids: ID[], users: User[], me: ID | null): string {
-  const list = ids.map((id) => who(id, users, me, false));
-  if (!list.length) return 'someone';
-  if (list.length === 1) return list[0];
-  if (list.length <= 3) return `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`;
-  return `${list[0]}, ${list[1]} and ${list.length - 2} others`;
-}
+const names = (ids: ID[], users: User[], me: ID | null) => nameList(ids.map((id) => who(id, users, me, false)));
 
 /**
  * An event line, worded for whoever is reading it: "You added Dev and June",
