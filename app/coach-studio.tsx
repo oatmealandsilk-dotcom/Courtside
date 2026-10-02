@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Button, Chip, EmptyState, Field, Screen, Toggle, SegmentedControl } from '@/components/ui';
@@ -55,6 +55,8 @@ export default function CoachStudio() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
+  // Which button the error belongs to, so a payouts error shows by the payouts buttons, not far up the page.
+  const [errorKey, setErrorKey] = useState<string | null>(null);
   const [saved, setSaved] = useState('');
 
   // Back from Stripe's payout setup: ask Stripe how it went.
@@ -65,6 +67,20 @@ export default function CoachStudio() {
     setBusy('payouts');
     void actions.checkPayouts().catch(() => false).finally(() => setBusy(null));
   }, [coach, cameBack, actions]);
+
+  // Stripe often finishes its checks a few minutes after the coach comes
+  // back, and the iPhone never brings ?stripe= back here. So while payouts
+  // are started but not on yet, ask Stripe again each time the studio comes
+  // into view.
+  const focusChecked = useRef(false);
+  const waitingOnStripe = !!coach?.payoutsStarted && !coach.payoutsReady && payments.on === true;
+  useFocusEffect(useCallback(() => {
+    if (waitingOnStripe && !cameBack && !focusChecked.current) {
+      focusChecked.current = true;
+      void actions.checkPayouts().catch(() => false);
+    }
+    return () => { focusChecked.current = false; };
+  }, [waitingOnStripe, cameBack, actions]));
 
   if (!coach) {
     return (
@@ -88,8 +104,9 @@ export default function CoachStudio() {
   const run = async (key: string, work: () => Promise<unknown>, done?: string) => {
     setBusy(key);
     setError('');
+    setErrorKey(null);
     setSaved('');
-    try { await work(); if (done) setSaved(done); } catch (e) { setError(e instanceof Error ? e.message : 'That did not save. Try again.'); } finally { setBusy(null); }
+    try { await work(); if (done) setSaved(done); } catch (e) { setError(e instanceof Error ? e.message : 'That did not save. Try again.'); setErrorKey(key); } finally { setBusy(null); }
   };
 
   const savePage = () => run('page', () => actions.saveCoachListing({
@@ -102,8 +119,10 @@ export default function CoachStudio() {
 
   const priceCents = draft ? Math.round(Number(draft.price.replace(/[^0-9.]/g, '')) * 100) : 0;
   const draftOk = !!draft && draft.title.trim().length >= 2 && priceCents >= 500 && priceCents <= 100000;
-  // What the coach keeps: the price, less CourtSide's share and Stripe's card fee (about 2.9% + 30¢).
-  const keeps = priceCents ? Math.max(0, priceCents - Math.round(priceCents * payments.feePercent / 100) - Math.round(priceCents * 0.029 + 30)) : 0;
+  // What the coach keeps: the price, less CourtSide's share, worked out the
+  // same way as the server does. Stripe's card fee comes out of CourtSide's
+  // share, not the coach's.
+  const keeps = priceCents ? priceCents - Math.round(priceCents * payments.feePercent / 100) : 0;
   const saveDraft = () => {
     if (!draft || !draftOk) return;
     void run('service', async () => {
@@ -167,7 +186,7 @@ export default function CoachStudio() {
           <Text style={styles.linkText}>See your page</Text>
         </Pressable>
       </View>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error && errorKey !== 'payouts' ? <Text style={styles.error}>{error}</Text> : null}
 
       {/* ------------------------------------------------------- your page */}
       <Text style={styles.sectionTitle}>Your page</Text>
@@ -233,7 +252,7 @@ export default function CoachStudio() {
           {priceCents ? (
             <Text style={styles.meta}>
               {priceCents < 500 || priceCents > 100000 ? 'Prices run from $5 to $1,000.'
-                : `You receive about ${money(keeps)}. CourtSide keeps ${payments.feePercent}%, and Stripe takes about 2.9% + 30¢ for the card.`}
+                : `You receive ${money(keeps)}. CourtSide keeps ${payments.feePercent}%, which covers Stripe’s card fee.`}
             </Text>
           ) : null}
           <View style={styles.toggleRow}>
@@ -256,8 +275,9 @@ export default function CoachStudio() {
         <Text style={styles.muted}>Payouts open once CourtSide switches payments on. Your page and services can be ready before then.</Text>
       ) : coach.payoutsReady ? (
         <View style={styles.form}>
-          <Text style={styles.body}>Payouts are on. Each booking’s money lands in your bank a few days after it is paid, less CourtSide’s {payments.feePercent}% and Stripe’s card fee.</Text>
+          <Text style={styles.body}>Payouts are on. Each booking’s money lands in your bank a few days after it is paid, less CourtSide’s {payments.feePercent}%.</Text>
           <Button label="Open your Stripe dashboard" variant="secondary" onPress={() => void run('payouts', actions.openPayoutDashboard)} loading={busy === 'payouts'} full />
+          {error && errorKey === 'payouts' ? <Text style={styles.error}>{error}</Text> : null}
         </View>
       ) : (
         <View style={styles.form}>
@@ -270,8 +290,10 @@ export default function CoachStudio() {
             label={busy === 'payouts' ? 'Opening Stripe…' : coach.payoutsStarted ? 'Continue with Stripe' : 'Set up payouts'}
             onPress={() => void run('payouts', actions.setupPayouts)}
             loading={busy === 'payouts'}
+            disabled={payments.on === undefined}
             full
           />
+          {error && errorKey === 'payouts' ? <Text style={styles.error}>{error}</Text> : null}
         </View>
       )}
       </>}

@@ -1825,6 +1825,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Keep a ref so async actions read fresh state without re-creating callbacks.
   const stateRef = React.useRef(state);
   stateRef.current = state;
+  /** Unpaid bookings already re-checked with Stripe this run (see refreshCoaching). */
+  const askedAboutPayment = useRef<Set<ID>>(new Set());
 
   /*
    * What the server says about people and posts (migration 64). Nobody's age
@@ -4761,6 +4763,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!live(me)) return;
     const [coaching, requests] = await Promise.all([remote.fetchCoaching(me!), remote.fetchCoachingRequests()]);
     setState((p) => ({ ...p, ...coaching, coachingRequests: requests }));
+    // A safety net: a booking of mine still "not paid" from the last day may
+    // have been paid after all (the tab closed before Stripe sent me back).
+    // Stripe is asked about each once per app run; any that turn out paid
+    // show up straight away.
+    const unsure = requests.filter((r) => r.userId === me && r.status === 'awaiting-payment' && !askedAboutPayment.current.has(r.id) && Date.now() - Date.parse(r.createdAt) < 24 * 3_600_000);
+    if (!unsure.length) return;
+    unsure.forEach((r) => askedAboutPayment.current.add(r.id));
+    const paid = await Promise.all(unsure.map((r) => remote.confirmPayment(r.id).then((x) => x.paid).catch(() => false)));
+    if (paid.some(Boolean)) {
+      const fresh = await remote.fetchCoachingRequests();
+      setState((p) => ({ ...p, coachingRequests: fresh }));
+    }
   }, []);
 
   const confirmBooking = useCallback(async (requestId: ID) => {
@@ -4794,7 +4808,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const paid = /[?&]paid=1/.test(cameBack) || (await confirmBooking(requestId));
     await refreshCoaching();
     if (paid) haptics.commit();
-    return { outcome: paid ? ('paid' as const) : result.type === 'success' ? ('pending' as const) : ('cancelled' as const), requestId };
+    // Not paid yet is not the same as cancelled: the sheet may have been
+    // closed while Stripe was still taking the payment. Only Stripe's own
+    // cancel link (handled above) means nothing was charged; anything else
+    // goes to the booking page, which keeps asking Stripe for a while.
+    return { outcome: paid ? ('paid' as const) : ('pending' as const), requestId };
   }, [requireUser, refreshCoaching, confirmBooking]);
 
   const answerBooking = useCallback(async (requestId: ID, response: string) => {
@@ -4877,6 +4895,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     const back = Linking.createURL('coach-studio');
     const { url } = await remote.connectPayouts(back);
+    if (!url) return checkPayouts();
     if (Platform.OS === 'web') { window.location.assign(url); return false; }
     await WebBrowser.openAuthSessionAsync(url, back);
     return checkPayouts();
@@ -4884,7 +4903,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const openPayoutDashboard = useCallback(async () => {
     const { url } = await remote.payoutDashboard();
-    if (Platform.OS === 'web') window.open(url, '_blank', 'noopener');
+    // Same tab on the web: Safari blocks a new tab opened this long after the tap.
+    if (Platform.OS === 'web') window.location.assign(url);
     else await WebBrowser.openBrowserAsync(url);
   }, []);
 

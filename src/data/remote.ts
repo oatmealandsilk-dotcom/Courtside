@@ -1497,7 +1497,8 @@ export const remote = {
   checkout: (serviceId: ID, question: string, back: string, videoUrl?: string) => coachPayments<{ url: string; requestId: ID }>('checkout', { serviceId, question, back, videoUrl }),
   confirmPayment: (requestId: ID) => coachPayments<{ paid: boolean }>('confirm', { requestId }),
   refundBooking: (requestId: ID) => coachPayments<{ refunded: boolean }>('refund', { requestId }),
-  connectPayouts: (back: string) => coachPayments<{ url: string; ready: boolean }>('connect', { back }),
+  /** No `url` when payouts are already set up: nothing to send the coach to Stripe for. */
+  connectPayouts: (back: string) => coachPayments<{ url?: string; ready: boolean }>('connect', { back }),
   checkPayouts: () => coachPayments<{ ready: boolean; started: boolean; due?: number }>('connect-check'),
   payoutDashboard: () => coachPayments<{ url: string }>('dashboard'),
   paymentsAdminStatus: () => coachPayments<{ stripe: boolean; live: boolean; webhook: boolean; feePercent: number }>('admin-status'),
