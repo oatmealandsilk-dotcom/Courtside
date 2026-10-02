@@ -11,8 +11,15 @@ import { FollowPill } from '@/components/FollowPill';
 import { LevelPill } from '@/components/LevelPill';
 import { Tappable } from '@/components/Tappable';
 import * as haptics from '@/lib/haptics';
-import type { Court } from '@/features/players/courts';
+import type { Court, CourtRow } from '@/features/players/courts';
 import { summarizeCourt } from '@/features/players/courtSummary';
+import { HitCard } from '@/components/HitCard';
+import { HitGlyph } from '@/components/HitGlyph';
+import type { HitRequest } from '@/data/types';
+import { FORMAT_LABEL, hitShort } from '@/features/hits/format';
+import { isMapCourtId, labelOf } from '@/features/places/courtName';
+import { useCourtHits } from '@/features/places/useCourtHits';
+import { directionsTo } from '@/features/players/openInMaps';
 import { useApp } from '@/store/AppContext';
 import { router } from 'expo-router';
 import { Image as ExpoImage } from 'expo-image';
@@ -23,24 +30,33 @@ import { LevelPill as Level } from '@/components/LevelPill';
 import type { User } from '@/data/types';
 import { countLabel } from '@/features/places/court';
 import { useCourtPosts } from '@/features/places/useCourtPosts';
-import { openCourt, openCourtReel } from '@/features/players/courtLink';
+import { openCourt, openCourtReel, playHere, postFromCourt, sendCourtToChat } from '@/features/players/courtLink';
 import { Toggle } from '@/components/ui';
 import type { MapFilter, Placed } from '@/features/players/mapModel';
 import type { Weather } from '@/lib/weather';
 import { colors, radius, spacing, typography } from '@/theme';
 import { agoShort } from '@/components/map/markers';
 import { MAP_CREDITS } from '@/components/map/credits';
-import Svg, { Line, Rect } from 'react-native-svg';
+import { CourtGlyph } from '@/components/map/CourtGlyph';
+
+// Kept here too, for the screens that already import it from the map's chrome.
+export { CourtGlyph };
 
 /*
  * Everything laid over the map that is not the map: the same on a phone and
  * in a browser, so the two canvases only draw tiles and pins.
  */
 
-/** Back, the search, and the location switch across the top. */
-export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onToggleLocation }: { onBack?: () => void; query: string; onQuery: (next: string) => void; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void }) {
+/**
+ * Back, the search, and the location switch across the top. While the search
+ * names courts (`results`), they list under it: a pick takes the map there
+ * with the court's card up.
+ */
+export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onToggleLocation, results, onPickCourt }: { onBack?: () => void; query: string; onQuery: (next: string) => void; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void; results?: CourtRow[]; onPickCourt?: (c: Court) => void }) {
   const styles = useThemedStyles(styleDefinitions);
+  const found = onPickCourt && query.trim() ? (results ?? []).slice(0, 5) : [];
   return (
+    <View style={{ gap: spacing.sm }}>
     <View style={styles.topRow}>
       {onBack ? (
         <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onBack} style={styles.roundHit}>
@@ -50,14 +66,15 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
       <Glass radius={21} style={styles.search}>
         <Ionicons name="search" size={16} color={colors.textFaint} />
         <TextInput
-          accessibilityLabel="Search players or places"
-          placeholder="Players or places"
+          accessibilityLabel="Search players, courts or places"
+          placeholder="Players, courts or places"
           placeholderTextColor={colors.textFaint}
           value={query}
           onChangeText={onQuery}
           autoCorrect={false}
           autoCapitalize="words"
           returnKeyType="search"
+          onSubmitEditing={() => { if (found[0] && onPickCourt) onPickCourt(found[0].c); }}
           style={styles.searchInput}
         />
         {query ? (
@@ -72,6 +89,25 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
           {locating ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={18} color={locationOn ? colors.brandInk : colors.text} />}
         </Pressable>
       ) : null}
+    </View>
+    {found.length ? (
+      <Animated.View entering={FadeIn.duration(140)} style={styles.resultsWrap}>
+        <Glass radius={18} style={styles.results}>
+          {found.map(({ c, miles }, i) => {
+            const meta = [formatMiles(miles), c.count > 1 ? `${c.count} courts` : null, c.lit ? 'lights' : null].filter(Boolean).join(' · ');
+            return (
+              <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${labelOf(c)}, ${meta}. Show on the map`} onPress={() => { haptics.tap(); onPickCourt?.(c); }} style={({ pressed }) => [styles.resultRow, i > 0 && styles.listRule, pressed && styles.listPressed]}>
+                <View style={styles.resultTile}><CourtGlyph size={13} color={colors.brand} /></View>
+                <View style={styles.listWords}>
+                  <Text style={styles.listName} numberOfLines={1}>{labelOf(c)}</Text>
+                  <Text style={styles.personMeta} numberOfLines={1}>{meta}</Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </Glass>
+      </Animated.View>
+    ) : null}
     </View>
   );
 }
@@ -146,19 +182,6 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
         </Pressable>
       </ScrollView>
     </View>
-  );
-}
-
-/** A tennis court from above: the outline, the net across the middle, the service boxes. */
-export function CourtGlyph({ size = 15, color }: { size?: number; color: string }) {
-  return (
-    <Svg width={size} height={size * 1.25} viewBox="0 0 16 20" fill="none">
-      <Rect x={2} y={1.5} width={12} height={17} rx={1.2} stroke={color} strokeWidth={1.5} />
-      <Line x1={2} y1={10} x2={14} y2={10} stroke={color} strokeWidth={1.5} />
-      <Line x1={2} y1={6} x2={14} y2={6} stroke={color} strokeWidth={1} />
-      <Line x1={2} y1={14} x2={14} y2={14} stroke={color} strokeWidth={1} />
-      <Line x1={8} y1={6} x2={8} y2={14} stroke={color} strokeWidth={1} />
-    </Svg>
   );
 }
 
@@ -239,7 +262,7 @@ const TRAY_SPRING = { damping: 26, stiffness: 260, mass: 0.9, overshootClamping:
  * the title, the faces, the list's top — or tap the title to step it up.
  * Tap a player and the map goes to them.
  */
-export function NearbyRail({ items, cityName, onSelect, weather }: { items: Placed[]; cityName: string; selectedId?: string | null; onSelect: (id: string) => void; /** Beside the city's name: what it's like to play there today. */ weather?: Weather | null }) {
+export function NearbyRail({ items, cityName, onSelect, weather, query = '' }: { items: Placed[]; cityName: string; selectedId?: string | null; onSelect: (id: string) => void; /** Beside the city's name: what it's like to play there today. */ weather?: Weather | null; /** What is typed in the search, which the players are filtered by. */ query?: string }) {
   const styles = useThemedStyles(styleDefinitions);
   const { height: windowH } = useWindowDimensions();
   const hasList = items.length > 0;
@@ -367,7 +390,8 @@ export function NearbyRail({ items, cityName, onSelect, weather }: { items: Plac
                   </GHScrollView>
                 </Animated.View>
               ) : (
-                <Animated.Text entering={FadeIn.duration(180)} style={styles.sheetEmpty}>No one here right now. Players show up once they share their location.</Animated.Text>
+                // With a name typed, say only that no player has it: a court's name finds the court, and the players are still there.
+                <Animated.Text entering={FadeIn.duration(180)} style={styles.sheetEmpty}>{query.trim() ? `No players named “${query.trim()}”` : 'No one sharing nearby yet. Tap a court to see what’s played there.'}</Animated.Text>
               )}
             </View>
           </Animated.View>
@@ -545,16 +569,18 @@ export function YouSheet({ me, open, onToggle, onProfile, onClose }: { me: User;
 
 /**
  * A court, picked on the map: what OpenStreetMap knows, then what players
- * say, and a way to add to it. The send button beside Close (when given)
- * puts the court in any of your chats, groups included: "meet here".
+ * say, what was posted there, and the open hits there. Directions, Play here
+ * (post a hit at this court) and Post (a photo or clip tagged here, with the
+ * video mark so it never reads as posting a hit); Send beside
+ * Close puts the court in any of your chats, groups included: "meet here".
  */
-export function CourtSheet({ court, miles, onClose, onDirections, onSend }: { court: Court; miles: number; onClose: () => void; onDirections: () => void; onSend?: () => void }) {
+export function CourtSheet({ court, miles, onClose }: { court: Court; miles: number; onClose: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const pull = useDragToClose(onClose);
-  const { courtNotes, currentUserId, actions } = useApp();
-  // Only a court OpenStreetMap knows can carry notes; a place sent without one
+  const { courtNotes, currentUserId, users, actions } = useApp();
+  // Only a court OpenStreetMap knows can carry notes and tags; a place sent without one
   // (a hit's place, a court from a chat) has nothing to load and nothing to add to.
-  const noteable = /^(node|way|relation)\d{1,15}$/.test(court.id);
+  const noteable = isMapCourtId(court.id);
   useEffect(() => { if (noteable) void actions.loadCourtNotes(court.id).catch(() => undefined); }, [court.id, noteable, actions]);
   const notes = noteable ? courtNotes[court.id] ?? [] : [];
   const said = summarizeCourt(notes);
@@ -565,6 +591,13 @@ export function CourtSheet({ court, miles, onClose, onDirections, onSend }: { co
   const place = useMemo(() => ({ id: noteable ? court.id : undefined, name: court.name, lat: court.lat, lng: court.lng }), [noteable, court.id, court.name, court.lat, court.lng]);
   const { posts: here, more } = useCourtPosts(place);
   const strip = here.filter((p) => p.thumbnailUrl || p.imageUrl).slice(0, 12);
+  // Open hits here, the same ones the court's page lists.
+  const hits = useCourtHits(place).slice(0, 2);
+  const hitLine = (h: HitRequest) => {
+    const left = Math.max(0, h.spots - h.joinedIds.length);
+    const who = h.authorId === currentUserId ? 'You' : users.find((u) => u.id === h.authorId)?.name.split(' ')[0];
+    return [hitShort(h.startsAt), FORMAT_LABEL[h.format], left ? `${left} ${left === 1 ? 'spot' : 'spots'} left` : 'Full', who].filter(Boolean).join(' · ');
+  };
   return (
     <GestureDetector gesture={pull.gesture}>
     <Animated.View style={[styles.sheet, pull.style]}>
@@ -578,11 +611,9 @@ export function CourtSheet({ court, miles, onClose, onDirections, onSend }: { co
           </View>
         </Pressable>
         {/* Send sits beside Close, the way a maps app's place card puts Share there. */}
-        {onSend ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={`Send ${court.name} to a chat`} hitSlop={8} onPress={onSend} style={styles.close}>
-            <Ionicons name="paper-plane-outline" size={16} color={colors.textMuted} />
-          </Pressable>
-        ) : null}
+        <Pressable accessibilityRole="button" accessibilityLabel={`Send ${court.name} to a chat`} hitSlop={8} onPress={() => sendCourtToChat(place)} style={styles.close}>
+          <Ionicons name="paper-plane-outline" size={16} color={colors.textMuted} />
+        </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
           <Ionicons name="close" size={18} color={colors.textMuted} />
         </Pressable>
@@ -625,19 +656,62 @@ export function CourtSheet({ court, miles, onClose, onDirections, onSend }: { co
           </ScrollView> : null}
         </View>
       ) : null}
+      {hits.length ? (
+        <View style={styles.hitRows}>
+          {hits.map((h) => (
+            <Pressable key={h.id} accessibilityRole="link" accessibilityLabel={`Open hit: ${hitLine(h)}`} onPress={() => router.push(`/hit-request/${h.id}`)} style={({ pressed }) => [styles.hitRow, pressed && styles.postedPressed]}>
+              <View style={styles.hitTile}><HitGlyph size={18} color={colors.brand} /></View>
+              <Text style={styles.hitText} numberOfLines={1}>{hitLine(h)}</Text>
+              <Ionicons name="chevron-forward" size={14} color={colors.textFaint} />
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
       <View style={styles.personActions}>
-        <Pressable accessibilityRole="link" accessibilityLabel="Directions" onPress={onDirections} style={styles.primary}>
+        {/* Three pills, a little tighter than the player card's, so they fit a 320pt phone. */}
+        <Pressable accessibilityRole="link" accessibilityLabel="Directions" onPress={() => directionsTo(court)} style={[styles.primary, styles.pillTight]}>
           <BrandWash />
           <Ionicons name="navigate-outline" size={16} color={colors.brandInk} />
           <Text style={styles.primaryText}>Directions</Text>
         </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Post a hit at ${court.name}`} onPress={() => playHere(place)} style={[styles.secondary, styles.pillTight]}>
+          <Text style={styles.secondaryText}>Play here</Text>
+        </Pressable>
         {noteable ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={mine ? 'Update what you said about this court' : 'Add what you know about this court'} onPress={() => router.push({ pathname: '/court-report', params: { id: court.id, name: court.name } })} style={styles.secondary}>
-            <Text style={styles.secondaryText}>{mine ? 'Update yours' : 'Add what you know'}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Post a photo or clip from ${court.name}`} onPress={() => postFromCourt({ id: court.id, name: court.name, lat: court.lat, lng: court.lng })} style={[styles.secondary, styles.pillTight, styles.pillIcon]}>
+            <Ionicons name="videocam-outline" size={15} color={colors.text} />
+            <Text style={styles.secondaryText}>Post</Text>
           </Pressable>
         ) : null}
       </View>
+      {/* A quiet link of its own, the way the player's card holds "Add to a group": a fourth pill does not fit on a phone. */}
+      {noteable ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={mine ? 'Update what you said about this court' : 'Add what you know about this court'} onPress={() => router.push({ pathname: '/court-report', params: { id: court.id, name: court.name } })} hitSlop={6} style={({ pressed }) => [styles.groupLink, pressed && { opacity: 0.6 }]}>
+          <Ionicons name="create-outline" size={16} color={colors.textMuted} />
+          <Text style={styles.groupLinkText}>{mine ? 'Update yours' : 'Add what you know'}</Text>
+        </Pressable>
+      ) : null}
       {noteable ? <Text style={styles.courtSource}>{said.players ? `From ${said.players} ${said.players === 1 ? 'player' : 'players'} and OpenStreetMap` : 'From OpenStreetMap. Know it? Add the lights, nets and how busy it gets.'}</Text> : null}
+    </Animated.View>
+    </GestureDetector>
+  );
+}
+
+/** An open hit, picked on the map: its card, the same one Find Players shows, with how far it is. */
+export function HitSheet({ hit, miles, onClose }: { hit: HitRequest; miles?: number; onClose: () => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const pull = useDragToClose(onClose);
+  return (
+    <GestureDetector gesture={pull.gesture}>
+    <Animated.View style={[styles.sheet, pull.style]}>
+      <View style={styles.grabber} />
+      <View style={styles.sheetHead}>
+        <Text style={styles.sheetTitle}>Open hit</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
+          <Ionicons name="close" size={18} color={colors.textMuted} />
+        </Pressable>
+      </View>
+      <View style={styles.hitSheetCard}><HitCard hit={hit} miles={miles} /></View>
     </Animated.View>
     </GestureDetector>
   );
@@ -649,13 +723,18 @@ export function CourtSheet({ court, miles, onClose, onDirections, onSend }: { co
  * under it; a round location switch, and the weather. Nothing says "open" —
  * a map is plainly a thing you tap.
  */
-export function PreviewOverlay({ cityName, count, weather, locationOn, locating, onToggleLocation }: { cityName: string; count: number; weather: Weather | null; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void }) {
+export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, weather, locationOn, locating, onToggleLocation }: { cityName: string; count: number; /** Places to play in town (one per park, not single courts). */ placeCount?: number; /** Open hits in town. */ hitCount?: number; weather: Weather | null; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
+  // Players first; with none sharing yet, the courts still say the map is worth opening.
+  const line = count === 1 ? '1 player around' : count ? `${count} players around`
+    : placeCount ? `${placeCount}${placeCount >= 30 ? '+' : ''} ${placeCount === 1 ? 'place' : 'places'} to play nearby`
+      : 'No one here yet';
   return (
     <>
       <View pointerEvents="none" style={styles.cityMark}>
         <Text style={styles.cityName} numberOfLines={1}>{cityName}</Text>
-        <Text style={[styles.cityCount, count > 0 && styles.cityCountOn]}>{count === 1 ? '1 player around' : count ? `${count} players around` : 'No one here yet'}</Text>
+        <Text style={[styles.cityCount, (count > 0 || placeCount > 0) && styles.cityCountOn]}>{line}</Text>
+        {hitCount ? <Text style={styles.cityHits}>{hitCount === 1 ? '1 open hit nearby' : `${hitCount} open hits nearby`}</Text> : null}
       </View>
       {onToggleLocation ? (
         <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? 'Turn location off' : 'Turn location on'} hitSlop={6} onPress={onToggleLocation} style={[styles.previewSwitch, locationOn && styles.roundOn]}>
@@ -772,6 +851,8 @@ const styleDefinitions = StyleSheet.create({
   primaryText: { ...typography.smallStrong, color: colors.brandInk },
   secondary: { height: 40, paddingHorizontal: 16, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
   secondaryText: { ...typography.smallStrong, color: colors.text },
+  pillTight: { paddingHorizontal: 12 },
+  pillIcon: { flexDirection: 'row', gap: 5 },
   groupLink: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginHorizontal: spacing.lg, marginTop: -spacing.xs, paddingBottom: spacing.sm },
   groupLinkText: { ...typography.smallStrong, color: colors.textMuted },
   openRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
@@ -808,6 +889,18 @@ const styleDefinitions = StyleSheet.create({
   cityName: { ...typography.title, fontSize: 26, letterSpacing: -0.6, color: colors.text, textShadowColor: colors.bg, textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },
   cityCount: { ...typography.smallStrong, color: colors.textMuted, textShadowColor: colors.bg, textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 } },
   cityCountOn: { color: colors.brand },
+  cityHits: { ...typography.caption, letterSpacing: 0, color: colors.textMuted, textShadowColor: colors.bg, textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 } },
+  // The map search's courts, under the bar: the bar's own glass, one row per place.
+  resultsWrap: { paddingHorizontal: spacing.md },
+  results: { paddingHorizontal: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
+  resultRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 9 },
+  resultTile: { width: 30, height: 30, borderRadius: 9, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  // A court card's open hits: one quiet line each, above its actions.
+  hitRows: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: 6 },
+  hitRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.sm, paddingVertical: 6, borderRadius: radius.md, backgroundColor: colors.bgElevated },
+  hitTile: { width: 28, height: 28, borderRadius: 8, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  hitText: { ...typography.smallStrong, color: colors.text, flex: 1, minWidth: 0 },
+  hitSheetCard: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   cityless: { borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: 'center', paddingVertical: spacing.xl, paddingHorizontal: spacing.lg, gap: 4 },
   citylessDisc: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
   citylessTitle: { ...typography.heading, color: colors.text, textAlign: 'center' },

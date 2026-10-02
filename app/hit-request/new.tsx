@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -9,6 +9,7 @@ import { CourtSearch } from '@/components/CourtSearch';
 import { Field } from '@/components/ui';
 import { ChipStrip, Chips, Fine, Section, SheetTitle, Submit, Tiles, formBody } from '@/components/sheet/SheetForm';
 import type { HitRequest } from '@/data/types';
+import { isMapCourtId } from '@/features/places/courtName';
 import { fetchCourts, type Court } from '@/features/players/courts';
 import { homeFor } from '@/features/players/positions';
 import { show as showToast } from '@/lib/toast';
@@ -27,7 +28,8 @@ const FORMAT_LABEL: Record<HitRequest['format'], string> = { singles: 'Singles',
  * typed), what level, singles or doubles or just hitting, and how many spots.
  * It goes up on Find Players; whoever says "I'm in" lands in a chat with you.
  * Once it is up, a note offers to send it into your chats and groups too,
- * for the friends who might want the spot.
+ * for the friends who might want the spot. Opened from a court ("Play
+ * here"), that court is already where.
  */
 export default function NewHit() {
   const styles = useThemedStyles(styleDefinitions);
@@ -41,7 +43,15 @@ export default function NewHit() {
   // Courts book on the half hour too: picking an hour offers its :30 underneath, on the hour until chosen.
   const [half, setHalf] = useState(false);
   const setHour = (h: number) => { setHourOnly(h); setHalf(false); };
-  const [place, setPlace] = useState<HitRequest['place'] | null>(null);
+  // "Play here" on a court's page or card: that court is chosen, its map id kept
+  // (when it has one) so the hit shows on the court's page.
+  const params = useLocalSearchParams<{ courtId?: string; courtName?: string; lat?: string; lng?: string }>();
+  const [place, setPlace] = useState<HitRequest['place'] | null>(() => {
+    const name = params.courtName?.trim();
+    const lat = Number(params.lat); const lng = Number(params.lng);
+    if (!name || !params.lat || !params.lng || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return { ...(isMapCourtId(params.courtId) ? { id: params.courtId } : {}), name: name.slice(0, 120), lat, lng };
+  });
   const [typed, setTyped] = useState('');
   const [courts, setCourts] = useState<Court[]>([]);
   const home = useMemo(() => (currentUser ? homeFor(currentUser, detectedCoords) : null), [currentUser, detectedCoords]);

@@ -21,6 +21,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import type { Answer, ChatEvent, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, TaggedCourt, Question, Story, Tip, User, CoachApplication } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
+import { isMapCourtId } from '@/features/places/courtName';
 
 /** What a new player did first, after setup. */
 /** What the live handle check says about a handle. */
@@ -304,10 +305,11 @@ export interface RemoteData {
 interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string }
 const toSession = (r: SessionRow): PracticeSession => ({ id: r.id, userId: r.user_id, day: r.day, minutes: r.minutes, kind: r.kind, won: r.won ?? undefined, opponent: r.opponent ?? undefined, note: r.note ?? undefined, createdAt: r.created_at });
 
-interface HitRow { id: string; author_id: string; starts_at: string; place: { name?: string; lat?: number; lng?: number } | null; level_min: number | null; level_max: number | null; format: HitRequest['format']; spots: number; note: string | null; conversation_id: string | null; cancelled: boolean; created_at: string; hit_joins?: { user_id: string }[] }
+interface HitRow { id: string; author_id: string; starts_at: string; place: { id?: string; name?: string; lat?: number; lng?: number } | null; level_min: number | null; level_max: number | null; format: HitRequest['format']; spots: number; note: string | null; conversation_id: string | null; cancelled: boolean; created_at: string; hit_joins?: { user_id: string }[] }
 const toHit = (r: HitRow): HitRequest => ({
   id: r.id, authorId: r.author_id, startsAt: r.starts_at,
-  place: { name: String(r.place?.name ?? 'A court').slice(0, 120), lat: typeof r.place?.lat === 'number' ? r.place.lat : undefined, lng: typeof r.place?.lng === 'number' ? r.place.lng : undefined },
+  // The court's map id when it was picked from the courts list (kept only if it is one), so the hit lands on that court's page.
+  place: { id: isMapCourtId(r.place?.id) ? r.place.id : undefined, name: String(r.place?.name ?? 'A court').slice(0, 120), lat: typeof r.place?.lat === 'number' ? r.place.lat : undefined, lng: typeof r.place?.lng === 'number' ? r.place.lng : undefined },
   levelMin: r.level_min ?? undefined, levelMax: r.level_max ?? undefined, format: r.format, spots: r.spots, note: r.note ?? undefined,
   conversationId: r.conversation_id ?? undefined, cancelled: r.cancelled, createdAt: r.created_at, joinedIds: (r.hit_joins ?? []).map((j) => j.user_id),
 });
@@ -423,7 +425,7 @@ const toCoachApplication = (r: CoachApplicationRow): CoachApplication => ({
 /** A chat member's row. `role` came with migration 54 (admin or member); a database without it leaves it out. */
 interface MemberRow { user_id: string; last_read_at: string | null; role?: string | null }
 interface ConversationRow { id: string; updated_at: string; title?: string | null; is_group?: boolean | null; created_by?: string | null; photo_url?: string | null; conversation_members?: MemberRow[]; messages?: MessageRow[] }
-interface MessageRow { id: string; conversation_id: string; sender_id: string; body: string; kind: string; shared_id: string | null; reactions: Record<string, string> | null; created_at: string; edited_at?: string | null; place?: { name: string; lat: number; lng: number } | null; audio_url?: string | null; audio_ms?: number | null; event?: { type?: string; targets?: unknown; title?: string | null; on?: boolean | null } | null }
+interface MessageRow { id: string; conversation_id: string; sender_id: string; body: string; kind: string; shared_id: string | null; reactions: Record<string, string> | null; created_at: string; edited_at?: string | null; place?: { id?: string; name: string; lat: number; lng: number } | null; audio_url?: string | null; audio_ms?: number | null; event?: { type?: string; targets?: unknown; title?: string | null; on?: boolean | null } | null }
 
 const EVENT_TYPES: ChatEvent['type'][] = ['created', 'added', 'removed', 'left', 'renamed', 'photo', 'admin', 'joined'];
 /** An event line's `event` as the server wrote it ({type, targets, title, on}), in the app's shape. Anything unexpected is left out, and the line shows its plain sentence. */
@@ -459,7 +461,7 @@ export function toConversations(me: ID, convRows: ConversationRow[], messageRows
       reactions: row.reactions && Object.keys(row.reactions).length ? row.reactions : undefined,
       editedAt: row.edited_at ?? undefined,
       audio: row.audio_url ? { url: row.audio_url, ms: row.audio_ms ?? 0 } : undefined,
-      place: row.place && typeof row.place.lat === 'number' && typeof row.place.lng === 'number' ? { name: String(row.place.name ?? 'Court').slice(0, 80), lat: row.place.lat, lng: row.place.lng } : undefined,
+      place: row.place && typeof row.place.lat === 'number' && typeof row.place.lng === 'number' ? { id: isMapCourtId(row.place.id) ? row.place.id : undefined, name: String(row.place.name ?? 'Court').slice(0, 80), lat: row.place.lat, lng: row.place.lng } : undefined,
       readAtBy: Object.keys(readAtBy).length ? readAtBy : undefined,
       openedAtBy: Object.keys(readAtBy).length ? readAtBy : undefined,
     };

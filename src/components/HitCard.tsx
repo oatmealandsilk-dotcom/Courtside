@@ -4,10 +4,11 @@ import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar } from '@/components/ui';
-import { CourtGlyph } from '@/components/map/MapChrome';
+import { CourtGlyph } from '@/components/map/CourtGlyph';
 import type { HitRequest } from '@/data/types';
 import { FORMAT_LABEL, hitWhen, levelText } from '@/features/hits/format';
 import { openCourt } from '@/features/players/courtLink';
+import { formatMiles } from '@/features/players/geo';
 import { confirm } from '@/lib/confirm';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -19,9 +20,10 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
  * how many spots are left. "I'm in" joins and opens the hit's group chat,
  * where the details get sorted. The poster sees who is in and can call it off.
  * The paper plane sends the hit into any of your chats or groups, for the
- * friends who might want the spot.
+ * friends who might want the spot. The place opens its court's page; with
+ * `miles` (Find Players near you, the map) it says how far that is.
  */
-export function HitCard({ hit }: { hit: HitRequest }) {
+export function HitCard({ hit, miles }: { hit: HitRequest; miles?: number }) {
   const styles = useThemedStyles(styleDefinitions);
   const { users, currentUserId, actions } = useApp();
   const [busy, setBusy] = useState(false);
@@ -52,9 +54,9 @@ export function HitCard({ hit }: { hit: HitRequest }) {
           <Ionicons name="paper-plane-outline" size={18} color={colors.textMuted} />
         </Pressable>
       </View>
-      <Pressable accessibilityRole="link" accessibilityLabel={`${hit.place.name}. See the court`} disabled={hit.place.lat === undefined} onPress={(e) => { e.stopPropagation?.(); if (hit.place.lat !== undefined && hit.place.lng !== undefined) openCourt({ name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={styles.place}>
+      <Pressable accessibilityRole="link" accessibilityLabel={`${hit.place.name}${miles !== undefined ? `, ${formatMiles(miles)}` : ''}. See the court`} disabled={hit.place.lat === undefined} onPress={(e) => { e.stopPropagation?.(); if (hit.place.lat !== undefined && hit.place.lng !== undefined) openCourt({ id: hit.place.id, name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={styles.place}>
         <CourtGlyph size={13} color={colors.brand} />
-        <Text style={styles.placeText} numberOfLines={1}>{hit.place.name}</Text>
+        <Text style={styles.placeText} numberOfLines={1}>{hit.place.name}{miles !== undefined ? <Text style={styles.placeMiles}>{` · ${formatMiles(miles)}`}</Text> : null}</Text>
       </Pressable>
       <View style={styles.tags}>
         <View style={styles.tag}><Text style={styles.tagText}>{FORMAT_LABEL[hit.format]}</Text></View>
@@ -91,6 +93,7 @@ const styleDefinitions = StyleSheet.create({
   when: { ...typography.title, fontSize: 20, color: colors.text, marginTop: 2 },
   place: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.brandDim, maxWidth: '100%' },
   placeText: { ...typography.smallStrong, color: colors.brand, flexShrink: 1 },
+  placeMiles: { ...typography.small, color: colors.brand },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   tag: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: colors.bgElevated },
   tagText: { ...typography.small, ...font('600'), color: colors.textMuted },

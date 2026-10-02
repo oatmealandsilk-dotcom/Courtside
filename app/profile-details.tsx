@@ -14,7 +14,7 @@ import { evaluateAchievements, fitnessLabel, levelBadge, playStyleLabel, surface
 import { formatDate, experienceLabel } from '@/lib/format';
 import { confirm } from '@/lib/confirm';
 import { localDay } from '@/features/practice/stats';
-import { CourtGlyph } from '@/components/map/MapChrome';
+import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { useApp } from '@/store/AppContext';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';

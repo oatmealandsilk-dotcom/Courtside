@@ -17,7 +17,7 @@ import { useApp } from '@/store/AppContext';
 import { confirmUnfollow } from '@/lib/confirm';
 import type { Notification, NotificationKind, PostKind } from '@/data/types';
 import { colors, radius, spacing, surfaceColorFor, typography } from '@/theme';
-import { CourtGlyph } from '@/components/map/MapChrome';
+import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 
 /**

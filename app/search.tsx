@@ -7,7 +7,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { CourtGlyph } from '@/components/map/MapChrome';
+import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { Highlighted, labelOf } from '@/components/CourtSearch';
 import { PersonRow } from '@/components/PersonRow';
@@ -18,7 +18,8 @@ import { Avatar, DottedRule, EmptyState } from '@/components/ui';
 import type { Post, Question, User } from '@/data/types';
 import { useBarInset } from '@/features/navigation/barInset';
 import { useSuggestedPlayers } from '@/features/people/suggestions';
-import { openCourtOnMap } from '@/features/players/courtLink';
+import { openCourt as openCourtPage } from '@/features/players/courtLink';
+import { useCourtSearch } from '@/features/places/useCourtSearch';
 import { fetchCourts, type Court } from '@/features/players/courts';
 import { formatMiles, milesBetween } from '@/features/players/geo';
 import { homeFor, type LatLng } from '@/features/players/positions';
@@ -216,7 +217,13 @@ export default function Search() {
     return out;
   }, [ranked, q.raw]);
   const threads = useMemo(() => matchThreads(q, questions, blocked, (x) => TOPIC_META[x.topic]?.label ?? ''), [q, questions, blocked]);
-  const foundCourts = useMemo(() => (courts ? matchCourts(q, courts, home) : []), [q, courts, home]);
+  // Courts further away whose names match, from our own database, a beat after
+  // the second letter: the ring loaded above only reaches about 15 miles.
+  const farCourts = useCourtSearch(q.mode === 'all' ? q.text : '', home, undefined, 40);
+  const foundCourts = useMemo(() => {
+    const pool = courts || farCourts.length ? [...(courts ?? []), ...farCourts.map((r) => r.c)] : null;
+    return pool ? matchCourts(q, pool, home) : [];
+  }, [q, courts, farCourts, home]);
   const order: ('people' | 'posts' | 'threads' | 'courts')[] = q.mode === 'people' ? ['people'] : q.mode === 'tag' ? ['posts', 'threads'] : ['people', 'posts', 'threads', 'courts'];
   // All shows only people whose name or handle matched. Someone found only
   // through their town or bio ("serve" in a bio) waits on the People tab,
@@ -291,7 +298,7 @@ export default function Search() {
   const openCourt = (court: Court) => {
     const name = labelOf(court);
     save({ kind: 'court', key: court.id, text: name, lat: court.lat, lng: court.lng });
-    openCourtOnMap({ id: court.id, name, lat: court.lat, lng: court.lng });
+    openCourtPage({ id: court.id, name, lat: court.lat, lng: court.lng });
   };
   const openPost = (post: Post) => { saveTerm(term); router.push(`/post/${post.id}`); };
   const openRecent = (r: Recent) => {
@@ -300,7 +307,7 @@ export default function Search() {
     if (r.kind === 'term') { setTerm(r.text); input.current?.blur(); return; }
     if (r.kind === 'user') { router.push(`/user/${r.key}`); return; }
     if (r.kind === 'thread') { router.push(`/question/${r.key}`); return; }
-    if (r.lat !== undefined && r.lng !== undefined) openCourtOnMap({ id: r.key, name: r.text, lat: r.lat, lng: r.lng });
+    if (r.lat !== undefined && r.lng !== undefined) openCourtPage({ id: r.key, name: r.text, lat: r.lat, lng: r.lng });
   };
   const empty = () => { setTerm(''); setTab('all'); };
   const pickTag = (t: string) => { setTerm(`#${t}`); saveTerm(`#${t}`); input.current?.blur(); };
@@ -373,7 +380,7 @@ export default function Search() {
       <Pressable
         key={court.id}
         accessibilityRole="link"
-        accessibilityLabel={`${labelOf(court)}${meta ? `, ${meta}` : ''}, open on the map`}
+        accessibilityLabel={`${labelOf(court)}${meta ? `, ${meta}` : ''}, open the court`}
         onPress={() => openCourt(court)}
         style={({ pressed }) => [styles.row, pressed && styles.pressed]}
       >
@@ -399,7 +406,7 @@ export default function Search() {
       <View key={`${r.kind}:${r.key}`} style={styles.recentRow}>
         <Pressable
           accessibilityRole={r.kind === 'term' ? 'button' : 'link'}
-          accessibilityLabel={r.kind === 'term' ? `Search ${r.text}` : r.kind === 'user' ? `${user?.name}, @${user?.handle}` : r.kind === 'thread' ? `Thread: ${r.text}` : `${r.text}, open on the map`}
+          accessibilityLabel={r.kind === 'term' ? `Search ${r.text}` : r.kind === 'user' ? `${user?.name}, @${user?.handle}` : r.kind === 'thread' ? `Thread: ${r.text}` : `${r.text}${line2 ? `, ${line2}` : ''}, open the court`}
           onPress={() => openRecent(r)}
           style={({ pressed }) => [styles.recentMain, pressed && styles.pressed]}
         >

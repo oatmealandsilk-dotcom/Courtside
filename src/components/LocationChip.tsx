@@ -2,7 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { CourtGlyph } from '@/components/map/MapChrome';
+import { CourtGlyph } from '@/components/map/CourtGlyph';
 
 import { colors, typography } from '@/theme';
 

@@ -13,7 +13,7 @@ import { NewHereTag } from '@/components/NewHereTag';
 import { isNewHere } from '@/features/feed/newHere';
 import { RichText } from '@/components/RichText';
 import type { Post, User } from '@/data/types';
-import { openCourtOnMap } from '@/features/players/courtLink';
+import { openCourt } from '@/features/players/courtLink';
 import { compactNumber, relativeTime, timeLeft } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useTourBusy } from '@/features/tour/tourStore';
@@ -95,10 +95,10 @@ export function ReelCaption({ post, author, onAuthor, open, onOpenChange }: { po
         {place ? (
           <Pressable
             accessibilityRole={post.court ? 'link' : undefined}
-            accessibilityLabel={post.court ? `${place}, open on the map` : place}
+            accessibilityLabel={post.court ? `${place}, see posts from here` : place}
             disabled={!post.court}
             hitSlop={LINK_SLOP}
-            onPress={(e) => { e?.stopPropagation?.(); if (post.court) openCourtOnMap(post.court); }}
+            onPress={(e) => { e?.stopPropagation?.(); if (post.court) openCourt(post.court); }}
             style={styles.metaItem}
           >
             <Ionicons name="location-sharp" size={12} color={META_INK} style={EDGE_SMALL} />

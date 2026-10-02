@@ -616,8 +616,8 @@ export interface Message {
   editedAt?: string;
   /** It never reached the server (no signal, or a server error); the chat offers a retry. */
   failed?: boolean;
-  /** Set when kind is 'court': where to meet. */
-  place?: { name: string; lat: number; lng: number };
+  /** Set when kind is 'court': where to meet, with the map's id for the court when it came from the courts list, so the card opens that court's page. */
+  place?: { id?: string; name: string; lat: number; lng: number };
   /** Set when kind is 'voice': the recording and how long it runs. */
   audio?: { url: string; ms: number };
 }
@@ -649,7 +649,7 @@ export interface Conversation {
  */
 export type ShareItem =
   | { kind: 'post' | 'question' | 'profile' | 'hit-request'; id: ID }
-  | { kind: 'court'; place: { name: string; lat: number; lng: number } }
+  | { kind: 'court'; place: { id?: string; name: string; lat: number; lng: number } }
   | { kind: 'message'; id: ID };
 
 /* -------------------------------- Payments ------------------------------- */
@@ -753,7 +753,8 @@ export interface HitRequest {
   id: ID;
   authorId: ID;
   startsAt: string;
-  place: { name: string; lat?: number; lng?: number };
+  /** Where: a court picked from the courts list carries the map's id for it (no migration: place is jsonb); a typed place has only a name. */
+  place: { id?: string; name: string; lat?: number; lng?: number };
   levelMin?: number;
   levelMax?: number;
   format: 'singles' | 'doubles' | 'hit';

@@ -485,7 +485,7 @@ export default function Thread() {
             const place = message.place;
             body = (
               <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles}>
-                <Tappable accessibilityRole="link" accessibilityLabel={`${place.name}. See the court`} scaleTo={0.97} onPress={() => openCourt({ name: place.name, lat: place.lat, lng: place.lng })} style={[styles.sharedCard, styles.courtCard]}>
+                <Tappable accessibilityRole="link" accessibilityLabel={`${place.name}. See the court`} scaleTo={0.97} onPress={() => openCourt({ id: place.id, name: place.name, lat: place.lat, lng: place.lng })} style={[styles.sharedCard, styles.courtCard]}>
                   <View style={styles.sharedHead}>
                     <Ionicons name="location" size={16} color={colors.brand} />
                     <Text style={styles.sharedKind}>Court</Text>

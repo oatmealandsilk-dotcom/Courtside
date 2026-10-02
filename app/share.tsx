@@ -17,6 +17,7 @@ import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { colors, font, radius, spacing, typography } from '@/theme';
 import { placeLink, shareLink } from '@/lib/shareLink';
+import { isMapCourtId } from '@/features/places/courtName';
 
 /**
  * Instagram's Send sheet. Your recent chats come first, groups included (two
@@ -121,7 +122,9 @@ export default function ShareSheet() {
       const lat = Number(params.lat);
       const lng = Number(params.lng);
       if (!name || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-      const place = { name, lat, lng };
+      // The court's map id travels with it when it has one, so the chat's card opens that court's page.
+      // The link for outside the app stays a maps link for now: someone signed out would land on sign-in and lose the page.
+      const place = { id: isMapCourtId(id) ? id : undefined, name, lat, lng };
       return { item: { kind: 'court', place }, label: name, icon: glyph('location-outline'), outside: { title: name, url: placeLink(place) } };
     }
     // A message, forwarded as it is. An event line ("Mira added Dev") is not one anyone sent,
