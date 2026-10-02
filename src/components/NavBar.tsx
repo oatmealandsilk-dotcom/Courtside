@@ -5,7 +5,8 @@ import { PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { interpolate, runOnJS, useAnimatedReaction, useAnimatedStyle } from 'react-native-reanimated';
 import { Animated as RNAnimated } from 'react-native';
 import { BAR_TUCK, barCompact, DUCK } from '@/features/navigation/barShrink';
-import { useCurtainDown, useFeedWarm } from '@/features/feed/warmup';
+import { useCurtainDown, useCurtainReady } from '@/features/feed/warmup';
+import { isStartTab } from '@/features/navigation/startTab';
 import { useCallback, useEffect, useRef } from 'react';
 import { Easing, useSharedValue, withTiming } from 'react-native-reanimated';
 import { router, usePathname } from 'expo-router';
@@ -30,13 +31,13 @@ const PX = PixelRatio.get();
  * than per copy of the bar: once it has come up it never waits below the
  * edge again, and the longest it ever waits is counted from the first time
  * it was drawn. (Kept per copy, every time the bar was taken away and put
- * back while the feed was still loading — the logo coming back, a page
+ * back while the page was still loading — the logo coming back, a page
  * opening and closing — it went back below the edge and its wait started
  * over, so it could stay out of sight far longer than meant.)
  */
 let barUp = false;
 let waitUntil = 0;
-/** The longest the bar waits for the feed on a fresh open. */
+/** The longest the bar waits for the page under the curtain on a fresh open. */
 const BAR_WAIT_MS = 7000;
 
 /**
@@ -55,9 +56,16 @@ interface NavItem {
   activeIcon: keyof typeof Ionicons.glyphMap;
 }
 
+/**
+ * In the strip's order, left to right (Community is where the app opens).
+ * On the phone the + sits in the middle, between Feed and Coaching. The
+ * feed's tab is called Feed, not Home: the app no longer opens on it, and a
+ * Home that isn't where you start reads as wrong. A play icon, not a house,
+ * because it is the clips.
+ */
 const ITEMS: NavItem[] = [
-  { route: 'index', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
   { route: 'discuss', label: 'Community', icon: 'people-outline', activeIcon: 'people' },
+  { route: 'index', label: 'Feed', icon: 'play-circle-outline', activeIcon: 'play-circle' },
   { route: 'coaches', label: 'Coaching', icon: 'clipboard-outline', activeIcon: 'clipboard' },
   { route: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
 ];
@@ -77,11 +85,12 @@ export function NavBar({ state, navigation }: NavBarProps) {
   const profileAlerts = unread + unseen;
   // The first-run tour points at these; each button puts itself on its list. Nothing here looks any different.
   const tourDiscuss = useTourTarget('tab-discuss');
+  const tourHome = useTourTarget('tab-home');
   const tourCoaches = useTourTarget('tab-coaches');
   const tourProfile = useTourTarget('tab-profile');
   const tourCreate = useTourTarget('create');
   const tourMessages = useTourTarget('side-messages');
-  const tourRef = (route: string) => (route === 'discuss' ? tourDiscuss : route === 'coaches' ? tourCoaches : route === 'profile' ? tourProfile : undefined);
+  const tourRef = (route: string) => (route === 'discuss' ? tourDiscuss : route === 'index' ? tourHome : route === 'coaches' ? tourCoaches : route === 'profile' ? tourProfile : undefined);
   // While the tour is up, a screen reader reads only the tour, not the bar under the dim.
   const touring = useTourOpen();
   const hideFromReader = touring ? 'no-hide-descendants' as const : 'auto' as const;
@@ -90,11 +99,12 @@ export function NavBar({ state, navigation }: NavBarProps) {
   // smaller. Scrolling up brings it straight back. Never small enough to miss.
   const bottomPad = Math.max(insets.bottom, spacing.sm);
   // On first open the bar is under the curtain; as the curtain lifts it
-  // rises into place with the feed rather than already sitting there.
-  // Only while the loading curtain is actually up (a fresh open on the feed)
-  // does the bar wait below the edge; anywhere else it is simply there. And
-  // it never waits more than a few seconds, whatever the feed is doing.
-  const warm = useFeedWarm();
+  // rises into place with the page rather than already sitting there.
+  // Only while the splash curtain is actually up (a fresh open, on the page
+  // the app opens on: Community, see startTab) does the bar wait below the
+  // edge; anywhere else it is simply there. And it never waits more than a
+  // few seconds, whatever that page is doing.
+  const warm = useCurtainReady();
   const pathname = usePathname();
   // The sidebar's own pages (not tabs): when on one, its row is the lit one.
   const extra = pathname.startsWith('/search') ? 'search' : pathname.startsWith('/notifications') ? 'notifications' : pathname.startsWith('/messages') ? 'messages' : null;
@@ -105,7 +115,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
     closeCreateMenu();
   };
   const curtainDown = useCurtainDown();
-  const behindCurtain = !barUp && !warm && !curtainDown && (pathname === '/' || pathname === '/index');
+  const behindCurtain = !barUp && !warm && !curtainDown && isStartTab(pathname);
   if (behindCurtain && !waitUntil) waitUntil = Date.now() + BAR_WAIT_MS;
   const entrance = useSharedValue(behindCurtain ? 1 : 0);
   useEffect(() => {

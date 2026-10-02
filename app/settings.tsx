@@ -92,7 +92,7 @@ export default function Settings() {
     {
       title: 'Support',
       rows: [
-        // Back to Home, where the first-run tour plays again from the start.
+        // Back to Community on the map, where the app opens and the first-run tutorial plays again from the start.
         // Until the tour is switched on for everyone, only admins see this (to review it).
         ...(TOUR_ON || currentUser?.isAdmin ? [{ icon: 'compass-outline' as const, label: 'Show the tutorial', onPress: replayTour }] : []),
         { icon: 'help-circle-outline', label: 'Help', onPress: () => router.push('/help') },

@@ -14,12 +14,22 @@ export type { NearbyMapProps };
 const RELOADED = 'courtside-map-reload';
 
 /**
- * The map engine is about a megabyte, a fifth of the whole app. It downloads
- * the first time a map is actually shown, not with the app, so everyone who
- * only watches clips opens CourtSide that much faster. Until it arrives, a
- * box of exactly the map's size holds its place so nothing jumps.
+ * The map engine is about a megabyte, a fifth of the whole app. It is not
+ * part of the app's first download, so the splash comes up that much faster.
+ * The app opens on Find Players, though, so the splash starts fetching it
+ * (preloadNearbyMap) while the logo is up, and the map is usually in by the
+ * time the page shows. Until it arrives, a box of exactly the map's size
+ * holds its place so nothing jumps.
  */
-const WebMap = lazy(() => import('@/components/map/WebMap').then((m) => {
+let loading: Promise<typeof import('@/components/map/WebMap')> | null = null;
+/** One fetch of the engine, shared by the early start and the map itself. */
+const loadMap = () => (loading ??= import('@/components/map/WebMap'));
+export function preloadNearbyMap() {
+  // A failure here is left for the map to meet and handle (below) when it is drawn.
+  loadMap().catch(() => undefined);
+}
+
+const WebMap = lazy(() => loadMap().then((m) => {
   try { sessionStorage.removeItem(RELOADED); } catch {}
   return { default: m.NearbyMap };
 }, () => {

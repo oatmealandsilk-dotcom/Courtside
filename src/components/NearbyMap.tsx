@@ -29,6 +29,13 @@ const CLOSE_ZOOM = 13.5;
 export type { NearbyMapProps };
 
 /**
+ * The browser fetches its map engine separately and starts it early (see
+ * NearbyMap.web). On the phone the map is part of the app already: nothing
+ * to fetch, so nothing to do.
+ */
+export function preloadNearbyMap() {}
+
+/**
  * A real map of who is around you, in the app's own warm-paper look (the
  * same vector map the browser draws, inside a web view — not Apple's stock
  * map). Profiles only say a city, so each player is set down at a fixed

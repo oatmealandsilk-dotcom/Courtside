@@ -14,6 +14,8 @@ import { RouteTransition } from './RouteTransition';
 import { useResponsive } from '@/lib/useResponsive';
 import { getPendingTab, setPendingTab, subscribePendingTab } from '@/features/navigation/pendingTab';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
+import { isStartTab } from '@/features/navigation/startTab';
+import { useCurtainDown } from '@/features/feed/warmup';
 import { useApp } from '@/store/AppContext';
 import { recallAnswered } from '@/features/age/ageCheck';
 import { setCrashScreen } from '@/lib/crashReporting';
@@ -22,11 +24,17 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { TERMS_VERSION } from '@/lib/legal';
 import { colors } from '@/theme';
 
-const paths = { index: '/', discuss: '/discuss', coaches: '/coaches', profile: '/profile' } as const;
+/**
+ * The four tabs in the strip's order, left to right: Community, Home,
+ * Coaching, Profile. The bar's lit item, the arrow keys and the "which side
+ * is it on" check below all count along this one list, the same order as
+ * TabsPager's row and the bar's buttons.
+ */
+const paths = { discuss: '/discuss', index: '/', coaches: '/coaches', profile: '/profile' } as const;
 const routes = Object.keys(paths).map(name => ({ key: name, name }));
 /** The pages that slide up over the app; Escape closes them on a computer. */
 const SHEETS = new Set(['/compose', '/share', '/pick-group', '/ask', '/comments', '/post-menu', '/edit-post', '/messages/new', '/log-session', '/hit-request/new', '/court-report']);
-const TAB_ORDER: string[] = [paths.index, paths.discuss, paths.coaches, paths.profile];
+const TAB_ORDER: string[] = Object.values(paths);
 export function AppShell({ children }: { children: React.ReactNode }) {
   useTheme();
   const pathname = usePathname();
@@ -49,7 +57,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     document.documentElement.style.overscrollBehavior = 'none';
     document.body.style.overscrollBehavior = 'none';
   }, []);
-  // Keyboard on a computer: Escape closes a sheet, the left and right arrows step between the four tabs.
+  // Keyboard on a computer: Escape closes a sheet, the left and right arrows step between the four tabs in strip order.
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const onKey = (e: KeyboardEvent) => {
@@ -98,11 +106,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     && termsVersion !== TERMS_VERSION && !needsBirthday && !['/agree', '/birthday', '/sign-in'].includes(pathname);
   const { isPhone } = useResponsive();
   const tourOpen = useTourOpen();
-  const selected = useRef(0);
-  if (shown === '/') selected.current = 0;
-  else if (shown === '/discuss' || shown.startsWith('/question/') || shown.startsWith('/user/')) selected.current = 1;
-  else if (shown === '/coaches' || shown.startsWith('/coach/') || shown.startsWith('/coach-') || shown === '/ai-coach' || shown === '/booking-done') selected.current = 2;
-  else if (shown === '/profile' || ['/settings', '/edit-profile', '/change-handle', '/profile-details'].includes(shown)) selected.current = 3;
+  // Which tab the page on show belongs to, as its place in TAB_ORDER. A page
+  // that is not a tab's own keeps the tab it was opened from. It starts on
+  // Home: a real launch passes through the splash and then Community and
+  // sets it on the way, so this only shows on a link opened cold (a shared
+  // post, say), where Home is the tab it belongs with.
+  const selected = useRef(TAB_ORDER.indexOf(paths.index));
+  if (shown === paths.index) selected.current = TAB_ORDER.indexOf(paths.index);
+  else if (shown === paths.discuss || shown.startsWith('/question/') || shown.startsWith('/user/')) selected.current = TAB_ORDER.indexOf(paths.discuss);
+  else if (shown === paths.coaches || shown.startsWith('/coach/') || shown.startsWith('/coach-') || shown === '/ai-coach' || shown === '/booking-done') selected.current = TAB_ORDER.indexOf(paths.coaches);
+  else if (shown === paths.profile || ['/settings', '/edit-profile', '/change-handle', '/profile-details'].includes(shown)) selected.current = TAB_ORDER.indexOf(paths.profile);
   // Pages with their own bottom controls (a composer, an editor, a thread's
   // message box) run without the phone's floating bar. On a computer the
   // menu sits at the side, out of their way, so it stays, the way
@@ -117,6 +130,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const segments = useSegments() as string[];
   const onSplash = segments.length === 0 || (segments.length === 1 && segments[0] === 'index');
   const showNav = !!currentUserId && !hideEverywhere && !onSplash && !(isPhone && phoneOnlyHide);
+  const curtainDown = useCurtainDown();
   // A shared link opened while signed out goes to sign-in, not to an empty page.
   const mustSignIn = ready && authResolved && !currentUserId && !['/', '/index', '/sign-in', '/onboarding', '/birthday'].includes(pathname);
   // The gates — sign in, birthday, terms — are reached by one replace each,
@@ -170,7 +184,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     {/* While the tour is up, TalkBack reads only the tour, not the page under the dim. */}
     <View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={{ flex: 1, minWidth: 0, minHeight: 0 }}><RouteTransition>{children}</RouteTransition><Toast /><UploadBar /></View>
     {showNav && isPhone && nav}
-    {!!currentUserId && !hideEverywhere && (pathname === '/' || pathname === '/index') ? <WarmCurtain /> : null}
+    {/* The splash curtain, from the splash's hand-over until the page the app opens on has drawn (see warmup). */}
+    {!curtainDown && !!currentUserId && !hideEverywhere && (onSplash || isStartTab(pathname)) ? <WarmCurtain /> : null}
     {/* The first-run tour: over the bar, so it can light the bar's own buttons. */}
     {currentUserId ? <TourOverlay eligible={showNav && !detour && !onSplash} /> : null}
     {/* On its way to a gate (sign-in, birthday, terms): the page underneath is covered for the moment it takes. */}

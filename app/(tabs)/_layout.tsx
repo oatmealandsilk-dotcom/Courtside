@@ -21,9 +21,12 @@ export default function TabsLayout() {
     <View style={{ flex: 1 }}>
       <TabsPager pathname={pathname} />
       <View style={{ width: 0, height: 0, overflow: 'hidden' }} pointerEvents="none">
+        {/* In the strip's order, Community first. '/(tabs)' still means Home: an
+            address picks its screen by name, never by this order. What the order
+            does set is the "first tab" that Android's Back returns to. */}
         <Tabs tabBar={() => null} screenOptions={{ headerShown: false, animation: 'none' }}>
-          <Tabs.Screen name="index" options={{ title: 'Home' }} />
           <Tabs.Screen name="discuss" options={{ title: 'Community' }} />
+          <Tabs.Screen name="index" options={{ title: 'Feed' }} />
           <Tabs.Screen name="coaches" options={{ title: 'Coaching' }} />
           <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
         </Tabs>

@@ -243,6 +243,9 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   useEffect(() => { setImmersive(false); immersion.value = 0; punch.value = 1; }, [active, immersion, punch]);
   const [visit, setVisit] = useState(0);
   const focused = useIsFocused();
+  // Whether Home has been the tab on screen at all yet this time round.
+  const shownOnce = useRef(false);
+  if (focused) shownOnce.current = true;
   const latest = useRef(app);
   latest.current = app;
   const [order, setOrder] = useState<string[]>([]);
@@ -441,10 +444,12 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       .flatMap((i) => (i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : []))
       .filter((k) => !have.has(k));
     if (!fresh.length) return;
-    // Newest first, with nothing shown yet (the curtain is still up): the feed
-    // is simply dealt again, so the newest is the first thing you see.
+    // Newest first, with nothing shown yet (Home has not been on screen, or
+    // its first clip has not started): the feed is simply dealt again, so the
+    // newest is the first thing you see. The app opens on Community, so the
+    // feed can be loaded and ready long before anyone has looked at it.
     // Otherwise the new pages go in right after the one on screen, newest first.
-    if (NEWEST_FIRST && active === 0 && !playable) { rerank(); return; }
+    if (NEWEST_FIRST && active === 0 && (!playable || !shownOnce.current)) { rerank(); return; }
     const made = madeAt(data);
     const dealt = NEWEST_FIRST ? [...fresh].sort((a, b) => made(b) - made(a)) : shuffleFeed(fresh);
     setOrder((prev) => {
@@ -718,17 +723,18 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const WINDOW = 1;
   /** How many pages ahead stay mounted and buffering, so the feed is never caught out. */
   const AHEAD = 2;
-  /** How many of those the curtain (and a pull-to-refresh) waits for; the rest load in behind the feed. */
+  /** How many of those the first clip (and a pull-to-refresh) waits for; the rest load in behind the feed. */
   const FIRST = 1;
 
   // The warm-up: the first seven pages load (a video's first seconds, a
-  // photo, a thread's words) behind a curtain, which lifts when they are in
-  // — or after six seconds, whichever is first. Only the main feed waits.
+  // photo, a thread's words) before the first clip plays — or for six
+  // seconds at most, whichever is first. The app opens on Community, so this
+  // usually happens out of sight. Only the main feed waits.
   const [readyIds, setReadyIds] = useState<Set<string>>(() => new Set());
   // Clips whose player has been freed since they were ready (the page went
   // out of reach): a rebuilt page fetches from nothing, so its cover comes
   // back and a refresh landing on it waits for it again. readyIds itself only
-  // grows; it is what the opening curtain waits on.
+  // grows; it is what the opening warm-up waits on.
   const [goneIds, setGoneIds] = useState<Set<string>>(() => new Set());
   // `ok` true: the page's picture is in (a picture that failed counts as done
   // too: nothing waits on it, and its cover lifts). False: its video player was freed.
@@ -783,18 +789,20 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   useEffect(() => { if (firstReady && warmWaiters.current.length) { const w = warmWaiters.current; warmWaiters.current = []; w.forEach((fn) => fn()); } }, [firstReady]);
   const dataIn = !isSupabaseConfigured || app.remoteLoaded || app.snapshotShown;
   const warmed = !!scope || warmTimedOut || (ready && dataIn && feed.length > 0 && warmDone >= warmTargets.length);
-  // The shell keeps the splash curtain up until this says the first pages are in.
+  // When the app opens on the feed, the shell keeps the splash curtain up
+  // until this says the first pages are in.
   useEffect(() => { if (warmed && !scope) setFeedWarm(true); }, [warmed, scope]);
   // Playback starts only once the splash curtain has actually left the
   // screen (it says so itself), a beat after — never while it is still
-  // fading over the player.
+  // fading over the player. The app opens on Community: the curtain there
+  // lifts once Community has drawn (see warmup), not when the feed is in.
   const curtainDown = useCurtainDown();
   const [playable, setPlayable] = useState(!!scope);
   useEffect(() => {
     if (scope) { setPlayable(true); return; }
     if (!warmed) { setPlayable(false); return; }
-    // The curtain says when it is gone; if it never showed at all (the feed
-    // opened from a link, say), playback starts after a short wait instead.
+    // The curtain says when it is gone; if it went up but never got to lift
+    // (an alert's page opened over the launch, say), playback starts after a short wait instead.
     const t = setTimeout(() => setPlayable(true), curtainDown ? 120 : 1500);
     return () => clearTimeout(t);
   }, [warmed, curtainDown, scope]);
@@ -952,7 +960,10 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                         {story.caption ? <FoldedWords text={story.caption} open={openWords === `h:${story.id}`} onOpenChange={(open) => setOpenWords(open ? `h:${story.id}` : null)} /> : null}
                         <InstantMeta expiresAt={story.expiresAt} />
                       </View>
-                      {index === 0 && !scope ? <SwipeHint /> : null}
+                      {/* Only while Home is the tab on show: on the phone it is built
+                          beside Community at launch, and the hint's few showings
+                          would run out off screen. */}
+                      {index === 0 && !scope && focused ? <SwipeHint /> : null}
                     </Reanimated.View>
                     <Reanimated.View style={[styles.actions, { bottom: wordsBottom + RAIL_DROP }, tuckStyle]}>
                       <RailShade />
@@ -1141,7 +1152,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
 
                   <Reanimated.View style={[styles.caption, { bottom: wordsBottom }, tuckStyle]}>
                     <ReelCaption post={post} author={author} onAuthor={() => { tappedAuthor(`p:${post.id}`); router.push(`/user/${author.id}`); }} open={openWords === `p:${post.id}`} onOpenChange={(open) => setOpenWords(open ? `p:${post.id}` : null)} />
-                    {index === 0 && !scope ? <SwipeHint /> : null}
+                    {/* Only while Home is on show (see the Instant's hint above). */}
+                    {index === 0 && !scope && focused ? <SwipeHint /> : null}
                   </Reanimated.View>
 
                   {/* The rail stands on the words' bottom line, as on TikTok and Reels, so it rises only as high as it must. */}

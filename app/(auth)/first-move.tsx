@@ -5,6 +5,7 @@ import Animated, { Easing, FadeIn, FadeInDown } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { useLeave } from '@/components/LeaveCurtain';
+import { replaceWithStart } from '@/features/navigation/startTab';
 import { LevelPill } from '@/components/LevelPill';
 import { Avatar } from '@/components/ui';
 import { Wash } from '@/components/Wash';
@@ -21,10 +22,10 @@ import { colors, radius, spacing, typography, lift } from '@/theme';
 const enter = (i: number) => FadeInDown.delay(80 + i * 80).duration(420).easing(Easing.out(Easing.cubic));
 
 /**
- * Right after setup: one thing to do before the feed. Not a gate and not a
- * form — a clip is the obvious move, a real question someone asked sits
- * right there to answer in a sentence, and asking your own is a quiet line
- * at the bottom. "Later" is always there.
+ * Right after setup: one thing to do before the app opens. Not a gate and
+ * not a form — a clip is the obvious move, a real question someone asked
+ * sits right there to answer in a sentence, and asking your own is a quiet
+ * line at the bottom. "Later" is always there.
  */
 export default function FirstMove() {
   const styles = useThemedStyles(styleDefinitions);
@@ -50,9 +51,11 @@ export default function FirstMove() {
   const [asking, setAsking] = useState(false);
   const [ask, setAsk] = useState('');
 
+  // Whatever was picked, the app opens on its start page (Community, on the
+  // map: see startTab); a post or an Instant then opens over it.
   const done = (move: FirstMove, then?: () => void) => {
     actions.noteFirstMove(move);
-    leave(() => { router.replace('/(tabs)'); if (then) setTimeout(then, 380); });
+    leave(() => { replaceWithStart(); if (then) setTimeout(then, 380); });
   };
   const sendAnswer = () => {
     if (!question || answer.trim().length < 3) return;

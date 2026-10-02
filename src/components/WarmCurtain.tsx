@@ -4,27 +4,29 @@ import { StyleSheet, Text, View } from 'react-native';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { BrandMark } from '@/components/BrandMark';
-import { setCurtainDown, setFeedWarm, useFeedWarm } from '@/features/feed/warmup';
+import { curtainLiftBy, curtainReadyAnyway, setCurtainDown, useCurtainReady } from '@/features/feed/warmup';
 import { colors, spacing, font } from '@/theme';
 
 /**
- * The splash, kept up over the app until the feed's first pages are in, then
+ * The splash, kept up over the app until the page it opens on is ready, then
  * faded out once. It lives in the shell rather than on any one screen, so
- * the move from the splash route into the tabs happens underneath it.
+ * the move from the splash route into the tabs happens underneath it. The
+ * app opens on Community (see startTab): the curtain lifts as soon as that
+ * page has drawn, not when the feed is in, and the feed shows its own
+ * loading pages the first time you get to it rather than the logo again.
  */
 /**
  * The longest the curtain ever stays up, counted from the first time it is
- * drawn. Whatever the feed is doing (no connection, nothing to show, a load
- * that never finishes), the app is never left behind the logo with no way
- * on: after this it lifts anyway, the bar comes up, and the feed shows what
- * it has.
+ * drawn. Whatever the page under it is doing (no connection, nothing to
+ * show, a load that never finishes), the app is never left behind the logo
+ * with no way on: after this it lifts anyway, the bar comes up, and the
+ * page shows what it has.
  */
 const CURTAIN_MAX_MS = 10_000;
-let liftBy = 0;
 
 export function WarmCurtain() {
   const styles = useThemedStyles(styleDefinitions);
-  const warm = useFeedWarm();
+  const warm = useCurtainReady();
   const [shown, setShown] = useState(!warm);
   const fade = useSharedValue(1);
   const style = useAnimatedStyle(() => ({ opacity: fade.value }));
@@ -32,12 +34,11 @@ export function WarmCurtain() {
     if (!warm || !shown) return;
     fade.value = withTiming(0, { duration: 420 }, (finished) => { if (finished) { runOnJS(setShown)(false); runOnJS(setCurtainDown)(); } });
   }, [warm, shown, fade]);
-  // Not shown at all (the feed was already warm): playback need not wait on it.
+  // Not shown at all (the page was already ready): playback need not wait on it.
   useEffect(() => { if (!shown) setCurtainDown(); }, [shown]);
   useEffect(() => {
     if (warm) return undefined;
-    if (!liftBy) liftBy = Date.now() + CURTAIN_MAX_MS;
-    const t = setTimeout(() => setFeedWarm(true), Math.max(0, liftBy - Date.now()));
+    const t = setTimeout(curtainReadyAnyway, Math.max(0, curtainLiftBy(CURTAIN_MAX_MS) - Date.now()));
     return () => clearTimeout(t);
   }, [warm]);
   if (!shown) return null;

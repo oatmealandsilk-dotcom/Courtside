@@ -79,7 +79,7 @@ export default function Help() {
         })}
       </View>
       <View style={styles.links}>
-        {/* The first-run tour again, from Home (admins only until it is switched on for everyone). */}
+        {/* The first-run tutorial again, from Community on the map, where the app opens (admins only until it is switched on for everyone). */}
         {TOUR_ON || currentUser?.isAdmin ? (
           <Pressable accessibilityRole="button" onPress={replayTour} style={styles.link}>
             <Ionicons name="compass-outline" size={19} color={colors.text} />

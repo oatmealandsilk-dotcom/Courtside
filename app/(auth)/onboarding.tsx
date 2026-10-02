@@ -8,6 +8,7 @@ import { LocationField } from '@/components/LocationField';
 import { PermissionRows } from '@/components/PermissionRows';
 import { Button, Collapse, Field, SegmentedControl, Toggle } from '@/components/ui';
 import { writeSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
+import { replaceWithStart } from '@/features/navigation/startTab';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { useGateSpace } from '@/lib/useGateSpace';
@@ -254,10 +255,13 @@ export default function Onboarding() {
     }
     actions.completeOnboarding(profile);
     if (currentUserId) void writeSkipped(currentUserId, [...skipped.current]);
-    // Came here from the profile's "finish setting up"? Back to the profile, not to the top of the feed.
-    // A new player with nothing posted yet goes on to their first move.
+    // Came here from the profile's "finish setting up"? Back to the profile, not to where the app opens.
+    // A new player with nothing posted yet goes on to their first move; anyone
+    // else into the app on its start page (Community, on the map: see startTab).
     const hasPosted = !!currentUserId && (posts.some((p) => p.authorId === currentUserId) || questions.some((q) => q.authorId === currentUserId) || answers.some((a) => a.authorId === currentUserId));
-    router.replace(params.from === 'profile' ? '/(tabs)/profile' : hasPosted ? '/(tabs)' : '/first-move');
+    if (params.from === 'profile') router.replace('/(tabs)/profile');
+    else if (hasPosted) replaceWithStart();
+    else router.replace('/first-move');
   };
 
   const skipStep = () => {
