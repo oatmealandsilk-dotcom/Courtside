@@ -13,6 +13,7 @@ import { goBack } from '@/lib/goBack';
 import { colors, radius, spacing, typography } from '@/theme';
 import { shareLink } from '@/lib/shareLink';
 import { confirm, confirmBlock } from '@/lib/confirm';
+import { notKnownAdult } from '@/features/players/age';
 
 type Row = {
   key: string;
@@ -87,6 +88,11 @@ export default function PostMenu() {
   if (mine && post) {
     rows.push(
       { key: 'edit', icon: 'create-outline', label: 'Edit', onPress: () => router.replace({ pathname: '/edit-post', params: { id: post.id, kind: 'post' } }) },
+      // A place only typed, with no court: one tap to pick the court, so the post shows on its page.
+      // Known adults only: a court tag says where a minor regularly plays.
+      ...(post.location && !post.court && currentUser && !notKnownAdult(currentUser)
+        ? [{ key: 'court', icon: 'tennisball-outline' as const, label: 'Add the court', note: 'Shows this post on the court’s page.', onPress: () => router.replace({ pathname: '/edit-post', params: { id: post.id, kind: 'post', pickPlace: '1' } }) }]
+        : []),
       { key: 'pin', icon: 'pin-outline', label: post.pinned ? 'Unpin from profile' : 'Pin to profile', note: post.pinned ? undefined : 'Shown first on your profile.', onPress: () => { actions.togglePinPost(post.id); close(); } },
       { key: 'archive', icon: 'archive-outline', label: post.archived ? 'Unarchive' : 'Archive', note: post.archived ? undefined : 'Hidden from everyone; kept in your archive.', onPress: () => { actions.toggleArchivePost(post.id); close(); } },
       // Asked once, the way other apps ask; the menu stays up behind the question, so Cancel leaves you on it.

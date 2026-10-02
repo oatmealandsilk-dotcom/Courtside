@@ -1,6 +1,10 @@
 import { isoDaysAgo } from '@/lib/format';
 import type { Comment, Post } from '../types';
 import { CURRENT_USER_ID } from './users';
+import { DEMO_PARK } from './courts';
+
+/** A demo park as a post's court tag. */
+const courtTag = (n: number) => { const c = DEMO_PARK(n); return { id: c.id, name: c.name ?? 'Public courts', lat: c.lat, lng: c.lng }; };
 
 export const posts: Post[] = [
   {
@@ -30,6 +34,8 @@ export const posts: Post[] = [
     likedBy: ['u-dev', 'u-june'],
     commentIds: ['c3', 'c7', 'c8'],
     tags: ['serve', 'practice'],
+    // A place typed rather than picked from the courts list: its menu offers "Add the court".
+    location: 'Alder Park',
   },
   {
     id: 'p3',
@@ -100,6 +106,58 @@ export const posts: Post[] = [
     likedBy: ['u-dev'],
     commentIds: [],
     tags: ['singles', 'mental'],
+  },
+  // Posts tagged at the demo parks, so their pages, the map's court cards and
+  // Courts near you have something to show.
+  {
+    id: 'p-court-1',
+    authorId: 'u-sam',
+    kind: 'clip',
+    createdAt: isoDaysAgo(0, 5),
+    body: 'Inside-out forehand drill on court 2. The lights here stay on till 10.',
+    mediaLabel: 'Clip · 0:24',
+    likedBy: ['u-marcus', CURRENT_USER_ID],
+    commentIds: [],
+    tags: ['forehand'],
+    location: 'Alder Park',
+    court: courtTag(1),
+  },
+  {
+    id: 'p-court-2',
+    authorId: 'u-sam',
+    kind: 'note',
+    createdAt: isoDaysAgo(1, 3),
+    body: 'Alder Park got new nets on courts 3 and 4. Quiet before 8am on weekdays.',
+    likedBy: ['u-priya'],
+    commentIds: [],
+    tags: ['courts'],
+    location: 'Alder Park',
+    court: courtTag(1),
+  },
+  {
+    id: 'p-court-3',
+    authorId: 'u-marcus',
+    kind: 'session',
+    createdAt: isoDaysAgo(2, 1),
+    body: 'First full hour of rallying in years. Cypress Hollow was busy but a court opened up by 7.',
+    session: { focus: 'Rally consistency', minutes: 60, drills: ['Crosscourt rallies', 'Down the line on call'], intensity: 2 },
+    likedBy: ['u-sam'],
+    commentIds: [],
+    tags: ['practice'],
+    location: 'Cypress Hollow Park',
+    court: courtTag(3),
+  },
+  {
+    id: 'p-court-4',
+    authorId: 'u-priya',
+    kind: 'note',
+    createdAt: isoDaysAgo(3),
+    body: 'Footwork clinic at Cypress Hollow went well. Split step on the opponent’s contact, not after it.',
+    likedBy: ['u-marcus', 'u-sam'],
+    commentIds: [],
+    tags: ['footwork', 'coaching'],
+    location: 'Cypress Hollow Park',
+    court: courtTag(3),
   },
 ];
 

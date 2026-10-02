@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { demoCourtsNamed, demoCourtsNear } from '@/data/mock/courts';
 import { milesBetween } from '@/features/players/geo';
 import type { LatLng } from '@/features/players/positions';
 import { plain } from '@/features/search/words';
@@ -48,6 +49,9 @@ export function peekCourts(center: LatLng, radiusMeters = 9000): Court[] | undef
 
 async function loadCourts(center: LatLng, radiusMeters: number, key: string): Promise<Court[]> {
   let rows: Row[] | null = null;
+  // The demo (no database) has its own made-up parks around its city, so the
+  // courts never depend on the internet there; anywhere else it asks OpenStreetMap.
+  if (!supabase) { const demo = demoCourtsNear(center, radiusMeters); if (demo.length) rows = demo; }
   if (supabase) {
     try {
       const { data, error } = await supabase.functions.invoke<{ courts?: Row[] }>('courts', { body: { lat: center.lat, lng: center.lng, km: radiusMeters / 1000 } });
@@ -152,12 +156,14 @@ const named = new Map<string, Court[]>();
  * with the first word typed ("god" finds Robert V. Godbold Park), from our
  * own database, for a place beyond the courts already on the phone. Two
  * letters at least: one letter matches a thousand courts. Answers are kept
- * for the session. Empty without a database (the demo).
+ * for the session. The demo searches its own made-up parks.
  */
 export async function searchCourtsByName(text: string, near: LatLng, signal?: AbortSignal): Promise<Court[]> {
   // Only letters, digits, apostrophes and hyphens reach the query, so nothing typed can change its meaning.
   const word = (plain(text).split(' ')[0] ?? '').replace(/[^\p{L}\p{N}'-]/gu, '');
-  if (!supabase || word.length < 2) return [];
+  if (word.length < 2) return [];
+  // The demo looks through its own made-up parks.
+  if (!supabase) return fold(demoCourtsNamed(word), near, 300000);
   const key = `${word}|${near.lat.toFixed(1)},${near.lng.toFixed(1)}`;
   const kept = named.get(key);
   if (kept) return kept;

@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -20,7 +20,7 @@ import { colors, spacing, typography } from '@/theme';
  */
 export default function EditPost() {
   const styles = useThemedStyles(styleDefinitions);
-  const { id = '', kind: rawKind } = useLocalSearchParams<{ id?: string; kind?: string }>();
+  const { id = '', kind: rawKind, pickPlace } = useLocalSearchParams<{ id?: string; kind?: string; pickPlace?: string }>();
   const { posts, questions, currentUserId, actions } = useApp();
   const isQuestion = rawKind === 'question';
   const post = isQuestion ? undefined : posts.find((p) => p.id === id);
@@ -46,6 +46,16 @@ export default function EditPost() {
     setCourt(post?.court ?? null);
     setFilled(true);
   }, [filled, post, question]);
+
+  // Opened from "Add the court" in the post's menu: straight to the place picker
+  // once the post is here, a beat after the sheet is up.
+  const picked = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (pickPlace !== '1' || picked.current || !filled || !post || !mine) return;
+    const typed = post.location ?? '';
+    picked.current = setTimeout(() => openPlacePicker((value, court) => { setLocation(value); setCourt(court ?? null); }, typed), 350);
+  }, [pickPlace, filled, post, mine]);
+  useEffect(() => () => { if (picked.current) clearTimeout(picked.current); }, []);
 
   const canSave = filled && mine && (isQuestion ? title.trim().length >= 3 : true);
   const save = () => {

@@ -77,8 +77,24 @@ export function showCourtOnMap(court: Spot) {
 }
 
 /**
- * The name every court link used before the court page existed. Kept so the
- * screens still calling it (a clip's caption, Search) open the page too;
- * rename those to openCourt and remove this.
+ * "Play here": the hit form with this court already chosen as where, so
+ * posting a hit from a court's page or card keeps that court (its id too,
+ * which puts the hit on the court's page).
  */
-export const openCourtOnMap = openCourt;
+export const playHereHref = (court: Spot): Href => ({
+  pathname: '/hit-request/new',
+  params: { courtId: court.id || 'near', courtName: court.name, lat: court.lat.toFixed(5), lng: court.lng.toFixed(5) },
+});
+export function playHere(court: Spot) {
+  router.push(playHereHref(court));
+}
+
+/** "Post from here": a new post or clip with this court already tagged. Only a court with the map's id can be tagged. */
+export function postFromCourt(court: Spot & { id: string }) {
+  router.push({ pathname: '/compose', params: { courtId: court.id, courtName: court.name, lat: court.lat.toFixed(5), lng: court.lng.toFixed(5) } });
+}
+
+/** A court into any of your chats ("meet here"), with its id, so the chat's card opens this same court's page. */
+export function sendCourtToChat(court: Spot) {
+  router.push({ pathname: '/share', params: { kind: 'court', id: court.id ?? '', name: court.name, lat: String(court.lat), lng: String(court.lng) } });
+}

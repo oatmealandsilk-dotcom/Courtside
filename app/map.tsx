@@ -15,18 +15,20 @@ import { colors } from '@/theme';
 export default function MapScreen() {
   // Hears a theme change, so its own colours never lag the page's.
   useTheme();
-  const { users, currentUser, currentUserId, blockedIds, locationEnabled, detectedCoords, actions } = useApp();
+  const { users, currentUser, currentUserId, blockedIds, locationEnabled, locationAsked, detectedCoords, actions } = useApp();
   const players = users.filter((u) => u.id !== currentUserId && !blockedIds.includes(u.id));
   const location = useLocationToggle();
-  // Opening the map is the moment to ask where you are, once.
+  // Opening the map is the moment to ask where you are: once, and only if you
+  // have never chosen. Off, once chosen, stays off however the map is opened.
   const asked = useRef(false);
   useEffect(() => {
-    if (asked.current || locationEnabled) return;
+    if (asked.current || locationEnabled || locationAsked !== false) return;
     asked.current = true;
     void actions.setLocationEnabled(true);
-  }, [locationEnabled, actions]);
+  }, [locationEnabled, locationAsked, actions]);
   // Opened from a post's tagged court: the map goes there, with the courts showing.
-  const params = useLocalSearchParams<{ court?: string; lat?: string; lng?: string; name?: string }>();
+  // Opened on an open hit (?hit=…): the map goes there with its card up.
+  const params = useLocalSearchParams<{ court?: string; lat?: string; lng?: string; name?: string; hit?: string }>();
   const lat = Number(params.lat); const lng = Number(params.lng);
   const focusCourt = useMemo(
     () => (params.court && params.name && Number.isFinite(lat) && Number.isFinite(lng) ? { id: params.court, name: params.name, lat, lng } : null),
@@ -39,7 +41,7 @@ export default function MapScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.bgElevated }}>
       {currentUser ? (
-        <NearbyMap expanded fullscreen me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onBack={back} onOpen={(id) => router.push(`/user/${id}`)} focusCourt={focusCourt} />
+        <NearbyMap expanded fullscreen me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onBack={back} onOpen={(id) => router.push(`/user/${id}`)} focusCourt={focusCourt} focusHit={params.hit ?? null} />
       ) : (
         <EmptyState title="Sign in to see who is around" />
       )}

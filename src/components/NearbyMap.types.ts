@@ -17,4 +17,6 @@ export interface NearbyMapProps {
   onToggleLocation?: () => void;
   /** Opened from a post's tagged court: the map starts there with that court's card up. */
   focusCourt?: TaggedCourt | null;
+  /** Opened on an open hit (?hit=…): the map goes to it with its card up. */
+  focusHit?: string | null;
 }

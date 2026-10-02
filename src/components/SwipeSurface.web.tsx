@@ -166,7 +166,7 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
       if ((delegateOnly && nearest?.getAttribute('data-swipe-delegate-right') !== 'true' && nearest?.getAttribute('data-swipe-delegate-left') !== 'true') ||
         // Sideways strips are their own thing: a drag on them never turns the page,
         // not even at their ends — that is how people ended up in Community by accident.
-        target.closest('input,textarea,select,video,#topic-filter-strip,#who-to-follow,#stories-rail,[data-swipe-ignore="true"]')) return;
+        target.closest('input,textarea,select,video,#topic-filter-strip,#who-to-follow,#stories-rail,#courts-near-strip,[data-swipe-ignore="true"]')) return;
       start.current = { x: event.clientX, y: event.clientY, lastX: event.clientX, time: performance.now(), velocity: 0, horizontal: false, delegateOnly, delegateDirection: nearest?.getAttribute("data-swipe-delegate-right") === "true" ? "right" : "left" };
     }}
     onPointerMoveCapture={event => {

@@ -1,4 +1,5 @@
-import type { User } from '@/data/types';
+import type { HitRequest, User } from '@/data/types';
+import { hitShort } from '@/features/hits/format';
 import type { Court } from '@/features/players/courts';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { initials } from '@/lib/format';
@@ -75,3 +76,30 @@ export function courtPinHtml(court: Court, on: boolean): string {
   const name = court.name && court.name !== 'Tennis courts' ? `<span class="cs-court-name" style="${nameStyle}">${court.name.replace(/[<>&"]/g, '')}</span>` : '';
   return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:999px;background:${colors.court};border:2px solid ${colors.bg};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,${on ? '.3' : '.2'});cursor:pointer">${courtGlyph(colors.brandInk)}${name}</div>`;
 }
+
+/**
+ * A court on the still card in Find Players: a small quiet dot, no glyph and
+ * no name, just enough to show where the courts in your city are. Not
+ * tappable: a tap anywhere on the card opens the full map.
+ */
+export function courtDotHtml(): string {
+  return `<div style="width:10px;height:10px;border-radius:999px;background:${colors.court};border:2px solid ${colors.bg};box-sizing:content-box;box-shadow:0 1px 3px rgba(0,0,0,.18);pointer-events:none"></div>`;
+}
+
+/** A tennis ball, drawn small enough for a flag: a filled ball with its two seams. */
+const ball = (fill: string, seam: string) =>
+  `<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="5.2" fill="${fill}"/><path d="M2.3 2.9c1.9 1.5 1.9 4.7 0 6.2M9.7 2.9c-1.9 1.5-1.9 4.7 0 6.2" fill="none" stroke="${seam}" stroke-width="1.1" stroke-linecap="round"/></svg>`;
+
+/**
+ * An open hit: a small brand-green flag with a ball and when ("Sat 9am"),
+ * its point on the spot. The canvases hang it from its bottom with a lift,
+ * so it floats above a court pin at the same spot rather than covering it.
+ */
+export function hitPinHtml(hit: HitRequest, on: boolean): string {
+  const when = hitShort(hit.startsAt).replace(/[<>&"]/g, '');
+  const ring = on ? `0 0 0 2px ${colors.bg},` : '';
+  return `<div class="cs-pin" style="display:flex;flex-direction:column;align-items:center;cursor:pointer"><div style="display:flex;align-items:center;gap:4px;padding:${on ? '5px 10px' : '4px 8px'};border-radius:999px;background:${colors.brand};color:${colors.brandInk};white-space:nowrap;box-shadow:${ring}0 2px 8px rgba(0,0,0,${on ? '.3' : '.2'});${FONT}">${ball(colors.brandInk, colors.brand)}<span>${when}</span></div><div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid ${colors.brand}"></div></div>`;
+}
+
+/** How far above its spot a hit's flag hangs: clear of a court pin there. */
+export const HIT_LIFT = -10;

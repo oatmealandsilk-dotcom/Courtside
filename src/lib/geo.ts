@@ -12,7 +12,15 @@ export type GeoResult =
   | { ok: true; lat: number; lng: number }
   | { ok: false; reason: 'unavailable' | 'denied' | 'timeout' };
 
-async function fromDevice(): Promise<GeoResult> {
+/**
+ * `recentMs`: the oldest answer that will do. Without it, a phone that cannot
+ * get a fix in time falls back on the last place it knew, however old (fine
+ * for a city); with it, an older one counts as no answer (for "where are you
+ * standing right now").
+ */
+interface Ask { recentMs?: number }
+
+async function fromDevice({ recentMs }: Ask): Promise<GeoResult> {
   try {
     const perm = await Location.requestForegroundPermissionsAsync();
     if (!perm.granted) return { ok: false, reason: 'denied' };
@@ -21,7 +29,7 @@ async function fromDevice(): Promise<GeoResult> {
       new Promise((resolve) => setTimeout(() => resolve(null), 9000)),
     ]);
     if (!fix) {
-      const last = await Location.getLastKnownPositionAsync();
+      const last = await Location.getLastKnownPositionAsync(recentMs ? { maxAge: recentMs } : undefined);
       if (!last) return { ok: false, reason: 'timeout' };
       return { ok: true, lat: last.coords.latitude, lng: last.coords.longitude };
     }
@@ -31,7 +39,7 @@ async function fromDevice(): Promise<GeoResult> {
   }
 }
 
-function fromBrowser(): Promise<GeoResult> {
+function fromBrowser({ recentMs }: Ask): Promise<GeoResult> {
   return new Promise((resolve) => {
     const geo = typeof navigator !== 'undefined' ? navigator.geolocation : undefined;
     if (!geo || typeof geo.getCurrentPosition !== 'function') {
@@ -48,7 +56,7 @@ function fromBrowser(): Promise<GeoResult> {
       geo.getCurrentPosition(
         (position) => done({ ok: true, lat: position.coords.latitude, lng: position.coords.longitude }),
         (error) => done({ ok: false, reason: error.code === 1 ? 'denied' : 'timeout' }),
-        { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 },
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: recentMs ?? 300000 },
       );
     } catch {
       done({ ok: false, reason: 'unavailable' });
@@ -57,6 +65,6 @@ function fromBrowser(): Promise<GeoResult> {
   });
 }
 
-export function getPosition(): Promise<GeoResult> {
-  return Platform.OS === 'web' ? fromBrowser() : fromDevice();
+export function getPosition(ask: Ask = {}): Promise<GeoResult> {
+  return Platform.OS === 'web' ? fromBrowser(ask) : fromDevice(ask);
 }

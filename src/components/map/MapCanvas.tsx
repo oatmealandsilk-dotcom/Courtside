@@ -7,7 +7,7 @@ import { CLOSE_ZOOM_NAMES, FAR_ZOOM, MAP_PIN_CSS } from '@/components/map/marker
 import type { LatLng } from '@/features/players/positions';
 
 /** One thing drawn on the map, as the HTML MapLibre will place there. */
-export interface CanvasMarker { id: string; lat: number; lng: number; html: string; anchor?: 'center' | 'top'; offsetY?: number; /** Stacking: higher sits on top (courts under players under you). */ z?: number }
+export interface CanvasMarker { id: string; lat: number; lng: number; html: string; /** Which part of it sits on the spot: a hit's flag hangs from its point. */ anchor?: 'center' | 'top' | 'bottom'; offsetY?: number; /** Stacking: higher sits on top (courts under players under you). */ z?: number }
 
 export interface MapCanvasHandle { flyTo: (to: LatLng, zoom?: number, ms?: number) => void }
 
@@ -21,7 +21,8 @@ interface Props {
   markers: CanvasMarker[];
   onTap?: (id: string) => void;
   onMapTap?: () => void;
-  onMove?: (center: LatLng) => void;
+  /** Where the map came to rest, and how close in. */
+  onMove?: (center: LatLng, zoom: number) => void;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -71,7 +72,7 @@ function look(l){for(var id in l){if(!map.getLayer(id))continue;var r=l[id];try{
 map.on('load',function(){look(LOOK);post({type:'ready'})});
 var box=document.getElementById('m');function zoomClass(){var z=map.getZoom();box.classList.toggle('cs-close',z>=${CLOSE_ZOOM_NAMES});box.classList.toggle('cs-far',z<${FAR_ZOOM})}zoomClass();map.on('zoom',zoomClass);
 map.on('click',function(){post({type:'maptap'})});
-map.on('moveend',function(){var c=map.getCenter();post({type:'move',lat:c.lat,lng:c.lng})});
+map.on('moveend',function(){var c=map.getCenter();post({type:'move',lat:c.lat,lng:c.lng,zoom:map.getZoom()})});
 var ms=[];
 window.__cs={
   set:function(list){ms.forEach(function(m){m.remove()});ms=[];list.forEach(function(it){var el=document.createElement('div');el.innerHTML=it.html;if(it.z!=null)el.style.zIndex=String(it.z);el.addEventListener('click',function(e){e.stopPropagation();post({type:'tap',id:it.id})});ms.push(new maplibregl.Marker({element:el,anchor:it.anchor||'center',offset:[0,it.offsetY||0]}).setLngLat([it.lng,it.lat]).addTo(map))})},
@@ -95,7 +96,7 @@ window.__cs={
         allowsInlineMediaPlayback
         setBuiltInZoomControls={false}
         onMessage={(e) => {
-          let msg: { type: string; id?: string; lat?: number; lng?: number };
+          let msg: { type: string; id?: string; lat?: number; lng?: number; zoom?: number };
           try { msg = JSON.parse(e.nativeEvent.data); } catch { return; }
           if (msg.type === 'ready') {
             ready.current = true;
@@ -107,7 +108,7 @@ window.__cs={
           }
           else if (msg.type === 'tap' && msg.id) latest.current.onTap?.(msg.id);
           else if (msg.type === 'maptap') latest.current.onMapTap?.();
-          else if (msg.type === 'move' && msg.lat !== undefined && msg.lng !== undefined) latest.current.onMove?.({ lat: msg.lat, lng: msg.lng });
+          else if (msg.type === 'move' && msg.lat !== undefined && msg.lng !== undefined && msg.zoom !== undefined) latest.current.onMove?.({ lat: msg.lat, lng: msg.lng }, msg.zoom);
         }}
       />
     </View>

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { Post, User } from '@/data/types';
+import type { User } from '@/data/types';
 import { sameCourt } from '@/features/places/court';
-import { isSupabaseConfigured } from '@/lib/supabase';
+import { notKnownAdult } from '@/features/players/age';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { useApp } from '@/store/AppContext';
 
@@ -17,6 +17,26 @@ import { useApp } from '@/store/AppContext';
 const HIDE_TEENS = true;
 
 export type CourtPostsStatus = 'loading' | 'ready' | 'failed';
+
+/** What deciding whose posts a court shows needs: everyone loaded, who you hide, who you follow, and you. */
+export interface CourtSeeing { byId: Map<string, User>; hidden: Set<string>; following: Set<string>; me: string | null }
+export function courtSeeing(s: { users: User[]; blockedIds: string[]; mutedIds: string[]; followingIds: string[]; currentUserId: string | null }): CourtSeeing {
+  return { byId: new Map(s.users.map((u) => [u.id, u])), hidden: new Set([...s.blockedIds, ...s.mutedIds]), following: new Set(s.followingIds), me: s.currentUserId };
+}
+
+/**
+ * Whether a post by this author may show on a court (its page, its reel, the
+ * map's card, the "2 clips" on Courts near you), so every one of them agrees.
+ * A post whose author is not loaded cannot draw in the reel; leaving it out
+ * keeps tile N on page N.
+ */
+export function canSeeAtCourt(author: User | undefined, ctx: CourtSeeing): boolean {
+  if (!author || ctx.hidden.has(author.id)) return false;
+  const mineOrFollowed = author.id === ctx.me || ctx.following.has(author.id);
+  if (author.isPrivate && !mineOrFollowed) return false;
+  if (HIDE_TEENS && notKnownAdult(author) && !mineOrFollowed) return false;
+  return true;
+}
 
 /**
  * Everything posted at one court, newest first, for its page, its reel and
@@ -57,21 +77,9 @@ export function useCourtPosts(place: { id?: string; lat: number; lng: number } |
 
   const list = useMemo(() => {
     if (!place) return [];
-    const byId = new Map<string, User>(users.map((u) => [u.id, u]));
-    const hidden = new Set([...blockedIds, ...mutedIds]);
-    const following = new Set(followingIds);
-    const seeable = (p: Post) => {
-      const author = byId.get(p.authorId);
-      // A post whose author is not loaded cannot draw in the reel; leaving it out here keeps tile N on page N.
-      if (!author || hidden.has(author.id)) return false;
-      const mineOrFollowed = author.id === currentUserId || following.has(author.id);
-      if (author.isPrivate && !mineOrFollowed) return false;
-      const minor = isSupabaseConfigured ? author.ageGroup !== 'adult' : author.ageGroup === 'teen';
-      if (HIDE_TEENS && minor && !mineOrFollowed) return false;
-      return true;
-    };
+    const ctx = courtSeeing({ users, blockedIds, mutedIds, followingIds, currentUserId });
     return posts
-      .filter((p) => !!p.court && !p.archived && sameCourt(p.court, place) && seeable(p))
+      .filter((p) => !!p.court && !p.archived && sameCourt(p.court, place) && canSeeAtCourt(ctx.byId.get(p.authorId), ctx))
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   }, [posts, users, blockedIds, mutedIds, followingIds, currentUserId, place?.id, place?.lat, place?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 

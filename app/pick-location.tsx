@@ -5,7 +5,7 @@ import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Screen } from '@/components/ui';
-import { CourtGlyph } from '@/components/map/MapChrome';
+import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { Highlighted, score } from '@/components/CourtSearch';
 import type { TaggedCourt } from '@/data/types';
 import { takePlacePicker } from '@/features/places/picker';

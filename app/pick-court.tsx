@@ -3,11 +3,14 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { CourtGlyph } from '@/components/map/MapChrome';
+import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { EmptyState, Screen } from '@/components/ui';
-import { fetchCourts, type Court } from '@/features/players/courts';
-import { formatMiles, milesBetween } from '@/features/players/geo';
+import { labelOf, score } from '@/features/places/courtName';
+import { useCourtSearch } from '@/features/places/useCourtSearch';
+import { courtRows, fetchCourts, type Court } from '@/features/players/courts';
+import { formatMiles } from '@/features/players/geo';
+import { plain } from '@/features/search/words';
 import { homeFor } from '@/features/players/positions';
 import { goBack } from '@/lib/goBack';
 import { useApp } from '@/store/AppContext';
@@ -15,9 +18,10 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 
 /**
- * Pick a court to send in a chat: the public courts near you, nearest first,
- * with a search box. Tap one and it lands in the chat as a card with its
- * name and "Open in Maps", so everyone knows where to meet.
+ * Pick a court to send in a chat: the public courts near you, nearest first
+ * (one row per park), with a search box that also finds parks further away by
+ * name. Tap one and it lands in the chat as a card with its name, which opens
+ * the court's page, so everyone knows where to meet.
  */
 export default function PickCourt() {
   const styles = useThemedStyles(styleDefinitions);
@@ -33,15 +37,18 @@ export default function PickCourt() {
     fetchCourts(home).then((list) => { if (on) setCourts(list); }).catch(() => { if (on) { setFailed(true); setCourts([]); } });
     return () => { on = false; };
   }, [home]);
-  const term = query.trim().toLowerCase();
-  const list = (courts ?? [])
-    .map((c) => ({ c, miles: home ? milesBetween(home, c) : 0 }))
-    .filter(({ c }) => !term || c.name.toLowerCase().includes(term))
-    .sort((a, b) => a.miles - b.miles);
+  const term = plain(query);
+  const nearby = useMemo(() => courtRows(courts ?? [], home), [courts, home]);
+  // Two letters on, the courts loaded here and, a beat later, matching parks further away.
+  const searched = useCourtSearch(query, home, courts ?? undefined, 40);
+  const list = !term ? nearby
+    : term.replace(/\s/g, '').length < 2 ? nearby.filter(({ c }) => score(labelOf(c), [term]) !== null)
+      : searched;
   const send = (c: Court) => {
     if (!conversation) return;
-    // The name as the map knows it; the distance would be from here, which means nothing to whoever reads it.
-    actions.sendCourt(conversation, { name: c.name, lat: c.lat, lng: c.lng });
+    // The name as the map knows it, and its id, so the card opens this court's page;
+    // the distance would be from here, which means nothing to whoever reads it.
+    actions.sendCourt(conversation, { id: c.id, name: labelOf(c), lat: c.lat, lng: c.lng });
     goBack(`/messages/${conversation}`);
   };
   return (
@@ -57,10 +64,10 @@ export default function PickCourt() {
       ) : (
         <View style={styles.group}>
           {list.slice(0, 40).map(({ c, miles }, i) => (
-            <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`Send ${c.name}`} onPress={() => send(c)} style={({ pressed }) => [styles.row, i > 0 && styles.line, pressed && { backgroundColor: colors.surfaceAlt }]}>
+            <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`Send ${labelOf(c)}`} onPress={() => send(c)} style={({ pressed }) => [styles.row, i > 0 && styles.line, pressed && { backgroundColor: colors.surfaceAlt }]}>
               <View style={styles.icon}><CourtGlyph size={14} color={colors.brand} /></View>
               <View style={{ flex: 1, gap: 2 }}>
-                <Text style={styles.name} numberOfLines={1}>{c.name}</Text>
+                <Text style={styles.name} numberOfLines={1}>{labelOf(c)}</Text>
                 <Text style={styles.meta}>{formatMiles(miles)}{c.count > 1 ? ` · ${c.count} courts` : ''}{c.lit ? ' · lights' : ''}</Text>
               </View>
               <Ionicons name="paper-plane-outline" size={18} color={colors.textMuted} />

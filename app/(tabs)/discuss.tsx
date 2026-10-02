@@ -16,6 +16,16 @@ import { useLocationToggle } from '@/features/players/useLocationToggle';
 import { QuestionCard, TOPIC_META } from '@/components/QuestionCard';
 import { HitCard } from '@/components/HitCard';
 import { Avatar, Chip, EmptyState, Screen } from '@/components/ui';
+import { Highlighted } from '@/components/CourtSearch';
+import { CourtGlyph } from '@/components/map/CourtGlyph';
+import { CourtsNear, useNearCourts } from '@/components/place/CourtsNear';
+import { NEAR_HIT_MILES, canSeeHitAt, hitSpot, openHits as openHitsOf } from '@/features/hits/visible';
+import { labelOf, looksPublic } from '@/features/places/courtName';
+import { useCourtSearch } from '@/features/places/useCourtSearch';
+import { openCourt, playHere } from '@/features/players/courtLink';
+import { formatMiles, milesBetween } from '@/features/players/geo';
+import { useMyCity } from '@/features/players/useMyCity';
+import { plain } from '@/features/search/words';
 import { askedSection, reportSection, subscribeSectionRequest, takeAskedSection } from '@/features/navigation/swipeOrder';
 import { START_SECTION, START_TAB } from '@/features/navigation/startTab';
 import { setStartDrawn } from '@/features/feed/warmup';
@@ -42,11 +52,13 @@ const asSection = (value: string): Section => (value === 'discussions' ? 'discus
 const asTopic = (value: string | undefined): QuestionTopic | 'all' => (value && value in TOPIC_META ? (value as QuestionTopic) : 'all');
 
 const SORT_LABEL = { new: 'New', hot: 'Hot', top: 'Top', unanswered: 'Unanswered' } as const;
+/** Open hits shown before "More open hits": the rest are a tap away, never dropped. */
+const HITS_SHOWN = 5;
 const SORT_HINT = { new: 'Newest first', hot: 'Busiest right now', top: 'Most upvoted', unanswered: 'Nobody has replied yet' } as const;
 
 function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
-  const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, saved, actions, detectedCoords, locationEnabled, hitRequests } = useApp();
+  const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, followingIds, saved, actions, detectedCoords, locationEnabled, hitRequests } = useApp();
   // The section lives here, not in the address: listening to the address made
   // this whole tab re-render on every route change anywhere in the app.
   // Other pages ask for a section through requestSection before navigating;
@@ -112,8 +124,42 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
 
   // How the list is ordered, the way Reddit offers it. New stays the default.
   const [sort, setSort] = useState<'new' | 'hot' | 'top' | 'unanswered'>('new');
-  // Hits still ahead (or just started), not called off, not from anyone blocked or muted.
-  const openHits = hitRequests.filter((h) => !h.cancelled && Date.parse(h.startsAt) > Date.now() - 3_600_000 && !blockedIds.includes(h.authorId) && !mutedIds.includes(h.authorId)).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  // One centre for everything on Find Players (the map card's dots and count,
+  // Courts near you, which hits are near, the court search), so their numbers
+  // agree and courts load once: your profile's city, else where the phone is.
+  const { city: myCityAt } = useMyCity(currentUser);
+  const firstCentre = myCityAt ?? detectedCoords ?? null;
+  const nearCourts = useNearCourts(firstCentre);
+  // Hits still ahead (or just started), not called off, not from anyone blocked
+  // or muted, and only those the teen rule lets you see (as on court pages and the map).
+  const seenHits = useMemo(() => {
+    const usersById = new Map(users.map((u) => [u.id, u]));
+    return openHitsOf(hitRequests, { blockedIds, mutedIds }).filter((h) => canSeeHitAt(h, { usersById, followingIds, currentUserId }));
+  }, [hitRequests, users, blockedIds, mutedIds, followingIds, currentUserId]);
+  // Near first (within 25 km, the reach of hit matches), soonest first, with how far:
+  // everything that close is near, so today's game beats next week's a mile closer.
+  // A place only typed has no spot, so it follows by time (most are local); the rest wait under "Further away".
+  const { openHits, furtherHits } = useMemo(() => {
+    if (!firstCentre) return { openHits: seenHits.map((hit) => ({ hit, miles: undefined as number | undefined })), furtherHits: [] };
+    const near: { hit: (typeof seenHits)[number]; miles: number | undefined }[] = [];
+    const typed: typeof near = [];
+    const far: typeof near = [];
+    for (const hit of seenHits) {
+      const spot = hitSpot(hit);
+      if (!spot) { typed.push({ hit, miles: undefined }); continue; }
+      const miles = milesBetween(firstCentre, spot);
+      (miles <= NEAR_HIT_MILES ? near : far).push({ hit, miles });
+    }
+    return { openHits: [...near, ...typed], furtherHits: far };
+  }, [seenHits, firstCentre?.lat, firstCentre?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [furtherOpen, setFurtherOpen] = useState(false);
+  const [moreHitsOpen, setMoreHitsOpen] = useState(false);
+  const moreHits = Math.max(0, openHits.length - HITS_SHOWN);
+  // With nothing open, name a court only when the nearest one reads as public and is close: never just because it is nearest.
+  const promptCourt = nearCourts.nearest && looksPublic(nearCourts.nearest.c.name) && nearCourts.nearest.miles <= 5 ? nearCourts.nearest.c : null;
+  // Typing two letters or more finds courts too, above the players.
+  const courtMatches = useCourtSearch(search, firstCentre, nearCourts.all, 4);
+  const searchWords = useMemo(() => plain(search).split(' ').filter(Boolean), [search]);
   const [sortOpen, setSortOpen] = useState(false);
   const [shownCount, setShownCount] = useState(25);
   const visible = useMemo(() => {
@@ -137,20 +183,35 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const content = (section:string) => (section === 'players' ? <View style={{ gap: 16 }}>
         <View style={styles.searchWrap}>
           <Ionicons name="search" size={17} color={colors.textFaint} style={styles.searchIcon} />
-          <TextInput accessibilityLabel="Search players" placeholder="Search" placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} style={styles.search} />
+          <TextInput accessibilityLabel="Search players or courts" placeholder="Search players or courts" placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} style={styles.search} />
         </View>
         {currentUser && !search ? (section === 'players'
           ? <NearbyMap me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} />
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : <View style={styles.mapStandIn} />) : null}
-        {/* Hits: someone wants a game, soonest first. Posting one is right here. */}
+        {/* Where to play: the courts in town, each a tap from its page. */}
+        {!search ? <CourtsNear center={firstCentre} /> : null}
+        {/* Hits: someone wants a game, near you first. Posting one is right here. */}
         {!search ? (
           <View style={styles.hits}>
             <View style={styles.hitsHead}>
               <Text style={styles.playersTitle}>Open hits</Text>
-              <Pressable accessibilityRole="button" onPress={() => router.push('/hit-request/new')} hitSlop={8}><Text style={styles.postHit}>Post one</Text></Pressable>
+              <View style={styles.hitsLinks}>
+                <Pressable accessibilityRole="link" accessibilityLabel="See open hits on the map" onPress={() => router.push('/map')} hitSlop={8}><Text style={styles.postHit}>Map</Text></Pressable>
+                {/* "Post a hit", not just "Post": a post elsewhere is a photo or clip. */}
+                <Pressable accessibilityRole="button" onPress={() => router.push('/hit-request/new')} hitSlop={8}><Text style={styles.postHit}>Post a hit</Text></Pressable>
+              </View>
             </View>
-            {openHits.length ? openHits.slice(0, 5).map((h) => <HitCard key={h.id} hit={h} />) : (
+            {openHits.length ? (moreHitsOpen ? openHits : openHits.slice(0, HITS_SHOWN)).map(({ hit, miles }) => <HitCard key={hit.id} hit={hit} miles={miles} />) : promptCourt ? (
+              <Pressable accessibilityRole="button" onPress={() => playHere({ id: promptCourt.id, name: labelOf(promptCourt), lat: promptCourt.lat, lng: promptCourt.lng })} style={styles.hitPrompt}>
+                <View style={styles.hitPromptTile}><HitGlyph size={24} color={colors.brand} /></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.hitPromptTitle}>Post the first hit at {labelOf(promptCourt)}</Text>
+                  <Text style={styles.hitPromptBody}>Say when. Players nearby can join.</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+              </Pressable>
+            ) : (
               <Pressable accessibilityRole="button" onPress={() => router.push('/hit-request/new')} style={styles.hitPrompt}>
                 <View style={styles.hitPromptTile}><HitGlyph size={24} color={colors.brand} /></View>
                 <View style={{ flex: 1 }}>
@@ -160,12 +221,50 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                 <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
               </Pressable>
             )}
+            {moreHits ? (
+              <Pressable accessibilityRole="button" accessibilityState={{ expanded: moreHitsOpen }} onPress={() => setMoreHitsOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: 0.6 }]}>
+                <Text style={styles.furtherText}>{moreHitsOpen ? 'Fewer open hits' : `More open hits (${moreHits})`}</Text>
+                <Ionicons name={moreHitsOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
+              </Pressable>
+            ) : null}
+            {furtherHits.length ? (
+              <>
+                <Pressable accessibilityRole="button" accessibilityState={{ expanded: furtherOpen }} onPress={() => setFurtherOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: 0.6 }]}>
+                  <Text style={styles.furtherText}>Further away ({furtherHits.length})</Text>
+                  <Ionicons name={furtherOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
+                </Pressable>
+                {furtherOpen ? furtherHits.map(({ hit, miles }) => <HitCard key={hit.id} hit={hit} miles={miles} />) : null}
+              </>
+            ) : null}
           </View>
         ) : null}
-        {players.length ? <View style={styles.playersHead}>
+        {/* Courts by name, above the players, once two letters are typed. */}
+        {search && courtMatches.length ? (
+          <View>
+            <View style={styles.playersHead}>
+              <Text style={styles.playersTitle}>Courts</Text>
+              <Text style={styles.playersBody}>{`${courtMatches.length} ${courtMatches.length === 1 ? 'match' : 'matches'}`}</Text>
+            </View>
+            {courtMatches.map(({ c, miles }, index) => {
+              const meta = [firstCentre ? formatMiles(miles) : null, c.count > 1 ? `${c.count} courts` : null, c.lit ? 'lights' : null].filter(Boolean).join(' · ');
+              return (
+                <Pressable key={c.id} accessibilityRole="link" accessibilityLabel={`${labelOf(c)}${meta ? `, ${meta}` : ''}, open the court`} onPress={() => openCourt({ id: c.id, name: labelOf(c), lat: c.lat, lng: c.lng })} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
+                  <View style={styles.courtTile}><CourtGlyph size={20} color={colors.brand} /></View>
+                  <View style={[styles.playerBody, index > 0 && styles.playerLine]}>
+                    <Highlighted text={labelOf(c)} words={searchWords} style={styles.playerName} strong={styles.courtNameMatch} lines={2} wordStart />
+                    {meta ? <Text style={styles.playerMeta} numberOfLines={1}>{meta}</Text> : null}
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.textFaint} style={styles.playerChevron} />
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+        {players.length || (search && courtMatches.length) ? <View style={styles.playersHead}>
           {/* Just "Players": the ones near you say so on their own row. */}
           <Text style={styles.playersTitle}>Players</Text>
-          {search ? <Text style={styles.playersBody}>{`${players.length} ${players.length === 1 ? 'match' : 'matches'}`}</Text> : null}
+          {/* A court matched but no one did: one quiet line, not a big empty state under the court that was found. */}
+          {search ? <Text style={styles.playersBody}>{players.length ? `${players.length} ${players.length === 1 ? 'match' : 'matches'}` : `No players named “${search.trim()}”`}</Text> : null}
         </View> : null}
         {players.map((user, index) => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
           <Avatar name={user.name} seed={user.avatarSeed} size={52} ring={user.isCoach} />
@@ -178,7 +277,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} style={styles.playerChevron} />
         </Pressable>)}
-        {!players.length && <EmptyState title="No players found" body="Try another name or city." />}
+        {!players.length && !(search && courtMatches.length) && (search
+          ? <EmptyState title={`Nothing matches “${search.trim()}”`} body="Try a name, a city or a park." />
+          : <EmptyState title="No players found" body="Try another name or city." />)}
       </View> : <>
       <View style={styles.controls}>
         <ScrollView ref={topicStrip} nativeID="topic-filter-strip" horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.topicRow}>
@@ -301,6 +402,13 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
 const styleDefinitions = StyleSheet.create({
   hits: { gap: spacing.md },
   hitsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: spacing.sm },
+  hitsLinks: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
+  // One quiet line that opens more hits: the rest of the near ones, or those beyond 25 km.
+  further: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingVertical: 4 },
+  furtherText: { ...typography.smallStrong, color: colors.textMuted },
+  // A court found by the search: the same tile as Search's court rows, in the players' row frame.
+  courtTile: { width: 52, height: 52, borderRadius: 14, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  courtNameMatch: { ...font('700'), color: colors.text },
   postHit: { ...typography.smallStrong, color: colors.brand },
   hitPrompt: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
   // The empty state's tile: the icon on Dim Green, the way the app's feature cards hold the mark.

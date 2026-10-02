@@ -16,6 +16,8 @@ import { conversations, messages } from './mock/messages';
 import { healthHistory, integrations } from './mock/health';
 import { activityNotifications, detectedActivities } from './mock/activities';
 import { users } from './mock/users';
+import { demoHits } from './mock/hits';
+import { demoLastSeen } from './mock/presence';
 import { supabase } from '@/lib/supabase';
 import type {
   Achievement,
@@ -37,6 +39,8 @@ import type {
   Post,
   Question,
   Story,
+  HitRequest,
+  LastSeen,
   TrainingBlockKind,
   TrainingPlan,
   User,
@@ -76,6 +80,9 @@ export interface Bootstrap {
   conversations: Conversation[];
   messages: Message[];
   notifications: Notification[];
+  /** Demo only: open hits and players' last spots, so Find Players and the map have something on them. */
+  hitRequests?: HitRequest[];
+  lastSeen?: Record<ID, LastSeen>;
   /** Tennis sessions a tracker picked up, waiting to be logged (migration 58). */
   detectedActivities: DetectedActivity[];
 }
@@ -85,8 +92,9 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
     clone({
       users,
       // The demo reels are gone: real clips and hits come from people now.
-      // The demo written posts and threads stay, so the app is never empty.
-      posts: posts.filter((p) => p.kind !== 'clip'),
+      // The demo written posts and threads stay, so the app is never empty,
+      // and so does the one clip tagged at a demo court, for its page and reel.
+      posts: posts.filter((p) => p.kind !== 'clip' || !!p.court),
       stories: [],
       comments,
       questions,
@@ -107,6 +115,9 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       integrations,
       healthHistory,
       achievements,
+      // Only without a database: with one, these come from the server, and an
+      // account's real hits must never be covered by the demo's.
+      ...(supabase ? {} : { hitRequests: demoHits, lastSeen: demoLastSeen }),
     }),
   );
 }

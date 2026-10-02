@@ -247,6 +247,20 @@ function readFlag(key: string): boolean {
   }
 }
 
+/**
+ * Whether you have ever chosen Location on or off. The browser knows at once;
+ * the phone reads it a moment after start (null until then). Storage that
+ * cannot be read counts as chosen, so it never sets off an ask by itself.
+ */
+function readAsked(key: string): boolean | null {
+  if (Platform.OS !== 'web') return null;
+  try {
+    return localStorage.getItem(key) !== null;
+  } catch {
+    return true;
+  }
+}
+
 function readDefaultPayment(): ID {
   try {
     if (Platform.OS !== 'web') return 'pm-visa';
@@ -315,6 +329,12 @@ interface AppState extends Bootstrap {
   prefs: { showActivity: boolean; pushLikes: boolean; pushCoach: boolean; pushMessages: boolean; pushActivity: boolean };
   /** Whether the app may ask the device where you are, and the city it found. */
   locationEnabled: boolean;
+  /**
+   * Whether Location was ever turned on or off here: null while the phone
+   * reads it, false only when never. The map asks by itself only then, so
+   * an Off you chose stays off (and your pin stays gone).
+   */
+  locationAsked: boolean | null;
   detectedLocation: string | null;
   /** The actual fix, for the map; the city name above is for text. */
   detectedCoords: { lat: number; lng: number } | null;
@@ -613,7 +633,7 @@ interface AppActions {
   /** Reports a chat to CourtSide for a person to review. */
   reportChat: (conversationId: ID, reason: string) => void;
   /** Send a court in a chat: where to meet. */
-  sendCourt: (conversationId: ID, place: { name: string; lat: number; lng: number }) => void;
+  sendCourt: (conversationId: ID, place: { id?: string; name: string; lat: number; lng: number }) => void;
   /** Send a voice note recorded on this device (uploaded first). */
   sendVoice: (conversationId: ID, recording: { uri: string; ms: number }) => void;
   /**
@@ -1157,6 +1177,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     lastSeen: {},
     hitRequests: [],
     locationEnabled: readFlag('courtside-location'),
+    locationAsked: readAsked('courtside-location'),
     detectedLocation: null,
     detectedCoords: null,
   });
@@ -3332,7 +3353,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [requireUser, appendMessage, makeMessage, refreshChat],
   );
 
-  const sendCourt = useCallback((conversationId: ID, place: { name: string; lat: number; lng: number }) => {
+  const sendCourt = useCallback((conversationId: ID, place: { id?: string; name: string; lat: number; lng: number }) => {
     haptics.commit();
     const me = requireUser();
     const message: Message = { ...makeMessage(conversationId, me, place.name), kind: 'court', place };
@@ -4127,7 +4148,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
     if (!enabled) {
       remember(false);
-      setState((prev) => ({ ...prev, locationEnabled: false, detectedLocation: null, detectedCoords: null }));
+      setState((prev) => ({ ...prev, locationEnabled: false, locationAsked: true, detectedLocation: null, detectedCoords: null }));
       // Location off means off: the spot others saw goes too.
       if (live(stateRef.current.currentUserId)) void remote.forgetLastSeen();
       markedAt.current = null;
@@ -4136,7 +4157,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const result = await getPosition();
     if (!result.ok) {
       remember(false);
-      setState((prev) => ({ ...prev, locationEnabled: false, detectedLocation: null, detectedCoords: null }));
+      setState((prev) => ({ ...prev, locationEnabled: false, locationAsked: true, detectedLocation: null, detectedCoords: null }));
       // Short on purpose: these sit under a settings row and in small notes.
       return result.reason === 'denied'
         ? (Platform.OS === 'web' ? 'Blocked by your browser' : 'Blocked in your phone’s Settings')
@@ -4147,7 +4168,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const place = nearestPlace(result.lat, result.lng);
     haptics.tap();
     remember(true);
-    setState((prev) => ({ ...prev, locationEnabled: true, detectedLocation: place.name, detectedCoords: { lat: result.lat, lng: result.lng } }));
+    setState((prev) => ({ ...prev, locationEnabled: true, locationAsked: true, detectedLocation: place.name, detectedCoords: { lat: result.lat, lng: result.lng } }));
     return null;
   }, []);
 
@@ -4169,8 +4190,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (Platform.OS === 'web') return;
     AsyncStorage.getItem('courtside-location')
-      .then((flag) => { if (flag === 'on') setState((prev) => (prev.locationEnabled ? prev : { ...prev, locationEnabled: true })); })
-      .catch(() => {});
+      .then((flag) => { setState((prev) => ({ ...prev, locationAsked: flag !== null, locationEnabled: prev.locationEnabled || flag === 'on' })); })
+      // Unreadable counts as chosen: never an ask set off by a storage hiccup.
+      .catch(() => { setState((prev) => ({ ...prev, locationAsked: true })); });
   }, []);
 
   // Someone who left Location on last time gets the city refreshed quietly.

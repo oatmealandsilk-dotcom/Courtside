@@ -1,4 +1,5 @@
 import { isoDaysAgo, isoDaysAhead } from '@/lib/format';
+import { endOfToday } from '@/features/players/openToHit';
 import type { User } from '../types';
 
 export const CURRENT_USER_ID = 'u-you';
@@ -300,6 +301,92 @@ export const users: User[] = [
       goals: [],
       constraints: [],
       tournaments: [],
+    },
+  },
+  /*
+   * Players around the demo's own city, so the map, the courts and the open
+   * hits have someone in them: three adults (Sam is up for a hit today; Priya
+   * coaches) and one junior, Ella, a teen account, whose hit and spot must
+   * show nowhere for an adult who does not follow her.
+   */
+  {
+    id: 'u-sam',
+    handle: 'samhits',
+    name: 'Sam Ortiz',
+    bio: 'Lefty, 4.0. Early mornings before work, doubles on weekends.',
+    location: 'Los Angeles, CA',
+    joinedAt: isoDaysAgo(45),
+    avatarSeed: 'sam-ortiz',
+    ageGroup: 'adult',
+    // Up for a hit until tonight, worked out when the demo loads.
+    openToHitUntil: endOfToday(),
+    isCoach: false,
+    followers: 38,
+    following: 52,
+    achievementIds: ['ach-first-serve', 'ach-ten-sessions'],
+    stats: { sessionsLogged: 19, matchesPlayed: 9, matchesWon: 5, hoursOnCourt: 31, currentStreakDays: 3, longestStreakDays: 6 },
+    profile: {
+      skillSystem: 'NTRP', rating: 4.0, playStyle: 'aggressive-baseliner', handedness: 'left', backhand: 'two-handed',
+      fitnessLevel: 'competitive', preferredSurface: 'hard', sessionsPerWeek: 4, yearsPlaying: 8, goals: [], constraints: [], tournaments: [],
+    },
+  },
+  {
+    id: 'u-priya',
+    handle: 'coachpriya',
+    name: 'Priya Nair',
+    bio: 'Teaching pro. Footwork first, then everything else gets easier.',
+    location: 'Pasadena, CA',
+    joinedAt: isoDaysAgo(120),
+    avatarSeed: 'priya-nair',
+    ageGroup: 'adult',
+    isCoach: true,
+    followers: 640,
+    following: 88,
+    achievementIds: ['ach-first-serve', 'ach-ten-sessions', 'ach-fifty-sessions'],
+    stats: { sessionsLogged: 88, matchesPlayed: 30, matchesWon: 21, hoursOnCourt: 210, currentStreakDays: 5, longestStreakDays: 24 },
+    profile: {
+      skillSystem: 'NTRP', rating: 5.0, playStyle: 'all-court', handedness: 'right', backhand: 'one-handed',
+      fitnessLevel: 'competitive', preferredSurface: 'hard', sessionsPerWeek: 6, yearsPlaying: 20, goals: [], constraints: [], tournaments: [],
+    },
+  },
+  {
+    id: 'u-marcus',
+    handle: 'marcusrallies',
+    name: 'Marcus Lee',
+    bio: 'Back on court after ten years off. Looking for patient rally partners.',
+    location: 'Los Angeles, CA',
+    joinedAt: isoDaysAgo(20),
+    avatarSeed: 'marcus-lee',
+    ageGroup: 'adult',
+    isCoach: false,
+    followers: 12,
+    following: 30,
+    achievementIds: ['ach-first-serve'],
+    stats: { sessionsLogged: 7, matchesPlayed: 2, matchesWon: 1, hoursOnCourt: 11, currentStreakDays: 1, longestStreakDays: 3 },
+    profile: {
+      skillSystem: 'NTRP', rating: 3.0, playStyle: 'counterpuncher', handedness: 'right', backhand: 'two-handed',
+      fitnessLevel: 'recreational', preferredSurface: 'hard', sessionsPerWeek: 2, yearsPlaying: 2, goals: [], constraints: [], tournaments: [],
+    },
+  },
+  {
+    id: 'u-ella',
+    handle: 'ellaserves',
+    name: 'Ella Brooks',
+    bio: 'High school varsity. Working on my second serve.',
+    location: 'Los Angeles, CA',
+    joinedAt: isoDaysAgo(15),
+    avatarSeed: 'ella-brooks',
+    ageGroup: 'teen',
+    // Teen accounts start private.
+    isPrivate: true,
+    isCoach: false,
+    followers: 21,
+    following: 25,
+    achievementIds: ['ach-first-serve'],
+    stats: { sessionsLogged: 14, matchesPlayed: 8, matchesWon: 4, hoursOnCourt: 22, currentStreakDays: 2, longestStreakDays: 5 },
+    profile: {
+      skillSystem: 'UTR', rating: 5.2, playStyle: 'aggressive-baseliner', handedness: 'right', backhand: 'two-handed',
+      fitnessLevel: 'competitive', preferredSurface: 'hard', sessionsPerWeek: 4, yearsPlaying: 6, goals: [], constraints: [], tournaments: [],
     },
   },
 ];

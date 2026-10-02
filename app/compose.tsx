@@ -13,14 +13,17 @@ import { registerCreateClose } from '@/features/compose/createMenu';
 import { SheetBackdrop } from '@/components/SheetBackdrop';
 import { Button, Field, Screen, Toggle } from '@/components/ui';
 import { FormRow } from '@/components/FormRow';
-import { CourtGlyph } from '@/components/map/MapChrome';
+import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { openPlacePicker } from '@/features/places/picker';
 import { PreparingRing } from '@/components/PreparingRing';
 import { TagPlayers } from '@/components/TagPlayers';
 import { addToBank, getBank } from '@/features/compose/mediaBank';
 import { useApp } from '@/store/AppContext';
-import { fetchCourts } from '@/features/players/courts';
-import { homeFor } from '@/features/players/positions';
+import { courtRows, fetchCourts, peekCourts, type Court } from '@/features/players/courts';
+import { labelOf } from '@/features/places/courtName';
+import { notKnownAdult } from '@/features/players/age';
+import { homeFor, type LatLng } from '@/features/players/positions';
+import { getPosition } from '@/lib/geo';
 import type { TaggedCourt } from '@/data/types';
 import { colors, radius, spacing, typography, font } from '@/theme';
 import { challengeFor } from '@/features/challenge/weekly';
@@ -53,7 +56,7 @@ type Stage = 'choose' | 'library' | 'edit' | 'form';
  */
 export default function Compose() {
   const styles = useThemedStyles(styleDefinitions);
-  const { actions, posts, currentUserId, currentUser, detectedCoords, lastSeen } = useApp();
+  const { actions, posts, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled } = useApp();
 
   // The story rail opens this straight at the library with ?mode=story.
   const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string }>();
@@ -137,6 +140,41 @@ export default function Compose() {
     return params.courtId && name && params.lat && params.lng && Number.isFinite(lat) && Number.isFinite(lng) ? { id: params.courtId, name, lat, lng } : null;
   });
   const [featureOk, setFeatureOk] = useState(true);
+  // "Played at …?": the named court you are standing at right now (within
+  // about 500 feet of where the phone says you are, with Location on), offered
+  // once above Add location so a post lands on that court's page. Only the
+  // phone's position at this moment: never your last shared spot, your
+  // profile's city or a guess. Never for someone not known to be an adult: a
+  // court tag says where a minor regularly plays (owner decision 7).
+  const [nearCourt, setNearCourt] = useState<TaggedCourt | null>(null);
+  const [nearWaved, setNearWaved] = useState(false);
+  const canSuggest = !!currentUser && !notKnownAdult(currentUser) && locationEnabled;
+  // Asked fresh as compose opens, not the spot the app noted when it started:
+  // an app left open for days would otherwise offer Monday's court on
+  // Wednesday. No answer within a few minutes' age, no suggestion.
+  const [here, setHere] = useState<LatLng | null>(null);
+  useEffect(() => {
+    if (!canSuggest) { setHere(null); return undefined; }
+    let on = true;
+    getPosition({ recentMs: 3 * 60_000 }).then((r) => { if (on) setHere(r.ok ? { lat: r.lat, lng: r.lng } : null); }).catch(() => undefined);
+    return () => { on = false; };
+  }, [canSuggest]);
+  const hereLat = here?.lat;
+  const hereLng = here?.lng;
+  useEffect(() => {
+    if (!canSuggest || hereLat === undefined || hereLng === undefined) { setNearCourt(null); return undefined; }
+    const at = { lat: hereLat, lng: hereLng };
+    let on = true;
+    const pick = (list: Court[]) => {
+      if (!on) return;
+      const nearest = courtRows(list, at).find((r) => r.c.name !== 'Tennis courts');
+      setNearCourt(nearest && nearest.miles <= 0.1 ? { id: nearest.c.id, name: labelOf(nearest.c), lat: nearest.c.lat, lng: nearest.c.lng } : null);
+    };
+    const kept = peekCourts(at);
+    if (kept) pick(kept);
+    else fetchCourts(at).then(pick).catch(() => undefined);
+    return () => { on = false; };
+  }, [canSuggest, hereLat, hereLng]);
 
   const canSubmit = !!media?.uri && (mode !== 'clip' || media.kind === 'video');
 
@@ -418,6 +456,20 @@ export default function Compose() {
                 {/* One list of rows, the Settings rows' size without their card. */}
                 <View style={styles.rows}>
                   <TagPlayers variant="row" tagged={tagged} onChange={setTagged} />
+                  {!location && nearCourt && !nearWaved && (mode === 'post' || mode === 'clip') ? (
+                    <FormRow
+                      line
+                      lead={<CourtGlyph size={16} color={colors.brand} />}
+                      label={`Played at ${nearCourt.name}?`}
+                      accessibilityLabel={`Played at ${nearCourt.name}? Tap to tag it`}
+                      onPress={() => { setLocation(nearCourt.name); setCourt(nearCourt); }}
+                      control={
+                        <Pressable accessibilityRole="button" accessibilityLabel="Not this court" hitSlop={12} onPress={() => setNearWaved(true)}>
+                          <Ionicons name="close" size={18} color={colors.textFaint} />
+                        </Pressable>
+                      }
+                    />
+                  ) : null}
                   {location ? (
                     <FormRow
                       line

@@ -3,38 +3,21 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
-import { CourtGlyph } from '@/components/map/MapChrome';
+import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { courtRows, fetchCourts, type Court } from '@/features/players/courts';
 import { formatMiles, milesBetween } from '@/features/players/geo';
 import type { LatLng } from '@/features/players/positions';
-import { plain, wordStartIndex } from '@/features/search/words';
+import { plain } from '@/features/search/words';
+import { labelOf, score } from '@/features/places/courtName';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 
-export interface ChosenPlace { name: string; lat?: number; lng?: number }
+/** Where a hit is played: a court from the list carries the map's id for it, so its card opens that court's page. */
+export interface ChosenPlace { id?: string; name: string; lat?: number; lng?: number }
 
 export { plain };
-/** OpenStreetMap leaves most public courts unnamed; the list calls those "Public courts". */
-export const labelOf = (c: Court) => (c.name === 'Tennis courts' ? 'Public courts' : c.name);
-
-/**
- * How well a court's name answers what was typed, the way Search reads it:
- * every word typed must start a word of the name ("pu" finds Pullen Park,
- * not Campus); 0 when the name starts with the first word typed (a leading
- * "The" aside: "ra" is The Raleigh Raquet Club's start too), 1 when a later
- * word of it does. Null when it does not match.
- */
-export function score(name: string, words: string[]): number | null {
-  const n = plain(name);
-  const start = n.startsWith('the ') ? 4 : 0;
-  let rank = 1;
-  for (const [i, w] of words.entries()) {
-    const at = i === 0 && start && n.startsWith(w, start) ? start : wordStartIndex(n, w);
-    if (at < 0) return null;
-    if (i === 0 && (at === 0 || at === start)) rank = 0;
-  }
-  return rank;
-}
+// Moved beside the other court-name rules; kept here for the screens that import them from the search.
+export { labelOf, score };
 
 /**
  * The name with the typed words in bold, so you see why each one came up.
@@ -126,7 +109,7 @@ export function CourtSearch({ home, nearby, chosen, onChoose, typed, onType }: {
     <View style={{ gap: spacing.sm }}>
       <View style={styles.search}>
         <Ionicons name="search" size={16} color={colors.textFaint} />
-        <TextInput ref={input} value={typed} onChangeText={onType} placeholder="Search courts" placeholderTextColor={colors.textFaint} style={styles.searchInput} accessibilityLabel="Where" autoCorrect={false} returnKeyType="done" onSubmitEditing={() => { if (rows[0] && query) onChoose({ name: labelOf(rows[0].c), lat: rows[0].c.lat, lng: rows[0].c.lng }); }} />
+        <TextInput ref={input} value={typed} onChangeText={onType} placeholder="Search courts" placeholderTextColor={colors.textFaint} style={styles.searchInput} accessibilityLabel="Where" autoCorrect={false} returnKeyType="done" onSubmitEditing={() => { if (rows[0] && query) onChoose({ id: rows[0].c.id, name: labelOf(rows[0].c), lat: rows[0].c.lat, lng: rows[0].c.lng }); }} />
         {loadingWide && query ? <ActivityIndicator size="small" color={colors.textFaint} /> : typed ? (
           <Pressable accessibilityRole="button" accessibilityLabel="Clear" hitSlop={8} onPress={() => onType('')}><Ionicons name="close-circle" size={17} color={colors.textFaint} /></Pressable>
         ) : null}
@@ -134,7 +117,7 @@ export function CourtSearch({ home, nearby, chosen, onChoose, typed, onType }: {
       <View style={styles.list}>
         {!query && rows.length ? <Text style={styles.listHead}>Near you</Text> : null}
         {rows.map(({ c, miles }, i) => (
-          <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${labelOf(c)}, ${formatMiles(miles)}`} onPress={() => onChoose({ name: labelOf(c), lat: c.lat, lng: c.lng })} style={({ pressed }) => [styles.row, i > 0 && styles.rule, pressed && styles.pressed]}>
+          <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${labelOf(c)}, ${formatMiles(miles)}`} onPress={() => onChoose({ id: c.id, name: labelOf(c), lat: c.lat, lng: c.lng })} style={({ pressed }) => [styles.row, i > 0 && styles.rule, pressed && styles.pressed]}>
             <View style={styles.tile}><CourtGlyph size={14} color={colors.brand} /></View>
             <View style={styles.rowWords}>
               <Highlighted text={labelOf(c)} words={words} style={styles.rowName} strong={styles.rowNameMatch} wordStart />
