@@ -47,7 +47,7 @@ export default function AdminWaitlist() {
   // Emails cannot be taken back, so the send asks once first, saying how many it will reach.
   const askSendBeta = (waiting: number) => confirm({
     title: `Email ${waiting} ${waiting === 1 ? 'person' : 'people'}?`,
-    message: "The beta invite goes out now. Emails can't be taken back.",
+    message: "The beta invite goes out now and can't be taken back.",
     confirmLabel: 'Send',
     onConfirm: sendBeta,
   });

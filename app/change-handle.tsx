@@ -63,7 +63,7 @@ export default function ChangeHandle() {
     if (!canSave) return;
     confirm({
       title: `Change to @${handle}?`,
-      message: `You won't be able to change it again for ${WAIT_DAYS} days. @${current} is held for you for 14 days in case you change your mind.`,
+      message: `You can't change it again for ${WAIT_DAYS} days. @${current} is kept for you for 14 days.`,
       confirmLabel: 'Change',
       onConfirm: async () => {
         setBusy(true);

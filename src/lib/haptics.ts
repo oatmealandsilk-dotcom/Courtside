@@ -42,3 +42,13 @@ export const reward = () => run(() => Haptics.impactAsync(Haptics.ImpactFeedback
 
 /** Something went wrong and the person needs to notice. */
 export const reject = () => run(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning), [0, 18, 50, 18]);
+
+/**
+ * An "are you sure?" card appearing (see ConfirmHost). A light tap; the
+ * phone's warning beat when a yes would delete something or cut someone off,
+ * so the hand feels the difference before the eye reads it.
+ */
+export const asking = (serious: boolean) => run(
+  () => (serious ? Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning) : Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)),
+  serious ? [0, 12, 40, 12] : 9,
+);
