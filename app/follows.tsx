@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { requestSection } from '@/features/navigation/swipeOrder';
+import { goToTab } from '@/features/navigation/startTab';
 import { goBack } from '@/lib/goBack';
 
 import { LevelPill } from '@/components/LevelPill';
@@ -63,7 +64,7 @@ export default function Follows() {
           icon="people-outline"
           title={tab === 'followers' ? 'No followers yet' : 'Not following anyone yet'}
           body={tab === 'followers' ? 'Post a clip or answer a thread. That is how players find you.' : 'Follow players from Community or their profile.'}
-          action={tab === 'followers' ? { label: 'Post a clip', onPress: () => router.push('/compose') } : { label: 'Find players', onPress: () => { requestSection('/discuss', 'players'); router.push('/discuss'); } }}
+          action={tab === 'followers' ? { label: 'Post a clip', onPress: () => router.push('/compose') } : { label: 'Find players', onPress: () => { requestSection('/discuss', 'players'); goToTab('/discuss'); } }}
         />
       ) : (
         list.map((user) => {

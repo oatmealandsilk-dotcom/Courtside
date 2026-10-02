@@ -71,21 +71,56 @@ export async function disconnectProvider(integration: Integration): Promise<Inte
   return { ...integration, connected: false, lastSyncedAt: undefined };
 }
 
-/** Summary the AI coach reads. Derived only from connected sources. */
-export function healthSignal(history: DailyHealth[], integrations: Integration[]) {
+/**
+ * Summary the AI coach reads. Derived only from connected sources.
+ * `skipSource` leaves one source's recovery, sleep and HRV out: WHOOP's terms
+ * bar using its numbers for AI, so the coach is told only what another
+ * source gave, and nothing when no other source gave any.
+ */
+export function healthSignal(history: DailyHealth[], integrations: Integration[], opts: { skipSource?: string } = {}) {
   const wearable = integrations.some((i) => i.category === 'wearable' && i.connected);
   const nutrition = integrations.some((i) => i.category === 'nutrition' && i.connected);
   const recent = history.slice(0, 3);
+  // The average of one number over the recent days, from every source, or only the days another source gave it.
+  const averaged = (col: string, pick: (d: DailyHealth) => number): number | undefined => {
+    if (!opts.skipSource) return recent.length ? mean(recent.map(pick)) : undefined;
+    const kept = recent.filter((d) => d.sources?.[col] !== opts.skipSource && pick(d) > 0).map(pick);
+    return kept.length ? mean(kept) : undefined;
+  };
+  const recovery = averaged('recovery', (d) => d.recovery);
+  const sleepHours = averaged('sleep_hours', (d) => d.sleepHours);
+  const hrvMs = averaged('hrv_ms', (d) => d.hrvMs);
 
   return {
     hasWearable: wearable,
     hasNutrition: nutrition,
-    recovery: wearable && recent.length ? Math.round(mean(recent.map((d) => d.recovery))) : undefined,
-    sleepHours: wearable && recent.length ? round1(mean(recent.map((d) => d.sleepHours))) : undefined,
-    hrvMs: wearable && recent.length ? Math.round(mean(recent.map((d) => d.hrvMs))) : undefined,
+    recovery: wearable && recovery !== undefined ? Math.round(recovery) : undefined,
+    sleepHours: wearable && sleepHours !== undefined ? round1(sleepHours) : undefined,
+    hrvMs: wearable && hrvMs !== undefined ? Math.round(hrvMs) : undefined,
     calories: nutrition && recent.length ? Math.round(mean(recent.map((d) => d.calories))) : undefined,
     proteinGrams: nutrition && recent.length ? Math.round(mean(recent.map((d) => d.proteinGrams))) : undefined,
   };
+}
+
+/** health_days columns (the keys of DailyHealth.sources) and the field each fills. */
+const FIELD: Record<string, keyof DailyHealth> = {
+  recovery: 'recovery', sleep_hours: 'sleepHours', hrv_ms: 'hrvMs', resting_hr: 'restingHeartRate', calories: 'calories',
+  protein_g: 'proteinGrams', carb_g: 'carbGrams', fat_g: 'fatGrams', steps: 'steps',
+};
+
+/**
+ * The days with one source's numbers taken out (as 0, the app's "not given"),
+ * for anything the AI coach is told or writes from: WHOOP's terms bar using
+ * its numbers for AI. Other sources' numbers on the same day stay.
+ */
+export function withoutSource(history: DailyHealth[], source: string): DailyHealth[] {
+  return history.map((d) => {
+    const cols = Object.entries(d.sources ?? {}).filter(([, s]) => s === source).map(([c]) => FIELD[c]).filter(Boolean);
+    if (!cols.length) return d;
+    const copy: DailyHealth = { ...d };
+    for (const f of cols) (copy as unknown as Record<string, number>)[f] = 0;
+    return copy;
+  });
 }
 
 function mean(values: number[]): number {

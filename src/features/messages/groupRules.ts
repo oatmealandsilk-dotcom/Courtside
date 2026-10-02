@@ -35,6 +35,34 @@ export const findDirectChat = (conversations: Conversation[], me: ID, other: ID)
 export const isMuted = (c: Conversation) => !!c.mutedUntil && Date.parse(c.mutedUntil) > Date.now();
 
 /**
+ * Muted for this one message: the chat is muted and the message doesn't
+ * @mention you. The server's alert rule (push_for_message, migration 54):
+ * a mention still gets through a mute.
+ */
+export function isMutedFor(c: Conversation, m: Message, myHandle: string | undefined): boolean {
+  if (!isMuted(c)) return false;
+  if (!myHandle) return true;
+  const mine = myHandle.toLowerCase();
+  return ![...m.body.matchAll(/@([A-Za-z0-9_]{2,24})/g)].some((hit) => hit[1].toLowerCase() === mine);
+}
+
+/**
+ * What a message was, in a few words: its own words, or "Sent a court",
+ * "Sent a voice message" for the kinds with none. The inbox's second line
+ * and the message banner both say it this way.
+ */
+export function messageSummary(m?: Message): string {
+  if (!m) return 'Say hello';
+  if (m.kind === 'court') return 'Sent a court';
+  if (m.kind === 'post') return 'Sent a clip';
+  if (m.kind === 'question') return 'Sent a discussion';
+  if (m.kind === 'profile') return 'Shared a profile';
+  if (m.kind === 'voice') return 'Sent a voice message';
+  if (m.kind === 'hit-request') return 'Sent a hit';
+  return m.body || 'Say hello';
+}
+
+/**
  * The number on the Messages badge: how many chats have something new in
  * them (Instagram counts chats, not messages), never counting a muted one.
  */
@@ -70,25 +98,27 @@ export const isOnlyAdmin = (c: Conversation, me: ID | null | undefined) =>
   !!me && isGroupChat(c) && hasGroupControls(c) && isGroupAdmin(c, me) && (c.adminIds?.length ?? 0) === 1 && c.participantIds.length > 1;
 
 /**
- * What "Leave this group?" says, honest about what leaving does there. The
- * last one in it: the server deletes the group (leave_group, migration 54),
- * so nobody is left to see it or add you back. Its only admin: whoever has
- * been in it longest runs it next. In the chat of a hit you are in: your
- * spot in the hit goes too.
+ * What "Leave this group?" says, honest about what leaving does there, in a
+ * sentence (two at most) so the card stays small. The last one in it: the
+ * server deletes the group (leave_group, migration 54), so nobody is left to
+ * add you back. In the chat of a hit you are in: your spot goes, and being
+ * added back doesn't return it. Its only admin: whoever has been in it
+ * longest runs it next.
  */
 export function leaveGroupMessage(c: Conversation, hits: HitRequest[], me: ID | null | undefined): string {
-  const spot = holdsHitSpot(hits, c.id, me) ? ' You’ll also give up your spot in the hit.' : '';
-  if (c.participantIds.length <= 1) return `You’re the only one here. Leaving deletes the group and its messages.${spot}`;
-  return `Everyone sees that you left. Someone in it can add you back.${isOnlyAdmin(c, me) ? ' Whoever has been in it longest becomes the admin.' : ''}${spot}`;
+  const inHit = holdsHitSpot(hits, c.id, me);
+  if (c.participantIds.length <= 1) return `You’re the only one here, so the group and its messages are deleted.${inHit ? ' Your spot in the hit goes too.' : ''}`;
+  return `Someone in it can add you back${inHit ? ', but not to your spot in the hit' : ''}.${isOnlyAdmin(c, me) ? ' Whoever’s been in it longest becomes admin.' : ''}`;
 }
 
 /**
- * What "Remove June?" says. In a hit's chat, June's "I'm in" goes with them
- * (remove_group_member does the same) and adding June back doesn't bring it
- * back, so it says so rather than suggesting it can all be undone.
+ * What "Remove June?" says, in one sentence. In a hit's chat, June's "I'm in"
+ * goes with them (remove_group_member does the same) and adding June back
+ * doesn't bring it back, so it says so rather than suggesting it can all be
+ * undone.
  */
 export const removeMemberMessage = (who: Named, givesUpSpot: boolean) =>
-  `${who.first} won’t get new messages. Someone in the group can add ${who.first} back.${givesUpSpot ? ` ${who.first}’s spot in the hit goes too.` : ''}`;
+  `${who.first} won’t get new messages${givesUpSpot ? ' and loses their spot in the hit' : ''}.`;
 
 /** First names in a sentence: "Dev", "Dev and June", "Dev, June and Mira", "Dev, June and 3 others". */
 export function nameList(firsts: string[]): string {

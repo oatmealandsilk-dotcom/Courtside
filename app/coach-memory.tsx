@@ -41,7 +41,7 @@ function CoachMemoryScreen() {
   }, []);
 
   const clear = () => {
-    confirm({ title: 'Clear what the coach remembers?', message: 'Its notes and your recent conversations are deleted. The coach starts fresh next time.', confirmLabel: 'Clear', destructive: true, onConfirm: async () => {
+    confirm({ title: 'Clear coach memory?', message: 'Its notes and your recent chats are deleted, so it starts fresh.', confirmLabel: 'Clear', destructive: true, onConfirm: async () => {
       setBusy(true);
       setError('');
       try {

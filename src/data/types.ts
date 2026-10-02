@@ -123,8 +123,37 @@ export interface PracticeSession {
   won?: boolean;
   opponent?: string;
   note?: string;
+  /** The tracker session this was logged from (migration 58). */
+  activityId?: ID;
   createdAt: string;
 }
+
+/** A tennis session a tracker recorded, waiting to be logged. Private to its owner (migration 58). */
+export interface DetectedActivity {
+  id: ID;
+  userId: ID;
+  source: 'whoop' | 'apple-health' | 'health-connect';
+  sport: 'tennis';
+  startedAt: string;
+  endedAt: string;
+  /** Minutes east of UTC where it was played, when the tracker said. */
+  tzOffsetMin?: number;
+  minutes: number;
+  avgHr?: number;
+  maxHr?: number;
+  kcal?: number;
+  /** WHOOP's own 0–21 score. Only from WHOOP, always called Strain, shown privately only. */
+  strain?: number;
+  /** 'WHOOP', or the Apple device that saved it, such as 'Watch7,1'. */
+  device?: string;
+  status: 'new' | 'logged' | 'dismissed' | 'duplicate' | 'withdrawn';
+  duplicateOf?: ID;
+  sessionId?: ID;
+  createdAt: string;
+}
+
+/** Where a post's session numbers came from, for its label. */
+export type StatsSource = 'whoop' | 'apple-watch' | 'apple-health' | 'health-connect';
 
 export interface PlayerStats {
   sessionsLogged: number;
@@ -440,6 +469,8 @@ export interface Integration {
   lastSyncedAt?: string;
   /** What the AI coach reads from this source once it is wired up. */
   provides: string[];
+  /** Tennis sessions switched on for this source (migration 58). */
+  readsWorkouts?: boolean;
 }
 
 export interface DailyHealth {
@@ -454,6 +485,8 @@ export interface DailyHealth {
   /** 0–100 composite readiness score, as reported by the wearable. */
   recovery: number;
   steps: number;
+  /** Which source gave which number, keyed by column ('recovery', 'sleep_hours', 'hrv_ms', …). */
+  sources?: Record<string, string>;
 }
 
 /* -------------------------------- AI coach ------------------------------- */
@@ -713,9 +746,11 @@ export type NotificationKind =
   /** Someone said "I'm in" to your Looking-for-a-hit post. */
   | 'hit-join'
   /** Someone nearby posted a hit much like yours (or like what your open-to-hit ring says). Actor is them; the target is their hit (migration 53). */
-  | 'hit-match';
+  | 'hit-match'
+  /** A tracker picked up a tennis session. Actor is you; the target is the detected activity (migration 58). */
+  | 'activity';
 
-export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application' | 'report' | 'coaching-request' | 'profile' | 'hit-request';
+export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application' | 'report' | 'coaching-request' | 'profile' | 'hit-request' | 'activity';
 
 /** A court a post is tagged with: the map's id for it, its name, and where it is. */
 export interface TaggedCourt { id: string; name: string; lat: number; lng: number }

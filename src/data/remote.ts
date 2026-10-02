@@ -19,7 +19,7 @@ import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, ChatEvent, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, TaggedCourt, Question, Story, Tip, User, CoachApplication } from './types';
+import type { Answer, ChatEvent, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, TaggedCourt, Question, Story, Tip, User, CoachApplication } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
 import { isMapCourtId } from '@/features/places/courtName';
 
@@ -300,10 +300,28 @@ export interface RemoteData {
   sessions: PracticeSession[];
   /** Open "Looking for a hit" posts (migration 43). */
   hitRequests: HitRequest[];
+  /** Your tracker sessions (migration 58); missing in older saved copies. */
+  activities?: DetectedActivity[];
 }
 
-interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string }
-const toSession = (r: SessionRow): PracticeSession => ({ id: r.id, userId: r.user_id, day: r.day, minutes: r.minutes, kind: r.kind, won: r.won ?? undefined, opponent: r.opponent ?? undefined, note: r.note ?? undefined, createdAt: r.created_at });
+interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null }
+const toSession = (r: SessionRow): PracticeSession => ({ id: r.id, userId: r.user_id, day: r.day, minutes: r.minutes, kind: r.kind, won: r.won ?? undefined, opponent: r.opponent ?? undefined, note: r.note ?? undefined, activityId: r.activity_id ?? undefined, createdAt: r.created_at });
+
+interface ActivityRow {
+  id: string; user_id: string; source: DetectedActivity['source']; sport: 'tennis'; started_at: string; ended_at: string; tz_offset_min: number | null; minutes: number;
+  avg_hr: number | null; max_hr: number | null; kcal: number | null; strain: number | string | null; device: string | null; status: DetectedActivity['status'];
+  duplicate_of: string | null; session_id: string | null; created_at: string;
+}
+const toActivity = (r: ActivityRow): DetectedActivity => ({
+  id: r.id, userId: r.user_id, source: r.source, sport: r.sport, startedAt: r.started_at, endedAt: r.ended_at, tzOffsetMin: r.tz_offset_min ?? undefined, minutes: r.minutes,
+  avgHr: r.avg_hr ?? undefined, maxHr: r.max_hr ?? undefined, kcal: r.kcal ?? undefined,
+  // numeric(3,1) arrives as a string.
+  strain: r.strain == null ? undefined : Number(r.strain),
+  device: r.device ?? undefined, status: r.status, duplicateOf: r.duplicate_of ?? undefined, sessionId: r.session_id ?? undefined, createdAt: r.created_at,
+});
+/** Your tracker sessions that ended in the last two weeks, newest first. Only your own rows come back (migration 58). */
+const activitiesQuery = (me: ID) => need().from('detected_activities').select('*').eq('user_id', me)
+  .gte('ended_at', new Date(Date.now() - 14 * 86_400_000).toISOString()).order('started_at', { ascending: false }).limit(60);
 
 interface HitRow { id: string; author_id: string; starts_at: string; place: { id?: string; name?: string; lat?: number; lng?: number } | null; level_min: number | null; level_max: number | null; format: HitRequest['format']; spots: number; note: string | null; conversation_id: string | null; cancelled: boolean; created_at: string; hit_joins?: { user_id: string }[] }
 const toHit = (r: HitRow): HitRequest => ({
@@ -322,6 +340,8 @@ export interface UserState {
   showActivity: boolean; pushLikes: boolean; pushCoach: boolean;
   /** The "Message alerts" switch (migration 54). Undefined on a database without it, which means on. */
   pushMessages?: boolean;
+  /** The "Tennis sessions" alert switch (migration 58). Undefined on a database without it, which means on. */
+  pushActivity?: boolean;
   /** What the coach works around (injuries, schedule, gear): kept in this private row, never on the public profile. Undefined on a database without migration 19. */
   constraints?: PlayerProfile['constraints'];
 }
@@ -362,7 +382,7 @@ const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
   listed: r.listed, payoutsReady: r.payouts_ready, payoutsStarted: r.payouts_started,
 });
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
-interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints'] } | null }
+interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints'] } | null }
 
 interface PollRow { question_id: string; options: string[]; counts: number[] | null }
 /** Each thread's poll, with the totals and your own vote, laid onto the threads. */
@@ -405,6 +425,7 @@ const toUserState = (r: UserStateRow): UserState => ({
   mutedIds: r.muted_ids ?? [], blockedIds: r.blocked_ids ?? [], savedQuestionIds: r.saved_question_ids ?? [], paymentMethods: r.payment_methods ?? [],
   defaultPaymentId: r.default_payment_id, showActivity: r.show_activity, pushLikes: r.push_likes, pushCoach: r.push_coach,
   pushMessages: typeof r.push_messages === 'boolean' ? r.push_messages : undefined,
+  pushActivity: typeof r.push_activity === 'boolean' ? r.push_activity : undefined,
   constraints: Array.isArray(r.private_profile?.constraints) ? r.private_profile!.constraints : undefined,
 });
 
@@ -584,7 +605,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     const now = await chatList(MEMBERS_NOW);
     return now.error ? chatList(MEMBERS_BEFORE_54) : now;
   })();
-  const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows, sessionRows, pollRows, myPollVotes, hitRows, prefRows] = await Promise.all([
+  const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows, sessionRows, pollRows, myPollVotes, hitRows, prefRows, activityRows] = await Promise.all([
     // Every profile, in chunks, so nobody is left out past the first 1,000.
     allRows<ProfileRow>((from, to) => db.from('profiles').select('*').order('created_at', { ascending: true }).range(from, to)),
     db.from('posts').select(POST_SELECT).order('created_at', { ascending: false }).limit(POST_PAGE),
@@ -620,6 +641,8 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     db.from('hit_requests').select('*, hit_joins(user_id)').eq('cancelled', false).gte('starts_at', new Date(Date.now() - 3_600_000).toISOString()).order('starts_at', { ascending: true }).limit(100),
     // Which chats you muted: only your own rows come back (migration 54; none without it).
     db.from('conversation_prefs').select('conversation_id, muted_until'),
+    // Tennis sessions your tracker picked up (migration 58; none without it).
+    activitiesQuery(me),
   ]);
   const coaching = await coachingLoad;
   if (qs.error) console.warn('[remote] community tables missing; run the pending migrations', qs.error.message);
@@ -681,6 +704,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     coachApplications: ((applicationRows.data ?? []) as CoachApplicationRow[]).map(toCoachApplication),
     sessions: ((sessionRows.data ?? []) as SessionRow[]).map(toSession),
     hitRequests: ((hitRows.data ?? []) as HitRow[]).map(toHit),
+    activities: activityRows.error ? [] : ((activityRows.data ?? []) as ActivityRow[]).map(toActivity),
     ...coaching,
   };
 }
@@ -751,6 +775,8 @@ const missingFunction = (error: { code?: string; message: string }) =>
 
 /** Set once a settings save finds no push_messages column (a database before migration 54). */
 let userStateLacksPushMessages = false;
+/** Set once a settings save finds no push_activity column (a database before migration 58). */
+let userStateLacksPushActivity = false;
 
 /** A note for whoever reads the logs: this needs the group chat update in Supabase first. */
 const needs54 = (what: string) => console.warn(`[remote] ${what} needs the group chat update. Open Supabase → SQL Editor → New query, paste the file supabase/migrations/20261001000054_group_chats.sql and press Run. It is safe to run more than once.`);
@@ -838,15 +864,21 @@ export const remote = {
       user_id: me, muted_ids: s.mutedIds, blocked_ids: s.blockedIds, saved_question_ids: s.savedQuestionIds, payment_methods: s.paymentMethods,
       default_payment_id: s.defaultPaymentId, show_activity: s.showActivity, push_likes: s.pushLikes, push_coach: s.pushCoach, updated_at: new Date().toISOString(),
     };
-    // The "Message alerts" switch has its own column (migration 54). A
-    // database without it refuses the whole save, so the rest is saved
-    // without it, and it is not sent again this session.
-    const withAlerts = s.pushMessages !== undefined && !userStateLacksPushMessages;
-    let { error } = await need().from('user_state').upsert(withAlerts ? { ...row, push_messages: s.pushMessages } : row);
-    if (error && withAlerts && /push_messages/.test(error.message)) {
-      userStateLacksPushMessages = true;
-      needs54('The Message alerts switch');
-      ({ error } = await need().from('user_state').upsert(row));
+    // The "Message alerts" switch (migration 54) and the "Tennis sessions"
+    // one (migration 58) each have their own column. A database without one
+    // refuses the whole save, so the rest is saved without it, and it is not
+    // sent again this session.
+    const send = () => need().from('user_state').upsert({
+      ...row,
+      ...(s.pushMessages !== undefined && !userStateLacksPushMessages ? { push_messages: s.pushMessages } : {}),
+      ...(s.pushActivity !== undefined && !userStateLacksPushActivity ? { push_activity: s.pushActivity } : {}),
+    });
+    let { error } = await send();
+    for (let tries = 0; error && tries < 2; tries += 1) {
+      if (/push_activity/.test(error.message) && !userStateLacksPushActivity) userStateLacksPushActivity = true;
+      else if (/push_messages/.test(error.message) && !userStateLacksPushMessages) { userStateLacksPushMessages = true; needs54('The Message alerts switch'); }
+      else break;
+      ({ error } = await send());
     }
     if (error) fail('settings save')(error);
   },
@@ -1152,7 +1184,7 @@ export const remote = {
   /* --------------------------------------------------------------- health */
 
   /** A person's days and which sources are connected. Null while the tables do not exist yet. */
-  async fetchHealth(me: ID): Promise<{ days: DailyHealth[]; connections: { provider: IntegrationProvider; lastSyncedAt?: string }[] } | null> {
+  async fetchHealth(me: ID): Promise<{ days: DailyHealth[]; connections: { provider: IntegrationProvider; lastSyncedAt?: string; readsWorkouts?: boolean }[] } | null> {
     const db = need();
     const [d, c] = await Promise.all([
       db.from('health_days').select('*').eq('user_id', me).order('date', { ascending: false }).limit(60),
@@ -1162,8 +1194,17 @@ export const remote = {
     const days = (d.data ?? []).map((r) => ({
       date: r.date as string, calories: r.calories ?? 0, proteinGrams: r.protein_g ?? 0, carbGrams: r.carb_g ?? 0, fatGrams: r.fat_g ?? 0,
       restingHeartRate: r.resting_hr ?? 0, hrvMs: r.hrv_ms ?? 0, sleepHours: Number(r.sleep_hours ?? 0), recovery: r.recovery ?? 0, steps: r.steps ?? 0,
+      // Which source gave each number, so WHOOP's can be kept out of the AI coach.
+      sources: (r.sources ?? {}) as Record<string, string>,
     }));
-    return { days, connections: (c.data ?? []).map((r) => ({ provider: r.provider as IntegrationProvider, lastSyncedAt: r.last_synced_at ?? undefined })) };
+    return {
+      days,
+      connections: (c.data ?? []).map((r) => ({
+        provider: r.provider as IntegrationProvider, lastSyncedAt: r.last_synced_at ?? undefined,
+        // Tennis sessions switched on for this source (migration 58; never without it).
+        readsWorkouts: r.reads_workouts === true,
+      })),
+    };
   },
 
   /** Writes only the numbers a source gave, leaving another source's numbers on the same day alone. */
@@ -1188,16 +1229,30 @@ export const remote = {
     if (error) throw new Error(error.message);
   },
 
-  async setHealthConnection(me: ID, provider: IntegrationProvider, connected: boolean) {
+  /** `readsWorkouts` turns tennis sessions on or off for a connected source (migration 58). */
+  async setHealthConnection(me: ID, provider: IntegrationProvider, connected: boolean, extra?: { readsWorkouts?: boolean }) {
     const db = need();
-    const { error } = connected
-      ? await db.from('health_connections').upsert({ user_id: me, provider, last_synced_at: new Date().toISOString() })
-      : await db.from('health_connections').delete().match({ user_id: me, provider });
+    if (!connected) {
+      const { error } = await db.from('health_connections').delete().match({ user_id: me, provider });
+      if (error) throw new Error(error.message);
+      return;
+    }
+    const tennis = extra?.readsWorkouts !== undefined;
+    // Turning tennis sessions on or off is not a sync, so it leaves "Synced …" as it was
+    // (every caller has just made or already has the row).
+    const row: Record<string, unknown> = tennis ? { user_id: me, provider } : { user_id: me, provider, last_synced_at: new Date().toISOString() };
+    let { error } = await db.from('health_connections').upsert(tennis ? { ...row, reads_workouts: extra!.readsWorkouts } : row);
+    // A database before migration 58 has no such column: the connection is still saved.
+    if (error && tennis && /reads_workouts/.test(error.message)) ({ error } = await db.from('health_connections').upsert(row));
     if (error) throw new Error(error.message);
   },
 
-  /** The WHOOP function on the server: start, sync, disconnect. */
-  async whoop<T = { url?: string; days?: number; ok?: boolean }>(path: 'start' | 'sync' | 'disconnect', body: object = {}): Promise<T> {
+  /**
+   * The WHOOP function on the server: start, sync, disconnect, and finish (a
+   * tennis sign-in collected by this phone). `fresh` (migration 58): the
+   * tennis sessions a sync just filed.
+   */
+  async whoop<T = { url?: string; days?: number; ok?: boolean; fresh?: ID[] }>(path: 'start' | 'finish' | 'sync' | 'disconnect', body: object = {}): Promise<T> {
     const { data, error } = await need().functions.invoke<T & { error?: string }>(`whoop/${path}`, { body });
     if (error) throw new Error('WHOOP is not reachable right now.');
     if (data && (data as { error?: string }).error) throw new Error((data as { error?: string }).error);
@@ -1642,12 +1697,60 @@ export const remote = {
   },
 
   async insertSession(s: PracticeSession) {
-    const { error } = await need().from('practice_sessions').insert({ id: s.id, user_id: s.userId, day: s.day, minutes: s.minutes, kind: s.kind, won: s.won ?? null, opponent: s.opponent ?? null, note: s.note ?? null, created_at: s.createdAt });
-    if (error) { fail('session')(error); throw new Error(error.message.includes('a lot of sessions') ? error.message : 'That session didn’t save. Try again.'); }
+    const db = need();
+    const row: Record<string, unknown> = { id: s.id, user_id: s.userId, day: s.day, minutes: s.minutes, kind: s.kind, won: s.won ?? null, opponent: s.opponent ?? null, note: s.note ?? null, created_at: s.createdAt };
+    let { error } = await db.from('practice_sessions').insert(s.activityId ? { ...row, activity_id: s.activityId } : row);
+    // A database before migration 58 has no activity_id: the session still counts, just without the link.
+    if (error && s.activityId && /activity_id/.test(error.message)) ({ error } = await db.from('practice_sessions').insert(row));
+    if (error) {
+      fail('session')(error);
+      // Each tracker session can be logged once (a unique index on activity_id).
+      if (error.code === '23505') throw new Error('Already logged.');
+      throw new Error(error.message.includes('a lot of sessions') ? error.message : 'That session didn’t save. Try again.');
+    }
   },
   async deleteSession(id: ID) {
     const { error } = await need().from('practice_sessions').delete().eq('id', id);
     if (error) fail('session delete')(error);
+  },
+
+  /* ------------------------------------------- tennis sessions (migration 58) */
+
+  /** Which server switches are on for you, by name ('tennis-apple', 'tennis-whoop'). Empty on a database without them. */
+  async myFlags(): Promise<Record<string, boolean>> {
+    const { data, error } = await need().rpc('my_flags');
+    if (error || !data || typeof data !== 'object') return {};
+    return data as Record<string, boolean>;
+  },
+  /** Your tracker sessions from the last two weeks. Null when they could not be read (empty on a database without them). */
+  async fetchActivities(me: ID): Promise<DetectedActivity[] | null> {
+    const { data, error } = await activitiesQuery(me);
+    if (error) return null;
+    return ((data ?? []) as ActivityRow[]).map(toActivity);
+  },
+  /**
+   * A tennis workout read from Apple Health on this phone, handed to the
+   * server, which keeps it, checks it against WHOOP's copy and files the
+   * in-app row. `notify` is true only when this very call filed it. Null on a
+   * database without the function, or when the server turned it away;
+   * 'error' when it did not get through.
+   */
+  async reportActivity(ext: string, p: object): Promise<{ id: ID; status: DetectedActivity['status']; notify: boolean } | null | 'error'> {
+    const { data, error } = await need().rpc('report_activity', { ext, p });
+    if (error) return missingFunction(error) ? null : 'error';
+    return (data as { id: ID; status: DetectedActivity['status']; notify: boolean } | null) ?? null;
+  },
+  /** "Not tennis": hides a session you have not logged, and its notification. */
+  async dismissActivity(id: ID) {
+    const { error } = await need().rpc('dismiss_activity', { a: id });
+    if (error) fail('dismiss activity')(error);
+  },
+  /** The "Tennis detected" rows from the last two weeks, for a check that just filed some. */
+  async fetchActivityNotes(me: ID): Promise<Notification[]> {
+    const { data, error } = await need().from('notifications').select('*').eq('user_id', me).eq('kind', 'activity')
+      .gte('created_at', new Date(Date.now() - 14 * 86_400_000).toISOString());
+    if (error) return [];
+    return ((data ?? []) as NotificationRow[]).map(toNotification);
   },
   /** Everyone's last spot you are allowed to see. Empty when the table is not there yet. */
   async fetchLastSeen(): Promise<LastSeen[]> {
@@ -2210,13 +2313,17 @@ export const auth = {
     if (error) throw new Error(error.message);
     return data.session;
   },
-  async signUp(email: string, password: string, name: string, handle: string) {
+  async signUp(email: string, password: string, name: string, handle: string, birthDate?: string) {
     const { data, error } = await need().auth.signUp({
       email: email.trim(),
       password,
       // The sign-up form cannot be sent without ticking the terms, so the
-      // agreement is written onto the account as it is made.
-      options: { data: { name: name.trim(), handle: handle.trim().toLowerCase(), terms_version: TERMS_VERSION, terms_accepted_at: new Date().toISOString() } },
+      // agreement is written onto the account as it is made. The birthday
+      // typed on the form rides along too: the account can open before it is
+      // saved, or only from the email link (on any phone or browser), and the
+      // age check saves it from here instead of asking again. It still goes
+      // through set_birth_date, and comes off once the age is on file.
+      options: { data: { name: name.trim(), handle: handle.trim().toLowerCase(), terms_version: TERMS_VERSION, terms_accepted_at: new Date().toISOString(), ...(birthDate ? { birth_date: birthDate } : {}) } },
     });
     if (error) throw new Error(error.message);
     // With email confirmation on, there is no session yet; the screen says so.
@@ -2319,6 +2426,22 @@ export const auth = {
     const base = (process.env.EXPO_BASE_URL ?? '').replace(/\/$/, '');
     const redirectTo = Platform.OS === 'web' ? `${window.location.origin}${base}/account?reset=1` : 'https://app.courtsidebase.com/account?reset=1';
     const { error } = await need().auth.resetPasswordForEmail(email.trim(), { redirectTo });
+    if (error) throw new Error(error.message);
+  },
+  /**
+   * The signed-in account as this phone's login has it, for the age check:
+   * when it was made, and the birthday its sign-up form carried, if any. No
+   * trip to the server.
+   */
+  async signedInUser(): Promise<{ id: string; createdAt: string; birthDate: string | null } | null> {
+    const user = (await need().auth.getSession()).data.session?.user;
+    if (!user) return null;
+    const dob: unknown = user.user_metadata?.birth_date;
+    return { id: user.id, createdAt: user.created_at, birthDate: typeof dob === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dob) ? dob : null };
+  },
+  /** Takes the sign-up form's birthday off the account once the age check has it (set_birth_date keeps its own private copy). */
+  async forgetSignUpBirthDate() {
+    const { error } = await need().auth.updateUser({ data: { birth_date: null } });
     if (error) throw new Error(error.message);
   },
   /** Records that this account agreed to the current terms, on the account itself. */

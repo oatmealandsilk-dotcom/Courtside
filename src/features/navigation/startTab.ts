@@ -1,7 +1,10 @@
+import { Platform } from 'react-native';
 import { router, type Href } from 'expo-router';
 
 import { HOME } from '@/lib/goBack';
-import { requestSection } from '@/features/navigation/swipeOrder';
+import { setInstantExit } from '@/features/navigation/instantExit';
+import { requestScrollToTop } from '@/features/navigation/scrollToTop';
+import { askedSection, requestSection } from '@/features/navigation/swipeOrder';
 
 /** The four tabs' own addresses. */
 export type TabPath = '/' | '/discuss' | '/coaches' | '/profile';
@@ -37,6 +40,26 @@ export function isStartTab(pathname: string): boolean {
   return pathname === START_TAB || (OPENS_ON_FEED && pathname === '/index');
 }
 
+/** Whether this address is one of the four tabs' own, not a page opened on top of them. */
+export function isTabPage(pathname: string): boolean {
+  return ['/', '/index', '/discuss', '/coaches', '/profile'].includes(pathname);
+}
+
+/**
+ * Community opens on Find Players (the map), from the top, whenever the bar
+ * takes you there from somewhere else: another tab, or a page opened on top.
+ * Only a swipe from the Feed lands on Discussions, the page next door,
+ * because that is where the finger went (TabsPager, the tabs' web layout).
+ *
+ * A section asked for just before that the tab has not taken yet (a topic
+ * chip, a thread's back swipe, "Find players" on an empty list) is left
+ * alone: that ask was the reason for going there.
+ */
+export function askForCommunityMap() {
+  if (askedSection('/discuss') === undefined) requestSection('/discuss', 'players');
+  requestScrollToTop('/discuss', true);
+}
+
 /**
  * To the start page, from anywhere, the way goHome goes to the feed: every
  * page opened on top of the tabs closes, and the tabs move across to
@@ -47,6 +70,29 @@ export function goToStart() {
   requestSection(START_TAB, START_SECTION);
   if (router.canDismiss()) router.dismissTo(START_HREF);
   else router.navigate(START_HREF);
+}
+
+/**
+ * To one of the four tabs from anywhere, after asking it for a section (a
+ * topic chip, a thread's back swipe, "Find players" on an empty list): every
+ * page on top closes and the tabs move across, the way goHome goes to the
+ * feed. Pushing a tab's address from a page on top built a second copy of
+ * the tabs over the first, and the copy underneath had already taken the
+ * section asked for, so the threads asked for opened on the map.
+ *
+ * `instant`: the page on top just goes, with no Back slide (on the phone),
+ * because a swipe has already slid the tab into view.
+ */
+export function goToTab(pathname: TabPath, instant = false) {
+  const href: Href = pathname === '/' ? HOME : pathname;
+  if (!router.canDismiss()) { router.navigate(href); return; }
+  if (!instant || Platform.OS === 'web') { router.dismissTo(href); return; }
+  setInstantExit(true);
+  // One frame for the stack to take the "no slide" setting before the page is dismissed (as the bar does).
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    router.dismissTo(href);
+    setTimeout(() => setInstantExit(false), 450);
+  }));
 }
 
 /**

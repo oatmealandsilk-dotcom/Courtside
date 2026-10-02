@@ -62,10 +62,10 @@ export default function CoachQuestionDetail() {
   const iAmCoach = Boolean(currentUser?.isCoach);
   const mine = question.authorId === currentUserId;
 
-  // Asked once, after the menu has gone, the way a post's Delete asks.
+  // Asked once, from the menu, the way a post's Delete asks.
   const askToDelete = () => confirmAfterMenu({
     title: 'Delete this question?',
-    message: 'Your question and any coach answers are removed for everyone. This can’t be undone.',
+    message: 'Any coach answers go with it. This can’t be undone.',
     confirmLabel: 'Delete',
     destructive: true,
     onConfirm: () => {

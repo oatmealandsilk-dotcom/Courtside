@@ -113,7 +113,7 @@ export default function CoachStudio() {
   };
   const removeDraft = () => {
     if (!draft) return;
-    confirm({ title: 'Remove this service?', message: 'Players will not be able to book it. Bookings already paid for are not affected.', confirmLabel: 'Remove', destructive: true, onConfirm: () => {
+    confirm({ title: 'Remove this service?', message: 'Players can’t book it any more. Paid bookings aren’t affected.', confirmLabel: 'Remove', destructive: true, onConfirm: () => {
       void run('service', async () => { await actions.removeCoachService(draft.id); setDraft(null); });
     } });
   };

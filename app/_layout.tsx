@@ -103,7 +103,7 @@ export default function RootLayout() {
           <Stack.Screen name="hit" options={{ presentation: 'fullScreenModal', animation: 'fade', contentStyle: { backgroundColor: '#000' } }} />
         </Stack></AppShell>
         <SignOutCurtainHost />
-        {/* "Delete post?" and the like, in a browser; a phone asks with its own alert. */}
+        {/* "Delete post?" and the like: the app's own card, last so it sits above every sheet, menu and the tab bar. */}
         <ConfirmHost />
       </AppProvider>
     </SafeAreaProvider></ThemeProvider></GestureHandlerRootView>

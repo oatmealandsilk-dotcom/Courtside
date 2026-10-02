@@ -8,6 +8,7 @@ export const integrations: Integration[] = [
     category: 'wearable',
     connected: false,
     provides: ['Sleep', 'HRV', 'Resting heart rate', 'Steps', 'Active energy'],
+    readsWorkouts: true,
   },
   {
     provider: 'whoop',
@@ -16,6 +17,7 @@ export const integrations: Integration[] = [
     connected: true,
     lastSyncedAt: isoDaysAgo(0, 5),
     provides: ['Recovery', 'HRV', 'Resting heart rate', 'Sleep', 'Strain'],
+    readsWorkouts: true,
   },
   {
     provider: 'cronometer',

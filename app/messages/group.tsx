@@ -177,7 +177,7 @@ export default function ChatDetails() {
                 accessibilityRole="button"
                 onPress={() => confirm({
                   title: `Report ${first(other)}?`,
-                  message: 'A person at CourtSide will look at this chat. They aren’t told who reported it.',
+                  message: `A person at CourtSide will look at this chat. ${first(other)} isn’t told it was you.`,
                   confirmLabel: 'Report',
                   onConfirm: () => { actions.reportUser(other.id, 'messages'); showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' }); },
                 })}
@@ -272,7 +272,7 @@ export default function ChatDetails() {
     : room <= 0 ? fullText
     : notice.kind === 'filled' ? `This group filled up while you were picking. There’s room for ${room} more now.`
     : `There’s only room for ${room} more in this group.`;
-  // Taking someone out, asked first. `fromMenu`: asked from the ⋯ sheet, which closes before it.
+  // Taking someone out, asked first. `fromMenu`: asked from the ⋯ sheet, which closes as it comes.
   const removeMember = (u: User, fromMenu = false) => (fromMenu ? confirmAfterMenu : confirm)({
     title: `Remove ${nm(u).label}?`,
     message: removeMemberMessage(nm(u), holdsHitSpot(hitRequests, conversation.id, u.id)),

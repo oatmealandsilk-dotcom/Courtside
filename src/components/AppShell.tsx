@@ -1,6 +1,6 @@
 import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Platform, View } from 'react-native';
+import { AppState, Platform, View } from 'react-native';
 import { goBack, goHome } from '@/lib/goBack';
 import { router, useGlobalSearchParams, usePathname, useSegments } from 'expo-router';
 import { NavBar } from './NavBar';
@@ -10,14 +10,16 @@ import { WarmCurtain } from '@/components/WarmCurtain';
 import { TourOverlay } from '@/components/TourOverlay';
 import { isTourOpen, useTourOpen } from '@/features/tour/tourStore';
 import { Toast } from './Toast';
+import { MessageBanner } from './MessageBanner';
 import { RouteTransition } from './RouteTransition';
 import { useResponsive } from '@/lib/useResponsive';
 import { getPendingTab, setPendingTab, subscribePendingTab } from '@/features/navigation/pendingTab';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
-import { isStartTab } from '@/features/navigation/startTab';
+import { askForCommunityMap, isStartTab } from '@/features/navigation/startTab';
 import { useCurtainDown } from '@/features/feed/warmup';
 import { useApp } from '@/store/AppContext';
-import { recallAnswered } from '@/features/age/ageCheck';
+import { claimCarriedBirthDate, isDeviceBlocked, recallAnswered } from '@/features/age/ageCheck';
+import { auth as remoteAuth } from '@/data/remote';
 import { setCrashScreen } from '@/lib/crashReporting';
 import { listenForPushTaps, registerForPush } from '@/features/push/push';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -68,13 +70,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       if (e.key === 'Escape' && SHEETS.has(pathname)) { e.preventDefault(); goBack('/'); return; }
       if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && TAB_ORDER.includes(pathname) && !e.metaKey && !e.altKey) {
         const next = TAB_ORDER[TAB_ORDER.indexOf(pathname) + (e.key === 'ArrowRight' ? 1 : -1)];
-        if (next) { e.preventDefault(); router.navigate(next); }
+        if (next) { e.preventDefault(); if (next === paths.discuss) askForCommunityMap(); router.navigate(next); }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [pathname]);
-  const { currentUserId, currentUser, ready, authResolved, remoteLoaded, onboardingComplete, termsVersion } = useApp();
+  const { currentUserId, currentUser, ready, authResolved, remoteLoaded, onboardingComplete, termsVersion, healthIsReal, actions } = useApp();
   // Crash reports say which screen they happened on.
   useEffect(() => { setCrashScreen(pathname); }, [pathname]);
   // Alerts: a tap on one opens what it is about. Once someone is signed in
@@ -88,14 +90,56 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     pushAskedFor.current = currentUserId;
     void registerForPush();
   }, [currentUserId, remoteLoaded, onboardingComplete, currentUser?.ageGroup]);
+  // Tennis sessions from a tracker: looked for when the app opens and each
+  // time it comes back to the front. It does nothing unless a source has
+  // tennis sessions on and its server switch is on (migration 58).
+  useEffect(() => {
+    if (!isSupabaseConfigured || !currentUserId || !remoteLoaded || !onboardingComplete || !healthIsReal) return;
+    void actions.checkForActivities();
+    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') void actions.checkForActivities(); });
+    return () => sub.remove();
+  }, [currentUserId, remoteLoaded, onboardingComplete, healthIsReal]); // eslint-disable-line react-hooks/exhaustive-deps
   // The age check: an account with no birthday on file is asked for one
   // before anything else, wherever it opens. (An answer given on this phone
   // counts too, in case the database's side of the check is not added yet.)
   const [answered, setAnswered] = useState<string | null | undefined>(undefined);
+  // Only once the account's own record is in is it known whether its age is on file.
+  const accountIn = remoteLoaded && !!currentUser;
   useEffect(() => {
     setAnswered(undefined);
-    if (currentUserId) void recallAnswered(currentUserId).then(setAnswered);
-  }, [currentUserId, currentUser?.ageGroup]);
+    if (!currentUserId) return;
+    let stale = false;
+    void (async () => {
+      let answer: string | null = await recallAnswered(currentUserId);
+      // A birthday given at sign-up and not saved yet: typed on the email
+      // form (it rides on the account, which can open before it is saved or
+      // only from the email link), or typed before tapping Apple or Google
+      // (carried on this phone for a few minutes). It is saved now, the same
+      // way the birthday page saves one, so whoever typed it is not asked again.
+      if (isSupabaseConfigured && accountIn) {
+        const who = await remoteAuth.signedInUser().catch(() => null);
+        // A phone that has had an under-13 answer takes no birthday from
+        // anywhere: an account with no age goes to the birthday page, which
+        // says CourtSide is not available.
+        const blocked = await isDeviceBlocked();
+        if (!stale && who?.id === currentUserId) {
+          // What Apple or Google carried is used up by the first account to open after it.
+          const carried = claimCarriedBirthDate({ createdAt: who.createdAt });
+          const typed = who.birthDate ?? carried;
+          // (An answer only this phone remembers, from a save that did not
+          // reach the server, is saved again here too.)
+          if (typed && !currentUser?.ageGroup && !blocked) {
+            const saved = await actions.confirmBirthDate(typed).catch(() => null);
+            if (saved === 'teen' || saved === 'adult') answer = saved;
+          }
+          // The form's birthday rode on the account only to get here; with the age on file it comes off.
+          if (who.birthDate && currentUser?.ageGroup) void remoteAuth.forgetSignUpBirthDate().catch(() => undefined);
+        }
+      }
+      if (!stale) setAnswered(answer);
+    })();
+    return () => { stale = true; };
+  }, [currentUserId, currentUser?.ageGroup, accountIn]);
   const needsBirthday = isSupabaseConfigured && !!currentUserId && remoteLoaded && !!currentUser && !currentUser.ageGroup
     && answered === null && !['/birthday', '/sign-in'].includes(pathname);
   // The terms: an account that has not agreed to the current ones — a Google
@@ -148,6 +192,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const nav = <NavBar state={{ index: selected.current, routes }} navigation={{ navigate: name => {
     const destination = paths[name as keyof typeof paths];
     if (!destination) return;
+    // Community opens on its map, from the top, whenever the bar takes you there.
+    if (destination === paths.discuss && destination !== pathname) askForCommunityMap();
     // Already here: a second tap on the same icon takes the page back to the top.
     if (destination === pathname) requestScrollToTop(destination);
     // From a page pushed on top (settings, edit profile…), go back down to the
@@ -184,6 +230,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     {/* While the tour is up, TalkBack reads only the tour, not the page under the dim. */}
     <View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={{ flex: 1, minWidth: 0, minHeight: 0 }}><RouteTransition>{children}</RouteTransition><Toast /><UploadBar /></View>
     {showNav && isPhone && nav}
+    {/* A new message drops in at the top, over the bar too; never on the pages the app keeps to themselves. */}
+    <MessageBanner enabled={!!currentUserId && !hideEverywhere && !onSplash && !detour} />
     {/* The splash curtain, from the splash's hand-over until the page the app opens on has drawn (see warmup). */}
     {!curtainDown && !!currentUserId && !hideEverywhere && (onSplash || isStartTab(pathname)) ? <WarmCurtain /> : null}
     {/* The first-run tour: over the bar, so it can light the bar's own buttons. */}

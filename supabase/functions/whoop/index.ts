@@ -1,24 +1,46 @@
 // CourtSide ↔ WHOOP — a Supabase Edge Function.
 //
-// The app never holds WHOOP's client secret. Four jobs, by path:
-//   /start      — (signed-in) sends the browser to WHOOP to say yes
+// The app never holds WHOOP's client secret. Six jobs, by path:
+//   /start      — (signed-in) sends the browser to WHOOP to say yes, within
+//                 ten minutes. With {tennis: true} it also asks to read
+//                 workouts, and that yes turns tennis sessions on (migration 58)
 //   /callback   — WHOOP sends the browser back here; the code becomes tokens,
-//                 the last week is pulled, and the browser returns to the app
-//   /sync       — (signed-in) pulls the last week again
-//   /disconnect — (signed-in) forgets the tokens
+//                 the last week is pulled (and the last 36 hours of tennis,
+//                 quietly), and the browser returns to the app. A tennis
+//                 sign-in is parked instead (?whoop=pending&n=…) for /finish
+//   /finish     — (signed-in) the phone that started a tennis sign-in collects
+//                 it, as the same player: only then is it put on the account
+//   /sync       — (signed-in) pulls the last week again. {only: 'workouts'}
+//                 just looks for tennis in the last 36 hours: the app's check
+//                 when it opens, at most hourly. Answers {days, fresh}, fresh
+//                 being the tennis sessions it just filed
+//   /disconnect — (signed-in) revokes CourtSide's access at WHOOP (which also
+//                 stops its webhooks), removes what WHOOP sent, forgets the tokens
+//   /webhook    — (POST, signed by WHOOP, no app token) WHOOP saying a
+//                 workout was saved, changed or deleted
 //
 // Deploy:   supabase functions deploy whoop --no-verify-jwt
-//           (the callback is opened by WHOOP's redirect, with no app token;
-//            /start, /sync and /disconnect check the person's token themselves)
+//           (WHOOP's redirect and webhook carry no app token; /start, /finish,
+//            /sync and /disconnect check the person's token themselves).
+//           Run migration 58 first (/finish needs its whoop_pending table).
 // Secrets:  supabase secrets set WHOOP_CLIENT_ID=... WHOOP_CLIENT_SECRET=...
 // WHOOP app: redirect URL = https://<project>.supabase.co/functions/v1/whoop/callback
-//            scopes = read:recovery read:sleep read:cycles read:profile offline
+//            scopes = read:recovery read:sleep read:cycles read:profile read:workout offline
+//            webhook URL = https://<project>.supabase.co/functions/v1/whoop/webhook, model version v2
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { verifyWhoop } from './verify.ts';
+import { isTennis, toPayload, type WhoopWorkout } from './workout.ts';
+
+/** Supabase's runtime: keeps the function alive for work that finishes after the answer. */
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 
 const AUTH = 'https://api.prod.whoop.com/oauth/oauth2/auth';
 const TOKEN = 'https://api.prod.whoop.com/oauth/oauth2/token';
 const API = 'https://api.prod.whoop.com/developer/v2';
-const SCOPES = 'read:recovery read:sleep read:cycles read:profile offline';
+// Workouts are asked for only by someone turning tennis sessions on, so
+// WHOOP's consent screen never lists something CourtSide will not use.
+const BASE_SCOPES = 'read:recovery read:sleep read:cycles read:profile offline';
+const SCOPES = 'read:recovery read:sleep read:cycles read:profile read:workout offline';
 
 const url = Deno.env.get('SUPABASE_URL')!;
 const admin = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -28,6 +50,11 @@ const redirectUri = `${url}/functions/v1/whoop/callback`;
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'content-type': 'application/json' } });
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Waits before trying a webhook again once WHOOP already has its answer. */
+const RETRY_MS = [2_000, 10_000];
+/** PostgREST's "no such function": a database before migration 58. */
+const NO_FUNCTION = 'PGRST202';
 
 /** Who is asking, from the app's own token. */
 async function whoIs(req: Request): Promise<string | null> {
@@ -37,53 +64,198 @@ async function whoIs(req: Request): Promise<string | null> {
   return data.user?.id ?? null;
 }
 
-/** The state that travels through WHOOP and back: who, and where to return, signed so nobody can forge it. */
+/** The state that travels through WHOOP and back: who, where to return, and whether tennis was asked for, signed so nobody can forge it. */
 const key = crypto.subtle.importKey('raw', new TextEncoder().encode(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
 const b64 = (b: ArrayBuffer | Uint8Array) => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const unb64 = (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
 async function sign(payload: object) { const body = b64(new TextEncoder().encode(JSON.stringify(payload))); const mac = b64(await crypto.subtle.sign('HMAC', await key, new TextEncoder().encode(body))); return `${body}.${mac}`; }
-async function open(state: string): Promise<{ uid: string; back: string } | null> {
+async function open(state: string): Promise<{ uid: string; back: string; tennis?: boolean; exp?: number } | null> {
   const [body, mac] = state.split('.');
   if (!body || !mac) return null;
   const ok = await crypto.subtle.verify('HMAC', await key, unb64(mac), new TextEncoder().encode(body));
-  return ok ? JSON.parse(new TextDecoder().decode(unb64(body))) : null;
+  if (!ok) return null;
+  try { return JSON.parse(new TextDecoder().decode(unb64(body))); } catch { return null; }
 }
+/** How long a sign-in link works: an old one, found or sent later, is useless. */
+const SIGN_IN_MS = 10 * 60_000;
 /** Only the app's own addresses may be returned to. */
 const safeBack = (back: string) => /^(courtside:\/\/|exps?:\/\/[a-z0-9-]+\.exp\.direct\/|exps?:\/\/(localhost|\d{1,3}(\.\d{1,3}){3}):\d+\/|https:\/\/app\.courtsidebase\.com\/)/.test(back) ? back : 'courtside://health';
 
-async function tokensFor(uid: string): Promise<{ access: string } | null> {
-  const { data: row } = await admin.from('whoop_tokens').select('*').eq('user_id', uid).maybeSingle();
-  if (!row) return null;
-  if (Date.parse(row.expires_at) - Date.now() > 60_000) return { access: row.access_token };
-  const res = await fetch(TOKEN, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: row.refresh_token, client_id: clientId, client_secret: clientSecret, scope: 'offline' }) });
-  if (!res.ok) return null;
-  const t = await res.json();
-  await admin.from('whoop_tokens').upsert({ user_id: uid, access_token: t.access_token, refresh_token: t.refresh_token ?? row.refresh_token, expires_at: new Date(Date.now() + t.expires_in * 1000).toISOString(), updated_at: new Date().toISOString() });
-  return { access: t.access_token };
+/** Tennis sessions on or off for this person's WHOOP (the app shows 'Turn on tennis sessions' again when off). */
+async function setReadsWorkouts(uid: string, on: boolean) {
+  await admin.from('health_connections').update({ reads_workouts: on }).match({ user_id: uid, provider: 'whoop' });
 }
 
-async function page(path: string, access: string, start: string, end: string) {
-  const out: any[] = [];
-  let next: string | undefined;
-  for (let i = 0; i < 5; i += 1) {
-    const q = new URLSearchParams({ start, end, limit: '25', ...(next ? { nextToken: next } : {}) });
-    const res = await fetch(`${API}${path}?${q}`, { headers: { authorization: `Bearer ${access}` } });
-    if (!res.ok) break;
-    const body = await res.json();
-    out.push(...(body.records ?? []));
-    next = body.next_token;
-    if (!next) break;
+/**
+ * Saves WHOOP's keys. Migration 58's columns (scope, the refresh lock, the
+ * WHOOP member id) go in `extra`; a database without them still keeps the
+ * keys, so WHOOP works as before whichever is deployed first.
+ */
+async function writeTokens(uid: string, how: 'upsert' | 'update', base: Record<string, unknown>, extra: Record<string, unknown>) {
+  const write = (fields: Record<string, unknown>) =>
+    how === 'upsert' ? admin.from('whoop_tokens').upsert({ user_id: uid, ...fields }) : admin.from('whoop_tokens').update(fields).eq('user_id', uid);
+  const { error } = await write({ ...base, ...extra });
+  // Only a missing column (no migration 58) means "save the keys alone"; any other error is real.
+  if (error && (error.code === 'PGRST204' || error.code === '42703')) return write(base).then((r) => r.error);
+  return error;
+}
+const unlock = (uid: string) => admin.from('whoop_tokens').update({ refresh_lock_until: null }).eq('user_id', uid).then(() => undefined);
+
+/** WHOOP's sample refresh answer lists every granted scope. One that names no data scope at all tells nothing new, so the stored list stands. */
+const keptScope = (fresh: unknown, stored: string | null): string | null =>
+  typeof fresh === 'string' && fresh.includes('read:') ? fresh : stored ?? (typeof fresh === 'string' ? fresh : null);
+/** A full scope list without workouts: this key cannot read tennis sessions. */
+const lacksWorkouts = (scope: string | null) => { const s = (scope ?? '').split(' '); return s.some((x) => x.startsWith('read:')) && !s.includes('read:workout'); };
+
+/** A key, what it may read, and the WHOOP member it belongs to (only for a sign-in this player's own phone collected). */
+type Tokens = { access: string; scope: string | null; member: number | null };
+/**
+ * A working WHOOP key for this person. It is refreshed when it is about to
+ * run out, or when `stale` (a key WHOOP just refused) is still the stored one.
+ * WHOOP invalidates the old refresh token on every refresh, so only the
+ * request holding claim_whoop_refresh refreshes; the others wait and use its
+ * key. Tennis is turned off only when WHOOP says the stored refresh token is
+ * dead (invalid_grant), never on a network error or a lost race.
+ */
+async function tokensFor(uid: string, stale?: string): Promise<Tokens | null> {
+  for (let i = 0; i < 6; i += 1) {
+    const { data: row } = await admin.from('whoop_tokens').select('*').eq('user_id', uid).maybeSingle();
+    if (!row) return null;
+    if (row.access_token !== stale && Date.parse(row.expires_at) - Date.now() > 60_000) return { access: row.access_token, scope: row.scope ?? null, member: row.whoop_user_id ?? null };
+    const { data: mine, error: noLock } = await admin.rpc('claim_whoop_refresh', { u: uid });
+    // Someone else is refreshing: wait for their key. (No lock at all before migration 58: refresh as before.)
+    if (mine !== true && noLock?.code !== NO_FUNCTION) { await wait(1000); continue; }
+    // Read again now the lock is ours: a refresh that finished between the
+    // read above and the claim left a new refresh token, the only one that still works.
+    const { data: cur } = await admin.from('whoop_tokens').select('*').eq('user_id', uid).maybeSingle();
+    if (!cur) return null;
+    if (cur.refresh_token !== row.refresh_token) { await unlock(uid); continue; }
+    let res: Response;
+    try {
+      // Well inside the 20-second lock, so no second refresh can start while this one is out.
+      res = await fetch(TOKEN, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: cur.refresh_token, client_id: clientId, client_secret: clientSecret, scope: 'offline' }), signal: AbortSignal.timeout(10_000) });
+    } catch (e) {
+      console.error('[whoop] refresh', e);
+      await unlock(uid);
+      return null;
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({})) as { error?: string };
+      await unlock(uid);
+      if (err.error === 'invalid_grant') {
+        // Still the token WHOOP just refused? Then the connection is gone; otherwise someone else refreshed: use theirs.
+        const { data: now } = await admin.from('whoop_tokens').select('refresh_token').eq('user_id', uid).maybeSingle();
+        if (now && now.refresh_token !== cur.refresh_token) continue;
+        await setReadsWorkouts(uid, false);
+      }
+      return null;
+    }
+    const t = await res.json();
+    const scope = keptScope(t.scope, cur.scope ?? null);
+    await writeTokens(uid, 'update', { access_token: t.access_token, refresh_token: t.refresh_token ?? cur.refresh_token, expires_at: new Date(Date.now() + t.expires_in * 1000).toISOString(), updated_at: new Date().toISOString() }, { scope, refresh_lock_until: null });
+    return { access: t.access_token, scope, member: cur.whoop_user_id ?? null };
   }
-  return out;
+  return null;
 }
 
-/** The last week from WHOOP, folded into a row per day. */
-async function sync(uid: string): Promise<number> {
+/** One GET from WHOOP's API as this person. A refused key is swapped (another request's, or one refresh) and the call tried once more. Null when there is no key. */
+async function whoopGet(uid: string, pathAndQuery: string): Promise<Response | null> {
   const t = await tokensFor(uid);
-  if (!t) throw new Error('not connected');
+  if (!t) return null;
+  const res = await fetch(API + pathAndQuery, { headers: { authorization: `Bearer ${t.access}` } });
+  if (res.status !== 401) return res;
+  await res.body?.cancel();
+  const again = await tokensFor(uid, t.access);
+  if (!again) return null;
+  return fetch(API + pathAndQuery, { headers: { authorization: `Bearer ${again.access}` } });
+}
+
+/** Up to `maxPages` pages of one WHOOP collection, the last answer's status (0 when there was no key), and whether that was all of it. */
+// deno-lint-ignore no-explicit-any
+async function page(uid: string, path: string, start: string, end: string, maxPages = 5): Promise<{ records: any[]; status: number; complete: boolean }> {
+  // deno-lint-ignore no-explicit-any
+  const records: any[] = [];
+  let next: string | undefined;
+  let status = 0;
+  for (let i = 0; i < maxPages; i += 1) {
+    const q = new URLSearchParams({ start, end, limit: '25', ...(next ? { nextToken: next } : {}) });
+    const res = await whoopGet(uid, `${path}?${q}`);
+    if (!res) return { records, status: 0, complete: false };
+    status = res.status;
+    if (!res.ok) { await res.body?.cancel(); return { records, status, complete: false }; }
+    const body = await res.json();
+    records.push(...(body.records ?? []));
+    next = body.next_token;
+    if (!next) return { records, status, complete: true };
+  }
+  return { records, status, complete: false };
+}
+
+/** The 15-minute sweep (migration 58), run here too in case pg_cron is not set up. */
+async function sweep() {
+  const { error } = await admin.rpc('sweep_activities');
+  if (error && error.code !== NO_FUNCTION) console.error('[whoop] sweep', error.message);
+}
+
+/** Files each tennis workout. Returns the ids of those that just got their alert. */
+async function recordWorkouts(uid: string, list: WhoopWorkout[], quiet: boolean): Promise<string[]> {
+  const fresh: string[] = [];
+  for (const w of list) {
+    if (!isTennis(w)) { if (w.sport_name) console.log('[whoop] not tennis:', w.sport_name); continue; }
+    const { data, error } = await admin.rpc('record_activity', { u: uid, src: 'whoop', ext: w.id, p: toPayload(w), quiet });
+    if (error) { console.error('[whoop] record', error.message); continue; }
+    if (data?.note === 'filed' || data?.note === 'pushed') fresh.push(data.id);
+  }
+  return fresh;
+}
+
+/**
+ * Tennis in the last 36 hours, filed quietly (the app shows its own banner).
+ * Also the safety net for a webhook that never came or failed after its
+ * answer: a workout WHOOP deleted, or that stopped being tennis, is taken back.
+ */
+async function workoutsFor(uid: string): Promise<string[]> {
+  const { data: ok } = await admin.rpc('tennis_allowed', { u: uid, src: 'whoop' });
+  if (ok !== true) return [];
+  const t = await tokensFor(uid);
+  // No member: this WHOOP came from a plain sign-in, which no phone collected, or a newer link took
+  // the member. Such a key may belong to someone else's WHOOP, so it never brings in tennis.
+  if (!t || t.member == null) return [];
+  if (lacksWorkouts(t.scope)) { await setReadsWorkouts(uid, false); return []; }
+  const end = new Date();
+  const since = new Date(end.getTime() - 36 * 3_600_000).toISOString();
+  const r = await page(uid, '/activity/workout', since, end.toISOString(), 2);
+  // WHOOP says this key may not read workouts.
+  if (r.status === 403) { await setReadsWorkouts(uid, false); return []; }
+  const fresh = await recordWorkouts(uid, r.records, true);
+  // Only from WHOOP's whole list, and never a session filed in the last 10 minutes (the list can lag the webhook).
+  if (r.complete) {
+    const tennis = new Set((r.records as WhoopWorkout[]).filter(isTennis).map((w) => String(w.id)));
+    const { data: mine, error } = await admin.from('detected_activities').select('external_id').eq('user_id', uid).eq('source', 'whoop')
+      .in('status', ['new', 'duplicate']).gte('started_at', since).lt('created_at', new Date(Date.now() - 10 * 60_000).toISOString());
+    if (error) console.error('[whoop] reconcile', error.message);
+    for (const m of (mine ?? []) as { external_id: string }[]) if (!tennis.has(m.external_id)) await withdraw(uid, m.external_id);
+  }
+  return fresh;
+}
+
+/** The last week from WHOOP, folded into a row per day, plus any new tennis. With only = 'workouts', just the tennis. */
+async function sync(uid: string, only?: 'workouts'): Promise<{ days: number; fresh: string[] }> {
+  const { data: have } = await admin.from('whoop_tokens').select('user_id').eq('user_id', uid).maybeSingle();
+  if (!have) throw new Error('not connected');
+  let fresh: string[] = [];
+  try { fresh = await workoutsFor(uid); } catch (e) { console.error('[whoop] workouts', e); }
+  await sweep();
+  if (only === 'workouts') return { days: 0, fresh };
+  // As before: a key WHOOP will no longer refresh means connecting again.
+  if (!(await tokensFor(uid))) throw new Error('not connected');
   const end = new Date();
   const start = new Date(end.getTime() - 8 * 86_400_000);
-  const [recovery, sleep, cycles] = await Promise.all([page('/recovery', t.access, start.toISOString(), end.toISOString()), page('/activity/sleep', t.access, start.toISOString(), end.toISOString()), page('/cycle', t.access, start.toISOString(), end.toISOString())]);
+  const [recovery, sleep, cycles] = await Promise.all([
+    page(uid, '/recovery', start.toISOString(), end.toISOString()).then((r) => r.records),
+    page(uid, '/activity/sleep', start.toISOString(), end.toISOString()).then((r) => r.records),
+    page(uid, '/cycle', start.toISOString(), end.toISOString()).then((r) => r.records),
+  ]);
   const days = new Map<string, Record<string, unknown>>();
   const at = (date: string) => { const d = days.get(date) ?? { user_id: uid, date, sources: {} as Record<string, string> }; days.set(date, d); return d; };
   const src = (d: Record<string, unknown>, k: string) => { (d.sources as Record<string, string>)[k] = 'whoop'; };
@@ -108,6 +280,8 @@ async function sync(uid: string): Promise<number> {
     if (c.score?.kilojoule != null) { d.calories = Math.round(c.score.kilojoule / 4.184); src(d, 'calories'); }
   }
   const rows = [...days.values()];
+  // Disconnected while this ran: write nothing back (no WHOOP numbers, no 'connected' row).
+  if (!(await stillConnected(uid))) return { days: 0, fresh };
   if (rows.length) {
     // Other sources' numbers on the same day are kept: only WHOOP's columns are written.
     for (const row of rows) {
@@ -116,8 +290,67 @@ async function sync(uid: string): Promise<number> {
       await admin.from('health_days').upsert({ ...row, sources, updated_at: new Date().toISOString() });
     }
   }
+  if (!(await stillConnected(uid))) return { days: 0, fresh };
   await admin.from('health_connections').upsert({ user_id: uid, provider: 'whoop', last_synced_at: new Date().toISOString() });
-  return rows.length;
+  return { days: rows.length, fresh };
+}
+const stillConnected = async (uid: string) => !!(await admin.from('whoop_tokens').select('user_id').eq('user_id', uid).maybeSingle()).data;
+
+/** WHOOP's answer to a sign-in, as kept until it is put on an account. */
+type Answer = { access_token: string; refresh_token: string; expires_at: string; scope: string; member: number | null };
+
+/**
+ * Puts a WHOOP sign-in on this account. `bound`: the phone that started it,
+ * signed in as this player, collected it (/finish). Only then is the WHOOP
+ * member remembered (so its webhooks reach this account) and tennis turned on.
+ */
+async function link(uid: string, a: Answer, bound: boolean): Promise<string | null> {
+  const member = bound ? a.member : null;
+  if (member != null) {
+    // One CourtSide account per WHOOP member: an older link elsewhere stops hearing about its workouts.
+    const { data: others } = await admin.from('whoop_tokens').select('user_id').eq('whoop_user_id', member).neq('user_id', uid);
+    for (const o of (others ?? []) as { user_id: string }[]) {
+      await admin.from('whoop_tokens').update({ whoop_user_id: null }).eq('user_id', o.user_id);
+      await setReadsWorkouts(o.user_id, false);
+    }
+  }
+  const error = await writeTokens(uid, 'upsert', { access_token: a.access_token, refresh_token: a.refresh_token, expires_at: a.expires_at, updated_at: new Date().toISOString() }, { scope: a.scope, refresh_lock_until: null, whoop_user_id: member });
+  if (error) return error.message;
+  const tennis = member != null && a.scope.split(' ').includes('read:workout');
+  await admin.from('health_connections').upsert({ user_id: uid, provider: 'whoop', connected_at: new Date().toISOString(), ...(tennis ? { reads_workouts: true } : {}) });
+  // Any other sign-in leaves tennis off (the app offers 'Turn on tennis sessions' again).
+  if (!tennis) await setReadsWorkouts(uid, false);
+  try { await sync(uid); } catch { /* the app can ask again */ }
+  return null;
+}
+
+/** WHOOP took a workout back (deleted, or no longer tennis): so does CourtSide, unless it was logged. */
+async function withdraw(u: string, ext: string) {
+  const { error } = await admin.rpc('withdraw_activity', { u, src: 'whoop', ext });
+  if (error) throw new Error(error.message);
+}
+
+/** One webhook. Throws when WHOOP should send it again. */
+async function onEvent(e: { user_id: number; id: string | number; type: string }) {
+  // Sleep and recovery events are not used yet; they are a free moment to sweep.
+  if (!e.type.startsWith('workout.')) { await sweep(); return; }
+  const { data: rows, error } = await admin.rpc('whoop_tennis_users', { w: e.user_id });
+  if (error) { if (error.code === NO_FUNCTION) return; throw new Error(error.message); }
+  const uids = ((rows ?? []) as { user_id: string }[]).map((r) => r.user_id);
+  if (!uids.length) return;
+  const ext = String(e.id);
+  if (e.type === 'workout.deleted') { for (const u of uids) await withdraw(u, ext); return; }
+  for (const u of uids) {
+    const res = await whoopGet(u, '/activity/workout/' + encodeURIComponent(ext));
+    if (!res) throw new Error('no WHOOP key');
+    if (res.status === 404) { await res.body?.cancel(); await withdraw(u, ext); continue; }
+    if (res.status === 403) { await res.body?.cancel(); await setReadsWorkouts(u, false); continue; }
+    if (!res.ok) { await res.body?.cancel(); throw new Error('WHOOP ' + res.status); }
+    const w = await res.json() as WhoopWorkout;
+    if (!isTennis(w)) { console.log('[whoop] sport', w.sport_name); await withdraw(u, ext); continue; }
+    const { error: bad } = await admin.rpc('record_activity', { u, src: 'whoop', ext: w.id, p: toPayload(w), quiet: false });
+    if (bad) throw new Error(bad.message);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -125,13 +358,39 @@ Deno.serve(async (req) => {
   const path = new URL(req.url).pathname.replace(/^.*\/whoop/, '');
   if (!clientId || !clientSecret) return json({ error: 'WHOOP is not set up on the server yet.' }, 503);
 
+  if (path === '/webhook') {
+    if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
+    const raw = await req.text();
+    if (!(await verifyWhoop(raw, req.headers.get('x-whoop-signature'), req.headers.get('x-whoop-signature-timestamp'), clientSecret))) return json({ error: 'bad signature' }, 401);
+    let e: { user_id?: number; id?: string | number; type?: string };
+    try { e = JSON.parse(raw); } catch { return json({ ok: true }); }
+    if (!e?.user_id || e.id == null || !e.type) return json({ ok: true });
+    // WHOOP wants a 2XX within a second. A quick failure answers 500 so WHOOP retries (five times over about an hour);
+    // slow work carries on after the answer. Repeats are harmless: record_activity upserts and notifies once.
+    const ev = e as { user_id: number; id: string | number; type: string };
+    const attempt = () => onEvent(ev).then(() => 'done' as const, (err) => { console.error('[whoop webhook]', err); return 'failed' as const; });
+    const settled = attempt();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const outcome = await Promise.race([settled, new Promise<'slow'>((r) => { timer = setTimeout(() => r('slow'), 900); })]);
+    clearTimeout(timer);
+    if (outcome === 'failed') return json({ error: 'try again' }, 500);
+    if (outcome === 'slow' && typeof EdgeRuntime !== 'undefined') {
+      // WHOOP already has its 200 and will not send this again, so a failure from here is tried twice more here.
+      EdgeRuntime.waitUntil(settled.then(async (o) => {
+        for (const ms of RETRY_MS) { if (o !== 'failed') return; await wait(ms); o = await attempt(); }
+      }));
+    }
+    return json({ ok: true });
+  }
+
   if (path === '/start') {
     const uid = await whoIs(req);
     if (!uid) return json({ error: 'Sign in first.' }, 401);
-    const posted = await req.json().catch(() => ({})) as { back?: string };
+    const posted = await req.json().catch(() => ({})) as { back?: string; tennis?: boolean };
     const back = safeBack(posted.back ?? new URL(req.url).searchParams.get('back') ?? 'courtside://health');
-    const state = await sign({ uid, back, n: crypto.randomUUID() });
-    const q = new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: redirectUri, scope: SCOPES, state });
+    const tennis = posted.tennis === true;
+    const state = await sign({ uid, back, tennis, n: crypto.randomUUID(), exp: Date.now() + SIGN_IN_MS });
+    const q = new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: redirectUri, scope: tennis ? SCOPES : BASE_SCOPES, state });
     return json({ url: `${AUTH}?${q}` });
   }
 
@@ -141,21 +400,65 @@ Deno.serve(async (req) => {
     const back = safeBack(opened?.back ?? 'courtside://health');
     const go = (result: string) => Response.redirect(`${back}${back.includes('?') ? '&' : '?'}whoop=${result}`, 302);
     if (!opened || !p.get('code')) return go('refused');
+    if (!(typeof opened.exp === 'number' && opened.exp > Date.now())) return go('expired');
     const res = await fetch(TOKEN, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'authorization_code', code: p.get('code')!, client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri }) });
     if (!res.ok) return go('failed');
     const t = await res.json();
-    await admin.from('whoop_tokens').upsert({ user_id: opened.uid, access_token: t.access_token, refresh_token: t.refresh_token, expires_at: new Date(Date.now() + t.expires_in * 1000).toISOString(), updated_at: new Date().toISOString() });
-    await admin.from('health_connections').upsert({ user_id: opened.uid, provider: 'whoop', connected_at: new Date().toISOString() });
-    try { await sync(opened.uid); } catch { /* the app can ask again */ }
-    return go('connected');
+    const scope: string = typeof t.scope === 'string' ? t.scope : opened.tennis ? SCOPES : BASE_SCOPES;
+    const answer: Answer = { access_token: t.access_token, refresh_token: t.refresh_token, expires_at: new Date(Date.now() + t.expires_in * 1000).toISOString(), scope, member: null };
+    if (!opened.tennis) {
+      // As before: straight onto the account that asked. It never carries tennis.
+      const bad = await link(opened.uid, answer, false);
+      if (bad) console.error('[whoop] link', bad);
+      return go(bad ? 'failed' : 'connected');
+    }
+    // Tennis: webhooks name only the WHOOP member, so learn which one this is.
+    const prof = await fetch(API + '/user/profile/basic', { headers: { authorization: 'Bearer ' + t.access_token } }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    answer.member = typeof prof?.user_id === 'number' ? prof.user_id : null;
+    // Parked until the phone that started this collects it as the same player
+    // (/finish), under a fresh code that only this browser sees: the state's
+    // own code was in a link that anyone could have been sent.
+    const n = crypto.randomUUID();
+    await admin.from('whoop_pending').delete().lt('expires_at', new Date().toISOString());
+    const { error } = await admin.from('whoop_pending').insert({ n, user_id: opened.uid, answer, expires_at: new Date(Date.now() + SIGN_IN_MS).toISOString() });
+    if (error) { console.error('[whoop] pending', error.message); return go('failed'); }
+    return go(`pending&n=${n}`);
   }
 
   const uid = await whoIs(req);
   if (!uid) return json({ error: 'Sign in first.' }, 401);
   if (path === '/sync') {
-    try { return json({ days: await sync(uid) }); } catch (e) { return json({ error: e instanceof Error ? e.message : 'sync failed' }, 400); }
+    const posted = await req.json().catch(() => ({})) as { only?: string };
+    try { return json(await sync(uid, posted.only === 'workouts' ? 'workouts' : undefined)); } catch (e) { return json({ error: e instanceof Error ? e.message : 'sync failed' }, 400); }
+  }
+  if (path === '/finish') {
+    const posted = await req.json().catch(() => ({})) as { n?: unknown };
+    const n = typeof posted.n === 'string' && /^[0-9a-f-]{36}$/i.test(posted.n) ? posted.n : null;
+    // Collected once, whoever asks. (Refusals answer 200 with the sentence the app shows.)
+    const { data: taken } = n ? await admin.from('whoop_pending').delete().eq('n', n).select() : { data: null };
+    const got = ((taken ?? []) as { user_id: string; answer: Answer; expires_at: string }[])[0];
+    if (!got || Date.parse(got.expires_at) < Date.now()) return json({ error: 'That WHOOP sign-in has expired. Try again.' });
+    // Only the account that started it: a WHOOP sign-in link someone else
+    // sent can never put your WHOOP on their account.
+    if (got.user_id !== uid) return json({ error: 'That WHOOP sign-in was started on another account.' });
+    const bad = await link(uid, got.answer, true);
+    if (bad) { console.error('[whoop] link', bad); return json({ error: 'Could not connect WHOOP right now. Try again.' }); }
+    return json({ ok: true });
   }
   if (path === '/disconnect') {
+    // Tennis off first, so no webhook or sync files a WHOOP session while the rest is removed.
+    await setReadsWorkouts(uid, false);
+    // Tell WHOOP: CourtSide's access is revoked and its webhooks stop. Best effort.
+    try {
+      const t = await tokensFor(uid);
+      if (t) await fetch(API + '/user/access', { method: 'DELETE', headers: { authorization: `Bearer ${t.access}` } }).then((r) => r.body?.cancel());
+    } catch { /* best effort */ }
+    // Then remove what WHOOP sent. If that fails, keep the keys so trying again finishes the job.
+    const { error } = await admin.rpc('forget_whoop_data', { u: uid });
+    if (error && error.code !== NO_FUNCTION) {
+      console.error('[whoop] forget', error.message);
+      return json({ error: 'Could not disconnect WHOOP right now.' }, 500);
+    }
     await admin.from('whoop_tokens').delete().eq('user_id', uid);
     await admin.from('health_connections').delete().eq('user_id', uid).eq('provider', 'whoop');
     return json({ ok: true });

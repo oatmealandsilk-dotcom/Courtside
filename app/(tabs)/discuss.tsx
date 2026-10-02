@@ -61,7 +61,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, followingIds, saved, actions, detectedCoords, locationEnabled, hitRequests } = useApp();
   // The section lives here, not in the address: listening to the address made
   // this whole tab re-render on every route change anywhere in the app.
-  // Other pages ask for a section through requestSection before navigating.
+  // Other pages ask for a section through requestSection before navigating;
+  // the bar asks for Find Players whenever it brings you here from somewhere
+  // else (askForCommunityMap), and a swipe from the Feed for Discussions.
   // It starts on Find Players: the app opens here, on the map (see startTab).
   // Unless a page asked for a section before this tab was built (a thread
   // opened from a link, then swiped back): that ask was kept for it.
@@ -389,6 +391,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         depth={1}
         delegateLeft
         delegateRight
+        // The tutorial's slide from the map to the threads plays here, as this pager's own swipe.
+        slideChannel={previewSection ? undefined : '/discuss'}
         onIndex={(i) => setSection(i === 0 ? 'players' : 'discussions')}
       />
     </Screen>

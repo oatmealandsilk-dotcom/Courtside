@@ -14,7 +14,7 @@ import { activationDistance, claimedDepth, waitsForDeeper } from '@/features/nav
  * JavaScript only hears from the gesture at three moments: when it starts (to
  * mount the preview), when it is known to be going through, and when it lands.
  */
-export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false, settledKey, progress: progressValue, depth = 1 }: {
+export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false, settledKey, progress: progressValue, depth = 1, slideRef }: {
   children: React.ReactNode; onSwipe: (direction: 1 | -1) => void;
   /** Fires the instant the gesture is known to be going through, before the animation. */
   onCommit?: (direction: 1 | -1) => void;
@@ -33,6 +33,12 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
   progress?: SharedValue<number>;
   /** How deep this sits: 1 for a section swipe inside a tab, 2 for one inside that. Deeper wins. */
   depth?: 1 | 2;
+  /**
+   * Filled in with a way to turn the page from code (see pageSlide): the
+   * same preview and the same glide as a released swipe. It answers false
+   * when it can't right now (mid-swipe, no page that way).
+   */
+  slideRef?: React.MutableRefObject<((direction: 1 | -1) => boolean) | null>;
 }) {
   const { isPhone } = useResponsive();
   const enabled = requestedEnabled && isPhone;
@@ -176,6 +182,32 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A page turn asked for by code: the preview is put beside the page the
+  // way a drag puts it, then the one glide a released swipe gets.
+  const queued = React.useRef<1 | -1 | null>(null);
+  useEffect(() => {
+    if (!slideRef) return undefined;
+    slideRef.current = (next) => {
+      if (!enabled || busy.value || dragging || !(next === 1 ? canNext : canPrev)) return false;
+      busy.value = true;
+      queued.current = next;
+      setDirection(next);
+      setDragging(true);
+      return true;
+    };
+    return () => { slideRef.current = null; };
+  });
+  useEffect(() => {
+    const next = queued.current;
+    if (!dragging || next === null || next !== direction) return;
+    queued.current = null;
+    decided(true, next);
+    const timing = { duration: 220, easing: Easing.bezier(0.22, 0.61, 0.36, 1) };
+    if (progressValue) progressValue.value = withTiming(next, timing);
+    offset.value = withTiming(-next * width.value, timing, (finished) => { if (finished) runOnJS(landed)(true, next); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragging, direction]);
 
   const pageStyle = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }));
   const previewStyle = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }));

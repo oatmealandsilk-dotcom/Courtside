@@ -1,5 +1,3 @@
-import { useSyncExternalStore } from 'react';
-
 /**
  * Every page a sideways swipe stops at, left to right: Community's two
  * sections (Find Players, where the app opens, then Discussions), Home,
@@ -31,23 +29,8 @@ export function horizontalSwipe(dx: number, dy: number) {
  * and guessing from the swipe direction sent people to the wrong page.
  */
 const shown = new Map<string, string>();
-const shownListeners = new Set<() => void>();
-let telling = false;
-export const reportSection = (pathname: string, section: string) => {
-  if (shown.get(pathname) === section) return;
-  shown.set(pathname, section);
-  // Reported while the tab draws, so whoever is watching (the tutorial) is
-  // told just after that draw, never in the middle of it.
-  if (telling) return;
-  telling = true;
-  void Promise.resolve().then(() => { telling = false; shownListeners.forEach((fn) => fn()); });
-};
+export const reportSection = (pathname: string, section: string) => { shown.set(pathname, section); };
 export const shownSection = (pathname: string) => shown.get(pathname);
-const subscribeShown = (fn: () => void) => { shownListeners.add(fn); return () => { shownListeners.delete(fn); }; };
-/** The same, for a screen that redraws when it changes (the tutorial waits for Find Players). */
-export function useShownSection(pathname: string): string | undefined {
-  return useSyncExternalStore(subscribeShown, () => shown.get(pathname), () => shown.get(pathname));
-}
 
 /**
  * Asks a tab to show a particular section before it slides into view — so a

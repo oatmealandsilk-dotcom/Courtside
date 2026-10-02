@@ -14,6 +14,7 @@ import { comments, posts } from './mock/feed';
 import { stories } from './mock/stories';
 import { conversations, messages } from './mock/messages';
 import { healthHistory, integrations } from './mock/health';
+import { activityNotifications, detectedActivities } from './mock/activities';
 import { users } from './mock/users';
 import { demoHits } from './mock/hits';
 import { demoLastSeen } from './mock/presence';
@@ -31,6 +32,7 @@ import type {
   Comment,
   Conversation,
   DailyHealth,
+  DetectedActivity,
   Integration,
   Message,
   Notification,
@@ -81,6 +83,8 @@ export interface Bootstrap {
   /** Demo only: open hits and players' last spots, so Find Players and the map have something on them. */
   hitRequests?: HitRequest[];
   lastSeen?: Record<ID, LastSeen>;
+  /** Tennis sessions a tracker picked up, waiting to be logged (migration 58). */
+  detectedActivities: DetectedActivity[];
 }
 
 export async function fetchBootstrap(): Promise<Bootstrap> {
@@ -103,7 +107,10 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       coachReviews,
       conversations,
       messages,
-      notifications: [],
+      // The demo's tracker session and its "Tennis detected" row. Only without
+      // a database: a real account's come from the server.
+      notifications: supabase ? [] : activityNotifications,
+      detectedActivities: supabase ? [] : detectedActivities,
       coachingRequests,
       integrations,
       healthHistory,

@@ -24,6 +24,13 @@ export interface SwipeSurfaceProps {
   settledKey?: string;
   /** Written as the finger moves: -1..1 toward the next page. */
   progress?: SharedValue<number>;
+  /**
+   * Filled in with a way to turn the page from code (the tutorial, through
+   * pageSlide): the same preview and the same settle as a released swipe.
+   * It answers false when it can't right now (mid-swipe, no page that way,
+   * the layout has no swipe).
+   */
+  slideRef?: React.MutableRefObject<((direction: 1 | -1) => boolean) | null>;
 }
 
 const SETTLE_MS = 300;
@@ -37,7 +44,7 @@ const EASE = 'cubic-bezier(.22,.61,.36,1)';
  * preview) and when it ends. Routing every pointer move through state meant
  * re-rendering the whole page per frame, which is what made swipes stutter.
  */
-export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false, settledKey, progress }: SwipeSurfaceProps) {
+export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false, settledKey, progress, slideRef }: SwipeSurfaceProps) {
   const { isPhone } = useResponsive();
   const enabled = requestedEnabled && isPhone;
   const start = useRef<{ x: number; y: number; lastX: number; time: number; velocity: number; horizontal: boolean; delegateOnly?: boolean; delegateDirection?: string | null } | null>(null);
@@ -47,6 +54,8 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
   const suppressClick = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const settling = useRef(false);
+  /** A page turn asked for by code, waiting one render for its preview. */
+  const queued = useRef<1 | -1 | null>(null);
   const [direction, setDirection] = useState<1 | -1>(1);
   const [dragging, setDragging] = useState(false);
   const latest = useRef({ onSwipe, onCommit, onDragTo, onProgress, renderPreview });
@@ -70,6 +79,7 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
       clearTimeout(timer.current);
       start.current = null;
       settling.current = false;
+      queued.current = null;
       setDragging(false);
       place(0, false);
     }
@@ -113,6 +123,35 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
     release();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settledKey]);
+
+  // A page turn asked for by code: the preview is put beside the page the
+  // way a drag puts it, then the one settle a released swipe gets.
+  useEffect(() => {
+    if (!slideRef) return undefined;
+    slideRef.current = (next) => {
+      if (!enabled || settling.current || start.current) return false;
+      if (latest.current.renderPreview && !latest.current.renderPreview(next)) return false;
+      settling.current = true;
+      queued.current = next;
+      setDirection(next);
+      setDragging(true);
+      return true;
+    };
+    return () => { slideRef.current = null; };
+  });
+  useEffect(() => {
+    const next = queued.current;
+    if (!dragging || next === null || next !== direction) return undefined;
+    // One frame for the preview to be drawn beside the page, then away.
+    const frame = requestAnimationFrame(() => {
+      queued.current = null;
+      // Read once so the browser has the preview's starting place before the slide begins.
+      void previewEl.current?.offsetWidth;
+      settle(true, next);
+    });
+    return () => cancelAnimationFrame(frame);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragging, direction]);
 
   const preview = dragging ? renderPreview?.(direction) : null;
   return <div ref={surface} data-swipe-delegate-right={delegateRight ? "true" : undefined} data-swipe-delegate-left={delegateLeft ? "true" : undefined} data-swipe-surface={enabled ? 'true' : undefined}

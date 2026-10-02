@@ -5,6 +5,7 @@ import { PullDisc, usePullDisc } from '@/components/PullDisc';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { cancelAnimation, runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { barCompact, glideBar } from '@/features/navigation/barShrink';
+import { setPageScrolling } from '@/features/navigation/swipeLock';
 import * as haptics from '@/lib/haptics';
 import { PULL_DISARM, PULL_DISC, PULL_GAP, PULL_LAND_SLACK, PULL_LINE, PULL_MIN_SPIN, PULL_RETURN, pullFetch, pullRowLift, pullRowOpacity } from '@/lib/pullRefresh';
 import { colors } from '@/theme';
@@ -200,6 +201,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     onBeginDrag: () => {
       barDir.value = 0;
       dragging.value = true;
+      // The tutorial waits for this finger to lift before it starts.
+      runOnJS(setPageScrolling)(true);
       settling.value = false;
       // A finger on the feed while it springs back catches it where it is.
       if (gliding.value) { cancelAnimation(glide); gliding.value = false; }
@@ -210,6 +213,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     onMomentumEnd: (e) => { settling.value = false; if (!gliding.value) runOnJS(settled)(e.contentOffset.y); },
     onEndDrag: (e) => {
       dragging.value = false;
+      runOnJS(setPageScrolling)(false);
       const y = e.contentOffset.y;
       if (top > 0 && !holding.value) {
         // Where the feed would coast to on its own, from its speed alone,
@@ -252,6 +256,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     placedTop.current = top;
     if (!refreshingRef.current) requestAnimationFrame(() => jump(last.current * height, false));
   }, [top, height, jump]);
+  // Gone mid-drag (the feed rebuilt under the finger): the drag can't still be on.
+  useEffect(() => () => setPageScrolling(false), []);
 
   return (
     <View style={{ flex: 1 }} onLayout={(e) => {
