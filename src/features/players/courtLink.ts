@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { router, useFocusEffect, type Href } from 'expo-router';
 
+import type { ID, OpenCourtReview } from '@/data/types';
 import { sameCourt } from '@/features/places/court';
 
 /** A court to open: the map's id when there is one, its name and its spot. */
@@ -81,12 +82,38 @@ export function showCourtOnMap(court: Spot) {
  * posting a hit from a court's page or card keeps that court (its id too,
  * which puts the hit on the court's page).
  */
-export const playHereHref = (court: Spot): Href => ({
-  pathname: '/hit-request/new',
-  params: { courtId: court.id || 'near', courtName: court.name, lat: court.lat.toFixed(5), lng: court.lng.toFixed(5) },
-});
+const playHereParams = (court: Spot) => ({ courtId: court.id || 'near', courtName: court.name, lat: court.lat.toFixed(5), lng: court.lng.toFixed(5) });
+export const playHereHref = (court: Spot): Href => ({ pathname: '/hit-request/new', params: playHereParams(court) });
 export function playHere(court: Spot) {
   router.push(playHereHref(court));
+}
+
+/**
+ * "Ask to hit": the hit form, with these players getting the hit in your
+ * chat with them once it is posted (and this court as where, when given).
+ * It is still an open hit, on Find Players for anyone nearby.
+ */
+export function askToHit(userIds: ID[], court?: Spot) {
+  router.push({ pathname: '/hit-request/new', params: { ...(court ? playHereParams(court) : {}), ask: userIds.slice(0, 5).join(',') } });
+}
+
+/**
+ * "Add what you know": lights, nets, surface, busy times, rules and who may
+ * play, for one court. The after-hit prompt (the sessions build) calls this
+ * with the hit, so the facts are linked to it. Only a court with the map's
+ * id takes facts.
+ */
+export const openCourtReview: OpenCourtReview = (courtId, options) => {
+  router.push({ pathname: '/court-report', params: { id: courtId, ...(options?.name ? { name: options.name } : {}), ...(options?.fromHit ? { hit: options.fromHit } : {}) } });
+};
+
+/**
+ * "How is it right now?": Free, A wait, Full, Wet or Locked, and "I'm
+ * playing here". Who may play there goes along, so the sheet offers the
+ * check-in only where anyone may play.
+ */
+export function openCourtNow(court: { id: string; name: string; access?: string }) {
+  router.push({ pathname: '/court-now', params: { id: court.id, name: court.name, ...(court.access && court.access !== 'unknown' ? { access: court.access } : {}) } });
 }
 
 /** "Post from here": a new post or clip with this court already tagged. Only a court with the map's id can be tagged. */

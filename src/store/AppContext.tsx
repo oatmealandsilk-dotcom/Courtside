@@ -47,6 +47,7 @@ import { show as showToast } from '@/lib/toast';
 import { forgetPushToken } from '@/features/push/push';
 import { framesAt } from '@/features/compose/frames';
 import { noteStep, reportError } from '@/lib/crashReporting';
+import { emptyCourtLife, useCourtLife, type CourtLifeActions, type CourtLifeState } from '@/store/courtLife';
 import type {
   DailyHealth,
   DetectedActivity,
@@ -78,7 +79,6 @@ import type {
   SavedItems,
   SessionDetail,
   PracticeSession,
-  CourtNote,
   LastSeen,
   HitRequest,
   ChatEvent,
@@ -270,7 +270,16 @@ function readDefaultPayment(): ID {
   }
 }
 
-interface AppState extends Bootstrap {
+/** The switches in Settings, kept with the account. */
+export interface Prefs {
+  showActivity: boolean; pushLikes: boolean; pushCoach: boolean; pushMessages: boolean; pushActivity: boolean;
+  /** The four map alerts (migration 60): a friend up for a hit, new hits near you, new players near you, courts you follow. */
+  pushMapFriends: boolean; pushMapHits: boolean; pushMapPlayers: boolean; pushCourts: boolean;
+}
+export type PrefKey = keyof Prefs;
+const DEFAULT_PREFS: Prefs = { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true, pushMapFriends: true, pushMapHits: true, pushMapPlayers: true, pushCourts: true };
+
+interface AppState extends Bootstrap, CourtLifeState {
   ready: boolean;
   /** Health came from this account's own connections, not the demo; a reload must keep it. */
   healthIsReal?: boolean;
@@ -319,14 +328,14 @@ interface AppState extends Bootstrap {
   tips: Tip[];
   /** Your own practice log: where streaks, hours and win rate come from. */
   sessions: PracticeSession[];
-  /** What players say about the courts opened on the map, by court id; loaded when a court is opened. */
-  courtNotes: Record<string, CourtNote[]>;
   /** Last spots for the map, by id, your own included (migration 46). */
   lastSeen: Record<ID, LastSeen>;
+  /** Whether the last spots have come down once since signing in, so an empty map is known to be empty, not still loading. */
+  lastSeenLoaded: boolean;
   /** Open "Looking for a hit" posts. */
   hitRequests: HitRequest[];
   /** Small switches from Settings, kept with the account. */
-  prefs: { showActivity: boolean; pushLikes: boolean; pushCoach: boolean; pushMessages: boolean; pushActivity: boolean };
+  prefs: Prefs;
   /** Whether the app may ask the device where you are, and the city it found. */
   locationEnabled: boolean;
   /**
@@ -340,7 +349,7 @@ interface AppState extends Bootstrap {
   detectedCoords: { lat: number; lng: number } | null;
 }
 
-interface AppActions {
+interface AppActions extends CourtLifeActions {
   /* Location */
   setLocationEnabled: (enabled: boolean) => Promise<string | null>;
 
@@ -362,7 +371,7 @@ interface AppActions {
   checkHandle: (handle: string) => Promise<HandleStatus | null>;
   /** Changes your handle. Throws with a plain-English reason when it cannot. */
   changeHandle: (handle: string) => Promise<void>;
-  setPref: (key: 'showActivity' | 'pushLikes' | 'pushCoach' | 'pushMessages' | 'pushActivity', value: boolean) => void;
+  setPref: (key: PrefKey, value: boolean) => void;
   /** The asker marks the answer that solved it. */
   acceptAnswer: (questionId: ID, answerId: ID) => void;
   /** The asker marks their coach question as answered. */
@@ -407,12 +416,8 @@ interface AppActions {
   updateIdentity: (patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string; cityAt?: { lat: number; lng: number } | null }) => void;
   updateProfile: (patch: Partial<PlayerProfile>) => void;
   /** Log a session you played (today unless a day is given). Throws a plain sentence when it cannot be saved. */
-  /** Fetches what players say about a court (on opening it on the map). */
-  loadCourtNotes: (courtId: string) => Promise<void>;
   /** Fetches the spots the map may show; the map asks each time it opens. */
   loadLastSeen: () => Promise<void>;
-  /** Saves your report on a court, replacing any earlier one; a photo on the phone is uploaded first. */
-  saveCourtNote: (input: Omit<CourtNote, 'userId' | 'updatedAt'>) => Promise<void>;
   /** `activityId`: the tracker session it was logged from, which then counts as logged. */
   logSession: (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; opponent?: string; note?: string; day?: string; activityId?: ID }) => Promise<void>;
   deleteSession: (id: ID) => void;
@@ -958,6 +963,7 @@ function snapshotOf(s: AppState, me: ID): RemoteData {
       defaultPaymentId: s.defaultPaymentId, showActivity: s.prefs.showActivity, pushLikes: s.prefs.pushLikes, pushCoach: s.prefs.pushCoach,
       pushMessages: s.prefs.pushMessages,
       pushActivity: s.prefs.pushActivity,
+      pushMapFriends: s.prefs.pushMapFriends, pushMapHits: s.prefs.pushMapHits, pushMapPlayers: s.prefs.pushMapPlayers, pushCourts: s.prefs.pushCourts,
       constraints: self?.profile.constraints,
     },
     tips: s.tips, coachApplications: s.coachApplications, coaches: s.coaches, coachReviews: s.coachReviews, coachResults: s.coachResults,
@@ -1057,7 +1063,10 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       paymentMethods: data.userState && data.userState.paymentMethods.length ? data.userState.paymentMethods : prev.paymentMethods,
       defaultPaymentId: data.userState?.defaultPaymentId ?? prev.defaultPaymentId,
       prefs: data.userState
-        ? { showActivity: data.userState.showActivity, pushLikes: data.userState.pushLikes, pushCoach: data.userState.pushCoach, pushMessages: data.userState.pushMessages ?? true, pushActivity: data.userState.pushActivity ?? true }
+        ? {
+          showActivity: data.userState.showActivity, pushLikes: data.userState.pushLikes, pushCoach: data.userState.pushCoach, pushMessages: data.userState.pushMessages ?? true, pushActivity: data.userState.pushActivity ?? true,
+          pushMapFriends: data.userState.pushMapFriends ?? true, pushMapHits: data.userState.pushMapHits ?? true, pushMapPlayers: data.userState.pushMapPlayers ?? true, pushCourts: data.userState.pushCourts ?? true,
+        }
         : prev.prefs,
       // The saved copy shows the app; only the server's answer counts as loaded (live updates, settings sync and retries wait for it).
       remoteLoaded: fromSnapshot ? prev.remoteLoaded : true,
@@ -1170,11 +1179,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     alertIds: [],
     paymentMethods: STARTER_PAYMENTS,
     defaultPaymentId: readDefaultPayment(),
-    prefs: { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true },
+    prefs: DEFAULT_PREFS,
     tips: [],
     sessions: [],
-    courtNotes: {},
     lastSeen: {},
+    lastSeenLoaded: false,
+    ...emptyCourtLife,
     hitRequests: [],
     locationEnabled: readFlag('courtside-location'),
     locationAsked: readAsked('courtside-location'),
@@ -1417,6 +1427,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         mutedIds: s.mutedIds, blockedIds: s.blockedIds, savedQuestionIds: s.saved.questionIds, paymentMethods: s.paymentMethods,
         defaultPaymentId: s.defaultPaymentId, showActivity: s.prefs.showActivity, pushLikes: s.prefs.pushLikes, pushCoach: s.prefs.pushCoach,
         pushMessages: s.prefs.pushMessages, pushActivity: s.prefs.pushActivity,
+        pushMapFriends: s.prefs.pushMapFriends, pushMapHits: s.prefs.pushMapHits, pushMapPlayers: s.prefs.pushMapPlayers, pushCourts: s.prefs.pushCourts,
       });
     }, 400);
     return () => clearTimeout(t);
@@ -1771,6 +1782,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       messages: s.messages.filter((m) => s.conversations.some((c) => c.id === m.conversationId && me && c.participantIds.includes(me))),
       coachingRequests: s.coachingRequests.filter((r) => r.userId === me),
       integrations: s.integrations.filter((i) => i.connected).map((i) => i.provider),
+      // Courts: the ones you follow, and what you said about any (only those loaded on this device).
+      followedCourts: (s.followedCourts ?? []).map((c) => ({ courtId: c.courtId, name: c.name, followedAt: c.followedAt })),
+      courtReviews: Object.values(s.myCourtReviews),
     };
   }, []);
 
@@ -1781,7 +1795,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // This phone stops getting the account's alerts before the session ends (the removal needs it).
     if (isSupabaseConfigured) void forgetPushToken().finally(() => remoteAuth.signOut());
     // One account's health (its tracker sessions too) never carries over to the next one signed in.
-    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [] }));
+    // Nor do its courts: who it follows, what it said, where it checked in.
+    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [], ...emptyCourtLife, lastSeenLoaded: false }));
   }, []);
 
   const patchCurrentUser = useCallback(
@@ -1916,37 +1931,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = stateRef.current.currentUserId;
     if (!live(me)) return;
     const rows = await remote.fetchLastSeen();
-    setState((prev) => ({ ...prev, lastSeen: Object.fromEntries(rows.map((r) => [r.userId, r])) }));
+    // A failed load keeps what was there and is not "loaded": an error must
+    // never read as nobody near you (the "You're early" card waits on this).
+    if (!rows || stateRef.current.currentUserId !== me) return;
+    setState((prev) => ({ ...prev, lastSeen: Object.fromEntries(rows.map((r) => [r.userId, r])), lastSeenLoaded: true }));
   }, []);
-
-  const loadCourtNotes = useCallback(async (courtId: string) => {
-    const me = stateRef.current.currentUserId;
-    if (!live(me)) return;
-    const notes = await remote.fetchCourtNotes(courtId);
-    setState((prev) => ({ ...prev, courtNotes: { ...prev.courtNotes, [courtId]: notes } }));
-  }, []);
-
-  const saveCourtNote = useCallback(async (input: Omit<CourtNote, 'userId' | 'updatedAt'>) => {
-    const me = requireUser();
-    const note: CourtNote = { ...input, note: input.note?.trim() || undefined, userId: me, updatedAt: new Date().toISOString() };
-    const put = (n: CourtNote) => setState((prev) => ({
-      ...prev,
-      courtNotes: { ...prev.courtNotes, [n.courtId]: [n, ...(prev.courtNotes[n.courtId] ?? []).filter((x) => x.userId !== me)] },
-    }));
-    const before = stateRef.current.courtNotes[input.courtId];
-    haptics.commit();
-    put(note);
-    if (!live(me)) return;
-    try {
-      const photoUrl = isLocalMedia(note.photoUrl) ? await uploadMedia(me, note.photoUrl!, 'photo') : note.photoUrl;
-      const saved = { ...note, photoUrl };
-      await remote.saveCourtNote(saved);
-      put(saved);
-    } catch (e) {
-      setState((prev) => ({ ...prev, courtNotes: { ...prev.courtNotes, [input.courtId]: before ?? [] } }));
-      throw e;
-    }
-  }, [requireUser]);
 
   const postHit = useCallback(async (input: Omit<HitRequest, 'id' | 'authorId' | 'createdAt' | 'joinedIds' | 'conversationId' | 'cancelled'>): Promise<ID> => {
     const me = requireUser();
@@ -4148,8 +4137,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
     if (!enabled) {
       remember(false);
-      setState((prev) => ({ ...prev, locationEnabled: false, locationAsked: true, detectedLocation: null, detectedCoords: null }));
-      // Location off means off: the spot others saw goes too.
+      // Location off means off: the spot others saw goes too, and with it any "I'm playing here" (the server drops both).
+      setState((prev) => ({
+        ...prev, locationEnabled: false, locationAsked: true, detectedLocation: null, detectedCoords: null,
+        courtNow: Object.fromEntries(Object.entries(prev.courtNow).map(([id, row]) => [id, { ...row, youHere: false }])),
+        followedCourts: prev.followedCourts?.map((c) => ({ ...c, youHere: false })) ?? null,
+      }));
       if (live(stateRef.current.currentUserId)) void remote.forgetLastSeen();
       markedAt.current = null;
       return null;
@@ -4508,7 +4501,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       },
     );
   }, [requireUser]);
-  const setPref = useCallback((key: 'showActivity' | 'pushLikes' | 'pushCoach' | 'pushMessages' | 'pushActivity', value: boolean) => {
+  const setPref = useCallback((key: PrefKey, value: boolean) => {
     haptics.tap();
     setState((prev) => ({ ...prev, prefs: { ...prev.prefs, [key]: value } }));
   }, []);
@@ -4721,8 +4714,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (await pullFrom(me!, provider)) { haptics.tap(); await reloadHealth(); }
   }, [pullFrom, reloadHealth]);
 
+  // The courts' own state (migration 60): its actions are written in store/courtLife.
+  const courtLife = useCourtLife(stateRef, setState, live);
+
   const actions = useMemo<AppActions>(
     () => ({
+      ...courtLife,
       addCoachResult,
       addCoachReview,
       bookCoach,
@@ -4782,9 +4779,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateProfile,
       logSession,
       deleteSession,
-      loadCourtNotes,
       loadLastSeen,
-      saveCourtNote,
       postHit,
       joinHit,
       leaveHit,
@@ -4887,6 +4882,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       demoIncoming,
     }),
     [
+      courtLife,
       addCoachResult,
       addCoachReview,
       bookCoach,
@@ -4940,9 +4936,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateProfile,
       logSession,
       deleteSession,
-      loadCourtNotes,
       loadLastSeen,
-      saveCourtNote,
       postHit,
       joinHit,
       leaveHit,

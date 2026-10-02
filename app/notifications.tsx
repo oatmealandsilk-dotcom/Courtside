@@ -19,6 +19,7 @@ import { confirmUnfollow } from '@/lib/confirm';
 import type { Notification, NotificationKind, PostKind } from '@/data/types';
 import { colors, radius, spacing, surfaceColorFor, typography } from '@/theme';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
+import { showCourtOnMap } from '@/features/players/courtLink';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 
 /**
@@ -57,6 +58,11 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap; tin
   'hit-join': { name: 'tennisball', tint: 'brand' },
   'hit-match': { name: 'people', tint: 'brand' },
   activity: { name: 'tennisball', tint: 'court' },
+  'map-friend-hit': { name: 'tennisball', tint: 'brand' },
+  'map-new-hit': { name: 'navigate', tint: 'brand' },
+  'map-new-player': { name: 'location', tint: 'court' },
+  // The court's own heart: the one you tapped to follow it.
+  'court-activity': { name: 'heart', tint: 'court' },
 };
 
 const VERB: Record<NotificationKind, string> = {
@@ -84,6 +90,10 @@ const VERB: Record<NotificationKind, string> = {
   'hit-join': 'is in for your hit',
   'hit-match': 'is also looking for a hit',
   activity: 'Tap to log it.',
+  'map-friend-hit': 'is up for a hit today',
+  'map-new-hit': 'posted an open hit near you',
+  'map-new-player': 'is new and shared their spot near you',
+  'court-activity': 'posted at a court you follow',
 };
 
 interface Group {
@@ -99,6 +109,9 @@ interface Group {
 }
 
 function routeFor(group: Group): string {
+  // The map's alerts open the map: on the player, or on the hit with its card up.
+  if (group.kind === 'map-friend-hit' || group.kind === 'map-new-player') return `/map?user=${group.actorIds[0]}`;
+  if (group.kind === 'map-new-hit') return `/map?hit=${group.targetId}`;
   // A tennis session a tracker picked up opens the log sheet, filled in from it.
   if (group.kind === 'activity') return `/log-session?activity=${group.targetId}`;
   // A coach application update opens the application, which shows where it stands.
@@ -134,7 +147,15 @@ const SECTIONS = ['New', 'Today', 'This week', 'This month', 'Earlier'];
 
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
-  const { notifications, users, posts, stories, comments, hitRequests, conversations, currentUserId, followRequests, followingIds, actions } = useApp();
+  const { notifications, users, posts, stories, comments, hitRequests, conversations, currentUserId, followRequests, followingIds, followedCourts, actions } = useApp();
+  // "New hit at Alder Park" opens the map on that court: where it is comes from the courts you follow.
+  const courtRows = notifications.some((n) => n.kind === 'court-activity');
+  useEffect(() => { if (courtRows && followedCourts === null) void actions.loadFollowedCourts(); }, [courtRows, followedCourts, actions]);
+  const openFollowedCourt = (courtId: string) => {
+    const c = followedCourts?.find((x) => x.courtId === courtId);
+    if (c) showCourtOnMap({ id: c.courtId, name: c.name ?? 'Tennis courts', lat: c.lat, lng: c.lng });
+    else router.push('/map');
+  };
   // "Replied to your comment" opens the comments at that reply, its thread
   // unfolded. The reply is the one by that person on that post with the same
   // words (the notification keeps them), else the nearest in time. A post or
@@ -292,6 +313,7 @@ export default function Notifications() {
                 onPress={() => {
                   const reply = replyAt(group);
                   if (reply) { router.push({ pathname: '/comments', params: reply }); return; }
+                  if (group.kind === 'court-activity') { openFollowedCourt(group.targetId); return; }
                   const to = routeFor(group);
                   // "Clip posted" and the like open Home: goHome closes this page down to the
                   // tabs. Never '/', the splash screen's address too, which opened a second app on top.
@@ -346,7 +368,7 @@ export default function Notifications() {
                 ) : hitChat ? (
                   // In for your hit: straight to the hit's group chat, where the details get sorted.
                   <Pressable accessibilityRole="button" accessibilityLabel="Open the hit's chat" onPress={() => router.push(`/messages/${hitChat}`)} style={styles.accept}><Text style={styles.acceptText}>Chat</Text></Pressable>
-                ) : (group.kind === 'follow' || group.kind === 'joined') && first && first !== currentUserId ? (
+                ) : (group.kind === 'follow' || group.kind === 'joined' || group.kind === 'map-new-player') && first && first !== currentUserId ? (
                   <FollowPill small following={followingIds.includes(first)} userId={first} onPress={() => { const who = users.find((u) => u.id === first); if (who && followingIds.includes(first)) confirmUnfollow(who, () => actions.toggleFollow(first)); else actions.toggleFollow(first); }} name={nameOf(first).split(' ')[0]} />
                 ) : thumb ? (
                   <View style={[styles.thumb, !thumb.uri && !thumb.words && { backgroundColor: surfaceColorFor(thumb.seed) }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">

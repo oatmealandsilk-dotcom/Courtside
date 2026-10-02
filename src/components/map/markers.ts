@@ -1,6 +1,6 @@
 import type { HitRequest, User } from '@/data/types';
 import { hitShort } from '@/features/hits/format';
-import type { Court } from '@/features/players/courts';
+import { isClosedCourt, type Court } from '@/features/players/courts';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { initials } from '@/lib/format';
 import { colors, surfaceColorFor } from '@/theme';
@@ -17,6 +17,15 @@ const face = (user: User, size: number) => {
 };
 
 /** How long ago someone last shared where they are, as short as a map label wants: "now", "12m", "3h", "2d", "5w". */
+/**
+ * The same, as words for a list row beside a distance ("0.9 mi · 12m ago",
+ * "just now"): "12m" alone next to miles reads as metres.
+ */
+export function agoLabel(iso?: string): string {
+  const short = agoShort(iso);
+  return !short ? '' : short === 'now' ? 'just now' : `${short} ago`;
+}
+
 export function agoShort(iso?: string): string {
   if (!iso) return '';
   const minutes = Math.max(0, (Date.now() - Date.parse(iso)) / 60_000);
@@ -62,28 +71,46 @@ export function mePinHtml(me: User, size: number): string {
 }
 
 /** The little court drawn on each court mark: an outline, the net, the centre line. */
-const courtGlyph = (color: string) =>
-  `<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.6" y="1.4" width="6.8" height="9.2" rx="0.9" fill="none" stroke="${color}" stroke-width="1.3"/><line x1="2.6" y1="6" x2="9.4" y2="6" stroke="${color}" stroke-width="1.3"/><line x1="6" y1="3.5" x2="6" y2="8.5" stroke="${color}" stroke-width="1"/></svg>`;
+const courtGlyph = (color: string, px = 12) =>
+  `<svg width="${px}" height="${px}" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.6" y="1.4" width="6.8" height="9.2" rx="0.9" fill="none" stroke="${color}" stroke-width="1.3"/><line x1="2.6" y1="6" x2="9.4" y2="6" stroke="${color}" stroke-width="1.3"/><line x1="6" y1="3.5" x2="6" y2="8.5" stroke="${color}" stroke-width="1"/></svg>`;
+
+/**
+ * The story ring around a court that was played on this week (a clip, a
+ * post or an open hit there): the stories rail's own green ring, a gap of
+ * the page colour inside it. Only real court pins carry one.
+ */
+const storyRing = (gap: number, width: number) => `0 0 0 ${gap}px ${colors.bg},0 0 0 ${gap + width}px ${colors.brand},`;
 
 /**
  * A court: a small round mark in the court colour with a tiny court on it,
  * quieter than the players; its name beside it once you zoom in (or when
- * picked). The count lives on its card, not on the pin.
+ * picked). The count lives on its card, not on the pin. `ring`: played on
+ * this week. A members-only or private court is greyed: there, but not a
+ * place to suggest.
  */
-export function courtPinHtml(court: Court, on: boolean): string {
+export function courtPinHtml(court: Court, on: boolean, ring = false): string {
   const size = on ? 30 : 24;
-  const nameStyle = `position:absolute;left:calc(100% + 5px);top:50%;transform:translateY(-50%);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 7px;border-radius:999px;background:${colors.bg};color:${colors.text};box-shadow:0 1px 3px rgba(0,0,0,.14);${FONT}`;
-  const name = court.name && court.name !== 'Tennis courts' ? `<span class="cs-court-name" style="${nameStyle}">${court.name.replace(/[<>&"]/g, '')}</span>` : '';
-  return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:999px;background:${colors.court};border:2px solid ${colors.bg};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,${on ? '.3' : '.2'});cursor:pointer">${courtGlyph(colors.brandInk)}${name}</div>`;
+  const closed = isClosedCourt(court);
+  const nameStyle = `position:absolute;left:calc(100% + ${ring ? 9 : 5}px);top:50%;transform:translateY(-50%);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 7px;border-radius:999px;background:${colors.bg};color:${closed ? colors.textMuted : colors.text};box-shadow:0 1px 3px rgba(0,0,0,.14);${FONT}`;
+  const name = court.name && court.name !== 'Tennis courts' ? `<span class="cs-court-name" style="${nameStyle}">${court.name.replace(/[<>&"]/g, '')}${closed ? ` · ${court.access === 'private' ? 'private' : 'members'}` : ''}</span>` : '';
+  const fill = closed ? colors.borderStrong : colors.court;
+  const glyph = closed ? colors.bg : colors.brandInk;
+  return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:999px;background:${fill};border:2px solid ${colors.bg};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${ring ? storyRing(2, 2.5) : ''}0 2px 6px rgba(0,0,0,${on ? '.3' : '.2'});cursor:pointer${closed && !on ? ';opacity:.75' : ''}">${courtGlyph(glyph)}${name}</div>`;
 }
 
 /**
- * A court on the still card in Find Players: a small quiet dot, no glyph and
- * no name, just enough to show where the courts in your city are. Not
- * tappable: a tap anywhere on the card opens the full map.
+ * A court on the still card in Find Players: a small badge in the court
+ * colour with the tiny court drawn on it and a soft halo, so the courts in
+ * your city read as courts at a glance (a plain dot looked dull, Oct 2). No
+ * name, and not tappable: a tap anywhere on the card opens the full map.
+ * `ring`: played on this week, in the stories' green ring. A members-only
+ * or private court is greyed.
  */
-export function courtDotHtml(): string {
-  return `<div style="width:10px;height:10px;border-radius:999px;background:${colors.court};border:2px solid ${colors.bg};box-sizing:content-box;box-shadow:0 1px 3px rgba(0,0,0,.18);pointer-events:none"></div>`;
+export function courtDotHtml(court?: Court, ring = false): string {
+  const closed = !!court && isClosedCourt(court);
+  const fill = closed ? colors.borderStrong : colors.court;
+  const halo = ring ? storyRing(1.5, 2.5) : `0 0 0 3px ${fill}38,`;
+  return `<div style="width:18px;height:18px;border-radius:999px;background:${fill};border:2px solid ${colors.bg};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${halo}0 2px 5px rgba(0,0,0,.22);pointer-events:none${closed ? ';opacity:.75' : ''}">${courtGlyph(closed ? colors.bg : colors.brandInk, 10)}</div>`;
 }
 
 /** A tennis ball, drawn small enough for a flag: a filled ball with its two seams. */
@@ -103,3 +130,6 @@ export function hitPinHtml(hit: HitRequest, on: boolean): string {
 
 /** How far above its spot a hit's flag hangs: clear of a court pin there. */
 export const HIT_LIFT = -10;
+
+/** How far above the middle a picked court lands, for a map this tall: in the open strip above its card. */
+export const courtLift = (mapHeight: number) => Math.round(Math.min(220, mapHeight * 0.24));

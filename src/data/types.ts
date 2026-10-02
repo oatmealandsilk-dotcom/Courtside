@@ -748,9 +748,12 @@ export type NotificationKind =
   /** Someone nearby posted a hit much like yours (or like what your open-to-hit ring says). Actor is them; the target is their hit (migration 53). */
   | 'hit-match'
   /** A tracker picked up a tennis session. Actor is you; the target is the detected activity (migration 58). */
-  | 'activity';
+  | 'activity'
+  /** The alerts that open the map (migration 60; see MapAlertKind). */
+  | MapAlertKind;
 
-export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application' | 'report' | 'coaching-request' | 'profile' | 'hit-request' | 'activity';
+/** 'court': a court you follow, by the map's id for it (migration 60). */
+export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application' | 'report' | 'coaching-request' | 'profile' | 'hit-request' | 'activity' | 'court';
 
 /** A court a post is tagged with: the map's id for it, its name, and where it is. */
 export interface TaggedCourt { id: string; name: string; lat: number; lng: number }
@@ -782,6 +785,141 @@ export interface LastSeen {
   city?: string;
   seenAt?: string;
 }
+
+/* ---------------------------- Courts (migration 60) ---------------------------- */
+
+/**
+ * Who may play at a court. 'unknown' courts are never hidden; 'members' and
+ * 'private' (someone's home) are greyed out and never suggested for Play
+ * here or Courts near you.
+ */
+export type CourtAccess = 'public' | 'members' | 'pay' | 'private' | 'unknown';
+
+/** Where a court's access answer came from: the map data, players' reviews, or an admin. Absent while unknown. */
+export type CourtAccessSource = 'map' | 'players' | 'admin';
+
+/**
+ * What the courts function now sends with each court (absent from a
+ * database before migration 60). Nearby courts fold into one pin under the
+ * lowest id, and players' answers are saved against that id, so a pin
+ * takes these from that court.
+ */
+export interface CourtAccessInfo {
+  access: CourtAccess;
+  fee?: boolean;
+  indoor?: boolean;
+  /** A booking or website link, from the map data or an admin, never from a player. */
+  bookUrl?: string;
+}
+
+/** A part of the week a court is usually busy, as players say in "Add what you know". */
+export type CourtDayPart = 'weekday-morning' | 'weekday-afternoon' | 'weekday-evening' | 'weekend-morning' | 'weekend-afternoon' | 'weekend-evening';
+
+/**
+ * One player's facts about one court ("Add what you know"; table
+ * court_reviews). Saving again replaces your own, and only you read it back.
+ * Unsaid is left out.
+ */
+export interface CourtReview {
+  courtId: string;
+  lights?: boolean;
+  nets?: 'good' | 'bad';
+  surface?: 'good' | 'cracked' | 'wet-prone';
+  /** When it is usually busy. An empty list means "never seen it busy". */
+  busy?: CourtDayPart[];
+  access?: Exclude<CourtAccess, 'unknown'>;
+  /** Rules and notes, up to 280 characters. Shown to others, unnamed, only when the author is an adult. */
+  notes?: string;
+  /** The hit this was added after. The server drops it unless you posted or joined that hit. */
+  fromHit?: ID;
+  updatedAt?: string;
+}
+
+/**
+ * Opens the "Add what you know" sheet for a court. The after-hit prompt
+ * (the sessions build) calls it with the hit, so the review is linked to it.
+ * `name` titles the sheet; without it the sheet takes the hit's place name.
+ * The app's own is openCourtReview in features/players/courtLink.
+ */
+export type OpenCourtReview = (courtId: string, options?: { fromHit?: ID; name?: string }) => void;
+
+/** Everyone's facts about a court, added up, never naming anyone (court_facts). */
+export interface CourtFacts extends CourtAccessInfo {
+  courtId: string;
+  accessBy?: CourtAccessSource;
+  /** How many players added something in the last 18 months. */
+  players: number;
+  lights: { yes: number; no: number };
+  nets: { good: number; bad: number };
+  surface: { good: number; cracked: number; wetProne: number };
+  /** How many players said each part of the week is busy, out of busyAnswers. */
+  busy: Partial<Record<CourtDayPart, number>>;
+  busyAnswers: number;
+  /** Of busyAnswers, how many said they have never seen it busy. */
+  busyNever: number;
+  /** Up to three notes from adults, newest first, with the day each was written. */
+  notes: { text: string; on: string }[];
+  updatedAt?: string;
+}
+
+/** "How is it right now?" */
+export type CourtNow = 'free' | 'wait' | 'full' | 'wet' | 'locked';
+
+/** Right now at a court (court_right_now). */
+export interface CourtRightNow {
+  courtId: string;
+  /** The latest answer in the last 90 minutes, and when. */
+  status?: CourtNow;
+  statusAt?: string;
+  /** Other adults checked in there: 0, or 2 and up (one stranger is never shown). Always 0 for a teen. */
+  playing: number;
+  /** People checked in there who follow each other with you. */
+  friendIds: ID[];
+  /** Whether you are checked in there. */
+  youHere: boolean;
+}
+
+/** "6 players follow this court": a count, never names (court_follow_counts). */
+export interface CourtFollowCount { courtId: string; followers: number; following: boolean }
+
+/** A court ring on the map: a real court with a post or open hit there in the last 7 days that you may see (court_rings). */
+export interface CourtRing { courtId: string; name?: string; lat: number; lng: number; posts: number; hits: number; lastAt: string }
+
+/** "Sam and Dev, who you follow, play here" (court_people_you_follow): up to 5 people, most recent first. */
+export interface CourtRegulars { courtId: string; userIds: ID[] }
+
+/** One of "Your courts" on Find Players, with what is new there (my_courts). */
+export interface FollowedCourt {
+  courtId: string;
+  name?: string;
+  lat: number;
+  lng: number;
+  access: CourtAccess;
+  followedAt: string;
+  /** Others' posts tagged there in the last 7 days. */
+  newPosts: number;
+  upcomingHits: number;
+  nextHitAt?: string;
+  status?: CourtNow;
+  statusAt?: string;
+  lastAt?: string;
+  /** You are checked in there ("I'm playing here"), so its card can say "You're here". */
+  youHere?: boolean;
+}
+
+/**
+ * The alerts that open the map, each with its own switch in Settings. Part
+ * of NotificationKind, so app/notifications.tsx lists them with the rest.
+ *   map-friend-hit  someone you follow turned on open to hit; actor them, target their profile
+ *   map-new-hit     a new open hit near you; actor the poster, target the hit ('hit-request')
+ *   map-new-player  a new player shared their spot near you; actor them, target their profile
+ *   court-activity  a new hit or post at a court you follow; actor the poster, target the court ('court')
+ * At most one a day from the three map- kinds together, and one a day from court-activity.
+ */
+export type MapAlertKind = 'map-friend-hit' | 'map-new-hit' | 'map-new-player' | 'court-activity';
+
+/** One switch each in Settings for those alerts (user_state push_map_friends, push_map_hits, push_map_players, push_courts). On unless turned off. */
+export interface MapAlertPrefs { pushMapFriends: boolean; pushMapHits: boolean; pushMapPlayers: boolean; pushCourts: boolean }
 
 /** "Looking for a hit": someone wants a game, and says when, where and at what level (migration 43). */
 export interface HitRequest {

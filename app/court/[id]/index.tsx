@@ -8,13 +8,14 @@ import { CourtDisc } from '@/components/place/CourtDisc';
 import { CourtGrid } from '@/components/place/CourtGrid';
 import { CourtHits } from '@/components/place/CourtHits';
 import { CourtSays } from '@/components/place/CourtSays';
+import { AccessTag, FollowHeart, NowTags } from '@/components/place/CourtLife';
 import { Avatar, Button, DottedRule, EmptyState, Screen } from '@/components/ui';
 import type { Post, User } from '@/data/types';
 import { countLabel, isClip, parseCourtParams, sameCourt } from '@/features/places/court';
 import { areaOf } from '@/features/places/search';
 import { useCourtPosts } from '@/features/places/useCourtPosts';
-import { summarizeCourt } from '@/features/players/courtSummary';
-import { fetchCourts, type Court } from '@/features/players/courts';
+import { fetchCourts, isClosedCourt, type Court } from '@/features/players/courts';
+import { isMapCourtId } from '@/features/places/courtName';
 import { openCourtReel, postFromCourt, sendCourtToChat, showCourtOnMap, useCourtOpen } from '@/features/players/courtLink';
 import { formatMiles, milesBetween } from '@/features/players/geo';
 import { directionsTo } from '@/features/players/openInMaps';
@@ -31,15 +32,17 @@ type Params = { id: string; name?: string; lat?: string; lng?: string };
 /**
  * A court's own page, the way a place has a page of its own on Snapchat or
  * Instagram: its name, town and distance; a clip in a ring, how fresh the
- * posts are, Watch all, and who has played here; the open hits here, with
- * Play here; what players say about it, once anyone has; then everything
- * posted there as a grid, newest first. A tile opens the court's reel on
- * that post.
+ * posts are, who has played here and how many follow it; who may play
+ * there and how it is right now; Watch all; what players say about it
+ * (lights, busy times, the surface), with Add what you know; the open hits
+ * here, with Play here; then everything posted there as a grid, newest
+ * first. A tile opens the court's reel on that post. The heart up top
+ * follows it.
  */
 export default function CourtPage() {
   const styles = useThemedStyles(styleDefinitions);
   const params = useLocalSearchParams<Params>();
-  const { posts, users, currentUser, currentUserId, detectedCoords, courtNotes, actions } = useApp();
+  const { posts, users, currentUser, currentUserId, detectedCoords, courtFacts, courtFollows, courtExtras, actions } = useApp();
   const stillLoading = useStillLoading();
   const parsed = parseCourtParams(params, posts);
   // One place object per court, however often the posts change (a like, a new page).
@@ -68,29 +71,36 @@ export default function CourtPage() {
   }, [place]);
   useEffect(() => { void askArea(); }, [askArea]);
 
-  // Notes are kept by the map's id for the court; a place with no court found has none.
+  // Facts, follows and right now are kept by the map's id for the court; a place with no court found has none.
   const noteId = mapCourt?.id ?? place?.id;
-  useEffect(() => { if (noteId) void actions.loadCourtNotes(noteId).catch(() => undefined); }, [noteId, actions]);
-  // What players say takes room only once someone has said something; until then, a quiet link.
-  const notes = noteId ? courtNotes[noteId] ?? [] : [];
-  const says = noteId ? summarizeCourt(notes) : null;
-  // A note with only a photo counts: the photo is what it says.
-  const showSays = !!says && (says.facts.length > 0 || !!says.latest || says.photos.length > 0);
-  const saidMine = notes.some((n) => n.userId === currentUserId);
+  const factsId = isMapCourtId(noteId) ? noteId : undefined;
+  // Asked again once you are signed in: a link opened cold can draw the page a moment before.
+  useEffect(() => { if (factsId && currentUserId) void actions.loadCourtInfo([factsId]).catch(() => undefined); }, [factsId, currentUserId, actions]);
+  // The court's own life (migration 60), shown once a read has said the
+  // database has it: on one without it, nothing appears that cannot work.
+  const extras = !!factsId && courtExtras === true;
+  const said = factsId ? courtFacts[factsId] : undefined;
+  const access = said && said.access !== 'unknown' ? said.access : mapCourt?.access ?? 'unknown';
+  const bookUrl = said?.bookUrl ?? mapCourt?.bookUrl;
+  const closed = isClosedCourt({ access });
+  const followers = factsId ? courtFollows[factsId]?.followers ?? 0 : 0;
   const name = params.name?.trim() || (mapCourt && mapCourt.name !== 'Tennis courts' ? mapCourt.name : null) || place?.name || 'Court';
   // Only from somewhere real: where the phone says you are, or the city on your profile. Never a guess.
   const viewer = detectedCoords ?? currentUser?.cityAt ?? null;
   const distance = place && viewer ? formatMiles(milesBetween(viewer, place)) : null;
   const subtitle = [area, distance].filter(Boolean).join(' · ') || undefined;
-  const facts = mapCourt ? [mapCourt.count > 1 ? `${mapCourt.count} courts` : '1 court', mapCourt.surface ? mapCourt.surface.replace(/_/g, ' ') : null, mapCourt.lit ? 'lit at night' : null].filter(Boolean).join(' · ') : '';
+  // Lights from the map only while no player has said: then "What players
+  // say" is the one place lights are mentioned, and the two never disagree.
+  const playersOnLights = !!said && said.lights.yes + said.lights.no > 0;
+  const facts = mapCourt ? [mapCourt.count > 1 ? `${mapCourt.count} courts` : '1 court', mapCourt.surface ? mapCourt.surface.replace(/_/g, ' ') : null, mapCourt.lit && !playersOnLights ? 'lit at night' : null].filter(Boolean).join(' · ') : '';
 
   // This page's own address, so a tap that would open it again comes back here instead.
   const ownHref = useMemo(() => ({ pathname: '/court/[id]' as const, params: Object.fromEntries(Object.entries({ id: params.id, name: params.name, lat: params.lat, lng: params.lng }).filter(([, v]) => v !== undefined)) }), [params.id, params.name, params.lat, params.lng]);
   useCourtOpen('page', place ? { id: noteId, lat: place.lat, lng: place.lng } : null, ownHref);
 
   const refresh = useCallback(async () => {
-    await Promise.all([court.refresh(), noteId ? actions.loadCourtNotes(noteId).catch(() => undefined) : undefined, askArea()]);
-  }, [court.refresh, noteId, actions, askArea]); // eslint-disable-line react-hooks/exhaustive-deps
+    await Promise.all([court.refresh(), factsId ? actions.loadCourtInfo([factsId]).catch(() => undefined) : undefined, askArea()]);
+  }, [court.refresh, factsId, actions, askArea]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!place) {
     return (
@@ -117,7 +127,6 @@ export default function CourtPage() {
   const when = newest ? relativeTime(newest.createdAt) : null;
   const lastPost = !when ? null : /^\d+[mh]$/.test(when) ? `Last post ${when} ago` : when === 'just now' ? 'Last post just now' : `Last post ${when}`;
   const freshness = [lastPost, facts].filter(Boolean).join(' · ');
-  const addWhatYouKnow = () => { if (noteId) router.push({ pathname: '/court-report', params: { id: noteId, name } }); };
   // Posting needs the court's map id to tag it; a place without one has no Post from here.
   const postHere = noteId ? () => postFromCourt({ id: noteId, name, lat: place.lat, lng: place.lng }) : undefined;
   // The court as the rest of the app should know it: the map's id even for a
@@ -146,6 +155,7 @@ export default function CourtPage() {
       onRefresh={isDesktopBrowser() ? undefined : refresh}
       right={
         <View style={styles.icons}>
+          {extras && factsId ? <FollowHeart court={{ id: factsId, name, lat: place.lat, lng: place.lng, access }} style={styles.icon} size={20} /> : null}
           <Pressable accessibilityRole="button" accessibilityLabel={`See ${name} on the map`} hitSlop={8} onPress={() => showCourtOnMap({ id: noteId, name, lat: place.lat, lng: place.lng })} style={({ pressed }) => [styles.icon, pressed && styles.pressed]}>
             <Ionicons name="map-outline" size={20} color={colors.textMuted} />
           </Pressable>
@@ -172,13 +182,16 @@ export default function CourtPage() {
               <Text style={styles.playedByText} numberOfLines={1}>Played here by {playedBy}</Text>
             </View>
           ) : null}
-          {!showSays && noteId ? (
-            <Pressable accessibilityRole="link" accessibilityLabel={saidMine ? `Update what you said about ${name}` : `Add what you know about ${name}`} hitSlop={8} onPress={addWhatYouKnow} style={({ pressed }) => [styles.addLink, pressed && styles.pressed]}>
-              <Text style={styles.add}>{saidMine ? 'Update yours' : 'Add what you know'}</Text>
-            </Pressable>
-          ) : null}
+          {/* A count, never names: who follows a court is theirs to know. */}
+          {extras && followers ? <Text style={styles.followers}>{followers === 1 ? '1 player follows this court' : `${followers} players follow this court`}</Text> : null}
         </View>
       </View>
+      {access !== 'unknown' || bookUrl || extras ? (
+        <View style={styles.tags}>
+          <AccessTag access={access} bookUrl={bookUrl} />
+          {extras && factsId ? <NowTags courtId={factsId} name={name} access={access} /> : null}
+        </View>
+      ) : null}
       <View style={styles.pills}>
         {lead ? <View style={styles.pill}><Button full label="Watch all" onPress={() => openReel(lead)} /></View>
           : postHere && !counting ? <View style={styles.pill}><Button full label="Post from here" onPress={postHere} /></View>
@@ -188,14 +201,14 @@ export default function CourtPage() {
         {!lead && (!postHere || counting) ? <View style={styles.pill} /> : null}
       </View>
       <DottedRule />
-      <CourtHits place={here} />
-      <DottedRule />
-      {showSays && noteId ? (
+      {extras && factsId ? (
         <>
-          <CourtSays courtId={noteId} name={name} />
+          <CourtSays courtId={factsId} name={name} />
           <DottedRule />
         </>
       ) : null}
+      <CourtHits place={here} closed={closed} />
+      <DottedRule />
       <CourtGrid
         posts={list}
         users={users}
@@ -221,13 +234,13 @@ const styleDefinitions = StyleSheet.create({
   heroWords: { flex: 1, gap: 2 },
   count: { ...typography.bodyStrong, color: colors.text },
   facts: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
-  addLink: { alignSelf: 'flex-start' },
+  followers: { ...typography.small, color: colors.textMuted },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: spacing.lg },
   playedBy: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 6 },
   faces: { flexDirection: 'row', alignItems: 'center' },
   faceOver: { marginLeft: -8 },
   face: { borderWidth: 2, borderColor: colors.bg, borderRadius: 15 },
   playedByText: { ...typography.small, color: colors.textMuted, flexShrink: 1 },
-  add: { ...typography.smallStrong, color: colors.brand },
   credit: { ...typography.caption, color: colors.textFaint, textAlign: 'center', marginTop: spacing.xl },
   wait: { paddingVertical: 60, alignItems: 'center' },
   // Two pills, never wider together than a phone's row: on a computer they stay pill-sized.

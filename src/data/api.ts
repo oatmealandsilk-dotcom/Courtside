@@ -18,6 +18,7 @@ import { activityNotifications, detectedActivities } from './mock/activities';
 import { users } from './mock/users';
 import { demoHits } from './mock/hits';
 import { demoLastSeen } from './mock/presence';
+import { DEMO_FOLLOWING, DEMO_MAP_ALERTS } from './mock/courtLife';
 import { supabase } from '@/lib/supabase';
 import type {
   Achievement,
@@ -83,6 +84,8 @@ export interface Bootstrap {
   /** Demo only: open hits and players' last spots, so Find Players and the map have something on them. */
   hitRequests?: HitRequest[];
   lastSeen?: Record<ID, LastSeen>;
+  /** Demo only: the people the demo player follows, for the map's Following chip and court cards. */
+  followingIds?: ID[];
   /** Tennis sessions a tracker picked up, waiting to be logged (migration 58). */
   detectedActivities: DetectedActivity[];
 }
@@ -107,9 +110,10 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       coachReviews,
       conversations,
       messages,
-      // The demo's tracker session and its "Tennis detected" row. Only without
-      // a database: a real account's come from the server.
-      notifications: supabase ? [] : activityNotifications,
+      // The demo's tracker session and its "Tennis detected" row, and two of
+      // the map's alerts. Only without a database: a real account's come from
+      // the server.
+      notifications: supabase ? [] : [...activityNotifications, ...DEMO_MAP_ALERTS],
       detectedActivities: supabase ? [] : detectedActivities,
       coachingRequests,
       integrations,
@@ -117,7 +121,7 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       achievements,
       // Only without a database: with one, these come from the server, and an
       // account's real hits must never be covered by the demo's.
-      ...(supabase ? {} : { hitRequests: demoHits, lastSeen: demoLastSeen }),
+      ...(supabase ? {} : { hitRequests: demoHits, lastSeen: demoLastSeen, followingIds: DEMO_FOLLOWING }),
     }),
   );
 }

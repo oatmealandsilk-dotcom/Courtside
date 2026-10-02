@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { searchPlaces, type Place } from '@/data/locations';
-import type { HitRequest, TaggedCourt, User } from '@/data/types';
+import type { CourtRing, HitRequest, TaggedCourt, User } from '@/data/types';
 import { NEAR_HIT_MILES, canSeeHitAt, hitSpot, openHits } from '@/features/hits/visible';
 import { sameCourt } from '@/features/places/court';
+import { looksPublic } from '@/features/places/courtName';
 import { useCourtSearch } from '@/features/places/useCourtSearch';
-import { fetchCourts, peekCourts, type Court } from '@/features/players/courts';
+import { courtRows, fetchCourts, isClosedCourt, peekCourts, type Court, type CourtRow } from '@/features/players/courts';
 import { milesBetween } from '@/features/players/geo';
 import { homeFor, homeIsKnown, positionFor, wideView, type LatLng } from '@/features/players/positions';
 import { useMyCity } from '@/features/players/useMyCity';
@@ -14,7 +15,7 @@ import { levelBadge } from '@/lib/badges';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { show as showToast } from '@/lib/toast';
 
-export type MapFilter = 'all' | 'open' | 'near' | 'level' | 'coaches';
+export type MapFilter = 'all' | 'following' | 'open' | 'near' | 'level' | 'coaches';
 /** A player set down on the map, with how far that is from you, and when they were last there. */
 export interface Placed { user: User; at: LatLng; miles: number; seenAt?: string; seenCity?: string }
 /** An open hit with a spot, for a flag on the map. */
@@ -33,6 +34,14 @@ export const COURTS_MIN_ZOOM = 10;
 
 /** Inside this many miles someone counts as in your town. */
 export const IN_TOWN_MILES = 30;
+/** The tray lists people only this close (about 50 miles), unless you searched for someone or somewhere, or picked Following. */
+const TRAY_MILES = 50;
+
+/** The box court rings are asked for around a spot: about 10 miles each way, a town and its edges. */
+export const ringBox = (at: LatLng) => ({ minLat: at.lat - 0.15, maxLat: at.lat + 0.15, minLng: at.lng - 0.2, maxLng: at.lng + 0.2 });
+
+/** A ring as a court pin, for a court with one that the courts layer has not loaded (or with the layer off). */
+const ringCourt = (r: CourtRing): Court => ({ id: r.courtId, name: r.name ?? 'Tennis courts', lat: r.lat, lng: r.lng, count: 1 });
 
 /**
  * Everything the map knows that is not the map itself: where you are, where
@@ -44,8 +53,10 @@ export const IN_TOWN_MILES = 30;
  * quiet dots and the soonest hits near you, and never loads the full court pins.
  * `focusHit` opens the map with that hit's card up.
  */
-export function useMapModel(me: User, players: User[], fix?: LatLng | null, focus?: TaggedCourt | null, card = false, focusHit?: string | null) {
-  const { lastSeen, actions, hitRequests, users, followingIds, currentUserId, blockedIds, mutedIds } = useApp();
+export function useMapModel(me: User, players: User[], fix?: LatLng | null, focus?: TaggedCourt | null, card = false, focusHit?: string | null, focusUser?: string | null, focusSpot?: LatLng | null) {
+  const { lastSeen, actions, hitRequests, users, followingIds, currentUserId, blockedIds, mutedIds, courtRings } = useApp();
+  // One stable function (it never changes), so asking for rings never repeats because something else did.
+  const { loadCourtRings } = actions;
   // Your profile's city (and a typed town looked up by name, so nobody from a
   // smaller town lands in the wrong city, or off the map).
   const { city, pending: cityPending, town } = useMyCity(me);
@@ -75,11 +86,14 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   }, [focusHit, hits]);
   const hitLat = hitAt?.lat;
   const hitLng = hitAt?.lng;
-  /** Where the map opens: a tagged court or a hit when one was tapped, else your town. */
+  /** Where the map opens: a tagged court or a hit when one was tapped, a spot an alert named, else your town. */
   // Street level, close enough for the court names to show.
+  const spotLat = focusSpot?.lat;
+  const spotLng = focusSpot?.lng;
   const start = useMemo(() => (focus ? { center: { lat: focus.lat, lng: focus.lng }, zoom: 15 as number | null }
     : hitLat !== undefined && hitLng !== undefined ? { center: { lat: hitLat, lng: hitLng }, zoom: 14 as number | null }
-      : homeView), [focus, hitLat, hitLng, homeView]);
+      : spotLat !== undefined && spotLng !== undefined ? { center: { lat: spotLat, lng: spotLng }, zoom: 13 as number | null }
+        : homeView), [focus, hitLat, hitLng, spotLat, spotLng, homeView]);
   // Each opening fetches where people were last seen, so the map is never a day old.
   useEffect(() => { void actions.loadLastSeen(); }, [actions.loadLastSeen]);
   const ranked = useMemo<Placed[]>(
@@ -99,7 +113,9 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   const myBand = levelBadge(me.profile).tint;
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const following = new Set(followingIds);
     return ranked.filter((p) => {
+      if (filter === 'following' && !following.has(p.user.id)) return false;
       if (filter === 'open' && !isOpenToHit(p.user)) return false;
       if (filter === 'near' && p.miles > IN_TOWN_MILES) return false;
       if (filter === 'coaches' && !p.user.isCoach) return false;
@@ -107,7 +123,7 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
       if (q && !(p.user.name.toLowerCase().includes(q) || p.user.handle.toLowerCase().includes(q) || p.user.location.toLowerCase().includes(q))) return false;
       return true;
     });
-  }, [ranked, filter, query, myBand]);
+  }, [ranked, filter, query, myBand, followingIds]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = useMemo(() => ranked.find((p) => p.user.id === selectedId) ?? null, [ranked, selectedId]);
   const [selectedHitId, setSelectedHitId] = useState<string | null>(null);
@@ -122,13 +138,32 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   // How many times the courts have come back (or failed to), so a tagged court waits for the first.
   const [courtsLoads, setCourtsLoads] = useState(0);
   const [selectedCourtId, setSelectedCourtId] = useState<string | null>(null);
-  const selectedCourt = useMemo(() => courts.find((c) => c.id === selectedCourtId) ?? null, [courts, selectedCourtId]);
+  // Court rings: courts played on this week. They show with the courts layer
+  // off too, and a ring the layer has not loaded brings its own pin; a ring
+  // only ever sits on a real court, matched by id or by standing on it.
+  const ringFor = useCallback((c: { id: string; lat: number; lng: number }) => courtRings.some((r) => sameCourt({ id: r.courtId, lat: r.lat, lng: r.lng }, c)), [courtRings]);
+  const pins = useMemo<Court[]>(() => {
+    const extra = courtRings.filter((r) => !courts.some((c) => sameCourt(c, { id: r.courtId, lat: r.lat, lng: r.lng }))).map(ringCourt);
+    if (courtsOn) return [...courts, ...extra];
+    return [...courts.filter((c) => ringFor(c)), ...extra];
+  }, [courts, courtRings, courtsOn, ringFor]);
+  const ringed = useMemo(() => new Set(pins.filter((c) => ringFor(c)).map((c) => c.id)), [pins, ringFor]);
+  const selectedCourt = useMemo(() => pins.find((c) => c.id === selectedCourtId) ?? null, [pins, selectedCourtId]);
   const selectCourt = useCallback((id: string | null) => { setSelectedCourtId(id); if (id) { setSelectedId(null); setSelectedHitId(null); } }, []);
   // Read inside a load that finishes later: what is picked then, and the list it was picked from.
   const pickedCourt = useRef<string | null>(null);
   pickedCourt.current = selectedCourtId;
   const courtsNow = useRef<Court[]>(courts);
   courtsNow.current = courts;
+  // Rings for where the map came to rest, whether or not the courts layer is on.
+  const lastRingCentre = useRef<LatLng | null>(null);
+  const loadRings = useCallback((centre: LatLng, zoom?: number) => {
+    if (zoom !== undefined && zoom < COURTS_MIN_ZOOM) return;
+    const last = lastRingCentre.current;
+    if (last && milesBetween(last, centre) < 3) return;
+    lastRingCentre.current = centre;
+    void loadCourtRings(ringBox(centre)).catch(() => undefined);
+  }, [loadCourtRings]);
   const lastCentre = useRef<LatLng | null>(null);
   /** Courts around a spot. `zoom` is given for a move of the map: too far out, it does not ask. */
   const loadCourts = useCallback(async (centre: LatLng, zoom?: number) => {
@@ -162,10 +197,12 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   // live spot as well as the city, and draw both), and a map that only knows
   // a guessed city never loads courts there.
   useEffect(() => {
-    if (!courtsOn || card) return;
-    const at = focus ?? hitAt ?? (homeKnown ? home : null);
-    if (at) void loadCourts(at);
-  }, [courtsOn, card, focus, hitAt, homeKnown, home, loadCourts]);
+    if (card) return;
+    const at = focus ?? hitAt ?? focusSpot ?? (homeKnown ? home : null);
+    if (!at) return;
+    loadRings(at);
+    if (courtsOn) void loadCourts(at);
+  }, [courtsOn, card, focus, hitAt, focusSpot, homeKnown, home, loadCourts, loadRings]);
   // The tagged court's card comes up as soon as the courts around it are in. It is
   // the same court if it is the same id or stands within a few hundred feet of it;
   // if the courts list has nothing there, the tag itself stands in for it.
@@ -194,9 +231,20 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   }, []);
   /** A city typed into the search, so the map can go there; a court that matches goes first. */
   const place: Place | undefined = useMemo(() => (query.trim().length >= 3 && !courtResults.length ? searchPlaces(query, 1)[0] : undefined), [query, courtResults.length]);
+  // The tray under the map: the people around you. In a town where nobody
+  // shares yet it never lists players 2,000 miles away as "around" it; it
+  // names the nearest courts instead. A search or Following lists everyone it finds.
+  const tray = useMemo(() => (query.trim() || filter === 'following' ? shown : shown.filter((p) => p.miles <= TRAY_MILES)), [shown, query, filter]);
 
   const selectedHit = useMemo(() => hits.find((h) => h.hit.id === selectedHitId) ?? null, [hits, selectedHitId]);
   const selectHit = useCallback((id: string | null) => { setSelectedHitId(id); if (id) { setSelectedId(null); setSelectedCourtId(null); } }, []);
+  // Opened on a player (?user=…, an alert that someone you follow is up for a hit): their card, once their pin is in.
+  const userFocused = useRef(false);
+  useEffect(() => {
+    if (!focusUser || userFocused.current || !ranked.some((p) => p.user.id === focusUser)) return;
+    userFocused.current = true;
+    select(focusUser);
+  }, [focusUser, ranked, select]);
   // Opened on a hit (?hit=…): its card comes up once it is in.
   const hitFocused = useRef(false);
   useEffect(() => {
@@ -226,15 +274,34 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
     return () => { on = false; };
   }, [card, cityLat, cityLng]);
   const cardCourts = useMemo(() => (card && city ? cardCourtList.slice(0, CARD_COURTS) : []), [card, city, cardCourtList]);
+  // The still card's rings: the city's courts played on this week.
+  useEffect(() => {
+    if (!card || cityLat === undefined || cityLng === undefined) return;
+    void loadCourtRings(ringBox({ lat: cityLat, lng: cityLng })).catch(() => undefined);
+  }, [card, cityLat, cityLng, loadCourtRings]);
+  const cardRinged = useMemo(() => new Set(cardCourts.filter((c) => ringFor(c)).map((c) => c.id)), [cardCourts, ringFor]);
+  /**
+   * With nobody sharing nearby, the tray names the nearest few places anyone
+   * may play in town: named ones only (three unnamed "Tennis courts" rows
+   * tell nobody anything), those whose names read as public (a park, a rec
+   * centre, a school) first, then the rest, nearest first within each. Only
+   * a town with no named court at all lists unnamed ones, told apart by how far.
+   */
+  const nearestCourts = useMemo<CourtRow[]>(() => {
+    const rows = courtRows(courts.filter((c) => !isClosedCourt(c)), home).filter((r) => r.miles <= IN_TOWN_MILES);
+    const named = rows.filter((r) => r.c.name !== 'Tennis courts');
+    const pool = named.length ? named : rows;
+    return [...pool.filter((r) => looksPublic(r.c.name)), ...pool.filter((r) => !looksPublic(r.c.name))].slice(0, 3);
+  }, [courts, home]);
   // The hits near your city: the same distance as the Open hits list under
   // it, so the count there agrees with the list. Flags for the soonest few
   // only; a busy city's dozen would pile up over the card and its name.
   const cardHits = useMemo(() => (city ? hits.filter((h) => milesBetween(city, h.at) <= NEAR_HIT_MILES) : []), [city, hits]);
   const cardFlags = useMemo(() => cardHits.slice(0, CARD_FLAGS), [cardHits]);
   return {
-    home, homeKnown, homeView, mePos, city, cityPending, inCity, start, ranked, inTown, filter, setFilter, query, setQuery, place, shown, selected, select,
-    courtsOn, toggleCourts, courts: courtsOn && !card ? courts : [], courtsLoading, loadCourts, selectedCourt, selectCourt,
-    cardCourts, cardHits, cardFlags, courtResults, pickCourt, hits, selectedHit, selectHit,
+    home, homeKnown, homeView, mePos, city, cityPending, inCity, start, ranked, inTown, filter, setFilter, query, setQuery, place, shown, tray, selected, select,
+    courtsOn, toggleCourts, courts: card ? [] : pins, ringed, courtsLoading, loadCourts, loadRings, selectedCourt, selectCourt,
+    cardCourts, cardRinged, cardHits, cardFlags, courtResults, pickCourt, hits, selectedHit, selectHit, nearestCourts,
   };
 }
 

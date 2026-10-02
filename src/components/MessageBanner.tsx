@@ -44,7 +44,7 @@ const NEVER = ReduceMotion.Never;
  * Pages where you are writing something. A banner waits until you leave, so
  * it never drops over the Share or Back button just as you reach for it.
  */
-const WRITING = new Set(['/compose', '/edit-post', '/ask', '/ask-coach', '/log-session', '/court-report', '/hit-request/new']);
+const WRITING = new Set(['/compose', '/edit-post', '/ask', '/ask-coach', '/log-session', '/court-report', '/court-now', '/hit-request/new']);
 
 /**
  * The demo in a browser (no database): `?banner=demo` has a message arrive a

@@ -1,8 +1,12 @@
 import { supabase } from '@/lib/supabase';
 import { demoCourtsNamed, demoCourtsNear } from '@/data/mock/courts';
+import type { CourtAccess } from '@/data/types';
 import { milesBetween } from '@/features/players/geo';
 import type { LatLng } from '@/features/players/positions';
 import { plain } from '@/features/search/words';
+// The courts function's own reading of a court's map tags, so a court
+// fetched straight from OpenStreetMap is read the same way as a stored one.
+import { courtTagFacts } from '../../../supabase/functions/courts/tags';
 
 /** A public tennis court, as OpenStreetMap knows it. */
 export interface Court {
@@ -14,10 +18,25 @@ export interface Court {
   count: number;
   lit?: boolean;
   surface?: string;
+  /**
+   * Who may play there (migration 60): absent, or 'unknown', when nobody
+   * has said. Members-only and private courts are greyed and never suggested.
+   */
+  access?: CourtAccess;
+  fee?: boolean;
+  indoor?: boolean;
+  /** A booking or website link, from the map data or an admin, never from a player. */
+  bookUrl?: string;
 }
 
-/** One court as stored: our own database's row, or OpenStreetMap's answer turned into one. */
-interface Row { id: string; name: string | null; lat: number; lng: number; lit: boolean | null; surface: string | null }
+/** Members only, or someone's own court: shown greyed, never suggested for a hit or in Courts near you. */
+export const isClosedCourt = (c: { access?: CourtAccess }) => c.access === 'members' || c.access === 'private';
+
+/** One court as stored: our own database's row, or OpenStreetMap's answer turned into one. The access columns arrive only from a database with migration 60. */
+interface Row {
+  id: string; name: string | null; lat: number; lng: number; lit: boolean | null; surface: string | null;
+  access?: CourtAccess | null; fee?: boolean | null; indoor?: boolean | null; book_url?: string | null;
+}
 interface Element { id: number; type: string; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }
 
 const cache = new Map<string, Court[]>();
@@ -79,7 +98,9 @@ async function fromOpenStreetMap(center: LatLng, radiusMeters: number): Promise<
     const lat = el.lat ?? el.center?.lat;
     const lng = el.lon ?? el.center?.lon;
     if (lat === undefined || lng === undefined) return [];
-    return [{ id: `${el.type}${el.id}`, name: el.tags?.name ?? null, lat, lng, lit: el.tags?.lit === 'yes' ? true : null, surface: el.tags?.surface ?? null }];
+    // Who may play there, as the map's tags say: a backyard or club court is greyed here too.
+    const facts = courtTagFacts(el.tags);
+    return [{ id: `${el.type}${el.id}`, name: el.tags?.name ?? null, lat, lng, lit: el.tags?.lit === 'yes' ? true : null, surface: el.tags?.surface ?? null, access: facts.osm_access, fee: facts.fee, indoor: facts.indoor, book_url: facts.book_url }];
   });
 }
 
@@ -104,7 +125,14 @@ function fold(rows: Row[], center: LatLng, radiusMeters: number, cap = radiusMet
       if (!have.surface && row.surface) have.surface = row.surface;
       continue;
     }
-    groups.set(cell, { id: row.id, name: row.name ?? 'Tennis courts', lat: row.lat, lng: row.lng, count: 1, lit: row.lit ?? undefined, surface: row.surface ?? undefined });
+    // Who may play there comes with the court whose id the pin stands under: players' answers are saved against it.
+    groups.set(cell, {
+      id: row.id, name: row.name ?? 'Tennis courts', lat: row.lat, lng: row.lng, count: 1, lit: row.lit ?? undefined, surface: row.surface ?? undefined,
+      ...(row.access && row.access !== 'unknown' ? { access: row.access } : {}),
+      ...(typeof row.fee === 'boolean' ? { fee: row.fee } : {}),
+      ...(typeof row.indoor === 'boolean' ? { indoor: row.indoor } : {}),
+      ...(row.book_url ? { bookUrl: row.book_url } : {}),
+    });
   }
   const reach = radiusMeters / 1609.34;
   return [...groups.values()]
@@ -150,6 +178,10 @@ export function courtRows(courts: Court[], from: LatLng | null): CourtRow[] {
 }
 
 const named = new Map<string, Court[]>();
+const BASE_COLUMNS = 'id,name,lat,lng,lit,surface';
+const ACCESS_COLUMNS = 'access,fee,indoor,book_url';
+/** Set once the courts table turns out to have no access columns (a database before migration 60). */
+let noAccessColumns = false;
 
 /**
  * Courts anywhere within about 140 miles whose name has a word starting
@@ -167,17 +199,26 @@ export async function searchCourtsByName(text: string, near: LatLng, signal?: Ab
   const key = `${word}|${near.lat.toFixed(1)},${near.lng.toFixed(1)}`;
   const kept = named.get(key);
   if (kept) return kept;
-  let ask = supabase
-    .from('courts')
-    .select('id,name,lat,lng,lit,surface')
-    .gte('lat', near.lat - 2).lte('lat', near.lat + 2)
-    .gte('lng', near.lng - 2.5).lte('lng', near.lng + 2.5)
-    .or(`name.ilike."${word}%",name.ilike."% ${word}%"`)
-    .limit(500);
-  if (signal) ask = ask.abortSignal(signal);
-  const { data, error } = await ask;
+  const db = supabase;
+  const ask = (columns: string) => {
+    let q = db
+      .from('courts')
+      .select(columns)
+      .gte('lat', near.lat - 2).lte('lat', near.lat + 2)
+      .gte('lng', near.lng - 2.5).lte('lng', near.lng + 2.5)
+      .or(`name.ilike."${word}%",name.ilike."% ${word}%"`)
+      .limit(500);
+    if (signal) q = q.abortSignal(signal);
+    return q;
+  };
+  let { data, error } = await ask(noAccessColumns ? BASE_COLUMNS : `${BASE_COLUMNS},${ACCESS_COLUMNS}`);
+  // A database before migration 60 has no access columns: ask without them from now on.
+  if (error && !noAccessColumns && /access|book_url|indoor|\bfee\b/.test(error.message)) {
+    noAccessColumns = true;
+    ({ data, error } = await ask(BASE_COLUMNS));
+  }
   if (error) throw error;
-  const out = fold((data ?? []) as Row[], near, 300000);
+  const out = fold((data ?? []) as unknown as Row[], near, 300000);
   named.set(key, out);
   return out;
 }
