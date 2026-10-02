@@ -1,6 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { Redirect, useNavigation } from 'expo-router';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { START_HREF, goToStart } from '@/features/navigation/startTab';
@@ -9,7 +10,7 @@ import { preloadNearbyMap } from '@/components/NearbyMap';
 
 import { BrandMark } from '@/components/BrandMark';
 import { useApp } from '@/store/AppContext';
-import { colors, spacing, typography, font } from '@/theme';
+import { colors, lightColors, spacing, typography, font } from '@/theme';
 import { Button } from '@/components/ui';
 import { leaveGently } from '@/components/SignOutCurtain';
 
@@ -40,7 +41,11 @@ export default function Index() {
     return () => clearTimeout(timer);
   }, []);
   const opacity = useRef(new Animated.Value(1)).current;
-  const rise = useRef(new Animated.Value(0)).current;
+  // On a phone the iPhone's own launch picture is already showing the mark at
+  // full size, so the mark carries straight on rather than vanishing and
+  // springing back in (that blink read as a flash). The browser has no
+  // launch picture, so there it still rises in.
+  const rise = useRef(new Animated.Value(Platform.OS === 'web' ? 0 : 1)).current;
 
   // Opened on top of the app that is already running: something went to '/'
   // (this splash's address, which Home shares) from a page over the tabs.
@@ -127,12 +132,18 @@ export default function Index() {
   }
 
   return (
-    <Animated.View style={[styles.splash, { opacity }]}>
+    // The launch screen is always CourtSide's own cream, whatever the theme:
+    // it has to match the iPhone's launch picture (app.config.js splash), which
+    // shows before any code runs and cannot know the theme. A themed launch
+    // screen snapped from cream to, say, New York's navy and read as a white
+    // flash. Now the two are one picture, and it fades into the theme as it goes.
+    <Animated.View style={[styles.splash, launchStyles.launch, { opacity }]}>
+      <StatusBar style="dark" />
       <Animated.View style={[styles.brand, { opacity: rise, transform: [{ scale: rise.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] }) }] }]}>
-        <BrandMark size={84} />
-        <Text style={styles.wordmark}>CourtSide</Text>
+        <BrandMark size={84} color={lightColors.brand} />
+        <Text style={[styles.wordmark, launchStyles.wordmark]}>CourtSide</Text>
       </Animated.View>
-      <Text style={styles.tagline}>Growing the game</Text>
+      <Text style={[styles.tagline, launchStyles.tagline]}>Growing the game</Text>
     </Animated.View>
   );
 }
@@ -157,4 +168,15 @@ const styleDefinitions = StyleSheet.create({
     color: colors.textFaint,
     textTransform: 'uppercase',
   },
+});
+
+/**
+ * The launch picture's own colours (see the comment on the launch screen).
+ * Kept out of the themed styles on purpose: those swap every light-palette
+ * colour for the theme's own, which would turn this cream back into navy.
+ */
+const launchStyles = StyleSheet.create({
+  launch: { backgroundColor: lightColors.bg },
+  wordmark: { color: lightColors.brand },
+  tagline: { color: lightColors.textFaint },
 });
