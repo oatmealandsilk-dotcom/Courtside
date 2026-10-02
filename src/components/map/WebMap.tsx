@@ -1,5 +1,5 @@
 import { themes, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -247,10 +247,11 @@ export function NearbyMap(props: NearbyMapProps) {
     return () => { markers.forEach((m) => m.remove()); };
   }, [model.cardCourts, expanded, night, mapGen]);
 
-  // Open hits as flags, hung above any court pin at the same spot. On the
-  // full map a flag opens the hit's card; the still card shows the soonest few near you.
+  // Open hits as flags, hung above any court pin at the same spot, on the full
+  // map only, where a flag opens the hit's card. The still card leaves them out:
+  // they crowded the city's name in the middle, and the hits are listed just below (Oct 2).
   const selectedHitId = model.selectedHit?.hit.id ?? null;
-  const hitList = expanded ? model.hits : model.cardFlags;
+  const hitList = useMemo(() => (expanded ? model.hits : []), [expanded, model.hits]);
   useEffect(() => {
     const instance = map.current;
     if (!instance) return;

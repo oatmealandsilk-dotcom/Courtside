@@ -11,7 +11,7 @@ import { Glass } from '@/components/ui/Glass';
 import { useBelowBanner } from '@/features/messages/bannerSpace';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { goHome } from '@/lib/goBack';
-import { useToast, type ToastMessage } from '@/lib/toast';
+import { onWithdraw, useToast, type ToastClosed, type ToastMessage } from '@/lib/toast';
 import { colors, spacing, typography } from '@/theme';
 
 const SHOW_MS = 2800;
@@ -45,6 +45,15 @@ export function Toast() {
   const shown = useSharedValue(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const screenReader = useRef(false);
+  // The toast up now, until it says how it closed (once): a toast that asks
+  // something is only counted as asked once it has been seen.
+  const live = useRef<ToastMessage | null>(null);
+  const shownAt = useRef(0);
+  const settle = (how: ToastClosed) => {
+    const was = live.current;
+    live.current = null;
+    was?.onClosed?.(how, Date.now() - shownAt.current);
+  };
   // A message banner on the same strip: the toast sits just under it, never hidden behind it.
   const below = useBelowBanner(spacing.xs);
   const underBanner = useSharedValue(below);
@@ -58,7 +67,8 @@ export function Toast() {
     return () => sub.remove();
   }, []);
 
-  const hide = () => {
+  const hide = (how: ToastClosed = 'timeout') => {
+    settle(how);
     if (timer.current) clearTimeout(timer.current);
     y.value = withTiming(-24, { duration: 200, easing: OUT });
     shown.value = withTiming(0, { duration: 200, easing: OUT }, (done) => { if (done) runOnJS(setToast)(null); });
@@ -66,6 +76,10 @@ export function Toast() {
 
   useEffect(() => {
     if (!incoming) return;
+    // Still up when the next one comes: it may not have been seen.
+    if (live.current && live.current.id !== incoming.id) settle('replaced');
+    live.current = incoming;
+    shownAt.current = Date.now();
     setToast(incoming);
     if (timer.current) clearTimeout(timer.current);
     y.value = -24;
@@ -76,16 +90,21 @@ export function Toast() {
     // VoiceOver doesn't read a toast that slides in, so one that says why
     // something was refused is spoken on an iPhone (TalkBack reads it by itself).
     if (incoming.long && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(incoming.body ? `${incoming.title}. ${incoming.body}` : incoming.title);
-    timer.current = setTimeout(hide, incoming.long ? (reader ? LONG_SCREEN_READER_MS : LONG_MS) : incoming.action ? (reader ? ACTION_SCREEN_READER_MS : ACTION_MS) : SHOW_MS);
+    timer.current = setTimeout(() => hide('timeout'), incoming.holdMs ?? (incoming.long ? (reader ? LONG_SCREEN_READER_MS : LONG_MS) : incoming.action ? (reader ? ACTION_SCREEN_READER_MS : ACTION_MS) : SHOW_MS));
     return () => { if (timer.current) clearTimeout(timer.current); };
   }, [incoming]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Taken back by whoever put it up, if it is still the one showing.
+  const hideRef = useRef(hide);
+  hideRef.current = hide;
+  useEffect(() => onWithdraw((id) => { if (live.current?.id === id) hideRef.current('withdrawn'); }), []);
 
   // A flick up sends it away early; a drag down just resists.
   const flick = Gesture.Pan()
     .activeOffsetY([-6, 6])
     .onUpdate((e) => { y.value = e.translationY < 0 ? e.translationY : e.translationY * 0.15; })
     .onEnd((e) => {
-      if (e.translationY < -16 || e.velocityY < -400) runOnJS(hide)();
+      if (e.translationY < -16 || e.velocityY < -400) runOnJS(hide)('flick');
       else y.value = withTiming(0, { duration: 200, easing: IN });
     });
 
@@ -109,8 +128,8 @@ export function Toast() {
                 accessibilityLabel={toast.body ? `${toast.title}. ${toast.body}` : toast.title}
                 onPress={() => {
                   // A long note with nowhere to go is put away by a tap, once read.
-                  if (!toast.href) { if (toast.long) hide(); return; }
-                  hide();
+                  if (!toast.href) { if (toast.long) hide('tap'); return; }
+                  hide('tap');
                   // Home is a tab, not a page to push: go there and put the feed at the top.
                   // (goHome, never '/': that is also the splash screen's address.)
                   if (toast.href === '/') { goHome(); requestScrollToTop('/'); }
@@ -132,7 +151,7 @@ export function Toast() {
                   accessibilityRole="button"
                   accessibilityLabel={`${action.label}: ${toast.title}`}
                   hitSlop={{ top: 6, bottom: 6, right: 6 }}
-                  onPress={() => { hide(); action.onPress(); }}
+                  onPress={() => { hide('action'); action.onPress(); }}
                   style={({ pressed }) => [styles.action, pressed && styles.actionPressed]}
                 >
                   <Text style={styles.actionLabel}>{action.label}</Text>

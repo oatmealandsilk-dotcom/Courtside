@@ -1,5 +1,6 @@
-import type { DetectedActivity, StatsSource } from '@/data/types';
+import type { DetectedActivity, PracticeSession, SessionDetail, StatsSource } from '@/data/types';
 import { localDay } from '@/features/practice/stats';
+import { duration } from '@/lib/format';
 
 /*
  * How a tracker's tennis session is put into words: its name, its day, its
@@ -57,13 +58,17 @@ export function statsSourceOf(a: DetectedActivity): StatsSource {
   return 'health-connect';
 }
 
-/** Where the numbers came from, in words only: never a logo. */
+/**
+ * Where a post's numbers came from, in words only, never a logo: WHOOP's
+ * own attribution wording, and "From …" for Apple's, so it reads as the
+ * source rather than a device tag.
+ */
 export function sourceLabel(s: StatsSource): string {
   switch (s) {
     case 'whoop': return 'Data by WHOOP';
-    case 'apple-watch': return 'Apple Watch';
-    case 'apple-health': return 'Apple Health';
-    default: return 'Health Connect';
+    case 'apple-watch': return 'From Apple Watch';
+    case 'apple-health': return 'From Apple Health';
+    default: return 'From Health Connect';
   }
 }
 
@@ -85,4 +90,73 @@ export function privateLine(a: DetectedActivity): string {
     a.kcal ? `${a.kcal} kcal` : null,
     a.source === 'whoop' && a.strain != null ? `Strain ${a.strain.toFixed(1)}` : null,
   ].filter(Boolean).join(' · ');
+}
+
+/**
+ * The stats a post carries from a tracker session: time on court always,
+ * heart rate only when the author switched it on and is a confirmed adult.
+ * It is the same shape the server rebuilds from the private record
+ * (fill_post_session_stats, migration 58), so the copy shown straight away
+ * matches what is saved. Sending maxHr is how the post asks for heart rate.
+ */
+export function sessionFromActivity(a: DetectedActivity, showHr: boolean, adult: boolean): SessionDetail {
+  return {
+    focus: 'Tennis',
+    minutes: a.minutes,
+    drills: [],
+    activityId: a.id,
+    source: statsSourceOf(a),
+    ...(showHr && adult && a.maxHr ? { maxHr: a.maxHr, ...(a.avgHr ? { avgHr: a.avgHr } : {}) } : {}),
+  };
+}
+
+/**
+ * A post's stats in one line of words: "1h 24m · 171 max bpm · Data by
+ * WHOOP" from a tracker, "Match · Won · 1h 30m" from your own log.
+ */
+export function statsLine(s: SessionDetail): string {
+  if (!s.activityId && s.sessionId) return `${s.kind ? loggedLabel({ kind: s.kind, won: s.won }) : s.focus} · ${duration(s.minutes)}`;
+  return [duration(s.minutes), s.maxHr ? `${s.maxHr} max bpm` : null, sourceLabel(s.source ?? 'apple-health')].filter(Boolean).join(' · ');
+}
+
+/** A post carries a session's stats: one from a tracker, or one from your own log. A plain "minutes on court" does not count. */
+export const hasSessionStats = (s: SessionDetail | undefined): boolean => !!s && (!!s.activityId || !!s.sessionId);
+
+/* ------------------------------------------------- sessions you logged */
+
+export const KIND_LABEL: Record<PracticeSession['kind'], string> = { practice: 'Practice', match: 'Match', drills: 'Drills', fitness: 'Fitness' };
+
+/** "Practice", "Match · Won", "Match · Lost", "Drills". */
+export function loggedLabel(s: Pick<PracticeSession, 'kind' | 'won'>): string {
+  if (s.kind === 'match' && s.won !== undefined) return `Match · ${s.won ? 'Won' : 'Lost'}`;
+  return KIND_LABEL[s.kind];
+}
+
+/** "Tuesday practice", "Sunday match": what a post from your log says when you leave the caption empty. */
+export function loggedTitle(s: Pick<PracticeSession, 'kind' | 'day'>): string {
+  const weekday = new Date(`${s.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' });
+  return `${weekday} ${KIND_LABEL[s.kind].toLowerCase()}`;
+}
+
+/** "Today", "Yesterday" or "Mon Sep 29", for a day in your log. */
+export function dayWords(day: string, now = new Date()): string {
+  if (day === localDay(now)) return 'Today';
+  if (day === localDay(now.getTime() - 86_400_000)) return 'Yesterday';
+  return new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }).replace(/,/g, '');
+}
+
+/**
+ * The stats a post carries from a session you logged by hand: how long and
+ * what it was (a match with its result), and nothing else. Never a heart
+ * rate: your own log has none, and the server would strip one (migration 58).
+ */
+export function sessionFromLogged(s: PracticeSession): SessionDetail {
+  return {
+    focus: loggedLabel(s),
+    minutes: s.minutes,
+    drills: [],
+    sessionId: s.id,
+    kind: s.kind,
+    ...(s.kind === 'match' && s.won !== undefined ? { won: s.won } : {}),
+  };
 }
