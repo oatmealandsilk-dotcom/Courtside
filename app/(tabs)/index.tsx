@@ -1,12 +1,12 @@
 import { asTabRoute } from '@/features/navigation/tabFocus';
-import { COUNT_EDGE, FoldedWords, GLYPH_EDGE, InstantMeta, MAX_GROW, RailShade, railCount, ReelCaption, ReelDim, ReelScrim, ReelWho, SwipeHint } from '@/components/ReelCaption';
+import { COUNT_EDGE, FoldedWords, GLYPH_EDGE, InstantMeta, MAX_GROW, RailShade, railCount, ReelCaption, ReelScrim, ReelWho, SwipeHint } from '@/components/ReelCaption';
 import { useSuggestedPlayers } from '@/features/people/suggestions';
 import { ThreadReplies } from '@/components/ThreadReplies';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Animated, AppState, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import React, { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { AccessibilityInfo, Animated, AppState, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
-import { router, useFocusEffect, useIsFocused as useRouteFocused } from 'expo-router';
+import { router, useFocusEffect, useIsFocused as useRouteFocused, useNavigation } from 'expo-router';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { goBack } from '@/lib/goBack';
@@ -14,7 +14,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { PinchZone } from '@/components/PinchZone';
-import Reanimated, { runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming } from 'react-native-reanimated';
+import Reanimated, { ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
 import * as haptics from '@/lib/haptics';
 
 import { Avatar, Button, EmptyState } from '@/components/ui';
@@ -53,6 +53,8 @@ import { confirmUnfollow } from '@/lib/confirm';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { useSidePanel } from '@/features/feed/sidePanel';
+import { CLOSE_MS, PAUSE_AT_FULL, SIDE_MIN_WINDOW, STAGE_EASING, STAGE_ON_ANDROID, begin as beginStage, clear as clearStage, currentY, getStage, markEnding, markLost, place as placeStage, stageGeometry, stageKeyOf, stageTop, useStageSelect, type StageSubject } from '@/features/feed/commentStage';
+import { StageChromeContext, useStageMotion, useStagePageChrome } from '@/features/feed/useStageMotion';
 import { colors, radius, typography, spacing, font, lift } from '@/theme';
 
 /**
@@ -164,13 +166,17 @@ const RAIL_DROP = -6;
 /**
  * A hit's photo at its own shape. A tall one fills the page; a wide one (a
  * computer's camera, say) sits in a wide box across the middle rather than
- * being cropped down to a strip of it.
+ * being cropped down to a strip of it. `onShape` tells the page which, so the
+ * comments stage shrinks the box rather than the whole page.
  */
-function HitPicture({ uri }: { uri: string }) {
+function HitPicture({ uri, onShape }: { uri: string; onShape?: (wide: boolean) => void }) {
   const [wide, setWide] = useState<boolean | null>(null);
+  const latestShape = useRef(onShape);
+  latestShape.current = onShape;
   useEffect(() => {
     let live = true;
-    Image.getSize(uri, (w, h) => { if (live) setWide(w > h); }, () => { if (live) setWide(false); });
+    const known = (isWide: boolean) => { if (!live) return; setWide(isWide); latestShape.current?.(isWide); };
+    Image.getSize(uri, (w, h) => known(w > h), () => known(false));
     return () => { live = false; };
   }, [uri]);
   if (wide) {
@@ -182,6 +188,83 @@ function HitPicture({ uri }: { uri: string }) {
   }
   return <ExpoImage accessibilityIgnoresInvertColors source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />;
 }
+
+/** A feed page's key: "p:<id>", "h:<id>", "q:<id>", or the page's kind ("tip", "challenge"). */
+const keyOf = (i: FeedItem) => (i.type === 'post' ? `p:${i.post.id}` : i.type === 'hit' ? `h:${i.story.id}` : i.type === 'question' ? `q:${i.question.id}` : i.type);
+
+/** Where a view sits in the window right now, read straight from it (no wait); null if it can't say. */
+function readRect(node: unknown): { x: number; y: number; width: number; height: number } | null {
+  const box = (node as { getBoundingClientRect?: () => { x?: number; left?: number; y?: number; top?: number; width: number; height: number } } | null)?.getBoundingClientRect?.();
+  if (!box || !(box.width > 0) || !(box.height > 0)) return null;
+  return { x: box.x ?? box.left ?? 0, y: box.y ?? box.top ?? 0, width: box.width, height: box.height };
+}
+
+/**
+ * In a browser, the words that opened the comments get the focus back after
+ * only if they had it from the keyboard: given back after a click, the focus
+ * would sit on them and the space bar would open the comments again instead
+ * of pausing the clip.
+ */
+function keyboardFocus(node: unknown): unknown {
+  const el = node as { matches?: (selector: string) => boolean } | null;
+  try { return el?.matches?.(':focus-visible') ? el : null; } catch { return null; }
+}
+
+/** The words, buttons and mark over a clip fade as it goes onto the comments stage; a browser finds them by this mark, inside the page on the stage only (useStageMotion.web). */
+const STAGE_CHROME = (Platform.OS === 'web' ? { dataSet: { stageChrome: '1' } } : {}) as object;
+
+/**
+ * Every clip, photo and Instant page that is built (the one on screen and
+ * those either side) sits in one of these, always (adding or taking away a
+ * parent around a player rebuilds it, and the video with it). On the comments
+ * stage the page shrinks into the room above the sheet, all of it as one
+ * picture, with black behind it: the same black in every theme, a video
+ * frame's own (DESIGN.md). The black is there from the tap, on the animation
+ * thread, before Home has redrawn; the page covers it until it moves. Never
+ * clipped or rounded: a clipped box around a moving native video froze its
+ * picture (see VerticalPager).
+ *
+ * It also works out, once for the page, how faded the words, buttons, mark
+ * and sound disc over it are (StageChromeContext): only the page on the
+ * stage, and only this Home's, ever fades.
+ */
+function StagePage({ owner, stageKey, staged, onNode, children }: { owner: string; stageKey: string; staged: boolean; onNode: (key: string, node: unknown) => void; children: React.ReactNode }) {
+  const motion = useStageMotion('page', { owner, stageKey });
+  const black = useStageMotion('black', { owner, stageKey });
+  const chrome = useStagePageChrome(owner, stageKey);
+  const motionRef = motion.ref;
+  const setNode = useCallback((node: unknown) => { motionRef?.(node); onNode(stageKey, node); }, [motionRef, onNode, stageKey]);
+  return (
+    <StageChromeContext.Provider value={chrome}>
+      <Reanimated.View ref={black.ref as never} pointerEvents="none" style={[stageStyles.blackStage, black.style]} />
+      <Reanimated.View ref={setNode as never} style={[stageStyles.page, staged && Platform.OS === 'web' ? (stageStyles.moving as object) : null, motion.style]}>
+        {children}
+      </Reanimated.View>
+    </StageChromeContext.Provider>
+  );
+}
+
+/**
+ * The words and buttons over a page, or its mark: they fade as their own page
+ * goes onto the comments stage (see StagePage), and the words and buttons go
+ * with a pinch-out too (`immersion`).
+ */
+function ChromeLayer({ immersion, style, pointerEvents, children }: { immersion?: SharedValue<number>; style?: StyleProp<ViewStyle>; pointerEvents?: 'box-none' | 'none'; children: React.ReactNode }) {
+  const chrome = useContext(StageChromeContext);
+  const fade = useAnimatedStyle(() => {
+    const gone = immersion ? immersion.value : 0;
+    return { opacity: (1 - gone) * (chrome ? chrome.value : 1), transform: [{ translateY: 14 * gone }] };
+  });
+  return <Reanimated.View {...STAGE_CHROME} pointerEvents={pointerEvents} style={[style, fade]}>{children}</Reanimated.View>;
+}
+
+const stageStyles = StyleSheet.create({
+  page: { flex: 1 },
+  // Only while it moves: a browser keeps the moving page on its own layer.
+  moving: { willChange: 'transform' } as object,
+  // Unseen until the page on top of it is on the stage.
+  blackStage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', opacity: 0 },
+});
 
 function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const styles = useThemedStyles(styleDefinitions);
@@ -205,9 +288,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   // growing to 28 and lifting the words into the picture. Phones only.
   const follow = barInset > 0 ? BAR_TUCK : 0;
   const tuckStyle = useAnimatedStyle(() => ({ transform: [{ translateY: follow * barCompact.value }] }));
-  // The page whose caption is open ("p:<id>" or "h:<id>"), so the picture behind it dims; moving on folds it.
-  const [openWords, setOpenWords] = useState<string | null>(null);
-  useEffect(() => { setOpenWords(null); }, [active]);
   useEffect(() => { const k = orderRef.current[active]; if (k) seenNow.current.add(k); setQuick(connectionIsQuick()); }, [active]);
 
   // Pinch out on a clip or hit and everything but the picture goes away —
@@ -239,7 +319,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     immersion.value = withTiming(on ? 1 : 0, { duration: 180 });
     punch.value = withSequence(withTiming(on ? 1.03 : 0.97, { duration: 80 }), withTiming(1, { duration: 110 }));
   };
-  const overlayStyle = useAnimatedStyle(() => ({ opacity: 1 - immersion.value, transform: [{ translateY: 14 * immersion.value }] }));
   // The wordmark and the thread logo can be tapped away, page by page: the
   // one you tapped goes; the next page still has its own.
   const [hiddenMarks, setHiddenMarks] = useState<Set<string>>(() => new Set());
@@ -248,11 +327,24 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   useEffect(() => { setImmersive(false); immersion.value = 0; punch.value = 1; }, [active, immersion, punch]);
   const [visit, setVisit] = useState(0);
   const focused = useIsFocused();
+  // The comments stage (see commentStage): which page, if any, is on it.
+  // `owner` tells this Home from another one under or over it (a scoped feed).
+  const owner = useRef(`home:${Math.random().toString(36).slice(2)}`).current;
+  // Read as one short line of what Home acts on, so it redraws only when one of those changes.
+  const stageLine = useStageSelect((s) => (s && s.owner === owner ? `${s.key}|${s.mode}|${s.covered}|${s.lost}|${PAUSE_AT_FULL && s.full}` : ''));
+  const myStage = useMemo(() => (stageLine ? getStage() : null), [stageLine]);
+  // A scoped feed's back tile fades with the words when this feed's page goes onto the stage.
+  const scopeBackFade = useStageMotion('chrome', { owner });
+  // Whether this Home is the page on show, for a stage's checks that run later (a timer).
+  const focusedNow = useRef(focused);
+  focusedNow.current = focused;
+  const navigation = useNavigation();
+  // Gone (a scoped feed closed with pages over it, say): a stage it put up goes with it, so no other feed is left faded or unable to open comments.
+  useEffect(() => () => { if (getStage()?.owner === owner) clearStage(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // While the tutorial's tips sit over the Feed, its clips hold still and
   // silent under the dim, and their clock doesn't count that time as watched.
   // The clip starts once the dim lifts.
   const touring = useTourOpen();
-  const playing = focused && !touring;
   // Whether Home has been the tab on screen at all yet this time round.
   const shownOnce = useRef(false);
   if (focused) shownOnce.current = true;
@@ -290,13 +382,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     const kind = signalKind(key);
     if (kind) actions.noteFeedSignal({ kind, id: key.slice(2), profileTap: true });
   };
-  // A new page on screen (or the feed coming back to the front): the last one
-  // is closed off and the new one's clock starts.
-  const viewedKey = playing && appActive ? order[active] : undefined;
-  useEffect(() => {
-    endViewing.current();
-    if (viewedKey) viewing.current = { key: viewedKey, since: Date.now() };
-  }, [viewedKey]);
   useEffect(() => () => endViewing.current(), []);
 
   // Re-rank when the session itself changes, not every time this screen regains
@@ -413,8 +498,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     if (scope) return;
     const data = latest.current;
     const key = data.posts.some((p) => p.id === id) ? `p:${id}` : data.stories.some((st) => st.id === id) ? `h:${id}` : null;
-    if (key) liftToTop(key); else rerank();
-  }), [scope, rerank, liftToTop]);
+    offStage(() => { if (key) liftToTop(key); else rerank(); });
+  }), [scope, rerank, liftToTop]); // eslint-disable-line react-hooks/exhaustive-deps
   const dealOnce = useCallback(() => {
     const stamp = `${ready}:${currentUserId}:${scope?.userId ?? ''}:${scope?.set ?? ''}:${scope?.ids?.join(',') ?? ''}`;
     if (rankedFor.current === stamp) return;
@@ -463,6 +548,9 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   useEffect(() => {
     if (!app.remoteLoaded || !dealtFromCopy.current || scope) return;
     dealtFromCopy.current = false;
+    offStage(dealFresh);
+  }, [app.remoteLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dealFresh = () => {
     const data = latest.current;
     const hidden = new Set([...data.blockedIds, ...data.mutedIds]);
     const have = new Set(orderRef.current);
@@ -475,21 +563,21 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     // newest is the first thing you see. The app opens on Community, so the
     // feed can be loaded and ready long before anyone has looked at it.
     // Otherwise the new pages go in right after the one on screen, newest first.
-    if (NEWEST_FIRST && active === 0 && (!playable || !shownOnce.current)) { rerank(); return; }
+    if (NEWEST_FIRST && activeRef.current === 0 && (!playable || !shownOnce.current)) { rerank(); return; }
     const made = madeAt(data);
     const dealt = NEWEST_FIRST ? [...fresh].sort((a, b) => made(b) - made(a)) : shuffleFeed(fresh);
     setOrder((prev) => {
-      const at = Math.min(prev.length, active + (NEWEST_FIRST ? 1 : 2));
+      const at = Math.min(prev.length, activeRef.current + (NEWEST_FIRST ? 1 : 2));
       return [...prev.slice(0, at), ...dealt.filter((k) => !prev.includes(k)), ...prev.slice(at)];
     });
-  }, [app.remoteLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  };
 
   // Something of yours just landed: straight to the top (see liftToTop). With
   // no page named, the feed is dealt again.
   useEffect(() => subscribeFeedRefresh((key) => {
     if (scope) return;
-    if (key) liftToTop(key); else rerank();
-  }), [scope, rerank, liftToTop]);
+    offStage(() => { if (key) liftToTop(key); else rerank(); });
+  }), [scope, rerank, liftToTop]); // eslint-disable-line react-hooks/exhaustive-deps
   // Pulling down on the first page fetches what is new and starts the feed over from the top.
   // Pull-to-refresh: fetch what is new, rank the pages again in place (the
   // pager is holding the feed down and brings it back itself), and give the
@@ -640,6 +728,130 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     const at = Math.min(7, withTip.length);
     return [...withTip.slice(0, at), { type: 'challenge' as const }, ...lead, ...withTip.slice(at)];
   }, [feedItems, scope]);
+
+  // The page on the comments stage keeps playing while the comments are up
+  // (the stage is this Home's, it is the page on screen, and nothing has been
+  // opened over the comments). Read by the page's key in `feed`, which is
+  // what `active` counts: `order` has no tip or challenge page.
+  const activeKey = feed[active] ? keyOf(feed[active]) : undefined;
+  const held = !!myStage && myStage.key === activeKey && !myStage.covered && !(PAUSE_AT_FULL && myStage.full);
+  const playing = (focused || held) && !touring;
+  // A new page on screen (or the feed coming back to the front): the last one
+  // is closed off and the new one's clock starts. Reading the comments under
+  // a clip that is still playing counts as watching it.
+  const viewedKey = playing && appActive ? order[active] : undefined;
+  useEffect(() => {
+    endViewing.current();
+    if (viewedKey) viewing.current = { key: viewedKey, since: Date.now() };
+  }, [viewedKey]);
+
+  /*
+   * The comments stage. A tap on a clip's or an Instant's words, or on its
+   * speech bubble, opens the comments with the clip still playing above them,
+   * shrunk into the room the sheet leaves (on a phone; a wide computer window
+   * docks the comments beside the clip instead, still playing; a narrower one
+   * keeps the centred box, the clip paused under it).
+   *
+   * The order matters: the stage is noted before the comments page is pushed,
+   * in the same tap, so there is never a frame where Home is neither on top
+   * nor holding its clip (that would be a blink of pause). It is cleared only
+   * once Home is back on top, for the same reason on the way out.
+   */
+  const { width: winW, height: winH } = useWindowDimensions();
+  // Each page's stage box, to measure at the tap; and each wide Instant photo's shape.
+  const pageNodes = useRef(new Map<string, unknown>());
+  const notePageNode = useCallback((key: string, node: unknown) => { if (node) pageNodes.current.set(key, node); else pageNodes.current.delete(key); }, []);
+  const hitShapes = useRef(new Map<string, boolean>());
+  const openComments = (kind: 'post' | 'hit', id: string, subject: StageSubject, from?: unknown) => {
+    const params = { kind, id };
+    const now = getStage();
+    // A second tap while this feed's comments are opening, open or closing does nothing.
+    if (now && now.owner === owner) return;
+    // Another feed's stage is still up under the pages opened over it (its
+    // comments, a profile, then this feed): these comments open as the plain sheet.
+    if (now) { router.push({ pathname: '/comments', params }); return; }
+    const key = stageKeyOf(kind, id);
+    const ownerOnTop = () => focusedNow.current;
+    if (Platform.OS === 'web' && isDesktopBrowser() && typeof window !== 'undefined' && window.innerWidth >= 700) {
+      // A computer: the docked panel keeps the clip playing beside it; the centred box does not.
+      if (window.innerWidth >= SIDE_MIN_WINDOW) beginStage({ owner, key, mode: 'side', focusBack: keyboardFocus(from), ownerOnTop });
+      router.push({ pathname: '/comments', params });
+      return;
+    }
+    const rect = readRect(pageNodes.current.get(key)) ?? { x: 0, y: 0, width: winW, height: winH };
+    const geo = phone && (Platform.OS !== 'android' || STAGE_ON_ANDROID) ? stageGeometry(winW, winH, insets.top, rect, subject, owner, key) : null;
+    if (!geo) { router.push({ pathname: '/comments', params }); return; }
+    beginStage({ owner, key, mode: 'stage', geo, focusBack: Platform.OS === 'web' ? keyboardFocus(from) : from, ownerOnTop });
+    // Everything on the stage reads the sheet's top: at the bottom edge, the
+    // page exactly as it is. The sheet starts the rise itself once it has
+    // drawn, so the clip and the sheet move as one.
+    if (Platform.OS !== 'web') stageTop.value = geo.H;
+    router.push({ pathname: '/comments', params: { ...params, stage: '1' } });
+    // The comments never came: the push went nowhere and this feed is still
+    // the page in front. The page goes back as it was. (A push that landed
+    // but is slow to draw is left to finish: the feed is no longer in front.)
+    setTimeout(() => {
+      const still = getStage();
+      if (still && still.owner === owner && still.key === key && !still.mounted && navigation.isFocused()) endStage();
+    }, 600);
+  };
+  // The stage is over (or never got going): the page grows back to full size
+  // if it is not there already (the comments went without their own close: a
+  // browser's Back, a tab tapped from a page on top), then it is cleared.
+  // Marked as ending first, so comments arriving now open plain, not onto it.
+  const endStage = () => {
+    const now = getStage();
+    if (!now || now.owner !== owner) return;
+    const G = now.geo;
+    const finish = () => { if (getStage()?.id === now.id) clearStage(); };
+    if (now.mode !== 'stage' || !G) { clearStage(); return; }
+    if (Platform.OS === 'web') {
+      const y = currentY();
+      if (y >= G.H - 0.5) { clearStage(); return; }
+      markEnding();
+      placeStage({ fromY: y, toY: G.H, ms: CLOSE_MS });
+      setTimeout(finish, CLOSE_MS + 20);
+      return;
+    }
+    if (stageTop.value >= G.H - 0.5) { clearStage(); return; }
+    markEnding();
+    // Cleared however the move ends (cut short too), never left half done.
+    stageTop.value = withTiming(G.H, { duration: CLOSE_MS, easing: STAGE_EASING, reduceMotion: ReduceMotion.Never }, () => { runOnJS(finish)(); });
+  };
+  // Back on top: the stage is over. The words that opened it get the screen reader's focus back.
+  const wasFocused = useRef(focused);
+  useEffect(() => {
+    const cameBack = focused && !wasFocused.current;
+    wasFocused.current = focused;
+    const now = getStage();
+    if (!cameBack || !now || now.owner !== owner) return;
+    const back = now.focusBack as { focus?: (o?: { preventScroll?: boolean }) => void } | null;
+    if (back) {
+      if (Platform.OS === 'web') back.focus?.({ preventScroll: true });
+      else AccessibilityInfo.sendAccessibilityEvent(back as never, 'focus');
+    }
+    endStage();
+  }, [focused]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The page on the stage went away under it (an Instant ran out, its author
+  // was blocked): the comments close the normal way.
+  useEffect(() => {
+    if (myStage && !myStage.lost && !feed.some((item) => keyOf(item) === myStage.key)) markLost();
+  }, [feed, myStage]);
+  // While a page is on the stage the feed is not dealt again under it (that
+  // would rebuild the page and its player); the last such request waits and
+  // runs once the stage is over. Pages added at the end are no trouble.
+  const heldDeal = useRef<(() => void) | null>(null);
+  const offStage = (deal: () => void) => {
+    const now = getStage();
+    if (now && now.owner === owner) { heldDeal.current = deal; return; }
+    deal();
+  };
+  useEffect(() => {
+    if (myStage || !heldDeal.current) return;
+    const deal = heldDeal.current;
+    heldDeal.current = null;
+    deal();
+  }, [myStage]);
   // A page above the one you are on went away (an upload that failed, an
   // Instant that expired): a phone's scroller keeps its place in points, so
   // every page below would move up one and the next clip would play instead
@@ -905,7 +1117,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
           action={!scope && ready ? { label: 'Share something', onPress: () => router.push('/compose') } : undefined}
         />
       ) : (
-        <View ref={viewer} style={styles.viewer}>
+        // While a page is on the comments stage, TalkBack reads the comments only, not the feed behind them.
+        <View ref={viewer} style={styles.viewer} importantForAccessibility={myStage?.mode === 'stage' ? 'no-hide-descendants' : 'auto'}>
           {/* Pull-to-refresh is for phones: the app and a phone's browser (`phone`, above). Asking
               isDesktopBrowser() alone took it off the iPhone app: the app has no browser to read,
               so the check answered "computer" there, and the pull strip was never built. */}
@@ -957,18 +1170,21 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                 const author = usersById.get(story.authorId);
                 if (!author) return <View key={story.id} />;
                 const hitLiked = !!currentUserId && story.likedBy.includes(currentUserId);
+                const hitKey = `h:${story.id}`;
+                // A video or a tall photo fills the page; a wide photo shrinks as its own box.
+                const openHitComments = (from?: unknown) => openComments('hit', story.id, !story.videoUrl && story.imageUrl && hitShapes.current.get(story.id) ? 'wide-photo' : 'portrait', from);
                 return (
                   <View key={story.id} style={styles.clip}>
                    <PinchZone onPinchOut={() => lock(true)} onPinchIn={() => lock(false)}><Reanimated.View style={[StyleSheet.absoluteFill, pictureStyle]}>
                     <View accessibilityLabel={`${author.name}'s instant`} style={styles.clipFrame}>
                       <View style={phone ? StyleSheet.absoluteFill : styles.clipPortrait}>
                         {story.videoUrl ? (
-                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} preload={near} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
+                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
                         ) : (
                           // Two quick taps like a hit, the way they like a clip.
                           <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s instant`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
                             {story.imageUrl ? (
-                              <HitPicture uri={story.imageUrl} />
+                              <HitPicture uri={story.imageUrl} onShape={(wide) => hitShapes.current.set(story.id, wide)} />
                             ) : (
                               <MediaPlaceholder label={story.mediaLabel ?? 'Instant'} seed={story.id} portrait fill />
                             )}
@@ -977,15 +1193,15 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       </View>
                     </View>
                     {burst.id === story.id ? <LikeBurst token={burst.n} /> : null}
-                    <Reanimated.View style={[StyleSheet.absoluteFill, overlayStyle]} pointerEvents={immersive ? 'none' : 'box-none'}>
+                    <ChromeLayer immersion={immersion} style={StyleSheet.absoluteFill} pointerEvents={immersive ? 'none' : 'box-none'}>
                     {/* An Instant's words are set exactly like a clip's: the same shade, the same who-line, the same small line. */}
                     <ReelScrim bottom={wordsBottom} />
-                    {openWords === `h:${story.id}` ? <ReelDim onClose={() => setOpenWords(null)} /> : null}
                     <Reanimated.View style={[styles.caption, { bottom: wordsBottom }, tuckStyle]}>
                       <View style={styles.words}>
                         <ReelWho author={author} onAuthor={() => { tappedAuthor(`h:${story.id}`); router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`); }} />
-                        {story.caption ? <FoldedWords text={story.caption} open={openWords === `h:${story.id}`} onOpenChange={(open) => setOpenWords(open ? `h:${story.id}` : null)} /> : null}
-                        <InstantMeta expiresAt={story.expiresAt} />
+                        {/* The words and the small line open the comments, the whole caption at their top. */}
+                        {story.caption ? <FoldedWords text={story.caption} onPress={openHitComments} /> : null}
+                        <InstantMeta expiresAt={story.expiresAt} onPress={openHitComments} />
                       </View>
                       {/* Only while Home is the tab on show: on the phone it is built
                           beside Community at launch, and the hint's few showings
@@ -995,7 +1211,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     <Reanimated.View style={[styles.actions, { bottom: wordsBottom + RAIL_DROP }, tuckStyle]}>
                       <RailShade />
                       <LikeButton ledgerKey={`h:${story.id}`} liked={hitLiked} count={story.likedBy.length} onToggle={() => actions.toggleLikeStory(story.id)} likesRoute={{ pathname: '/likes', params: { id: story.id, kind: 'hit' } }} pop={burst.id === story.id ? burst.n : 0} what="hit" size={RAIL_ICONS[0][1]} style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
-                      <Tappable accessibilityLabel="Hit comments" onPress={() => router.push({ pathname: '/comments', params: { kind: 'hit', id: story.id } })} scaleTo={0.78} style={styles.action}>
+                      <Tappable accessibilityLabel="Hit comments" onPress={() => openHitComments()} scaleTo={0.78} style={styles.action}>
                         <Ionicons name="chatbubble-outline" size={RAIL_ICONS[1][1]} color="white" style={styles.actionGlyph} />
                         <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(story.commentIds.length)}</Text>
                       </Tappable>
@@ -1003,7 +1219,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                         <Ionicons name="ellipsis-horizontal" size={RAIL_ICONS[4][1]} color="white" style={styles.actionGlyph} />
                       </Tappable>
                     </Reanimated.View>
-                    </Reanimated.View>
+                    </ChromeLayer>
                    </Reanimated.View></PinchZone>
                     {story.videoUrl ? cover(story.id, 'word', story.thumbnailUrl) : null}
                   </View>
@@ -1108,6 +1324,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               }
 
               const liked = !!currentUserId && post.likedBy.includes(currentUserId);
+              // A landscape clip shrinks as its wide band; anything else, the whole page.
+              const openClipComments = (from?: unknown) => openComments('post', post.id, post.orientation === 'landscape' ? 'landscape' : 'portrait', from);
               return (
                 <View key={post.id} style={styles.clip}>
                  <PinchZone onPinchOut={() => lock(true)} onPinchIn={() => lock(false)}><Reanimated.View style={[StyleSheet.absoluteFill, pictureStyle]}>
@@ -1135,6 +1353,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                           discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand}
                           discPinned={index === 0 && !scope}
                           onReady={(ok) => markReady(post.id, ok)}
+                          held={held && myStage?.key === `p:${post.id}`}
+                          onStage={myStage?.key === `p:${post.id}`}
                         />
                       </View>
                     </View>
@@ -1173,13 +1393,12 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
 
                   {burst.id === post.id ? <LikeBurst token={burst.n} /> : null}
 
-                  <Reanimated.View style={[StyleSheet.absoluteFill, overlayStyle]} pointerEvents={immersive ? 'none' : 'box-none'}>
+                  <ChromeLayer immersion={immersion} style={StyleSheet.absoluteFill} pointerEvents={immersive ? 'none' : 'box-none'}>
 
                   <ReelScrim bottom={wordsBottom} />
-                  {openWords === `p:${post.id}` ? <ReelDim onClose={() => setOpenWords(null)} /> : null}
 
                   <Reanimated.View style={[styles.caption, { bottom: wordsBottom }, tuckStyle]}>
-                    <ReelCaption post={post} author={author} onAuthor={() => { tappedAuthor(`p:${post.id}`); router.push(`/user/${author.id}`); }} open={openWords === `p:${post.id}`} onOpenChange={(open) => setOpenWords(open ? `p:${post.id}` : null)} />
+                    <ReelCaption post={post} author={author} onAuthor={() => { tappedAuthor(`p:${post.id}`); router.push(`/user/${author.id}`); }} onOpenComments={openClipComments} />
                     {/* Only while Home is on show (see the Instant's hint above). */}
                     {index === 0 && !scope && focused ? <SwipeHint /> : null}
                   </Reanimated.View>
@@ -1190,7 +1409,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     <LikeButton ledgerKey={`p:${post.id}`} liked={liked} count={post.likedBy.length} onToggle={() => actions.toggleLike(post.id)} likesRoute={{ pathname: '/likes', params: { id: post.id } }} pop={burst.id === post.id ? burst.n : 0} what="clip" size={RAIL_ICONS[0][1]} style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
                     <Tappable
                       accessibilityLabel="Clip comments"
-                      onPress={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id } })}
+                      onPress={() => openClipComments()}
                       scaleTo={0.78}
                       style={styles.action}
                     >
@@ -1224,7 +1443,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       <Ionicons name="ellipsis-horizontal" size={RAIL_ICONS[4][1]} color="white" style={styles.actionGlyph} />
                     </Tappable>
                   </Reanimated.View>
-                  </Reanimated.View>
+                  </ChromeLayer>
                  </Reanimated.View></PinchZone>
                   {post.videoUrl ? cover(post.id, 'word', post.thumbnailUrl, post.orientation === 'landscape') : null}
                 </View>
@@ -1242,24 +1461,39 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                 : item?.type === 'post' && item.post.kind === 'clip' && !!(item.post.videoUrl || item.post.thumbnailUrl || item.post.imageUrl);
               if (!media && item) return page;
               const key = item?.type === 'post' ? item.post.id : item?.type === 'hit' ? item.story.id : 'first';
+              const pageKey = item ? keyOf(item) : 'first';
+              // Only a built page (the one on screen and those either side) can go onto the stage.
+              const built = index - active >= -WINDOW && index - active <= AHEAD;
+              const markStyle = [styles.wordmarkOverlay, { top: insets.top + 24 }, media && picture && styles.clipMarkOverlay];
+              /* A tap on the mark tucks it away for this page only. Over a clip or hit it is the
+                 small mark at the top left, part of the picture; on a post, the wordmark. */
+              const markTile = media && picture ? (
+                <TapAway label="Hide the CourtSide mark" onHidden={() => hideMark(key)} style={styles.markPill}>
+                  <BrandMark size={30} color={theme === 'us-open' ? '#FFFFFF' : colors.brand} />
+                </TapAway>
+              ) : (
+                <TapAway label="Hide the CourtSide wordmark" onHidden={() => hideMark(key)}>
+                  <Text style={[styles.wordmark, theme === 'us-open' && { color: '#FFFFFF' }]}>CourtSide</Text>
+                </TapAway>
+              );
+              // Over a picture the wordmark sits in a small pill of the theme's own
+              // background, so it reads on anything without touching the picture.
+              const mark = scope || hiddenMarks.has(key) || (immersive && index === active) ? null
+                : built ? <ChromeLayer pointerEvents="box-none" style={markStyle}>{markTile}</ChromeLayer>
+                  : <View pointerEvents="box-none" style={markStyle}>{markTile}</View>;
               return (
                 <React.Fragment key={key}>
-                  {page}
-                  {/* Over a picture the wordmark sits in a small pill of the theme's own
-                      background, so it reads on anything without touching the picture. */}
-                  {scope || hiddenMarks.has(key) || (immersive && index === active) ? null : <View pointerEvents="box-none" style={[styles.wordmarkOverlay, { top: insets.top + 24 }, media && picture && styles.clipMarkOverlay]}>
-                    {/* A tap on the mark tucks it away for this page only. Over a clip or hit it is the
-                        small mark at the top left, part of the picture; on a post, the wordmark. */}
-                    {media && picture ? (
-                      <TapAway label="Hide the CourtSide mark" onHidden={() => hideMark(key)} style={styles.markPill}>
-                        <BrandMark size={30} color={theme === 'us-open' ? '#FFFFFF' : colors.brand} />
-                      </TapAway>
-                    ) : (
-                      <TapAway label="Hide the CourtSide wordmark" onHidden={() => hideMark(key)}>
-                        <Text style={[styles.wordmark, theme === 'us-open' && { color: '#FFFFFF' }]}>CourtSide</Text>
-                      </TapAway>
-                    )}
-                  </View>}
+                  {built ? (
+                    <StagePage owner={owner} stageKey={pageKey} staged={myStage?.mode === 'stage' && myStage.key === pageKey} onNode={notePageNode}>
+                      {page}
+                      {mark}
+                    </StagePage>
+                  ) : (
+                    <View style={stageStyles.page}>
+                      {page}
+                      {mark}
+                    </View>
+                  )}
                 </React.Fragment>
               );
             }), ...(scope ? [] : [endPage])]}
@@ -1268,9 +1502,11 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
           {scope ? (
             // The same plain chevron every other page has. Over a picture it sits on the mark's tile, in
             // the mark's ink: a bare white arrow vanished on a bright sky or a white ceiling.
-            <Pressable accessibilityRole="button" accessibilityLabel="Go back" hitSlop={10} onPress={() => goBack()} style={[styles.scopeBack, activeOnPicture && styles.scopeBackTile, { top: insets.top + (activeOnPicture ? 7 : 10) }]}>
-              <Ionicons name="chevron-back" size={22} color={activeOnPicture ? (theme === 'us-open' ? '#FFFFFF' : colors.brand) : colors.text} />
-            </Pressable>
+            <Reanimated.View ref={scopeBackFade.ref as never} pointerEvents="box-none" style={[styles.scopeBackLayer, scopeBackFade.style]}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Go back" hitSlop={10} onPress={() => goBack()} style={[styles.scopeBack, activeOnPicture && styles.scopeBackTile, { top: insets.top + (activeOnPicture ? 7 : 10) }]}>
+                <Ionicons name="chevron-back" size={22} color={activeOnPicture ? (theme === 'us-open' ? '#FFFFFF' : colors.brand) : colors.text} />
+              </Pressable>
+            </Reanimated.View>
           ) : null}
           {/* Over a clip or an Instant the phone's clock and battery turn white, as on TikTok, Reels and Shorts:
               the theme's dark clock sank into a dark court, and the top shade keeps a white one clear of a bright sky.
@@ -1286,6 +1522,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
 const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, alignItems: 'center' },
   scopeBack: { position: 'absolute', left: 12, padding: 6, zIndex: 6 },
+  // Its own layer over the feed, so it can fade as a clip goes onto the comments stage.
+  scopeBackLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 6 },
   // Over a picture: the mark's tile, 40 square (the sound disc's size), the chevron nudged right of centre to sit centred by eye.
   scopeBackTile: { width: 40, height: 40, padding: 0, paddingRight: 2, borderRadius: 12, backgroundColor: `${colors.bg}E6`, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   wordmarkOverlay: {

@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState, memo } from 'react';
+import React, { useContext, useEffect, useRef, useState, memo } from 'react';
 import { useSoundMuted } from '@/features/feed/sound';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as haptics from '@/lib/haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -15,13 +15,15 @@ import type { MediaCrop } from '@/data/types';
 import { colors } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { onSpaceBar } from '@/features/feed/keyboard';
+import { STAGE_ON_ANDROID } from '@/features/feed/commentStage';
+import { StageChromeContext } from '@/features/feed/useStageMotion';
 
 /**
  * A clip in the feed on a phone: plays itself when it is the page on screen,
  * one tap pauses, two likes, a small disc top-right toggles the sound, and a
  * hairline along the bottom shows how far through it is.
  */
-function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop }: {
+function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop, held = false, onStage = false }: {
   uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void; fit?: 'cover' | 'contain';
   trimStart?: number; trimEnd?: number;
   /** The browser's Feed warming up out of sight (ClipPlayback.web). A phone builds its feed from the start, so it never is. */
@@ -51,6 +53,10 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   onReady?: (ready: boolean) => void;
   /** A zoom and shift inside the frame, chosen in the editor. */
   crop?: MediaCrop;
+  /** On the comments stage: plays on, shrunk above the sheet, although the comments page is on top. */
+  held?: boolean;
+  /** Its page is on the comments stage, held or not (a page opened over the comments holds it still): a pause the viewer chose stays. */
+  onStage?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const styles = useThemedStyles(styleDefinitions);
@@ -70,7 +76,9 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   const [muted, setMuted] = useSoundMuted();
   const lastTap = useRef(0);
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => { if (!active) setPaused(false); }, [active]);
+  // Swiped away or covered, a pause is forgotten; held still under a page
+  // opened over the comments stage, a pause the viewer chose is kept.
+  useEffect(() => { if (!active && !onStage) setPaused(false); }, [active, onStage]);
   // Space bar on a computer: play / pause the clip on screen.
   useEffect(() => { if (!active) return; return onSpaceBar(() => setPaused((p) => !p)); }, [active]);
   useEffect(() => () => { if (pending.current) clearTimeout(pending.current); }, []);
@@ -101,7 +109,16 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
     if (active && !silent && !bare) showDisc();
     return () => { if (discTimer.current) clearTimeout(discTimer.current); };
   }, [active, silent, bare, discPinned]); // eslint-disable-line react-hooks/exhaustive-deps
-  const discStyle = useAnimatedStyle(() => ({ opacity: disc.value, transform: [{ scale: 0.86 + 0.14 * disc.value }] }));
+  // A feed disc also fades with the words as its own page goes onto the
+  // comments stage, a pinned one too (worked out by the page: StagePage).
+  const pageChrome = useContext(StageChromeContext);
+  const discStyle = useAnimatedStyle(() => ({
+    opacity: disc.value * (pageChrome ? pageChrome.value : 1),
+    transform: [{ scale: 0.86 + 0.14 * disc.value }],
+  }));
+  // Android draws the feed's videos on a texture, the one surface that can
+  // shrink and move smoothly onto the comments stage (a slight battery cost).
+  const surfaceType = Platform.OS === 'android' && STAGE_ON_ANDROID && discInk ? 'textureView' as const : undefined;
 
   const tap = () => {
     // One tap plays or pauses, two likes. The pause waits out the double-tap
@@ -124,11 +141,11 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
     <View style={StyleSheet.absoluteFill}>
       {letterbox ? (
         <View style={styles.wideFrame}><View style={cropLayer(crop)}>
-          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent || !active} paused={paused} fit="contain" trimStart={trimStart} trimEnd={trimEnd} speed={(speed ?? 1) * (fast ? 2 : 1)} volume={volume} onProgress={onProgress} onReady={setReady} onGone={gone} />
+          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent || !active} paused={paused} fit="contain" trimStart={trimStart} trimEnd={trimEnd} speed={(speed ?? 1) * (fast ? 2 : 1)} volume={volume} onProgress={onProgress} onReady={setReady} onGone={gone} held={held} surfaceType={surfaceType} />
         </View></View>
       ) : (
         <View style={cropLayer(crop)}>
-          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent || !active} paused={paused} fit={fit} trimStart={trimStart} trimEnd={trimEnd} speed={(speed ?? 1) * (fast ? 2 : 1)} volume={volume} onProgress={onProgress} onReady={setReady} onGone={gone} />
+          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent || !active} paused={paused} fit={fit} trimStart={trimStart} trimEnd={trimEnd} speed={(speed ?? 1) * (fast ? 2 : 1)} volume={volume} onProgress={onProgress} onReady={setReady} onGone={gone} held={held} surfaceType={surfaceType} />
         </View>
       )}
       {/* Over the picture, under the disc: the top shade darkens the video, never the disc. */}

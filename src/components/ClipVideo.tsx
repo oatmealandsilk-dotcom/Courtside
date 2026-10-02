@@ -1,6 +1,6 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
-import { VideoView, createVideoPlayer, type VideoPlayer } from 'expo-video';
+import { VideoView, createVideoPlayer, type SurfaceType, type VideoPlayer } from 'expo-video';
 import { videoSource } from '@/lib/videoSource';
 import { noteClipLoad } from '@/lib/netSpeed';
 import { useIsFocused } from '@/lib/useIsFocused';
@@ -40,7 +40,9 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   onReady?: (ready: boolean) => void;
   onSize?: (width: number, height: number) => void;
   onGone?: () => void;
-}>(function ClipVideo({ uri, active: wanted = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, speed, volume, onProgress, onReady, onSize, onGone }: {
+  held?: boolean;
+  surfaceType?: SurfaceType;
+}>(function ClipVideo({ uri, active: wanted = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, speed, volume, onProgress, onReady, onSize, onGone, held = false, surfaceType }: {
   uri: string; poster?: string; active?: boolean; muted?: boolean; paused?: boolean; fit?: 'cover' | 'contain';
   trimStart?: number; trimEnd?: number;
   /** The author's playback edits, honoured by the player rather than cut into the file: a rate (1 is normal) and a level (0–1). */
@@ -53,12 +55,20 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   onSize?: (width: number, height: number) => void;
   /** Its player was freed (the page left, or the clip changed): whatever it had fetched is gone with it. */
   onGone?: () => void;
+  /**
+   * The clip is on the comments stage: it counts as on top although the
+   * comments page is over it, so it plays on, shrunk above the sheet.
+   */
+  held?: boolean;
+  /** Android only: 'textureView' can be shrunk and moved smoothly (the comments stage); the default can't. */
+  surfaceType?: SurfaceType;
 }, ref) {
   // Plays only on the screen you are looking at: a page pushed over this one
   // (a profile, a thread, the comments) or a tab slid off screen holds it,
   // whatever the page that drew it asked for, and it carries on when you
-  // come back. A clip's own page needs to say nothing for this.
-  const onTop = useIsFocused();
+  // come back. A clip's own page needs to say nothing for this. The one
+  // exception is the comments stage, which keeps its clip playing above it.
+  const onTop = useIsFocused() || held;
   const active = wanted && onTop;
   // The player is made and freed by hand rather than by the toolkit's hook:
   // the hook freed a still-playing player when a page left the feed, and
@@ -310,7 +320,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   }, [player]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <View style={StyleSheet.absoluteFill}>
-      <VideoView player={player} style={StyleSheet.absoluteFill} contentFit={fit} nativeControls={false} allowsPictureInPicture={false} />
+      <VideoView player={player} style={StyleSheet.absoluteFill} contentFit={fit} nativeControls={false} allowsPictureInPicture={false} surfaceType={surfaceType} />
     </View>
   );
 });
