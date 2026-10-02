@@ -787,8 +787,8 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
     <>
       {/* The city's name is the top layer, so a player's ring or a court never
           sits over the words however busy the middle of town gets. Behind the
-          words, only their own soft glow of the page colour, as it was first:
-          the oval backdrop added on Oct 2 came back out the same day (William). */}
+          words, a soft rectangle of the page colour that fades out at its
+          edges like a shadow, so the name reads over roads and pins. */}
       <View pointerEvents="none" style={styles.cityMark}>
         <View style={styles.cityGlow}>
           <Text style={styles.cityName} numberOfLines={1}>{cityName}</Text>
@@ -956,8 +956,9 @@ const styleDefinitions = StyleSheet.create({
   postedPlay: { position: 'absolute', right: 5, bottom: 5, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
   // The still card's overlay: the city named the way a map names it, with a soft halo of the page colour so it reads over roads.
   cityMark: { position: 'absolute', left: spacing.xl, right: spacing.xl, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 10, elevation: 10 },
-  // A soft oval of the page colour behind the words: dense in the middle, feathered at the edge by its own glow.
-  cityGlow: { alignItems: 'center', gap: 2 },
+  // A soft rectangle of the page colour behind the words, its edges fading out like a shadow
+  // rather than ending in a line (Oct 2, William: "more of a rectangle with like a shadow fade").
+  cityGlow: { alignItems: 'center', gap: 2, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 16, backgroundColor: `${colors.bg}A8`, shadowColor: colors.bg, shadowOpacity: 0.9, shadowRadius: 24, shadowOffset: { width: 0, height: 0 } },
   cityName: { ...typography.title, fontSize: 26, letterSpacing: -0.6, color: colors.text, textShadowColor: colors.bg, textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },
   cityCount: { ...typography.smallStrong, color: colors.textMuted, textShadowColor: colors.bg, textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 } },
   cityCountOn: { color: colors.brand },
