@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { show as showToast } from '@/lib/toast';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
@@ -12,7 +12,8 @@ import { takePendingShot } from '@/features/compose/pendingShot';
 import { registerCreateClose } from '@/features/compose/createMenu';
 import { SheetBackdrop } from '@/components/SheetBackdrop';
 import { Button, Field, Screen, Toggle } from '@/components/ui';
-import { LocationLink } from '@/components/LocationChip';
+import { FormRow } from '@/components/FormRow';
+import { CourtGlyph } from '@/components/map/MapChrome';
 import { openPlacePicker } from '@/features/places/picker';
 import { PreparingRing } from '@/components/PreparingRing';
 import { TagPlayers } from '@/components/TagPlayers';
@@ -24,6 +25,7 @@ import type { TaggedCourt } from '@/data/types';
 import { colors, radius, spacing, typography, font } from '@/theme';
 import { challengeFor } from '@/features/challenge/weekly';
 import { goHome } from '@/lib/goBack';
+import { useRevealOnFocus } from '@/lib/keyboardScroll';
 
 type Mode = 'clip' | 'post' | 'story' | 'hit';
 
@@ -120,6 +122,11 @@ export default function Compose() {
   const [body, setBody] = useState(entering ? `#${challenge.tag} ` : '');
   const inChallenge = mode === 'clip' && new RegExp(`#${challenge.tag}\\b`, 'i').test(body);
   const [minutes, setMinutes] = useState('');
+  // The minutes box shows "90 min" at rest and just the number while typing.
+  const [minutesFocused, setMinutesFocused] = useState(false);
+  const minutesInput = useRef<TextInput>(null);
+  const minutesRow = useRef<View>(null);
+  const reveal = useRevealOnFocus();
   // People tagged in the post: chips under the caption, added from a short search.
   const [tagged, setTagged] = useState<string[]>([]);
   // Opened from a court's page ("Post from here"): that court is already the place.
@@ -370,7 +377,7 @@ export default function Compose() {
           onBack={() => (mode === 'hit' ? router.navigate('/hit') : setStage('edit'))}
           right={<Button label={mode === 'story' || mode === 'hit' ? 'Post instant' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit} />}
         >
-          <View style={styles.form}>
+          <View style={mode === 'story' || mode === 'hit' ? styles.form : null}>
             <View style={styles.stage}>
               {mode === 'hit' && media?.uri ? (
                 // The hit is what the camera took, full stop: shown plainly, nothing to click.
@@ -378,7 +385,7 @@ export default function Compose() {
                   <Image source={{ uri: media.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel="Your instant" />
                 </View>
               ) : (
-                <MediaPicker bare orientation={orientation} portraitRatio={portraitRatio} selection={mode === 'clip' ? 'video' : 'all'} value={media} onChange={setMedia} trim={edit} />
+                <MediaPicker bare orientation={orientation} portraitRatio={portraitRatio} selection={mode === 'clip' ? 'video' : 'all'} value={media} onChange={setMedia} trim={edit} onCoverAt={(at) => setEdit((was) => ({ ...was, coverAt: at }))} />
               )}
             </View>
             {mode === 'hit' ? (
@@ -387,40 +394,84 @@ export default function Compose() {
                 <Text style={styles.hitMetaText}>On the feed for a day, then kept in your archive.</Text>
               </View>
             ) : null}
-            <Field
-              label={mode !== 'story' && mode !== 'hit' ? 'Caption' : undefined}
-              labelRight={mode !== 'story' && mode !== 'hit' ? <LocationLink value={location} court={!!court} onPress={() => openPlacePicker((value, picked) => { setLocation(value); setCourt(picked ?? null); }, location)} onClear={() => { setLocation(''); setCourt(null); }} /> : undefined}
-              value={body}
-              onChangeText={setBody}
-              placeholder={mode === 'story' ? 'Add a line (optional)' : mode === 'hit' ? 'How did it go? (optional)' : 'Write a caption…'}
-              multiline
-              minHeight={64}
-              mentions
-            />
-            {inChallenge ? (
-              <View style={styles.inlineRow}>
-                <Ionicons name="trophy-outline" size={18} color={colors.brand} />
-                <Text style={styles.inlineLabel}>Entering this week’s challenge: {challenge.title}</Text>
-              </View>
-            ) : null}
-            {mode !== 'story' && mode !== 'hit' ? <TagPlayers tagged={tagged} onChange={setTagged} /> : null}
-            {mode !== 'story' && mode !== 'hit' ? (
-              <View style={styles.inlineRow}>
-                <Ionicons name="megaphone-outline" size={18} color={colors.textMuted} />
-                <Text style={styles.inlineLabel}>OK to feature on CourtSide's Instagram</Text>
-                <Toggle value={featureOk} onChange={setFeatureOk} accessibilityLabel="OK for CourtSide to feature this on its own channels" />
-              </View>
-            ) : null}
-
-            {mode !== 'story' && mode !== 'hit' ? (
-              <View style={styles.inlineRow}>
-                <Ionicons name="time-outline" size={18} color={colors.textMuted} />
-                <Text style={styles.inlineLabel}>Minutes on court</Text>
-                <View style={{ width: 96 }}>
-                  <Field value={minutes} onChangeText={setMinutes} placeholder="optional" accessibilityLabel="Minutes on court (optional)" keyboardType="number-pad" />
+            {mode === 'story' || mode === 'hit' ? (
+              <Field
+                value={body}
+                onChangeText={setBody}
+                placeholder={mode === 'story' ? 'Add a line (optional)' : 'How did it go? (optional)'}
+                multiline
+                minHeight={64}
+                mentions
+              />
+            ) : (
+              <>
+                {/* The caption, with no label over it: the box says what it is. */}
+                <View style={styles.caption}>
+                  <Field accessibilityLabel="Caption" value={body} onChangeText={setBody} placeholder="Write a caption…" multiline minHeight={88} mentions />
                 </View>
-              </View>
-            ) : null}
+                {inChallenge ? (
+                  <View style={styles.challengeChip} accessible accessibilityLabel={`Entering this week's challenge: ${challenge.title}`}>
+                    <Ionicons name="trophy-outline" size={14} color={colors.brand} />
+                    <Text style={styles.challengeChipText}>Entering {challenge.title}</Text>
+                  </View>
+                ) : null}
+                {/* One list of rows, the Settings rows' size without their card. */}
+                <View style={styles.rows}>
+                  <TagPlayers variant="row" tagged={tagged} onChange={setTagged} />
+                  {location ? (
+                    <FormRow
+                      line
+                      lead={court ? <CourtGlyph size={16} color={colors.brand} /> : <Ionicons name="location" size={20} color={colors.brand} />}
+                      label={location}
+                      accessibilityLabel={`Location: ${location}. Tap to change it`}
+                      onPress={() => openPlacePicker((value, picked) => { setLocation(value); setCourt(picked ?? null); }, location)}
+                      control={
+                        <Pressable accessibilityRole="button" accessibilityLabel="Remove location" hitSlop={12} onPress={() => { setLocation(''); setCourt(null); }}>
+                          <Ionicons name="close-circle" size={18} color={colors.textFaint} />
+                        </Pressable>
+                      }
+                    />
+                  ) : (
+                    <FormRow line icon="location-outline" label="Add location" chevron onPress={() => openPlacePicker((value, picked) => { setLocation(value); setCourt(picked ?? null); }, location)} />
+                  )}
+                  <FormRow
+                    ref={minutesRow}
+                    line
+                    icon="time-outline"
+                    label="Minutes on court"
+                    // The box itself is what a screen reader lands on; the row is its label.
+                    accessible={false}
+                    accessibilityRole="none"
+                    onPress={() => minutesInput.current?.focus()}
+                    control={
+                      <TextInput
+                        ref={minutesInput}
+                        value={minutesFocused || !minutes ? minutes : `${minutes} min`}
+                        onChangeText={(text) => setMinutes(text.replace(/\D/g, '').slice(0, 3))}
+                        placeholder="Add"
+                        placeholderTextColor={colors.textFaint}
+                        keyboardType="number-pad"
+                        accessibilityLabel="Minutes on court"
+                        onFocus={() => { setMinutesFocused(true); reveal(minutesRow.current); }}
+                        onBlur={() => setMinutesFocused(false)}
+                        style={styles.minutesInput}
+                      />
+                    }
+                  />
+                  <FormRow
+                    line
+                    icon="megaphone-outline"
+                    label="Feature on CourtSide's Instagram"
+                    accessibilityRole="switch"
+                    accessibilityState={{ checked: featureOk }}
+                    accessibilityLabel="Feature on CourtSide's Instagram"
+                    onPress={() => setFeatureOk((on) => !on)}
+                    // The row is the switch: the toggle only shows its state, so one tap flips it once.
+                    accessory={<View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><Toggle value={featureOk} onChange={setFeatureOk} /></View>}
+                  />
+                </View>
+              </>
+            )}
           </View>
         </Screen>
       </View>
@@ -452,8 +503,13 @@ const styleDefinitions = StyleSheet.create({
   // Bleed past the screen's own padding so the media runs edge to edge.
   // A little room under the header, so the preview's rounded top corners show.
   stage: { marginTop: spacing.xs },
-  inlineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  inlineLabel: { ...typography.small, color: colors.textMuted, flex: 1 },
+  // A clip or post: the caption 24 under the preview, the challenge chip 8
+  // under that, and the rows 16 under whichever is last.
+  caption: { marginTop: spacing.xl },
+  challengeChip: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, marginTop: spacing.sm, paddingVertical: 5, paddingHorizontal: 10, borderRadius: radius.pill, backgroundColor: colors.brandDim },
+  challengeChipText: { ...typography.smallStrong, color: colors.brand },
+  rows: { marginTop: spacing.lg },
+  minutesInput: { ...typography.body, color: colors.text, textAlign: 'right', width: 88, alignSelf: 'stretch', paddingVertical: 0, paddingHorizontal: 0, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
   note: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
   pickError: { ...typography.small, color: colors.danger, lineHeight: 18 },
   hitFrame: { width: '100%', aspectRatio: 4 / 3, maxHeight: 520, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000', alignSelf: 'center' },

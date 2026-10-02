@@ -9,12 +9,14 @@ import { colors, radius, spacing, typography } from '@/theme';
 /**
  * The list that drops under a text box while an @handle is being typed.
  * Tapping a row hands the handle back; the box does the inserting.
+ * `maxHeight` makes it shorter (it scrolls for the rest), for a box that
+ * has little room between the top of the screen and the keyboard.
  */
-export function MentionSuggestions({ candidates, onPick }: { candidates: MentionCandidate[]; onPick: (handle: string) => void }) {
+export function MentionSuggestions({ candidates, onPick, maxHeight }: { candidates: MentionCandidate[]; onPick: (handle: string) => void; maxHeight?: number }) {
   const styles = useThemedStyles(styleDefinitions);
   if (!candidates.length) return null;
   return (
-    <ScrollView style={styles.list} keyboardShouldPersistTaps="always" nestedScrollEnabled>
+    <ScrollView style={[styles.list, maxHeight ? { maxHeight } : null]} keyboardShouldPersistTaps="always" nestedScrollEnabled>
       {candidates.map(({ user, reason }, i) => (
         <Pressable
           key={user.id}

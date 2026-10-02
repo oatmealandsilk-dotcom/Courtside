@@ -11,9 +11,8 @@ import { TOP_SHADE } from './ReelCaption';
 import { cropCss } from '@/lib/crop';
 import type { MediaCrop } from '@/data/types';
 import { useIsFocused } from '@/lib/useIsFocused';
+import { forgetLeft, noteLeft, takeLeft } from '@/features/feed/clipResume';
 
-/** Swipe away and back within this long and the clip picks up where it was; longer and it starts over. */
-const RESUME_WINDOW_MS = 3000;
 /** The feed's top shade (see TOP_SHADE) as a browser gradient. */
 const TOP_SHADE_CSS = `linear-gradient(${TOP_SHADE.colors.map((c, i) => `${c} ${TOP_SHADE.locations[i] * 100}%`).join(', ')})`;
 
@@ -55,7 +54,13 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, onDou
   const bar = useRef<HTMLDivElement>(null);
   const lastTap = useRef(0);
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const left = useRef<{ time: number; at: number } | null>(null);
+  // Whether the clip has been started since it came on screen, and whether
+  // its next play carries on from exactly where it stands (the viewer paused
+  // it, or a page was pushed over it) rather than following the swipe rule.
+  const started = useRef(false);
+  const fromHere = useRef(false);
+  // Whether it is the clip playing on screen right now, for a refusal that arrives after it has gone.
+  const onScreen = useRef(false);
   const [paused, setPaused] = useState(false);
   // Hold the right side of a clip and it plays at double speed until you let
   // go, the way Instagram's Reels do. A drag (the feed scrolling) cancels it.
@@ -89,29 +94,64 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, onDou
     return () => { if (discTimer.current) clearTimeout(discTimer.current); };
   }, [active, silent, bare, discPinned]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Where the clip was when the page left, and when: a quick return resumes,
-  // a slow one starts the clip over.
+  // Swiped away and back within a few seconds, it picks up where it was (even
+  // if its page was rebuilt meanwhile); later, it starts over (clipResume).
+  // A tap to pause, or a page on top, is not a swipe: it carries on from right there.
   useEffect(() => {
     const el = video.current;
     if (!el) return;
+    onScreen.current = active && !paused;
+    let place: (() => void) | null = null;
     if (active && !paused) {
-      const back = left.current;
-      left.current = null;
-      if (!back || Date.now() - back.at > RESUME_WINDOW_MS) el.currentTime = trimStart;
-      else el.currentTime = back.time;
+      if (fromHere.current) { fromHere.current = false; forgetLeft(uri); }
+      else {
+        const at = takeLeft(uri) ?? trimStart;
+        el.currentTime = at;
+        // A video rebuilt a moment ago may not know its own length yet. Browsers
+        // are meant to keep the spot and start there once it does; one that
+        // drops it is given it again then, before anything has played.
+        if (el.readyState < 1) {
+          const settle = () => { if (Math.abs(el.currentTime - at) > 0.05) el.currentTime = at; };
+          place = settle;
+          el.addEventListener('loadedmetadata', settle, { once: true });
+        }
+      }
+      started.current = true;
       // The page is away (another tab, or on a phone the app switcher and the
       // like): it waits there and starts once the page is back.
       if (pageAway()) holdUntilBack(el);
       // Browsers refuse a video that starts with sound until the page has been tapped: fall back to silent, and the disc says so.
-      else el.play().catch(() => { el.muted = true; setMuted(true); el.play().catch(() => setPaused(true)); });
+      // Only that refusal: a play cut short by a pause (a swipe that crosses the middle and comes straight back) is not
+      // a reason to silence every clip, nor to start this one again off screen.
+      else el.play().catch((e: unknown) => {
+        if ((e as { name?: string } | null)?.name !== 'NotAllowedError' || !onScreen.current) return;
+        el.muted = true; setMuted(true); el.play().catch(() => setPaused(true));
+      });
+    } else if (active || !onTop) {
+      // Paused by the viewer, or covered (a page pushed over the feed, another tab): held right here.
+      if (started.current) fromHere.current = true;
+      started.current = false;
+      // Stopped by the app or the viewer: the page coming back to the front does not start it again.
+      forgetHeld(el);
+      el.pause();
     } else {
-      if (!active) left.current = { time: el.currentTime, at: Date.now() };
-      // Stopped by the app (no longer on screen, or covered): coming back to the page does not start it again.
+      // Swiped away (or uncovered on a feed that has moved on): only a clip that had played has a spot to come back to.
+      if (started.current || fromHere.current) noteLeft(uri, el.currentTime);
+      started.current = false;
+      fromHere.current = false;
       forgetHeld(el);
       el.pause();
     }
-    return () => el.pause();
-  }, [active, paused, trimStart]);
+    return () => { if (place) el.removeEventListener('loadedmetadata', place); el.pause(); };
+  }, [active, paused, trimStart, onTop]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Taken off the page while it was the clip on screen (the feed rebuilt its
+  // pages): its spot is kept, so the page built in its place carries on from there.
+  const latestUri = useRef(uri);
+  latestUri.current = uri;
+  useEffect(() => {
+    const el = video.current;
+    return () => { if (el && (started.current || fromHere.current)) noteLeft(latestUri.current, el.currentTime); };
+  }, []);
   // The author's speed and level, on the element; pitch is kept so voices stay voices.
   useEffect(() => {
     const el = video.current;

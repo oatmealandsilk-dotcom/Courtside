@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -10,8 +10,7 @@ import { ClipVideo } from './ClipVideo';
 import { ZoomableMedia } from './ZoomableMedia';
 import { cropCss } from '@/lib/crop';
 import { framesAt } from '@/features/compose/frames';
-import { CoverScrubber } from './CoverScrubber';
-import { VideoSurface, type VideoSurfaceHandle } from './VideoSurface';
+import { CoverPage } from './CoverPage';
 
 export type { PickedMedia, MediaPickerProps } from './MediaPicker';
 
@@ -165,7 +164,7 @@ export function pickFromDevice(selection: 'video' | 'photo' | 'all'): Promise<Pi
   });
 }
 
-export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false, orientation = 'portrait', portraitRatio = 9 / 16, trim, noCover = false }: MediaPickerProps) {
+export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false, orientation = 'portrait', portraitRatio = 9 / 16, trim, noCover = false, onCoverAt }: MediaPickerProps) {
   const styles = useThemedStyles(styleDefinitions);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
@@ -173,13 +172,19 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
   const coverUrl = useRef<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [frames, setFrames] = useState<CoverFrame[]>([]);
-  // The cover chooser under the preview, opened by its Edit cover button: a
-  // strip to drag along. While it is open the preview holds still on the
-  // moment under the bar.
+  // The Cover page, opened from the Edit cover pill on the preview. It keeps
+  // the moment the cover came from, and whether the cover is a photo of
+  // your own rather than a frame; ✕ there puts all of it back as it was.
   const [coverOpen, setCoverOpen] = useState(false);
   const [coverAt, setCoverAt] = useState<number | null>(null);
-  const [clipLength, setClipLength] = useState(0);
-  const still = useRef<VideoSurfaceHandle>(null);
+  const [uploaded, setUploaded] = useState(false);
+  const remembered = useRef<{ thumb?: string; at: number | null; uploaded: boolean } | null>(null);
+  // Each frame cut (or photo chosen) takes a number; a cut that comes back
+  // after a later choice, or after ✕, is dropped rather than landing late.
+  const captureSeq = useRef(0);
+  // The frame being cut right now, if any. Done waits for it (a moment at
+  // most), so a Share tapped straight after carries the frame you chose.
+  const capture = useRef<Promise<void> | null>(null);
   const [expanded, setExpanded] = useState(false);
 
   // Release the blob URL when the picker unmounts or the choice changes.
@@ -247,29 +252,64 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
   );
 
   // The kept part of the clip, for the cover strip. Without a trim end, the
-  // clip's own length is read once.
+  // Cover page reads the clip's own length.
   const keepFrom = Math.max(0, trim?.trimStart ?? 0);
-  useEffect(() => {
-    if (!value || value.kind !== 'video' || !value.uri || noCover) return;
-    let cancelled = false;
-    probeDuration(value.uri).then((seconds) => { if (!cancelled && seconds) setClipLength(seconds); });
-    return () => { cancelled = true; };
-  }, [value?.uri, value?.kind, noCover]); // eslint-disable-line react-hooks/exhaustive-deps
-  const keepTo = trim?.trimEnd && trim.trimEnd > keepFrom ? trim.trimEnd : clipLength;
-  const scrubCover = (seconds: number) => { setCoverAt(seconds); still.current?.seek(seconds); };
+  const keepTo = trim?.trimEnd && trim.trimEnd > keepFrom ? trim.trimEnd : undefined;
+  // The cover page opens where the cover came from: its last choice here,
+  // else the moment picked in the editor's Cover tool, else the clip's start.
+  const coverStart = Math.max(keepFrom, coverAt ?? trim?.coverAt ?? keepFrom);
+  const openCover = () => {
+    remembered.current = { thumb: value?.thumbnailUrl, at: coverAt, uploaded };
+    setCoverOpen(true);
+  };
   const settleCover = (seconds: number) => {
     if (!value?.uri) return;
+    setCoverAt(seconds);
+    setUploaded(false);
     const picked = value;
-    framesAt(picked.uri!, [seconds], 1080).then((got) => { if (got[0]) onChange({ ...picked, thumbnailUrl: got[0].uri }); });
+    const mine = ++captureSeq.current;
+    const job: Promise<void> = framesAt(picked.uri!, [seconds], 1080)
+      .then((got) => { if (got[0] && mine === captureSeq.current) onChange({ ...picked, thumbnailUrl: got[0].uri }); })
+      .catch(() => undefined)
+      .finally(() => { if (capture.current === job) capture.current = null; });
+    capture.current = job;
+  };
+  const cancelCover = () => {
+    if (!coverOpen) return;
+    captureSeq.current += 1;
+    const was = remembered.current;
+    if (was && value && value.thumbnailUrl !== was.thumb) onChange({ ...value, thumbnailUrl: was.thumb });
+    if (was) { setCoverAt(was.at); setUploaded(was.uploaded); }
+    setCoverOpen(false);
+  };
+  const doneCover = () => {
+    const seq = captureSeq.current;
+    let finished = false;
+    const finish = () => {
+      // ✕, or a newer choice, since Done was tapped: that one decides instead.
+      if (finished || seq !== captureSeq.current) return;
+      finished = true;
+      setCoverOpen(false);
+      const at = uploaded ? undefined : coverAt ?? trim?.coverAt;
+      if (at !== trim?.coverAt) onCoverAt?.(at);
+    };
+    const pending = capture.current;
+    if (!pending) { finish(); return; }
+    // The chosen frame is still being cut: close once it lands, or after a
+    // second and a half regardless, so Done never feels stuck.
+    void pending.finally(finish);
+    setTimeout(finish, 1500);
   };
 
   const onCoverFile = useCallback(
     (files: FileList | null) => {
       const file = files?.[0];
       if (!file || !file.type.startsWith('image/') || !value) return;
-      if (coverUrl.current) URL.revokeObjectURL(coverUrl.current);
+      // Earlier photos are kept, not freed: ✕ on the Cover page can put one back.
       const url = URL.createObjectURL(file);
       coverUrl.current = url;
+      captureSeq.current += 1;
+      setUploaded(true);
       onChange({ ...value, thumbnailUrl: url });
     },
     [onChange, value],
@@ -306,25 +346,24 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
       <View style={bare ? styles.bare : styles.preview}>
         {hiddenInput}
         {bare ? (
-          // The media is the whole box: the cover frame edge to edge with a
-          // play badge, the way it will sit in the feed. Tap to watch it.
+          // The media is the whole box: the clip playing edge to edge, the
+          // way it will sit in the feed, with the Edit cover pill. Tap to watch it.
           <div
             // The box keeps the post's own shape even when the screen is short:
             // it gets narrower instead of cutting off the top and bottom, so the
-            // whole picture shows, exactly as it will in the feed.
-            style={{ position: 'relative', width: orientation === 'landscape' ? 'min(100%, calc(62vh * 16 / 9))' : `min(100%, calc(62vh * ${portraitRatio}))`, aspectRatio: orientation === 'landscape' ? '16 / 9' : String(portraitRatio), margin: '0 auto', borderRadius: 16, overflow: 'hidden', background: '#000', cursor: 'zoom-in' }}
-            onClick={() => { if (!coverOpen) setExpanded(true); }}
+            // whole picture shows, exactly as it will in the feed. About half
+            // the screen tall at most, so the caption shows under it.
+            style={{ position: 'relative', width: orientation === 'landscape' ? 'min(100%, calc(55vh * 16 / 9))' : `min(100%, calc(55vh * ${portraitRatio}))`, aspectRatio: orientation === 'landscape' ? '16 / 9' : String(portraitRatio), margin: '0 auto', borderRadius: 16, overflow: 'hidden', background: '#000', cursor: 'zoom-in' }}
+            onClick={() => setExpanded(true)}
             role="button"
             tabIndex={0}
             aria-label="Open a larger preview"
-            onKeyDown={(event) => { if (!coverOpen && (event.key === 'Enter' || event.key === ' ')) setExpanded(true); }}
+            onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setExpanded(true); }}
           >
-            {value.kind === 'video' && value.uri && coverOpen ? (
-              // Choosing a cover: the picture holds on the moment under the bar.
-              <div style={cropCss(trim?.crop)}><VideoSurface ref={still} uri={value.uri} muted paused fit={orientation === 'landscape' ? 'contain' : 'cover'} from={keepFrom} onDuration={() => still.current?.seek(coverAt ?? keepFrom)} /></div>
-            ) : value.kind === 'video' && value.uri ? (
+            {value.kind === 'video' && value.uri ? (
               // Plays the way it will in the feed: looped, muted, edge to edge.
-              <div style={cropCss(trim?.crop)}><ClipVideo uri={value.uri} poster={value.thumbnailUrl} active muted fit={orientation === 'landscape' ? 'contain' : 'cover'} trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} speed={trim?.speed} volume={trim?.volume} /></div>
+              // Holds still while the Cover page is up over it.
+              <div style={cropCss(trim?.crop)}><ClipVideo uri={value.uri} poster={value.thumbnailUrl} active={!coverOpen} muted fit={orientation === 'landscape' ? 'contain' : 'cover'} trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} speed={trim?.speed} volume={trim?.volume} /></div>
             ) : value.uri ? (
               <img src={value.uri} alt={describe(value)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
             ) : null}
@@ -332,27 +371,28 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
             {value.kind === 'video' && !noCover ? (
               <button
                 type="button"
-                aria-label={coverOpen ? 'Done choosing a cover' : 'Edit cover'}
-                aria-expanded={coverOpen}
-                onClick={(event) => { event.stopPropagation(); setCoverOpen((o) => !o); }}
+                aria-label="Edit cover"
+                onClick={(event) => { event.stopPropagation(); openCover(); }}
                 onKeyDown={(event) => event.stopPropagation()}
-                // Frosted glass over the video, like the editor's Sound button;
-                // CourtSide blue while the cover strip is open. The words are an
-                // app Text, so they wear the app's font, not the browser's serif.
+                // A small frosted-glass pill, centred low on the picture,
+                // carrying the cover itself. It opens the Cover page and never
+                // changes on the picture. The words are an app Text, so they
+                // wear the app's font, not the browser's serif.
                 style={{
-                  position: 'absolute', right: 12, bottom: 12, display: 'flex', alignItems: 'center', gap: 6,
-                  padding: coverOpen || !value.thumbnailUrl ? '8px 14px 8px 11px' : '5px 14px 5px 6px', borderRadius: 999, cursor: 'pointer', margin: 0,
-                  border: coverOpen ? '1px solid transparent' : '1px solid rgba(255,255,255,0.28)',
-                  background: coverOpen ? colors.brand : 'rgba(10,14,20,0.52)',
+                  position: 'absolute', left: '50%', bottom: 12, transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 7,
+                  minHeight: 36, width: 'max-content', boxSizing: 'border-box', whiteSpace: 'nowrap',
+                  padding: value.thumbnailUrl ? '4px 13px 4px 5px' : '8px 13px 8px 11px', borderRadius: 999, cursor: 'pointer', margin: 0,
+                  border: '1px solid rgba(255,255,255,0.28)',
+                  background: 'rgba(10,14,20,0.52)',
                   backdropFilter: 'blur(12px) saturate(140%)', WebkitBackdropFilter: 'blur(12px) saturate(140%)',
-                  boxShadow: '0 4px 14px rgba(0,0,0,0.28)', transition: 'background 160ms ease, border-color 160ms ease',
+                  boxShadow: '0 4px 14px rgba(0,0,0,0.28)',
                 }}
               >
                 {/* The cover itself, small, so you can see which frame people will see first. */}
-                {coverOpen || !value.thumbnailUrl
-                  ? <Ionicons name={coverOpen ? 'checkmark' : 'image-outline'} size={15} color={coverOpen ? colors.brandInk : 'white'} />
-                  : <img src={value.thumbnailUrl} alt="" style={{ width: 22, height: 28, borderRadius: 5, objectFit: 'cover', border: '1.5px solid rgba(255,255,255,0.9)', display: 'block' }} />}
-                <Text style={[styles.coverPillText, coverOpen && { color: colors.brandInk }]}>{coverOpen ? 'Done' : 'Edit cover'}</Text>
+                {value.thumbnailUrl
+                  ? <img src={value.thumbnailUrl} alt="" style={{ width: 20, height: 26, borderRadius: 4, objectFit: 'cover', border: '1.5px solid rgba(255,255,255,0.9)', display: 'block', boxSizing: 'border-box' }} />
+                  : <Ionicons name="image-outline" size={15} color="white" />}
+                <Text numberOfLines={1} style={styles.coverPillText}>Edit cover</Text>
               </button>
             ) : null}
           </div>
@@ -456,19 +496,26 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
           </Modal>
         ) : null}
 
-        {value.kind === 'video' && !noCover && bare && coverOpen && value.uri ? (
-          <View style={[styles.coverBlock, { borderTopWidth: 0, paddingTop: 0 }]}>
+        {value.kind === 'video' && !noCover && bare && value.uri ? (
+          <>
             {hiddenCoverInput}
-            <View style={styles.coverHead}>
-              <Text style={styles.coverTitle}>Cover</Text>
-              <Pressable onPress={() => coverInputRef.current?.click()} accessibilityRole="button" accessibilityLabel="Upload your own cover image" hitSlop={8} style={styles.coverUploadButton}>
-                <Ionicons name="image-outline" size={15} color={colors.brand} />
-                <Text style={styles.coverUploadButtonText}>Upload</Text>
-              </Pressable>
-            </View>
-            <Text style={styles.coverHint}>Drag along the strip to choose the frame people see before it plays.</Text>
-            <CoverScrubber uri={value.uri} from={keepFrom} to={keepTo} at={coverAt ?? keepFrom} onScrub={scrubCover} onSettle={settleCover} />
-          </View>
+            <CoverPage
+              visible={coverOpen}
+              uri={value.uri}
+              from={keepFrom}
+              to={keepTo}
+              start={coverStart}
+              photo={uploaded ? value.thumbnailUrl : undefined}
+              ratio={orientation === 'landscape' ? 16 / 9 : portraitRatio}
+              fit={orientation === 'landscape' ? 'contain' : 'cover'}
+              crop={trim?.crop}
+              onSettle={settleCover}
+              // Straight from the tap: a browser opens its file box only then.
+              onUpload={() => coverInputRef.current?.click()}
+              onDone={doneCover}
+              onCancel={cancelCover}
+            />
+          </>
         ) : null}
 
         {value.kind === 'video' && !noCover && !bare ? (
@@ -562,10 +609,7 @@ const styleDefinitions = StyleSheet.create({
     paddingTop: spacing.md,
   },
   coverTitle: { ...typography.smallStrong, color: colors.text },
-  coverPillText: { ...typography.caption, fontWeight: '600', color: 'white', letterSpacing: 0.1 },
-  coverHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  coverUploadButton: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, borderWidth: 1, borderColor: colors.brand },
-  coverUploadButtonText: { ...typography.smallStrong, color: colors.brand },
+  coverPillText: { ...typography.smallStrong, color: 'white' },
   coverHint: { ...typography.small, color: colors.textFaint },
   coverRow: { gap: spacing.sm, paddingTop: spacing.sm, paddingRight: spacing.sm },
   coverTile: {
