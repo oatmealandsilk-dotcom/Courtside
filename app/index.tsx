@@ -57,7 +57,10 @@ export default function Index() {
   const [launchCover, setLaunchCover] = useState(Platform.OS !== 'web');
   useEffect(() => {
     if (!launchCover) return;
-    Animated.timing(cover, { toValue: 0, duration: 380, delay: 60, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(() => setLaunchCover(false));
+    // A beat on the cream first, then a slow, even fade: it reads as the app
+    // settling into your colours rather than a cut (Oct 2, William: "wait a
+    // bit before fading, don't have to do it super fast").
+    Animated.timing(cover, { toValue: 0, duration: 700, delay: 350, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }).start(() => setLaunchCover(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Opened on top of the app that is already running: something went to '/'
@@ -104,7 +107,9 @@ export default function Index() {
   useEffect(() => { if (currentUserId) preloadNearbyMap(); }, [currentUserId]);
 
   useEffect(() => {
-    if (!settled || !held || gone || launchUpdate.holding) return;
+    // On a phone the loading screen stays until the cream has finished fading,
+    // so the fade is never cut short by the app opening over it.
+    if (!settled || !held || gone || launchUpdate.holding || launchCover) return;
     // Into the app: no fade here. The page it opens on is built behind the
     // shell's curtain — the same mark and name — and that curtain does the
     // one fade, once the page has drawn (see warmup). Fading here too showed
@@ -114,7 +119,7 @@ export default function Index() {
     Animated.timing(opacity, { toValue: 0, duration: FADE_MS, useNativeDriver: true }).start(({ finished }) => {
       if (finished) setGone(true);
     });
-  }, [settled, held, gone, opacity, currentUserId, onboardingComplete, overTabs, launchUpdate.holding]);
+  }, [settled, held, gone, opacity, currentUserId, onboardingComplete, overTabs, launchUpdate.holding, launchCover]);
 
   // On its way back to the app underneath: a plain page for the moment it takes, no logo.
   if (backToApp) return <View style={styles.splash} />;
