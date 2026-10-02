@@ -885,11 +885,15 @@ const styleDefinitions = StyleSheet.create({
   postedPressed: { opacity: 0.85 },
   postedPlay: { position: 'absolute', right: 5, bottom: 5, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
   // The still card's overlay: the city named the way a map names it, with a soft halo of the page colour so it reads over roads.
-  cityMark: { position: 'absolute', left: spacing.xl, right: spacing.xl, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', gap: 2 },
-  cityName: { ...typography.title, fontSize: 26, letterSpacing: -0.6, color: colors.text, textShadowColor: colors.bg, textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },
-  cityCount: { ...typography.smallStrong, color: colors.textMuted, textShadowColor: colors.bg, textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 } },
+  // The city and its counts sit in a small card in the top-left corner, clear
+  // of the middle: that is where a city's players and hits gather, and the
+  // name used to sit right on top of them and became unreadable (Oct 2). The
+  // right edge stops short of the location button in the other corner.
+  cityMark: { position: 'absolute', left: 12, top: 12, maxWidth: '72%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.lg, backgroundColor: `${colors.surface}EB`, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, gap: 1 },
+  cityName: { ...typography.bodyStrong, fontSize: 17, letterSpacing: -0.3, color: colors.text },
+  cityCount: { ...typography.smallStrong, color: colors.textMuted },
   cityCountOn: { color: colors.brand },
-  cityHits: { ...typography.caption, letterSpacing: 0, color: colors.textMuted, textShadowColor: colors.bg, textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 } },
+  cityHits: { ...typography.caption, letterSpacing: 0, color: colors.textMuted },
   // The map search's courts, under the bar: the bar's own glass, one row per place.
   resultsWrap: { paddingHorizontal: spacing.md },
   results: { paddingHorizontal: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
