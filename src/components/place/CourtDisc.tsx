@@ -1,9 +1,9 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Image as ExpoImage } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandWash } from '@/components/ui';
+import { TileCover } from '@/components/TileCover';
 import type { Post } from '@/data/types';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, radius } from '@/theme';
@@ -28,7 +28,7 @@ export function CourtDisc({ cover, label, onPress }: { cover: Post | null; label
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} hitSlop={6} style={({ pressed }) => [styles.ring, pressed && styles.pressed]}>
       <View style={styles.inner}>
-        <ExpoImage accessibilityIgnoresInvertColors source={{ uri: picture }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" recyclingKey={cover.id} />
+        <TileCover accessibilityIgnoresInvertColors uri={picture} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" recyclingKey={cover.id} />
       </View>
       <View style={styles.badge}>
         <BrandWash />

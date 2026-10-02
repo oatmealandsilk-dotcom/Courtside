@@ -1,12 +1,12 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { goBack, goHome } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { QuestionCard } from '@/components/QuestionCard';
+import { TileCover } from '@/components/TileCover';
 import Reanimated from 'react-native-reanimated';
 
 import { EmptyState, Screen } from '@/components/ui';
@@ -71,7 +71,7 @@ export default function Saved() {
                   <View style={[StyleSheet.absoluteFill, styles.tileBlank]}>
                     <Text numberOfLines={6} style={styles.tileText}>{post.body}</Text>
                   </View>
-                  {picture ? <Image accessibilityIgnoresInvertColors source={{ uri: picture }} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={post.id} transition={120} /> : null}
+                  {picture ? <TileCover accessibilityIgnoresInvertColors uri={picture} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={post.id} transition={120} /> : null}
                   {video ? <Ionicons name="play" size={15} color="#FFFFFF" style={styles.tileMark} /> : null}
                 </Pressable>
               );

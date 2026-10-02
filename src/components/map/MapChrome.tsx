@@ -8,6 +8,7 @@ import Animated, { Easing, FadeIn, runOnJS, useAnimatedStyle, useSharedValue, wi
 import { Avatar, BrandWash } from '@/components/ui';
 import { Glass } from '@/components/ui/Glass';
 import { FollowPill } from '@/components/FollowPill';
+import { TileCover } from '@/components/TileCover';
 import { LevelPill } from '@/components/LevelPill';
 import { Tappable } from '@/components/Tappable';
 import * as haptics from '@/lib/haptics';
@@ -649,7 +650,7 @@ export function CourtSheet({ court, miles, onClose }: { court: Court; miles: num
           {strip.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.postedRow}>
             {strip.map((p) => (
               <Pressable key={p.id} accessibilityRole="button" accessibilityLabel={p.kind === 'clip' ? 'A clip from this court' : 'A post from this court'} onPress={() => openCourtReel(place, p.id)} style={({ pressed }) => [styles.postedThumb, pressed && styles.postedPressed]}>
-                <ExpoImage source={{ uri: p.thumbnailUrl ?? p.imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
+                <TileCover uri={p.thumbnailUrl ?? p.imageUrl} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
                 {p.kind === 'clip' || p.videoUrl ? <View style={styles.postedPlay}><Ionicons name="play" size={11} color="#fff" /></View> : null}
               </Pressable>
             ))}

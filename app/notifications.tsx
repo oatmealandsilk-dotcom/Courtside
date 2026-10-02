@@ -7,10 +7,10 @@ import { requestSection } from '@/features/navigation/swipeOrder';
 import { goToTab } from '@/features/navigation/startTab';
 import { goBack, goHome } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Image as ExpoImage } from 'expo-image';
 
 import { Avatar, EmptyState, Screen } from '@/components/ui';
 import { FollowPill } from '@/components/FollowPill';
+import { TileCover } from '@/components/TileCover';
 import { BrandMark } from '@/components/BrandMark';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { relativeTime } from '@/lib/format';
@@ -350,7 +350,7 @@ export default function Notifications() {
                   <FollowPill small following={followingIds.includes(first)} userId={first} onPress={() => { const who = users.find((u) => u.id === first); if (who && followingIds.includes(first)) confirmUnfollow(who, () => actions.toggleFollow(first)); else actions.toggleFollow(first); }} name={nameOf(first).split(' ')[0]} />
                 ) : thumb ? (
                   <View style={[styles.thumb, !thumb.uri && !thumb.words && { backgroundColor: surfaceColorFor(thumb.seed) }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-                    {thumb.uri ? <ExpoImage source={{ uri: thumb.uri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={120} />
+                    {thumb.uri ? <TileCover uri={thumb.uri} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={120} />
                       // A post that is only words: a speech mark where a picture would be.
                       : thumb.words ? <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.textMuted} />
                       // A photo or clip with no picture yet: the tinted court tile the app uses everywhere for that.

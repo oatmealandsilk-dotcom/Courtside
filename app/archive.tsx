@@ -2,13 +2,13 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type ViewStyle } from 'react-native';
 import Reanimated, { runOnJS, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
-import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { SectionPager } from '@/components/SectionPager';
+import { TileCover } from '@/components/TileCover';
 import { EmptyState, Screen } from '@/components/ui';
 import { barCompact } from '@/features/navigation/barShrink';
 import { useBarInset } from '@/features/navigation/barInset';
@@ -84,7 +84,7 @@ export default function Archive() {
               style={({ pressed }) => [styles.storyTile, { width: tileW, height: tileH }, pressed && styles.pressed]}
             >
               {story.thumbnailUrl || story.imageUrl ? (
-                <ExpoImage accessibilityIgnoresInvertColors source={{ uri: story.thumbnailUrl ?? story.imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
+                <TileCover accessibilityIgnoresInvertColors uri={story.thumbnailUrl ?? story.imageUrl} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
               ) : (
                 <View style={StyleSheet.absoluteFill}>
                   <MediaPlaceholder label={story.mediaLabel ?? 'Instant'} seed={story.id} portrait fill />
@@ -118,7 +118,7 @@ export default function Archive() {
               >
                 <View style={styles.postThumb}>
                   {post.thumbnailUrl ? (
-                    <ExpoImage accessibilityIgnoresInvertColors source={{ uri: post.thumbnailUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
+                    <TileCover accessibilityIgnoresInvertColors uri={post.thumbnailUrl} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
                   ) : (
                     <Ionicons name={post.kind === 'clip' ? 'play' : 'document-text-outline'} size={18} color={colors.textMuted} />
                   )}

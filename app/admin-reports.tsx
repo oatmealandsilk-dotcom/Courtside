@@ -1,10 +1,11 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { goBack } from '@/lib/goBack';
 
+import { TileCover } from '@/components/TileCover';
 import { Avatar, Button, EmptyState, Screen, SegmentedControl } from '@/components/ui';
 import type { AdminReport, ReportedChat } from '@/data/remote';
 import { GroupAvatar, groupName } from '@/features/messages/groups';
@@ -142,7 +143,7 @@ export default function AdminReports() {
                   </>
                 ) : (
                   <>
-                    {item.picture ? <Image source={{ uri: item.picture }} style={styles.thumb} accessibilityIgnoresInvertColors /> : <View style={[styles.thumb, styles.noThumb]}><Ionicons name="document-text-outline" size={18} color={colors.textMuted} /></View>}
+                    {item.picture ? <TileCover uri={item.picture} style={styles.thumb} accessibilityIgnoresInvertColors /> : <View style={[styles.thumb, styles.noThumb]}><Ionicons name="document-text-outline" size={18} color={colors.textMuted} /></View>}
                     <View style={{ flex: 1, gap: 2 }}>
                       <Text style={styles.body} numberOfLines={2}>{item.body || 'No caption'}</Text>
                       <Text style={styles.muted} numberOfLines={1}>{person ? `by @${person.handle}` : ''}{item.removed ? ' · Removed' : ''}</Text>
