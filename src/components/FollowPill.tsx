@@ -62,9 +62,11 @@ export function FollowPill({ following, onPress, small = false, name, userId, wi
 }
 
 const styles = StyleSheet.create({
-  pill: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1 },
-  small: { paddingVertical: 7, paddingHorizontal: 12 },
-  wide: { alignSelf: 'stretch' },
+  // One width whatever it says, like Instagram: Follow, Following and Requested never change
+  // the pill's size, so nothing beside it shifts when you tap (Oct 2). Sized for "✓ Following".
+  pill: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, width: 116, paddingVertical: 9, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1 },
+  small: { width: 104, paddingVertical: 7, paddingHorizontal: 8 },
+  wide: { alignSelf: 'stretch', width: 'auto' },
   text: { ...typography.smallStrong, fontSize: 14 },
   textSmall: { fontSize: 13 },
 });
