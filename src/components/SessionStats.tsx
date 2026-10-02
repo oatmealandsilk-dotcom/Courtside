@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import type { SessionDetail } from '@/data/types';
-import { sourceLabel, statsLine } from '@/features/activity/format';
+import { KIND_LABEL, hasSessionStats, sourceLabel, statsLine } from '@/features/activity/format';
 import { duration } from '@/lib/format';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -12,25 +12,28 @@ import { colors, radius, spacing, typography } from '@/theme';
 const MAX_GROW = 1.3;
 
 /**
- * A tracker session's numbers on a post: time on court, and heart rate
- * when its author chose to show it, with where the numbers came from
- * written underneath ("Data by WHOOP"), in words and never a logo. A post
- * that did not come from a tracker session shows nothing here.
+ * A session's numbers on a post: time on court, and heart rate when its
+ * author chose to show it, with where the numbers came from written
+ * underneath ("Data by WHOOP"), in words and never a logo. A session from
+ * the author's own log shows its time and what it was (a match with its
+ * result), and no source line: the words are the player's own. A post with
+ * neither (a plain "minutes on court") shows nothing here.
  *
  * The full form is a row of tiles, the Health page's stat style. The
- * compact form is one line, for under a photo, where the picture has the room.
+ * compact form is one line, for under a photo or over a clip, where the
+ * picture has the room.
  */
 export function SessionStats({ session, compact = false }: { session: SessionDetail; compact?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
-  if (!session.activityId) return null;
-  const source = sourceLabel(session.source ?? 'apple-health');
+  if (!hasSessionStats(session)) return null;
+  const tracker = !!session.activityId;
+  const source = tracker ? sourceLabel(session.source ?? 'apple-health') : null;
+  const kind = session.kind ?? 'practice';
   // One sentence for a screen reader, rather than a tile at a time.
-  const spoken = [
-    `${duration(session.minutes)} on court`,
-    session.maxHr ? `max heart rate ${session.maxHr} bpm` : null,
-    session.avgHr ? `average ${session.avgHr} bpm` : null,
-    source,
-  ].filter(Boolean).join(', ');
+  const spoken = (tracker
+    ? [`${duration(session.minutes)} on court`, session.maxHr ? `max heart rate ${session.maxHr} bpm` : null, session.avgHr ? `average ${session.avgHr} bpm` : null, source]
+    : [statsLine(session)]
+  ).filter(Boolean).join(', ');
 
   if (compact) {
     return (
@@ -42,11 +45,20 @@ export function SessionStats({ session, compact = false }: { session: SessionDet
     );
   }
 
-  const tiles = [
-    { label: 'Time on court', value: duration(session.minutes) },
-    session.maxHr ? { label: 'Max bpm', value: String(session.maxHr) } : null,
-    session.avgHr ? { label: 'Avg bpm', value: String(session.avgHr) } : null,
-  ].filter((t): t is { label: string; value: string } => !!t);
+  const tiles = (tracker
+    ? [
+        { label: 'Time on court', value: duration(session.minutes) },
+        session.maxHr ? { label: 'Max bpm', value: String(session.maxHr) } : null,
+        session.avgHr ? { label: 'Avg bpm', value: String(session.avgHr) } : null,
+      ]
+    : [
+        // A gym session is not time on court.
+        { label: kind === 'fitness' ? 'Time' : 'Time on court', value: duration(session.minutes) },
+        kind === 'match'
+          ? { label: 'Match', value: session.won === true ? 'Won' : session.won === false ? 'Lost' : 'Played' }
+          : { label: 'Session', value: KIND_LABEL[kind] },
+      ]
+  ).filter((t): t is { label: string; value: string } => !!t);
   return (
     <View style={styles.wrap} accessible accessibilityLabel={spoken}>
       <View style={styles.tiles}>
@@ -58,7 +70,7 @@ export function SessionStats({ session, compact = false }: { session: SessionDet
           </View>
         ))}
       </View>
-      <Text style={styles.source} maxFontSizeMultiplier={MAX_GROW}>{source}</Text>
+      {source ? <Text style={styles.source} maxFontSizeMultiplier={MAX_GROW}>{source}</Text> : null}
     </View>
   );
 }

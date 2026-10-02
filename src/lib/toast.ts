@@ -20,21 +20,48 @@ export interface ToastMessage {
    * cut off with "…", and a tap puts it away once read.
    */
   long?: boolean;
+  /**
+   * How long it stays up, for a question that must not slip by unseen ("How
+   * was the hit?"). A flick or a tap still puts it away sooner.
+   */
+  holdMs?: number;
+  /**
+   * Told once how it went, and how long it was up: it stayed its full time,
+   * was tapped, its button was used, it was flicked away, another toast took
+   * its place first ('replaced'), or the caller took it back ('withdrawn').
+   */
+  onClosed?: (how: ToastClosed, upMs: number) => void;
 }
+
+export type ToastClosed = 'timeout' | 'tap' | 'action' | 'flick' | 'replaced' | 'withdrawn';
 
 type Listener = (toast: ToastMessage) => void;
 const listeners = new Set<Listener>();
+const withdrawers = new Set<(id: number) => void>();
 let counter = 0;
 
 /**
  * A tiny announcement bus. Anything can `show()` a toast — the shell renders
  * it over whatever screen is up. Kept outside React so a modal that closes
  * in the same breath as it posts (the composer) can still announce itself.
+ * Returns the toast's id, for `withdraw`.
  */
-export function show(toast: Omit<ToastMessage, 'id'>) {
+export function show(toast: Omit<ToastMessage, 'id'>): number {
   counter += 1;
   const message = { ...toast, id: counter };
   listeners.forEach((fn) => fn(message));
+  return message.id;
+}
+
+/** Puts a toast away early if it is still up (a question that should not sit over a page where someone is busy). */
+export function withdraw(id: number) {
+  withdrawers.forEach((fn) => fn(id));
+}
+
+/** For the shell's toast: told when one is taken back. */
+export function onWithdraw(fn: (id: number) => void): () => void {
+  withdrawers.add(fn);
+  return () => { withdrawers.delete(fn); };
 }
 
 /**

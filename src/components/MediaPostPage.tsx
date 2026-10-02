@@ -28,6 +28,7 @@ import { Avatar, Chip } from '@/components/ui';
 import { LevelPill } from '@/components/LevelPill';
 import { RichText } from '@/components/RichText';
 import { SessionStats } from '@/components/SessionStats';
+import { hasSessionStats } from '@/features/activity/format';
 import { compactNumber, relativeTime } from '@/lib/format';
 import type { Post, User } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -235,8 +236,8 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
       ) : null}
 
       <View style={[styles.details, lane]}>
-        {/* A tracker session's numbers, on one line under the picture. */}
-        {post.session?.activityId ? <SessionStats session={post.session} compact /> : null}
+        {/* A session's stats (a tracker's numbers, or one from the author's log), on one line under the picture. */}
+        {post.session && hasSessionStats(post.session) ? <SessionStats session={post.session} compact /> : null}
         {post.body ? (
           <Pressable accessibilityRole="button" accessibilityLabel={captionOpen ? 'Show less' : 'Show the whole caption'} onPress={() => setCaptionOpen((o) => !o)}>
             <Text numberOfLines={captionOpen ? undefined : 4} style={styles.caption}><Text style={styles.captionName}>{author.handle} </Text><RichText style={styles.caption}>{post.body}</RichText></Text>

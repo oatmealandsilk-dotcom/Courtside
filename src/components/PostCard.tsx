@@ -22,6 +22,7 @@ import { compactNumber, duration, relativeTime } from '@/lib/format';
 import type { Post, QuestionTopic, User } from '@/data/types';
 import { RichText } from '@/components/RichText';
 import { SessionStats } from '@/components/SessionStats';
+import { hasSessionStats } from '@/features/activity/format';
 import { requestSection } from '@/features/navigation/swipeOrder';
 import { goToTab } from '@/features/navigation/startTab';
 import { useHoldTour } from '@/features/tour/tourHold';
@@ -86,8 +87,8 @@ function PostCardInner({
   const [menuOpen, setMenuOpen] = useState(false);
   // The tutorial never starts under this menu.
   useHoldTour(menuOpen);
-  // A post made from a tracker's session is labelled for the game itself, not as a generic session.
-  const meta = post.session?.activityId ? { label: 'Tennis', icon: 'tennisball-outline' as const, tint: colors.court } : KIND_META[post.kind];
+  // A post carrying a tennis session (a tracker's, or one from your log) is labelled for the game itself, not as a generic session.
+  const meta = post.session?.activityId || (post.session?.sessionId && post.session.kind !== 'fitness') ? { label: 'Tennis', icon: 'tennisball-outline' as const, tint: colors.court } : KIND_META[post.kind];
   // The heart fills on the tap; the store's own redraw follows without changing anything on screen.
   const like = useOptimisticToggle(`p:${post.id}`, liked, onToggleLike);
 
@@ -182,7 +183,7 @@ function PostCardInner({
           </View>
         ) : null}
 
-        {post.session?.activityId ? (
+        {post.session && hasSessionStats(post.session) ? (
           <SessionStats session={post.session} />
         ) : post.session ? (
           <View style={styles.detailBox}>

@@ -122,6 +122,7 @@ export interface PracticeSession {
   kind: 'practice' | 'match' | 'drills' | 'fitness';
   won?: boolean;
   opponent?: string;
+  /** A few words of your own. A session logged from a hit keeps where it was here ("At Alder Park · with Mira"). */
   note?: string;
   /** The tracker session this was logged from (migration 58). */
   activityId?: ID;
@@ -203,6 +204,17 @@ export interface SessionDetail {
   /** Only when the author chose to show heart rate, and only for adults. */
   maxHr?: number;
   avgHr?: number;
+  /**
+   * The session in your own log it came from, when one you logged by hand is
+   * attached to a Post or a Clip (Oct 2). It marks that session as posted;
+   * the log itself stays private (only its owner can read it, migration 39).
+   * The server keeps it, with `kind` and `won`, and strips only tracker numbers.
+   */
+  sessionId?: ID;
+  /** What a session from your log was: practice, a match, drills or fitness. */
+  kind?: PracticeSession['kind'];
+  /** A match's result, when you said. */
+  won?: boolean;
 }
 
 /** scale ≥ 1; x and y are the picture's centre offset as fractions of the frame's width and height. */

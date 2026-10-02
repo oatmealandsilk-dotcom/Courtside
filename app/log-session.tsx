@@ -7,7 +7,9 @@ import { DragSheet } from '@/components/DragSheet';
 import { Field } from '@/components/ui';
 import { Chips, Section, SheetTitle, Submit, Tiles, formBody } from '@/components/sheet/SheetForm';
 import { activityDay, activityWhen, fromWho, privateLine, statsSourceOf } from '@/features/activity/format';
+import { postOf, postedIndex } from '@/features/activity/recent';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
+import { hitNote, hitPrefill, prefillFor } from '@/features/hits/followUp';
 import { localDay } from '@/features/practice/stats';
 import type { DetectedActivity, PracticeSession } from '@/data/types';
 import { confirm } from '@/lib/confirm';
@@ -46,11 +48,26 @@ function lengthsFor(a: DetectedActivity) {
  * hides it instead (migration 58). "Save and post" (or "Post it", once
  * logged) saves the same way, then opens a new post with the session's stats
  * on it: nothing from the tracker is public until that post is shared.
+ *
+ * Opened from "How was the hit?" (?hit=), it comes filled in from the hit:
+ * practice or a match, its usual length, its day, and who played; where it
+ * was is kept as the session's note. When your tracker picked up the same
+ * game, the prompt sends both (?activity=&hit=): the tracker's session is
+ * the one logged, with its own day and length, and the hit fills in the
+ * rest, so one game is never logged twice.
  */
 export default function LogSession() {
   const styles = useThemedStyles(styleDefinitions);
-  const { activity } = useLocalSearchParams<{ activity?: string }>();
-  const { actions, detectedActivities, remoteLoaded } = useApp();
+  const { activity, hit } = useLocalSearchParams<{ activity?: string; hit?: string }>();
+  const { actions, detectedActivities, remoteLoaded, hitRequests, currentUserId, users, posts } = useApp();
+  // The hit it was opened for: the prompt's words, or the hit itself if the app was reloaded on the way.
+  const [fromHit] = useState(() => {
+    if (!hit) return null;
+    const known = hitPrefill(hit);
+    if (known) return known;
+    const h = hitRequests.find((x) => x.id === hit);
+    return h && currentUserId ? prefillFor(h, currentUserId, users) : null;
+  });
   const [closeSignal, setCloseSignal] = useState(0);
   const close = () => setCloseSignal((n) => n + 1);
   // The session to post once the sheet has slid away, when the player chose to post it.
@@ -86,15 +103,21 @@ export default function LogSession() {
   const fresh = a?.status === 'new' ? a : undefined;
   const done = !fresh && (a?.status === 'logged' || a?.status === 'duplicate') ? a : undefined;
   const gone = !!activity && !waiting && !fresh && !done;
+  // One session, one post: a logged session already on one of your posts
+  // offers no "Post it". Your posts with a session are asked for fresh, as
+  // the app may hold only the newest few (the post page checks again).
+  useEffect(() => { if (activity) void actions.loadMySessionPosts(); }, [activity]); // eslint-disable-line react-hooks/exhaustive-deps
+  const alreadyPosted = !!done && !!postOf({ type: 'tracker', activity: done }, postedIndex(posts, currentUserId));
 
-  const [kind, setKind] = useState<PracticeSession['kind']>('practice');
-  const [minutes, setMinutes] = useState<number | null>(fresh ? fresh.minutes : null);
+  const [kind, setKind] = useState<PracticeSession['kind']>(fromHit?.kind ?? 'practice');
+  const [minutes, setMinutes] = useState<number | null>(fresh ? fresh.minutes : fromHit ? fromHit.minutes : null);
   // A session that arrives after the sheet opened starts on its own length too.
   const [preset, setPreset] = useState(fresh?.id);
   if (fresh && preset !== fresh.id) { setPreset(fresh.id); setMinutes(fresh.minutes); }
   const [won, setWon] = useState<'won' | 'lost' | null>(null);
-  const [opponent, setOpponent] = useState('');
-  const [when, setWhen] = useState<'today' | 'yesterday'>('today');
+  // From a hit, a match starts with who played in the opponent box.
+  const [opponent, setOpponent] = useState(fromHit?.kind === 'match' ? fromHit.who : '');
+  const [when, setWhen] = useState<'today' | 'yesterday'>(fromHit && fromHit.day !== localDay(new Date()) ? 'yesterday' : 'today');
   const [saving, setSaving] = useState(false);
   // Which button the save came from, so only that one spins.
   const [andPost, setAndPost] = useState(false);
@@ -108,7 +131,12 @@ export default function LogSession() {
     const day = fresh ? activityDay(fresh) : when === 'today' ? localDay(new Date()) : localDay(Date.now() - 86_400_000);
     if (fresh) setFrozen(fresh);
     try {
-      await actions.logSession({ minutes, kind, won: won === 'won' ? true : won === 'lost' ? false : undefined, opponent, day, ...(fresh ? { activityId: fresh.id } : {}) });
+      await actions.logSession({
+        minutes, kind, won: won === 'won' ? true : won === 'lost' ? false : undefined, opponent, day,
+        ...(fresh ? { activityId: fresh.id } : {}),
+        // From a hit: where it was (and who, unless they are in the opponent box) as the note; the opponent box only for a match.
+        ...(fromHit ? { note: hitNote(fromHit, kind), opponent: kind === 'match' ? opponent : undefined } : {}),
+      });
       // Posting goes straight on to the new post, which only opens once the
       // save went through, and says "Posted" when shared. A toast there would
       // sit over its Share button for a few seconds.
@@ -136,9 +164,11 @@ export default function LogSession() {
   const header = waiting ? (
     <SheetTitle title="Log your tennis" onClose={close} />
   ) : fresh ? (
-    <SheetTitle title="Log your tennis" line={`From ${fromWho(fresh)} · ${activityWhen(fresh)}. Only you see this.`} lines={2} onClose={close} />
+    <SheetTitle title={fromHit ? 'How was the hit?' : 'Log your tennis'} line={`${fromHit ? `${fromHit.place}. ` : ''}From ${fromWho(fresh)} · ${activityWhen(fresh)}. Only you see this.`} lines={2} onClose={close} />
   ) : done ? (
     <SheetTitle title="Log your tennis" line={done.status === 'logged' ? 'Logged. It counts toward your streak and hours.' : 'You already logged this session.'} lines={2} onClose={close} />
+  ) : fromHit ? (
+    <SheetTitle title="How was the hit?" line={`${fromHit.place}${fromHit.who ? ` · with ${fromHit.who}` : ''}. Only you see this.`} lines={2} onClose={close} />
   ) : (
     <SheetTitle title="Log a session" line="Keeps your streak, hours and win rate. Only you see it." onClose={close} />
   );
@@ -152,7 +182,7 @@ export default function LogSession() {
         <View style={styles.wait}><CourtSpinner size={34} /></View>
       ) : done ? (
         <ScrollView contentContainerStyle={formBody}>
-          {done.status === 'logged' && postable(done) ? (
+          {done.status === 'logged' && postable(done) && !alreadyPosted ? (
             <>
               <Submit label="Post it" onPress={() => { next.current = done.id; close(); }} />
               <Pressable accessibilityRole="button" onPress={close} style={({ pressed }) => [styles.second, pressed && styles.pressed]}>
