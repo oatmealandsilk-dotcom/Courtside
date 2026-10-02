@@ -12,7 +12,7 @@ import { useAnyUploading } from '@/lib/uploads';
 import { useApp } from '@/store/AppContext';
 
 /** Pages where someone is writing or posting: the question waits until they are done. */
-const BUSY = new Set(['/compose', '/edit-post', '/ask', '/ask-coach', '/log-session', '/pick-session', '/pick-location', '/court-report', '/court-now', '/hit-request/new', '/hit', '/comments']);
+const BUSY = new Set(['/compose', '/edit-post', '/ask', '/ask-coach', '/log-session', '/pick-session', '/session-tag', '/pick-location', '/court-report', '/court-now', '/hit-request/new', '/hit', '/comments']);
 /** A moment after the way is clear, so it never lands on the app's own opening notes. */
 const SETTLE_MS = 2500;
 /** It stays up this long (a flick or a tap puts it away sooner): long enough to be noticed on a page you are looking at. */

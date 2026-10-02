@@ -30,7 +30,10 @@ const TITLE_ID = 'courtside-confirm-title';
 const MESSAGE_ID = 'courtside-confirm-message';
 
 const sameQuestion = (a: ConfirmOptions, b: ConfirmOptions) =>
-  a.title === b.title && a.message === b.message && a.confirmLabel === b.confirmLabel;
+  a.title === b.title && a.message === b.message && a.confirmLabel === b.confirmLabel && a.also?.label === b.also?.label;
+
+/** Which row was tapped: Cancel, the action, or the second action (`also`). */
+type Answer = 'cancel' | 'yes' | 'also';
 
 /**
  * Every "are you sure?" in the app (`confirm` in src/lib/confirm.ts), drawn
@@ -39,7 +42,9 @@ const sameQuestion = (a: ConfirmOptions, b: ConfirmOptions) =>
  *
  * A rounded card in the middle of a dimmed screen: the question in bold, one
  * muted line, then two full-width rows on hairlines, the action's own word on
- * top (red when it deletes or cuts someone off) and Cancel under it. It
+ * top (red when it deletes or cuts someone off) and Cancel under it. A
+ * question with a second answer (`also`) has it on a row of its own between
+ * the two. It
  * springs in from a touch smaller with a light tap of the phone (a warning
  * beat when it is red), and fades away when answered; with Reduce Motion on it
  * only fades. A tap on the dimmed screen, Android's back, Escape or the
@@ -100,23 +105,24 @@ export function ConfirmHost() {
     else setRequest(null);
   };
 
-  const answer = (yes: boolean) => {
+  const answer = (choice: Answer) => {
     const asked = live.current;
     if (!asked) return; // already answered: a second tap, or Escape heard twice
     live.current = null;
     shown.value = withTiming(0, OUT, (done) => { if (done) runOnJS(gone)(); });
     // The action runs as the card leaves, the way Instagram's delete does.
-    if (yes) void asked.onConfirm();
+    if (choice === 'yes') void asked.onConfirm();
+    else if (choice === 'also') void asked.also?.onPress();
   };
 
   // A tap on a button or the dimmed screen counts only if it began once the card had settled (SETTLE_MS).
   const touchBegan = () => { touchAt.current = Date.now(); };
-  const tapped = (yes: boolean) => {
+  const tapped = (choice: Answer) => {
     // No touch began (TalkBack's double tap goes straight to the press): judged by now instead.
     const began = touchAt.current || Date.now();
     touchAt.current = 0;
     if (began - openedAt.current < SETTLE_MS) return;
-    answer(yes);
+    answer(choice);
   };
 
   // Each new question: in it comes, felt as well as seen, with the focus put where it belongs.
@@ -145,7 +151,7 @@ export function ConfirmHost() {
   useEffect(() => {
     if (Platform.OS !== 'web' || !request) return undefined;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); answer(false); return; }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); answer('cancel'); return; }
       if (e.key === 'Tab' || e.key === 'Enter' || e.key === ' ') return;
       e.stopImmediatePropagation();
     };
@@ -178,7 +184,7 @@ export function ConfirmHost() {
       <View
         style={[styles.box, desktop && styles.boxWide]}
         accessibilityViewIsModal
-        onAccessibilityEscape={() => answer(false)}
+        onAccessibilityEscape={() => answer('cancel')}
         {...webDialog}
       >
         <Animated.View style={[styles.card, cardStyle]}>
@@ -195,16 +201,27 @@ export function ConfirmHost() {
               accessibilityRole="button"
               accessibilityLabel="Cancel"
               onPressIn={touchBegan}
-              onPress={() => tapped(false)}
+              onPress={() => tapped('cancel')}
               style={({ pressed }) => [styles.row, pressed && styles.pressed]}
             >
               <Text style={styles.cancel}>Cancel</Text>
             </Pressable>
+            {request.also ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={request.also.label}
+                onPressIn={touchBegan}
+                onPress={() => tapped('also')}
+                style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+              >
+                <Text style={[styles.action, request.also.destructive && styles.danger]}>{request.also.label}</Text>
+              </Pressable>
+            ) : null}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={request.confirmLabel}
               onPressIn={touchBegan}
-              onPress={() => tapped(true)}
+              onPress={() => tapped('yes')}
               style={({ pressed }) => [styles.row, pressed && styles.pressed]}
             >
               <Text style={[styles.action, request.destructive && styles.danger]}>{request.confirmLabel}</Text>
@@ -218,7 +235,7 @@ export function ConfirmHost() {
         style={[styles.dim, dimStyle]}
         onStartShouldSetResponder={() => true}
         onResponderGrant={touchBegan}
-        onResponderRelease={() => tapped(false)}
+        onResponderRelease={() => tapped('cancel')}
       />
     </View>
   );
@@ -227,7 +244,7 @@ export function ConfirmHost() {
     return <FullWindowOverlay unstable_accessibilityContainerViewIsModal>{layer}</FullWindowOverlay>;
   }
   return (
-    <Modal visible transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={() => answer(false)}>
+    <Modal visible transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={() => answer('cancel')}>
       {layer}
     </Modal>
   );

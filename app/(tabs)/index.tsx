@@ -56,6 +56,7 @@ import { useSidePanel } from '@/features/feed/sidePanel';
 import { CLOSE_MS, PAUSE_AT_FULL, SIDE_MIN_WINDOW, STAGE_EASING, STAGE_ON_ANDROID, begin as beginStage, clear as clearStage, currentY, getStage, markEnding, markLost, place as placeStage, stageGeometry, stageKeyOf, stageTop, useStageSelect, type StageSubject } from '@/features/feed/commentStage';
 import { StageChromeContext, useStageMotion, useStagePageChrome } from '@/features/feed/useStageMotion';
 import { colors, radius, typography, spacing, font, lift } from '@/theme';
+import { isTaggedIn } from '@/features/activity/sessionTags';
 
 /**
  * The heart that blooms when you double tap a clip.
@@ -405,7 +406,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
             // Archived posts only ever in your own archive's set, opened from the Archive page.
             .filter((p) => (set === 'archived'
               ? p.archived && p.authorId === userId && userId === data.currentUserId
-              : !p.archived && (set === 'tagged' ? !!userId && p.taggedUserIds?.includes(userId) : p.authorId === userId && (set !== 'clips' || p.kind === 'clip'))))
+              : !p.archived && (set === 'tagged' ? isTaggedIn(p, userId) : p.authorId === userId && (set !== 'clips' || p.kind === 'clip'))))
             .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
         setOrder(mine.map((p) => `p:${p.id}`));
         setActive(Math.max(0, mine.findIndex((p) => p.id === scope.start)));

@@ -14,7 +14,8 @@ import { isNewHere } from '@/features/feed/newHere';
 import { RichText } from '@/components/RichText';
 import type { Post, User } from '@/data/types';
 import { openCourt } from '@/features/players/courtLink';
-import { hasSessionStats, statsLine } from '@/features/activity/format';
+import { hasSessionStats, reelStatsChunks } from '@/features/activity/format';
+import { StatsWords } from '@/components/SessionStats';
 import { compactNumber, relativeTime, timeLeft } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useTourBusy } from '@/features/tour/tourStore';
@@ -149,11 +150,21 @@ export function ReelCaption({ post, author, onAuthor, onOpenComments }: { post: 
           </Pressable>
         ) : null}
       </View>
-      {/* A clip with a session attached: its stats on one more quiet line ("1h 24m · Data by WHOOP", "Match · Won · 1h 30m"). */}
+      {/* A clip with a session attached: its stats on one more quiet line ("1h 24m · Data by WHOOP",
+          "Match · Won · 1h 15m · vs @miraplays +2"). What it was, the result and the time lead, so a
+          doubles match never cuts them off; the first player's handle opens them, "+2" everyone who played. */}
       {post.session && hasSessionStats(post.session) ? (
         <View style={styles.metaItem}>
           <Ionicons name="tennisball-outline" size={12} color={META_INK} style={EDGE_SMALL} />
-          <Text style={styles.metaText} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{statsLine(post.session)}</Text>
+          <StatsWords
+            chunks={reelStatsChunks(post.session, blockedIds)}
+            style={styles.metaText}
+            handleStyle={styles.metaHandle}
+            numberOfLines={1}
+            maxFontSizeMultiplier={MAX_GROW}
+            onMore={() => router.push({ pathname: '/likes', params: { id: post.id, set: 'played' } })}
+            moreLabel="Everyone who played"
+          />
         </View>
       ) : null}
     </View>
@@ -442,6 +453,8 @@ const styles = StyleSheet.create({
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 3, flexShrink: 1, minWidth: 0 },
   metaKeep: { flexShrink: 0 },
   metaText: { color: META_INK, fontSize: 13, lineHeight: 16, ...font('500'), letterSpacing: 0.1, fontVariant: ['tabular-nums'], flexShrink: 1, ...EDGE_SMALL },
+  // A player's handle in the stats line: the line's own ink, a step bolder, so it reads as a name to tap.
+  metaHandle: { color: META_INK, ...font('600') },
   // Out of the words' layout, 10 above the name, in the words' column (16 in from the left, clear of the rail).
   hint: { position: 'absolute', left: 16, right: 72, bottom: '100%', marginBottom: 10, color: 'rgba(255,255,255,0.8)', fontSize: 12, lineHeight: 15, ...font('500'), letterSpacing: 0.1, ...EDGE_SMALL },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0 },

@@ -11,6 +11,11 @@ export interface ConfirmOptions {
   destructive?: boolean;
   /** Runs only on yes. Cancel, a tap outside, Escape or Android's back does nothing. */
   onConfirm: () => void | Promise<void>;
+  /**
+   * A second way to say yes, on its own row under the first ("Remove tag and
+   * my session" under "Remove tag"). Rare: most questions have one answer.
+   */
+  also?: { label: string; destructive?: boolean; onPress: () => void | Promise<void> };
 }
 
 type Show = (request: ConfirmOptions) => void;

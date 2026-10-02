@@ -22,6 +22,7 @@ import { TagPlayers } from '@/components/TagPlayers';
 import { AttachSessionStats } from '@/components/AttachSessionStats';
 import { pickCaption, statsOf, type SessionPick } from '@/features/activity/recent';
 import { openSessionPicker } from '@/features/activity/sessionPicker';
+import { isActive, tagsOnSession } from '@/features/activity/sessionTags';
 import { addToBank, getBank } from '@/features/compose/mediaBank';
 import { useApp } from '@/store/AppContext';
 import { courtRows, fetchCourts, peekCourts, type Court } from '@/features/players/courts';
@@ -75,7 +76,7 @@ type Stage = 'choose' | 'library' | 'edit' | 'form';
  */
 export default function Compose() {
   const styles = useThemedStyles(styleDefinitions);
-  const { actions, posts, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions } = useApp();
+  const { actions, posts, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions, sessionTags } = useApp();
 
   // The story rail opens this straight at the library with ?mode=story.
   const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string; activity?: string; session?: string }>();
@@ -262,6 +263,20 @@ export default function Compose() {
   // "Add session stats" is for a Post or a Clip, never a challenge entry (the
   // weekly clip stays exactly as it was) and never a story or an instant.
   const statsRow = !opened && !entering && !inChallenge && (mode === 'post' || mode === 'clip');
+  // The players tagged in the session on this post (migration 62): asked to
+  // accept there, so Tag players lists them apart and never tags them
+  // straight onto the post; anyone tagged here before the session went on
+  // moves to that list.
+  const statsSession = (withStats ? opened : statsRow ? statsPick : null)?.session;
+  const fromSession = statsSession && currentUserId
+    ? tagsOnSession(sessionTags, statsSession.id, currentUserId).filter(isActive).map((t) => ({ id: t.taggedId, accepted: t.status === 'accepted' }))
+    : [];
+  const fromSessionKey = fromSession.map((f) => f.id).join(',');
+  useEffect(() => {
+    if (!fromSessionKey) return;
+    const ids = new Set(fromSessionKey.split(','));
+    setTagged((was) => (was.some((id) => ids.has(id)) ? was.filter((id) => !ids.has(id)) : was));
+  }, [fromSessionKey]);
   const pickStats = () => openSessionPicker((pick, logged) => { setStatsPick(pick); setJustLogged(logged); });
 
   // A quick second tap on Share would post it twice.
@@ -611,7 +626,7 @@ export default function Compose() {
                 ) : null}
                 {/* One list of rows, the Settings rows' size without their card. */}
                 <View style={styles.rows}>
-                  <TagPlayers variant="row" tagged={tagged} onChange={setTagged} />
+                  <TagPlayers variant="row" tagged={tagged} onChange={setTagged} fromSession={fromSession} />
                   {!location && nearCourt && !nearWaved && (mode === 'post' || mode === 'clip') ? (
                     <FormRow
                       line

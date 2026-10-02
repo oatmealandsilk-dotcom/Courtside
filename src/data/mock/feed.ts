@@ -195,6 +195,48 @@ export const posts: Post[] = [
     commentIds: [],
     tags: [],
   },
+  {
+    // Yesterday's match from your log (ses-demo-1). Mira accepted her tag, so the stats name her (migration 62).
+    id: 'p-demo-match',
+    authorId: CURRENT_USER_ID,
+    kind: 'note',
+    createdAt: isoDaysAgo(0, 14),
+    body: 'Two tiebreaks and a lot of running. The first serve finally showed up in the second set.',
+    session: {
+      focus: 'Match · Won', minutes: 90, drills: [], sessionId: 'ses-demo-1', kind: 'match', won: true,
+      with: [{ id: 'u-mira', handle: 'miraplays', name: 'Mira Okafor', role: 'opponent' }],
+    },
+    likedBy: ['u-mira', 'u-dev'],
+    commentIds: [],
+    tags: [],
+  },
+  {
+    // Sam's match two days ago (ses-sam-1). Sam tagged you; until you accept, the post keeps your name off.
+    id: 'p-sam-match',
+    authorId: 'u-sam',
+    kind: 'note',
+    createdAt: isoDaysAgo(1, 20),
+    body: 'Lost a close one. Their backhand down the line was on all night.',
+    session: { focus: 'Match · Lost', minutes: 75, drills: [], sessionId: 'ses-sam-1', kind: 'match', won: false },
+    likedBy: ['u-dev'],
+    commentIds: [],
+    tags: [],
+  },
+  {
+    // Mira's practice (ses-mira-1), with you as her accepted partner: it is on your Tagged tab.
+    id: 'p-mira-practice',
+    authorId: 'u-mira',
+    kind: 'note',
+    createdAt: isoDaysAgo(4, 3),
+    body: 'An hour of crosscourt patterns. Good legs today.',
+    session: {
+      focus: 'Practice', minutes: 60, drills: [], sessionId: 'ses-mira-1', kind: 'practice',
+      with: [{ id: CURRENT_USER_ID, handle: 'you', name: 'Alex Rivera', role: 'partner' }],
+    },
+    likedBy: [CURRENT_USER_ID, 'u-june'],
+    commentIds: [],
+    tags: [],
+  },
 ];
 
 export const comments: Comment[] = [

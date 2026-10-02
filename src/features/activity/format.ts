@@ -1,5 +1,6 @@
-import type { DetectedActivity, PracticeSession, SessionDetail, StatsSource } from '@/data/types';
+import type { DetectedActivity, ID, PracticeSession, SessionDetail, SessionWith, StatsSource } from '@/data/types';
 import { localDay } from '@/features/practice/stats';
+import { sessionPeople } from './sessionTags';
 import { duration } from '@/lib/format';
 
 /*
@@ -110,13 +111,97 @@ export function sessionFromActivity(a: DetectedActivity, showHr: boolean, adult:
   };
 }
 
+/** A piece of a stats line: words, a player's @handle (opens their profile), or "+2" for the rest of them (`more`). */
+export type StatsBit = { text: string; userId?: ID; more?: boolean };
+
+/** "@miraplays", "@miraplays and @samhits", as pieces, each handle its own. */
+function handleBits(list: SessionWith[]): StatsBit[] {
+  return list.flatMap((w, i) => [
+    ...(i === 0 ? [] : [{ text: i === list.length - 1 ? ' and ' : ', ' }]),
+    { text: `@${w.handle}`, userId: w.id },
+  ]);
+}
+
+/**
+ * Who a post's session was played with, as pieces: "vs @miraplays", "with
+ * @devbackhand". Only players who accepted their tag are ever on a post
+ * (migration 62), and anyone the viewer blocked is left out.
+ */
+export function peopleBits(s: SessionDetail, hidden: ID[] = []): { vs: StatsBit[] | null; with: StatsBit[] | null } {
+  const { opponents, partners } = sessionPeople(s, hidden);
+  return {
+    vs: opponents.length ? [{ text: 'vs ' }, ...handleBits(opponents)] : null,
+    with: partners.length ? [{ text: 'with ' }, ...handleBits(partners)] : null,
+  };
+}
+
+/**
+ * A post's stats as the pieces of one line, parted by " · ": "1h 24m · with
+ * @devbackhand · 171 max bpm · Data by WHOOP" from a tracker, "Match · Won
+ * vs @miraplays · 1h 30m" or "Practice with @devbackhand · 1h 15m" from your
+ * own log.
+ */
+export function statsChunks(s: SessionDetail, hidden: ID[] = []): StatsBit[][] {
+  const people = peopleBits(s, hidden);
+  if (!s.activityId && s.sessionId) {
+    const chunks: StatsBit[][] = [];
+    if (s.kind === 'match') {
+      const result = s.won === true ? 'Won' : s.won === false ? 'Lost' : '';
+      // "Match · Won vs @mira", or "Match vs @mira" with no result given.
+      if (result) chunks.push([{ text: 'Match' }], [{ text: result }, ...(people.vs ? [{ text: ' ' }, ...people.vs] : [])]);
+      else chunks.push([{ text: 'Match' }, ...(people.vs ? [{ text: ' ' }, ...people.vs] : [])]);
+      if (people.with) chunks.push(people.with);
+    } else {
+      chunks.push([{ text: s.kind ? KIND_LABEL[s.kind] : s.focus }, ...(people.with ? [{ text: ' ' }, ...people.with] : [])]);
+    }
+    chunks.push([{ text: duration(s.minutes) }]);
+    return chunks;
+  }
+  return [
+    [{ text: duration(s.minutes) }],
+    people.vs,
+    people.with,
+    s.maxHr ? [{ text: `${s.maxHr} max bpm` }] : null,
+    [{ text: sourceLabel(s.source ?? 'apple-health') }],
+  ].filter((c): c is StatsBit[] => !!c);
+}
+
+/**
+ * The stats line over a clip, which has one line only: what it was, the
+ * result and the time first, so they are never what gets cut, then the
+ * first player and how many more ("Match · Won · 1h 15m · vs @miraplays +2").
+ * From a tracker, its own numbers and where they came from lead.
+ */
+export function reelStatsChunks(s: SessionDetail, hidden: ID[] = []): StatsBit[][] {
+  const { opponents, partners } = sessionPeople(s, hidden);
+  const all = [...opponents, ...partners];
+  const lead = all[0];
+  const people: StatsBit[] | null = lead
+    ? [{ text: opponents.length ? 'vs ' : 'with ' }, { text: `@${lead.handle}`, userId: lead.id }, ...(all.length > 1 ? [{ text: ' ' }, { text: `+${all.length - 1}`, more: true }] : [])]
+    : null;
+  if (!s.activityId && s.sessionId) {
+    const result = s.kind === 'match' ? (s.won === true ? 'Won' : s.won === false ? 'Lost' : '') : '';
+    return [
+      [{ text: s.kind ? KIND_LABEL[s.kind] : s.focus }],
+      result ? [{ text: result }] : null,
+      [{ text: duration(s.minutes) }],
+      people,
+    ].filter((c): c is StatsBit[] => !!c);
+  }
+  return [
+    [{ text: duration(s.minutes) }],
+    s.maxHr ? [{ text: `${s.maxHr} max bpm` }] : null,
+    [{ text: sourceLabel(s.source ?? 'apple-health') }],
+    people,
+  ].filter((c): c is StatsBit[] => !!c);
+}
+
 /**
  * A post's stats in one line of words: "1h 24m · 171 max bpm · Data by
- * WHOOP" from a tracker, "Match · Won · 1h 30m" from your own log.
+ * WHOOP" from a tracker, "Match · Won vs @miraplays · 1h 30m" from your own log.
  */
-export function statsLine(s: SessionDetail): string {
-  if (!s.activityId && s.sessionId) return `${s.kind ? loggedLabel({ kind: s.kind, won: s.won }) : s.focus} · ${duration(s.minutes)}`;
-  return [duration(s.minutes), s.maxHr ? `${s.maxHr} max bpm` : null, sourceLabel(s.source ?? 'apple-health')].filter(Boolean).join(' · ');
+export function statsLine(s: SessionDetail, hidden: ID[] = []): string {
+  return statsChunks(s, hidden).map((chunk) => chunk.map((b) => b.text).join('')).join(' · ');
 }
 
 /** A post carries a session's stats: one from a tracker, or one from your own log. A plain "minutes on court" does not count. */
@@ -143,6 +228,13 @@ export function dayWords(day: string, now = new Date()): string {
   if (day === localDay(now)) return 'Today';
   if (day === localDay(now.getTime() - 86_400_000)) return 'Yesterday';
   return new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }).replace(/,/g, '');
+}
+
+/** "Today", "Yesterday" or "Sep 29": a day in a few letters, for a small tile. */
+export function shortDay(day: string, now = new Date()): string {
+  if (day === localDay(now)) return 'Today';
+  if (day === localDay(now.getTime() - 86_400_000)) return 'Yesterday';
+  return new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }).replace(/,/g, '');
 }
 
 /**

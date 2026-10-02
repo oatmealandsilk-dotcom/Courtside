@@ -24,6 +24,7 @@ import { afterMenu, confirmBlock, confirmUnfollow } from '@/lib/confirm';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { ProfileSkeleton } from '@/components/Skeleton';
 import { isDesktopBrowser } from '@/lib/browserDevice';
+import { isTaggedIn } from '@/features/activity/sessionTags';
 
 const TABS = ['Posts', 'Clips', 'Tagged'] as const;
 
@@ -69,9 +70,9 @@ export default function UserProfile() {
   // What a private account keeps behind the door until they say yes.
   const locked = !!user.isPrivate && !isMe && !following;
   const own = posts.filter((p) => p.authorId === user.id && !p.archived);
-  const itemsFor = (section: (typeof TABS)[number]) => (section === 'Tagged' ? posts.filter((p) => p.taggedUserIds?.includes(user.id) && !p.archived) : own.filter((p) => section !== 'Clips' || p.kind === 'clip'))
+  const itemsFor = (section: (typeof TABS)[number]) => (section === 'Tagged' ? posts.filter((p) => isTaggedIn(p, user.id) && !p.archived) : own.filter((p) => section !== 'Clips' || p.kind === 'clip'))
     .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
-  const counts = { Posts: own.length, Clips: own.filter((p) => p.kind === 'clip').length, Tagged: posts.filter((p) => p.taggedUserIds?.includes(user.id) && !p.archived).length };
+  const counts = { Posts: own.length, Clips: own.filter((p) => p.kind === 'clip').length, Tagged: posts.filter((p) => isTaggedIn(p, user.id) && !p.archived).length };
   const unlocked = evaluateAchievements(user).filter((a) => a.unlocked);
   const profile = user.profile;
 

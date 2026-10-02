@@ -21,21 +21,30 @@ import { colors, radius, spacing, typography } from '@/theme';
  * `variant="row"` is the composer's look: one line of its settings list
  * ("Tag players   Maya, Jonah ›") that opens into the search in place, with
  * the tagged people as chips only while it is open.
+ *
+ * With session stats on the post, the players tagged in that session
+ * (`fromSession`) are listed apart, "From your session · Waiting" or
+ * "Accepted", and are left out of the search: they are asked to accept
+ * there, and their name goes on the post only once they do, so they are
+ * never tagged straight onto it here instead.
  */
-export function TagPlayers({ tagged, onChange, variant = 'button', line = false }: {
+export function TagPlayers({ tagged, onChange, variant = 'button', line = false, fromSession = [] }: {
   tagged: string[];
   onChange: (ids: string[]) => void;
   variant?: 'button' | 'row';
   /** As a row: the thin line above it (any row but the first). */
   line?: boolean;
+  /** The session's tagged players and whether each has accepted (migration 62). */
+  fromSession?: { id: string; accepted: boolean }[];
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { users } = useApp();
   const candidates = useMentionCandidates();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const fromIds = new Set(fromSession.map((f) => f.id));
   // Tagged people stay in the list, checked, so a second tap can untag them.
-  const matches = open ? candidates(query, 8) : [];
+  const matches = open ? candidates(query, 8 + fromIds.size).filter(({ user }) => !fromIds.has(user.id)).slice(0, 8) : [];
   const close = () => { setOpen(false); setQuery(''); };
   const tag = (id: string) => {
     haptics.tap();
@@ -84,6 +93,26 @@ export function TagPlayers({ tagged, onChange, variant = 'button', line = false 
     );
   });
   const empty = !matches.length ? <Text style={styles.tagHandle}>{query ? 'No one by that name.' : 'Start typing a name.'}</Text> : null;
+  // The session's players: shown, not tappable; they answer their own tag.
+  const sessionPeople = fromSession.length ? (
+    <View style={styles.fromSession}>
+      <Text style={styles.fromTitle}>From your session · asked to accept</Text>
+      {fromSession.map(({ id, accepted }) => {
+        const who = users.find((u) => u.id === id);
+        if (!who) return null;
+        return (
+          <View key={id} style={styles.fromRow} accessible accessibilityLabel={`${who.name}, from your session. ${accepted ? 'Accepted' : 'Waiting'}`}>
+            <Avatar name={who.name} seed={who.avatarSeed} uri={who.avatarUrl} size={28} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.tagName} numberOfLines={1}>{who.name}</Text>
+              <Text style={styles.tagHandle} numberOfLines={1}>@{who.handle} · {accepted ? 'Accepted' : 'Waiting'}</Text>
+            </View>
+            <Ionicons name={accepted ? 'checkmark-circle' : 'time-outline'} size={16} color={accepted ? colors.brand : colors.textFaint} />
+          </View>
+        );
+      })}
+    </View>
+  ) : null;
 
   if (variant === 'row') {
     if (!open) {
@@ -101,6 +130,7 @@ export function TagPlayers({ tagged, onChange, variant = 'button', line = false 
           </Pressable>
         </View>
         {chips}
+        {sessionPeople}
         <View style={styles.resultsBox}>
           <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" contentContainerStyle={styles.resultsInner}>
             {results}
@@ -129,6 +159,7 @@ export function TagPlayers({ tagged, onChange, variant = 'button', line = false 
         </Pressable>
       )}
       {chips}
+      {open ? sessionPeople : null}
       {open ? (
         <View style={styles.tagSearch}>
           {results}
@@ -160,4 +191,7 @@ const styleDefinitions = StyleSheet.create({
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   resultsBox: { maxHeight: 240, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
   resultsInner: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  fromSession: { gap: 2 },
+  fromTitle: { ...typography.small, color: colors.textFaint, paddingBottom: 2 },
+  fromRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 4 },
 });

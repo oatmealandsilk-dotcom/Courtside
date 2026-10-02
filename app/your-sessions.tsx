@@ -1,12 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtGlyph } from '@/components/map/CourtGlyph';
-import { EmptyState, Screen } from '@/components/ui';
-import type { DetectedActivity, PracticeSession } from '@/data/types';
+import { LoggedTitle, type PeopleLine } from '@/components/LoggedTitle';
+import { Avatar, EmptyState, Screen } from '@/components/ui';
+import type { DetectedActivity, PracticeSession, SessionTag, User } from '@/data/types';
 import { activityTitle, activityWhen, dayWords, loggedLabel } from '@/features/activity/format';
+import { canTagKind, firstName, peopleText, peopleWords, yourResult } from '@/features/activity/sessionTags';
+import { show as showToast } from '@/lib/toast';
 import { ATTACH_DAYS, pickSource, postOf, postedIndex, sourceOn, type SessionPick } from '@/features/activity/recent';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { localDay } from '@/features/practice/stats';
@@ -50,11 +53,36 @@ function weekLabel(start: string, now = new Date()): string {
  * never posts anything (owner, Oct 2). A tracker whose source the server has
  * switched off shows nothing of its own here: its sessions waiting to be
  * logged are left out, and logged ones say "Tracker", not WHOOP or the Watch.
+ *
+ * Who you played (migration 62), by first name: a tag still waiting reads
+ * "vs June · Waiting", an accepted one "vs Mira" with a small tick. A tap on
+ * a match or a practice opens "Who you played" for it, to tag people after
+ * the fact. Tags of you that you haven't answered sit at the very top, under
+ * "Tagged you", with Accept and Decline and your side of the result ("You
+ * won"); a session you accepted into your log reads as yours ("Practice with
+ * Mira", "Mira's tag"), and a tap on it opens that tag. The phone alert for
+ * a tag opens this page with ?tag= (the tagger's session), and the tag's
+ * sheet opens on top.
  */
 export default function YourSessions() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUserId, sessions, detectedActivities, posts, actions } = useApp();
+  const { currentUserId, sessions, detectedActivities, posts, sessionTags, users, actions } = useApp();
   const flags = useTennisFlags();
+  // Opened from a tag's phone alert: its sheet opens over this page, once.
+  const { tag: tagParam } = useLocalSearchParams<{ tag?: string }>();
+  const opened = useRef<string | null>(null);
+  useEffect(() => {
+    if (!tagParam || opened.current === tagParam) return;
+    opened.current = tagParam;
+    const t = setTimeout(() => router.push({ pathname: '/session-tag', params: { session: tagParam } }), 250);
+    return () => clearTimeout(t);
+  }, [tagParam]);
+  // Your tags asked for fresh, so a "Waiting" that has since been answered says so.
+  useEffect(() => { void actions.refreshSessionTags(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const taggedYou = useMemo(
+    () => sessionTags.filter((t) => t.taggedId === currentUserId && t.status === 'pending' && !t.dropped && users.some((u) => u.id === t.taggerId)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    [sessionTags, currentUserId, users],
+  );
   const [weeks, setWeeks] = useState(WEEKS);
   // "Post it" waits until your posts with a session have been asked for
   // fresh (the app may hold only the newest few), so a session already on a
@@ -96,13 +124,22 @@ export default function YourSessions() {
 
   return (
     <Screen title="Your sessions" subtitle="Only you see this." compactTitle onBack={() => goBack('/profile')} right={logButton}>
-      {!waiting.length && !groups.length ? (
+      {!waiting.length && !groups.length && !taggedYou.length ? (
         <EmptyState
           icon="tennisball-outline"
           title="No sessions yet"
           body="Log one after you play. It keeps your streak going, and only you see it."
           action={{ label: 'Log a session', onPress: () => router.push('/log-session') }}
         />
+      ) : null}
+
+      {taggedYou.length ? (
+        <>
+          <Text style={styles.sectionTitle}>Tagged you</Text>
+          <View style={styles.group}>
+            {taggedYou.map((t, i) => <TaggedYou key={t.id} tag={t} tagger={users.find((u) => u.id === t.taggerId)!} line={i > 0} />)}
+          </View>
+        </>
       ) : null}
 
       {waiting.length ? (
@@ -129,11 +166,26 @@ export default function YourSessions() {
                 const activity = found && sourceOn(found, flags) ? found : undefined;
                 const pick: SessionPick = activity ? { type: 'tracker', activity, session: s } : { type: 'logged', session: s };
                 const postId = postOf(pick, posted);
+                // A copy from someone's tag reads as yours, built from the tag ("Practice with Mira", "Mira's tag"), and opens that tag.
+                const from = s.fromSessionId ? sessionTags.find((t) => t.taggedId === currentUserId && (t.mirroredSessionId === s.id || t.sessionId === s.fromSessionId)) : undefined;
+                const fromWho = from ? users.find((u) => u.id === from.taggerId) : undefined;
+                const fromFirst = fromWho ? firstName(fromWho.name) : '';
+                const people: PeopleLine | null = from && fromFirst
+                  ? (s.kind === 'match' && from.role === 'opponent'
+                    ? { vs: [{ name: fromFirst, state: 'typed' }], with: [], allWaiting: false }
+                    : { vs: [], with: [{ name: fromFirst, state: 'typed' }], allWaiting: false })
+                  : peopleWords(s, sessionTags, users);
                 return (
                   <Logged
                     key={s.id}
                     session={s}
-                    source={pickSource(pick)}
+                    people={people}
+                    onOpen={from ? () => router.push({ pathname: '/session-tag', params: { tag: from.id } })
+                      : canTagKind(s.kind) && !s.fromSessionId ? () => router.push({ pathname: '/log-session', params: { edit: s.id } })
+                      : undefined}
+                    // Built from the tag, the title already says who it was with: no note line repeating it.
+                    hideNote={!!(from && fromFirst)}
+                    source={s.fromSessionId ? (fromFirst ? `${fromFirst}’s tag` : 'From a tag') : pickSource(pick)}
                     postId={postId}
                     postable={checked && !postId && s.day >= firstPostable}
                     onPost={() => router.push({ pathname: '/compose', params: pick.type === 'tracker' ? { activity: pick.activity.id } : { session: s.id } })}
@@ -173,28 +225,96 @@ function Waiting({ activity, line }: { activity: DetectedActivity; line: boolean
   );
 }
 
-/** One session you logged, with Post it, or Posted (which opens the post). */
-function Logged({ session: s, source, postId, postable, onPost, line }: { session: PracticeSession; source: string; postId?: string; postable: boolean; onPost: () => void; line: boolean }) {
+/**
+ * Someone tagged you and is waiting on your answer: who, what it was (your
+ * side of a match's result), when and how long, with Accept (it goes in your
+ * log too) and Decline. A tap on the rest opens the tag's sheet, which says
+ * more and lets you accept without adding it to your log.
+ */
+function TaggedYou({ tag, tagger, line }: { tag: SessionTag; tagger: User; line: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
-  const title = `${loggedLabel(s)}${s.opponent ? ` vs ${s.opponent}` : ''}`;
+  const { actions } = useApp();
+  const [busy, setBusy] = useState<'accept' | 'decline' | null>(null);
+  const first = tagger.name.trim().split(/\s+/)[0] || tagger.handle;
+  // Your side of it: "You won", "You lost", "Practice".
+  const what = yourResult(tag);
+  const answer = async (accept: boolean) => {
+    if (busy) return;
+    setBusy(accept ? 'accept' : 'decline');
+    try {
+      await actions.respondSessionTag(tag.id, accept);
+      showToast(accept ? { title: 'Tag accepted', body: 'It’s in your sessions too.', icon: 'checkmark-circle-outline' } : { title: 'Tag declined', body: 'Your name stays off their posts.', icon: 'close-circle-outline' });
+    } catch (e) {
+      showToast({ title: 'That didn’t go through', body: e instanceof Error ? e.message : undefined, icon: 'alert-circle-outline' });
+      setBusy(null);
+    }
+  };
+  return (
+    <View style={[styles.tagRow, line && styles.line]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${tagger.name} tagged you in a ${tag.kind === 'match' ? 'match' : 'practice'}. ${what}, ${dayWords(tag.day)}, ${duration(tag.minutes)}. Open`}
+        onPress={() => router.push({ pathname: '/session-tag', params: { tag: tag.id } })}
+        style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}
+      >
+        <Avatar name={tagger.name} seed={tagger.avatarSeed} uri={tagger.avatarUrl} size={40} />
+        <View style={styles.words}>
+          <Text style={styles.title} numberOfLines={1}>{first} tagged you</Text>
+          <Text style={styles.sub} numberOfLines={1}>{what} · {dayWords(tag.day)} · {duration(tag.minutes)}</Text>
+        </View>
+      </Pressable>
+      {/* Accept and Decline under the words, the way a follow request asks in Notifications. */}
+      <View style={styles.answers}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Accept ${first}’s tag`} accessibilityState={{ busy: busy === 'accept' }} disabled={!!busy} hitSlop={4} onPress={() => { void answer(true); }} style={({ pressed }) => [styles.answer, styles.actionOn, pressed && styles.pressed]}>
+          {busy === 'accept' ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Text style={[styles.actionText, styles.actionTextOn]}>Accept</Text>}
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Decline ${first}’s tag`} accessibilityState={{ busy: busy === 'decline' }} disabled={!!busy} hitSlop={4} onPress={() => { void answer(false); }} style={({ pressed }) => [styles.answer, pressed && styles.pressed]}>
+          {busy === 'decline' ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Text style={styles.actionText}>Decline</Text>}
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+/** One session you logged, with Post it, or Posted (which opens the post). A tap on the rest opens who you played (or, for a copy from a tag, that tag). */
+function Logged({ session: s, people, onOpen, hideNote = false, source, postId, postable, onPost, line }: {
+  session: PracticeSession;
+  /** "vs Mira" (accepted), "vs June · Waiting", "with Dev", a name you typed. */
+  people: PeopleLine | null;
+  onOpen?: () => void;
+  /** The note says nothing the title doesn't (a copy from a tag). */
+  hideNote?: boolean;
+  source: string; postId?: string; postable: boolean; onPost: () => void; line: boolean;
+}) {
+  const styles = useThemedStyles(styleDefinitions);
+  const title = `${loggedLabel(s)}${people ? ` ${peopleText(people)}` : ''}`;
   return (
     <View style={[styles.row, line && styles.line]}>
-      <View style={styles.icon}>
-        {s.kind === 'match' ? <Ionicons name="trophy-outline" size={17} color={colors.textMuted} />
-          : s.kind === 'fitness' ? <Ionicons name="barbell-outline" size={17} color={colors.textMuted} />
-          : <CourtGlyph size={14} color={colors.textMuted} />}
-      </View>
-      <View style={styles.words}>
-        <Text style={styles.title} numberOfLines={1}>{title}</Text>
-        <Text style={styles.sub}>{dayWords(s.day)} · {duration(s.minutes)} · {source}</Text>
-        {/* Where it was, for a session logged from a hit ("At Alder Park · with Mira"); any other note as it was written. */}
-        {s.note ? (
-          <View style={styles.noteRow}>
-            {s.note.startsWith('At ') ? <Ionicons name="location-outline" size={12} color={colors.textFaint} /> : null}
-            <Text style={styles.note} numberOfLines={1}>{s.note.startsWith('At ') ? s.note.slice(3) : s.note}</Text>
-          </View>
-        ) : null}
-      </View>
+      {/* The row itself, beside its button rather than around it: a button inside a button is not allowed in a browser. */}
+      <Pressable
+        accessibilityRole={onOpen ? 'button' : undefined}
+        accessibilityLabel={onOpen ? `${title}. ${s.fromSessionId ? 'Open the tag' : 'Who you played'}` : undefined}
+        disabled={!onOpen}
+        onPress={onOpen}
+        style={({ pressed }) => [styles.rowMain, pressed && onOpen && styles.pressed]}
+      >
+        <View style={styles.icon}>
+          {s.kind === 'match' ? <Ionicons name="trophy-outline" size={17} color={colors.textMuted} />
+            : s.kind === 'fitness' ? <Ionicons name="barbell-outline" size={17} color={colors.textMuted} />
+            : <CourtGlyph size={14} color={colors.textMuted} />}
+        </View>
+        <View style={styles.words}>
+          <LoggedTitle label={loggedLabel(s)} people={people} style={styles.title} faint={styles.waiting} numberOfLines={2} />
+          <Text style={styles.sub}>{dayWords(s.day)} · {duration(s.minutes)} · {source}</Text>
+          {/* Where it was, for a session logged from a hit ("At Alder Park"); any other note as it was written. */}
+          {s.note && !hideNote ? (
+            <View style={styles.noteRow}>
+              {s.note.startsWith('At ') ? <Ionicons name="location-outline" size={12} color={colors.textFaint} /> : null}
+              <Text style={styles.note} numberOfLines={1}>{s.note.startsWith('At ') ? s.note.slice(3) : s.note}</Text>
+            </View>
+          ) : null}
+        </View>
+      </Pressable>
       {postId ? (
         <Pressable accessibilityRole="link" accessibilityLabel={`Posted. Open the post: ${title}`} hitSlop={8} onPress={() => router.push(`/post/${postId}`)} style={({ pressed }) => [styles.posted, pressed && styles.pressed]}>
           <Ionicons name="checkmark" size={13} color={colors.textMuted} />
@@ -217,6 +337,12 @@ const styleDefinitions = StyleSheet.create({
   weekName: { flex: 1 },
   weekHours: { ...typography.small, color: colors.textMuted, fontVariant: ['tabular-nums'], paddingHorizontal: spacing.sm, paddingBottom: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 60, paddingVertical: 11 },
+  rowMain: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  tagRow: { gap: spacing.sm, paddingVertical: 12 },
+  // Under the words, lined up with them (past the 40 of the face and the row's gap).
+  answers: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingLeft: 40 + spacing.md },
+  answer: { minWidth: 92, height: 34, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong },
+  waiting: { ...typography.small, ...font('500'), color: colors.textFaint },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   icon: { width: 22, alignItems: 'center' },
   words: { flex: 1, minWidth: 0, gap: 2 },
