@@ -1,10 +1,10 @@
-import React, { useEffect, useId, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import Animated, { FadeOut } from 'react-native-reanimated';
 import { router } from 'expo-router';
 
 import { Avatar } from '@/components/ui';
@@ -60,6 +60,19 @@ const META_INK = 'rgba(255, 255, 255, 0.94)';
  * up, so a tap on the caption's last line still opens the caption.
  */
 const LINK_SLOP = { top: 8, bottom: 12, left: 6, right: 6 } as const;
+/** The words' own tap area: a little above them, nothing below (the small line has its own buttons there). */
+const WORDS_SLOP = { top: 6, bottom: 0, left: 0, right: 0 } as const;
+
+/** "Posted 2 hours ago", for a screen reader: the small line's "2h" said in full. */
+function spokenAgo(iso: string): string {
+  const diff = Math.max(0, Date.now() - Date.parse(iso));
+  const minutes = Math.floor(diff / 60_000);
+  const hours = Math.floor(diff / 3_600_000);
+  if (minutes < 1) return 'Posted just now';
+  if (hours < 1) return `Posted ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`;
+  if (hours < 24) return `Posted ${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+  return `Posted on ${new Date(iso).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}`;
+}
 
 /** A count on the rail: "1.2k" past a thousand, and nothing at all for none, so a new post is not a column of zeros. The space keeps the line, so the icons never jump when the first like lands. */
 export const railCount = (n: number) => (n > 0 ? compactNumber(n) : ' ');
@@ -72,9 +85,15 @@ export const railCount = (n: number) => (n > 0 ? compactNumber(n) : ' ');
  *      at the end of the second line, never on a line of its own;
  *   3. one quiet line: when, where (opens the map), who with.
  * Nothing else stacks up over the video.
+ *
+ * The caption and the time open the comments, the whole caption at their
+ * top and the clip still playing above them, as Instagram does since Dec
+ * 2025. The name, the place, "with" and each #tag keep their own taps.
  */
-export function ReelCaption({ post, author, onAuthor, open, onOpenChange }: { post: Post; author: User; onAuthor: () => void; open?: boolean; onOpenChange?: (open: boolean) => void }) {
+export function ReelCaption({ post, author, onAuthor, onOpenComments }: { post: Post; author: User; onAuthor: () => void; onOpenComments?: (from?: unknown) => void }) {
   const { users, blockedIds } = useApp();
+  const touring = useTourBusy();
+  const timeButton = useRef<View>(null);
   // Only the tags the caption does not already say (a challenge entry has its #tag in both).
   const tags = tagsNotInCaption(post.body, post.tags).map((t) => `#${t}`).join(' ');
   const text = [post.body?.trim(), tags].filter(Boolean).join(' ');
@@ -86,11 +105,22 @@ export function ReelCaption({ post, author, onAuthor, open, onOpenChange }: { po
   return (
     <View style={styles.wrap}>
       <Who author={author} onAuthor={onAuthor} newHere={isNewHere(post)} />
-      {text ? <FoldedWords text={text} open={open} onOpenChange={onOpenChange} /> : null}
+      {text ? <FoldedWords text={text} onPress={onOpenComments} /> : null}
       <View style={styles.meta}>
         {/* The time never gives up room: a long court name is what shortens, never "8h" breaking onto two lines.
-            No "Edited" over the video (TikTok, Reels and Shorts leave it off too); the clip's own page still says so. */}
-        <Text style={[styles.metaText, styles.metaKeep]} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{relativeTime(post.createdAt)}</Text>
+            No "Edited" over the video (TikTok, Reels and Shorts leave it off too); the clip's own page still says so.
+            It opens the comments too, a second way in for a clip with no words. */}
+        <Pressable
+          ref={timeButton}
+          accessibilityRole="button"
+          accessibilityLabel={`${spokenAgo(post.createdAt)}. Opens the comments`}
+          disabled={!onOpenComments || touring}
+          hitSlop={LINK_SLOP}
+          onPress={(e) => { e?.stopPropagation?.(); onOpenComments?.(timeButton.current); }}
+          style={({ pressed }) => [styles.metaItem, styles.metaKeep, pressed && styles.pressed]}
+        >
+          <Text style={styles.metaText} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{relativeTime(post.createdAt)}</Text>
+        </Pressable>
         {/* The icons part the items, so no dots between them: one quiet line, not a row of punctuation. */}
         {place ? (
           <Pressable
@@ -167,19 +197,21 @@ const MORE_TAIL = <><Text style={{ ...font('400') }}>…</Text>{' more'}</>;
 /**
  * Two lines, then "… more" on the end of the second, the way the big apps
  * fold a caption. A hidden copy finds, by halving, the most of the caption
- * that fits two lines with "… more" after it; tapping opens the whole of it.
- * The page can hold the open state (to dim the picture behind an open
- * caption); left alone, the caption keeps its own.
+ * that fits two lines with "… more" after it. The whole block is one button:
+ * it opens the comments, where the whole caption is at the top (it no longer
+ * unfolds over the picture). "… more" stays as the visible cue and does the same.
+ * It sits only as wide as its words, so the air beside a short line does nothing.
  */
-export function FoldedWords({ text, open: openFromPage, onOpenChange }: { text: string; open?: boolean; onOpenChange?: (open: boolean) => void }) {
-  const [ownOpen, setOwnOpen] = useState(false);
-  const open = openFromPage ?? ownOpen;
-  const setOpen = (next: boolean) => { setOwnOpen(next); onOpenChange?.(next); };
+export function FoldedWords({ text, onPress }: { text: string; onPress?: (from?: unknown) => void }) {
+  // The tutorial is teaching the swipes: the words stay still under it.
+  const touring = useTourBusy();
+  const button = useRef<View>(null);
+  const press = () => onPress?.(button.current);
   const [fullH, setFullH] = useState(0);
   // The search for the cut: lo fits, hi does not; trial is what is being measured.
   const [cut, setCut] = useState<{ lo: number; hi: number; trial: number } | null>(null);
   const folds = fullH > LINE * 2 + 2;
-  useEffect(() => { setCut(null); setFullH(0); setOwnOpen(false); }, [text]);
+  useEffect(() => { setCut(null); setFullH(0); }, [text]);
   useEffect(() => { if (folds && !cut) setCut({ lo: 0, hi: text.length, trial: Math.floor(text.length / 2) }); }, [folds, cut, text.length]);
   const settled = cut && cut.hi - cut.lo <= 1;
   const shown = useMemo(() => {
@@ -189,15 +221,24 @@ export function FoldedWords({ text, open: openFromPage, onOpenChange }: { text: 
     const space = text.lastIndexOf(' ', at);
     return text.slice(0, space > at - 14 && space > 0 ? space : at).trimEnd().replace(/[\s,;:.–—-]+$/u, '');
   }, [folds, settled, cut, text]);
-  const more = <Text style={styles.more} onPress={() => setOpen(true)}>{MORE_TAIL}</Text>;
+  const more = <Text style={styles.more} onPress={onPress && !touring ? press : undefined}>{MORE_TAIL}</Text>;
   return (
-    <Pressable disabled={!folds} onPress={() => setOpen(!open)} accessibilityRole={folds ? 'button' : undefined} accessibilityLabel={folds ? (open ? 'Show less of the caption' : 'Show the whole caption') : undefined}>
-      {open ? (
-        <RichText style={styles.caption} hashtagStyle={styles.tag} mentionStyle={styles.tag} numberOfLines={10} maxFontSizeMultiplier={MAX_GROW} after={<Text style={styles.more}>{'  less'}</Text>}>{text}</RichText>
-      ) : (
+    <View>
+      <Pressable
+        ref={button}
+        disabled={!onPress || touring}
+        onPress={press}
+        hitSlop={WORDS_SLOP}
+        accessibilityRole={onPress ? 'button' : undefined}
+        accessibilityLabel={text}
+        accessibilityHint={onPress ? 'Opens the comments, with the whole caption' : undefined}
+        // Feedback at once and nothing more: no shrink, no buzz, no wait.
+        style={({ pressed }) => [styles.wordsButton, pressed && styles.pressed]}
+      >
         <RichText style={styles.caption} hashtagStyle={styles.tag} mentionStyle={styles.tag} numberOfLines={2} maxFontSizeMultiplier={MAX_GROW} after={folds ? more : null}>{shown}</RichText>
-      )}
-      {/* Measuring, out of sight: the full height, and each trial cut with "… more" after it. */}
+      </Pressable>
+      {/* Measuring, out of sight, across the words' whole column (not the button, which is only as wide as
+          what it shows): the full height, and each trial cut with "… more" after it. */}
       <View pointerEvents="none" aria-hidden importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={styles.measure}>
         <Text style={styles.caption} maxFontSizeMultiplier={MAX_GROW} onLayout={(e) => setFullH(e.nativeEvent.layout.height)}>{text}</Text>
         {cut && !settled ? (
@@ -219,7 +260,7 @@ export function FoldedWords({ text, open: openFromPage, onOpenChange }: { text: 
           </Text>
         ) : null}
       </View>
-    </Pressable>
+    </View>
   );
 }
 
@@ -232,16 +273,28 @@ export function ReelWho({ author, onAuthor }: { author: User; onAuthor: () => vo
  * An Instant's small line, set like a clip's: that it is an Instant and how
  * long it has left. No posted-at time beside it: an Instant lasts a day, so
  * "4h" next to "20h left" would say the same thing twice. Ticks once a minute.
+ * Like a clip's time, it opens the comments.
  */
-export function InstantMeta({ expiresAt }: { expiresAt: string }) {
+export function InstantMeta({ expiresAt, onPress }: { expiresAt: string; onPress?: (from?: unknown) => void }) {
   const [, tick] = useState(0);
   useEffect(() => { const id = setInterval(() => tick((n) => n + 1), 60_000); return () => clearInterval(id); }, []);
+  const touring = useTourBusy();
+  const button = useRef<View>(null);
+  const left = timeLeft(expiresAt);
   return (
     <View style={styles.meta}>
-      <View style={[styles.metaItem, styles.metaKeep]}>
+      <Pressable
+        ref={button}
+        accessibilityRole={onPress ? 'button' : undefined}
+        accessibilityLabel={`Instant, ${left}. ${onPress ? 'Opens the comments' : ''}`.trim()}
+        disabled={!onPress || touring}
+        hitSlop={LINK_SLOP}
+        onPress={() => onPress?.(button.current)}
+        style={({ pressed }) => [styles.metaItem, styles.metaKeep, pressed && styles.pressed]}
+      >
         <Ionicons name="time-outline" size={12} color={META_INK} style={EDGE_SMALL} />
-        <Text style={styles.metaText} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{`Instant · ${timeLeft(expiresAt)}`}</Text>
-      </View>
+        <Text style={styles.metaText} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{`Instant · ${left}`}</Text>
+      </Pressable>
     </View>
   );
 }
@@ -318,19 +371,6 @@ export function RailShade() {
   );
 }
 
-/**
- * Behind an opened caption the whole picture dims, the way Reels and TikTok
- * do it, so a long caption reads like a page of its own. A tap anywhere on
- * the picture folds it again.
- */
-export function ReelDim({ onClose }: { onClose: () => void }) {
-  return (
-    <Animated.View entering={FadeIn.duration(300)} exiting={FadeOut.duration(300)} style={[StyleSheet.absoluteFill, styles.dim]}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Fold the caption" onPress={onClose} style={StyleSheet.absoluteFill} />
-    </Animated.View>
-  );
-}
-
 const HINT_KEY = 'courtside-swipe-hint-shows';
 /** How many opens of the app teach the swipes; after that the hint never shows again. */
 const HINT_OPENS = 3;
@@ -399,5 +439,7 @@ const styles = StyleSheet.create({
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   // From the rail's top, up past the heart and down past the bookmark, to the screen's right edge (the rail stands 12 in).
   railShade: { position: 'absolute', top: -115, right: -12, width: 112, height: 340 },
-  dim: { backgroundColor: 'rgba(0, 0, 0, 0.5)' },
+  // The words as a button: only as wide as they are.
+  wordsButton: { alignSelf: 'flex-start', maxWidth: '100%' },
+  pressed: { opacity: 0.6 },
 });

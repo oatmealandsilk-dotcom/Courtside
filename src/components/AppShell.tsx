@@ -25,6 +25,9 @@ import { listenForPushTaps, registerForPush } from '@/features/push/push';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { TERMS_VERSION } from '@/lib/legal';
 import { colors } from '@/theme';
+import { stageKeyOf, useStageSelect } from '@/features/feed/commentStage';
+import { useStageMotion } from '@/features/feed/useStageMotion';
+import Reanimated from 'react-native-reanimated';
 
 /**
  * The four tabs in the strip's order, left to right: Community, Home,
@@ -34,8 +37,12 @@ import { colors } from '@/theme';
  */
 const paths = { discuss: '/discuss', index: '/', coaches: '/coaches', profile: '/profile' } as const;
 const routes = Object.keys(paths).map(name => ({ key: name, name }));
-/** The pages that slide up over the app; Escape closes them on a computer. */
-const SHEETS = new Set(['/compose', '/share', '/pick-group', '/ask', '/comments', '/post-menu', '/edit-post', '/messages/new', '/log-session', '/hit-request/new', '/court-report']);
+/**
+ * The pages that slide up over the app; Escape closes them on a computer.
+ * The comments close themselves on Escape, with their own animation (see
+ * DragSheet.web), so they are not here: a second step back closed the page under them too.
+ */
+const SHEETS = new Set(['/compose', '/share', '/pick-group', '/ask', '/post-menu', '/edit-post', '/messages/new', '/log-session', '/hit-request/new', '/court-report']);
 const TAB_ORDER: string[] = Object.values(paths);
 export function AppShell({ children }: { children: React.ReactNode }) {
   useTheme();
@@ -167,13 +174,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // hide it everywhere.
   const phoneOnlyHide = ['/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/invite', '/comments', '/share', '/pick-group', '/likes', '/post-menu', '/log-session', '/hit-request/new', '/court-report', '/wrapped'].includes(pathname) || pathname.startsWith('/messages/');
   // Arriving from the password-reset email is its own calm page, with no app around it yet.
-  const { reset } = useGlobalSearchParams<{ reset?: string }>();
+  // (The comments' own address says which clip they are about, for the stage below.)
+  const { reset, kind: routeKind, id: routeId, stage: routeStage } = useGlobalSearchParams<{ reset?: string; kind?: string; id?: string; stage?: string }>();
   const hideEverywhere = ['/sign-in', '/onboarding', '/agree', '/birthday', '/first-move', '/hit'].includes(pathname) || pathname.startsWith('/story/') || (pathname === '/account' && !!reset);
   // The splash shares Home's address ('/'); only the route's segments tell
   // them apart. The bar waits until the splash has handed over to the app.
   const segments = useSegments() as string[];
   const onSplash = segments.length === 0 || (segments.length === 1 && segments[0] === 'index');
-  const showNav = !!currentUserId && !hideEverywhere && !onSplash && !(isPhone && phoneOnlyHide);
+  // On the comments stage the phone's bar does not pop away: it stays, out of
+  // reach of touches, and fades out with the first of the opening (and back
+  // in with the last of the closing), following the sheet (see commentStage).
+  // It follows from the tap, before the comments' address is even the page's,
+  // so it fades from the first frame of the move; then only while those very
+  // comments are in front (not a page opened over them, nor other comments),
+  // and as the page grows back if the comments went without their own close.
+  const stageBar = useStageSelect((s) => (s && s.mode === 'stage' && !s.covered ? `${s.key}|${s.mounted && !s.ending ? 'up' : 'moving'}` : ''));
+  const [barKey, barPhase] = stageBar.split('|');
+  const commentsOnStage = pathname === '/comments' && routeStage === '1' && stageKeyOf(routeKind === 'hit' ? 'hit' : 'post', routeId ?? '') === barKey;
+  const barOnStage = isPhone && !!stageBar && (commentsOnStage || (barPhase === 'moving' && pathname !== '/comments'));
+  // The bar is cut off at the sheet's top as it rises (navInner holds the bar
+  // still inside the cut): the sheet comes up over it, never under it.
+  const navFade = useStageMotion('nav', { enabled: barOnStage });
+  const navHold = useStageMotion('navInner', { enabled: barOnStage });
+  // A browser still lets taps reach the bar's buttons through "none" on the
+  // layer around it (they set their own); `inert` takes the whole bar out of
+  // reach, and out of a screen reader's, while the comments are over it.
+  const navLayer = useRef<HTMLElement | null>(null);
+  useEffect(() => { if (Platform.OS === 'web' && navLayer.current) navLayer.current.inert = barOnStage; }, [barOnStage]);
+  const showNav = !!currentUserId && !hideEverywhere && !onSplash && (!(isPhone && phoneOnlyHide) || barOnStage);
   const curtainDown = useCurtainDown();
   // A shared link opened while signed out goes to sign-in, not to an empty page.
   const mustSignIn = ready && authResolved && !currentUserId && !['/', '/index', '/sign-in', '/onboarding', '/birthday'].includes(pathname);
@@ -229,7 +257,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     {showNav && !isPhone && nav}
     {/* While the tour is up, TalkBack reads only the tour, not the page under the dim. */}
     <View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={{ flex: 1, minWidth: 0, minHeight: 0 }}><RouteTransition>{children}</RouteTransition><Toast /><UploadBar /></View>
-    {showNav && isPhone && nav}
+    {showNav && isPhone ? (
+      <Reanimated.View ref={((node: unknown) => { navLayer.current = node as HTMLElement | null; navFade.ref?.(node); }) as never} pointerEvents={barOnStage ? 'none' : 'box-none'} style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, barOnStage && { overflow: 'hidden' }, navFade.style]}>
+        <Reanimated.View ref={navHold.ref as never} pointerEvents="box-none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, navHold.style]}>{nav}</Reanimated.View>
+      </Reanimated.View>
+    ) : null}
     {/* A new message drops in at the top, over the bar too; never on the pages the app keeps to themselves. */}
     <MessageBanner enabled={!!currentUserId && !hideEverywhere && !onSplash && !detour} />
     {/* The splash curtain, from the splash's hand-over until the page the app opens on has drawn (see warmup). */}

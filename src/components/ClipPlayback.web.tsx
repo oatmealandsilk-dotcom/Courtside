@@ -16,7 +16,7 @@ import { forgetLeft, noteLeft, takeLeft } from '@/features/feed/clipResume';
 /** The feed's top shade (see TOP_SHADE) as a browser gradient. */
 const TOP_SHADE_CSS = `linear-gradient(${TOP_SHADE.colors.map((c, i) => `${c} ${TOP_SHADE.locations[i] * 100}%`).join(', ')})`;
 
-function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmOnly = false, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop }: {
+function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmOnly = false, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop, held = false, onStage = false }: {
   uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void; fit?: 'cover' | 'contain'; trimStart?: number; trimEnd?: number; silent?: boolean;
   /** Built ahead on a page not opened yet (the Feed warming up out of sight): fetch only the clip's opening, not the whole file. */
   warmOnly?: boolean;
@@ -43,13 +43,17 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
   onReady?: (ready: boolean) => void;
   /** A zoom and shift inside the frame, chosen in the editor. */
   crop?: MediaCrop;
+  /** On the comments stage: plays on, shrunk above the sheet, although the comments page is on top. */
+  held?: boolean;
+  /** Its page is on the comments stage, held or not (a page opened over the comments holds it still): a pause the viewer chose stays. */
+  onStage?: boolean;
 }) {
   // Hears a theme change, so its own colours never lag the page's.
   useTheme();
   // Plays only on the screen you are looking at: a page pushed over this one,
   // or a tab slid away, holds it until you come back (the phone's player does
-  // the same in ClipVideo).
-  const onTop = useIsFocused();
+  // the same in ClipVideo). The comments stage keeps its clip playing.
+  const onTop = useIsFocused() || held;
   const active = wanted && onTop;
   const insets = useSafeAreaInsets();
   const video = useRef<HTMLVideoElement>(null);
@@ -163,7 +167,9 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
     el.preservesPitch = true;
     el.volume = volume ?? 1;
   }, [speed, volume, fast]);
-  useEffect(() => { if (!active) setPaused(false); }, [active]);
+  // Swiped away or covered, a pause is forgotten; held still under a page
+  // opened over the comments stage, a pause the viewer chose is kept.
+  useEffect(() => { if (!active && !onStage) setPaused(false); }, [active, onStage]);
   // Space bar on a computer: play / pause the clip on screen.
   useEffect(() => { if (!active) return; return onSpaceBar(() => setPaused((p) => !p)); }, [active]);
 
@@ -217,7 +223,8 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
     }} style={{ position: 'absolute', inset: 0, width: '100%', background: 'transparent', border: 0, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       {paused && ready ? <span style={{ width: 64, height: 64, borderRadius: 32, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', paddingLeft: 4 }}><Ionicons name="play" size={30} color="white" /></span> : null}
     </button>
-    {silent || bare ? null : <button aria-label={muted ? 'Unmute clip' : 'Mute clip'} onClick={() => { setMuted((v) => !v); if (!discPinned) showDisc(); }} style={{
+    {/* A feed disc fades with the words as its page goes onto the comments stage (data-stage-chrome, see useStageMotion.web). */}
+    {silent || bare ? null : <div data-stage-chrome={discInk ? '' : undefined}><button aria-label={muted ? 'Unmute clip' : 'Mute clip'} onClick={() => { setMuted((v) => !v); if (!discPinned) showDisc(); }} style={{
       position: 'absolute', right: 18, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxSizing: 'border-box',
       // In the feed: the phone's tile, the same rounded square as the mark's at the other corner, centred level with it,
       // nearly solid so its icon stays crisp, with a hairline so it holds on a white sky. Elsewhere: a small dark disc.
@@ -225,7 +232,7 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
         ? { top: insets.top + 27, width: 40, height: 40, borderRadius: 12, background: `${colors.bg}E6`, border: `0.5px solid ${colors.border}` }
         : { top: insets.top + 22, width: 30, height: 30, borderRadius: 15, background: 'rgba(0,0,0,0.55)', border: 0 }),
       opacity: discOn ? 1 : 0, transform: discOn ? 'scale(1)' : 'scale(0.86)', transition: discOn ? 'opacity 160ms ease-out, transform 160ms ease-out' : 'opacity 140ms ease-in, transform 140ms ease-in',
-    }}><Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={discInk ? 19 : 17} color={discInk ?? 'white'} /></button>}
+    }}><Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={discInk ? 19 : 17} color={discInk ?? 'white'} /></button></div>}
     {bare ? null : <div aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, background: 'rgba(255,255,255,0.25)' }}>
       <div ref={bar} style={{ height: 2, width: '0%', background: 'rgba(255,255,255,0.9)' }} />
     </div>}

@@ -15,10 +15,15 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   onSize?: (width: number, height: number) => void;
   /** The clip left the page (or was swapped for another): whatever it had fetched is gone with it. */
   onGone?: () => void;
-}>(function ClipVideo({ uri, poster, active: wanted = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, speed, volume, onProgress, onReady, onSize, onGone }, ref) {
+  /** On the comments stage: it plays on although the comments page is over it (see the phone's ClipVideo). */
+  held?: boolean;
+  /** The phone's Android drawing mode; a browser has no such choice. */
+  surfaceType?: 'textureView' | 'surfaceView';
+}>(function ClipVideo({ uri, poster, active: wanted = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, speed, volume, onProgress, onReady, onSize, onGone, held = false }, ref) {
   // Plays only on the screen you are looking at, as on a phone: a page pushed
-  // over this one, or a tab slid away, holds it until you come back.
-  const onTop = useIsFocused();
+  // over this one, or a tab slid away, holds it until you come back. The
+  // comments stage is the exception: its clip plays on above the sheet.
+  const onTop = useIsFocused() || held;
   const active = wanted && onTop;
   const el = useRef<HTMLVideoElement>(null);
   // Rate and level are set on the element, and set again whenever it reloads

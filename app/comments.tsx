@@ -1,30 +1,52 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useRef, useState } from 'react';
-import { Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, View, type TextInput } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { AccessibilityInfo, BackHandler, Keyboard, Platform, Pressable, StyleSheet, Text, View, type TextInput } from 'react-native';
+import { router, useFocusEffect, useIsFocused, useLocalSearchParams, useNavigation, useRoute } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image as ExpoImage } from 'expo-image';
-import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, { FadeInDown, FadeOut, runOnJS, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, type AnimatedRef } from 'react-native-reanimated';
 
 import { CommentThread, threadOf, threadsOf, useReplyDraft } from '@/components/CommentThread';
-import { DragSheet } from '@/components/DragSheet';
+import { CommentsCaption } from '@/components/CommentsCaption';
+import { DragSheet, useSheetDrag } from '@/components/DragSheet';
 import { pickFromDevice } from '@/components/MediaPicker';
+import { StageRail } from '@/components/StageRail';
 import { Avatar, BrandWash, Field } from '@/components/ui';
 import type { Comment, ID } from '@/data/types';
+import { LIST_PULL, getStage, markGone, markMounted, setCovered, stageKeyOf, useStageSelect } from '@/features/feed/commentStage';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /** One tap drops these into the box, the way Instagram's row above the keyboard does. Tennis first. */
 const QUICK = ['🎾', '🔥', '👏', '😂', '😮', '🙌', '💯', '❤️'];
+/**
+ * On the stage, how many threads come in with the sheet: about what fills
+ * it at half. The rest follow once it has come to rest, so the comments are
+ * drawn, and the rise starts, as soon as they can be.
+ */
+const FIRST_THREADS = 4;
+/**
+ * What you were writing, by post, until the app quits: closing the comments
+ * (or a stray swipe) never throws away a half-written comment.
+ */
+const drafts = new Map<string, string>();
 
 /**
  * Comments on a clip, a post or a hit, as a sheet over the feed — the way
  * Instagram does it — instead of a page of its own. Threads keep their page.
  *
- * The box at the bottom: your picture, the words, and on the right a photo
- * button that turns into send as soon as there is something to send. A sent
- * comment slides in at the bottom of the list.
+ * Opened from a clip's words or its speech bubble in the Feed, on a phone, it
+ * is the comments stage: the clip stays playing above the sheet, shrunk into
+ * the room left, with its heart, send and save beside it (see commentStage).
+ * From anywhere else (an alert, a link, a post's page) it is the plain sheet.
+ *
+ * At the top of the list, the post itself: who, the whole caption and its
+ * small line (CommentsCaption). The box at the bottom: your picture, the
+ * words, and on the right a photo button that turns into send as soon as
+ * there is something to send. A sent comment slides in at the bottom.
  *
  * Replies work the way Instagram's do: "Reply" under a comment puts
  * "@them " in the box with a slim "Replying to @them ×" bar above it; the
@@ -35,11 +57,47 @@ const QUICK = ['🎾', '🔥', '👏', '😂', '😮', '🙌', '💯', '❤️']
  */
 export default function CommentsSheet() {
   const styles = useThemedStyles(styleDefinitions);
-  const { kind: rawKind, id = '', focus, at, reply: replyParam } = useLocalSearchParams<{ kind?: string; id?: string; focus?: string; at?: string; reply?: string }>();
+  const { kind: rawKind, id = '', focus, at, reply: replyParam, stage: stageParam } = useLocalSearchParams<{ kind?: string; id?: string; focus?: string; at?: string; reply?: string; stage?: string }>();
+  const kind = rawKind === 'hit' ? 'hit' : 'post';
+  const key = stageKeyOf(kind, id);
+  // The stage only when the Feed has just put this very clip on it; a reload,
+  // an old link (the address says stage, nothing is on it) or a stage already
+  // on its way out gets the plain sheet. A wide computer window's docked panel
+  // (mode 'side') takes the clip on too, with nothing to shrink.
+  const [adopted] = useState(() => {
+    const now = getStage();
+    if (!now || now.ending || now.key !== key) return null;
+    if (now.mode === 'side') return { id: now.id, geo: null };
+    return stageParam === '1' && now.geo ? { id: now.id, geo: now.geo } : null;
+  });
+  const stage = adopted?.geo ?? null;
+  const staged = !!stage;
+  // Read as one word, so the comments redraw only when it changes: whether
+  // the stage they took on is still up, and whether its page went away.
+  const stageNow = useStageSelect((s) => (adopted && s?.id === adopted.id ? (s.lost ? 'lost' : 'up') : 'off'));
+  const mine = stageNow !== 'off';
+  // Told before anything else can run, so the feed never gives up on a stage these comments have taken.
+  useLayoutEffect(() => { if (adopted) markMounted(adopted.id); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Gone without their own close (taken down with pages opened over them): the feed may need telling.
+  useEffect(() => () => { if (adopted) markGone(adopted.id); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // A page opened over the comments (a profile, a #tag, a court) holds the
+  // clip under the stage still until you are back; then it carries on from there.
+  const focused = useIsFocused();
+  useEffect(() => { if (mine) setCovered(!focused); }, [focused, mine]);
+  // Leaving: back, as ever, from the page in front. Under a page opened over
+  // it (the clip went away meanwhile, say), this page alone goes: never the
+  // one on top, and never left behind, invisible, over the feed.
+  const navigation = useNavigation();
+  const route = useRoute();
+  const leave = () => {
+    if (navigation.isFocused()) { router.back(); return; }
+    navigation.dispatch({ type: 'POP', payload: { count: 1 }, source: route.key, target: navigation.getState()?.key });
+  };
+
   // Opened from "Add a comment": the box is ready to type in as the sheet lands.
   const input = useRef<TextInput>(null);
   // Opened from a comment on the page: the list scrolls to that comment as the sheet lands.
-  const list = useRef<ScrollView>(null);
+  const list = useAnimatedRef<Animated.ScrollView>();
   const rowY = useRef<Record<string, number>>({});
   const rowH = useRef<Record<string, number>>({});
   // How far the list is scrolled, and the two edges of what can be seen of it:
@@ -47,22 +105,23 @@ export default function CommentsSheet() {
   const scrollY = useRef(0);
   const frame = useRef<View>(null);
   const composer = useRef<View>(null);
+  const heading = useRef<Text>(null);
   useEffect(() => {
     if (!at) return;
     const t = setTimeout(() => { const y = rowY.current[at]; if (y !== undefined) list.current?.scrollTo({ y: Math.max(0, y - 12), animated: true }); }, 420);
     return () => clearTimeout(t);
-  }, [at]);
+  }, [at]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!focus) return;
     const t = setTimeout(() => input.current?.focus(), 380);
     return () => clearTimeout(t);
   }, [focus]);
-  const kind = rawKind === 'hit' ? 'hit' : 'post';
   const { comments, posts, stories, users, currentUserId, actions } = useApp();
   const me = users.find((u) => u.id === currentUserId);
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState(() => drafts.get(key) ?? '');
   const [photo, setPhoto] = useState<string | null>(null);
   const [closeSignal, setCloseSignal] = useState(0);
+  const close = useCallback(() => setCloseSignal((n) => n + 1), []);
   const post = kind === 'post' ? posts.find((p) => p.id === id) : undefined;
   const exists = kind === 'hit' ? stories.some((st) => st.id === id) : !!post;
   const author = post ? users.find((u) => u.id === post.authorId) : undefined;
@@ -71,6 +130,39 @@ export default function CommentsSheet() {
   const threads = threadsOf(comments, id, 'oldest');
   // Comments made while the sheet is open slide in; the ones already there just appear.
   const openedAt = useRef(Date.now());
+  // On the stage the first few threads rise with the sheet; the rest are drawn
+  // once it is at rest. Opened at a comment, or as the plain sheet, all of them at once.
+  const [allThreads, setAllThreads] = useState(!!at || !staged);
+  const settledOnce = useRef(false);
+  const onSettled = () => {
+    if (settledOnce.current) return;
+    settledOnce.current = true;
+    setAllThreads(true);
+    // A screen reader starts on the sheet's heading, "Comments, 12". Not when
+    // the sheet opened to type in ("Add a comment", "Reply"), or the box would lose the keyboard.
+    if (focus || replyParam) return;
+    if (Platform.OS !== 'web') { if (heading.current) AccessibilityInfo.sendAccessibilityEvent(heading.current as never, 'focus'); return; }
+    const el = heading.current as unknown as HTMLElement | null;
+    const active = typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null;
+    if (!el || (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable))) return;
+    // A heading takes the focus only when told it may (and never by Tab).
+    el.tabIndex = -1;
+    el.focus?.({ preventScroll: true });
+  };
+
+  // Your words are kept if you leave without sending them.
+  const latestDraft = useRef(draft);
+  latestDraft.current = draft;
+  // The page under the stage went away (an Instant ran out, its author was
+  // blocked): the sheet closes the usual way. With a page opened over it (the
+  // profile they were blocked from), it waits until it is back in front.
+  useEffect(() => { if (stageNow === 'lost' && focused) close(); }, [stageNow, focused]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Android's Back closes the sheet with its own animation, while it is the page in front.
+  useFocusEffect(useCallback(() => {
+    if (Platform.OS !== 'android') return undefined;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { close(); return true; });
+    return () => sub.remove();
+  }, [close]));
 
   // A post opened from a notification may not be loaded yet: it is fetched once.
   const [looked, setLooked] = useState(exists);
@@ -108,6 +200,13 @@ export default function CommentsSheet() {
   const { replyingTo, start: startReply, change: changeDraft, stop: stopReplying, done: doneReplying, words } = useReplyDraft(setDraft, () => input.current?.focus());
   // Something of your own to send: words beyond the "@them " Reply put in, or a photo.
   const canSend = exists && (!!words(draft).trim() || !!photo);
+  // Kept for next time only if there is something of your own in it.
+  const latestWords = useRef(words);
+  latestWords.current = words;
+  useEffect(() => () => {
+    const text = latestDraft.current;
+    if (latestWords.current(text).trim()) drafts.set(key, text); else drafts.delete(key);
+  }, [key]);
 
   // The comment being answered stays in sight just above the box, as on
   // Instagram, rather than sliding under the keyboard as it comes up. Measured
@@ -191,96 +290,197 @@ export default function CommentsSheet() {
     setDraft((d) => d + emoji);
     input.current?.focus();
   };
+  // On the stage the emoji row shows only while you type, giving its room
+  // back to the comments at half. A moment's grace on blur: pressing an emoji
+  // takes the focus away for an instant, and the row must not go under the finger.
+  const [typing, setTyping] = useState(false);
+  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (blurTimer.current) clearTimeout(blurTimer.current); }, []);
+  const onBoxFocus = () => { if (blurTimer.current) clearTimeout(blurTimer.current); setTyping(true); };
+  const onBoxBlur = () => {
+    blurredAt.current = Date.now();
+    if (blurTimer.current) clearTimeout(blurTimer.current);
+    blurTimer.current = setTimeout(() => setTyping(false), 250);
+  };
+  const quickRow = (
+    <>
+      {QUICK.map((e) => (
+        <Pressable key={e} accessibilityRole="button" accessibilityLabel={`Add ${e}`} hitSlop={6} onPress={() => addEmoji(e)} style={({ pressed }) => [styles.quickItem, pressed && styles.quickPressed]}>
+          <Text style={styles.quickEmoji}>{e}</Text>
+        </Pressable>
+      ))}
+    </>
+  );
 
+  const shownThreads = allThreads ? threads : threads.slice(0, FIRST_THREADS);
+  const count = all.length;
   return (
-    <DragSheet
-      closeSignal={closeSignal}
-      onDismissed={() => router.back()}
-      peekFraction={0.7}
-      side
-      header={
-        <View style={styles.headerRow}>
-          <Text style={styles.heading}>Comments{all.length ? ` · ${all.length}` : ''}</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={() => setCloseSignal((n) => n + 1)}>
-            <Ionicons name="close" size={22} color={colors.textMuted} />
-          </Pressable>
-        </View>
-      }
-    >
-      <View ref={frame} style={{ flex: 1 }}>
-        <ScrollView
-          ref={list}
-          style={{ flex: 1 }}
-          contentContainerStyle={styles.list}
-          keyboardShouldPersistTaps="handled"
-          scrollEventThrottle={32}
-          onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }}
-        >
-          {threads.map((t) => (
-            <CommentThread
-              key={t.top.id}
-              thread={t}
-              big
-              open={openThreads.has(t.top.id)}
-              onToggle={() => toggleThread(t.top.id)}
-              onReply={exists ? replyTo : undefined}
-              onRowLayout={(commentId, y, height) => { rowY.current[commentId] = y; rowH.current[commentId] = height; }}
-              isFresh={(c) => Date.parse(c.createdAt) > openedAt.current}
-            />
-          ))}
-          {!threads.length ? <Text style={styles.empty}>{exists ? 'No comments yet. Start the conversation.' : looked ? 'This is no longer available.' : ''}</Text> : null}
-        </ScrollView>
-        <View ref={composer} style={styles.composer}>
-          {replyingTo ? (
-            <Animated.View entering={FadeInDown.duration(160)} style={styles.replying}>
-              <Text style={styles.replyingText} numberOfLines={1}>
-                Replying to {replyingTo.self ? 'your comment' : <Text style={styles.replyingHandle}>@{replyingTo.handle}</Text>}
-              </Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Stop replying" hitSlop={10} onPress={stopReplying}>
-                <Ionicons name="close" size={16} color={colors.textMuted} />
-              </Pressable>
-            </Animated.View>
-          ) : null}
-          <View style={styles.quick}>
-            {QUICK.map((e) => (
-              <Pressable key={e} accessibilityRole="button" accessibilityLabel={`Add ${e}`} hitSlop={6} onPress={() => addEmoji(e)} style={({ pressed }) => [styles.quickItem, pressed && styles.quickPressed]}>
-                <Text style={styles.quickEmoji}>{e}</Text>
-              </Pressable>
-            ))}
+    <>
+      {/* Over the stage's black the phone's clock is white, as it is over the clip in the Feed. */}
+      {staged && focused ? <StatusBar style="light" animated /> : null}
+      <DragSheet
+        closeSignal={closeSignal}
+        onDismissed={leave}
+        peekFraction={0.7}
+        active={focused}
+        side
+        stage={stage}
+        stageOverlay={staged ? <StageRail kind={kind} id={id} /> : undefined}
+        onSettled={onSettled}
+        header={
+          <View style={styles.headerRow}>
+            <Text ref={heading} accessibilityRole="header" accessibilityLabel={count ? `Comments, ${count}` : 'Comments'} style={styles.heading}>Comments{count ? ` · ${count}` : ''}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={close}>
+              <Ionicons name="close" size={22} color={colors.textMuted} />
+            </Pressable>
           </View>
-          {photo ? (
-            <Animated.View entering={FadeInDown.duration(180)} style={styles.attached}>
-              <ExpoImage source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="cover" />
-              <Pressable accessibilityRole="button" accessibilityLabel="Remove the photo" hitSlop={8} onPress={() => setPhoto(null)} style={styles.attachedRemove}>
-                <Ionicons name="close" size={13} color="#fff" />
-              </Pressable>
-            </Animated.View>
-          ) : null}
-          <View style={styles.inputRow}>
-            <Avatar name={me?.name ?? 'You'} seed={me?.avatarSeed ?? currentUserId ?? 'me'} uri={me?.avatarUrl} size={34} style={styles.me} />
-            <View style={{ flex: 1 }}>
-              <Field inputRef={input} value={draft} onChangeText={changeDraft} placeholder={replyingTo ? (replyingTo.self ? 'Add a reply…' : `Reply to @${replyingTo.handle}…`) : author && author.id !== currentUserId ? `Add a comment for ${author.name.split(' ')[0]}…` : 'Add a comment…'} multiline minHeight={44} onSubmitEditing={send} onBlur={() => { blurredAt.current = Date.now(); }} mentions compact />
-            </View>
-            <View style={styles.action}>
-              {kind === 'post' ? (
-                <Animated.View style={[StyleSheet.absoluteFill, styles.center, photoStyle]} pointerEvents={canSend ? 'none' : 'auto'}>
-                  <Pressable accessibilityRole="button" accessibilityLabel="Add a photo" hitSlop={6} onPress={() => void addPhoto()} style={styles.photoButton}>
-                    <Ionicons name="image-outline" size={19} color={colors.textMuted} />
-                  </Pressable>
-                </Animated.View>
-              ) : null}
-              <Animated.View style={[StyleSheet.absoluteFill, styles.center, kind === 'post' ? sendStyle : null]} pointerEvents={canSend ? 'auto' : kind === 'post' ? 'none' : 'auto'}>
-                <Pressable accessibilityRole="button" accessibilityLabel="Post comment" disabled={!canSend} onPress={send} style={[styles.send, !canSend && kind !== 'post' && { opacity: 0.4 }]}>
-                  <BrandWash />
-                  <Ionicons name="arrow-up" size={19} color={colors.brandInk} />
+        }
+      >
+        <View ref={frame} style={{ flex: 1 }} onAccessibilityEscape={close}>
+          <CommentList
+            listRef={list}
+            pull={staged && LIST_PULL && Platform.OS !== 'web'}
+            onScrollY={(y) => { scrollY.current = y; }}
+            contentContainerStyle={styles.list}
+          >
+            {/* The post itself first: who, the whole caption, its small line. */}
+            <CommentsCaption kind={kind} id={id} />
+            {shownThreads.map((t) => (
+              <CommentThread
+                key={t.top.id}
+                thread={t}
+                big
+                open={openThreads.has(t.top.id)}
+                onToggle={() => toggleThread(t.top.id)}
+                onReply={exists ? replyTo : undefined}
+                onRowLayout={(commentId, y, height) => { rowY.current[commentId] = y; rowH.current[commentId] = height; }}
+                isFresh={(c) => Date.parse(c.createdAt) > openedAt.current}
+              />
+            ))}
+            {!threads.length ? <Text style={styles.empty}>{exists ? 'No comments yet. Start the conversation.' : looked ? 'This is no longer available.' : ''}</Text> : null}
+          </CommentList>
+          <View ref={composer} style={styles.composer}>
+            {replyingTo ? (
+              <Animated.View entering={FadeInDown.duration(160)} style={styles.replying}>
+                <Text style={styles.replyingText} numberOfLines={1}>
+                  Replying to {replyingTo.self ? 'your comment' : <Text style={styles.replyingHandle}>@{replyingTo.handle}</Text>}
+                </Text>
+                <Pressable accessibilityRole="button" accessibilityLabel="Stop replying" hitSlop={10} onPress={stopReplying}>
+                  <Ionicons name="close" size={16} color={colors.textMuted} />
                 </Pressable>
               </Animated.View>
+            ) : null}
+            {!staged ? <View style={styles.quick}>{quickRow}</View> : typing ? (
+              <Animated.View entering={FadeInDown.duration(160)} exiting={FadeOut.duration(120)} style={styles.quick}>{quickRow}</Animated.View>
+            ) : null}
+            {photo ? (
+              <Animated.View entering={FadeInDown.duration(180)} style={styles.attached}>
+                <ExpoImage source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="cover" />
+                <Pressable accessibilityRole="button" accessibilityLabel="Remove the photo" hitSlop={8} onPress={() => setPhoto(null)} style={styles.attachedRemove}>
+                  <Ionicons name="close" size={13} color="#fff" />
+                </Pressable>
+              </Animated.View>
+            ) : null}
+            <View style={styles.inputRow}>
+              <Avatar name={me?.name ?? 'You'} seed={me?.avatarSeed ?? currentUserId ?? 'me'} uri={me?.avatarUrl} size={34} style={styles.me} />
+              <View style={{ flex: 1 }}>
+                <Field inputRef={input} value={draft} onChangeText={changeDraft} placeholder={replyingTo ? (replyingTo.self ? 'Add a reply…' : `Reply to @${replyingTo.handle}…`) : author && author.id !== currentUserId ? `Add a comment for ${author.name.split(' ')[0]}…` : 'Add a comment…'} multiline minHeight={44} onSubmitEditing={send} onFocus={onBoxFocus} onBlur={onBoxBlur} mentions compact />
+              </View>
+              <View style={styles.action}>
+                {kind === 'post' ? (
+                  <Animated.View style={[StyleSheet.absoluteFill, styles.center, photoStyle]} pointerEvents={canSend ? 'none' : 'auto'}>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Add a photo" hitSlop={6} onPress={() => void addPhoto()} style={styles.photoButton}>
+                      <Ionicons name="image-outline" size={19} color={colors.textMuted} />
+                    </Pressable>
+                  </Animated.View>
+                ) : null}
+                <Animated.View style={[StyleSheet.absoluteFill, styles.center, kind === 'post' ? sendStyle : null]} pointerEvents={canSend ? 'auto' : kind === 'post' ? 'none' : 'auto'}>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Post comment" disabled={!canSend} onPress={send} style={[styles.send, !canSend && kind !== 'post' && { opacity: 0.4 }]}>
+                    <BrandWash />
+                    <Ionicons name="arrow-up" size={19} color={colors.brandInk} />
+                  </Pressable>
+                </Animated.View>
+              </View>
             </View>
           </View>
         </View>
-      </View>
-    </DragSheet>
+      </DragSheet>
+    </>
   );
+}
+
+/**
+ * The comments list. On the stage (a phone, not a browser) a pull down while
+ * the list is at its very top moves the sheet instead, so the comments can be
+ * pulled down and away from anywhere, as on Instagram; anywhere else it is
+ * the list's own scroll. The list is held at its top while the sheet moves.
+ */
+function CommentList({ listRef, pull, onScrollY, contentContainerStyle, children }: {
+  listRef: AnimatedRef<Animated.ScrollView>;
+  pull: boolean;
+  onScrollY: (y: number) => void;
+  contentContainerStyle: object;
+  children: React.ReactNode;
+}) {
+  const drag = useSheetDrag();
+  const listY = useSharedValue(0);
+  const pulling = useSharedValue(false);
+  const touchStart = useSharedValue({ x: 0, y: 0 });
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      listY.value = e.contentOffset.y;
+      runOnJS(onScrollY)(e.contentOffset.y);
+    },
+  });
+  // Made once: the sheet re-draws as you type, and the pull must not be re-made under a finger.
+  const gesture = useMemo(() => {
+    if (!pull || !drag) return null;
+    const native = Gesture.Native();
+    // Taken only for a pull down that starts with the list at its top; a move up, or a list already scrolled, is the list's own.
+    const sheetPull = Gesture.Pan()
+      .manualActivation(true)
+      .simultaneousWithExternalGesture(native)
+      .onTouchesDown((e) => {
+        'worklet';
+        const t = e.allTouches[0];
+        if (t) touchStart.value = { x: t.absoluteX, y: t.absoluteY };
+      })
+      .onTouchesMove((e, manager) => {
+        'worklet';
+        const t = e.allTouches[0];
+        if (!t) return;
+        const dy = t.absoluteY - touchStart.value.y;
+        const dx = Math.abs(t.absoluteX - touchStart.value.x);
+        if (listY.value <= 0 && dy > 6 && dx < 12) manager.activate();
+        else if (dy < -2 || listY.value > 0 || dx >= 12) manager.fail();
+      })
+      .onStart(() => { 'worklet'; pulling.value = true; drag.start(); })
+      .onUpdate((e) => {
+        'worklet';
+        drag.to(e.translationY);
+        scrollTo(listRef, 0, 0, false);
+      })
+      .onEnd((e) => { 'worklet'; drag.release(e.velocityY); })
+      .onFinalize(() => { 'worklet'; pulling.value = false; });
+    return Gesture.Simultaneous(native, sheetPull);
+  }, [pull, drag, listRef]); // eslint-disable-line react-hooks/exhaustive-deps
+  const scroller = (
+    <Animated.ScrollView
+      ref={listRef}
+      style={{ flex: 1 }}
+      contentContainerStyle={contentContainerStyle}
+      keyboardShouldPersistTaps="handled"
+      // A swipe down the list takes the keyboard with it, following the finger on an iPhone.
+      keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+      bounces={!pull}
+      scrollEventThrottle={16}
+      onScroll={onScroll}
+    >
+      {children}
+    </Animated.ScrollView>
+  );
+  if (!gesture) return scroller;
+  return <GestureDetector gesture={gesture}>{scroller}</GestureDetector>;
 }
 
 const styleDefinitions = StyleSheet.create({
