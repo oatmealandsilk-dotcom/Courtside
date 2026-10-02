@@ -2,6 +2,20 @@ import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react
 
 export interface HomeRect { x: number; y: number; width: number; height: number; radius?: number }
 export interface ZoomableMediaHandle { close: () => void }
+export interface ZoomableMediaProps {
+  children: React.ReactNode;
+  onDismiss?: () => void;
+  home?: HomeRect;
+  /** The phone's viewer grows out of `home`; a browser's simply opens (kept so both take the same props). */
+  grow?: boolean;
+  /**
+   * Which swipe puts it away: sideways (the feed's viewer), or down, as in
+   * Photos and iMessage, when it sits in a row of pictures that a sideways
+   * swipe moves between. Down leaves sideways swipes to the browser, which
+   * scrolls the row.
+   */
+  dismissOn?: 'sideways' | 'down';
+}
 
 /**
  * The browser twin of ZoomableMedia. On a touch screen, a two-finger pinch
@@ -12,7 +26,8 @@ export interface ZoomableMediaHandle { close: () => void }
  * sliding two fingers then moves around the picture, and pinching back out
  * or a double-click returns it to normal.
  */
-export const ZoomableMedia = forwardRef<ZoomableMediaHandle, { children: React.ReactNode; onDismiss?: () => void; home?: HomeRect }>(function ZoomableMedia({ children, onDismiss }, ref) {
+export const ZoomableMedia = forwardRef<ZoomableMediaHandle, ZoomableMediaProps>(function ZoomableMedia({ children, onDismiss, dismissOn = 'sideways' }, ref) {
+  const down = dismissOn === 'down';
   useImperativeHandle(ref, () => ({ close: () => onDismiss?.() }), [onDismiss]);
   const box = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
@@ -72,7 +87,8 @@ export const ZoomableMedia = forwardRef<ZoomableMediaHandle, { children: React.R
     return () => node.removeEventListener('wheel', onWheel);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const drag = useRef<{ x: number; y: number } | null>(null);
+  // A one-finger drag: where it began and, once it has moved enough to tell, which way it goes.
+  const drag = useRef<{ x: number; y: number; axis?: 'x' | 'y' } | null>(null);
   const place = (scale: number, fx: number, fy: number, animate: boolean, driftX = 0, driftY = 0) => {
     const el = inner.current;
     const rect = box.current?.getBoundingClientRect();
@@ -92,7 +108,8 @@ export const ZoomableMedia = forwardRef<ZoomableMediaHandle, { children: React.R
   return (
     <div
       ref={box}
-      style={{ position: 'absolute', inset: 0, overflow: 'hidden', touchAction: 'none', backgroundColor: '#000' }}
+      // Swiping down to close: sideways moves are the browser's, to scroll the row of pictures.
+      style={{ position: 'absolute', inset: 0, overflow: 'hidden', touchAction: down ? 'pan-x' : 'none', backgroundColor: '#000' }}
       // Every touch stops here: the viewer sits over the feed, and a flick
       // that bubbled through would swipe the page out from under it.
       onTouchStart={(e) => {
@@ -113,6 +130,17 @@ export const ZoomableMedia = forwardRef<ZoomableMediaHandle, { children: React.R
           return;
         }
         const d = drag.current;
+        if (d && e.touches.length === 1 && down) {
+          const dx = e.touches[0].clientX - d.x;
+          const dy = e.touches[0].clientY - d.y;
+          if (!d.axis && Math.hypot(dx, dy) > 8) d.axis = Math.abs(dy) > Math.abs(dx) ? 'y' : 'x';
+          // A sideways move is the row scrolling: nothing here follows it.
+          if (d.axis !== 'y' || !onDismiss) return;
+          const rect = box.current?.getBoundingClientRect();
+          place(1, (rect?.width ?? 0) / 2, (rect?.height ?? 0) / 2, false, dx * 0.25, dy);
+          if (box.current) { box.current.style.transition = 'none'; box.current.style.backgroundColor = `rgba(0,0,0,${1 - Math.min(1, Math.abs(dy) / ((rect?.height ?? 700) * 0.6)) * 0.9})`; }
+          return;
+        }
         if (d && e.touches.length === 1) {
           e.preventDefault();
           const rect = box.current?.getBoundingClientRect();
@@ -129,8 +157,21 @@ export const ZoomableMedia = forwardRef<ZoomableMediaHandle, { children: React.R
         const d = drag.current; drag.current = null;
         const rect = box.current?.getBoundingClientRect();
         const t = e.changedTouches[0];
+        // Swiping down to close: far enough down (or up), it drops out of sight.
+        if (down && !s && d && t && onDismiss && d.axis === 'y' && Math.abs(t.clientY - d.y) > 90) {
+          const el = inner.current;
+          const dir = t.clientY - d.y >= 0 ? 1 : -1;
+          if (el && rect) {
+            el.style.transition = 'transform 240ms cubic-bezier(.33,1,.68,1), opacity 220ms ease-out';
+            el.style.transform = `translate(${(t.clientX - d.x) * 0.25}px, ${dir * rect.height * 1.05}px)`;
+            el.style.opacity = '0.35';
+          }
+          if (box.current) { box.current.style.transition = 'background-color 220ms ease-out'; box.current.style.backgroundColor = 'rgba(0,0,0,0)'; }
+          setTimeout(onDismiss, 230);
+          return;
+        }
         // One finger, swiped sideways (a bit of diagonal is fine) with nothing zoomed: close.
-        if (!s && d && t && onDismiss && Math.abs(t.clientX - d.x) > 90 && Math.abs(t.clientX - d.x) > Math.abs(t.clientY - d.y) * 0.7) {
+        if (!down && !s && d && t && onDismiss && Math.abs(t.clientX - d.x) > 90 && Math.abs(t.clientX - d.x) > Math.abs(t.clientY - d.y) * 0.7) {
           const el = inner.current;
           const dir = t.clientX - d.x >= 0 ? 1 : -1;
           if (el && rect) {

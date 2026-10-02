@@ -7,6 +7,9 @@
 // Files do not cascade, so they are cleared first: everything the person
 // uploaded lives in a folder named after their account id, in `media` (their
 // photos and videos) and in `coach-applications` (a résumé, if they applied).
+// Photos sent in chats sit in each chat's own folder on the private
+// `chat-photos` shelf ("<chat>/<them>/<name>.jpg", migration 61), so those
+// are found by name across every chat, the ones they left included.
 // Left behind, those files stay openable by anyone holding an old link and
 // keep using the project's storage — which is neither what "delete" means to
 // the person nor what privacy law and Apple expect of it.
@@ -47,6 +50,36 @@ async function emptyFolder(admin: SupabaseClient, bucket: string, folder: string
   return removed;
 }
 
+/**
+ * Every photo one person sent in any chat, taken off the private chat shelf.
+ * The database lists them (chat_photo_names_of, migration 61: only the
+ * service role may ask); before that migration there are none, and the
+ * missing function is simply passed over. Returns how many files went.
+ */
+async function removeChatPhotos(admin: SupabaseClient, me: string): Promise<number> {
+  let removed = 0;
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    // Always the first names: each round removes what it listed.
+    const { data, error } = await admin.rpc('chat_photo_names_of', { who: me, max: PAGE });
+    if (error) {
+      if (!/chat_photo_names_of/.test(error.message ?? '')) console.error('[delete-account] chat photos list', error);
+      return removed;
+    }
+    const names = ((data ?? []) as unknown[]).filter((n): n is string => typeof n === 'string');
+    if (!names.length) return removed;
+    const { data: went, error: gone } = await admin.storage.from('chat-photos').remove(names);
+    if (gone) {
+      console.error('[delete-account] remove chat photos', gone);
+      return removed;
+    }
+    // Nothing went this round: asking again would list the same names forever.
+    if (!went?.length) return removed;
+    removed += went.length;
+    if (names.length < PAGE) return removed;
+  }
+  return removed;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return new Response(JSON.stringify({ error: 'POST only' }), { status: 405, headers: cors });
@@ -62,6 +95,9 @@ Deno.serve(async (req) => {
   // whose files these were, and they would sit there for good.
   const media = await emptyFolder(admin, 'media', me);
   const resumes = await emptyFolder(admin, 'coach-applications', me);
+  // Even if one were left behind, nobody could open it: its message goes
+  // with the account, and a chat photo only opens while its message is there.
+  const chatPhotos = await removeChatPhotos(admin, me);
 
   // WHOOP is told first (CourtSide's access revoked, so its webhooks stop). The whoop function does it, refreshing the key if it must. Best effort.
   const { data: whoop } = await admin.from('whoop_tokens').select('user_id').eq('user_id', me).maybeSingle();
@@ -79,6 +115,6 @@ Deno.serve(async (req) => {
     console.error('[delete-account]', error);
     return new Response(JSON.stringify({ error: 'Could not delete the account right now.' }), { status: 500, headers: cors });
   }
-  console.log(`[delete-account] ${me}: ${media} media, ${resumes} résumé files`);
+  console.log(`[delete-account] ${me}: ${media} media, ${resumes} résumé, ${chatPhotos} chat photo files`);
   return new Response(JSON.stringify({ ok: true }), { headers: { ...cors, 'content-type': 'application/json' } });
 });

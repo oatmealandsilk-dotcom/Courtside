@@ -35,7 +35,7 @@ import { colors } from '@/theme';
 const paths = { discuss: '/discuss', index: '/', coaches: '/coaches', profile: '/profile' } as const;
 const routes = Object.keys(paths).map(name => ({ key: name, name }));
 /** The pages that slide up over the app; Escape closes them on a computer. */
-const SHEETS = new Set(['/compose', '/share', '/pick-group', '/ask', '/comments', '/post-menu', '/edit-post', '/messages/new', '/log-session', '/hit-request/new', '/court-report']);
+const SHEETS = new Set(['/compose', '/share', '/pick-group', '/pick-court', '/ask', '/comments', '/post-menu', '/edit-post', '/messages/new', '/log-session', '/hit-request/new', '/court-report']);
 const TAB_ORDER: string[] = Object.values(paths);
 export function AppShell({ children }: { children: React.ReactNode }) {
   useTheme();

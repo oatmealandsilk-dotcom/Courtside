@@ -76,6 +76,9 @@ export function DragSheet({
     onDismissed();
   };
   const dismiss = () => {
+    // The keyboard (a search or comment box in the sheet) goes down with the
+    // sheet, not after it: the page it uncovers is then already at rest.
+    Keyboard.dismiss();
     translateY.value = withTiming(fullHeight, { duration: 230, easing: EASE_OUT_OF_VIEW }, (done) => {
       if (done) runOnJS(finish)();
     });

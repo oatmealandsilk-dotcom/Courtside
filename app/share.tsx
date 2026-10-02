@@ -129,8 +129,9 @@ export default function ShareSheet() {
     }
     // A message, forwarded as it is. An event line ("Mira added Dev") is not one anyone sent,
     // and a voice note still only on this phone (its upload failed) can't be heard anywhere else.
+    // Photos too: they sit on their own chat's private shelf, so they can't be passed on (yet).
     const message = messages.find((m) => m.id === id);
-    if (!message || message.kind === 'system' || isLocalMedia(message.audio?.url)) return null;
+    if (!message || message.kind === 'system' || message.kind === 'photo' || isLocalMedia(message.audio?.url)) return null;
     const shared = message.sharedId;
     const label = message.kind === 'voice' ? 'Voice message'
       : message.kind === 'court' ? `Court · ${message.place?.name ?? message.body}`
