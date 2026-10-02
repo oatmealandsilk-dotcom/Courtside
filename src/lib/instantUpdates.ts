@@ -3,7 +3,7 @@ import { AppState } from 'react-native';
 import * as Updates from 'expo-updates';
 
 import { crashScreen, noteRestartCancelled, noteRestartForUpdate, setCrashRelease } from '@/lib/crashReporting';
-import { anyUploading, sinceLastPost } from '@/lib/uploads';
+import { anyUploading, quietUploading, sinceLastPost } from '@/lib/uploads';
 
 /** How often the phone asks Expo for newer app code while it is open. */
 const CHECK_EVERY_MS = 10 * 60_000;
@@ -27,7 +27,7 @@ const BUSY_PAGES = ['/sign-in', '/birthday', '/agree', '/onboarding', '/first-mo
  */
 function busy(): boolean {
   const page = crashScreen();
-  return anyUploading() || sinceLastPost() < QUIET_AFTER_POST_MS || BUSY_PAGES.includes(page) || page.startsWith('/messages/');
+  return anyUploading() || quietUploading() || sinceLastPost() < QUIET_AFTER_POST_MS || BUSY_PAGES.includes(page) || page.startsWith('/messages/');
 }
 
 /**

@@ -40,7 +40,7 @@ import * as haptics from '@/lib/haptics';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import * as toast from '@/lib/toast';
-import { anyUploading, cancelUpload, finishUpload, setUploadProgress, simulateUpload, startUpload } from '@/lib/uploads';
+import { anyUploading, cancelUpload, finishUpload, holdQuietUpload, setUploadProgress, simulateUpload, startUpload } from '@/lib/uploads';
 import { requestFeedRefresh } from '@/features/feed/feedBus';
 import { blockDevice, groupFor, rememberAnswered, yearsOld, type AgeGroup } from '@/features/age/ageCheck';
 import { show as showToast } from '@/lib/toast';
@@ -1745,9 +1745,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // A new photo is shown at once but only exists on this phone until it uploads. If the
         // upload fails, say so and put the old photo back: before, the failure was silent, the
         // owner kept seeing the new photo and everyone else saw their initials.
+        // Counted as an upload, so an update never restarts the app halfway through it.
+        const release = holdQuietUpload();
         try {
           avatarUrl = await uploadMedia(me!, patch.avatarUrl!, 'photo');
         } catch (err) {
+          release();
           void reportError(err, { where: 'avatar upload' });
           patchCurrentUser(u => ({ ...u, avatarUrl: before }));
           showToast({ title: 'Couldn’t save your photo', body: 'Check your connection and try again.', icon: 'cloud-offline-outline' });
@@ -1755,6 +1758,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           await remote.updateProfile(me!, rest).catch(() => undefined);
           return;
         }
+        release();
         if (avatarUrl && avatarUrl !== patch.avatarUrl) patchCurrentUser(u => ({ ...u, avatarUrl }));
       }
       await remote.updateProfile(me!, { ...patch, avatarUrl });
