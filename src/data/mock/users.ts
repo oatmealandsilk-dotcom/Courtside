@@ -370,6 +370,49 @@ export const users: User[] = [
       fitnessLevel: 'recreational', preferredSurface: 'hard', sessionsPerWeek: 2, yearsPlaying: 2, goals: [], constraints: [], tournaments: [],
     },
   },
+  /*
+   * Two adults who joined this week and have not shared a spot yet, so "New
+   * on CourtSide" on Find Players has someone in it. Ella, the teen, joined
+   * recently too, and is never listed there for an adult who does not follow her.
+   */
+  {
+    id: 'u-rosa',
+    handle: 'rosadoubles',
+    name: 'Rosa Diaz',
+    bio: 'Just moved to LA. 3.5, happiest playing doubles.',
+    location: 'Glendale, CA',
+    joinedAt: isoDaysAgo(3),
+    avatarSeed: 'rosa-diaz',
+    ageGroup: 'adult',
+    isCoach: false,
+    followers: 4,
+    following: 9,
+    achievementIds: [],
+    stats: { sessionsLogged: 1, matchesPlayed: 0, matchesWon: 0, hoursOnCourt: 1, currentStreakDays: 1, longestStreakDays: 1 },
+    profile: {
+      skillSystem: 'NTRP', rating: 3.5, playStyle: 'serve-and-volley', handedness: 'right', backhand: 'one-handed',
+      fitnessLevel: 'recreational', preferredSurface: 'hard', sessionsPerWeek: 2, yearsPlaying: 6, goals: [], constraints: [], tournaments: [],
+    },
+  },
+  {
+    id: 'u-kai',
+    handle: 'kaiswings',
+    name: 'Kai Mendes',
+    bio: 'Weekend hitter. Working on a serve I can trust.',
+    location: 'Burbank, CA',
+    joinedAt: isoDaysAgo(9),
+    avatarSeed: 'kai-mendes',
+    ageGroup: 'adult',
+    isCoach: false,
+    followers: 7,
+    following: 15,
+    achievementIds: ['ach-first-serve'],
+    stats: { sessionsLogged: 3, matchesPlayed: 1, matchesWon: 0, hoursOnCourt: 4, currentStreakDays: 0, longestStreakDays: 2 },
+    profile: {
+      skillSystem: 'NTRP', rating: 3.0, playStyle: 'all-court', handedness: 'left', backhand: 'two-handed',
+      fitnessLevel: 'recreational', preferredSurface: 'hard', sessionsPerWeek: 2, yearsPlaying: 3, goals: [], constraints: [], tournaments: [],
+    },
+  },
   {
     id: 'u-ella',
     handle: 'ellaserves',

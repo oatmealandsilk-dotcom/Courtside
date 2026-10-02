@@ -12,16 +12,18 @@ import { colors, lift, spacing, typography } from '@/theme';
 /**
  * A court's open hits: who wants a game here and when, soonest first, the
  * same cards as Find Players. "Play here" posts a hit at this court; with
- * none open, the whole prompt does.
+ * none open, the whole prompt does. A members-only or private court is
+ * never suggested for a hit: no Play here, and nothing at all with none open.
  */
-export function CourtHits({ place }: { place: { id?: string; name: string; lat: number; lng: number } }) {
+export function CourtHits({ place, closed = false }: { place: { id?: string; name: string; lat: number; lng: number }; closed?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const hits = useCourtHits(place).slice(0, 3);
+  if (closed && !hits.length) return null;
   return (
     <View style={styles.wrap}>
       <View style={styles.head}>
         <Text accessibilityRole="header" style={styles.title}>Open hits</Text>
-        {hits.length ? (
+        {hits.length && !closed ? (
           <Pressable accessibilityRole="button" accessibilityLabel={`Post a hit at ${place.name}`} hitSlop={8} onPress={() => playHere(place)} style={({ pressed }) => pressed && styles.pressed}>
             <Text style={styles.headLink}>Play here</Text>
           </Pressable>

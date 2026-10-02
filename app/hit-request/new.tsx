@@ -10,7 +10,7 @@ import { Field } from '@/components/ui';
 import { ChipStrip, Chips, Fine, Section, SheetTitle, Submit, Tiles, formBody } from '@/components/sheet/SheetForm';
 import type { HitRequest } from '@/data/types';
 import { isMapCourtId } from '@/features/places/courtName';
-import { fetchCourts, type Court } from '@/features/players/courts';
+import { fetchCourts, isClosedCourt, type Court } from '@/features/players/courts';
 import { homeFor } from '@/features/players/positions';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -29,11 +29,14 @@ const FORMAT_LABEL: Record<HitRequest['format'], string> = { singles: 'Singles',
  * It goes up on Find Players; whoever says "I'm in" lands in a chat with you.
  * Once it is up, a note offers to send it into your chats and groups too,
  * for the friends who might want the spot. Opened from a court ("Play
- * here"), that court is already where.
+ * here"), that court is already where. Opened from "Ask to hit" (?ask=…),
+ * the hit also goes straight into your chat with each of those players; it
+ * is still an open hit, so the sheet says so: anyone nearby may take the
+ * spot first.
  */
 export default function NewHit() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, detectedCoords, actions } = useApp();
+  const { currentUser, detectedCoords, users, actions } = useApp();
   const [closeSignal, setCloseSignal] = useState(0);
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + i); return d; }), []);
   // Late in the evening there is no hour left today: start on tomorrow.
@@ -45,7 +48,11 @@ export default function NewHit() {
   const setHour = (h: number) => { setHourOnly(h); setHalf(false); };
   // "Play here" on a court's page or card: that court is chosen, its map id kept
   // (when it has one) so the hit shows on the court's page.
-  const params = useLocalSearchParams<{ courtId?: string; courtName?: string; lat?: string; lng?: string }>();
+  const params = useLocalSearchParams<{ courtId?: string; courtName?: string; lat?: string; lng?: string; ask?: string }>();
+  // "Ask to hit": the players it also goes to, in your chat with each. Only people you may message (an adult, or a teen who follows you).
+  const asked = useMemo(() => (params.ask ?? '').split(',').filter((id, i, all) => !!id && all.indexOf(id) === i && id !== currentUser?.id && actions.canMessage(id))
+    .flatMap((id) => { const u = users.find((x) => x.id === id); return u ? [u] : []; }).slice(0, 5), [params.ask, users, currentUser?.id, actions]);
+  const askedNames = asked.length === 1 ? asked[0].name.split(' ')[0] : asked.length === 2 ? `${asked[0].name.split(' ')[0]} and ${asked[1].name.split(' ')[0]}` : `${asked.length} players`;
   const [place, setPlace] = useState<HitRequest['place'] | null>(() => {
     const name = params.courtName?.trim();
     const lat = Number(params.lat); const lng = Number(params.lng);
@@ -55,7 +62,8 @@ export default function NewHit() {
   const [typed, setTyped] = useState('');
   const [courts, setCourts] = useState<Court[]>([]);
   const home = useMemo(() => (currentUser ? homeFor(currentUser, detectedCoords) : null), [currentUser, detectedCoords]);
-  useEffect(() => { if (home) fetchCourts(home).then(setCourts).catch(() => setCourts([])); }, [home]);
+  // Members-only and private courts are never suggested for a hit (a search by name still finds them).
+  useEffect(() => { if (home) fetchCourts(home).then((list) => setCourts(list.filter((c) => !isClosedCourt(c)))).catch(() => setCourts([])); }, [home]);
   const rating = currentUser?.profile.rating;
   const [level, setLevel] = useState<'any' | 'mine'>(rating ? 'mine' : 'any');
   // The rating may arrive a moment after the sheet: default to your level once it does.
@@ -92,6 +100,8 @@ export default function NewHit() {
         levelMin: level === 'mine' && rating ? Math.max(1, rating - step) : undefined,
         levelMax: level === 'mine' && rating ? rating + step : undefined,
       });
+      // Asked: it lands in your chat with each of them, as the hit's own card.
+      if (asked.length) actions.shareToChats({ userIds: asked.map((u) => u.id) }, { kind: 'hit-request', id: posted.current });
       setCloseSignal((n) => n + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'That didn’t post. Try again.');
@@ -104,6 +114,16 @@ export default function NewHit() {
     router.back();
     const id = posted.current;
     if (!id) return;
+    if (asked.length) {
+      const one = asked.length === 1 ? asked[0] : null;
+      showToast({
+        title: `Sent to ${askedNames}`,
+        body: 'It’s on Find Players too',
+        icon: 'paper-plane-outline',
+        ...(one ? { action: { label: 'Open chat', onPress: () => router.push(`/messages/${actions.openConversationWith(one.id)}`) } } : {}),
+      });
+      return;
+    }
     showToast({
       title: 'Your hit is up',
       body: 'Players nearby see it on Find Players',
@@ -114,8 +134,15 @@ export default function NewHit() {
 
   return (
     <DragSheet fitContent closeSignal={closeSignal} onDismissed={done} peekFraction={0.86}
-      header={<SheetTitle title="Looking for a hit" line={summary} lineTone="brand" onClose={() => setCloseSignal((n) => n + 1)} />}>
+      header={<SheetTitle title={asked.length ? `Ask ${askedNames} to hit` : 'Looking for a hit'} line={summary} lineTone="brand" onClose={() => setCloseSignal((n) => n + 1)} />}>
       <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled">
+        {/* Asked: said first, before anything is picked, so "Ask Sam" never reads as a private invite. */}
+        {asked.length ? (
+          <View style={styles.openNote}>
+            <Ionicons name="people-outline" size={16} color={colors.textMuted} />
+            <Text style={styles.openNoteText}>It’s an open hit: {askedNames} {asked.length === 1 ? 'gets' : 'get'} it in your chat, and anyone nearby can take the spot.</Text>
+          </View>
+        ) : null}
         <Section title="When">
           <Tiles scroll value={day} onChange={setDay} options={days.map((d, i) => ({ value: i, top: i === 0 ? 'Today' : d.toLocaleDateString([], { weekday: 'short' }), main: String(d.getDate()), label: d.toDateString() }))} />
           <ChipStrip value={hour} onChange={setHour} options={hours.map((h) => ({ value: h, label: hourLabel(h) }))} />
@@ -157,7 +184,9 @@ export default function NewHit() {
         {past ? <Text style={styles.error}>That time has passed. Pick a later one.</Text> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <Submit label="Post" onPress={post} disabled={!ready} busy={saving} waiting={past ? 'Pick a later time' : 'Choose where to play'} />
-        <Fine>Players nearby see it on Find Players. Whoever joins gets a chat with you.</Fine>
+        <Fine>{asked.length
+          ? `It goes to ${askedNames} in your chat. It’s an open hit, so it shows on Find Players too, and someone nearby may take the spot first.`
+          : 'Players nearby see it on Find Players. Whoever joins gets a chat with you.'}</Fine>
       </ScrollView>
     </DragSheet>
   );
@@ -165,6 +194,9 @@ export default function NewHit() {
 
 const styleDefinitions = StyleSheet.create({
   error: { ...typography.small, color: colors.danger },
+  // "It's an open hit": one plain line on the sheet's quiet tint, above When.
+  openNote: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.bgElevated },
+  openNoteText: { ...typography.small, color: colors.text, flex: 1, lineHeight: 19 },
   pair: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.lg },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: 10, height: 34 },
   step: { ...lift, width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },

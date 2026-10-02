@@ -9,7 +9,8 @@ import type { LatLng } from '@/features/players/positions';
 /** One thing drawn on the map, as the HTML MapLibre will place there. */
 export interface CanvasMarker { id: string; lat: number; lng: number; html: string; /** Which part of it sits on the spot: a hit's flag hangs from its point. */ anchor?: 'center' | 'top' | 'bottom'; offsetY?: number; /** Stacking: higher sits on top (courts under players under you). */ z?: number }
 
-export interface MapCanvasHandle { flyTo: (to: LatLng, zoom?: number, ms?: number) => void }
+/** `offsetY`: where the spot ends up, in pixels from the middle (negative is higher: clear of a tall card). */
+export interface MapCanvasHandle { flyTo: (to: LatLng, zoom?: number, ms?: number, offsetY?: number) => void }
 
 interface Props {
   center: LatLng;
@@ -44,9 +45,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
   const pendingMove = useRef<{ to: LatLng; zoom?: number } | null>(null);
 
   useImperativeHandle(ref, () => ({
-    flyTo: (to, z, ms = 500) => {
+    flyTo: (to, z, ms = 500, offsetY = 0) => {
       if (!ready.current) { pendingMove.current = { to, zoom: z }; return; }
-      send(`window.__cs.fly(${to.lat},${to.lng},${z ?? 'null'},${ms})`);
+      send(`window.__cs.fly(${to.lat},${to.lng},${z ?? 'null'},${ms},${Math.round(offsetY)})`);
     },
   }), []);
   const markerJson = JSON.stringify(markers);
@@ -82,7 +83,7 @@ map.on('moveend',function(){var c=map.getCenter();post({type:'move',lat:c.lat,ln
 var ms=[];
 window.__cs={
   set:function(list){ms.forEach(function(m){m.remove()});ms=[];list.forEach(function(it){var el=document.createElement('div');el.innerHTML=it.html;if(it.z!=null)el.style.zIndex=String(it.z);el.addEventListener('click',function(e){e.stopPropagation();post({type:'tap',id:it.id})});ms.push(new maplibregl.Marker({element:el,anchor:it.anchor||'center',offset:[0,it.offsetY||0]}).setLngLat([it.lng,it.lat]).addTo(map))})},
-  fly:function(lat,lng,z,ms){map.flyTo({center:[lng,lat],zoom:z==null?map.getZoom():Math.max(map.getZoom(),z),duration:ms})},
+  fly:function(lat,lng,z,ms,oy){map.flyTo({center:[lng,lat],zoom:z==null?map.getZoom():Math.max(map.getZoom(),z),duration:ms,offset:[0,oy||0]})},
   look:function(l){LOOK=l;document.body.style.background=(l.background&&l.background.fill)||'#F4EFE6';if(map.loaded())look(l)}
 };
 </script></body></html>`, []); // eslint-disable-line react-hooks/exhaustive-deps

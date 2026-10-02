@@ -7,9 +7,15 @@
 // (or the seeding token) can make the function go to OpenStreetMap; anyone
 // else gets what is already stored.
 //
+// Each court also keeps what the map says about who may play there (public,
+// members only, pay to book, private), fees, indoors and a Book link
+// (migration 60; read by tags.ts). Players' corrections are never
+// overwritten: the database keeps them and works out what the app shows.
+//
 // Deploy:   supabase functions deploy courts --no-verify-jwt
 // Secrets:  COURTS_SEED_TOKEN   (optional — lets a script fill in many cities, or the whole country from a map extract, at once; unset it after)
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { cleanLink, courtTagFacts, type CourtAccess } from './tags.ts';
 
 const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 const CELL = 0.25;
@@ -130,19 +136,49 @@ async function saveCell(cell: string, elements: Element[]): Promise<string | nul
       lat, lng,
       lit: el.tags?.lit === 'yes' ? true : el.tags?.lit === 'no' ? false : null,
       surface: el.tags?.surface?.slice(0, 40) ?? null,
+      ...courtTagFacts(el.tags),
       updated_at: new Date().toISOString(),
     }];
   });
-  for (let k = 0; k < rows.length; k += 500) {
-    const { error } = await admin.from('courts').upsert(rows.slice(k, k + 500));
-    if (error) return `saving: ${error.message}`;
-  }
+  const problem = await saveCourts(rows);
+  if (problem) return problem;
   const { error } = await admin.from('court_areas').upsert({ cell, fetched_at: new Date().toISOString(), found: rows.length });
   return error ? `area: ${error.message}` : null;
 }
 
+/** The columns migration 60 added. Until it is applied they are left out, so saving keeps working. */
+const FACT_KEYS = ['osm_access', 'fee', 'indoor', 'book_url'] as const;
+let noFactColumns = false;
+const withoutFacts = <T extends Record<string, unknown>>(row: T) => Object.fromEntries(Object.entries(row).filter(([k]) => !(FACT_KEYS as readonly string[]).includes(k)));
+/**
+ * Only a missing column means a database before migration 60: PostgREST's
+ * PGRST204 or Postgres's 42703 ("column … does not exist"), naming one of
+ * those columns. Anything else (a refused value, a network hiccup) must not
+ * switch them off for the rest of this copy's life.
+ */
+const lacksFactColumns = (error: { code?: string; message: string }) =>
+  (error.code === 'PGRST204' || error.code === '42703' || /does not exist|schema cache/i.test(error.message))
+  && /osm_access|access|book_url|indoor|\bfee\b/.test(error.message);
+
+/** Keeps courts, 500 at a time. Says what went wrong, or null. */
+async function saveCourts(rows: Record<string, unknown>[]): Promise<string | null> {
+  for (let k = 0; k < rows.length; k += 500) {
+    const part = rows.slice(k, k + 500);
+    let { error } = await admin.from('courts').upsert(noFactColumns ? part.map(withoutFacts) : part);
+    // A database before migration 60: save without the access columns from now on.
+    if (error && !noFactColumns && lacksFactColumns(error)) {
+      noFactColumns = true;
+      ({ error } = await admin.from('courts').upsert(part.map(withoutFacts)));
+    }
+    if (error) return `saving: ${error.message}`;
+  }
+  return null;
+}
+
 /** One square from the country-wide import: its courts, already named, and whether the square is whole (a square on the border is only partly in the map extract). */
-interface SeedSquare { cell: string; partial?: boolean; rows: { id: string; name: string | null; lat: number; lng: number; lit: boolean | null; surface: string | null }[] }
+interface SeedSquare { cell: string; partial?: boolean; rows: { id: string; name: string | null; lat: number; lng: number; lit: boolean | null; surface: string | null; access?: CourtAccess; fee?: boolean | null; indoor?: boolean | null; book_url?: string | null }[] }
+
+const ACCESS: readonly string[] = ['public', 'members', 'pay', 'private', 'unknown'];
 
 /** Keeps the import's courts as they come, and notes each whole square as fetched so the app never asks OpenStreetMap about it again for two months. */
 async function saveNamed(squares: SeedSquare[]): Promise<string | null> {
@@ -158,14 +194,19 @@ async function saveNamed(squares: SeedSquare[]): Promise<string | null> {
         lat: r.lat, lng: r.lng,
         lit: typeof r.lit === 'boolean' ? r.lit : null,
         surface: typeof r.surface === 'string' ? r.surface.slice(0, 40) : null,
+        // The import reads the tags itself (tags.ts); anything it did not send stays unknown.
+        osm_access: typeof r.access === 'string' && ACCESS.includes(r.access) ? r.access : 'unknown',
+        fee: typeof r.fee === 'boolean' ? r.fee : null,
+        indoor: typeof r.indoor === 'boolean' ? r.indoor : null,
+        book_url: cleanLink(r.book_url),
         updated_at: at,
       });
     }
   }
-  for (let k = 0; k < rows.length; k += 500) {
-    const { error } = await admin.from('courts').upsert(rows.slice(k, k + 500));
-    if (error) return `saving: ${error.message}`;
-  }
+  // An import that sent none of these (an older script) leaves what is stored alone.
+  const sentFacts = squares.some((sq) => sq.rows.some((r) => ['access', 'fee', 'indoor', 'book_url'].some((k) => k in r)));
+  const problem = await saveCourts(sentFacts ? rows : rows.map(withoutFacts));
+  if (problem) return problem;
   const whole = squares.filter((sq) => !sq.partial).map((sq) => ({ cell: sq.cell, fetched_at: at, found: sq.rows.length }));
   for (let k = 0; k < whole.length; k += 500) {
     const { error } = await admin.from('court_areas').upsert(whole.slice(k, k + 500));
@@ -222,10 +263,17 @@ Deno.serve(async (req) => {
 
   // The database hands back a thousand rows at a time; a big city has more.
   const courts: unknown[] = [];
+  const columns = (facts: boolean) => `id, name, lat, lng, lit, surface${facts ? ', access, fee, indoor, book_url' : ''}`;
   for (let from = 0; from < 4000; from += 1000) {
-    const { data, error } = await admin.from('courts').select('id, name, lat, lng, lit, surface')
+    const page = (facts: boolean) => admin.from('courts').select(columns(facts))
       .gte('lat', lat - dLat).lte('lat', lat + dLat).gte('lng', lng - dLng).lte('lng', lng + dLng)
       .order('id').range(from, from + 999);
+    let { data, error } = await page(!noFactColumns);
+    // A database before migration 60: answer without the access columns.
+    if (error && !noFactColumns && lacksFactColumns(error)) {
+      noFactColumns = true;
+      ({ data, error } = await page(false));
+    }
     if (error) return json({ error: 'courts unavailable' }, 503);
     courts.push(...(data ?? []));
     if (!data || data.length < 1000) break;

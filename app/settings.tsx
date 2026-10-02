@@ -1,6 +1,6 @@
 import { PlayerName } from '@/components/PlayerName';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
@@ -16,6 +16,7 @@ import { confirm } from '@/lib/confirm';
 import { replayTour } from '@/features/tour/tourStore';
 import { TOUR_ON } from '@/features/tour/tourSeen';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
+import { notKnownAdult } from '@/features/players/age';
 
 interface Row {
   icon: keyof typeof Ionicons.glyphMap;
@@ -38,7 +39,7 @@ interface Row {
  */
 export default function Settings() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, locationEnabled, detectedLocation, actions, prefs } = useApp();
+  const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras } = useApp();
   const [locationNote, setLocationNote] = useState('');
   const toggleLocation = async (next: boolean) => {
     setLocationNote(next ? 'Asking…' : '');
@@ -48,8 +49,14 @@ export default function Settings() {
   const { theme } = useTheme();
   // The tennis-session alert switch shows once WHOOP's tennis sessions are switched on (migration 58).
   const tennis = useTennisFlags();
+  const mapAdult = !!currentUser && !notKnownAdult(currentUser);
+  // The map alerts' switches show only once the server is known to have
+  // them (migration 60): before that a switch would do nothing, and come
+  // back on at the next start. Asking for Your courts is what finds out.
+  useEffect(() => { if (courtExtras === null && currentUserId) void actions.loadFollowedCourts(); }, [courtExtras, currentUserId, actions]);
+  const mapAlerts = courtExtras === true;
 
-  const sections: { title: string; rows: Row[] }[] = [
+  const sections: { title: string; rows: Row[]; note?: string }[] = [
     {
       title: 'Account',
       rows: [
@@ -66,6 +73,20 @@ export default function Settings() {
         { icon: 'heart-outline' as const, label: 'Likes and comments', toggle: { value: prefs.pushLikes, onChange: (v: boolean) => actions.setPref('pushLikes', v) } },
         { icon: 'chatbubble-ellipses-outline' as const, label: 'Coach replies', toggle: { value: prefs.pushCoach, onChange: (v: boolean) => actions.setPref('pushCoach', v) } },
         ...(tennis.whoop ? [{ icon: 'tennisball-outline' as const, label: 'Tennis sessions', detail: 'An alert when WHOOP picks one up', toggle: { value: prefs.pushActivity, onChange: (v: boolean) => actions.setPref('pushActivity', v) } }] : []),
+      ],
+    }]),
+    // The map's own alerts, each with its own switch. On a computer too: they also land in your Notifications.
+    // The first three only ever go to adults (the server's rule), so a teen sees just the courts one.
+    ...(!mapAlerts ? [] : [{
+      title: 'Map alerts',
+      note: mapAdult ? 'At most one a day from the map, and one a day from your courts.' : 'At most one a day.',
+      rows: [
+        ...(mapAdult ? [
+          { icon: 'tennisball-outline' as const, label: 'Friends up for a hit', detail: 'Someone you follow turns on Open to hit nearby', toggle: { value: prefs.pushMapFriends, onChange: (v: boolean) => actions.setPref('pushMapFriends', v) } },
+          { icon: 'navigate-outline' as const, label: 'New open hits', detail: 'A hit posted within 15 miles of you', toggle: { value: prefs.pushMapHits, onChange: (v: boolean) => actions.setPref('pushMapHits', v) } },
+          { icon: 'location-outline' as const, label: 'New players nearby', detail: 'A new player shares their spot near you', toggle: { value: prefs.pushMapPlayers, onChange: (v: boolean) => actions.setPref('pushMapPlayers', v) } },
+        ] : []),
+        { icon: 'heart-outline' as const, label: 'Courts you follow', detail: 'A new hit or clip at one of your courts', toggle: { value: prefs.pushCourts, onChange: (v: boolean) => actions.setPref('pushCourts', v) } },
       ],
     }]),
     {
@@ -152,6 +173,7 @@ export default function Settings() {
               </Pressable>
             ))}
           </View>
+          {section.note ? <Text style={styles.sectionNote}>{section.note}</Text> : null}
         </View>
       ))}
 
@@ -192,6 +214,7 @@ const styleDefinitions = StyleSheet.create({
   searchInput: { flex: 1, ...typography.body, color: colors.text, paddingVertical: 0 },
   section: { gap: spacing.sm, paddingBottom: spacing.xl },
   sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm },
+  sectionNote: { ...typography.small, color: colors.textFaint, paddingHorizontal: spacing.sm },
   // Borderless grouped list: the list is a shade off the page, rows are separated by hairlines that start past the icons.
   card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'stretch', paddingLeft: spacing.lg },

@@ -1,6 +1,6 @@
 import { themes, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -8,10 +8,11 @@ import { CitylessCard, CourtSheet, FilterChips, HitSheet, MapCredit, YouSheet, M
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle } from '@/components/map/MapCanvas';
 import { cardLook, lookFor } from '@/components/map/look';
-import { HIT_LIFT, courtDotHtml, courtPinHtml, hitPinHtml, mePinHtml, playerPinHtml } from '@/components/map/markers';
+import { HIT_LIFT, courtLift, courtDotHtml, courtPinHtml, hitPinHtml, mePinHtml, playerPinHtml } from '@/components/map/markers';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { milesBetween } from '@/features/players/geo';
 import { useMapModel } from '@/features/players/mapModel';
+import { askToHit } from '@/features/players/courtLink';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { useBarInset } from '@/features/navigation/barInset';
 import { useWeather } from '@/features/players/useWeather';
@@ -51,18 +52,19 @@ export function nearbyMapSettled(): Promise<void> { return Promise.resolve(); }
  * card for whoever or whatever you tap.
  */
 export function NearbyMap(props: NearbyMapProps) {
-  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit } = props;
+  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot } = props;
   const styles = useThemedStyles(styleDefinitions);
   const { theme } = useTheme();
   // The still card takes the place names off: it sets your city's name in the middle itself.
   const look = useMemo(() => (expanded ? lookFor(themes[theme]) : cardLook(lookFor(themes[theme]))), [theme, expanded]);
   const insets = useSafeAreaInsets();
+  const { height: windowH } = useWindowDimensions();
   const barInset = useBarInset();
   const { followingIds, actions } = useApp();
   // Your own pin, tapped: the card with your open-to-hit switch.
   const [meOpen, setMeOpen] = useState(false);
   const openToHit = isOpenToHit(me);
-  const model = useMapModel(me, players, at, focusCourt, !expanded, focusHit);
+  const model = useMapModel(me, players, at, focusCourt, !expanded, focusHit, focusUser, focusSpot);
   const { home, start } = model;
   // The full map opens where you are; the still card always on your profile's city.
   const view = expanded ? { center: start.center, zoom: start.zoom ?? CITY_ZOOM } : { center: model.city ?? start.center, zoom: CITY_ZOOM };
@@ -75,14 +77,15 @@ export function NearbyMap(props: NearbyMapProps) {
     if (lastHome.current.lat === home.lat && lastHome.current.lng === home.lng) return;
     lastHome.current = home;
     // Opened on a tagged court or a hit, the map stays there; the still card stays on your city.
-    if (expanded && model.homeKnown && !focusCourt && !focusHit) canvas.current?.flyTo(home, CITY_ZOOM, 600);
+    if (expanded && model.homeKnown && !focusCourt && !focusHit && !focusSpot) canvas.current?.flyTo(home, CITY_ZOOM, 600);
   }, [home]); // eslint-disable-line react-hooks/exhaustive-deps
   // The still card follows a change of city on the profile.
   const cityKey = model.city ? `${model.city.lat},${model.city.lng}` : '';
   useEffect(() => { if (!expanded && model.city) canvas.current?.flyTo(model.city, CITY_ZOOM, 0); }, [cityKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // Picking someone, a court, a hit, or typing a city takes the map there.
   useEffect(() => { if (model.selected) canvas.current?.flyTo(model.selected.at, CLOSE_ZOOM); }, [model.selected]);
-  useEffect(() => { if (model.selectedCourt) canvas.current?.flyTo(model.selectedCourt, CLOSE_ZOOM); }, [model.selectedCourt]);
+  // A court's card is tall (who may play, right now, what players say): its court lands above it, not under it.
+  useEffect(() => { if (model.selectedCourt) canvas.current?.flyTo(model.selectedCourt, CLOSE_ZOOM, 500, -courtLift(windowH)); }, [model.selectedCourt]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (model.selectedHit) canvas.current?.flyTo(model.selectedHit.at, CLOSE_ZOOM); }, [model.selectedHit]);
   useEffect(() => { if (model.place) canvas.current?.flyTo(model.place, CITY_ZOOM, 700); }, [model.place]);
 
@@ -92,9 +95,10 @@ export function NearbyMap(props: NearbyMapProps) {
   const selectedHitId = model.selectedHit?.hit.id ?? null;
   const markers = useMemo<CanvasMarker[]>(() => {
     // Full court pins only on the full map (the model draws none on the card either).
-    const list: CanvasMarker[] = (expanded ? model.courts : []).map((c) => ({ id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, c.id === selectedCourtId), z: c.id === selectedCourtId ? 4 : 1 }));
+    // A court played on this week wears the green story ring (courts only, never a random spot).
+    const list: CanvasMarker[] = (expanded ? model.courts : []).map((c) => ({ id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, c.id === selectedCourtId, model.ringed.has(c.id)), z: c.id === selectedCourtId ? 4 : 1 }));
     // The still card: your city's courts as quiet dots, under everything.
-    if (!expanded) for (const c of model.cardCourts) list.push({ id: `d:${c.id}`, lat: c.lat, lng: c.lng, html: courtDotHtml(), z: 0 });
+    if (!expanded) for (const c of model.cardCourts) list.push({ id: `d:${c.id}`, lat: c.lat, lng: c.lng, html: courtDotHtml(c, model.cardRinged.has(c.id)), z: 0 });
     // Open hits as flags, hung above any court pin at the same spot — on the
     // full map only. On the still card the flags crowded the city's name in the
     // middle, and the hits are listed just below it anyway (Oct 2).
@@ -112,7 +116,7 @@ export function NearbyMap(props: NearbyMapProps) {
     const mine = expanded ? model.mePos : null;
     if (mine) list.push({ id: 'me', lat: mine.lat, lng: mine.lng, html: mePinHtml(me, expanded ? 34 : 26), z: 6 });
     return list;
-  }, [model.courts, model.cardCourts, model.hits, model.cardFlags, shown, selectedId, selectedCourtId, selectedHitId, expanded, me, theme, openToHit, model.mePos]);
+  }, [model.courts, model.ringed, model.cardCourts, model.cardRinged, model.hits, shown, selectedId, selectedCourtId, selectedHitId, expanded, me, theme, openToHit, model.mePos]);
 
   const mapView = (
     <MapCanvas
@@ -131,8 +135,8 @@ export function NearbyMap(props: NearbyMapProps) {
         else if (id.startsWith('p:')) { setMeOpen(false); model.select(id.slice(2)); }
       }}
       onMapTap={() => { model.select(null); model.selectCourt(null); model.selectHit(null); setMeOpen(false); }}
-      // Courts for where the map came to rest, zoomed in on a town (loadCourts checks the zoom).
-      onMove={(c, zoom) => { if (expanded && model.courtsOn) void model.loadCourts(c, zoom); }}
+      // Courts and their rings for where the map came to rest, zoomed in on a town (both check the zoom).
+      onMove={(c, zoom) => { if (!expanded) return; model.loadRings(c, zoom); if (model.courtsOn) void model.loadCourts(c, zoom); }}
     />
   );
 
@@ -170,15 +174,15 @@ export function NearbyMap(props: NearbyMapProps) {
         {meOpen ? (
           <YouSheet me={me} open={openToHit} onToggle={actions.setOpenToHit} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} />
         ) : model.selected ? (
-          <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onAddToGroup={() => addToGroup(model.selected!.user.id)} onFollow={() => { const who = model.selected!.user; if (followingIds.includes(who.id)) confirmUnfollow(who, () => actions.toggleFollow(who.id)); else actions.toggleFollow(who.id); }} />
+          <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onAskToHit={actions.canMessage(model.selected.user.id) ? () => askToHit([model.selected!.user.id]) : undefined} onAddToGroup={() => addToGroup(model.selected!.user.id)} onFollow={() => { const who = model.selected!.user; if (followingIds.includes(who.id)) confirmUnfollow(who, () => actions.toggleFollow(who.id)); else actions.toggleFollow(who.id); }} />
         ) : model.selectedCourt ? (
-          <CourtSheet court={model.selectedCourt} miles={milesBetween(home, model.selectedCourt)} onClose={() => model.selectCourt(null)} />
+          <CourtSheet court={model.selectedCourt} miles={milesBetween(home, model.selectedCourt)} ringed={model.ringed.has(model.selectedCourt.id)} onClose={() => model.selectCourt(null)} />
         ) : model.selectedHit ? (
           <HitSheet hit={model.selectedHit.hit} miles={milesBetween(home, model.selectedHit.at)} onClose={() => model.selectHit(null)} />
         ) : !model.homeKnown && !model.place ? (
           <WhereCard locating={locating} onLocation={onToggleLocation} />
         ) : (
-          <NearbyRail items={model.shown} cityName={model.place ? model.place.name.split(',')[0] : cityName} selectedId={null} onSelect={model.select} weather={weather} query={model.query} />
+          <NearbyRail items={model.tray} cityName={model.place ? model.place.name.split(',')[0] : cityName} selectedId={null} onSelect={model.select} weather={weather} query={model.query} filter={model.filter} courts={model.nearestCourts} onPickCourt={model.selectCourt} />
         )}
         {/* The tray's own colour runs on beneath the floating tab bar, so no map shows between them. */}
         {barInset ? <View style={{ height: barInset, backgroundColor: colors.surface, marginTop: -spacing.md - 1 }} /> : null}

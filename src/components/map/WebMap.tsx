@@ -11,6 +11,7 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { milesBetween } from '@/features/players/geo';
 import { useMapModel } from '@/features/players/mapModel';
+import { askToHit } from '@/features/players/courtLink';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { useBarInset } from '@/features/navigation/barInset';
 import { show as showToast } from '@/lib/toast';
@@ -20,7 +21,7 @@ import { levelBadge } from '@/lib/badges';
 import { useWeather } from '@/features/players/useWeather';
 import { colors, radius, spacing, typography } from '@/theme';
 import { STYLE, applyLook, cardLook, lookFor } from '@/components/map/look';
-import { CLOSE_ZOOM_NAMES, FAR_ZOOM, HIT_LIFT, MAP_PIN_CSS, courtDotHtml, courtPinHtml, hitPinHtml, mePinHtml, playerPinHtml } from '@/components/map/markers';
+import { CLOSE_ZOOM_NAMES, FAR_ZOOM, HIT_LIFT, MAP_PIN_CSS, courtLift, courtDotHtml, courtPinHtml, hitPinHtml, mePinHtml, playerPinHtml } from '@/components/map/markers';
 
 const HEIGHT = 330;
 const START_ZOOM = 11.5;
@@ -40,7 +41,7 @@ maplibregl.setWorkerUrl(`${BASE}/maplibre/maplibre-gl-worker.mjs`);
  * marks. The controls laid over it are shared with the phone.
  */
 export function NearbyMap(props: NearbyMapProps) {
-  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit } = props;
+  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot } = props;
   const styles = useThemedStyles(styleDefinitions);
   const { theme, night } = useTheme();
   const insets = useSafeAreaInsets();
@@ -49,7 +50,7 @@ export function NearbyMap(props: NearbyMapProps) {
   // Your own pin, tapped: the card with your open-to-hit switch.
   const [meOpen, setMeOpen] = useState(false);
   const openToHit = isOpenToHit(me);
-  const model = useMapModel(me, players, at, focusCourt, !expanded, focusHit);
+  const model = useMapModel(me, players, at, focusCourt, !expanded, focusHit, focusUser, focusSpot);
   const { home, start } = model;
   // The full map opens where you are; the still card always on your profile's city.
   const view = expanded ? { center: start.center, zoom: start.zoom ?? START_ZOOM } : { center: model.city ?? start.center, zoom: START_ZOOM };
@@ -60,8 +61,8 @@ export function NearbyMap(props: NearbyMapProps) {
   // Which map the marks are on: a new one (a new look, or your location arriving
   // and the map starting again there) counts up, so every mark is drawn onto it afresh.
   const [mapGen, setMapGen] = useState(0);
-  const latest = useRef({ onOpen, select: model.select, selectCourt: model.selectCourt, selectHit: model.selectHit, loadCourts: model.loadCourts, courtsOn: model.courtsOn, openMe: () => undefined as void });
-  latest.current = { onOpen, select: model.select, selectCourt: model.selectCourt, selectHit: model.selectHit, loadCourts: model.loadCourts, courtsOn: model.courtsOn, openMe: () => { if (expanded) { model.select(null); model.selectCourt(null); model.selectHit(null); setMeOpen(true); } else onExpand?.(); } };
+  const latest = useRef({ onOpen, select: model.select, selectCourt: model.selectCourt, selectHit: model.selectHit, loadCourts: model.loadCourts, loadRings: model.loadRings, courtsOn: model.courtsOn, openMe: () => undefined as void });
+  latest.current = { onOpen, select: model.select, selectCourt: model.selectCourt, selectHit: model.selectHit, loadCourts: model.loadCourts, loadRings: model.loadRings, courtsOn: model.courtsOn, openMe: () => { if (expanded) { model.select(null); model.selectCourt(null); model.selectHit(null); setMeOpen(true); } else onExpand?.(); } };
 
   // The map itself: made once per look and home, kept across everything else.
   useEffect(() => {
@@ -93,14 +94,19 @@ export function NearbyMap(props: NearbyMapProps) {
     zoomClass();
     instance.on('zoom', zoomClass);
     instance.on('click', () => { latest.current.select(null); latest.current.selectCourt(null); latest.current.selectHit(null); setMeOpen(false); });
-    // Courts for where the map came to rest: asked once it has been still a
-    // moment, not on every frame of a scroll, and only zoomed in on a town
-    // (loadCourts checks the zoom). The still card never asks.
+    // Courts and their rings for where the map came to rest: asked once it
+    // has been still a moment, not on every frame of a scroll, and only zoomed
+    // in on a town (both check the zoom). Rings come with the courts layer off
+    // too. The still card never asks.
     let courtsTimer: ReturnType<typeof setTimeout> | null = null;
     instance.on('moveend', () => {
-      if (!expanded || !latest.current.courtsOn) return;
+      if (!expanded) return;
       if (courtsTimer) clearTimeout(courtsTimer);
-      courtsTimer = setTimeout(() => { const c = instance.getCenter(); void latest.current.loadCourts({ lat: c.lat, lng: c.lng }, instance.getZoom()); }, 250);
+      courtsTimer = setTimeout(() => {
+        const c = instance.getCenter();
+        latest.current.loadRings({ lat: c.lat, lng: c.lng }, instance.getZoom());
+        if (latest.current.courtsOn) void latest.current.loadCourts({ lat: c.lat, lng: c.lng }, instance.getZoom());
+      }, 250);
     });
     // Trackpad: a pinch arrives as a wheel with Ctrl held and zooms around the
     // pointer; a plain two-finger scroll slides the map. Both are ours. A
@@ -229,14 +235,15 @@ export function NearbyMap(props: NearbyMapProps) {
     for (const c of expanded ? model.courts : []) {
       const on = c.id === selectedCourtId;
       const node = document.createElement('div');
-      node.innerHTML = courtPinHtml(c, on);
+      // A court played on this week wears the green story ring (courts only, never a random spot).
+      node.innerHTML = courtPinHtml(c, on, model.ringed.has(c.id));
       node.style.zIndex = on ? '4' : '1';
       node.setAttribute('role', 'button'); node.setAttribute('aria-label', c.name);
       node.addEventListener('click', (event) => { event.stopPropagation(); latest.current.selectCourt(c.id); });
       markers.push(new maplibregl.Marker({ element: node, anchor: 'center' }).setLngLat([c.lng, c.lat]).addTo(instance));
     }
     return () => { markers.forEach((m) => m.remove()); };
-  }, [model.courts, selectedCourtId, night, expanded, mapGen]);
+  }, [model.courts, model.ringed, selectedCourtId, night, expanded, mapGen]);
 
   // The still card: your city's courts as quiet dots, not tappable (the card itself opens the map).
   useEffect(() => {
@@ -244,13 +251,13 @@ export function NearbyMap(props: NearbyMapProps) {
     if (!instance || expanded) return;
     const markers = model.cardCourts.map((c) => {
       const node = document.createElement('div');
-      node.innerHTML = courtDotHtml();
+      node.innerHTML = courtDotHtml(c, model.cardRinged.has(c.id));
       node.style.zIndex = '0';
       node.style.pointerEvents = 'none';
       return new maplibregl.Marker({ element: node, anchor: 'center' }).setLngLat([c.lng, c.lat]).addTo(instance);
     });
     return () => { markers.forEach((m) => m.remove()); };
-  }, [model.cardCourts, expanded, night, mapGen]);
+  }, [model.cardCourts, model.cardRinged, expanded, night, mapGen]);
 
   // Open hits as flags, hung above any court pin at the same spot, on the full
   // map only, where a flag opens the hit's card. The still card leaves them out:
@@ -277,7 +284,8 @@ export function NearbyMap(props: NearbyMapProps) {
 
   // Picking someone, a court, a hit, or typing a city takes the map there.
   useEffect(() => { if (model.selected) map.current?.flyTo({ center: [model.selected.at.lng, model.selected.at.lat], zoom: Math.max(map.current.getZoom(), CLOSE_ZOOM), duration: 500 }); }, [model.selected]);
-  useEffect(() => { if (model.selectedCourt) map.current?.flyTo({ center: [model.selectedCourt.lng, model.selectedCourt.lat], zoom: Math.max(map.current.getZoom(), CLOSE_ZOOM), duration: 500 }); }, [model.selectedCourt]);
+  // A court's card is tall (who may play, right now, what players say): its court lands above it, not under it.
+  useEffect(() => { if (model.selectedCourt) map.current?.flyTo({ center: [model.selectedCourt.lng, model.selectedCourt.lat], zoom: Math.max(map.current.getZoom(), CLOSE_ZOOM), duration: 500, offset: [0, -courtLift(host.current?.clientHeight ?? 800)] }); }, [model.selectedCourt]);
   useEffect(() => { if (model.selectedHit) map.current?.flyTo({ center: [model.selectedHit.at.lng, model.selectedHit.at.lat], zoom: Math.max(map.current.getZoom(), CLOSE_ZOOM), duration: 500 }); }, [model.selectedHit]);
   useEffect(() => { if (model.place) map.current?.flyTo({ center: [model.place.lng, model.place.lat], zoom: START_ZOOM, duration: 700 }); }, [model.place]);
 
@@ -319,15 +327,15 @@ export function NearbyMap(props: NearbyMapProps) {
         {meOpen ? (
           <YouSheet me={me} open={openToHit} onToggle={actions.setOpenToHit} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} />
         ) : model.selected ? (
-          <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onAddToGroup={() => addToGroup(model.selected!.user.id)} onFollow={() => { const who = model.selected!.user; if (followingIds.includes(who.id)) confirmUnfollow(who, () => actions.toggleFollow(who.id)); else actions.toggleFollow(who.id); }} />
+          <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onAskToHit={actions.canMessage(model.selected.user.id) ? () => askToHit([model.selected!.user.id]) : undefined} onAddToGroup={() => addToGroup(model.selected!.user.id)} onFollow={() => { const who = model.selected!.user; if (followingIds.includes(who.id)) confirmUnfollow(who, () => actions.toggleFollow(who.id)); else actions.toggleFollow(who.id); }} />
         ) : model.selectedCourt ? (
-          <CourtSheet court={model.selectedCourt} miles={milesBetween(home, model.selectedCourt)} onClose={() => model.selectCourt(null)} />
+          <CourtSheet court={model.selectedCourt} miles={milesBetween(home, model.selectedCourt)} ringed={model.ringed.has(model.selectedCourt.id)} onClose={() => model.selectCourt(null)} />
         ) : model.selectedHit ? (
           <HitSheet hit={model.selectedHit.hit} miles={milesBetween(home, model.selectedHit.at)} onClose={() => model.selectHit(null)} />
         ) : !model.homeKnown && !model.place ? (
           <WhereCard locating={locating} onLocation={onToggleLocation} />
         ) : (
-          <NearbyRail items={model.shown} cityName={model.place ? model.place.name.split(',')[0] : cityName} selectedId={null} onSelect={model.select} weather={weather} query={model.query} />
+          <NearbyRail items={model.tray} cityName={model.place ? model.place.name.split(',')[0] : cityName} selectedId={null} onSelect={model.select} weather={weather} query={model.query} filter={model.filter} courts={model.nearestCourts} onPickCourt={model.selectCourt} />
         )}
         {/* The tray's own colour runs on beneath the floating tab bar, so no map shows between them. */}
         {barInset ? <View style={{ height: barInset, backgroundColor: colors.surface, marginTop: -spacing.md - 1 }} /> : null}

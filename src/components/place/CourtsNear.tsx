@@ -10,8 +10,9 @@ import { countLabel, sameCourt } from '@/features/places/court';
 import { labelOf, looksPublic } from '@/features/places/courtName';
 import { canSeeAtCourt, courtSeeing } from '@/features/places/useCourtPosts';
 import { openCourt } from '@/features/players/courtLink';
-import { courtRows, fetchCourts, peekCourts, type Court, type CourtRow } from '@/features/players/courts';
+import { courtRows, fetchCourts, isClosedCourt, peekCourts, type Court, type CourtRow } from '@/features/players/courts';
 import { formatMiles } from '@/features/players/geo';
+import { IN_TOWN_MILES } from '@/features/players/mapModel';
 import type { LatLng } from '@/features/players/positions';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -44,7 +45,9 @@ export function useNearCourts(center: LatLng | null): { rows: CourtRow[]; neares
   }, [lat, lng]);
   return useMemo(() => {
     if (lat === undefined || lng === undefined) return { rows: [], nearest: null, all: list };
-    const named = courtRows(list, { lat, lng }).filter((r) => r.c.name !== 'Tennis courts');
+    // Members-only and private courts are never suggested: not listed, and never "the nearest" named for a first hit.
+    // Only courts in town: after a move to another city, the last city's list (kept while the new one loads, or if it fails) is never listed as near.
+    const named = courtRows(list.filter((c) => !isClosedCourt(c)), { lat, lng }).filter((r) => r.c.name !== 'Tennis courts' && r.miles <= IN_TOWN_MILES);
     const rows = [...named.filter((r) => looksPublic(r.c.name)), ...named.filter((r) => !looksPublic(r.c.name))].slice(0, MOST);
     return { rows, nearest: named[0] ?? null, all: list };
   }, [list, lat, lng]);
@@ -54,13 +57,18 @@ export function useNearCourts(center: LatLng | null): { rows: CourtRow[]; neares
  * "Courts near you" under the map on Find Players: a row of the courts in
  * town, each with how far, how many courts and lights, the next open hit
  * there and how much was posted there. A card opens the court's page; the
- * last one opens the map. Nothing without somewhere to centre on.
- * (Until court access lands, a members-only court can still show here.)
+ * last one opens the map. Nothing without somewhere to centre on. A
+ * court the map or players say is members only or private never shows here,
+ * nor one you follow: Your courts already shows it, with the same news.
  */
 export function CourtsNear({ center }: { center: LatLng | null }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { rows } = useNearCourts(center);
-  const { hitRequests, posts, users, followingIds, currentUserId, blockedIds, mutedIds } = useApp();
+  const near = useNearCourts(center);
+  const { hitRequests, posts, users, followingIds, currentUserId, blockedIds, mutedIds, followedCourts } = useApp();
+  const rows = useMemo(() => {
+    const mine = new Set((followedCourts ?? []).map((c) => c.courtId));
+    return mine.size ? near.rows.filter((r) => !mine.has(r.c.id)) : near.rows;
+  }, [near.rows, followedCourts]);
   // What each card says about its court: the soonest open hit you may see there, and the posts its page would show.
   const badges = useMemo(() => {
     const usersById = new Map(users.map((u) => [u.id, u]));

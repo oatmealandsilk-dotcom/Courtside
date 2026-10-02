@@ -15,7 +15,8 @@ import { colors, radius, spacing, typography } from '@/theme';
 /**
  * "Who do you hit with?" — the person's own invite link, offered after
  * their first post and from their profile. A friend who joins through it
- * follows them and is followed back, and lands on the same map.
+ * follows them (and can be followed back). It says only that: whether
+ * someone shows on a map depends on their age and their Location switch.
  */
 export default function Invite() {
   const styles = useThemedStyles(styleDefinitions);
@@ -39,7 +40,7 @@ export default function Invite() {
       </View>
     }>
       <View style={styles.body}>
-        <Text style={styles.lead}>Send them your link. When they join, you follow each other and they show up on your map.</Text>
+        <Text style={styles.lead}>Send them your link. When they join, they follow you, and you can follow them back.</Text>
         <View style={styles.linkBox}>
           <Ionicons name="link-outline" size={16} color={colors.textMuted} />
           <Text style={styles.link} numberOfLines={1}>{link.replace('https://', '')}</Text>

@@ -19,12 +19,22 @@ import { Avatar, Chip, EmptyState, Screen } from '@/components/ui';
 import { Highlighted } from '@/components/CourtSearch';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { CourtsNear, useNearCourts } from '@/components/place/CourtsNear';
+import { YourCourts } from '@/components/place/YourCourts';
+import { EarlyInvite } from '@/components/EarlyInvite';
+import { FollowPill } from '@/components/FollowPill';
+import { takeInviteCourt } from '@/features/invite/referral';
+import { notKnownAdult } from '@/features/players/age';
+import { IN_TOWN_MILES } from '@/features/players/mapModel';
+import { isClosedCourt } from '@/features/players/courts';
+import { agoLabel } from '@/components/map/markers';
+import { confirmUnfollow } from '@/lib/confirm';
 import { NEAR_HIT_MILES, canSeeHitAt, hitSpot, openHits as openHitsOf } from '@/features/hits/visible';
 import { labelOf, looksPublic } from '@/features/places/courtName';
 import { useCourtSearch } from '@/features/places/useCourtSearch';
 import { openCourt, playHere } from '@/features/players/courtLink';
 import { formatMiles, milesBetween } from '@/features/players/geo';
 import { useMyCity } from '@/features/players/useMyCity';
+import { isOpenToHit as isOpenToHitNow } from '@/features/players/openToHit';
 import { plain } from '@/features/search/words';
 import { askedSection, reportSection, subscribeSectionRequest, takeAskedSection } from '@/features/navigation/swipeOrder';
 import { START_SECTION, START_TAB } from '@/features/navigation/startTab';
@@ -33,6 +43,7 @@ import { useApp } from '@/store/AppContext';
 import type { QuestionTopic } from '@/data/types';
 import { colors, radius, spacing, typography, font, lift } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
+import { isSupabaseConfigured } from '@/lib/supabase';
 
 const TOPICS: (QuestionTopic | 'all')[] = [
   'all',
@@ -54,11 +65,20 @@ const asTopic = (value: string | undefined): QuestionTopic | 'all' => (value && 
 const SORT_LABEL = { new: 'New', hot: 'Hot', top: 'Top', unanswered: 'Unanswered' } as const;
 /** Open hits shown before "More open hits": the rest are a tap away, never dropped. */
 const HITS_SHOWN = 5;
+/** "New on CourtSide": joined this recently. */
+const NEW_DAYS = 14;
+/** New players shown before "Show more". */
+const NEW_SHOWN = 6;
 const SORT_HINT = { new: 'Newest first', hot: 'Busiest right now', top: 'Most upvoted', unanswered: 'Nobody has replied yet' } as const;
+/** "Joined 3 days ago", for New on CourtSide. */
+const joinedLabel = (iso: string) => {
+  const days = Math.floor((Date.now() - Date.parse(iso)) / 86_400_000);
+  return days <= 0 ? 'Joined today' : days === 1 ? 'Joined yesterday' : `Joined ${days} days ago`;
+};
 
 function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
-  const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, followingIds, saved, actions, detectedCoords, locationEnabled, hitRequests } = useApp();
+  const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, followingIds, saved, actions, detectedCoords, locationEnabled, hitRequests, lastSeen, lastSeenLoaded, followedCourts, onboardingComplete } = useApp();
   // The section lives here, not in the address: listening to the address made
   // this whole tab re-render on every route change anywhere in the app.
   // Other pages ask for a section through requestSection before navigating;
@@ -157,6 +177,61 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const moreHits = Math.max(0, openHits.length - HITS_SHOWN);
   // With nothing open, name a court only when the nearest one reads as public and is close: never just because it is nearest.
   const promptCourt = nearCourts.nearest && looksPublic(nearCourts.nearest.c.name) && nearCourts.nearest.miles <= 5 ? nearCourts.nearest.c : null;
+  // "Near you" is one thing on this tab and on the map: people who shared a
+  // spot within 30 miles of you (where the phone is, your own last spot, or
+  // your profile's city), nearest first, never placed by a typed city.
+  const nearFrom = detectedCoords ?? (currentUserId && lastSeen[currentUserId] ? { lat: lastSeen[currentUserId].lat, lng: lastSeen[currentUserId].lng } : null) ?? myCityAt ?? null;
+  const nearPlayers = useMemo(() => {
+    if (!nearFrom) return [];
+    return users
+      .filter((u) => u.id !== currentUserId && !blockedIds.includes(u.id))
+      .flatMap((user) => { const seen = lastSeen[user.id]; if (!seen) return []; const miles = milesBetween(nearFrom, seen); return miles <= IN_TOWN_MILES ? [{ user, miles, seenAt: seen.seenAt }] : []; })
+      .sort((a, b) => a.miles - b.miles);
+  }, [users, lastSeen, currentUserId, blockedIds, nearFrom?.lat, nearFrom?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+  // "New on CourtSide": who joined in the last two weeks, newest first. Only
+  // known adults and people you already follow, so a teen is never put in
+  // front of adult strangers with a one-tap Follow; a teen viewer sees only
+  // the people they follow.
+  const [newOpen, setNewOpen] = useState(false);
+  const newPlayers = useMemo(() => {
+    const viewerAdult = !!currentUser && !notKnownAdult(currentUser);
+    const near = new Set(nearPlayers.map((p) => p.user.id));
+    const since = Date.now() - NEW_DAYS * 86_400_000;
+    return users
+      .filter((u) => u.id !== currentUserId && !blockedIds.includes(u.id) && !near.has(u.id) && Date.parse(u.joinedAt) >= since)
+      .filter((u) => followingIds.includes(u.id) || (viewerAdult && !notKnownAdult(u)))
+      .sort((a, b) => b.joinedAt.localeCompare(a.joinedAt));
+  }, [users, currentUser, currentUserId, blockedIds, followingIds, nearPlayers]);
+  // Nobody sharing a spot within 30 miles (once the spots have come down): the map fills up with the people you already play with.
+  // Only somewhere we know: with no spot and no city, "early here" would be a guess.
+  // Only for a known adult: anyone else is shown nobody's spot (migration 46),
+  // so an empty list says nothing about the town for them.
+  const early = !!currentUser && !notKnownAdult(currentUser) && !!nearFrom && (lastSeenLoaded || !isSupabaseConfigured) && nearPlayers.length === 0;
+  const myCityName = (currentUser?.location ?? '').split(',')[0].trim() || null;
+  // The court the invite carries: one you follow in town, else the nearest
+  // that reads as public (never a club or someone's own court, and none
+  // that is members only). Never for a teen: a poster or link naming where
+  // a teen plays would put their court in front of strangers.
+  const inviteCourt = useMemo(() => {
+    if (!currentUser || notKnownAdult(currentUser)) return null;
+    // A court with a name only: "Hit with me at Tennis courts" tells a friend nothing.
+    const mine = followedCourts?.find((c) => !isClosedCourt(c) && !!c.name && c.name !== 'Tennis courts' && (!firstCentre || milesBetween(firstCentre, c) <= IN_TOWN_MILES));
+    if (mine?.name) return { id: mine.courtId, name: mine.name, lat: mine.lat, lng: mine.lng };
+    const c = promptCourt ?? nearCourts.rows.find((r) => looksPublic(r.c.name) && r.miles <= IN_TOWN_MILES)?.c ?? null;
+    return c ? { id: c.id, name: labelOf(c), lat: c.lat, lng: c.lng } : null;
+  }, [currentUser, followedCourts, promptCourt, nearCourts.rows, firstCentre?.lat, firstCentre?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Joined through a link that carried a court: its page, once, as soon as you are in.
+  useEffect(() => {
+    if (previewSection || !currentUserId || !onboardingComplete) return;
+    let on = true;
+    void takeInviteCourt().then((court) => { if (on && court) openCourt(court); });
+    return () => { on = false; };
+  }, [previewSection, currentUserId, onboardingComplete]);
+  const followRow = (id: string) => {
+    const who = users.find((u) => u.id === id);
+    if (who && followingIds.includes(id)) confirmUnfollow(who, () => actions.toggleFollow(id));
+    else actions.toggleFollow(id);
+  };
   // Typing two letters or more finds courts too, above the players.
   const courtMatches = useCourtSearch(search, firstCentre, nearCourts.all, 4);
   const searchWords = useMemo(() => plain(search).split(' ').filter(Boolean), [search]);
@@ -180,6 +255,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // A long list is drawn in slices: the first screenfuls at once, the rest on request.
   const slice = visible.slice(0, shownCount);
 
+  // Where to play: the courts you follow, with what is new at each, then the others in town, each a tap from its page.
+  const yourCourts = <YourCourts from={firstCentre} />;
+  const courtsBlock = <CourtsNear center={firstCentre} />;
   const content = (section:string) => (section === 'players' ? <View style={{ gap: 16 }}>
         <View style={styles.searchWrap}>
           <Ionicons name="search" size={17} color={colors.textFaint} style={styles.searchIcon} />
@@ -189,8 +267,13 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           ? <NearbyMap me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} />
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : <View style={styles.mapStandIn} />) : null}
-        {/* Where to play: the courts in town, each a tap from its page. */}
-        {!search ? <CourtsNear center={firstCentre} /> : null}
+        {/* Nobody sharing a spot within 30 miles: the way to fill the map, right under it. */}
+        {!search && early ? <EarlyInvite city={myCityName} court={inviteCourt} /> : null}
+        {/* A quiet area leads with where to play (your courts, then the others
+            near you); once it has open hits, they come first, and Your courts
+            follows them, since its "Hit today" badges repeat those cards. */}
+        {!search && !openHits.length ? yourCourts : null}
+        {!search && !openHits.length ? courtsBlock : null}
         {/* Hits: someone wants a game, near you first. Posting one is right here. */}
         {!search ? (
           <View style={styles.hits}>
@@ -238,6 +321,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             ) : null}
           </View>
         ) : null}
+        {!search && openHits.length ? yourCourts : null}
+        {!search && openHits.length ? courtsBlock : null}
         {/* Courts by name, above the players, once two letters are typed. */}
         {search && courtMatches.length ? (
           <View>
@@ -260,26 +345,68 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             })}
           </View>
         ) : null}
-        {players.length || (search && courtMatches.length) ? <View style={styles.playersHead}>
-          {/* Just "Players": the ones near you say so on their own row. */}
+        {search && (players.length || courtMatches.length) ? <View style={styles.playersHead}>
           <Text style={styles.playersTitle}>Players</Text>
           {/* A court matched but no one did: one quiet line, not a big empty state under the court that was found. */}
-          {search ? <Text style={styles.playersBody}>{players.length ? `${players.length} ${players.length === 1 ? 'match' : 'matches'}` : `No players named “${search.trim()}”`}</Text> : null}
+          <Text style={styles.playersBody}>{players.length ? `${players.length} ${players.length === 1 ? 'match' : 'matches'}` : `No players named “${search.trim()}”`}</Text>
         </View> : null}
-        {players.map((user, index) => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
+        {search ? players.map((user, index) => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
           <Avatar name={user.name} seed={user.avatarSeed} size={52} ring={user.isCoach} />
           <View style={[styles.playerBody, index > 0 && styles.playerLine]}>
             <View style={styles.playerTop}><Text style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
-            <View style={styles.playerTop}>
-              {sameCity(user) ? <View style={styles.near}><Text style={styles.nearText}>Near you</Text></View> : null}
-              <Text style={styles.playerMeta} numberOfLines={1}>@{user.handle} · {user.location}</Text>
-            </View>
+            <Text style={styles.playerMeta} numberOfLines={1}>@{user.handle} · {user.location}</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} style={styles.playerChevron} />
-        </Pressable>)}
-        {!players.length && !(search && courtMatches.length) && (search
-          ? <EmptyState title={`Nothing matches “${search.trim()}”`} body="Try a name, a city or a park." />
-          : <EmptyState title="No players found" body="Try another name or city." />)}
+        </Pressable>) : null}
+        {search && !players.length && !courtMatches.length ? <EmptyState title={`Nothing matches “${search.trim()}”`} body="Try a name, a city or a park." /> : null}
+        {/* Near you: who shared a spot within 30 miles, the same "near" as the map. */}
+        {!search && nearPlayers.length ? (
+          <View>
+            <View style={styles.playersHead}>
+              <Text style={styles.playersTitle}>Near you</Text>
+              <Text style={styles.playersBody}>Shared their spot within 30 miles</Text>
+            </View>
+            {nearPlayers.map(({ user, miles, seenAt }, index) => (
+              <Pressable key={user.id} accessibilityRole="link" accessibilityLabel={`${user.name}, ${formatMiles(miles)}, open profile`} onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
+                <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} />
+                <View style={[styles.playerBody, styles.playerFollowBody, index > 0 && styles.playerLine]}>
+                  <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                    <View style={styles.playerTop}><Text style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
+                    <Text style={styles.playerMeta} numberOfLines={1}>{[formatMiles(miles), seenAt ? agoLabel(seenAt) : null, isOpenToHitNow(user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
+                  </View>
+                  <FollowPill small following={followingIds.includes(user.id)} userId={user.id} onPress={() => followRow(user.id)} name={user.name.split(' ')[0]} />
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+        {/* New on CourtSide: who joined in the last two weeks (adults, and people you already follow), with Follow in one tap. */}
+        {!search && newPlayers.length ? (
+          <View>
+            <View style={styles.playersHead}>
+              <Text style={styles.playersTitle}>New on CourtSide</Text>
+              <Text style={styles.playersBody}>Joined in the last two weeks</Text>
+            </View>
+            {(newOpen ? newPlayers : newPlayers.slice(0, NEW_SHOWN)).map((user, index) => (
+              <Pressable key={user.id} accessibilityRole="link" accessibilityLabel={`${user.name}, ${joinedLabel(user.joinedAt).toLowerCase()}, open profile`} onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
+                <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} />
+                <View style={[styles.playerBody, styles.playerFollowBody, index > 0 && styles.playerLine]}>
+                  <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                    <View style={styles.playerTop}><Text style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
+                    <Text style={styles.playerMeta} numberOfLines={1}>{[joinedLabel(user.joinedAt), user.location.split(',')[0] || null].filter(Boolean).join(' · ')}</Text>
+                  </View>
+                  <FollowPill small following={followingIds.includes(user.id)} userId={user.id} onPress={() => followRow(user.id)} name={user.name.split(' ')[0]} />
+                </View>
+              </Pressable>
+            ))}
+            {newPlayers.length > NEW_SHOWN ? (
+              <Pressable accessibilityRole="button" accessibilityState={{ expanded: newOpen }} onPress={() => setNewOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: 0.6 }]}>
+                <Text style={styles.furtherText}>{newOpen ? 'Fewer' : `Show all (${newPlayers.length})`}</Text>
+                <Ionicons name={newOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
       </View> : <>
       <View style={styles.controls}>
         <ScrollView ref={topicStrip} nativeID="topic-filter-strip" horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.topicRow}>
@@ -446,6 +573,8 @@ const styleDefinitions = StyleSheet.create({
   near: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.brandDim },
   nearText: { ...typography.caption, fontSize: 11, color: colors.brand, letterSpacing: 0 },
   playerChevron: { marginRight: spacing.lg },
+  // A row with Follow at its end: the words take the room, the pill keeps the page's right margin.
+  playerFollowBody: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingRight: spacing.lg },
   fab: {
     width: 38,
     height: 38,

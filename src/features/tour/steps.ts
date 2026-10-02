@@ -67,8 +67,9 @@ export const TOUR_STEPS: TourStep[] = [
     key: 'map',
     target: { phone: null, wide: null },
     page: MAP,
-    phone: { title: 'Players near you', body: "The map shows who's playing nearby and open hits to join." },
-    wide: { title: 'Players near you', body: "The map shows who's playing nearby and open hits to join." },
+    // What the map always has, even in a new city: courts, the players who shared their spot, open hits.
+    phone: { title: 'Your map', body: 'Courts near you, players who shared their spot, and open hits to join.' },
+    wide: { title: 'Your map', body: 'Courts near you, players who shared their spot, and open hits to join.' },
   },
   {
     // The pages slide from the map to the threads on their own under this

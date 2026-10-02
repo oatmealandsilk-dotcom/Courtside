@@ -1,3 +1,4 @@
+import type { CourtAccess } from '@/data/types';
 import { milesBetween } from '@/features/players/geo';
 import type { LatLng } from '@/features/players/positions';
 import { plain, wordStartIndex } from '@/features/search/words';
@@ -12,9 +13,13 @@ import { plain, wordStartIndex } from '@/features/search/words';
  * the way OpenStreetMap leaves most courts. The ids look like the map's own
  * ("way…"), so notes, tags and hits treat them as real courts.
  */
-export interface DemoCourtRow { id: string; name: string | null; lat: number; lng: number; lit: boolean | null; surface: string | null }
+export interface DemoCourtRow {
+  id: string; name: string | null; lat: number; lng: number; lit: boolean | null; surface: string | null;
+  /** Who may play there, the way the courts function sends it after migration 60. */
+  access?: CourtAccess; book_url?: string | null;
+}
 
-const park = (n: number, name: string | null, lat: number, lng: number, courts: number, lit: boolean, surface: string | null): DemoCourtRow[] => {
+const park = (n: number, name: string | null, lat: number, lng: number, courts: number, lit: boolean, surface: string | null, access?: { access: CourtAccess; book_url?: string }): DemoCourtRow[] => {
   // A park's courts stand a few metres apart: the same ~250 m cell, so the map folds them into one pin with a count.
   const spots = [[0, 0], [0.0003, 0.0002], [-0.0003, 0.0002], [0.0002, -0.0004], [-0.0002, -0.0004], [0.0004, 0.0005]];
   return spots.slice(0, courts).map(([dLat, dLng], i) => ({
@@ -24,18 +29,23 @@ const park = (n: number, name: string | null, lat: number, lng: number, courts: 
     lng: Number((lng + dLng).toFixed(5)),
     lit: lit || null,
     surface,
+    ...access,
   }));
 };
 
+// Who may play at each: most say nothing (unknown), the way most courts on
+// the map do; one park is open to all, one rec centre books by the hour (its
+// link is a placeholder), the club is members only, and the unnamed pair is
+// someone's own court, so the map greys both and never suggests them.
 export const DEMO_COURT_ROWS: DemoCourtRow[] = [
-  ...park(1, 'Alder Park', 34.0604, -118.254, 4, true, 'hard'),
+  ...park(1, 'Alder Park', 34.0604, -118.254, 4, true, 'hard', { access: 'public' }),
   ...park(2, 'Bellwood Recreation Center', 34.0406, -118.221, 2, false, 'hard'),
   ...park(3, 'Cypress Hollow Park', 34.0736, -118.23, 6, true, 'hard'),
   ...park(4, 'Marigold Park', 34.034, -118.26, 1, false, 'hard'),
   ...park(5, 'Juniper Community Park', 34.0868, -118.245, 3, false, 'clay'),
-  ...park(6, 'Larkspur Recreation Center', 34.0186, -118.233, 2, false, 'hard'),
-  ...park(7, 'Hillcrest Tennis Club', 34.056, -118.212, 5, false, 'clay'),
-  ...park(8, null, 34.045, -118.248, 2, false, null),
+  ...park(6, 'Larkspur Recreation Center', 34.0186, -118.233, 2, false, 'hard', { access: 'pay', book_url: 'https://example.com/book' }),
+  ...park(7, 'Hillcrest Tennis Club', 34.056, -118.212, 5, false, 'clay', { access: 'members' }),
+  ...park(8, null, 34.045, -118.248, 2, false, null, { access: 'private' }),
 ];
 
 /** The first court of each demo park, the one its pin and page stand for: parks 1 and 3 hold the demo hits and posts. */

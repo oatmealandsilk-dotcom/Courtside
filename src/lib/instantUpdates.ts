@@ -44,7 +44,7 @@ const launchedAt = Date.now();
  * the Google sheet was open threw away a new player's sign-in, and they had
  * to start again from the welcome page (Oct 1).
  */
-const BUSY_PAGES = ['/sign-in', '/birthday', '/agree', '/onboarding', '/first-move', '/compose', '/ask', '/hit', '/edit-post', '/edit-profile', '/log-session', '/pick-session', '/court-report', '/hit-request/new', '/comments', '/ask-coach', '/coach-apply', '/pick-location'];
+const BUSY_PAGES = ['/sign-in', '/birthday', '/agree', '/onboarding', '/first-move', '/compose', '/ask', '/hit', '/edit-post', '/edit-profile', '/log-session', '/pick-session', '/court-report', '/court-now', '/hit-request/new', '/comments', '/ask-coach', '/coach-apply', '/pick-location'];
 
 /**
  * Whether a restart now would throw something away: a post or Instant still

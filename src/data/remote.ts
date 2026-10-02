@@ -20,7 +20,7 @@ import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, TaggedCourt, Question, Story, Tip, User, CoachApplication } from './types';
+import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, TaggedCourt, Question, Story, Tip, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
 import { isMapCourtId } from '@/features/places/courtName';
 
@@ -343,14 +343,50 @@ export interface UserState {
   pushMessages?: boolean;
   /** The "Tennis sessions" alert switch (migration 58). Undefined on a database without it, which means on. */
   pushActivity?: boolean;
+  /** The four map alert switches (migration 60). Undefined on a database without them, which means on. */
+  pushMapFriends?: boolean; pushMapHits?: boolean; pushMapPlayers?: boolean; pushCourts?: boolean;
   /** What the coach works around (injuries, schedule, gear): kept in this private row, never on the public profile. Undefined on a database without migration 19. */
   constraints?: PlayerProfile['constraints'];
 }
 
-interface CourtNoteRow { court_id: string; user_id: string; lights: boolean | null; surface: CourtNote['surface'] | null; nets: CourtNote['nets'] | null; busy: CourtNote['busy'] | null; photo_url: string | null; note: string | null; updated_at: string }
-const toCourtNote = (r: CourtNoteRow): CourtNote => ({
-  courtId: r.court_id, userId: r.user_id, lights: r.lights ?? undefined, surface: r.surface ?? undefined, nets: r.nets ?? undefined,
-  busy: r.busy ?? undefined, photoUrl: r.photo_url ?? undefined, note: r.note ?? undefined, updatedAt: r.updated_at,
+/* Courts, migration 60: players' facts, follows, right now, rings. */
+const DAY_PARTS: CourtDayPart[] = ['weekday-morning', 'weekday-afternoon', 'weekday-evening', 'weekend-morning', 'weekend-afternoon', 'weekend-evening'];
+const NOW_WORDS: CourtNow[] = ['free', 'wait', 'full', 'wet', 'locked'];
+const ACCESS_WORDS: CourtAccess[] = ['public', 'members', 'pay', 'private', 'unknown'];
+const asAccess = (v: unknown): CourtAccess => (ACCESS_WORDS.includes(v as CourtAccess) ? (v as CourtAccess) : 'unknown');
+const asNow = (v: unknown): CourtNow | undefined => (NOW_WORDS.includes(v as CourtNow) ? (v as CourtNow) : undefined);
+const num = (v: unknown) => (typeof v === 'number' ? v : Number(v) || 0);
+interface CourtFactsRow {
+  court_id: string; players: number; lights_yes: number; lights_no: number; nets_good: number; nets_bad: number;
+  surface_good: number; surface_cracked: number; surface_wet: number; busy: Record<string, number> | null; busy_answers: number; busy_never?: number | null;
+  notes: { text: string; on: string }[] | null; access: string | null; access_by: string | null; fee: boolean | null; indoor: boolean | null; book_url: string | null; updated_at: string | null;
+}
+const toCourtFacts = (r: CourtFactsRow): CourtFacts => ({
+  courtId: r.court_id, access: asAccess(r.access),
+  ...(r.access_by === 'map' || r.access_by === 'players' || r.access_by === 'admin' ? { accessBy: r.access_by as CourtAccessSource } : {}),
+  ...(typeof r.fee === 'boolean' ? { fee: r.fee } : {}), ...(typeof r.indoor === 'boolean' ? { indoor: r.indoor } : {}),
+  ...(r.book_url ? { bookUrl: r.book_url } : {}),
+  players: num(r.players),
+  lights: { yes: num(r.lights_yes), no: num(r.lights_no) },
+  nets: { good: num(r.nets_good), bad: num(r.nets_bad) },
+  surface: { good: num(r.surface_good), cracked: num(r.surface_cracked), wetProne: num(r.surface_wet) },
+  busy: Object.fromEntries(Object.entries(r.busy ?? {}).filter(([k]) => DAY_PARTS.includes(k as CourtDayPart)).map(([k, v]) => [k, num(v)])),
+  busyAnswers: num(r.busy_answers),
+  busyNever: num(r.busy_never ?? 0),
+  notes: (r.notes ?? []).filter((n) => typeof n?.text === 'string').map((n) => ({ text: n.text, on: String(n.on) })),
+  ...(r.updated_at ? { updatedAt: r.updated_at } : {}),
+});
+interface CourtReviewRow { court_id: string; lights: boolean | null; nets: string | null; surface: string | null; busy: string[] | null; access: string | null; notes: string | null; from_hit: string | null; updated_at: string }
+const toCourtReview = (r: CourtReviewRow): CourtReview => ({
+  courtId: r.court_id,
+  ...(typeof r.lights === 'boolean' ? { lights: r.lights } : {}),
+  ...(r.nets === 'good' || r.nets === 'bad' ? { nets: r.nets } : {}),
+  ...(r.surface === 'good' || r.surface === 'cracked' || r.surface === 'wet-prone' ? { surface: r.surface } : {}),
+  ...(Array.isArray(r.busy) ? { busy: r.busy.filter((b): b is CourtDayPart => DAY_PARTS.includes(b as CourtDayPart)) } : {}),
+  ...(r.access && r.access !== 'unknown' && ACCESS_WORDS.includes(r.access as CourtAccess) ? { access: r.access as Exclude<CourtAccess, 'unknown'> } : {}),
+  ...(r.notes ? { notes: r.notes } : {}),
+  ...(r.from_hit ? { fromHit: r.from_hit } : {}),
+  updatedAt: r.updated_at,
 });
 interface QuestionRow { id: string; author_id: string; title: string; body: string; topic: string; tags: string[]; votes: number; voted_by: Record<string, 1 | -1>; accepted_answer_id: string | null; edited_at: string | null; created_at: string }
 interface AnswerRow { id: string; question_id: string; author_id: string; parent_answer_id: string | null; body: string; votes: number; voted_by: Record<string, 1 | -1>; from_coach: boolean; created_at: string; media_url?: string | null; media_kind?: 'photo' | 'video' | null; media_thumb?: string | null }
@@ -383,7 +419,7 @@ const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
   listed: r.listed, payoutsReady: r.payouts_ready, payoutsStarted: r.payouts_started,
 });
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
-interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints'] } | null }
+interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints'] } | null }
 
 interface PollRow { question_id: string; options: string[]; counts: number[] | null }
 /** Each thread's poll, with the totals and your own vote, laid onto the threads. */
@@ -427,6 +463,10 @@ const toUserState = (r: UserStateRow): UserState => ({
   defaultPaymentId: r.default_payment_id, showActivity: r.show_activity, pushLikes: r.push_likes, pushCoach: r.push_coach,
   pushMessages: typeof r.push_messages === 'boolean' ? r.push_messages : undefined,
   pushActivity: typeof r.push_activity === 'boolean' ? r.push_activity : undefined,
+  pushMapFriends: typeof r.push_map_friends === 'boolean' ? r.push_map_friends : undefined,
+  pushMapHits: typeof r.push_map_hits === 'boolean' ? r.push_map_hits : undefined,
+  pushMapPlayers: typeof r.push_map_players === 'boolean' ? r.push_map_players : undefined,
+  pushCourts: typeof r.push_courts === 'boolean' ? r.push_courts : undefined,
   constraints: Array.isArray(r.private_profile?.constraints) ? r.private_profile!.constraints : undefined,
 });
 
@@ -796,10 +836,16 @@ function groupRefusal(message: string): GroupRefusal | null {
 const missingFunction = (error: { code?: string; message: string }) =>
   error.code === 'PGRST202' || error.code === '42883' || /could not find the function|function .* does not exist/i.test(error.message);
 
+/** The same for a table: PostgREST's "Could not find the table" (PGRST205), or Postgres's "relation … does not exist". */
+const missingTable = (error: { code?: string; message: string }) =>
+  error.code === 'PGRST205' || error.code === '42P01' || /could not find the table|relation .* does not exist/i.test(error.message);
+
 /** Set once a settings save finds no push_messages column (a database before migration 54). */
 let userStateLacksPushMessages = false;
 /** Set once a settings save finds no push_activity column (a database before migration 58). */
 let userStateLacksPushActivity = false;
+/** Set once a settings save finds no map alert columns (a database before migration 60). */
+let userStateLacksMapAlerts = false;
 
 /** A note for whoever reads the logs: this needs the group chat update in Supabase first. */
 const needs54 = (what: string) => console.warn(`[remote] ${what} needs the group chat update. Open Supabase → SQL Editor → New query, paste the file supabase/migrations/20261001000054_group_chats.sql and press Run. It is safe to run more than once.`);
@@ -887,18 +933,23 @@ export const remote = {
       user_id: me, muted_ids: s.mutedIds, blocked_ids: s.blockedIds, saved_question_ids: s.savedQuestionIds, payment_methods: s.paymentMethods,
       default_payment_id: s.defaultPaymentId, show_activity: s.showActivity, push_likes: s.pushLikes, push_coach: s.pushCoach, updated_at: new Date().toISOString(),
     };
-    // The "Message alerts" switch (migration 54) and the "Tennis sessions"
-    // one (migration 58) each have their own column. A database without one
+    // The "Message alerts" switch (migration 54), the "Tennis sessions" one
+    // (migration 58) and the four map alerts (migration 60) each have their
+    // own columns. A database without one
     // refuses the whole save, so the rest is saved without it, and it is not
     // sent again this session.
     const send = () => need().from('user_state').upsert({
       ...row,
       ...(s.pushMessages !== undefined && !userStateLacksPushMessages ? { push_messages: s.pushMessages } : {}),
       ...(s.pushActivity !== undefined && !userStateLacksPushActivity ? { push_activity: s.pushActivity } : {}),
+      ...(s.pushMapFriends !== undefined && !userStateLacksMapAlerts
+        ? { push_map_friends: s.pushMapFriends, push_map_hits: s.pushMapHits ?? true, push_map_players: s.pushMapPlayers ?? true, push_courts: s.pushCourts ?? true }
+        : {}),
     });
     let { error } = await send();
-    for (let tries = 0; error && tries < 2; tries += 1) {
-      if (/push_activity/.test(error.message) && !userStateLacksPushActivity) userStateLacksPushActivity = true;
+    for (let tries = 0; error && tries < 3; tries += 1) {
+      if (/push_map_|push_courts/.test(error.message) && !userStateLacksMapAlerts) userStateLacksMapAlerts = true;
+      else if (/push_activity/.test(error.message) && !userStateLacksPushActivity) userStateLacksPushActivity = true;
       else if (/push_messages/.test(error.message) && !userStateLacksPushMessages) { userStateLacksPushMessages = true; needs54('The Message alerts switch'); }
       else break;
       ({ error } = await send());
@@ -1867,10 +1918,14 @@ export const remote = {
     if (error) return [];
     return ((data ?? []) as NotificationRow[]).map(toNotification);
   },
-  /** Everyone's last spot you are allowed to see. Empty when the table is not there yet. */
-  async fetchLastSeen(): Promise<LastSeen[]> {
+  /**
+   * Everyone's last spot you are allowed to see. Empty when the table is not
+   * there yet; null when the ask failed, so the map keeps what it had and
+   * nothing reads a failed load as "nobody near you".
+   */
+  async fetchLastSeen(): Promise<LastSeen[] | null> {
     const { data, error } = await need().from('last_seen').select('user_id, lat, lng, city, seen_at, show_activity').limit(2000);
-    if (error) { fail('last seen')(error); return []; }
+    if (error) { fail('last seen')(error); return missingTable(error) ? [] : null; }
     return (data as { user_id: ID; lat: number; lng: number; city: string | null; seen_at: string; show_activity: boolean }[])
       .map((r) => ({ userId: r.user_id, lat: r.lat, lng: r.lng, city: r.city ?? undefined, seenAt: r.show_activity ? r.seen_at : undefined }));
   },
@@ -1883,19 +1938,109 @@ export const remote = {
     const { error } = await need().rpc('forget_last_seen');
     if (error) fail('forget last seen')(error);
   },
-  /** What players say about one court, newest first. Empty when the table is not there yet. */
-  async fetchCourtNotes(courtId: string): Promise<CourtNote[]> {
-    const { data, error } = await need().from('court_notes').select('*').eq('court_id', courtId).order('updated_at', { ascending: false }).limit(50);
-    if (error) { fail('court notes')(error); return []; }
-    return (data as CourtNoteRow[]).map(toCourtNote);
+  /*
+   * Courts (migration 60). Every read here answers null on a database
+   * without it (the function or table is missing), so the app hides what it
+   * cannot show yet rather than failing; the writes say so in a sentence.
+   */
+  /** Everyone's facts about up to 50 courts, added up, never naming anyone. */
+  async fetchCourtFacts(ids: string[]): Promise<CourtFacts[] | null> {
+    const { data, error } = await need().rpc('court_facts', { ids: ids.slice(0, 50) });
+    if (error) { if (!missingFunction(error)) fail('court facts')(error); return null; }
+    return ((data ?? []) as CourtFactsRow[]).map(toCourtFacts);
   },
-  /** Your own report on a court; saving again replaces it. */
-  async saveCourtNote(n: CourtNote) {
-    const { error } = await need().from('court_notes').upsert({
-      court_id: n.courtId, user_id: n.userId, lights: n.lights ?? null, surface: n.surface ?? null, nets: n.nets ?? null,
-      busy: n.busy ?? null, photo_url: n.photoUrl ?? null, note: n.note ?? null,
+  /** Your own facts about one court, to fill the sheet in. Null when you have none (or the table is missing). */
+  async fetchMyCourtReview(me: ID, courtId: string): Promise<CourtReview | null> {
+    const { data, error } = await need().from('court_reviews').select('court_id, lights, nets, surface, busy, access, notes, from_hit, updated_at').eq('user_id', me).eq('court_id', courtId).maybeSingle();
+    if (error || !data) return null;
+    return toCourtReview(data as CourtReviewRow);
+  },
+  /** Your facts about a court; saving again replaces them. Throws a plain sentence when it cannot. */
+  async saveCourtReview(me: ID, r: CourtReview) {
+    const { error } = await need().from('court_reviews').upsert({
+      court_id: r.courtId, user_id: me, lights: r.lights ?? null, nets: r.nets ?? null, surface: r.surface ?? null,
+      // A hit's id is a uuid; anything else in that slot would make the whole save fail.
+      busy: r.busy ?? null, access: r.access ?? null, notes: r.notes?.trim() || null, from_hit: r.fromHit && /^[0-9a-f-]{36}$/i.test(r.fromHit) ? r.fromHit : null,
     }, { onConflict: 'court_id,user_id' });
-    if (error) { fail('court note')(error); throw new Error('That didn’t save. Try again.'); }
+    if (!error) return;
+    fail('court review')(error);
+    if (missingTable(error)) throw new Error('Court reviews aren’t switched on yet. Try again soon.');
+    if (/30 courts a day|slow down/i.test(error.message)) throw new Error('That’s a lot of courts for one day. Try again tomorrow.');
+    throw new Error('That didn’t save. Try again.');
+  },
+  /** "6 players follow this court", and whether you do, for up to 50 courts. */
+  async fetchCourtFollowCounts(ids: string[]): Promise<CourtFollowCount[] | null> {
+    const { data, error } = await need().rpc('court_follow_counts', { ids: ids.slice(0, 50) });
+    if (error) { if (!missingFunction(error)) fail('court follows')(error); return null; }
+    return ((data ?? []) as { court_id: string; followers: number; following: boolean }[]).map((r) => ({ courtId: r.court_id, followers: num(r.followers), following: !!r.following }));
+  },
+  /** Follow a court (the heart). Null when it went through, else a sentence. */
+  async followCourt(me: ID, courtId: string): Promise<string | null> {
+    const { error } = await need().from('court_follows').insert({ user_id: me, court_id: courtId });
+    if (!error || error.code === '23505') return null;
+    fail('follow court')(error);
+    if (/up to 100 courts/.test(error.message)) return 'You can follow up to 100 courts.';
+    return 'That didn’t go through. Try again.';
+  },
+  async unfollowCourt(me: ID, courtId: string): Promise<boolean> {
+    const { error } = await need().from('court_follows').delete().eq('user_id', me).eq('court_id', courtId);
+    if (error) { fail('unfollow court')(error); return false; }
+    return true;
+  },
+  /** The courts you follow, with what is new at each ("Your courts"). */
+  async fetchMyCourts(): Promise<FollowedCourt[] | null> {
+    const { data, error } = await need().rpc('my_courts');
+    if (error) { if (!missingFunction(error)) fail('my courts')(error); return null; }
+    return ((data ?? []) as { court_id: string; name: string | null; lat: number; lng: number; access: string | null; followed_at: string; new_posts: number; upcoming_hits: number; next_hit_at: string | null; status: string | null; status_at: string | null; last_at: string | null; you_here?: boolean | null }[])
+      .map((r) => ({
+        courtId: r.court_id, ...(r.name ? { name: r.name } : {}), lat: r.lat, lng: r.lng, access: asAccess(r.access), followedAt: r.followed_at,
+        newPosts: num(r.new_posts), upcomingHits: num(r.upcoming_hits), ...(r.next_hit_at ? { nextHitAt: r.next_hit_at } : {}),
+        ...(asNow(r.status) ? { status: asNow(r.status), statusAt: r.status_at ?? undefined } : {}), ...(r.last_at ? { lastAt: r.last_at } : {}),
+        ...(r.you_here ? { youHere: true } : {}),
+      }));
+  },
+  /** Right now at up to 50 courts: the latest answer, and who is playing (counts and names as the server allows). */
+  async fetchCourtRightNow(ids: string[]): Promise<CourtRightNow[] | null> {
+    const { data, error } = await need().rpc('court_right_now', { ids: ids.slice(0, 50) });
+    if (error) { if (!missingFunction(error)) fail('court right now')(error); return null; }
+    return ((data ?? []) as { court_id: string; status: string | null; status_at: string | null; playing: number; friend_ids: string[] | null; you_here: boolean }[])
+      .map((r) => ({ courtId: r.court_id, ...(asNow(r.status) ? { status: asNow(r.status), statusAt: r.status_at ?? undefined } : {}), playing: num(r.playing), friendIds: r.friend_ids ?? [], youHere: !!r.you_here }));
+  },
+  /** "How is it right now?" No status takes yours back. Null when it went through, else a sentence. */
+  async reportCourtStatus(courtId: string, status: CourtNow | null): Promise<string | null> {
+    const { error } = await need().rpc('report_court_status', { p_court: courtId, p_status: status });
+    if (!error) return null;
+    fail('court status')(error);
+    if (missingFunction(error)) return 'This isn’t switched on yet. Try again soon.';
+    if (/private_court/.test(error.message)) return 'This is someone’s home court, so it doesn’t take reports.';
+    if (/slow down/.test(error.message)) return 'That’s a lot of courts this hour. Try again later.';
+    return 'That didn’t go through. Try again.';
+  },
+  /** "I'm playing here": when it ends, or why not, as the server says it. */
+  async checkInAtCourt(courtId: string): Promise<{ until: string } | { error: 'adults_only' | 'location_off' | 'too_far' | 'closed_court' | 'slow_down' | 'failed' }> {
+    const { data, error } = await need().rpc('check_in_at_court', { p_court: courtId });
+    if (!error && typeof data === 'string') return { until: data };
+    if (error) fail('check in')(error);
+    const said = error?.message ?? '';
+    return { error: /adults_only/.test(said) ? 'adults_only' : /location_off/.test(said) ? 'location_off' : /too_far/.test(said) ? 'too_far'
+      : /closed_court/.test(said) ? 'closed_court' : /slow down/.test(said) ? 'slow_down' : 'failed' };
+  },
+  async checkOutOfCourt() {
+    const { error } = await need().rpc('check_out_of_court');
+    if (error) fail('check out')(error);
+  },
+  /** Court rings in a box of the map: real courts with a post or hit there this week that you may see. */
+  async fetchCourtRings(box: { minLat: number; minLng: number; maxLat: number; maxLng: number }): Promise<CourtRing[] | null> {
+    const { data, error } = await need().rpc('court_rings', { min_lat: box.minLat, min_lng: box.minLng, max_lat: box.maxLat, max_lng: box.maxLng });
+    if (error) { if (!missingFunction(error)) fail('court rings')(error); return null; }
+    return ((data ?? []) as { court_id: string; name: string | null; lat: number; lng: number; posts: number; hits: number; last_at: string }[])
+      .map((r) => ({ courtId: r.court_id, ...(r.name ? { name: r.name } : {}), lat: r.lat, lng: r.lng, posts: num(r.posts), hits: num(r.hits), lastAt: r.last_at }));
+  },
+  /** "Sam and Dev, who you follow, play here", for up to 50 courts. */
+  async fetchCourtRegulars(ids: string[]): Promise<CourtRegulars[] | null> {
+    const { data, error } = await need().rpc('court_people_you_follow', { ids: ids.slice(0, 50) });
+    if (error) { if (!missingFunction(error)) fail('court regulars')(error); return null; }
+    return ((data ?? []) as { court_id: string; user_ids: string[] | null }[]).map((r) => ({ courtId: r.court_id, userIds: r.user_ids ?? [] }));
   },
   async insertHit(h: HitRequest) {
     const { error } = await need().from('hit_requests').insert({

@@ -19,4 +19,8 @@ export interface NearbyMapProps {
   focusCourt?: TaggedCourt | null;
   /** Opened on an open hit (?hit=…): the map goes to it with its card up. */
   focusHit?: string | null;
+  /** Opened on a player (?user=…, from an alert): their card comes up once their pin is in. */
+  focusUser?: string | null;
+  /** Opened on a spot (?lat=…&lng=…, from an alert): the map starts there. */
+  focusSpot?: LatLng | null;
 }
