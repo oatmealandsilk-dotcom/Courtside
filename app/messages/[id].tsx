@@ -20,7 +20,7 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { useIsFocused } from '@/lib/useIsFocused';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 
@@ -697,7 +697,7 @@ export default function Thread() {
           style={styles.emojiToggle}
         >
           {emojiOpen && !desktopWeb
-            ? <MaterialCommunityIcons name="keyboard-outline" size={24} color={colors.textMuted} />
+            ? <KeyboardGlyph size={24} color={colors.textMuted} />
             : <Ionicons name={emojiOpen ? 'happy' : 'happy-outline'} size={23} color={emojiOpen ? colors.brand : colors.textMuted} />}
         </Tappable>
         <Tappable accessibilityLabel="Send a court" onPress={() => router.push({ pathname: '/pick-court', params: { conversation: conversation.id } })} style={styles.emojiToggle}>
@@ -734,6 +734,21 @@ export default function Thread() {
 }
 
 /** "Dev", "Dev and June", "Dev, June and Mira", "Dev, June and 2 others". */
+/**
+ * The keyboard key that swaps the emoji keyboard back for the typing one:
+ * Material Design's "keyboard-outline", drawn from its own outline. As a
+ * glyph from that icon font it put the whole set's list of names (about 50 KB
+ * zipped) into the app's first download, and in a browser it fetched a
+ * 1.3 MB font for this one picture.
+ */
+function KeyboardGlyph({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path fill={color} d="M4,5A2,2 0 0,0 2,7V17A2,2 0 0,0 4,19H20A2,2 0 0,0 22,17V7A2,2 0 0,0 20,5H4M4,7H20V17H4V7M5,8V10H7V8H5M8,8V10H10V8H8M11,8V10H13V8H11M14,8V10H16V8H14M17,8V10H19V8H17M5,11V13H7V11H5M8,11V13H10V11H8M11,11V13H13V11H11M14,11V13H16V11H14M17,11V13H19V11H17M8,14V16H16V14H8Z" />
+    </Svg>
+  );
+}
+
 function listNames(names: string[]): string {
   if (names.length <= 1) return names[0] ?? '';
   if (names.length <= 3) return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;

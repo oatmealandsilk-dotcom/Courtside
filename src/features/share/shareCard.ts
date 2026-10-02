@@ -7,6 +7,9 @@ import * as Sharing from 'expo-sharing';
  * and handed to the phone's share sheet: Instagram, Messages, Save Image.
  * Says nothing back when the sheet opened; a sentence when it could not.
  */
+/** Gets the card's drawing ready before Share is tapped; a phone has it built in already (the browser twin fetches it). */
+export function warmShareCard() {}
+
 export async function shareCard(view: View | null, title: string): Promise<string | null> {
   if (!view) return 'The card is not ready yet. Try again in a moment.';
   const uri = await captureRef(view, { format: 'png', quality: 1, width: 1080, height: 1920, result: 'tmpfile' });

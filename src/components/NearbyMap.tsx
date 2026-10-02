@@ -34,6 +34,8 @@ export type { NearbyMapProps };
  * to fetch, so nothing to do.
  */
 export function preloadNearbyMap() {}
+/** In the browser: once the map engine asked for is in. On the phone there is nothing to wait for. */
+export function nearbyMapSettled(): Promise<void> { return Promise.resolve(); }
 
 /**
  * A real map of who is around you, in the app's own warm-paper look (the

@@ -24,6 +24,8 @@ import { onSpaceBar } from '@/features/feed/keyboard';
 function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop }: {
   uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void; fit?: 'cover' | 'contain';
   trimStart?: number; trimEnd?: number;
+  /** The browser's Feed warming up out of sight (ClipPlayback.web). A phone builds its feed from the start, so it never is. */
+  warmOnly?: boolean;
   /** The author's rate (1 is normal) and level (0–1), honoured at playback. */
   speed?: number; volume?: number;
   /** Posted without sound: plays muted and offers no way to unmute. */

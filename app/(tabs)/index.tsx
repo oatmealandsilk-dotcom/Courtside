@@ -6,7 +6,7 @@ import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Animated, AppState, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useIsFocused as useRouteFocused } from 'expo-router';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { goBack } from '@/lib/goBack';
@@ -252,6 +252,13 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   // Whether Home has been the tab on screen at all yet this time round.
   const shownOnce = useRef(false);
   if (focused) shownOnce.current = true;
+  // In a browser the Feed is built out of sight shortly after the app opens
+  // (see the tabs' web layout). Until you first come to it, only the first
+  // clip fetches, and only its opening: enough to start at once, without
+  // spending anyone's data on clips they may never open. A picture of the
+  // Feed sliding in under a finger is not this (its route is the one on screen).
+  const routeFocused = useRouteFocused();
+  const warming = Platform.OS === 'web' && !scope && !routeFocused && !shownOnce.current;
   const latest = useRef(app);
   latest.current = app;
   const [order, setOrder] = useState<string[]>([]);
@@ -401,14 +408,20 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     const key = data.posts.some((p) => p.id === id) ? `p:${id}` : data.stories.some((st) => st.id === id) ? `h:${id}` : null;
     if (key) liftToTop(key); else rerank();
   }), [scope, rerank, liftToTop]);
-  useFocusEffect(
-    useCallback(() => {
-      const stamp = `${ready}:${currentUserId}:${scope?.userId ?? ''}:${scope?.set ?? ''}:${scope?.ids?.join(',') ?? ''}`;
-      if (rankedFor.current === stamp) return;
-      rankedFor.current = stamp;
-      rerank();
-    }, [ready, currentUserId, scope?.userId, scope?.set, scope?.ids?.join(','), rerank]),
-  );
+  const dealOnce = useCallback(() => {
+    const stamp = `${ready}:${currentUserId}:${scope?.userId ?? ''}:${scope?.set ?? ''}:${scope?.ids?.join(',') ?? ''}`;
+    if (rankedFor.current === stamp) return;
+    rankedFor.current = stamp;
+    rerank();
+  }, [ready, currentUserId, scope?.userId, scope?.set, scope?.ids?.join(','), rerank]);
+  useFocusEffect(dealOnce);
+  // In a browser the Feed is built out of sight a moment after the app opens
+  // (see the tabs' web layout), before you have been to it. It is dealt then
+  // too, as it is on the phone, so its first clip loads before you arrive;
+  // only from the account's own posts, never the stand-in demo ones, which
+  // are dropped once the real ones are in and would leave the Feed empty.
+  const dataIn = !isSupabaseConfigured || app.remoteLoaded || app.snapshotShown;
+  useEffect(() => { if (Platform.OS === 'web' && !scope && !routeFocused && dataIn) dealOnce(); }, [dealOnce, routeFocused, scope, dataIn]);
   /**
    * Nearing the end of what is loaded: the next page of older posts is asked
    * for and dealt onto the end. The pages already in front of you are left
@@ -793,7 +806,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   firstReadyRef.current = firstReady;
   // A pull-to-refresh holding the feed down is let go once the new first pages are in.
   useEffect(() => { if (firstReady && warmWaiters.current.length) { const w = warmWaiters.current; warmWaiters.current = []; w.forEach((fn) => fn()); } }, [firstReady]);
-  const dataIn = !isSupabaseConfigured || app.remoteLoaded || app.snapshotShown;
   const warmed = !!scope || warmTimedOut || (ready && dataIn && feed.length > 0 && warmDone >= warmTargets.length);
   // When the app opens on the feed, the shell keeps the splash curtain up
   // until this says the first pages are in.
@@ -925,7 +937,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               // buffers while the feed is still warming up instead of waiting for
               // it, the one you are most likely to land on starts instantly, and
               // scrolling stays smooth.
-              const near = Platform.OS === 'web' ? ahead === 0 || ahead === 1 : distance <= 1 || (ahead > 0 && ahead <= AHEAD);
+              const near = Platform.OS === 'web' ? (ahead === 0 || ahead === 1) && (!warming || ahead === 0) : distance <= 1 || (ahead > 0 && ahead <= AHEAD);
               const strip = index === suggestHost ? suggestStrip : null;
 
               if (item.type === 'tip') return <TipPage key="tip" onSubmit={actions.submitTip} />;
@@ -942,7 +954,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     <View accessibilityLabel={`${author.name}'s instant`} style={styles.clipFrame}>
                       <View style={phone ? StyleSheet.absoluteFill : styles.clipPortrait}>
                         {story.videoUrl ? (
-                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} preload={near} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
+                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} preload={near} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
                         ) : (
                           // Two quick taps like a hit, the way they like a clip.
                           <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s instant`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
@@ -1102,6 +1114,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                           poster={post.thumbnailUrl}
                           active={playing && active === index && warmed && playable}
                           preload={near}
+                          warmOnly={warming}
                           onDoubleTap={() => likeByTap(post.id, liked)}
                           trimStart={post.trimStart}
                           trimEnd={post.trimEnd}

@@ -900,6 +900,19 @@ const termsOf = (user: { user_metadata?: Record<string, unknown> }): string | nu
   return typeof version === 'string' ? version : null;
 };
 
+/**
+ * Whether two lists of remembered logins are the same as far as anything
+ * shows or uses them (when each was last saved is never shown). The list is
+ * saved again at every open and every hourly token refresh; handing the app
+ * an unchanged copy redrew every screen for nothing.
+ */
+const sameAccounts = (a: SavedAccount[], b: SavedAccount[]) => a.length === b.length && a.every((x, i) => {
+  const y = b[i];
+  return x.id === y.id && x.handle === y.handle && x.name === y.name && x.email === y.email && x.avatarUrl === y.avatarUrl && x.refreshToken === y.refreshToken;
+});
+/** The remembered logins as just saved, laid into the state only if something in them changed. */
+const withAccounts = (savedAccounts: SavedAccount[]) => (prev: AppState): AppState => (sameAccounts(prev.savedAccounts, savedAccounts) ? prev : { ...prev, savedAccounts });
+
 /** Whether an id names a row in Supabase rather than a fixture. */
 const live = (...ids: (ID | null | undefined)[]) => isSupabaseConfigured && ids.every((id) => !!id && UUID.test(id));
 
@@ -1395,7 +1408,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => (prev.remoteLoaded || (prev.currentUserId && prev.currentUserId !== me) ? prev : mergeRemote(prev, data, me, null, null, true)));
   }, []);
 
-  const loadRemote = useCallback(async (me: ID, email?: string | null) => {
+  const fetchAndMerge = useCallback(async (me: ID, email?: string | null) => {
     try {
       // The network can miss on a cold open; the load is tried a few times
       // before giving up, and giving up never means "start the quiz again".
@@ -1437,7 +1450,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       void remote.fetchFollowEdges(data.followingIds, false).then(mergeFollowEdges);
       // Now the profile is known, the saved login gets its name and picture.
       const who = data.users.find((u) => u.id === me);
-      if (who) rememberAccount({ id: me, handle: who.handle, name: who.name, avatarUrl: who.avatarUrl }).then((savedAccounts) => setState((prev) => ({ ...prev, savedAccounts })));
+      if (who) rememberAccount({ id: me, handle: who.handle, name: who.name, avatarUrl: who.avatarUrl }).then((savedAccounts) => setState(withAccounts(savedAccounts)));
       return true;
     } catch (err) {
       // A later load that fails (a pull-to-refresh on a weak signal) leaves a
@@ -1464,10 +1477,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return false;
     }
   }, []);
+  // One load at a time per account at sign-in: an ask while one is running
+  // gets that one's answer. At an open, the saved login is checked
+  // (getSession) while the sign-in listener hears about it too (SIGNED_IN, or
+  // TOKEN_REFRESHED when the login was renewed on the way in, as on a cold
+  // open an hour or more after the last), and each fetched everything: the
+  // whole opening load twice over the phone's connection, every screen redrawn
+  // twice, and a broken cover repaired twice. Signing in did the same (the
+  // sign-in itself and the listener). Those asks all come within a moment of
+  // each other; a load older than that may be stuck on a dead connection, so
+  // a later ask starts its own (coming back to the app after an offline open,
+  // say). Someone asking to try again (a pull, Try again) always starts a
+  // fresh one (`fresh`), as before.
+  const loading = useRef<{ me: ID; run: Promise<boolean>; at: number } | null>(null);
+  const loadRemote = useCallback((me: ID, email?: string | null, fresh = false): Promise<boolean> => {
+    const running = loading.current;
+    if (!fresh && running?.me === me && Date.now() - running.at < 5000) return running.run;
+    const run: Promise<boolean> = fetchAndMerge(me, email).finally(() => { if (loading.current?.run === run) loading.current = null; });
+    loading.current = { me, run, at: Date.now() };
+    return run;
+  }, [fetchAndMerge]);
 
   useEffect(() => {
     if (!supabase) return;
     let cancelled = false;
+    const remembered = listSavedAccounts();
+    // The saved copy is read from the phone while the login is still being
+    // checked, rather than only after: the two waits overlap. (The copy still
+    // goes up once the check is done, which on an expired login means after
+    // its renewal trip to the server.) The newest remembered login is the one
+    // being checked almost every time; its copy is only used if it is.
+    const earlyCopy = remembered
+      .then((list) => list[0]?.id)
+      .then((id) => (id ? Promise.all([snapshotFailedBefore(id), readSnapshot(id)]).then(([failed, copy]) => ({ id, failed, copy })) : null))
+      .catch(() => null);
     supabase.auth.getSession().then(({ data }) => {
       if (cancelled) return;
       if (data.session) {
@@ -1477,9 +1520,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setState((prev) => ({ ...prev, currentUserId: prev.currentUserId ?? me, authResolved: true, termsVersion: termsOf(data.session.user) }));
         // Last time's copy goes up straight after the logo, the fresh load lands on top of it.
         void (async () => {
+          const early = await earlyCopy;
+          // Whether the last open on it got through, and the copy itself: read together.
+          const [failed, snapshot] = early?.id === me ? [early.failed, early.copy] : await Promise.all([snapshotFailedBefore(me), readSnapshot(me)]);
           // The last open on the saved copy never finished: throw it away and open the old way.
-          if (await snapshotFailedBefore(me)) { await clearSnapshot(me); await markSnapshotOpened(me); return; }
-          const snapshot = await readSnapshot(me);
+          if (failed) { await clearSnapshot(me); await markSnapshotOpened(me); return; }
           if (!snapshot || cancelled) return;
           await markSnapshotOpening(me);
           showSnapshot(me, snapshot);
@@ -1488,21 +1533,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
         loadRemote(me, data.session.user.email);
       } else setState((prev) => ({ ...prev, authResolved: true }));
     }).catch(() => setState((prev) => ({ ...prev, authResolved: true })));
-    listSavedAccounts().then((savedAccounts) => { if (!cancelled) setState((prev) => ({ ...prev, savedAccounts })); });
+    remembered.then((savedAccounts) => { if (!cancelled) setState(withAccounts(savedAccounts)); });
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
       // Every fresh session (and every rotated token) is kept, so this login
       // can be picked again later without a password.
       if (session?.refresh_token) {
         rememberAccount({ id: session.user.id, email: session.user.email ?? undefined, refreshToken: session.refresh_token })
-          .then((savedAccounts) => { if (!cancelled) setState((prev) => ({ ...prev, savedAccounts })); });
+          .then((savedAccounts) => { if (!cancelled) setState(withAccounts(savedAccounts)); });
       }
       // The terms travel on the account, so every new look at it (signing in,
       // switching accounts, agreeing just now) carries the current answer.
-      if (session) setState((prev) => ({ ...prev, termsVersion: termsOf(session.user) }));
+      // The same answer again (every hourly token refresh) changes nothing.
+      if (session) { const terms = termsOf(session.user); setState((prev) => (prev.termsVersion === terms ? prev : { ...prev, termsVersion: terms })); }
       if (event === 'SIGNED_IN' && session) loadRemote(session.user.id, session.user.email);
-      // A refreshed token after a failed first load: try again with the new one.
-      if (event === 'TOKEN_REFRESHED' && session && !stateRef.current.remoteLoaded) loadRemote(session.user.id, session.user.email);
+      // A refreshed token after a failed first load: try again with the new
+      // one. A load already running shares its answer (see loadRemote); if
+      // that one could not finish, one more try with the new token.
+      if (event === 'TOKEN_REFRESHED' && session && !stateRef.current.remoteLoaded) {
+        const { id, email } = session.user;
+        void loadRemote(id, email).then((ok) => { if (!ok && !cancelled && !stateRef.current.remoteLoaded && stateRef.current.currentUserId === id) void loadRemote(id, email); });
+      }
       if (event === 'SIGNED_OUT') setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, termsVersion: undefined }));
     });
     // Tokens only refresh while the app is in front.
@@ -1676,7 +1727,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!me || !isSupabaseConfigured) return;
     setState((prev) => ({ ...prev, error: null }));
     const { data } = await supabase!.auth.getSession();
-    await loadRemote(me, data.session?.user.email);
+    await loadRemote(me, data.session?.user.email, true);
   }, [loadRemote]);
   /** Emails a link that signs the person in so they can set a new password. */
   const requestPasswordReset = useCallback(async (email: string) => {
@@ -2221,7 +2272,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // pull is exactly how someone asks it to try again.
     if (!me || !live(me)) { await new Promise((resolve) => setTimeout(resolve, 500)); return true; }
     const before = stateRef.current.feed;
-    if (await loadRemote(me)) { await drawn(() => stateRef.current.feed !== before); return true; }
+    if (await loadRemote(me, undefined, true)) { await drawn(() => stateRef.current.feed !== before); return true; }
     // An open on the saved copy that could not refresh has already said so.
     if (stateRef.current.remoteLoaded || !stateRef.current.snapshotShown) showToast({ title: 'Can’t refresh right now', body: 'Check your connection, then pull down to try again.', icon: 'cloud-offline-outline' });
     return false;

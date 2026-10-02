@@ -8,7 +8,7 @@ import Animated, { Easing, FadeInDown, cancelAnimation, useAnimatedStyle, useSha
 
 import { Avatar } from '@/components/ui';
 import { WrappedCard } from '@/components/WrappedCard';
-import { shareCard } from '@/features/share/shareCard';
+import { shareCard, warmShareCard } from '@/features/share/shareCard';
 import { wrappedYear, yearInTennis } from '@/features/wrapped/yearInTennis';
 import { compactNumber } from '@/lib/format';
 import { goBack } from '@/lib/goBack';
@@ -111,6 +111,8 @@ export default function Wrapped() {
 
   const [index, setIndex] = useState(0);
   const last = index === slides.length - 1;
+  // In a browser the card's drawing kit comes down now, so Share is instant.
+  useEffect(() => { warmShareCard(); }, []);
   const progress = useSharedValue(0);
   useEffect(() => {
     cancelAnimation(progress);
