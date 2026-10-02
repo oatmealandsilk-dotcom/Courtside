@@ -56,11 +56,17 @@ export function slidePagesTo(fromPathname: string, to: PageStop): void {
   const a = placeOf(from);
   const b = placeOf(to);
   if (b < 0 || a === b) return;
+  const otherTab = to.pathname !== from.pathname;
+  // Another tab is out of sight until it slides in, so its section is asked
+  // for first and is already in place when it shows (as goToStart does). In
+  // a browser it used to be asked only once the slide had landed, so the tab
+  // changed section in plain view as the picture sliding in let go of it.
+  if (otherTab && to.section) requestSection(to.pathname, to.section);
   if (a >= 0) {
-    const channel = from.pathname === to.pathname ? to.pathname : TABS_SLIDE;
+    const channel = otherTab ? TABS_SLIDE : to.pathname;
     if (surfaces.get(channel)?.({ direction: b > a ? 1 : -1, to })) return;
   }
-  if (to.section) requestSection(to.pathname, to.section);
+  if (!otherTab && to.section) requestSection(to.pathname, to.section);
   // Home's address is HOME, never '/': that is also the splash screen's (see goBack).
-  if (to.pathname !== from.pathname) router.navigate(to.pathname === '/' ? HOME : to.pathname);
+  if (otherTab) router.navigate(to.pathname === '/' ? HOME : to.pathname);
 }

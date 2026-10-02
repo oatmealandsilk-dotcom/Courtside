@@ -59,7 +59,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
   lookNow.current = lookJson;
   useEffect(() => { send(`window.__cs.look(${lookJson})`); }, [lookJson]);
 
-  // The page is built once; everything after arrives as messages.
+  // The page is built once; everything after arrives as messages. The theme's
+  // colours go on as soon as the style's layers exist ('style.load'), before
+  // anything is drawn, and with no fade (P), so the plain style's pale map
+  // never shows first (as in the browser's WebMap and applyLook); 'load' puts
+  // them on again with the latest theme.
   const html = useMemo(() => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <style>html,body,#m{margin:0;height:100%;background:${look.background?.fill ?? '#F4EFE6'};overflow:hidden}.maplibregl-ctrl{display:none}.maplibregl-canvas{outline:none}${MAP_PIN_CSS.replace(/\n/g, '')}</style></head>
@@ -68,7 +72,9 @@ var LOOK=${lookJson};
 var post=function(o){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify(o))};
 var map=new maplibregl.Map({container:'m',style:'${STYLE}',center:[${center.lng},${center.lat}],zoom:${zoom},interactive:${interactive},attributionControl:false,dragRotate:false,pitchWithRotate:false,touchPitch:false});
 map.touchZoomRotate.disableRotation();
-function look(l){for(var id in l){if(!map.getLayer(id))continue;var r=l[id];try{if(r.hide){map.setLayoutProperty(id,'visibility','none');continue}if(r.minZoom!=null)map.setLayerZoomRange(id,r.minZoom,24);if(r.fill)map.setPaintProperty(id,id==='background'?'background-color':'fill-color',r.fill);if(r.fill&&id!=='background')map.setPaintProperty(id,'fill-outline-color',r.fill);if(r.line)map.setPaintProperty(id,'line-color',r.line);if(r.opacity!=null)map.setPaintProperty(id,'line-opacity',r.opacity);if(r.text)map.setPaintProperty(id,'text-color',r.text);if(r.halo)map.setPaintProperty(id,'text-halo-color',r.halo)}catch(e){}}}
+function P(id,k,v){map.setPaintProperty(id,k+'-transition',{duration:0,delay:0});map.setPaintProperty(id,k,v)}
+function look(l){for(var id in l){if(!map.getLayer(id))continue;var r=l[id];try{if(r.hide){map.setLayoutProperty(id,'visibility','none');continue}if(r.minZoom!=null)map.setLayerZoomRange(id,r.minZoom,24);if(r.fill)P(id,id==='background'?'background-color':'fill-color',r.fill);if(r.fill&&id!=='background')P(id,'fill-outline-color',r.fill);if(r.line)P(id,'line-color',r.line);if(r.opacity!=null)P(id,'line-opacity',r.opacity);if(r.text)P(id,'text-color',r.text);if(r.halo)P(id,'text-halo-color',r.halo)}catch(e){}}}
+map.on('style.load',function(){look(LOOK)});
 map.on('load',function(){look(LOOK);post({type:'ready'})});
 var box=document.getElementById('m');function zoomClass(){var z=map.getZoom();box.classList.toggle('cs-close',z>=${CLOSE_ZOOM_NAMES});box.classList.toggle('cs-far',z<${FAR_ZOOM})}zoomClass();map.on('zoom',zoomClass);
 map.on('click',function(){post({type:'maptap'})});

@@ -81,7 +81,12 @@ export function NearbyMap(props: NearbyMapProps) {
       touchPitch: false,
     });
     instance.touchZoomRotate.disableRotation();
-    instance.on('load', () => applyLook(instance, expanded ? lookFor(themes[theme]) : cardLook(lookFor(themes[theme]))));
+    // The theme's colours go on as soon as the style's layers exist, before
+    // anything is drawn, and with no fade (applyLook). Waiting for 'load'
+    // (after the first full drawing) showed the plain style's own pale map,
+    // with every street name, for a moment each time a map was made: a white
+    // flash on a dark theme.
+    instance.on('style.load', () => applyLook(instance, expanded ? lookFor(themes[theme]) : cardLook(lookFor(themes[theme]))));
     // The pins' shared styles, once per page, and the zoom classes they answer to.
     if (!document.getElementById('cs-pin-css')) { const css = document.createElement('style'); css.id = 'cs-pin-css'; css.textContent = MAP_PIN_CSS; document.head.appendChild(css); }
     const zoomClass = () => { const z = instance.getZoom(); el.classList.toggle('cs-close', z >= CLOSE_ZOOM_NAMES); el.classList.toggle('cs-far', z < FAR_ZOOM); };

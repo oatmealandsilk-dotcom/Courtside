@@ -15,6 +15,7 @@ import { useAiCoachOn } from '@/features/aiCoach/switch';
 import { statusLabel } from '@/features/coaching/bookings';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
+import { useTourTarget } from '@/features/tour/tourStore';
 
 function Coaching() {
   const styles = useThemedStyles(styleDefinitions);
@@ -22,6 +23,8 @@ function Coaching() {
   const aiCoachOn = useAiCoachOn();
   // Where the box sits on screen, so the question page can grow out of it.
   const askPill = useRef<View>(null);
+  // The tutorial's Coaching tip lights this box and the line under it, so the two share one box it can find.
+  const tourAsk = useTourTarget('coach-ask');
   const openAsk = () => {
     const pill = askPill.current;
     if (!pill) { router.push('/ask-coach'); return; }
@@ -49,6 +52,8 @@ function Coaching() {
           <Text style={styles.sectionCount}>free</Text>
         </View>
       </View>
+      {/* Never folded away by the phone's renderer (a plain box can be), or the tutorial could not measure it. */}
+      <View ref={tourAsk} collapsable={false}>
       {/* Tapped, this box grows and lifts into the full question page (see ask-coach), where you type from the start. */}
       <Pressable
         ref={askPill}
@@ -64,6 +69,7 @@ function Coaching() {
           This is the one place the tab says asking is public (and, once coaches are on, that
           they are verified), so the header and the Coaches section don't repeat it. */}
       <Text style={styles.askNote}>{shown.length ? 'Public. A verified coach answers, usually within a day.' : 'Public. Your question stays up until a coach answers.'}</Text>
+      </View>
       {/* The AI coach shows up here once it is switched on (its key added on the server). */}
       {aiCoachOn ? (
         <Pressable accessibilityRole="link" accessibilityLabel="AI coach" onPress={() => router.push('/ai-coach')} style={({ pressed }) => [styles.ai, pressed && styles.pressed]}>
