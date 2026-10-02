@@ -11,10 +11,12 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button } from '@/components/ui/Button';
 import { useCurtainDown } from '@/features/feed/warmup';
 import { setBarCompact } from '@/features/navigation/barShrink';
-import { START_SECTION, START_TAB, isStartTab } from '@/features/navigation/startTab';
+import { isAtStop, slidePagesTo } from '@/features/navigation/pageSlide';
+import { START_TAB, isTabPage } from '@/features/navigation/startTab';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
-import { requestSection, useShownSection } from '@/features/navigation/swipeOrder';
-import { LAST_BUTTON, TOUR_STEPS, type HoleShape, type TourStep, type TourTargetId } from '@/features/tour/steps';
+import { isPageDragging, isPageScrolling } from '@/features/navigation/swipeLock';
+import { LAST_BUTTON, TOUR_STEPS, tourPageAt, type HoleShape, type TourStep, type TourTargetId } from '@/features/tour/steps';
+import { useTourHeld } from '@/features/tour/tourHold';
 import { TOUR_ON, hasSeenTour, isNewAccount, markTourSeen } from '@/features/tour/tourSeen';
 import {
   endTourQuietly, lastTourRect, measureTourTarget, nextStep, openTour, setTourPending, skipTour, useTour, useTourRequest,
@@ -31,8 +33,15 @@ import { colors, pageIsDark, radius, typography } from '@/theme';
 /**
  * The first-run tour: the screen dims, a small card explains one thing at a
  * time, and a lit window in the dim glides along the bar to the thing being
- * explained. A tap anywhere moves on; Skip ends it. It plays over the page
- * the app opens on (Community, on Find Players), which stays put underneath.
+ * explained. A tap anywhere moves on (a swipe never moves the pages against
+ * the finger; see touched); Skip ends it where it is.
+ *
+ * It begins on the page the app opens on (Community, on Find Players),
+ * sliding there under the dim from whichever tab the player was on, and the
+ * pages move along under its tips the way a swipe moves them (see each tip's
+ * page in steps.ts): on to the threads while it shows the swipe, then on to
+ * the Feed, where the bar's tips play out. The Feed's clips hold still under
+ * the dim meanwhile (app/(tabs)/index.tsx).
  *
  * It lives in the shell, beside the bar, so the dim can sit over the bar and
  * light one of its buttons. There is no browser twin of this file: the
@@ -42,6 +51,8 @@ import { colors, pageIsDark, radius, typography } from '@/theme';
 
 /** The app's own ease: quick off the mark, a long soft landing. */
 const EASE = Easing.bezier(0.22, 1, 0.36, 1);
+/** The pages' own ease when they turn (TabsPager, SectionPager, SwipeSurface), so the demo fingertip moves the way they do. */
+const PAGE_EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
 /** Our own Reduce Motion handling sets the timings below, so Reanimated is told not to second-guess it. */
 const NEVER = ReduceMotion.Never;
 /** How long the window and the card take to move from one tip to the next. */
@@ -50,12 +61,24 @@ const GLIDE = 360;
 const GAP = 14;
 /** The screen margin a card never crosses. */
 const M = 16;
-/** How far the first tip's demo fingertip travels, right to left, above the card. */
+/** How far the swipe tip's demo fingertip travels, right to left, above the card. */
 const SLIDE = 72;
 /** For this long after a tip lands, a tap does not move on, so a quick double tap can't skip one unread. */
 const DWELL = 400;
-/** The wait on the start page before the dim arrives: the map gets a moment, and anything first-move opens wins. */
+/** The wait on a tab before the tour begins: the page gets a moment, and anything first-move opens wins. */
 const SETTLE_MS = 1200;
+/** A page turn, from asking for it to the page being drawn where it went (the browser's slide is 300ms). */
+const SLIDE_MS = 450;
+/** Arriving from another page: the dim is mostly up by now, and the pages slide to the first tip's page under it. */
+const ARRIVE_DIM_MS = 220;
+/** From the swipe tip's words appearing to the fingertip's stroke, and the pages' slide with it. */
+const DEMO_LEAD = 350;
+/** The fingertip's one stroke: as long as a page turn (240 to 300ms), so finger and page arrive together. */
+const STROKE_MS = 300;
+/** The swipe tip holds its taps until its slide has played (the words' swap, the lead, the stroke), so every player sees it once. */
+const SWIPE_DWELL = 100 + DEMO_LEAD + STROKE_MS + 100;
+/** Further than this sideways, a touch on the dim is a swipe, not a tap. */
+const SIDEWAYS = 24;
 /** The bar's own return to full size, before anything on it is measured. */
 const BAR_SETTLE_MS = 260;
 const PAD = 16;
@@ -77,33 +100,82 @@ const SIDE_CODE: Record<Side, number> = { down: 1, up: 2, left: 3 };
 
 /**
  * Just after posting, the tour does not start on its own for this long: a
- * new player who posts before it has appeared is taken to Home to see their
- * post go up, and a dim arriving the moment they come back would bury that.
+ * new player who posts before it has appeared is taken to the Feed to see
+ * their post go up, and a dim arriving the moment it lands would bury that.
  */
 const AFTER_POST_MS = 30_000;
 /** Started on its own this launch, per account, in case storage is slow to say so. */
 const startedThisLaunch = new Set<string>();
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+/** The longest the tour waits for a finger to lift, in case a drag never says it ended. */
+const FINGER_WAIT_MAX = 15_000;
+
+/**
+ * In a browser, the fingers on the screen (and the mouse button) anywhere on
+ * the page, watched while the tour might start. Touch events rather than
+ * pointer events: a list the browser scrolls itself cancels the pointer
+ * while the finger is still down, but not the touch.
+ */
+const pressing = { touches: 0, mouse: false };
+function watchPresses(): () => void {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return () => undefined;
+  const touch = (e: TouchEvent) => { pressing.touches = e.touches.length; };
+  const down = () => { pressing.mouse = true; };
+  const up = () => { pressing.mouse = false; };
+  const away = () => { pressing.touches = 0; pressing.mouse = false; };
+  const opts = { capture: true, passive: true };
+  window.addEventListener('touchstart', touch, opts);
+  window.addEventListener('touchend', touch, opts);
+  window.addEventListener('touchcancel', touch, opts);
+  window.addEventListener('mousedown', down, true);
+  window.addEventListener('mouseup', up, true);
+  window.addEventListener('blur', away);
+  return () => {
+    window.removeEventListener('touchstart', touch, opts);
+    window.removeEventListener('touchend', touch, opts);
+    window.removeEventListener('touchcancel', touch, opts);
+    window.removeEventListener('mousedown', down, true);
+    window.removeEventListener('mouseup', up, true);
+    window.removeEventListener('blur', away);
+    away();
+  };
+}
+
+/** A finger still on the page: a sideways swipe, the Feed's clips mid-scroll, or in a browser any touch at all. */
+const fingerDown = () => isPageDragging() || isPageScrolling() || pressing.touches > 0 || pressing.mouse;
+
+/**
+ * In a browser a tap is followed, a moment later, by a click aimed at
+ * whatever is under the finger by then. When a tap on the dim ends the tour,
+ * the dim has already let touches through, so that click would land on the
+ * page underneath (a name on the Feed, opening a profile). It is caught here.
+ */
+function eatFollowUpClick() {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  const kinds = ['mousedown', 'mouseup', 'click'] as const;
+  const eat = (e: Event) => { e.preventDefault(); e.stopPropagation(); };
+  kinds.forEach((k) => window.addEventListener(k, eat, true));
+  setTimeout(() => kinds.forEach((k) => window.removeEventListener(k, eat, true)), 400);
+}
 
 /**
  * When the tour starts, and when it ends without being asked to.
  *
- * On its own it starts only for a new account, set up, fully loaded, on the
- * start page (see startTab) showing the map, with nothing in the way, on the
- * phone layout, the first time on this device. Asked for (Settings, Help, ?tour=N) it
- * skips the "new" and "seen" checks, on either layout.
+ * On its own it starts only for a new account, set up, fully loaded, on any
+ * of the four tabs with nothing opened over them (a post, a profile, the
+ * Create box, a menu, a photo full screen, an "are you sure?": it waits for
+ * those to close), with no finger on the page, on the phone layout, the
+ * first time on this device. Wherever the player is, the dim comes up first
+ * and then the pages slide to the start page (see startTab), the map from
+ * its top, so the move plainly belongs to the tutorial and the first tip
+ * lines up with what is underneath (TourLayer). Asked for (Settings, Help,
+ * ?tour=N) it skips the "new" and "seen" checks, on either layout.
  */
 function useTourStarter(eligible: boolean) {
   const { currentUserId, currentUser, onboardingComplete, remoteLoaded } = useApp();
   const pathname = usePathname();
-  const onStart = isStartTab(pathname);
-  // On its own it begins only over the map (Find Players): someone who has
-  // moved on to the threads is never pulled back to it. When they come back
-  // to the map, it tries again.
-  const shownStart = useShownSection(START_TAB);
+  const onTab = isTabPage(pathname);
   const request = useTourRequest();
-  // Asked for, it goes ahead wherever Community is, and puts the map under itself (below).
-  const mapReady = !!request?.force || (shownStart ?? START_SECTION) === START_SECTION;
   // The splash curtain lifts off the start page before anything here is measured.
   const curtainDown = useCurtainDown();
   const { isPhone } = useResponsive();
@@ -114,9 +186,12 @@ function useTourStarter(eligible: boolean) {
   const startedFor = useRef<string | null>(null);
   // A post or Instant still going up: the tour waits until it has landed.
   const posting = useAnyUploading();
+  // A menu, a photo full screen or a question open over the tab: it waits for that to close (tourHold).
+  const held = useTourHeld();
+  useEffect(() => watchPresses(), []);
 
   useEffect(() => {
-    if (run.open || !accountReady || !eligible || !onStart || !curtainDown || !currentUserId) return;
+    if (run.open || !accountReady || !eligible || !onTab || held || !curtainDown || !currentUserId) return;
     const forced = !!request?.force;
     if (!forced) {
       if (posting) return;
@@ -126,13 +201,12 @@ function useTourStarter(eligible: boolean) {
       if (!TOUR_ON) return;
       if (startedThisLaunch.has(currentUserId)) return;
       if (!request?.pretendNew && !isNewAccount(joinedAt)) return;
-      if (!mapReady) return;
     }
     let cancelled = false;
     // The tour is on its way: the feed's own swipe hint holds back meanwhile.
     setTourPending(true);
     void (async () => {
-      // Anything that changes during this wait (left Community or its map, a gate came up) cancels it and starts it again.
+      // Anything that changes during this wait (a page opened over the tabs, a gate came up) cancels it and starts it again.
       const seen = !forced && (await hasSeenTour(currentUserId));
       if (cancelled) return;
       if (seen) { setTourPending(false); return; }
@@ -141,26 +215,26 @@ function useTourStarter(eligible: boolean) {
       if (cancelled) return;
       await wait(SETTLE_MS);
       if (cancelled) return;
-      // The bar at full size, labels showing, before any of it is measured.
-      setBarCompact(false);
-      // The first tip is about the map. Asked for (a replay), Find Players,
-      // from its top, is put under it, wherever Community was left. Started
-      // on its own, it is already on the map (above) and stays where it is.
-      if (forced) {
-        requestSection(START_TAB, START_SECTION);
-        requestScrollToTop(START_TAB);
+      // Never under a finger: the page is the player's until it lifts.
+      for (let waited = 0; fingerDown() && waited < FINGER_WAIT_MAX; waited += 250) {
+        await wait(250);
+        if (cancelled) return;
       }
+      // The bar at full size, labels showing, before any of it is measured.
+      // The bar doesn't move with the pages, so it can be measured before they slide.
+      setBarCompact(false);
       await wait(BAR_SETTLE_MS);
       if (cancelled) return;
       const layout: Layout = isPhone ? 'phone' : 'wide';
-      const found = await Promise.all(TOUR_STEPS.map(async (s) => {
+      const inLayout = TOUR_STEPS.filter((s) => s[layout] !== null);
+      const found = await Promise.all(inLayout.map(async (s) => {
         const target = s.target[layout];
         return target ? !!(await measureTourTarget(target.id)) : true;
       }));
       if (cancelled) return;
       // A tip whose button isn't on screen is left out, and the dots count only the tips shown.
-      const keys = TOUR_STEPS.filter((_, i) => found[i]).map((s) => s.key);
-      const lit = TOUR_STEPS.filter((s, i) => found[i] && s.target[layout]).length;
+      const keys = inLayout.filter((_, i) => found[i]).map((s) => s.key);
+      const lit = inLayout.filter((s, i) => found[i] && s.target[layout]).length;
       // Too little of the bar to point at: try another time, and don't count this one as seen.
       if (lit < 2) { setTourPending(false); return; }
       // Any tour this launch, asked for or not, means it won't also start on its own straight after.
@@ -173,14 +247,15 @@ function useTourStarter(eligible: boolean) {
       openTour(keys, wanted ? keys.indexOf(wanted.key) : 0, forced);
     })();
     return () => { cancelled = true; setTourPending(false); };
-  }, [run.open, accountReady, eligible, onStart, mapReady, curtainDown, currentUserId, isPhone, request, joinedAt, posting]);
+  }, [run.open, accountReady, eligible, onTab, held, curtainDown, currentUserId, isPhone, request, joinedAt, posting]);
 
-  // Leaving the start page (a tapped alert opening a chat), a gate coming up,
-  // or a different account: the tour just goes. It already counts as seen.
+  // A page opened over the tabs (a tapped alert opening a chat), a gate
+  // coming up, or a different account: the tour just goes. It already counts
+  // as seen. Moving between the tabs is the tour's own doing, and fine.
   useEffect(() => {
     if (!run.open) return;
-    if (!eligible || !onStart || currentUserId !== startedFor.current) endTourQuietly();
-  }, [run.open, eligible, onStart, currentUserId]);
+    if (!eligible || !onTab || currentUserId !== startedFor.current) endTourQuietly();
+  }, [run.open, eligible, onTab, currentUserId]);
 }
 
 export function TourOverlay({ eligible }: { eligible: boolean }) {
@@ -298,8 +373,14 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
   // The same black everywhere; a dark page needs a little more of it to read as dimmed at all.
   const dimAlpha = dark ? 0.7 : 0.6;
 
+  // The tab page on show, read when the pages are about to move rather than when the move was planned.
+  const pathname = usePathname();
+  const here = useRef(pathname);
+  here.current = pathname;
+
   const steps = useMemo(() => run.keys.map((k) => TOUR_STEPS.find((s) => s.key === k)).filter((s): s is TourStep => !!s), [run.keys]);
-  const wordsFor = (s: TourStep) => (reader && s.screenReader) || s[layout];
+  // A tip left out of this layout never reaches here; the phone's words stand in for the types' sake.
+  const wordsFor = (s: TourStep) => (reader && s.screenReader) || s[layout] || s.phone;
   const step = steps[run.step] ?? steps[0];
   const last = run.step >= run.total - 1;
   const spot = step.target[layout];
@@ -418,17 +499,38 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
     placed.current = true;
   }, [ready, hole.x, hole.y, hole.w, hole.h, hole.r, place.x, place.y, place.ptr, place.side, cardH, reduce, spot?.shape]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Arriving: the dim fades up, then the card rises into place just behind it.
+  // Arriving: the dim fades up first. When the first tip's page is somewhere
+  // else (the player was on the Feed), the pages slide there under the dim,
+  // so the move plainly belongs to the tutorial, not a stray swipe; then the
+  // card rises. Already there, the card follows the dim straight away.
   const landedAt = useRef(0);
   const entered = useRef(false);
+  // The card is up: the swipe tip's demo and slide wait for this.
+  const [up, setUp] = useState(false);
+  const arrival = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => arrival.current.forEach(clearTimeout), []);
   useEffect(() => {
     if (!ready || entered.current) return;
     entered.current = true;
-    landedAt.current = Date.now();
+    const page = tourPageAt(steps, run.step);
+    const moving = !!page && !isAtStop(here.current, page);
+    const cardAfter = moving ? ARRIVE_DIM_MS + SLIDE_MS : 80;
+    landedAt.current = Date.now() + cardAfter;
     dimIn.value = withTiming(1, { duration: reduce ? 160 : 280, easing: EASE, reduceMotion: NEVER });
-    cardIn.value = withDelay(80, withTiming(1, { duration: reduce ? 160 : 320, easing: EASE, reduceMotion: NEVER }));
+    cardIn.value = withDelay(cardAfter, withTiming(1, { duration: reduce ? 160 : 320, easing: EASE, reduceMotion: NEVER }));
+    // The map from its top: at once when it is sliding in from another tab
+    // (not yet in view), a glide when the player is already on it.
+    const toStart = page?.pathname === START_TAB;
+    if (page && moving) {
+      arrival.current.push(setTimeout(() => {
+        if (toStart) requestScrollToTop(START_TAB, here.current !== START_TAB);
+        slidePagesTo(here.current, page);
+      }, ARRIVE_DIM_MS));
+    } else if (toStart) requestScrollToTop(START_TAB);
+    arrival.current.push(setTimeout(() => setUp(true), cardAfter));
   }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { landedAt.current = Date.now(); }, [run.step]);
+  // A later tip lands now; the first one when its card is up (above).
+  useEffect(() => { landedAt.current = Math.max(landedAt.current, Date.now()); }, [run.step]);
 
   // The words change in the card's own little fade: out, swap, in. The card's height glides meanwhile.
   const [shownStep, setShownStep] = useState(run.step);
@@ -444,16 +546,37 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
   const shownWords = wordsFor(shown);
   const shownLast = shownStep >= run.total - 1;
 
+  /* ---- The pages underneath ---- */
+  // Each later tip's page (steps.ts): on to it as soon as the tip is asked
+  // for, while the card glides, by the same slide a swipe makes (the first
+  // tip's page is the arrival's, above). The swipe tip moves the pages
+  // itself once its words are up, with the fingertip's one stroke, so the
+  // finger and the page go together. Skip or Got it moves nothing: the
+  // player stays on the page they can see.
+  const pagesAt = useRef(run.step);
+  useEffect(() => {
+    if (!open || run.step === pagesAt.current) return;
+    pagesAt.current = run.step;
+    const page = tourPageAt(steps, run.step);
+    if (page) slidePagesTo(here.current, page);
+  }, [open, run.step]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const to = steps[shownStep]?.slidesTo;
+    if (!open || !up || !to || shownStep !== run.step) return undefined;
+    const timer = setTimeout(() => slidePagesTo(here.current, to), DEMO_LEAD);
+    return () => clearTimeout(timer);
+  }, [open, up, shownStep, run.step]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // A soft ring leaves the lit window every 1.8s, the live dot's rhythm, once the window has arrived.
   useEffect(() => {
     cancelAnimation(pulse);
     cancelAnimation(pulseOn);
     pulse.value = 0;
     pulseOn.value = 0;
-    if (!ready || !lit || reduce) return;
+    if (!ready || !up || !lit || reduce) return;
     pulseOn.value = withDelay(GLIDE + 500, withTiming(1, { duration: 0, reduceMotion: NEVER }));
     pulse.value = withDelay(GLIDE + 500, withRepeat(withTiming(1, { duration: 1800, easing: Easing.out(Easing.cubic), reduceMotion: NEVER }), -1, false));
-  }, [run.step, lit, ready, reduce]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [run.step, lit, ready, up, reduce]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Leaving: everything fades while the card settles a few points, then the overlay goes.
   useEffect(() => {
@@ -470,15 +593,36 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ---- Moving on ---- */
+  // Too soon after a tip landed for a touch to count (DWELL; longer on the swipe tip, until its slide has played).
+  const settling = () => !reader && Date.now() - landedAt.current < (step.slidesTo ? SWIPE_DWELL : DWELL);
   const tryNext = () => {
-    if (!open) return;
-    if (!reader && Date.now() - landedAt.current < DWELL) return;
+    if (!open || settling()) return false;
     nextStep();
+    return true;
   };
   const skip = () => { if (open) skipTour(); };
+  // A touch on the dim, by how far it went. A tap, or a drag up or down,
+  // moves on. Sideways, the pages never move against the finger: leftward
+  // moves on (each tip's page lies to the right of the last, so the pages
+  // go the finger's way); rightward does nothing. On the swipe tip a
+  // sideways drag is the real thing: it moves the pages between the map and
+  // the threads, the way the tip just said, and leftward from the threads
+  // moves on to the Feed.
+  const touched = (dx: number, dy: number) => {
+    if (!open || settling()) return;
+    const sideways = Math.abs(dx) > SIDEWAYS && Math.abs(dx) > Math.abs(dy);
+    if (sideways && step.slidesTo && step.page) {
+      const toward = dx < 0 ? step.slidesTo : step.page;
+      if (!isAtStop(here.current, toward)) { slidePagesTo(here.current, toward); return; }
+      if (dx > 0) return;
+    } else if (sideways && dx > 0) return;
+    const ending = last;
+    if (tryNext() && ending) eatFollowUpClick();
+  };
   // Listeners set up once read the latest of these.
-  const act = useRef({ next: tryNext, skip });
-  act.current = { next: tryNext, skip };
+  const act = useRef({ next: tryNext, skip, touched });
+  act.current = { next: tryNext, skip, touched };
+  const touchFrom = useRef<{ x: number; y: number } | null>(null);
 
   // Android's Back button skips.
   useEffect(() => {
@@ -599,8 +743,9 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
   const rim = dark ? styles.holeRim : null;
   const edge = dark ? colors.borderStrong : colors.border;
   const pointerSides = place.side === 'down' ? styles.pointerDown : place.side === 'up' ? styles.pointerUp : styles.pointerLeft;
-  // The first tip, the one with no window, carries the swipe demo and the "tap anywhere" line.
+  // The first tip, with no window, carries the "tap anywhere" line; the swipe tip the fingertip that shows the swipe.
   const mapShown = shown.key === 'map';
+  const swipeShown = shown.key === 'swipe';
   const hidden = { accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' as const, 'aria-hidden': true };
   const webDialog = Platform.OS === 'web' ? { role: 'dialog' as const, 'aria-modal': true, 'aria-labelledby': TITLE_ID } : {};
   const webFocus = Platform.OS === 'web' ? { tabIndex: -1 as const } : {};
@@ -611,13 +756,20 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
       onLayout={noteOrigin}
       // Fading out, it lets touches through: the first tap after the tour is the player's.
       style={[styles.root, { pointerEvents: open ? 'auto' : 'none' }]}
-      // The whole screen is one quiet catch-all: any touch that ends moves on.
-      // It is not a button, so a screen reader never lands on the dim itself.
-      // It only asks for touches as they start: asking mid-move as well would
-      // take a slightly moving finger off Skip, and Skip would mean Next.
+      // The whole screen is one quiet catch-all: a touch that ends moves on
+      // (or, sideways, moves the pages; see touched). It is not a button, so
+      // a screen reader never lands on the dim itself. It only asks for
+      // touches as they start: asking mid-move as well would take a slightly
+      // moving finger off Skip, and Skip would mean Next.
       onStartShouldSetResponder={() => true}
       onResponderTerminationRequest={() => false}
-      onResponderRelease={() => act.current.next()}
+      onResponderGrant={(e) => { touchFrom.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY }; }}
+      onResponderTerminate={() => { touchFrom.current = null; }}
+      onResponderRelease={(e) => {
+        const from = touchFrom.current;
+        touchFrom.current = null;
+        act.current.touched(from ? e.nativeEvent.pageX - from.x : 0, from ? e.nativeEvent.pageY - from.y : 0);
+      }}
       accessibilityViewIsModal
       onAccessibilityEscape={() => act.current.skip()}
       onMagicTap={() => act.current.next()}
@@ -631,14 +783,12 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
       </Animated.View>
 
       <Animated.View style={[styles.cardWrap, { width: cardW }, cardStyle]}>
+        {/* A thumb's swipe means nothing to a mouse, so a computer never gets the swipe tip at all (steps.ts). */}
+        {swipeShown && layout === 'phone' && up ? <SwipeDemo reduce={reduce} cardW={cardW} fade={fade} hidden={hidden} /> : null}
         {mapShown ? (
-          <>
-            {/* A thumb's swipe means nothing to a mouse, so a computer gets the words alone. */}
-            {layout === 'phone' ? <SwipeDemo reduce={reduce} cardW={cardW} fade={fade} hidden={hidden} /> : null}
-            <Animated.Text {...hidden} selectable={false} style={[styles.tapHint, hintStyle]}>
-              {layout === 'wide' ? 'Click anywhere to continue' : 'Tap anywhere to continue'}
-            </Animated.Text>
-          </>
+          <Animated.Text {...hidden} selectable={false} style={[styles.tapHint, hintStyle]}>
+            {layout === 'wide' ? 'Click anywhere to continue' : 'Tap anywhere to continue'}
+          </Animated.Text>
         ) : null}
         <Animated.View style={[styles.card, { borderColor: edge }, boxStyle]}>
           <View ref={cardRef} style={[StyleSheet.absoluteFill, styles.focusRing]} {...webFocus}>
@@ -720,10 +870,12 @@ function Dots({ total, at, styles, hidden }: { total: number; at: number; styles
 }
 
 /**
- * On the first tip, a small ring slides leftward above the card the way a
- * thumb would to reach Discussions, three times, then a still arrow takes its
- * place and stays, so the tip never ends up with nothing above it. Under
- * Reduce Motion it is the still arrow from the start.
+ * On the swipe tip, a small ring makes one stroke leftward above the card,
+ * the way a thumb goes to reach the threads, at the very moment the pages
+ * slide there underneath (DEMO_LEAD), and as quickly as they do; then a
+ * still two-way arrow takes its place and stays, so the tip never ends up
+ * with nothing above it. One stroke, because a second would move nothing.
+ * Under Reduce Motion it is the still arrow from the start.
  */
 function SwipeDemo({ reduce, cardW, fade, hidden }: { reduce: boolean; cardW: number; fade: SharedValue<number>; hidden: Hidden }) {
   const rise = useSharedValue(0);
@@ -731,19 +883,18 @@ function SwipeDemo({ reduce, cardW, fade, hidden }: { reduce: boolean; cardW: nu
   const rest = useSharedValue(reduce ? 1 : 0);
   useEffect(() => {
     if (reduce) { rest.value = 1; return; }
-    // Three slides of 1.5s each, after half a second: then the arrow fades in.
     rest.value = 0;
-    rest.value = withDelay(500 + 3 * 1500, withTiming(1, { duration: 200, reduceMotion: NEVER }));
-    // 900ms across, its last 200ms fading, then 600ms of rest: three times over.
-    rise.value = withDelay(500, withRepeat(withSequence(
-      withTiming(1, { duration: 900, easing: EASE, reduceMotion: NEVER }),
-      withDelay(600, withTiming(0, { duration: 0, reduceMotion: NEVER })),
-    ), 3, false));
-    seen.value = withDelay(500, withRepeat(withSequence(
-      withTiming(1, { duration: 120, reduceMotion: NEVER }),
-      withDelay(580, withTiming(0, { duration: 200, reduceMotion: NEVER })),
-      withDelay(600, withTiming(0, { duration: 0, reduceMotion: NEVER })),
-    ), 3, false));
+    rise.value = 0;
+    seen.value = 0;
+    // In at its start a moment before it moves, so the eye is on it; gone once it lands.
+    seen.value = withDelay(DEMO_LEAD - 200, withSequence(
+      withTiming(1, { duration: 150, reduceMotion: NEVER }),
+      withDelay(50 + STROKE_MS, withTiming(0, { duration: 200, reduceMotion: NEVER })),
+    ));
+    // Across in a page turn's time, on the pages' own ease.
+    rise.value = withDelay(DEMO_LEAD, withTiming(1, { duration: STROKE_MS, easing: PAGE_EASE, reduceMotion: NEVER }));
+    // Then the still arrow, as the ring fades.
+    rest.value = withDelay(DEMO_LEAD + STROKE_MS + 100, withTiming(1, { duration: 200, reduceMotion: NEVER }));
     return () => { cancelAnimation(rise); cancelAnimation(seen); cancelAnimation(rest); };
   }, [reduce, rise, seen, rest]);
   // From a little right of the middle to a little left of it, right to left, the way the finger goes.
@@ -753,7 +904,8 @@ function SwipeDemo({ reduce, cardW, fade, hidden }: { reduce: boolean; cardW: nu
     <>
       {reduce ? null : <Animated.View {...hidden} pointerEvents="none" style={[demo.ring, { left: (cardW - 26) / 2 }, ringStyle]} />}
       <Animated.View {...hidden} pointerEvents="none" style={[demo.still, { left: (cardW - 24) / 2 }, stillStyle]}>
-        <Ionicons name="chevron-back" size={24} color="rgba(255, 255, 255, 0.9)" />
+        {/* Both ways: the words say left and right. */}
+        <Ionicons name="swap-horizontal" size={24} color="rgba(255, 255, 255, 0.9)" />
       </Animated.View>
     </>
   );

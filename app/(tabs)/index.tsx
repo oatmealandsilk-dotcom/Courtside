@@ -8,6 +8,7 @@ import { Animated, AppState, Image, Platform, Pressable, ScrollView, StyleSheet,
 import { Image as ExpoImage } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@/lib/useIsFocused';
+import { useTourOpen } from '@/features/tour/tourStore';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -243,6 +244,11 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   useEffect(() => { setImmersive(false); immersion.value = 0; punch.value = 1; }, [active, immersion, punch]);
   const [visit, setVisit] = useState(0);
   const focused = useIsFocused();
+  // While the tutorial's tips sit over the Feed, its clips hold still and
+  // silent under the dim, and their clock doesn't count that time as watched.
+  // The clip starts once the dim lifts.
+  const touring = useTourOpen();
+  const playing = focused && !touring;
   // Whether Home has been the tab on screen at all yet this time round.
   const shownOnce = useRef(false);
   if (focused) shownOnce.current = true;
@@ -275,7 +281,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   };
   // A new page on screen (or the feed coming back to the front): the last one
   // is closed off and the new one's clock starts.
-  const viewedKey = focused && appActive ? order[active] : undefined;
+  const viewedKey = playing && appActive ? order[active] : undefined;
   useEffect(() => {
     endViewing.current();
     if (viewedKey) viewing.current = { key: viewedKey, since: Date.now() };
@@ -936,7 +942,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     <View accessibilityLabel={`${author.name}'s instant`} style={styles.clipFrame}>
                       <View style={phone ? StyleSheet.absoluteFill : styles.clipPortrait}>
                         {story.videoUrl ? (
-                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={focused && active === index && warmed && playable} preload={near} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
+                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} preload={near} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
                         ) : (
                           // Two quick taps like a hit, the way they like a clip.
                           <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s instant`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
@@ -1033,7 +1039,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       author={author}
                       liked={liked}
                       saved={isSaved}
-                      active={focused && active === index && warmed && playable}
+                      active={playing && active === index && warmed && playable}
                       preload={near}
                       topInset={insets.top + 66}
                       onDoubleTap={() => likeByTap(post.id, liked)}
@@ -1094,7 +1100,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                           letterbox={post.orientation === 'landscape'}
                           uri={post.videoUrl}
                           poster={post.thumbnailUrl}
-                          active={focused && active === index && warmed && playable}
+                          active={playing && active === index && warmed && playable}
                           preload={near}
                           onDoubleTap={() => likeByTap(post.id, liked)}
                           trimStart={post.trimStart}

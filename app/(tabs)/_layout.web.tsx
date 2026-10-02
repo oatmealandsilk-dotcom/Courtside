@@ -7,6 +7,7 @@ import Profile from './profile';
 import { Redirect, Tabs, router, usePathname, useGlobalSearchParams } from 'expo-router';
 import { SwipeSurface } from '@/components/SwipeSurface';
 import { setPendingTab } from '@/features/navigation/pendingTab';
+import { TABS_SLIDE, listenForSlides, type PageSlide } from '@/features/navigation/pageSlide';
 import { requestSection, shownSection, swipeDestination } from '@/features/navigation/swipeOrder';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { TabFocus } from '@/features/navigation/tabFocus';
@@ -21,9 +22,30 @@ export default function TabsLayout() {
   useTheme();
   const pathname = usePathname();
   const params = useGlobalSearchParams<{ section?: string }>();
+  // A page turn the tutorial asks for (see pageSlide) plays on this same
+  // surface, with the page it is heading for as the one sliding in: it may
+  // be further along than the next stop (the Feed to the map), the way the
+  // phone's tab row glides straight to a far tab.
+  const slide = useRef<((direction: 1 | -1) => boolean) | null>(null);
+  const asked = useRef<PageSlide | null>(null);
+  useEffect(() => listenForSlides(TABS_SLIDE, (wanted) => {
+    asked.current = wanted;
+    if (slide.current?.(wanted.direction)) return true;
+    asked.current = null;
+    return false;
+  }), []);
+  const destination = (direction: 1 | -1) => {
+    const wanted = asked.current;
+    if (wanted && wanted.direction === direction) return wanted.to;
+    return swipeDestination(pathname, pathname === "/discuss" || pathname === "/profile" ? shownSection(pathname) ?? params.section : params.section, direction);
+  };
   const swipe = (direction: 1 | -1) => {
-    const next = swipeDestination(pathname, pathname === "/discuss" || pathname === "/profile" ? shownSection(pathname) ?? params.section : params.section, direction);
+    const next = destination(direction);
     if (next) { requestSection(next.pathname, next.section); router.navigate(next.pathname); }
+    // Kept until the page it went to is drawn and the surface lets go, so the
+    // picture sliding in stays the same one; the next swipe is a finger's.
+    const done = asked.current;
+    if (done) setTimeout(() => { if (asked.current === done) asked.current = null; }, 1000);
   };
   const { ready, currentUserId } = useApp();
   const { isPhone } = useResponsive();
@@ -39,15 +61,15 @@ export default function TabsLayout() {
   }, [pathname]);
   if (ready && !currentUserId) return <Redirect href="/sign-in" />;
   return (
-    <SwipeSurface onSwipe={swipe} onCommit={direction => {
-      const next = swipeDestination(pathname, pathname === "/discuss" || pathname === "/profile" ? shownSection(pathname) ?? params.section : params.section, direction);
+    <SwipeSurface slideRef={slide} onSwipe={swipe} onCommit={direction => {
+      const next = destination(direction);
       if (next) setPendingTab(next.pathname);
     }} onDragTo={direction => {
       if (direction === null) return setPendingTab(null);
-      const next = swipeDestination(pathname, pathname === "/discuss" || pathname === "/profile" ? shownSection(pathname) ?? params.section : params.section, direction);
+      const next = destination(direction);
       setPendingTab(next ? next.pathname : null);
     }} delegateLeft={pathname === "/profile"} settledKey={`${pathname}:${shownSection(pathname) ?? params.section ?? ''}`} renderPreview={direction => {
-      const next = swipeDestination(pathname, pathname === "/discuss" || pathname === "/profile" ? shownSection(pathname) ?? params.section : params.section, direction);
+      const next = destination(direction);
       if (!next) return null;
       // Home slid in under a finger is a picture of the feed, not the feed:
       // its clip shows its cover and starts only once you have arrived (a

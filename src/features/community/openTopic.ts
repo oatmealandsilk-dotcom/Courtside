@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { goToTab } from '@/features/navigation/startTab';
 import { requestSection } from '@/features/navigation/swipeOrder';
 import type { QuestionTopic } from '@/data/types';
 
@@ -9,5 +9,5 @@ import type { QuestionTopic } from '@/data/types';
 export function openTopic(topic: QuestionTopic) {
   requestSection('/discuss', 'discussions');
   requestSection('/discuss#topic', topic);
-  router.navigate('/discuss');
+  goToTab('/discuss');
 }

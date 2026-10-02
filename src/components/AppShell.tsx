@@ -15,7 +15,7 @@ import { RouteTransition } from './RouteTransition';
 import { useResponsive } from '@/lib/useResponsive';
 import { getPendingTab, setPendingTab, subscribePendingTab } from '@/features/navigation/pendingTab';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
-import { isStartTab } from '@/features/navigation/startTab';
+import { askForCommunityMap, isStartTab } from '@/features/navigation/startTab';
 import { useCurtainDown } from '@/features/feed/warmup';
 import { useApp } from '@/store/AppContext';
 import { claimCarriedBirthDate, isDeviceBlocked, recallAnswered } from '@/features/age/ageCheck';
@@ -70,7 +70,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       if (e.key === 'Escape' && SHEETS.has(pathname)) { e.preventDefault(); goBack('/'); return; }
       if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && TAB_ORDER.includes(pathname) && !e.metaKey && !e.altKey) {
         const next = TAB_ORDER[TAB_ORDER.indexOf(pathname) + (e.key === 'ArrowRight' ? 1 : -1)];
-        if (next) { e.preventDefault(); router.navigate(next); }
+        if (next) { e.preventDefault(); if (next === paths.discuss) askForCommunityMap(); router.navigate(next); }
       }
     };
     window.addEventListener('keydown', onKey);
@@ -192,6 +192,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const nav = <NavBar state={{ index: selected.current, routes }} navigation={{ navigate: name => {
     const destination = paths[name as keyof typeof paths];
     if (!destination) return;
+    // Community opens on its map, from the top, whenever the bar takes you there.
+    if (destination === paths.discuss && destination !== pathname) askForCommunityMap();
     // Already here: a second tap on the same icon takes the page back to the top.
     if (destination === pathname) requestScrollToTop(destination);
     // From a page pushed on top (settings, edit profile…), go back down to the

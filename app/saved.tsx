@@ -11,6 +11,7 @@ import Reanimated from 'react-native-reanimated';
 
 import { EmptyState, Screen } from '@/components/ui';
 import { requestSection } from '@/features/navigation/swipeOrder';
+import { goToTab } from '@/features/navigation/startTab';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { useApp } from '@/store/AppContext';
 import { colors, font, spacing, typography } from '@/theme';
@@ -104,7 +105,7 @@ export default function Saved() {
           title="No saved discussions"
           body="Bookmark a thread and it will wait for you here."
           // To the threads, not the map Community opens on: they are what can be saved here.
-          action={{ label: 'Browse Community', onPress: () => { requestSection('/discuss', 'discussions'); router.navigate('/discuss'); } }}
+          action={{ label: 'Browse Community', onPress: () => { requestSection('/discuss', 'discussions'); goToTab('/discuss'); } }}
         />
       )}
     </Screen>

@@ -5,6 +5,7 @@ import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useSharedVal
 import { FullWindowOverlay } from 'react-native-screens';
 
 import { isDesktopBrowser } from '@/lib/browserDevice';
+import { useHoldTour } from '@/features/tour/tourHold';
 import { setConfirmHost, type ConfirmOptions } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
 import { useReducedMotion } from '@/lib/useReducedMotion';
@@ -58,6 +59,8 @@ export function ConfirmHost() {
   reduceRef.current = reduce;
   // What the card says. Kept while it fades out, so the words do not vanish on the way.
   const [request, setRequest] = useState<ConfirmOptions | null>(null);
+  // The tutorial never starts under a question; it waits until the card has gone.
+  useHoldTour(request !== null);
   // The question still waiting for an answer: null once answered, even mid-fade.
   const live = useRef<ConfirmOptions | null>(null);
   // Anything asked while a card was up waits its turn.

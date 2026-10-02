@@ -30,6 +30,12 @@ export function SectionPager({ index, panes, onIndex, progress, depth = 1, deleg
   depth?: 1 | 2;
   delegateLeft?: boolean;
   delegateRight?: boolean;
+  /**
+   * Where page turns asked for by code arrive (see pageSlide). Only the
+   * browser's pager listens: this one already glides whenever `index`
+   * changes, so a section asked for is the slide.
+   */
+  slideChannel?: string;
 }) {
   const { isPhone } = useResponsive();
   const count = panes.length;

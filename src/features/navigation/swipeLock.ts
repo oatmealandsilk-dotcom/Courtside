@@ -25,3 +25,12 @@ export const setPageDragging = (on: boolean) => {
 };
 export const isPageDragging = () => dragging;
 export const subscribePageDragging = (fn: () => void) => { dragListeners.add(fn); return () => { dragListeners.delete(fn); }; };
+
+/**
+ * Whether a finger is moving the Feed's clips up or down right now (on the
+ * phone; a browser's tutorial watches the touches themselves). Only the
+ * tutorial asks: it never starts under a finger that is still scrolling.
+ */
+let scrolling = false;
+export const setPageScrolling = (on: boolean) => { scrolling = on; };
+export const isPageScrolling = () => scrolling;

@@ -16,6 +16,7 @@ import { cropLayer } from '@/lib/crop';
 import type { MediaCrop } from '@/data/types';
 import { onSpaceBar } from '@/features/feed/keyboard';
 import { allowTurning, stayUpright } from '@/lib/orientation';
+import { useHoldTour } from '@/features/tour/tourHold';
 
 const HIDE_AFTER_MS = 3000;
 // On a computer, how long the mouse rests before the controls (and in full screen the pointer) go.
@@ -53,6 +54,8 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
   const [muted, setMuted] = useSoundMuted();
   const [ready, setReady] = useState(false);
   const [full, setFull] = useState(false);
+  // The tutorial never starts under a video opened full screen.
+  useHoldTour(full);
   // Full screen shows the very same player (no second download, no pause):
   // it grows out of the frame on the page and travels back into it on close.
   const rootRef = useRef<View>(null);
