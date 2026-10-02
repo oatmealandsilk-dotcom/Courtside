@@ -138,6 +138,30 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
   );
 }
 
+/* ------------------------------------------- New on CourtSide (migration 63) */
+
+/**
+ * The demo's stand-in for new_on_courtside(): who joined in the last two
+ * weeks that `me` may be shown, newest first, by the same rule. Only ever
+ * known adults and 16 and 17 year olds; the demo keeps no birthdays, so
+ * that is known adults only (every teen counts as under 16, and no age on
+ * file is never listed). A known adult sees them all; anyone else only
+ * those they follow. Never yourself, never anyone blocked.
+ */
+export function newOnCourtside({ me, users: everyone, followingIds, blockedIds, days = 14 }: { me: ID; users: User[]; followingIds: ID[]; blockedIds: ID[]; days?: number }): { userId: ID; joinedAt: string }[] {
+  const viewer = everyone.find((u) => u.id === me);
+  const adult = !!viewer && viewer.ageGroup !== 'teen';
+  const since = Date.now() - Math.min(60, Math.max(1, days)) * 86_400_000;
+  return everyone
+    .filter((u) => u.id !== me && !blockedIds.includes(u.id) && Date.parse(u.joinedAt) >= since)
+    // Known adults only: a teen with no birthday to say otherwise counts as under 16, and no age on file is never listed.
+    .filter((u) => u.ageGroup === 'adult')
+    .filter((u) => followingIds.includes(u.id) || adult)
+    .sort((a, b) => b.joinedAt.localeCompare(a.joinedAt))
+    .slice(0, 100)
+    .map((u) => ({ userId: u.id, joinedAt: u.joinedAt }));
+}
+
 /* ------------------------------------------- Session tags (migration 62) */
 
 /*

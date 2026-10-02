@@ -86,6 +86,7 @@ import type {
   SessionTag,
   SessionTagRefusal,
   LastSeen,
+  MapVisibility,
   HitRequest,
   ChatEvent,
   ChatPhoto,
@@ -277,6 +278,18 @@ function readDefaultPayment(): ID {
   }
 }
 
+/** The demo's answer to "Who can see you on the map?", kept in the browser; null until chosen. */
+const DEMO_VISIBILITY_KEY = 'courtside-demo-map-visibility';
+function readDemoVisibility(): MapVisibility | null {
+  try {
+    if (Platform.OS !== 'web') return null;
+    const v = localStorage.getItem(DEMO_VISIBILITY_KEY);
+    return v === 'nearby' || v === 'mutuals' || v === 'none' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The switches in Settings, kept with the account. */
 export interface Prefs {
   showActivity: boolean; pushLikes: boolean; pushCoach: boolean; pushMessages: boolean; pushActivity: boolean;
@@ -351,6 +364,17 @@ interface AppState extends Bootstrap, CourtLifeState {
   lastSeen: Record<ID, LastSeen>;
   /** Whether the last spots have come down once since signing in, so an empty map is known to be empty, not still loading. */
   lastSeenLoaded: boolean;
+  /**
+   * Whether the database has the map's round 2 (migration 63: exact pins at
+   * courts and for people who follow each other, "Who can see you on the
+   * map?", New on CourtSide decided by the server). Null until it is known;
+   * always true in the demo, which plays the server's part.
+   */
+  mapLive: boolean | null;
+  /** Your answer to "Who can see you on the map?": null never chosen; undefined not known (or a database before 63). */
+  mapVisibility: MapVisibility | null | undefined;
+  /** New on CourtSide as the server lists it for you (migration 63), newest first; null until asked, or before 63. */
+  newOnCourtside: { userId: ID; joinedAt: string }[] | null;
   /** Open "Looking for a hit" posts. */
   hitRequests: HitRequest[];
   /** Small switches from Settings, kept with the account. */
@@ -371,6 +395,10 @@ interface AppState extends Bootstrap, CourtLifeState {
 interface AppActions extends CourtLifeActions {
   /* Location */
   setLocationEnabled: (enabled: boolean) => Promise<string | null>;
+  /** "Who can see you on the map?": takes effect at once. Resolves false when it could not be saved. */
+  setMapVisibility: (v: MapVisibility) => Promise<boolean>;
+  /** Asks who is new on CourtSide for you (migration 63); before it, the screen works the list out itself. */
+  loadNewOnCourtside: () => Promise<void>;
 
   /* Payments */
   setDefaultPayment: (id: ID) => void;
@@ -435,8 +463,12 @@ interface AppActions extends CourtLifeActions {
   updateIdentity: (patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string; cityAt?: { lat: number; lng: number } | null }) => void;
   updateProfile: (patch: Partial<PlayerProfile>) => void;
   /** Log a session you played (today unless a day is given). Throws a plain sentence when it cannot be saved. */
-  /** Fetches the spots the map may show; the map asks each time it opens. */
-  loadLastSeen: () => Promise<void>;
+  /**
+   * Fetches the spots the map may show: round where you are (each time the
+   * map opens), or, with `view`, the part of the full map in view as it
+   * moves (migration 63 answers for one part of the map at a time).
+   */
+  loadLastSeen: (view?: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null) => Promise<void>;
   /** `activityId`: the tracker session it was logged from, which then counts as logged. */
   logSession: (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; opponent?: string; note?: string; day?: string; activityId?: ID }) => Promise<ID>;
   deleteSession: (id: ID) => void;
@@ -1127,6 +1159,9 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       blockedIds: data.userState ? data.userState.blockedIds : prev.blockedIds,
       paymentMethods: data.userState && data.userState.paymentMethods.length ? data.userState.paymentMethods : prev.paymentMethods,
       defaultPaymentId: data.userState?.defaultPaymentId ?? prev.defaultPaymentId,
+      // The settings row carries map_visibility only once migration 63 has run: its key says the map's round 2 is live.
+      mapVisibility: data.userState && data.userState.mapVisibility !== undefined ? data.userState.mapVisibility : prev.mapVisibility,
+      mapLive: data.userState && data.userState.mapVisibility !== undefined ? true : prev.mapLive,
       prefs: data.userState
         ? {
           showActivity: data.userState.showActivity, pushLikes: data.userState.pushLikes, pushCoach: data.userState.pushCoach, pushMessages: data.userState.pushMessages ?? true, pushActivity: data.userState.pushActivity ?? true,
@@ -1251,6 +1286,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     sessionTagsReady: !isSupabaseConfigured,
     lastSeen: {},
     lastSeenLoaded: false,
+    mapLive: isSupabaseConfigured ? null : true,
+    mapVisibility: isSupabaseConfigured ? undefined : readDemoVisibility(),
+    newOnCourtside: null,
     ...emptyCourtLife,
     hitRequests: [],
     locationEnabled: readFlag('courtside-location'),
@@ -1892,7 +1930,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (isSupabaseConfigured) void forgetPushToken().finally(() => remoteAuth.signOut());
     // One account's health (its tracker sessions too) never carries over to the next one signed in.
     // Nor do its courts: who it follows, what it said, where it checked in.
-    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [], ...emptyCourtLife, lastSeenLoaded: false, sessionTags: [] }));
+    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [], ...emptyCourtLife, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null, mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility }));
   }, []);
 
   const patchCurrentUser = useCallback(
@@ -2028,14 +2066,90 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (live(me)) void remote.deleteSession(id);
   }, []);
 
-  const loadLastSeen = useCallback(async () => {
+  // What the map's two kinds of load last brought (migration 63 answers for
+  // one part of the map at a time): round where you are, which Find Players,
+  // Near you and Who's up today read, and the part of the full map in view.
+  // The map shows both; a new load of a kind replaces only its own.
+  const seenAround = useRef<Record<ID, LastSeen>>({});
+  const seenInView = useRef<Record<ID, LastSeen>>({});
+  const seenFor = useRef<ID | null>(null);
+  const loadLastSeen = useCallback(async (view?: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null) => {
     const me = stateRef.current.currentUserId;
     if (!live(me)) return;
-    const rows = await remote.fetchLastSeen();
+    if (seenFor.current !== me) { seenFor.current = me; seenAround.current = {}; seenInView.current = {}; }
+    // The map's own function first (migration 63): each pin where you may see
+    // it. A database without it yet answers 'missing', and the map reads the
+    // old table (everyone about a kilometre out) the way it always has.
+    let rows: LastSeen[] | null = null;
+    let mapLive = stateRef.current.mapLive;
+    if (mapLive !== false) {
+      // Round you: about 80 km each way (the tray lists people up to 50
+      // miles out), from the phone's fix or else your own last spot. Without
+      // either, the server answers only for you, which still says whether it is there.
+      const s = stateRef.current;
+      const from = s.detectedCoords ?? (s.lastSeen[me!] ? { lat: s.lastSeen[me!].lat, lng: s.lastSeen[me!].lng } : null);
+      const around = from ? { minLat: from.lat - 0.75, maxLat: from.lat + 0.75, minLng: from.lng - Math.min(1, 0.75 / Math.max(0.2, Math.cos((from.lat * Math.PI) / 180))), maxLng: from.lng + Math.min(1, 0.75 / Math.max(0.2, Math.cos((from.lat * Math.PI) / 180))) } : null;
+      const got = await remote.fetchMapPlayers(view ?? around);
+      if (got === 'missing') mapLive = false;
+      else { if (got) mapLive = true; rows = got; }
+    }
+    if (mapLive === false) rows = await remote.fetchLastSeen();
+    if (stateRef.current.currentUserId !== me) return;
+    // Live, and the settings row said nothing (an account with no settings saved yet): never chosen.
+    if (mapLive !== stateRef.current.mapLive || (mapLive && stateRef.current.mapVisibility === undefined && stateRef.current.remoteLoaded)) {
+      setState((prev) => ({ ...prev, mapLive, mapVisibility: mapLive && prev.mapVisibility === undefined && prev.remoteLoaded ? null : prev.mapVisibility }));
+    }
     // A failed load keeps what was there and is not "loaded": an error must
     // never read as nobody near you (the "You're early" card waits on this).
+    if (!rows) return;
+    const loaded = Object.fromEntries(rows.map((r) => [r.userId, r]));
+    // The old table answers for everywhere at once: it replaces both.
+    if (mapLive === false) { seenAround.current = loaded; seenInView.current = {}; }
+    else if (view) seenInView.current = loaded;
+    else seenAround.current = loaded;
+    const merged = { ...seenAround.current, ...seenInView.current };
+    setState((prev) => ({ ...prev, lastSeen: merged, lastSeenLoaded: true }));
+  }, []);
+
+  const setMapVisibility = useCallback(async (v: MapVisibility): Promise<boolean> => {
+    const me = stateRef.current.currentUserId;
+    const was = stateRef.current.mapVisibility;
+    haptics.tap();
+    setState((prev) => ({ ...prev, mapVisibility: v }));
+    if (!live(me)) {
+      // The demo keeps it in the browser, the way the server keeps it with the account.
+      try { if (Platform.OS === 'web') localStorage.setItem(DEMO_VISIBILITY_KEY, v); } catch {}
+      return true;
+    }
+    const ok = await remote.setMapVisibility(v);
+    if (!ok && stateRef.current.currentUserId === me) setState((prev) => ({ ...prev, mapVisibility: was }));
+    if (ok) {
+      // Your spot again at once, so the choice takes effect now: the server
+      // keeps your exact spot only for Players nearby or follow-back only.
+      const s = stateRef.current;
+      if (s.locationEnabled && s.detectedCoords) {
+        markedAt.current = { lat: s.detectedCoords.lat, lng: s.detectedCoords.lng, at: Date.now() };
+        await remote.markLastSeen(s.detectedCoords.lat, s.detectedCoords.lng, s.detectedLocation ?? undefined);
+      }
+      // Who you see does not change, but your own row's look does: fetch again.
+      void loadLastSeen();
+    }
+    return ok;
+  }, [loadLastSeen]);
+
+  const loadNewOnCourtside = useCallback(async () => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    if (!me) return;
+    if (!live(me)) {
+      setState((prev) => ({ ...prev, newOnCourtside: demoApi.newOnCourtside({ me, users: prev.users, followingIds: prev.followingIds, blockedIds: prev.blockedIds }) }));
+      return;
+    }
+    if (s.mapLive === false) return;
+    const rows = await remote.fetchNewOnCourtside(14);
     if (!rows || stateRef.current.currentUserId !== me) return;
-    setState((prev) => ({ ...prev, lastSeen: Object.fromEntries(rows.map((r) => [r.userId, r])), lastSeenLoaded: true }));
+    // (Every profile comes down with the app's first load, so each one listed is already on the phone.)
+    setState((prev) => ({ ...prev, newOnCourtside: rows, mapLive: true }));
   }, []);
 
   const postHit = useCallback(async (input: Omit<HitRequest, 'id' | 'authorId' | 'createdAt' | 'joinedIds' | 'conversationId' | 'cancelled'>): Promise<ID> => {
@@ -4551,8 +4665,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!enabled) {
       remember(false);
       // Location off means off: the spot others saw goes too, and with it any "I'm playing here" (the server drops both).
+      // Your own pin goes from this phone's map at once as well.
+      const self = stateRef.current.currentUserId;
+      if (self) { delete seenAround.current[self]; delete seenInView.current[self]; }
       setState((prev) => ({
         ...prev, locationEnabled: false, locationAsked: true, detectedLocation: null, detectedCoords: null,
+        lastSeen: self && prev.lastSeen[self] ? Object.fromEntries(Object.entries(prev.lastSeen).filter(([id]) => id !== self)) : prev.lastSeen,
         courtNow: Object.fromEntries(Object.entries(prev.courtNow).map(([id, row]) => [id, { ...row, youHere: false }])),
         followedCourts: prev.followedCourts?.map((c) => ({ ...c, youHere: false })) ?? null,
       }));
@@ -4578,14 +4696,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return null;
   }, []);
 
-  // Where you are, for other players' maps: kept to about a kilometre by the
-  // database, and sent again only after a real move or a quarter of an hour.
+  // Where you are, for other players' maps: the database keeps the exact spot
+  // to itself and shows each player only what they may see (about a kilometre
+  // out, on your court, or exact for people who follow each other with you;
+  // migration 63). Sent again only after a real move or a quarter of an hour.
   useEffect(() => {
     const me = state.currentUserId;
     const at = state.detectedCoords;
     if (!state.locationEnabled || !at || !live(me)) return;
     const last = markedAt.current;
-    const moved = !last || Math.abs(last.lat - at.lat) > 0.01 || Math.abs(last.lng - at.lng) > 0.01;
+    // A real move: about a kilometre before migration 63 (the spot was kept no finer); since it,
+    // about 150 m, the reach of "at a court", so arriving at one moves your pin onto it.
+    const step = stateRef.current.mapLive ? 0.0015 : 0.01;
+    const moved = !last || Math.abs(last.lat - at.lat) > step || Math.abs(last.lng - at.lng) > step;
     if (!moved && Date.now() - last!.at < 15 * 60 * 1000) return;
     markedAt.current = { lat: at.lat, lng: at.lng, at: Date.now() };
     void remote.markLastSeen(at.lat, at.lng, state.detectedLocation ?? undefined);
@@ -5158,6 +5281,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       approveCoachApplication,
       rejectCoachApplication,
       setLocationEnabled,
+      setMapVisibility,
+      loadNewOnCourtside,
       setDefaultPayment,
       addPaymentMethod,
       removePaymentMethod,
@@ -5331,6 +5456,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       approveCoachApplication,
       rejectCoachApplication,
       setLocationEnabled,
+      setMapVisibility,
+      loadNewOnCourtside,
       setDefaultPayment,
       addPaymentMethod,
       removePaymentMethod,

@@ -17,6 +17,8 @@ if (isDesktopBrowser()) SHEETS.add('/messages/new');
 // A court's own two sheets ("Add what you know", "How is it right now?") sit over its page or card the same way.
 SHEETS.add('/court-report');
 SHEETS.add('/court-now');
+// "Who can see you on the map?" sits over the map or Find Players the same way.
+SHEETS.add('/map-visibility');
 
 /**
  * Animate the content without remounting the router or moving navigation.

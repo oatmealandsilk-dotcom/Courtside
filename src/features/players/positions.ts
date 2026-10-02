@@ -3,6 +3,8 @@ import type { LastSeen, User } from '@/data/types';
 import { US_STATES } from '@/features/places/search';
 
 export interface LatLng { lat: number; lng: number; }
+/** A part of the map, corner to corner (south-west, north-east). */
+export interface ViewBounds { minLat: number; minLng: number; maxLat: number; maxLng: number }
 
 /** Stable 0–1 pair from a string, so a player always lands in the same spot. */
 function spread(seed: string): { x: number; y: number } {
@@ -93,12 +95,21 @@ export function positionFor(user: User, seen?: LastSeen): LatLng | null {
   // works: no spot, no pin. A profile's city is never a position — it put
   // people where they weren't.
   if (!seen) return null;
+  // On a court, or exact (you, and people who follow each other with you):
+  // just where the server put them. Crowded together, the map gathers them
+  // into "+N" and fans them out on a tap (pinEngine).
+  if (seen.place === 'court' || seen.place === 'exact') return { lat: seen.lat, lng: seen.lng };
   const { x, y } = spread(user.avatarSeed);
-  // A last spot is already rounded to about a kilometre, so it only needs
-  // nudging apart from its neighbours. East–west is shrunk so the scatter stays round.
-  const reach = 0.008;
+  // A rough spot only needs nudging apart from its neighbours. Before
+  // migration 63 every spot was rounded to the same 1 km grid, so they are
+  // nudged further; the server's rough spot is already nudged once a day.
+  // East–west is shrunk so the scatter stays round.
+  const reach = seen.place === 'approx' ? 0.004 : 0.008;
   return { lat: seen.lat + y * reach, lng: seen.lng + (x * reach) / Math.max(0.2, Math.cos((seen.lat * Math.PI) / 180)) };
 }
+
+/** Whether a spot is only rough (about a kilometre): anything not on a court or exact, including every spot before migration 63. */
+export const isRoughSpot = (seen?: Pick<LastSeen, 'place'> | null) => !seen || (seen.place !== 'court' && seen.place !== 'exact');
 
 /** Whether the map knows where you are, or would only be guessing from the time zone. */
 export function homeIsKnown(me: User, fix?: LatLng | null, cityGuess?: LatLng | null): boolean {

@@ -9,10 +9,12 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { CardStage } from '@/components/map/CardStage';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle } from '@/components/map/MapCanvas';
 import { cardLook, lookFor } from '@/components/map/look';
-import { HIT_LIFT, courtLift, youLift, courtDotHtml, courtPinHtml, discSize, hitPinHtml, mePinHtml, playerPinClass, playerPinHtml } from '@/components/map/markers';
+import { clusterTemplates, courtLift, youLift } from '@/components/map/markers';
+import { mapMarkers } from '@/components/map/pinList';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { milesBetween } from '@/features/players/geo';
 import { useMapModel } from '@/features/players/mapModel';
+import { askWhoSeesYou, canChooseVisibility } from '@/features/players/mapPrivacy';
 import { askToHit } from '@/features/players/courtLink';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { useBarInset } from '@/features/navigation/barInset';
@@ -23,8 +25,6 @@ import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
 const HEIGHT = 330;
-/** Your face on your own pin, a touch bigger than everyone else's. */
-const ME_SIZE = 34;
 /** How far in the map starts: roughly a city. */
 const CITY_ZOOM = 11.5;
 /** Close enough to read street names, when the map goes to someone. */
@@ -55,7 +55,7 @@ export function nearbyMapSettled(): Promise<void> { return Promise.resolve(); }
  * card for whoever or whatever you tap.
  */
 export function NearbyMap(props: NearbyMapProps) {
-  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot } = props;
+  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, holdPins = false } = props;
   const styles = useThemedStyles(styleDefinitions);
   const { theme } = useTheme();
   // The still card takes the place names off: it sets your city's name in the middle itself.
@@ -63,7 +63,9 @@ export function NearbyMap(props: NearbyMapProps) {
   const insets = useSafeAreaInsets();
   const { height: windowH } = useWindowDimensions();
   const barInset = useBarInset();
-  const { followingIds, actions } = useApp();
+  const { followingIds, actions, mapLive, mapVisibility } = useApp();
+  // Who can see you on the map (migration 63): from your card and the location button, once there is a choice to make.
+  const choosing = canChooseVisibility(mapLive, me);
   // Your own pin, tapped: the card with your open-to-hit switch.
   const [meOpen, setMeOpen] = useState(false);
   const openToHit = isOpenToHit(me);
@@ -100,33 +102,13 @@ export function NearbyMap(props: NearbyMapProps) {
   const selectedId = model.selected?.user.id ?? null;
   const selectedCourtId = model.selectedCourt?.id ?? null;
   const selectedHitId = model.selectedHit?.hit.id ?? null;
-  const markers = useMemo<CanvasMarker[]>(() => {
-    // Full court pins only on the full map (the model draws none on the card either).
-    // A court played on this week wears the green story ring (courts only, never a random spot).
-    const list: CanvasMarker[] = (expanded ? model.courts : []).map((c) => ({ id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, c.id === selectedCourtId, model.ringed.has(c.id)), z: c.id === selectedCourtId ? 4 : 1 }));
-    // The still card: your city's courts as quiet dots, under everything.
-    if (!expanded) for (const c of model.cardCourts) list.push({ id: `d:${c.id}`, lat: c.lat, lng: c.lng, html: courtDotHtml(c, model.cardRinged.has(c.id)), z: 0 });
-    // Open hits as flags, hung above any court pin at the same spot — on the
-    // full map only. On the still card the flags crowded the city's name in the
-    // middle, and the hits are listed just below it anyway (Oct 2).
-    for (const h of expanded ? model.hits : []) {
-      const on = h.hit.id === selectedHitId;
-      list.push({ id: `h:${h.hit.id}`, lat: h.at.lat, lng: h.at.lng, html: hitPinHtml(h.hit, on), anchor: 'bottom', offsetY: HIT_LIFT, z: on ? 5 : 2 });
-    }
-    for (const p of shown) {
-      const on = p.user.id === selectedId;
-      const size = on ? 38 : 30;
-      // Open to hit is a class on the pin (cls), so it eases on and off in place rather than redrawing;
-      // an open player stands above the plain ones beside them, so a neighbour never covers their ring.
-      list.push({ id: `p:${p.user.id}`, lat: p.at.lat, lng: p.at.lng, html: playerPinHtml(p.user, { size, on, label: expanded, seenAt: p.seenAt }), cls: playerPinClass(p.user), anchor: expanded ? 'top' : 'center', offsetY: expanded ? -discSize(size) / 2 : 0, z: on ? 5 : isOpenToHit(p.user) ? 4 : 3 });
-    }
-    // Your pin only where you last shared your location; location off, no pin.
-    // Not on the still card: it shows your city, never your spot in it.
-    const mine = expanded ? model.mePos : null;
-    // Hung by its top, the face on your spot; Open to hit switches its class, so the green ring draws in behind your card.
-    if (mine) list.push({ id: 'me', lat: mine.lat, lng: mine.lng, html: mePinHtml(me, ME_SIZE), cls: playerPinClass(me), anchor: 'top', offsetY: -discSize(ME_SIZE) / 2, z: 6 });
-    return list;
-  }, [model.courts, model.ringed, model.cardCourts, model.cardRinged, model.hits, shown, selectedId, selectedCourtId, selectedHitId, expanded, me, theme, openToHit, model.mePos]);
+  // Everything drawn on the map, the same list the browser's map draws (pinList).
+  const markers = useMemo<CanvasMarker[]>(
+    () => mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden: choosing && mapVisibility === 'none' }),
+    [model.courts, model.ringed, model.cardCourts, model.cardRinged, model.hits, shown, selectedId, selectedCourtId, selectedHitId, expanded, me, theme, openToHit, model.mePos, choosing, mapVisibility], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  // What "+N" pins look like, in this theme's colours.
+  const tpl = useMemo(() => clusterTemplates(), [theme]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mapView = (
     <MapCanvas
@@ -136,6 +118,11 @@ export function NearbyMap(props: NearbyMapProps) {
       look={look}
       interactive={expanded}
       markers={markers}
+      tpl={tpl}
+      // The full map's first pins come in as one wave (once any sheet over it has gone); a tap on "+N" zooms in clear of the bars and the tray.
+      popIn={expanded}
+      holdPins={expanded && holdPins}
+      pad={{ top: insets.top + 120, bottom: 250, left: 50, right: 50 }}
       onTap={(id) => {
         // The still card is one button: any tap on it opens the full map.
         if (!expanded) { onExpand?.(); return; }
@@ -145,8 +132,8 @@ export function NearbyMap(props: NearbyMapProps) {
         else if (id.startsWith('p:')) { setMeOpen(false); model.select(id.slice(2)); }
       }}
       onMapTap={() => { model.select(null); model.selectCourt(null); model.selectHit(null); setMeOpen(false); }}
-      // Courts and their rings for where the map came to rest, zoomed in on a town (both check the zoom).
-      onMove={(c, zoom) => { if (!expanded) return; model.loadRings(c, zoom); if (model.courtsOn) void model.loadCourts(c, zoom); }}
+      // Courts and their rings for where the map came to rest, zoomed in on a town (both check the zoom); and who is in view.
+      onMove={(c, zoom, bounds) => { if (!expanded) return; model.loadRings(c, zoom); if (model.courtsOn) void model.loadCourts(c, zoom); model.loadPlayersIn(bounds); }}
     />
   );
 
@@ -182,7 +169,7 @@ export function NearbyMap(props: NearbyMapProps) {
     <View style={styles.fill}>
       {mapView}
       <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
-        <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} />
+        <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} locationMenu={choosing} />
         <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
       </View>
       <View pointerEvents="box-none" style={styles.bottom}>
@@ -197,7 +184,7 @@ export function NearbyMap(props: NearbyMapProps) {
           ) : stageKey === 'tray' ? (
             <NearbyRail items={model.tray} cityName={model.place ? model.place.name.split(',')[0] : cityName} selectedId={null} onSelect={model.select} weather={weather} query={model.query} filter={model.filter} courts={model.nearestCourts} onPickCourt={model.selectCourt} />
           ) : meOpen ? (
-            <YouSheet me={me} open={openToHit} onToggle={actions.setOpenToHit} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} />
+            <YouSheet me={me} open={openToHit} onToggle={actions.setOpenToHit} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} seenBy={mapVisibility} onSeenBy={choosing ? () => { void askWhoSeesYou('manage'); } : undefined} />
           ) : model.selected ? (
             <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onAskToHit={actions.canMessage(model.selected.user.id) ? () => askToHit([model.selected!.user.id]) : undefined} onAddToGroup={() => addToGroup(model.selected!.user.id)} onFollow={() => { const who = model.selected!.user; if (followingIds.includes(who.id)) confirmUnfollow(who, () => actions.toggleFollow(who.id)); else actions.toggleFollow(who.id); }} />
           ) : model.selectedCourt ? (

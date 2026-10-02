@@ -4,11 +4,12 @@ import { WebView } from 'react-native-webview';
 import { useReducedMotion } from 'react-native-reanimated';
 
 import { STYLE, type Look } from '@/components/map/look';
-import { CLOSE_ZOOM_NAMES, FAR_ZOOM, JUST_OPEN_CLASS, MAP_PIN_CSS, OPEN_CLASS, POP_MS } from '@/components/map/markers';
-import type { LatLng } from '@/features/players/positions';
+import { CLOSE_ZOOM_NAMES, FAR_ZOOM, MAP_PIN_CSS, SHORT_ZOOM } from '@/components/map/markers';
+import { CARD_BOX, FULL_MAP_BOX, PIN_ENGINE_JS, type CanvasMarker, type ClusterTemplates } from '@/components/map/pinEngine';
+import type { LatLng, ViewBounds } from '@/features/players/positions';
+import * as haptics from '@/lib/haptics';
 
-/** One thing drawn on the map, as the HTML MapLibre will place there. */
-export interface CanvasMarker { id: string; lat: number; lng: number; html: string; /** Which part of it sits on the spot: a hit's flag hangs from its point. */ anchor?: 'center' | 'top' | 'bottom'; offsetY?: number; /** Stacking: higher sits on top (courts under players under you). */ z?: number; /** Classes on the marker itself (OPEN_CLASS): a change of these animates in place, where a change of `html` redraws it. */ cls?: string }
+export type { CanvasMarker };
 
 /** `offsetY`: where the spot ends up, in pixels from the middle (negative is higher: clear of a tall card). */
 export interface MapCanvasHandle { flyTo: (to: LatLng, zoom?: number, ms?: number, offsetY?: number) => void }
@@ -21,10 +22,18 @@ interface Props {
   /** Drag and pinch move the map; off, it is a picture. */
   interactive: boolean;
   markers: CanvasMarker[];
+  /** What gathered "+N" pins look like, in the theme's colours (markers.ts clusterTemplates). */
+  tpl: ClusterTemplates;
+  /** The full map, just opened: its first pins come in as one wave (pinEngine). */
+  popIn?: boolean;
+  /** A sheet is over the map ("Who can see you on the map?"): the first wave waits until it has gone. */
+  holdPins?: boolean;
+  /** Room kept clear round the edge when a tap zooms in to split a "+N" pin. */
+  pad?: { top: number; bottom: number; left: number; right: number };
   onTap?: (id: string) => void;
   onMapTap?: () => void;
-  /** Where the map came to rest, and how close in. */
-  onMove?: (center: LatLng, zoom: number) => void;
+  /** Where the map came to rest, how close in, and the part of the world in view. */
+  onMove?: (center: LatLng, zoom: number, bounds: ViewBounds) => void;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -34,7 +43,7 @@ interface Props {
  * Apple's stock map with its shields and yellow motorways. Nothing native
  * to build — Expo Go has the web view — and one look everywhere.
  */
-export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, onTap, onMapTap, onMove, style }, ref) {
+export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, holdPins = false, pad, onTap, onMapTap, onMove, style }, ref) {
   const web = useRef<WebView | null>(null);
   const ready = useRef(false);
   const latest = useRef({ onTap, onMapTap, onMove });
@@ -51,7 +60,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
       send(`window.__cs.fly(${to.lat},${to.lng},${z ?? 'null'},${ms},${Math.round(offsetY)})`);
     },
   }), []);
-  const markerJson = JSON.stringify(markers);
+  const markerJson = JSON.stringify({ items: markers, tpl });
   const markersNow = useRef(markerJson);
   markersNow.current = markerJson;
   useEffect(() => { send(`window.__cs.set(${markerJson})`); }, [markerJson]);
@@ -65,6 +74,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
   const lookNow = useRef(lookJson);
   lookNow.current = lookJson;
   useEffect(() => { send(`window.__cs.look(${lookJson})`); }, [lookJson]);
+  const holdNow = useRef(holdPins);
+  holdNow.current = holdPins;
+  useEffect(() => { send(`window.__cs.hold(${holdPins ? 'true' : 'false'})`); }, [holdPins]);
 
   // The page is built once; everything after arrives as messages. The theme's
   // colours go on as soon as the style's layers exist ('style.load'), before
@@ -87,21 +99,14 @@ map.on('style.load',function(){look(LOOK)});
 // left, say, Night's dark map under the light Paris page; Oct 2).
 map.on('idle',function(){if(LOOK!==APPLIED){APPLIED=LOOK;look(LOOK)}});
 map.on('load',function(){look(LOOK);post({type:'ready'})});
-var box=document.getElementById('m');function zoomClass(){var z=map.getZoom();box.classList.toggle('cs-close',z>=${CLOSE_ZOOM_NAMES});box.classList.toggle('cs-far',z<${FAR_ZOOM})}zoomClass();map.on('zoom',zoomClass);
+var box=document.getElementById('m');${interactive ? '' : "box.classList.add('cs-quiet');"}function zoomClass(){var z=map.getZoom();box.classList.toggle('cs-close',z>=${CLOSE_ZOOM_NAMES});box.classList.toggle('cs-far',z<${FAR_ZOOM});box.classList.toggle('cs-short',z<${SHORT_ZOOM})}zoomClass();map.on('zoom',zoomClass);
 map.on('click',function(){post({type:'maptap'})});
-map.on('moveend',function(){var c=map.getCenter();post({type:'move',lat:c.lat,lng:c.lng,zoom:map.getZoom()})});
-var ms={};
-function has(c,n){return (' '+(c||'')+' ').indexOf(' '+n+' ')>=0}
-function cls(k,c,fresh){if(c===k.cls)return;var was=has(k.cls,'${OPEN_CLASS}'),now=has(c,'${OPEN_CLASS}');(k.cls||'').split(' ').forEach(function(n){if(n)k.el.classList.remove(n)});(c||'').split(' ').forEach(function(n){if(n)k.el.classList.add(n)});k.cls=c;
-  if(now&&!was&&!fresh){k.el.classList.add('${JUST_OPEN_CLASS}');clearTimeout(k.pop);k.pop=setTimeout(function(){k.el.classList.remove('${JUST_OPEN_CLASS}')},${POP_MS})}else if(!now)k.el.classList.remove('${JUST_OPEN_CLASS}')}
+map.on('moveend',function(){var c=map.getCenter(),b=map.getBounds();post({type:'move',lat:c.lat,lng:c.lng,zoom:map.getZoom(),s:b.getSouth(),w:b.getWest(),n:b.getNorth(),e:b.getEast()})});
+// The pins: one engine with the browser's map (pinEngine), so both gather, split and cascade alike.
+var engine=(${PIN_ENGINE_JS})(map,maplibregl,{tap:function(id){post({type:'tap',id:id})},gathered:function(){post({type:'gathered'})},popIn:${popIn ? 'true' : 'false'},hold:${holdPins ? 'true' : 'false'},quiet:${interactive ? 'false' : 'true'},box:${JSON.stringify(interactive ? FULL_MAP_BOX : CARD_BOX)},pad:${JSON.stringify(pad ?? null)}});
 window.__cs={
-  set:function(list){var seen={};list.forEach(function(it){var a=it.anchor||'center';var k=ms[it.id];seen[it.id]=1;
-    if(k&&k.a!==a){k.m.remove();k=null}
-    var fresh=!k;
-    if(!k){var el=document.createElement('div');el.innerHTML=it.html;var id=it.id;el.addEventListener('click',function(e){e.stopPropagation();post({type:'tap',id:id})});k=ms[it.id]={el:el,html:it.html,a:a,cls:''};k.m=new maplibregl.Marker({element:el,anchor:a,offset:[0,it.offsetY||0]}).setLngLat([it.lng,it.lat]).addTo(map)}
-    else{if(k.html!==it.html){k.el.innerHTML=it.html;k.html=it.html}k.m.setLngLat([it.lng,it.lat]);k.m.setOffset([0,it.offsetY||0])}
-    k.el.style.zIndex=it.z!=null?String(it.z):'';cls(k,it.cls||'',fresh)});
-    for(var id in ms){if(!seen[id]){ms[id].m.remove();delete ms[id]}}},
+  set:function(p){engine.set(p)},
+  hold:function(on){engine.hold(on)},
   fly:function(lat,lng,z,ms,oy){map.flyTo({center:[lng,lat],zoom:z==null?map.getZoom():Math.max(map.getZoom(),z),duration:ms,offset:[0,oy||0]})},
   look:function(l){LOOK=l;document.body.style.background=(l.background&&l.background.fill)||'#F4EFE6';if(map.isStyleLoaded())look(l)}
 };
@@ -122,20 +127,24 @@ window.__cs={
         allowsInlineMediaPlayback
         setBuiltInZoomControls={false}
         onMessage={(e) => {
-          let msg: { type: string; id?: string; lat?: number; lng?: number; zoom?: number };
+          let msg: { type: string; id?: string; lat?: number; lng?: number; zoom?: number; s?: number; w?: number; n?: number; e?: number };
           try { msg = JSON.parse(e.nativeEvent.data); } catch { return; }
           if (msg.type === 'ready') {
             ready.current = true;
             send(`document.body.classList.toggle('cs-still',${stillNow.current ? 'true' : 'false'})`);
             send(`window.__cs.look(${lookNow.current})`);
+            send(`window.__cs.hold(${holdNow.current ? 'true' : 'false'})`);
             send(`window.__cs.set(${markersNow.current})`);
             const move = pendingMove.current;
             pendingMove.current = null;
             if (move) send(`window.__cs.fly(${move.to.lat},${move.to.lng},${move.zoom ?? 'null'},0)`);
           }
           else if (msg.type === 'tap' && msg.id) latest.current.onTap?.(msg.id);
+          else if (msg.type === 'gathered') haptics.tap();
           else if (msg.type === 'maptap') latest.current.onMapTap?.();
-          else if (msg.type === 'move' && msg.lat !== undefined && msg.lng !== undefined && msg.zoom !== undefined) latest.current.onMove?.({ lat: msg.lat, lng: msg.lng }, msg.zoom);
+          else if (msg.type === 'move' && msg.lat !== undefined && msg.lng !== undefined && msg.zoom !== undefined) {
+            latest.current.onMove?.({ lat: msg.lat, lng: msg.lng }, msg.zoom, { minLat: msg.s ?? msg.lat, minLng: msg.w ?? msg.lng, maxLat: msg.n ?? msg.lat, maxLng: msg.e ?? msg.lng });
+          }
         }}
       />
     </View>

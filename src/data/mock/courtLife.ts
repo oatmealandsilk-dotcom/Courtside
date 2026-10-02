@@ -17,8 +17,12 @@ const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString(
 const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString().slice(0, 10);
 const park = (n: number): TaggedCourt => { const c = DEMO_PARK(n); return { id: c.id, name: c.name ?? 'Public courts', lat: c.lat, lng: c.lng }; };
 
-/** The demo player follows Sam and Marcus, so the Following chip and "who you follow plays here" have someone to show. */
-export const DEMO_FOLLOWING: ID[] = ['u-sam', 'u-marcus'];
+/**
+ * The demo player follows Sam and Marcus, so the Following chip and "who
+ * you follow plays here" have someone to show, and Omar, who follows back
+ * (his pin is exact on the map, presence.ts).
+ */
+export const DEMO_FOLLOWING: ID[] = ['u-sam', 'u-marcus', 'u-omar'];
 
 const blankFacts = (courtId: string): CourtFacts => ({
   courtId, access: 'unknown', players: 0, lights: { yes: 0, no: 0 }, nets: { good: 0, bad: 0 }, surface: { good: 0, cracked: 0, wetProne: 0 }, busy: {}, busyAnswers: 0, busyNever: 0, notes: [],

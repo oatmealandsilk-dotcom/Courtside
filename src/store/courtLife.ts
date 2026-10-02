@@ -251,6 +251,7 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
             : got.error === 'adults_only' ? 'Checking in is for adults only.'
               : got.error === 'closed_court' ? 'Check-ins are only for courts anyone can play at.'
                 : got.error === 'slow_down' ? 'That’s a lot of check-ins today. Try again tomorrow.'
+                  : got.error === 'hidden' ? 'You chose Only me on the map, so you can’t check in.'
                   : 'That didn’t go through. Try again.';
       }
     }

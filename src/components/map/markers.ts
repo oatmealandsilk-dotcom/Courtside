@@ -39,7 +39,11 @@ export function agoShort(iso?: string): string {
 /**
  * Styles the pins share, and what the map's zoom switches on: court names
  * once you are down at street level. The canvases put "cs-close" on the
- * map when zoomed in that far, and "cs-far" when far out.
+ * map when zoomed in that far, "cs-far" when far out, and "cs-short" below
+ * zoom 12, where players' names drop their "· 2h" (SHORT_ZOOM: the pin
+ * engine leaves them less room there). "cs-hit" on a pin: an open hit
+ * folded into it, zoomed out (a small dot, pinEngine). "cs-quiet" on the
+ * still card: no pin takes a tap (the card does).
  *
  * Open to hit is a class on a pin's own marker element (OPEN_CLASS), not a
  * redraw, so switching it on or off animates: the green ring draws itself
@@ -47,7 +51,7 @@ export function agoShort(iso?: string): string {
  * pin on its own beat), and a green dot slides in before the name (on your
  * own pin, "You · Open to hit"). Only a real change from off to on also
  * gives the face one small pop (JUST_OPEN_CLASS, put on for a moment by
- * setOpen): a pin that appears already open, or is redrawn, never pops.
+ * the pin engine): a pin that appears already open, or is redrawn, never pops.
  * Off, it all eases back; the ring's ends go square as it unwinds, so it
  * never leaves a round dot behind. With Reduce Motion on (the system's
  * setting, or "cs-still" on the map, which the phone sets from its own),
@@ -78,35 +82,34 @@ export const MAP_PIN_CSS = `
 .cs-still .cs-halo{animation:none;transform:scale(1.35);opacity:.2}
 .cs-still .cs-just-open .cs-disc{animation:none}
 .cs-still .cs-ring circle,.cs-still .cs-open .cs-ring circle{stroke-dashoffset:0;transition:opacity .3s ease}
+.cs-move{transition:translate .4s cubic-bezier(.2,.8,.2,1),transform .15s ease-out}
+.cs-pop{animation:cs-pop-in .34s cubic-bezier(.22,.9,.32,1.18) both}
+@keyframes cs-pop-in{0%{opacity:0;scale:.6}100%{opacity:1;scale:1}}
+.cs-in{animation:cs-fade-in .22s ease-out both}
+@keyframes cs-fade-in{from{opacity:0}to{opacity:1}}
+.cs-out{animation:cs-fade-out .24s ease-in forwards}
+@keyframes cs-fade-out{to{opacity:0;scale:.7}}
+@media (prefers-reduced-motion:reduce){.cs-pop,.cs-out{animation-name:cs-fade-in}.cs-out{animation-direction:reverse}}
+.cs-still .cs-pop{animation-name:cs-fade-in}
+.cs-still .cs-out{animation-name:cs-fade-in;animation-direction:reverse}
+.cs-short .cs-ago{display:none}
+.cs-hitdot{display:none;position:absolute;left:-1px;top:-1px;width:11px;height:11px;border-radius:999px;border:2px solid;box-sizing:border-box;z-index:2;pointer-events:none}
+.cs-hit .cs-hitdot{display:block}
+.cs-quiet .maplibregl-marker{pointer-events:none}
 `;
 
 /** The zoom at which court names show, and below which the court marks shrink. */
 export const CLOSE_ZOOM_NAMES = 14.3;
 export const FAR_ZOOM = 11.8;
+/** Below this, players' names drop their "· 2h" (the pin engine gathers them closer there). */
+export const SHORT_ZOOM = 12;
 
 /** The class a player's marker element wears while they are open to hit (see MAP_PIN_CSS). */
 export const OPEN_CLASS = 'cs-open';
-/** Worn for a moment as a pin switches from off to on: its one pop. */
+/** Worn for a moment as a pin already on the map switches from off to on: its one pop (the pin engine puts it on). */
 export const JUST_OPEN_CLASS = 'cs-just-open';
 /** How long the pop lasts, with a little to spare. */
 export const POP_MS = 650;
-
-/**
- * Switches a pin already on the map to open or not, so it animates in
- * place; a real change from off to on also pops it once. For a pin being
- * made, set OPEN_CLASS directly instead: it appears as it is, no pop. The
- * phone's map does the same inside its web view (MapCanvas).
- */
-export function setOpen(el: HTMLElement, open: boolean) {
-  const was = el.classList.contains(OPEN_CLASS);
-  el.classList.toggle(OPEN_CLASS, open);
-  if (open && !was) {
-    el.classList.add(JUST_OPEN_CLASS);
-    clearTimeout(pops.get(el));
-    pops.set(el, setTimeout(() => el.classList.remove(JUST_OPEN_CLASS), POP_MS));
-  } else if (!open) el.classList.remove(JUST_OPEN_CLASS);
-}
-const pops = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 /** The classes a player's pin wears: "cs-open" while they are open to hit today. */
 export const playerPinClass = (user: User) => (isOpenToHit(user) ? OPEN_CLASS : '');
 
@@ -138,11 +141,11 @@ function disc(user: User, size: number): string {
   const r = inner / 2 - 0.5 + RING / 2;
   const round = (2 * Math.PI * r).toFixed(2);
   const c = box / 2;
-  return `<div class="cs-disc" style="width:${box}px;height:${box}px">`
+  return `<div class="cs-disc" style="width:${box}px;height:${box}px"><!--cs-stack-->`
     + `<div class="cs-halo-wrap"><div class="cs-halo" style="left:${at}px;top:${at}px;width:${inner}px;height:${inner}px;background:${colors.open};animation-delay:-${beat(user.id)}ms"></div></div>`
     + `<div style="position:absolute;left:${at}px;top:${at}px;width:${inner}px;height:${inner}px;border-radius:999px;background:${colors.bg};display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(0,0,0,.24)">${face(user, size)}</div>`
     + `<svg class="cs-ring" width="${box}" height="${box}" viewBox="0 0 ${box} ${box}" aria-hidden="true"><circle cx="${c}" cy="${c}" r="${r.toFixed(2)}" fill="none" stroke="${colors.open}" stroke-width="${RING}" stroke-linecap="round" stroke-dasharray="${round}" stroke-dashoffset="${round}"/></svg>`
-    + `</div>`;
+    + `<i class="cs-hitdot" style="background:${colors.brand};border-color:${colors.bg}"></i><!--cs-badge--></div>`;
 }
 
 /**
@@ -151,10 +154,11 @@ function disc(user: User, size: number): string {
  * playerPinClass), a green ring draws round them with a slow soft pulse, and
  * a green dot leads their name. The canvases hang it by its top, `discSize(size) / 2` up, so the face sits on the spot.
  */
-export function playerPinHtml(user: User, { size, label, seenAt }: { size: number; on?: boolean; label: boolean; seenAt?: string }): string {
+export function playerPinHtml(user: User, { size, label, seenAt, atCourt = false }: { size: number; on?: boolean; label: boolean; seenAt?: string; /** On a court right now (migration 63): a small court before the name. */ atCourt?: boolean }): string {
   const ago = agoShort(seenAt);
-  const when = ago ? `<span style="color:${colors.textMuted};font-weight:500"> · ${ago}</span>` : '';
-  const name = label ? `<div style="margin-top:2px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 8px;border-radius:999px;background:${colors.bg};color:${colors.text};box-shadow:0 1px 4px rgba(0,0,0,.16);${FONT}"><i class="cs-dot" style="background:${colors.open}"></i>${esc(user.name.split(' ')[0])}${when}</div>` : '';
+  const when = ago ? `<span class="cs-ago" style="color:${colors.textMuted};font-weight:500"> · ${ago}</span>` : '';
+  const court = atCourt ? `<span style="display:inline-block;vertical-align:-2px;margin-right:3px">${courtGlyph(colors.court, 11)}</span>` : '';
+  const name = label ? `<div style="margin-top:2px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 8px;border-radius:999px;background:${colors.bg};color:${colors.text};box-shadow:0 1px 4px rgba(0,0,0,.16);${FONT}"><i class="cs-dot" style="background:${colors.open}"></i>${court}${esc(user.name.split(' ')[0])}${when}</div>` : '';
   return `<div class="cs-pin" style="display:flex;flex-direction:column;align-items:center;cursor:pointer">${disc(user, size)}${name}</div>`;
 }
 
@@ -167,9 +171,11 @@ export function playerPinHtml(user: User, { size, label, seenAt }: { size: numbe
  * on the same page-coloured pill (never a solid green one, which is a
  * posted hit's flag). Hung by its top like the players' pins.
  */
-export function mePinHtml(me: User, size: number): string {
+export function mePinHtml(me: User, size: number, hidden = false): string {
   const open = `<span class="cs-tag-open"><span style="color:${colors.textMuted};font-weight:500">&nbsp;· </span>Open to hit</span>`;
-  const tag = `<div style="margin-top:2px;display:flex;align-items:center;white-space:nowrap;padding:3px 8px;border-radius:999px;background:${colors.bg};color:${colors.text};box-shadow:0 1px 4px rgba(0,0,0,.16);${FONT}"><i class="cs-dot" style="background:${colors.open}"></i>You${open}</div>`;
+  // "Only me" (migration 63): nobody else sees this pin, and the tag says so.
+  const alone = hidden ? `<span style="color:${colors.textMuted};font-weight:500">&nbsp;· Hidden</span>` : '';
+  const tag = `<div style="margin-top:2px;display:flex;align-items:center;white-space:nowrap;padding:3px 8px;border-radius:999px;background:${colors.bg};color:${colors.text};box-shadow:0 1px 4px rgba(0,0,0,.16);${FONT}"><i class="cs-dot" style="background:${colors.open}"></i>You${open}${alone}</div>`;
   return `<div class="cs-pin" style="display:flex;flex-direction:column;align-items:center;cursor:pointer">${disc(me, size)}${tag}</div>`;
 }
 
@@ -198,8 +204,11 @@ export function courtPinHtml(court: Court, on: boolean, ring = false): string {
   const name = court.name && court.name !== 'Tennis courts' ? `<span class="cs-court-name" style="${nameStyle}">${court.name.replace(/[<>&"]/g, '')}${closed ? ` · ${court.access === 'private' ? 'private' : 'members'}` : ''}</span>` : '';
   const fill = closed ? colors.borderStrong : colors.court;
   const glyph = closed ? colors.bg : colors.brandInk;
-  return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:999px;background:${fill};border:2px solid ${colors.bg};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${ring ? storyRing(2, 2.5) : ''}0 2px 6px rgba(0,0,0,${on ? '.3' : '.2'});cursor:pointer${closed && !on ? ';opacity:.75' : ''}">${courtGlyph(glyph)}${name}</div>`;
+  return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:999px;background:${fill};border:2px solid ${colors.bg};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${ring ? storyRing(2, 2.5) : ''}0 2px 6px rgba(0,0,0,${on ? '.3' : '.2'});cursor:pointer${closed && !on ? ';opacity:.75' : ''}">${courtGlyph(glyph)}${name}${hitDot()}</div>`;
 }
+
+/** The dot an open hit folds into on a pin when zoomed out (pinEngine puts "cs-hit" on the pin). */
+const hitDot = () => `<i class="cs-hitdot" style="background:${colors.brand};border-color:${colors.bg}"></i>`;
 
 /**
  * A court on the still card in Find Players: a small badge in the court
@@ -228,7 +237,7 @@ const ball = (fill: string, seam: string) =>
 export function hitPinHtml(hit: HitRequest, on: boolean): string {
   const when = hitShort(hit.startsAt).replace(/[<>&"]/g, '');
   const ring = on ? `0 0 0 2px ${colors.bg},` : '';
-  return `<div class="cs-pin" style="display:flex;flex-direction:column;align-items:center;cursor:pointer"><div style="display:flex;align-items:center;gap:4px;padding:${on ? '5px 10px' : '4px 8px'};border-radius:999px;background:${colors.brand};color:${colors.brandInk};white-space:nowrap;box-shadow:${ring}0 2px 8px rgba(0,0,0,${on ? '.3' : '.2'});${FONT}">${ball(colors.brandInk, colors.brand)}<span>${when}</span></div><div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid ${colors.brand}"></div></div>`;
+  return `<div class="cs-pin" style="display:flex;flex-direction:column;align-items:center;cursor:pointer"><div style="position:relative;display:flex;align-items:center;gap:4px;padding:${on ? '5px 10px' : '4px 8px'};border-radius:999px;background:${colors.brand};color:${colors.brandInk};white-space:nowrap;box-shadow:${ring}0 2px 8px rgba(0,0,0,${on ? '.3' : '.2'});${FONT}">${ball(colors.brandInk, colors.brand)}<span>${when}</span><!--cs-badge--></div><div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid ${colors.brand}"></div></div>`;
 }
 
 /** How far above its spot a hit's flag hangs: clear of a court pin there. */
@@ -238,3 +247,25 @@ export const HIT_LIFT = -10;
 export const courtLift = (mapHeight: number) => Math.round(Math.min(220, mapHeight * 0.24));
 /** The same for your own pin under your (shorter) card: in clear view, so switching Open to hit shows on it. */
 export const youLift = (mapHeight: number) => Math.round(Math.min(150, mapHeight * 0.14));
+
+/**
+ * What gathered pins look like (pinEngine), in the theme's colours. A
+ * crowd of players is the leading player's own pin with a second disc
+ * peeking out behind it and a small ink badge, "+4"; so when it splits the
+ * leader's pin is left exactly where it was. A crowd of courts is a court
+ * disc a size up, with how many places it holds where the little court
+ * would be: never mistaken for players. Players crowding your own pin (or
+ * whoever is picked) gather into a small "+3" beside it instead (`chip`).
+ */
+export function clusterTemplates(): { badge: string; stack: string; court: string; chip: string } {
+  const box = discSize(30);
+  const inner = 30 + GAP * 2;
+  const at = (box - inner) / 2;
+  return {
+    badge: `<div style="position:absolute;right:-7px;top:-3px;min-width:22px;height:20px;padding:0 6px;box-sizing:border-box;border-radius:999px;background:${colors.text};color:${colors.bg};border:2px solid ${colors.bg};display:flex;align-items:center;justify-content:center;${FONT};font-size:11px;box-shadow:0 1px 4px rgba(0,0,0,.2)">{n}</div>`,
+    stack: `<div style="position:absolute;left:${at - 9}px;top:${at - 2}px;width:${inner}px;height:${inner}px;border-radius:999px;background:${colors.surfaceAlt};border:1.5px solid ${colors.bg};box-sizing:border-box;box-shadow:0 2px 7px rgba(0,0,0,.2)"></div>`,
+    court: `<div class="cs-court cs-pin" style="position:relative;width:30px;height:30px;border-radius:999px;background:${colors.court};border:2px solid ${colors.bg};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px ${colors.court}40,0 2px 6px rgba(0,0,0,.22);color:${colors.brandInk};${FONT};font-size:12px;cursor:pointer">{n}${hitDot()}</div>`,
+    // Beside you (or whoever is picked): the others crowding your spot, as a small ink "+3" with a disc peeking behind it.
+    chip: `<div class="cs-pin" style="position:relative;width:40px;height:30px;cursor:pointer"><div style="position:absolute;left:12px;top:2px;width:26px;height:26px;border-radius:999px;background:${colors.surfaceAlt};border:1.5px solid ${colors.bg};box-sizing:border-box;box-shadow:0 2px 6px rgba(0,0,0,.18)"></div><div style="position:absolute;left:0;top:2px;min-width:28px;height:26px;padding:0 7px;box-sizing:border-box;border-radius:999px;background:${colors.text};color:${colors.bg};border:2px solid ${colors.bg};display:flex;align-items:center;justify-content:center;${FONT};box-shadow:0 2px 6px rgba(0,0,0,.22)">{n}</div></div>`,
+  };
+}

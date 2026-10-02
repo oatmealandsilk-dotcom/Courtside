@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Gesture, GestureDetector, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
-import Animated, { Easing, FadeIn, interpolateColor, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, interpolateColor, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
 
 import { Avatar, BrandWash } from '@/components/ui';
 import { Glass } from '@/components/ui/Glass';
@@ -44,6 +44,9 @@ import { sheetFling } from '@/components/map/sheetFling';
 import { OpenRing } from '@/components/map/OpenRing';
 import { mix } from '@/components/map/look';
 import { notKnownAdult } from '@/features/players/age';
+import { dismissHideTip, useHideTip, useHideTipText, visibilityLabel, type TipSpot } from '@/features/players/mapPrivacy';
+import { formatSpotMiles } from '@/features/players/geo';
+import type { MapVisibility } from '@/data/types';
 
 // Kept here too, for the screens that already import it from the map's chrome.
 export { CourtGlyph };
@@ -58,11 +61,12 @@ export { CourtGlyph };
  * names courts (`results`), they list under it: a pick takes the map there
  * with the court's card up.
  */
-export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onToggleLocation, results, onPickCourt }: { onBack?: () => void; query: string; onQuery: (next: string) => void; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void; results?: CourtRow[]; onPickCourt?: (c: Court) => void }) {
+export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onToggleLocation, results, onPickCourt, locationMenu = false }: { onBack?: () => void; query: string; onQuery: (next: string) => void; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void; results?: CourtRow[]; onPickCourt?: (c: Court) => void; /** With Location on, the button opens who can see you (and Location off) rather than switching off. */ locationMenu?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const found = onPickCourt && query.trim() ? (results ?? []).slice(0, 5) : [];
   return (
-    <View style={{ gap: spacing.sm }}>
+    // Above the filter chips under it, so the location tip hangs over them.
+    <View style={{ gap: spacing.sm, zIndex: 5 }}>
     <View style={styles.topRow}>
       {onBack ? (
         <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onBack} style={styles.roundHit}>
@@ -90,10 +94,14 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
         ) : null}
       </Glass>
       {onToggleLocation ? (
-        <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? 'Turn location off' : 'Turn location on'} onPress={onToggleLocation} style={[styles.round, locationOn && styles.roundOn]}>
-          {locationOn ? <BrandWash /> : null}
-          {locating ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={18} color={locationOn ? colors.brandInk : colors.text} />}
-        </Pressable>
+        <View>
+          <TipPulse where="map" size={42} />
+          <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? (locationMenu ? 'Location on. Who can see you' : 'Turn location off') : 'Turn location on'} onPress={onToggleLocation} style={[styles.round, locationOn && styles.roundOn]}>
+            {locationOn ? <BrandWash /> : null}
+            {locating ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={18} color={locationOn ? colors.brandInk : colors.text} />}
+          </Pressable>
+          <HideTip where="map" style={{ top: 50, right: 0 }} />
+        </View>
       ) : null}
     </View>
     {found.length ? (
@@ -389,10 +397,10 @@ export function NearbyRail({ items, cityName, onSelect, weather, query = '', fil
                   <GHScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail} style={styles.railScroll}>
                     {items.slice(0, 30).map((p) => (
                       <View key={p.user.id}>
-                        <Tappable accessibilityLabel={`${p.user.name}, ${formatMiles(p.miles)}`} onPress={() => onSelect(p.user.id)} scaleTo={0.96} style={styles.railItem}>
+                        <Tappable accessibilityLabel={`${p.user.name}, ${formatSpotMiles(p.miles, p.rough)}`} onPress={() => onSelect(p.user.id)} scaleTo={0.96} style={styles.railItem}>
                           <View style={[styles.railRing, isOpenToHit(p.user) && styles.railRingOn]}><Avatar name={p.user.name} seed={p.user.avatarSeed} size={46} ring={p.user.isCoach} /></View>
                           <Text style={styles.railName} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text>
-                          <Text style={styles.railMeta} numberOfLines={1}>{formatMiles(p.miles)}{p.seenAt ? ` · ${agoShort(p.seenAt)}` : ''}</Text>
+                          <Text style={styles.railMeta} numberOfLines={1}>{formatSpotMiles(p.miles, p.rough)}{p.seenAt ? ` · ${agoShort(p.seenAt)}` : ''}</Text>
                         </Tappable>
                       </View>
                     ))}
@@ -436,14 +444,14 @@ export function NearbyRail({ items, cityName, onSelect, weather, query = '', fil
                 onScrollEndDrag={(e) => { if (e.nativeEvent.contentOffset.y < -48) settleTo(1); }}
               >
                 {items.map((p, i) => (
-                  <Pressable key={p.user.id} accessibilityRole="button" accessibilityLabel={`${p.user.name}, ${formatMiles(p.miles)}`} onPress={() => onSelect(p.user.id)} style={({ pressed }) => [styles.listRow, i > 0 && styles.listRule, pressed && styles.listPressed]}>
+                  <Pressable key={p.user.id} accessibilityRole="button" accessibilityLabel={`${p.user.name}, ${formatSpotMiles(p.miles, p.rough)}`} onPress={() => onSelect(p.user.id)} style={({ pressed }) => [styles.listRow, i > 0 && styles.listRule, pressed && styles.listPressed]}>
                     <View style={[styles.railRing, isOpenToHit(p.user) && styles.railRingOn]}><Avatar name={p.user.name} seed={p.user.avatarSeed} size={40} ring={p.user.isCoach} /></View>
                     <View style={styles.listWords}>
                       <View style={styles.personTop}>
                         <Text style={styles.listName} numberOfLines={1}>{p.user.name}</Text>
                         <LevelPill profile={p.user.profile} small />
                       </View>
-                      <Text style={styles.personMeta} numberOfLines={1}>{[formatMiles(p.miles), p.seenAt ? agoLabel(p.seenAt) : null, isOpenToHit(p.user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
+                      <Text style={styles.personMeta} numberOfLines={1}>{[formatSpotMiles(p.miles, p.rough), p.seenAt ? agoLabel(p.seenAt) : null, isOpenToHit(p.user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
                   </Pressable>
@@ -517,7 +525,7 @@ export function WhereCard({ locating, onLocation }: { locating?: boolean; onLoca
 export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, onFollow, onAddToGroup, onAskToHit }: { placed: Placed; following: boolean; onClose: () => void; onProfile: () => void; onMessage: () => void; onFollow: () => void; onAddToGroup?: () => void; /** Only for someone you may message: an adult, or a teen who follows you. */ onAskToHit?: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const pull = useDragToClose(onClose);
-  const { user, miles, seenAt, seenCity } = placed;
+  const { user, miles, seenAt, seenCity, rough, court } = placed;
   return (
     <GestureDetector gesture={pull.gesture}>
     <Animated.View style={[styles.sheet, pull.style]}>
@@ -533,8 +541,10 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
             <Text style={styles.personName} numberOfLines={1}>{user.name}</Text>
             <LevelPill profile={user.profile} small />
           </View>
-          <Text style={styles.personMeta} numberOfLines={1}>{[`@${user.handle}`, seenCity || user.location || null, formatMiles(miles)].filter(Boolean).join(' · ')}</Text>
-          {seenAt ? <Text style={styles.personMeta} numberOfLines={1}>{activeLabel(seenAt)}</Text> : null}
+          {/* At a court right now (migration 63): which one, first; otherwise the town, and how far (never finer than the pin is). */}
+          <Text style={styles.personMeta} numberOfLines={1}>{[`@${user.handle}`, court ? null : seenCity || user.location || null, formatSpotMiles(miles, rough)].filter(Boolean).join(' · ')}</Text>
+          {court ? <View style={styles.openRow}><CourtGlyph size={13} color={colors.court} /><Text style={styles.atCourt} numberOfLines={1}>At {court.name}{seenAt ? ` · ${agoLabel(seenAt)}` : ''}</Text></View>
+            : seenAt ? <Text style={styles.personMeta} numberOfLines={1}>{activeLabel(seenAt)}</Text> : null}
           {isOpenToHit(user) ? <View style={styles.openRow}><View style={styles.openDot} /><Text style={styles.openText}>Open to hit today</Text></View> : null}
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
@@ -585,7 +595,7 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
  * face here draws on its green ring, the box around the switch warms to
  * green, and your pin on the map behind does the same.
  */
-export function YouSheet({ me, open, onToggle, onProfile, onClose }: { me: User; open: boolean; onToggle: (on: boolean) => void; onProfile: () => void; onClose: () => void }) {
+export function YouSheet({ me, open, onToggle, onProfile, onClose, seenBy, onSeenBy }: { me: User; open: boolean; onToggle: (on: boolean) => void; onProfile: () => void; onClose: () => void; /** Who can see you on the map (migration 63), with a way to change it; absent before it. */ seenBy?: MapVisibility | null; onSeenBy?: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const pull = useDragToClose(onClose);
   const reduce = useReducedMotion();
@@ -634,6 +644,14 @@ export function YouSheet({ me, open, onToggle, onProfile, onClose }: { me: User;
         {/* Green like the ring it puts on, not the court's colour: the one switch in the app that is (see DESIGN.md, Open Green). */}
         <Toggle value={open} onChange={onToggle} haptic tint={colors.open} accessibilityLabel="Open to hit today" />
       </Animated.View>
+      {onSeenBy ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={`Who can see you: ${visibilityLabel(seenBy)}. Change`} onPress={onSeenBy} style={({ pressed }) => [styles.seenRow, pressed && styles.listPressed]}>
+          <Ionicons name={seenBy === 'none' ? 'eye-off-outline' : 'eye-outline'} size={17} color={colors.textMuted} />
+          <Text style={styles.seenLabel}>Who can see you</Text>
+          <Text style={styles.seenValue} numberOfLines={1}>{visibilityLabel(seenBy)}</Text>
+          <Ionicons name="chevron-forward" size={15} color={colors.textFaint} />
+        </Pressable>
+      ) : null}
       <View style={styles.personActions}>
         <Pressable accessibilityRole="link" accessibilityLabel="Your profile" onPress={onProfile} style={styles.secondary}>
           <Text style={styles.secondaryText}>Your profile</Text>
@@ -835,10 +853,14 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
         </View>
       </View>
       {onToggleLocation ? (
-        <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? 'Turn location off' : 'Turn location on'} hitSlop={6} onPress={onToggleLocation} style={[styles.previewSwitch, locationOn && styles.roundOn]}>
-          {locationOn ? <BrandWash /> : null}
-          {locating ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={15} color={locationOn ? colors.brandInk : colors.text} />}
-        </Pressable>
+        <>
+          <View pointerEvents="none" style={styles.previewPulse}><TipPulse where="card" size={32} /></View>
+          <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? 'Turn location off' : 'Turn location on'} hitSlop={6} onPress={onToggleLocation} style={[styles.previewSwitch, locationOn && styles.roundOn]}>
+            {locationOn ? <BrandWash /> : null}
+            {locating ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={15} color={locationOn ? colors.brandInk : colors.text} />}
+          </Pressable>
+          <HideTip where="card" style={{ top: 52, right: 8 }} />
+        </>
       ) : null}
       {weather ? (
         <View pointerEvents="none" style={styles.previewWeather}>
@@ -877,7 +899,58 @@ export function CitylessCard({ onOpenMap }: { onOpenMap?: () => void }) {
   );
 }
 
+/**
+ * The one tip after "Who can see you on the map?" and the device's prompt,
+ * hung under the location button it points at: "Tap here any time to hide
+ * yourself." (or, for someone who chose Only me and is hidden already, "Tap
+ * here to change who sees you."). Once, ever; a tap on it (or the button)
+ * puts it away, and it goes by itself after a few seconds.
+ */
+function HideTip({ where, style }: { where: TipSpot; style: object }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const shown = useHideTip(where);
+  const text = useHideTipText();
+  useEffect(() => {
+    if (!shown) return undefined;
+    const t = setTimeout(dismissHideTip, 7000);
+    return () => clearTimeout(t);
+  }, [shown]);
+  if (!shown) return null;
+  return (
+    <Animated.View entering={FadeIn.duration(260).delay(120)} exiting={FadeOut.duration(180)} style={[styles.tip, style]}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`${text} Got it`} onPress={dismissHideTip} style={styles.tipBody}>
+        <View style={styles.tipArrow} />
+        <Text style={styles.tipText}>{text}</Text>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+/** While the tip is up, a soft ring breathes out from the button it points at. */
+function TipPulse({ where, size }: { where: TipSpot; size: number }) {
+  const shown = useHideTip(where);
+  const reduce = useReducedMotion();
+  const t = useSharedValue(0);
+  useEffect(() => {
+    if (shown && !reduce) t.value = withDelay(200, withRepeat(withTiming(1, { duration: 1600, easing: Easing.out(Easing.cubic) }), -1, false));
+    else t.value = 0;
+  }, [shown, reduce]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ring = useAnimatedStyle(() => (reduce ? { opacity: shown ? 0.5 : 0, transform: [{ scale: 1.15 }] } : { opacity: shown ? 0.55 * (1 - t.value) : 0, transform: [{ scale: 1 + 0.5 * t.value }] }));
+  if (!shown) return null;
+  return <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, top: 0, width: size, height: size, borderRadius: size / 2, borderWidth: 2, borderColor: colors.text }, ring]} />;
+}
+
 const styleDefinitions = StyleSheet.create({
+  // The tip: an ink bubble, its arrow pointing up at the button.
+  tip: { position: 'absolute', zIndex: 30, elevation: 30, width: 210 },
+  tipBody: { backgroundColor: colors.text, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } },
+  tipArrow: { position: 'absolute', top: -5, right: 14, width: 12, height: 12, borderRadius: 2, backgroundColor: colors.text, transform: [{ rotate: '45deg' }] },
+  tipText: { ...typography.smallStrong, color: colors.bg, lineHeight: 18 },
+  previewPulse: { position: 'absolute', right: 12, top: 12, width: 32, height: 32 },
+  // Your card's "Who can see you" row: a settings row, quiet, under the Open to hit box.
+  seenRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.lg, paddingHorizontal: spacing.md, paddingVertical: 11, borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  seenLabel: { ...typography.smallStrong, color: colors.text, flex: 1 },
+  seenValue: { ...typography.small, color: colors.textMuted, flexShrink: 1 },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md },
   round: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
   roundOn: { backgroundColor: colors.brand, borderColor: colors.brand },
@@ -960,6 +1033,7 @@ const styleDefinitions = StyleSheet.create({
   // Open to hit, on a player's card: the map's green, never the brand (New York's is yellow).
   openDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.open },
   openText: { ...typography.smallStrong, color: colors.text },
+  atCourt: { ...typography.smallStrong, color: colors.text, flexShrink: 1 },
   // A face that may wear the open ring: the ring's room is kept either way, so nothing shifts when it comes on.
   faceSlot: { marginVertical: -4, marginHorizontal: -4 },
   openCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginHorizontal: spacing.lg, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: 'transparent' },

@@ -9,6 +9,7 @@ import { Section, SheetTitle, formBody } from '@/components/sheet/SheetForm';
 import type { CourtAccess, CourtNow } from '@/data/types';
 import { isMapCourtId } from '@/features/places/courtName';
 import { notKnownAdult } from '@/features/players/age';
+import { canChooseVisibility } from '@/features/players/mapPrivacy';
 import { NOW_ICON, NOW_LABEL, nowStatus, playingLine } from '@/features/players/courtSummary';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -25,14 +26,17 @@ const ACCESS: readonly string[] = ['public', 'members', 'pay', 'private'];
  * answer). Under it, for adults and only at a court anyone may play at,
  * "I'm playing here": two hours, gone the moment Location goes off; people
  * who follow each other with you see your name, anyone else only a count,
- * and only once two or more are there. With the check-in on offer, a pick
+ * and only once two or more are there. With "Who can see you on the map?"
+ * answered (migration 63) it follows that answer: Players nearby also puts
+ * you on this court on their map while it lasts; Only people you follow back
+ * shows you to them alone; Only me cannot check in. With the check-in on offer, a pick
  * keeps the sheet open (with thanks) so the switch is still in reach;
  * without it, a pick closes the sheet.
  */
 export default function CourtNowSheet() {
   const styles = useThemedStyles(styleDefinitions);
   const params = useLocalSearchParams<{ id?: string; name?: string; access?: string }>();
-  const { actions, courtNow, courtFacts, users, currentUser, currentUserId, locationEnabled } = useApp();
+  const { actions, courtNow, courtFacts, users, currentUser, currentUserId, locationEnabled, mapLive, mapVisibility } = useApp();
   const courtId = isMapCourtId(params.id) ? params.id : null;
   const name = params.name?.trim() || 'This court';
   const [closeSignal, setCloseSignal] = useState(0);
@@ -50,6 +54,13 @@ export default function CourtNowSheet() {
   // A teen never checks in: their spot is never put on the map for anyone.
   // Nor does anyone at a club's or someone's home court.
   const canCheckIn = !!currentUser && !notKnownAdult(currentUser) && access !== 'members' && access !== 'private';
+  // Who sees you here follows who can see you on the map, once you have said (migration 63).
+  const seenBy = canChooseVisibility(mapLive, currentUser) ? mapVisibility ?? null : null;
+  const hereNote = !locationEnabled ? 'Turn on Location to check in.'
+    : seenBy === 'none' ? 'You chose Only me on the map, so no one sees you here.'
+      : seenBy === 'nearby' ? 'For 2 hours. Players nearby see you on this court.'
+        : seenBy === 'mutuals' ? 'For 2 hours. Only people you follow back see you here.'
+          : 'For 2 hours. People who follow you back see your name; others only see a count, once 2 or more are here.';
 
   const pick = async (status: CourtNow) => {
     if (!courtId || busy) return;
@@ -100,11 +111,9 @@ export default function CourtNowSheet() {
             <View style={styles.hereRow}>
               <View style={{ flex: 1, gap: 2 }}>
                 <Text style={styles.hereTitle}>I’m playing here</Text>
-                <Text style={styles.hereNote}>{locationEnabled
-                  ? 'For 2 hours. People who follow you back see your name; others only see a count, once 2 or more are here.'
-                  : 'Turn on Location to check in.'}</Text>
+                <Text style={styles.hereNote}>{hereNote}</Text>
               </View>
-              <Toggle value={here} onChange={(v) => { void flipHere(v); }} accessibilityLabel="I’m playing here" />
+              {seenBy === 'none' ? null : <Toggle value={here} onChange={(v) => { void flipHere(v); }} accessibilityLabel="I’m playing here" />}
             </View>
           </Section>
         ) : null}

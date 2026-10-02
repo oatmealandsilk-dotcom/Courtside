@@ -9,11 +9,12 @@ import { Screen, Toggle } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { openLegal } from '@/lib/legal';
+import { askWhoSeesYou, canChooseVisibility, visibilityLabel } from '@/features/players/mapPrivacy';
 import { colors, spacing, typography } from '@/theme';
 
 export default function PrivacyCentre() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, blockedIds, mutedIds, actions } = useApp();
+  const { currentUser, blockedIds, mutedIds, actions, mapLive, mapVisibility } = useApp();
   const receipts = currentUser?.readReceiptsEnabled !== false;
   const link = (icon: keyof typeof Ionicons.glyphMap, label: string, value: string | undefined, onPress: () => void) => (
     <Pressable key={label} accessibilityRole="link" onPress={onPress} style={({ pressed }) => [styles.row, styles.rowBorder, pressed && { backgroundColor: colors.surfaceAlt }]}>
@@ -41,6 +42,8 @@ export default function PrivacyCentre() {
           <Text style={styles.rowLabel}>Read receipts</Text>
           <Toggle value={receipts} onChange={actions.setReadReceiptsEnabled} accessibilityLabel="Read receipts" />
         </View>
+        {/* Who sees you on the map (migration 63): the same screen as the map's own location button. */}
+        {canChooseVisibility(mapLive, currentUser) ? link('location-outline', 'Who can see you on the map', visibilityLabel(mapVisibility), () => { void askWhoSeesYou('manage'); }) : null}
         {link('close-circle-outline', 'Blocked', String(blockedIds.length || 'None'), () => router.push('/blocked'))}
         {link('volume-mute-outline', 'Muted', String(mutedIds.length || 'None'), () => router.push('/muted'))}
         {link('time-outline', 'Your activity', undefined, () => router.push('/activity'))}

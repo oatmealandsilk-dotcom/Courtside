@@ -36,7 +36,7 @@ module.exports = {
         ITSAppUsesNonExemptEncryption: false,
         NSCameraUsageDescription: 'CourtSide uses the camera to take an instant — one photo right after your session.',
         NSPhotoLibraryUsageDescription: 'CourtSide needs your photo library to choose clips and photos to post.',
-        NSLocationWhenInUseUsageDescription: 'CourtSide uses your location, only while the app is open, to show players near you.',
+        NSLocationWhenInUseUsageDescription: 'CourtSide uses your location while the app is open to show players near you, and to put you on the map for the people you chose.',
       },
     },
     android: {
@@ -53,7 +53,7 @@ module.exports = {
       ['expo-camera', { cameraPermission: 'CourtSide uses the camera to take an instant — one photo right after your session.', microphonePermission: 'CourtSide uses the microphone for voice notes you send in chats.', recordAudioAndroid: false }],
       ['expo-image-picker', { photosPermission: 'CourtSide needs your photo library to choose clips and photos to post.', microphonePermission: 'CourtSide uses the microphone for voice notes you send in chats.' }],
       'expo-video',
-      ['expo-location', { locationWhenInUsePermission: 'CourtSide uses your location to show players near you on the map.' }],
+      ['expo-location', { locationWhenInUsePermission: 'CourtSide uses your location while the app is open to show players near you, and to put you on the map for the people you chose.' }],
       ['expo-notifications', { color: '#3F7049' }],
       'expo-apple-authentication',
       // No playing on in the background: nothing in the app is meant to be
