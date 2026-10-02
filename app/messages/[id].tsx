@@ -25,7 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 
 import { Avatar, BrandWash, EmptyState } from '@/components/ui';
-import { GroupAvatar, eventText, groupName, holdsHitSpot, isGroupChat, isMuted, leaveGroupMessage, othersIn, seenByLabel } from '@/features/messages/groups';
+import { GROUP_CAP, GroupAvatar, eventText, groupName, isGroupChat, isMuted, leaveGroupMessage, othersIn, seenByLabel } from '@/features/messages/groups';
 import { HitGlyph } from '@/components/HitGlyph';
 import { hitWhen } from '@/features/hits/format';
 import { goBack } from '@/lib/goBack';
@@ -251,11 +251,13 @@ export default function Thread() {
   const members = conversation.participantIds.length;
   // The group's page, or a one-to-one chat's details (mute, block, report).
   const openDetails = () => router.push({ pathname: '/messages/group', params: { id: conversation.id } });
+  // The add-people page for a group (Add, then back here).
+  const openAddPeople = () => router.push({ pathname: '/messages/group', params: { id: conversation.id, add: '1' } });
   // Holding a message opens its menu; a group you were taken out of offers none.
   const openMenu = (target: MenuTarget) => { if (!removed) setMenu(target); };
   const leaveGroup = () => confirm({
     title: 'Leave this group?',
-    message: leaveGroupMessage(holdsHitSpot(hitRequests, conversation.id, currentUserId)),
+    message: leaveGroupMessage(conversation, hitRequests, currentUserId),
     confirmLabel: 'Leave',
     destructive: true,
     onConfirm: () => { actions.leaveGroup(conversation.id); router.replace('/messages'); },
@@ -354,6 +356,13 @@ export default function Thread() {
           </View>
         </Pressable>
         )}
+        {/* Adding people, one tap from the chat itself (anyone in a group can), beside its details.
+            Not on a full group: there would be nobody it could add. */}
+        {group && !removed && members < GROUP_CAP ? (
+          <Pressable onPress={openAddPeople} accessibilityRole="button" accessibilityLabel="Add people" hitSlop={10}>
+            <Ionicons name="person-add-outline" size={22} color={colors.text} />
+          </Pressable>
+        ) : null}
         {!removed ? (
           <Pressable onPress={openDetails} accessibilityRole="button" accessibilityLabel={group ? 'Group details' : 'Chat details'} hitSlop={10}>
             <Ionicons name="information-circle-outline" size={24} color={colors.text} />

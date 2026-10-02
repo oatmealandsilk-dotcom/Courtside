@@ -159,7 +159,9 @@ export default function UserProfile() {
               <Button label={followLabel} variant={following || requested ? 'secondary' : 'primary'} onPress={following ? () => confirmUnfollow(user, () => actions.toggleFollow(user.id)) : () => actions.toggleFollow(user.id)} full />
             </View>
             <View style={{ flex: 1 }}>
-              <Button label="Message" variant="secondary" onPress={() => { if (!actions.canMessage(user.id)) { showToast({ title: `Only people ${user.name.split(' ')[0]} follows can message them`, icon: 'lock-closed-outline' }); return; } router.push(`/messages/${actions.openConversationWith(user.id)}`); }} full />
+              {/* Locked, it asks the server again first (they may have followed you
+                  since the app opened), then says why in a note that stays to be read. */}
+              <Button label="Message" variant="secondary" onPress={async () => { const lock = await actions.messageLock(user.id); if (lock) { showToast({ title: lock, icon: 'lock-closed-outline', long: true }); return; } router.push(`/messages/${actions.openConversationWith(user.id)}`); }} full />
             </View>
           </View>
         ) : (

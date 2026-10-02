@@ -261,6 +261,47 @@ export const users: User[] = [
       tournaments: [],
     },
   },
+  {
+    // A junior: a teen account, so the demo shows the teen rule at work. Only
+    // people Leo follows can message Leo or put Leo in a group, and Leo
+    // follows nobody here, so Leo shows with a lock in every picker.
+    id: 'u-leo',
+    handle: 'leoserves',
+    name: 'Leo Tanaka',
+    bio: 'Junior player. Big forehand, still building the backhand.',
+    location: 'Austin, TX',
+    joinedAt: isoDaysAgo(60),
+    avatarSeed: 'leo-tanaka',
+    ageGroup: 'teen',
+    // Teen accounts start private.
+    isPrivate: true,
+    isCoach: false,
+    followers: 48,
+    following: 61,
+    achievementIds: ['ach-first-serve'],
+    stats: {
+      sessionsLogged: 22,
+      matchesPlayed: 14,
+      matchesWon: 8,
+      hoursOnCourt: 40,
+      currentStreakDays: 2,
+      longestStreakDays: 9,
+    },
+    profile: {
+      skillSystem: 'UTR',
+      rating: 6.1,
+      playStyle: 'aggressive-baseliner',
+      handedness: 'right',
+      backhand: 'two-handed',
+      fitnessLevel: 'competitive',
+      preferredSurface: 'hard',
+      sessionsPerWeek: 4,
+      yearsPlaying: 5,
+      goals: [],
+      constraints: [],
+      tournaments: [],
+    },
+  },
 ];
 
 export const userById = (id: string): User | undefined => users.find((u) => u.id === id);

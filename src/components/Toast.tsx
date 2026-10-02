@@ -19,6 +19,10 @@ const SHOW_MS = 2800;
 const ACTION_MS = 5000;
 // With VoiceOver or TalkBack on, getting to the button takes a few swipes.
 const ACTION_SCREEN_READER_MS = 10000;
+// A note that has to be read (why something was refused) waits long enough
+// to read two lines slowly; a tap puts it away sooner.
+const LONG_MS = 9000;
+const LONG_SCREEN_READER_MS = 15000;
 const IN = Easing.out(Easing.cubic);
 const OUT = Easing.in(Easing.cubic);
 
@@ -28,7 +32,8 @@ const OUT = Easing.in(Easing.cubic);
  * AirPods): a small glass capsule, centred, as wide as its words, a plain
  * glyph beside them. Eases down, settles, lifts away on its own or with a
  * flick up. Tap it to open what it is about. Some carry a button on the
- * right ("Undo") that takes back what was just done.
+ * right ("Undo") that takes back what was just done. A long one (why
+ * something was refused) wraps instead of being cut, and stays until read.
  */
 export function Toast() {
   const styles = useThemedStyles(styleDefinitions);
@@ -62,7 +67,11 @@ export function Toast() {
     shown.value = 0;
     y.value = withTiming(0, { duration: 320, easing: IN });
     shown.value = withTiming(1, { duration: 260, easing: IN });
-    timer.current = setTimeout(hide, incoming.action ? (screenReader.current ? ACTION_SCREEN_READER_MS : ACTION_MS) : SHOW_MS);
+    const reader = screenReader.current;
+    // VoiceOver doesn't read a toast that slides in, so one that says why
+    // something was refused is spoken on an iPhone (TalkBack reads it by itself).
+    if (incoming.long && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(incoming.body ? `${incoming.title}. ${incoming.body}` : incoming.title);
+    timer.current = setTimeout(hide, incoming.long ? (reader ? LONG_SCREEN_READER_MS : LONG_MS) : incoming.action ? (reader ? ACTION_SCREEN_READER_MS : ACTION_MS) : SHOW_MS);
     return () => { if (timer.current) clearTimeout(timer.current); };
   }, [incoming]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -94,7 +103,8 @@ export function Toast() {
                 accessibilityLiveRegion="polite"
                 accessibilityLabel={toast.body ? `${toast.title}. ${toast.body}` : toast.title}
                 onPress={() => {
-                  if (!toast.href) return;
+                  // A long note with nowhere to go is put away by a tap, once read.
+                  if (!toast.href) { if (toast.long) hide(); return; }
                   hide();
                   // Home is a tab, not a page to push: go there and put the feed at the top.
                   // (goHome, never '/': that is also the splash screen's address.)
@@ -105,8 +115,9 @@ export function Toast() {
               >
                 <Ionicons name={icon} size={16} color={colors.text} />
                 <View style={styles.words}>
-                  <Text style={styles.title} numberOfLines={1}>{toast.title}</Text>
-                  {toast.body ? <Text style={styles.body} numberOfLines={1}>{toast.body}</Text> : null}
+                  {/* Cut to one line only when it is a quick note; one that has to be read wraps. */}
+                  <Text style={styles.title} numberOfLines={toast.long ? 3 : 1}>{toast.title}</Text>
+                  {toast.body ? <Text style={styles.body} numberOfLines={toast.long ? 4 : 1}>{toast.body}</Text> : null}
                 </View>
               </Pressable>
               {/* Its own button beside the words, not part of them, so a tap on

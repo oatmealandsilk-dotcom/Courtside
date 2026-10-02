@@ -1130,6 +1130,20 @@ export const remote = {
     return data.map((e) => ({ followerId: e.follower_id, followingId: e.following_id }));
   },
 
+  /**
+   * Which of these people follow you right now. Whether a teen account is
+   * open to you depends on it, and the app's own copy is from when it
+   * opened, so the pickers ask again before showing a lock as final.
+   */
+  async fetchFollowersAmong(me: ID, userIds: ID[]): Promise<ID[]> {
+    const ids = userIds.filter((id) => UUID_RE.test(id)).slice(0, 150);
+    if (!ids.length || !UUID_RE.test(me)) return [];
+    const { data, error } = await need().from('follows').select('follower_id').eq('following_id', me).in('follower_id', ids);
+    // Thrown, not passed over: an empty answer would read as "nobody follows you" and lock them.
+    if (error) { fail('follows')(error); throw error; }
+    return ((data ?? []) as { follower_id: string }[]).map((r) => r.follower_id);
+  },
+
   /* ------------------------------ reports (admins) ------------------------------ */
 
   /** Everyone on the waitlist, newest first. Only admins can read it; for anyone else it is empty. */
