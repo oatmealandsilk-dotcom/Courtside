@@ -7,6 +7,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { START_HREF, goToStart } from '@/features/navigation/startTab';
 import { raiseCurtain } from '@/features/feed/warmup';
 import { preloadNearbyMap } from '@/components/NearbyMap';
+import { useLaunchUpdate } from '@/lib/instantUpdates';
 
 import { BrandMark } from '@/components/BrandMark';
 import { useApp } from '@/store/AppContext';
@@ -32,6 +33,8 @@ export default function Index() {
   // person done the quiz" is not known, so hold the splash rather than guess.
   // Last time's saved copy is enough to open on (see data/snapshot); the fresh load lands on top.
   const settled = ready && (!currentUserId || !isSupabaseConfigured || remoteLoaded || snapshotShown || !!error);
+  // A newer version on its way: the loading screen holds a moment and opens it (see useLaunchUpdate).
+  const launchUpdate = useLaunchUpdate();
   const [held, setHeld] = useState(false);
   const [gone, setGone] = useState(false);
   const [settledCode, setSettledCode] = useState(false);
@@ -101,7 +104,7 @@ export default function Index() {
   useEffect(() => { if (currentUserId) preloadNearbyMap(); }, [currentUserId]);
 
   useEffect(() => {
-    if (!settled || !held || gone) return;
+    if (!settled || !held || gone || launchUpdate.holding) return;
     // Into the app: no fade here. The page it opens on is built behind the
     // shell's curtain — the same mark and name — and that curtain does the
     // one fade, once the page has drawn (see warmup). Fading here too showed
@@ -111,7 +114,7 @@ export default function Index() {
     Animated.timing(opacity, { toValue: 0, duration: FADE_MS, useNativeDriver: true }).start(({ finished }) => {
       if (finished) setGone(true);
     });
-  }, [settled, held, gone, opacity, currentUserId, onboardingComplete, overTabs]);
+  }, [settled, held, gone, opacity, currentUserId, onboardingComplete, overTabs, launchUpdate.holding]);
 
   // On its way back to the app underneath: a plain page for the moment it takes, no logo.
   if (backToApp) return <View style={styles.splash} />;
@@ -147,7 +150,7 @@ export default function Index() {
         <BrandMark size={84} />
         <Text style={styles.wordmark}>CourtSide</Text>
       </Animated.View>
-      <Text style={styles.tagline}>Growing the game</Text>
+      <Text style={styles.tagline}>{launchUpdate.downloading ? 'Getting the newest version' : 'Growing the game'}</Text>
       {launchCover ? (
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.splash, launchStyles.launch, { opacity: cover }]}>
           <StatusBar style="dark" />
