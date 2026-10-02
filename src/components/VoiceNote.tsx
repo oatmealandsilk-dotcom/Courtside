@@ -12,13 +12,17 @@ import { colors, font, spacing } from '@/theme';
  * its length. The player is only made when it is first played, so a long
  * chat full of voice notes costs nothing until one is tapped.
  */
-export function VoiceNote({ url, ms, mine }: { url: string; ms: number; mine: boolean }) {
+export function VoiceNote({ url, ms, mine, sentAt }: {
+  url: string; ms: number; mine: boolean;
+  /** When it was sent ("9:41 AM"), for a screen reader. */
+  sentAt?: string;
+}) {
   const styles = useThemedStyles(styleDefinitions);
   const [started, setStarted] = useState(false);
   const ink = mine ? colors.brandInk : colors.text;
   if (started) return <Playing url={url} ms={ms} mine={mine} onDone={() => setStarted(false)} />;
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`Play voice note, ${clock(ms)}`} onPress={() => setStarted(true)} style={[styles.note, mine ? styles.mine : styles.theirs]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`Play voice note, ${clock(ms)}${sentAt ? `, sent ${sentAt}` : ''}`} onPress={() => setStarted(true)} style={[styles.note, mine ? styles.mine : styles.theirs]}>
       <Ionicons name="play" size={20} color={ink} />
       <View style={[styles.track, mine && styles.trackMine]} />
       <Text style={[styles.time, { color: ink }]}>{clock(ms)}</Text>

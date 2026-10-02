@@ -41,7 +41,7 @@ export function courtLine(place: NonNullable<Message['place']>, from?: LatLng | 
  * row puts yours on the right. Its corners match the chat's bubbles, the
  * last of a run keeping the small tail corner.
  */
-export function CourtCard({ place, width = COURT_CARD_W, mine, tail, from, onPress, onLongPress }: {
+export function CourtCard({ place, width = COURT_CARD_W, mine, tail, from, sentAt, onPress, onLongPress }: {
   place: NonNullable<Message['place']>;
   /** Narrower on a small phone; the map is drawn at this width. */
   width?: number;
@@ -50,6 +50,8 @@ export function CourtCard({ place, width = COURT_CARD_W, mine, tail, from, onPre
   tail: boolean;
   /** Where you are, when the app knows (for the distance). */
   from?: LatLng | null;
+  /** When it was sent ("9:41 AM"), for a screen reader. */
+  sentAt?: string;
   onPress: () => void;
   onLongPress?: () => void;
 }) {
@@ -58,7 +60,7 @@ export function CourtCard({ place, width = COURT_CARD_W, mine, tail, from, onPre
   return (
     <Tappable
       accessibilityRole="link"
-      accessibilityLabel={`Court: ${place.name}${line ? `, ${line}` : ''}. See the court`}
+      accessibilityLabel={`Court: ${place.name}${line ? `, ${line}` : ''}${sentAt ? `, sent ${sentAt}` : ''}. See the court`}
       scaleTo={0.98}
       hoverTo={1.01}
       onPress={onPress}

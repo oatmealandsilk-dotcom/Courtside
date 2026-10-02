@@ -41,7 +41,8 @@ import { PHOTO_W, PhotoStack, PhotoTray, PhotoViewer, type TileRect, type TrayPh
 import { MAX_CHAT_PHOTOS, useChatPhotosReady, useSendProgress } from '@/features/messages/chatPhotos';
 import { pickPhotos } from '@/components/MediaPicker';
 import { Tappable, useDoubleTap } from '@/components/Tappable';
-import { chatStamp } from '@/lib/format';
+import { chatStamp, chatTime } from '@/lib/format';
+import { Slide, TimeAnchor, TimeSwipeArea } from '@/features/messages/MessageTimes';
 import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
 import { MESSAGE_PAGE } from '@/data/remote';
@@ -457,6 +458,9 @@ export default function Thread() {
         ) : null}
       </View>
 
+      {/* Swiping the messages to the left shows when each was sent (iMessage's way); see MessageTimes.
+          Not while a message's menu or a photo is open over the chat. */}
+      <TimeSwipeArea enabled={!menu && !viewing}>
       <ScrollView
         ref={scrollRef}
         style={styles.scroll}
@@ -557,24 +561,26 @@ export default function Thread() {
               <Text style={[styles.sender, styles.senderBeside]}>{firstName(sender)}</Text>
             </Pressable>
           ) : null;
+          // When it was sent: shown at the right edge when the chat is swiped to the left.
+          const sentAt = chatTime(message.createdAt);
 
           let body: React.ReactNode;
           if (message.kind === 'voice' && message.audio) {
             body = (
               <>
-                <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles}>
-                  <View style={{ opacity: message.failed ? 0.5 : 1 }}><VoiceNote url={message.audio.url} ms={message.audio.ms} mine={mine} /></View>
+                <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles} time={sentAt}>
+                  <TimeAnchor style={{ opacity: message.failed ? 0.5 : 1 }}><VoiceNote url={message.audio.url} ms={message.audio.ms} mine={mine} sentAt={sentAt} /></TimeAnchor>
                 </Row>
-                {message.failed ? <Text style={[styles.sender, { alignSelf: 'flex-end', marginRight: spacing.lg, color: colors.danger }]}>Not sent</Text> : null}
+                {message.failed ? <Slide mine><Text style={[styles.sender, { alignSelf: 'flex-end', marginRight: spacing.lg, color: colors.danger }]}>Not sent</Text></Slide> : null}
               </>
             );
           } else if (message.kind === 'court' && message.place) {
             // A court: a still map of the spot, its name and where it is; the whole card opens the court's page.
             const place = message.place;
-            const card = { place, width: Math.min(COURT_CARD_W, reach(gutter)), mine, tail: lastOfRun, from: detectedCoords ?? currentUser?.cityAt ?? null };
+            const card = { place, width: Math.min(COURT_CARD_W, reach(gutter)), mine, tail: lastOfRun, from: detectedCoords ?? currentUser?.cityAt ?? null, sentAt };
             body = (
               <>
-                <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles}>
+                <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles} time={sentAt}>
                   {/* Held, the menu draws it lifted and bright above the dimmed chat, so this one steps out of sight. */}
                   <HoldArea onHold={(rect) => openMenu({ message, mine, rect, copy: <CourtCard {...card} onPress={() => {}} /> })} style={[styles.cardArea, menu?.message.id === message.id && styles.heldAway]}>
                     {(hold) => (
@@ -587,9 +593,11 @@ export default function Thread() {
                   </HoldArea>
                 </Row>
                 {message.failed ? (
-                  <Pressable accessibilityRole="button" accessibilityLabel="Not sent. Tap to try again" onPress={() => actions.retryMessage(message.id)} hitSlop={8} style={styles.notSentWrap}>
-                    <Text style={[styles.edited, styles.notSent]}>Not sent · Tap to retry</Text>
-                  </Pressable>
+                  <Slide mine>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Not sent. Tap to try again" onPress={() => actions.retryMessage(message.id)} hitSlop={8} style={styles.notSentWrap}>
+                      <Text style={[styles.edited, styles.notSent]}>Not sent · Tap to retry</Text>
+                    </Pressable>
+                  </Slide>
                 ) : null}
               </>
             );
@@ -604,6 +612,7 @@ export default function Thread() {
                 leading={leading}
                 styles={styles}
                 me={currentUserId}
+                time={sentAt}
                 width={Math.min(PHOTO_W, reach(gutter))}
                 held={menu?.message.id === message.id}
                 onHold={(rect, copy) => openMenu({ message, mine, rect, copy })}
@@ -619,12 +628,12 @@ export default function Thread() {
             const hit = hitRequests.find((h) => h.id === message.sharedId && !h.cancelled);
             const left = hit ? Math.max(0, hit.spots - hit.joinedIds.length) : 0;
             body = (
-              <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles}>
+              <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles} time={sentAt}>
                 <HoldArea onHold={(rect) => openMenu({ message, mine, rect })} style={styles.sharedCardArea}>
                   {(hold) => (
                     <Tappable
                       accessibilityRole="link"
-                      accessibilityLabel={hit ? `Looking for a hit, ${hitWhen(hit.startsAt)}, ${hit.place.name}` : 'This hit is over'}
+                      accessibilityLabel={`${hit ? `Looking for a hit, ${hitWhen(hit.startsAt)}, ${hit.place.name}` : 'This hit is over'}, sent ${sentAt}`}
                       scaleTo={0.97}
                       onLongPress={hold}
                       onPress={() => (hit ? router.push(`/hit-request/${hit.id}`) : undefined)}
@@ -656,11 +665,12 @@ export default function Thread() {
                 : (shared as { title: string }).title
               : 'This item was removed';
             body = (
-              <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles}>
+              <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles} time={sentAt}>
               <HoldArea onHold={(rect) => openMenu({ message, mine, rect })} style={styles.sharedCardArea}>
               {(hold) => (
               <Tappable
                 accessibilityRole="link"
+                accessibilityLabel={`${message.kind === 'profile' ? 'Profile' : message.kind === 'post' ? 'Clip' : 'Discussion'}: ${label}, sent ${sentAt}`}
                 scaleTo={0.97}
                 onLongPress={hold}
                 onPress={() =>
@@ -703,6 +713,7 @@ export default function Thread() {
                 leading={leading}
                 styles={styles}
                 me={currentUserId}
+                time={sentAt}
                 held={menu?.message.id === message.id}
                 onHold={(rect) => openMenu({ message, mine, rect })}
                 onReact={(emoji) => { if (!removed) actions.reactToMessage(message.id, emoji); }}
@@ -732,6 +743,7 @@ export default function Thread() {
           />
         ) : null}
       </ScrollView>
+      </TimeSwipeArea>
 
       {menu ? (
         <MessageMenu
@@ -897,18 +909,22 @@ function listNames(names: string[]): string {
  * One message's line across the chat: yours on the right, theirs on the
  * left. In a group, theirs carries `leading` (the sender's face, or an empty
  * space the same size) beside the message, the face lined up with its bottom.
+ * The line slides left when the chat is swiped for its times, and `time`
+ * (when it was sent) comes into view at the right edge as it does.
  */
-function Row({ mine, inRun, arrive, leading, styles, children }: {
-  mine: boolean; inRun: boolean; arrive?: FadeInUp; leading?: React.ReactNode; styles: any; children: React.ReactNode;
+function Row({ mine, inRun, arrive, leading, styles, time, children }: {
+  mine: boolean; inRun: boolean; arrive?: FadeInUp; leading?: React.ReactNode; styles: any; time?: string; children: React.ReactNode;
 }) {
   return (
-    <Reanimated.View entering={arrive} layout={LinearTransition.duration(120)} style={[styles.row, mine ? styles.rowMine : styles.rowTheirs, inRun && styles.inRun, leading !== undefined && styles.rowFace]}>
-      {leading !== undefined ? (
-        <>
-          {leading}
-          <View style={styles.faceColumn}>{children}</View>
-        </>
-      ) : children}
+    <Reanimated.View entering={arrive} layout={LinearTransition.duration(120)} style={[styles.row, inRun && styles.inRun]}>
+      <Slide time={time} mine={mine} style={[styles.row, mine ? styles.rowMine : styles.rowTheirs, leading !== undefined && styles.rowFace]}>
+        {leading !== undefined ? (
+          <>
+            {leading}
+            <View style={styles.faceColumn}>{children}</View>
+          </>
+        ) : children}
+      </Slide>
     </Reanimated.View>
   );
 }
@@ -919,8 +935,10 @@ function Row({ mine, inRun, arrive, leading, styles, children }: {
  * Double tap leaves your default reaction; a long press opens the picker for a
  * different one. Reactions sit under the bubble and are tappable to remove.
  */
-function Bubble({ message, mine, inRun, tail, arrive, leading, styles, me, held = false, onHold, onReact, onRetry }: {
+function Bubble({ message, mine, inRun, tail, arrive, leading, styles, me, time, held = false, onHold, onReact, onRetry }: {
   message: Message; mine: boolean; inRun: boolean; tail: boolean; arrive?: FadeInUp; styles: any; me: string | null;
+  /** When it was sent ("9:41 AM"), for the swipe that shows it. */
+  time: string;
   /** In a group, the sender's face (or its empty space) beside their message. */
   leading?: React.ReactNode;
   /** Its menu is open: the lifted copy stands in for it, so it steps out of sight. */
@@ -943,7 +961,7 @@ function Bubble({ message, mine, inRun, tail, arrive, leading, styles, me, held 
     // The row spans the chat, so the bubble's width limit is a share of the
     // chat itself. (A row that shrank to fit its text made that limit a share
     // of the text's own width, and short messages broke onto a second line.)
-    <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles}>
+    <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles} time={time}>
       {/* The chip is anchored to the bubble, not the row, so it sits on the
           bubble's bottom inner corner however wide the message is. */}
       <HoldArea onHold={onHold} style={[styles.bubbleWrap, reacted && styles.bubbleWrapReacted, held && { opacity: 0 }]}>
@@ -954,7 +972,7 @@ function Bubble({ message, mine, inRun, tail, arrive, leading, styles, me, held 
               onLongPress={hold}
               delayLongPress={320}
               accessibilityRole="button"
-              accessibilityLabel={`Message: ${message.body}. Double tap to react, hold for more.`}
+              accessibilityLabel={`Message: ${message.body}, sent ${time}. Double tap to react, hold for more.`}
               style={[styles.bubble, mine ? styles.mine : styles.theirs, !tail && styles.noTail]}
             >
               <RichText style={[styles.bubbleText, mine && { color: colors.brandInk }]} mentionStyle={mine ? { color: colors.brandInk, textDecorationLine: 'underline' } : undefined}>{message.body}</RichText>
@@ -996,8 +1014,10 @@ function Bubble({ message, mine, inRun, tail, arrive, leading, styles, me, held 
  * message; a hold opens the menu. While the photos go up, a ring fills over
  * them; one that did not go offers a retry.
  */
-function PhotoMessage({ message, mine, inRun, tail, arrive, leading, styles, me, width, held = false, onHold, onReact, onRetry, onOpen }: {
+function PhotoMessage({ message, mine, inRun, tail, arrive, leading, styles, me, time, width, held = false, onHold, onReact, onRetry, onOpen }: {
   message: Message; mine: boolean; inRun: boolean; tail: boolean; arrive?: FadeInUp; leading?: React.ReactNode; styles: any; me: string | null;
+  /** When it was sent ("9:41 AM"), for the swipe that shows it. */
+  time: string;
   /** How wide the photos sit (narrower on a small phone, and beside a face in a group). */
   width: number;
   /** Its menu is open: the lifted copy stands in for it, so it steps out of sight. */
@@ -1027,7 +1047,7 @@ function PhotoMessage({ message, mine, inRun, tail, arrive, leading, styles, me,
     </View>
   );
   return (
-    <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles}>
+    <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles} time={time}>
       <HoldArea onHold={(rect) => onHold(rect, copy)} style={[styles.photoWrap, mine ? styles.mineAlign : styles.theirsAlign, reacted && styles.bubbleWrapReacted, held && styles.heldAway]}>
         {(hold) => (
           <>
@@ -1040,12 +1060,13 @@ function PhotoMessage({ message, mine, inRun, tail, arrive, leading, styles, me,
                 progress={progress}
                 failed={message.failed}
                 idKey={message.id}
+                sentAt={time}
                 onTile={(index, rects) => { tapped.current = { index, rects }; tap(); }}
                 onHold={hold}
               />
             </View>
             {caption ? (
-              <Pressable onPress={captionTap} onLongPress={hold} delayLongPress={320} accessibilityRole="button" accessibilityLabel={`Caption: ${caption}. Double tap to react, hold for more.`} style={captionStyle}>
+              <Pressable onPress={captionTap} onLongPress={hold} delayLongPress={320} accessibilityRole="button" accessibilityLabel={`Caption: ${caption}, sent ${time}. Double tap to react, hold for more.`} style={captionStyle}>
                 {captionText}
               </Pressable>
             ) : null}
@@ -1094,14 +1115,17 @@ interface Rect { x: number; y: number; w: number; h: number }
 /** A held message: where it sits, and (for photos and court cards) the copy the menu lifts in its place. */
 interface MenuTarget { message: Message; mine: boolean; rect: Rect; copy?: React.ReactNode }
 
-/** Wraps a message so a hold can tell the menu exactly where the message sits on screen. */
+/**
+ * Wraps a message so a hold can tell the menu exactly where the message sits
+ * on screen (and its row where to line up the time a swipe shows).
+ */
 function HoldArea({ onHold, style, children }: { onHold: (rect: Rect) => void; style?: any; children: (hold: () => void) => React.ReactNode }) {
   const ref = useRef<View>(null);
   const hold = () => {
     haptics.tap();
     ref.current?.measureInWindow((x, y, w, h) => onHold({ x, y, w, h }));
   };
-  return <View ref={ref} collapsable={false} style={style}>{children(hold)}</View>;
+  return <TimeAnchor ref={ref} style={style}>{children(hold)}</TimeAnchor>;
 }
 
 /**

@@ -1,10 +1,14 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import Reanimated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
+import { Tappable } from '@/components/Tappable';
+import { BrandWash } from '@/components/ui/BrandWash';
+import * as haptics from '@/lib/haptics';
 import { Screen } from '@/components/ui';
 import { appleHealthAvailable } from '@/features/health/appleHealth';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
@@ -139,27 +143,39 @@ export default function Health() {
                 ) : null}
                 {i.connected && tennis ? (
                   i.readsWorkouts ? (
-                    <View style={styles.tennisRow}>
-                      <Ionicons name="tennisball-outline" size={14} color={colors.textMuted} />
-                      <Text style={styles.tennisOn}>Tennis sessions on.</Text>
-                      <Pressable accessibilityRole="button" accessibilityLabel={`Turn off tennis sessions from ${i.label}`} disabled={loading} onPress={() => run(i.provider, 'tennis-off')} style={styles.smallGhost}>
+                    // On: a plain tick in the brand colour springs in, the way iPhone's own
+                    // Settings confirms a choice, so switching on reads as something happening
+                    // (no cartoon ball: William found it childish).
+                    <Reanimated.View key="tennis-on" entering={FadeIn.duration(260)} exiting={FadeOut.duration(140)} style={styles.tennisCard}>
+                      <Reanimated.View entering={ZoomIn.springify().damping(12).stiffness(240).delay(60)} style={styles.tennisTick}>
+                        <Ionicons name="checkmark" size={14} color={colors.brandInk} />
+                      </Reanimated.View>
+                      <View style={styles.tennisWords}>
+                        <Text style={styles.tennisTitle}>Tennis sessions on</Text>
+                      </View>
+                      <Pressable accessibilityRole="button" accessibilityLabel={`Turn off tennis sessions from ${i.label}`} disabled={loading} onPress={() => { haptics.untap(); run(i.provider, 'tennis-off'); }} hitSlop={8} style={({ pressed }) => [styles.smallGhost, pressed && styles.pressedDim]}>
                         <Text style={styles.smallGhostText}>Turn off</Text>
                       </Pressable>
-                    </View>
+                    </Reanimated.View>
                   ) : blocked ? null : (
                     // Not offered where it could never work (Expo Go, or not an iPhone): the row is as it always was.
-                    <View style={styles.actions}>
-                      {/* WHOOP's own sign-in says what it shares; Apple Health is explained here first. */}
-                      <Pressable accessibilityRole="button" accessibilityLabel={`Turn on tennis sessions from ${i.label}`} disabled={loading} onPress={() => (i.provider === 'apple-health' ? askApple('tennis') : run(i.provider, 'tennis'))} style={styles.small}>
-                        <Ionicons name="tennisball-outline" size={14} color={colors.text} /><Text style={styles.smallText}>Turn on tennis sessions</Text>
-                      </Pressable>
-                    </View>
+                    <Reanimated.View key="tennis-off" entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)} style={styles.actions}>
+                      {/* WHOOP's own sign-in says what it shares; Apple Health is explained here first.
+                          The app's own filled pill (with its soft wash) dips under the finger; while it
+                          works, the pill itself says so rather than the row going quiet. */}
+                      <Tappable accessibilityRole="button" accessibilityLabel={`Turn on tennis sessions from ${i.label}`} disabled={loading} scaleTo={0.96} onPress={() => { haptics.tap(); if (i.provider === 'apple-health') askApple('tennis'); else run(i.provider, 'tennis'); }} style={styles.turnOn}>
+                        <BrandWash />
+                        {loading ? <ActivityIndicator size="small" color={colors.brandInk} /> : null}
+                        <Text style={styles.turnOnText}>{loading ? 'Turning on…' : 'Turn on tennis sessions'}</Text>
+                      </Tappable>
+                    </Reanimated.View>
                   )
                 ) : null}
               </View>
-              {loading ? (
+              {/* The tennis pill shows its own "Turning on…"; a second spinner beside it would be one too many. */}
+              {loading && !(i.connected && tennis && !i.readsWorkouts) ? (
                 <CourtSpinner size={26} />
-              ) : i.connected ? null : (
+              ) : i.connected || loading ? null : (
                 <Pressable accessibilityRole="button" accessibilityLabel={`Connect ${i.label}`} accessibilityState={{ disabled: blocked }} disabled={blocked} onPress={() => (tennis && i.provider === 'apple-health' ? askApple('toggle') : run(i.provider, 'toggle'))} style={[styles.connect, blocked && styles.connectOff]}>
                   <Text style={[styles.connectText, blocked && styles.connectTextOff]}>{(i.provider === 'cronometer' || i.provider === 'myfitnesspal') && !appleHealthAvailable() ? 'Import' : 'Connect'}</Text>
                 </Pressable>
@@ -206,8 +222,13 @@ const styleDefinitions = StyleSheet.create({
   smallText: { ...typography.smallStrong, color: colors.text },
   smallGhost: { height: 32, paddingHorizontal: 8, justifyContent: 'center' },
   smallGhostText: { ...typography.smallStrong, color: colors.textMuted },
-  tennisRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.xs },
-  tennisOn: { ...typography.small, color: colors.textMuted },
+  turnOn: { flexDirection: 'row', alignItems: 'center', gap: 7, height: 36, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: colors.brand, overflow: 'hidden' },
+  turnOnText: { ...typography.smallStrong, color: colors.brandInk },
+  tennisCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm, padding: spacing.sm, paddingRight: spacing.xs, borderRadius: radius.md, backgroundColor: colors.bgElevated },
+  tennisTick: { width: 24, height: 24, borderRadius: 12, marginLeft: 4, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  tennisWords: { flex: 1, gap: 1 },
+  tennisTitle: { ...typography.smallStrong, color: colors.text },
+  pressedDim: { opacity: 0.55 },
   connect: { height: 36, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', marginTop: 3 },
   connectOff: { backgroundColor: colors.surfaceAlt },
   connectText: { ...typography.smallStrong, color: colors.brandInk },
