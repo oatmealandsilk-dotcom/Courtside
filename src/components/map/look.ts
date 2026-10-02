@@ -134,20 +134,33 @@ export function cardLook(look: Look): Look {
   return { ...look, label_city: hidden, label_city_capital: hidden, label_town: hidden, label_village: hidden, label_other: hidden };
 }
 
+/**
+ * A colour change with no fade. MapLibre otherwise eases every recoloured
+ * layer in from the plain style's own colours over 300ms, so a new map
+ * showed pale and white for a moment before turning dark on a dark theme
+ * (each time Community slid into view, a new map is made). MapCanvas's page
+ * does the same.
+ */
+const AT_ONCE = { duration: 0, delay: 0 };
+
 /** Recolours the loaded style layer by layer; anything the style lacks is skipped. */
 export function applyLook(map: LookMap, look: Look) {
   for (const [id, rule] of Object.entries(look)) {
     if (!map.getLayer(id)) continue;
+    const paint = (name: string, value: unknown) => {
+      map.setPaintProperty(id, `${name}-transition`, AT_ONCE);
+      map.setPaintProperty(id, name, value);
+    };
     try {
       if (rule.hide) { map.setLayoutProperty(id, 'visibility', 'none'); continue; }
       if (rule.minZoom !== undefined) map.setLayerZoomRange(id, rule.minZoom, 24);
-      if (rule.fill) map.setPaintProperty(id, id === 'background' ? 'background-color' : 'fill-color', rule.fill);
+      if (rule.fill) paint(id === 'background' ? 'background-color' : 'fill-color', rule.fill);
       // Shapes are flat fills: an outline in the style's own colour drew every building twice on a dark map.
-      if (rule.fill && id !== 'background') map.setPaintProperty(id, 'fill-outline-color', rule.fill);
-      if (rule.line) map.setPaintProperty(id, 'line-color', rule.line);
-      if (rule.opacity !== undefined) map.setPaintProperty(id, 'line-opacity', rule.opacity);
-      if (rule.text) map.setPaintProperty(id, 'text-color', rule.text);
-      if (rule.halo) map.setPaintProperty(id, 'text-halo-color', rule.halo);
+      if (rule.fill && id !== 'background') paint('fill-outline-color', rule.fill);
+      if (rule.line) paint('line-color', rule.line);
+      if (rule.opacity !== undefined) paint('line-opacity', rule.opacity);
+      if (rule.text) paint('text-color', rule.text);
+      if (rule.halo) paint('text-halo-color', rule.halo);
     } catch {
       // A layer that turned out to be a different type than expected: leave it.
     }

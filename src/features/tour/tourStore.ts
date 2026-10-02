@@ -22,6 +22,12 @@ export interface TourRun {
   forced: boolean;
   /** Counts up on every open, so a fresh run is never mistaken for the last one. */
   run: number;
+  /**
+   * How it closed: finished (Got it), skipped, or ended by something else (a
+   * page opened over the tabs, signed out). The first two take the pages
+   * back to the map; the last leaves the player where they went.
+   */
+  ended?: 'done' | 'skipped' | 'quiet';
 }
 
 let state: TourRun = { open: false, keys: [], step: 0, total: 0, forced: false, run: 0 };
@@ -58,7 +64,7 @@ export function useTourBusy(): boolean {
 
 export function openTour(keys: StepKey[], startAt: number, forced: boolean): void {
   if (!keys.length) return;
-  state = { open: true, keys, step: Math.max(0, Math.min(keys.length - 1, startAt)), total: keys.length, forced, run: state.run + 1 };
+  state = { open: true, keys, step: Math.max(0, Math.min(keys.length - 1, startAt)), total: keys.length, forced, run: state.run + 1, ended: undefined };
   // A request is used up only once the tour is really on screen.
   request = null;
   emit();
@@ -67,29 +73,29 @@ export function openTour(keys: StepKey[], startAt: number, forced: boolean): voi
 /** On to the next tip; past the last one, the tour is done. */
 export function nextStep(): void {
   if (!state.open) return;
-  if (state.step + 1 >= state.total) { close(); return; }
+  if (state.step + 1 >= state.total) { close('done'); return; }
   state = { ...state, step: state.step + 1 };
   emit();
 }
 
 /**
  * Skip, Back on Android, Escape on a keyboard: over at once, no "are you
- * sure?". The player stays on the page under the dim, the one they were
- * just looking at; nothing slides away after they asked it to stop.
+ * sure?". The pages glide back to the map the app opens on, the same as
+ * at the end, so a skip never leaves the player somewhere the tutorial took them.
  */
 export function skipTour(): void {
-  close();
+  close('skipped');
 }
 
-/** Ended by something else (a page opened over the tabs, signed out): no fuss. */
+/** Ended by something else (a page opened over the tabs, signed out): no fuss, and the pages stay put. */
 export function endTourQuietly(): void {
-  close();
+  close('quiet');
 }
 
-function close() {
+function close(how: NonNullable<TourRun['ended']>) {
   if (!state.open) return;
   // The tips stay as they were, so the overlay can fade out on the one that was showing.
-  state = { ...state, open: false };
+  state = { ...state, open: false, ended: how };
   emit();
 }
 
@@ -144,11 +150,17 @@ export function replayTour(): void {
   try { goToStart(); } catch { /* The router is not up yet: the tour starts when the start page is. */ }
 }
 
-/* ---- Targets: the bar's buttons put themselves on this list; the overlay measures them. ---- */
+/* ---- Targets: the bar's buttons, and a few things on the pages, put themselves on this list; the overlay measures them. ---- */
 
 export interface TourRect { x: number; y: number; width: number; height: number }
 
-const targets = new Map<TourTargetId, View>();
+/**
+ * Every copy of each target that is mounted, oldest first. Usually there is
+ * one; in a browser a page sliding in is a second copy of that page for a
+ * moment (the picture beside the one you are leaving), so a page's target
+ * can briefly have two. Each copy takes only itself off the list.
+ */
+const targets = new Map<TourTargetId, View[]>();
 /** The last good measurement of each target, so a new tip can glide straight there while it is checked again. */
 const lastRects = new Map<TourTargetId, TourRect>();
 
@@ -156,25 +168,21 @@ const lastRects = new Map<TourTargetId, TourRect>();
 export function useTourTarget(id: TourTargetId): (node: View | null) => void {
   const mine = useRef<View | null>(null);
   return useCallback((node: View | null) => {
-    if (node) {
-      mine.current = node;
-      targets.set(id, node);
-      return;
+    const list = targets.get(id) ?? [];
+    if (mine.current) {
+      const at = list.indexOf(mine.current);
+      if (at >= 0) list.splice(at, 1);
     }
-    // Only take our own entry off the list: a newer copy of the same button may have put itself there since.
-    if (mine.current && targets.get(id) === mine.current) targets.delete(id);
-    mine.current = null;
+    mine.current = node;
+    if (node) list.push(node);
+    if (list.length) targets.set(id, list);
+    else targets.delete(id);
   }, [id]);
 }
 
-/**
- * Where a target sits on the screen, or null when it has no size, sits off
- * the screen (a tab laid out to the side) or takes too long to answer.
- * measureInWindow is the same call on a phone and in a browser.
- */
-export function measureTourTarget(id: TourTargetId): Promise<TourRect | null> {
-  const node = targets.get(id);
-  if (!node || typeof node.measureInWindow !== 'function') return Promise.resolve(null);
+/** Where one copy of a target sits, or null when it has no size, sits off the screen or takes too long to answer. */
+function measureNode(node: View): Promise<TourRect | null> {
+  if (typeof node.measureInWindow !== 'function') return Promise.resolve(null);
   return new Promise((resolve) => {
     let done = false;
     const finish = (rect: TourRect | null) => { if (done) return; done = true; resolve(rect); };
@@ -184,15 +192,30 @@ export function measureTourTarget(id: TourTargetId): Promise<TourRect | null> {
         clearTimeout(timer);
         const { width: W, height: H } = Dimensions.get('window');
         const usable = width > 0 && height > 0 && x + width > 0 && y + height > 0 && x < W && y < H;
-        const rect = usable ? { x, y, width, height } : null;
-        if (rect) lastRects.set(id, rect);
-        finish(rect);
+        finish(usable ? { x, y, width, height } : null);
       });
     } catch {
       clearTimeout(timer);
       finish(null);
     }
   });
+}
+
+/**
+ * Where a target sits on the screen, or null when no copy of it is on the
+ * screen (a tab laid out to the side, a page not open). The newest copy
+ * that is on screen wins. measureInWindow is the same call on a phone and
+ * in a browser.
+ */
+export async function measureTourTarget(id: TourTargetId): Promise<TourRect | null> {
+  const list = [...(targets.get(id) ?? [])];
+  if (!list.length) return null;
+  const found = await Promise.all(list.map(measureNode));
+  for (let i = found.length - 1; i >= 0; i -= 1) {
+    const rect = found[i];
+    if (rect) { lastRects.set(id, rect); return rect; }
+  }
+  return null;
 }
 
 export function lastTourRect(id: TourTargetId): TourRect | null {

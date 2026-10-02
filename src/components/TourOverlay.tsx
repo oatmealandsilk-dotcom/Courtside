@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, AppState, BackHandler, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
-  Easing, FadeIn, FadeOut, ReduceMotion, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue,
+  Easing, ReduceMotion, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue,
   withDelay, withRepeat, withSequence, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { usePathname } from 'expo-router';
@@ -11,11 +11,12 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button } from '@/components/ui/Button';
 import { useCurtainDown } from '@/features/feed/warmup';
 import { setBarCompact } from '@/features/navigation/barShrink';
-import { isAtStop, slidePagesTo } from '@/features/navigation/pageSlide';
-import { START_TAB, isTabPage } from '@/features/navigation/startTab';
+import { TAB_BAR_H } from '@/features/navigation/barInset';
+import { isAtStop, slidePagesTo, type PageStop } from '@/features/navigation/pageSlide';
+import { START_SECTION, START_TAB, isTabPage } from '@/features/navigation/startTab';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { isPageDragging, isPageScrolling } from '@/features/navigation/swipeLock';
-import { LAST_BUTTON, TOUR_STEPS, tourPageAt, type HoleShape, type TourStep, type TourTargetId } from '@/features/tour/steps';
+import { LAST_BUTTON, TOUR_STEPS, tourPageAt, type HoleShape, type TourSpot, type TourStep, type TourTargetId } from '@/features/tour/steps';
 import { useTourHeld } from '@/features/tour/tourHold';
 import { TOUR_ON, hasSeenTour, isNewAccount, markTourSeen } from '@/features/tour/tourSeen';
 import {
@@ -31,17 +32,24 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, pageIsDark, radius, typography } from '@/theme';
 
 /**
- * The first-run tour: the screen dims, a small card explains one thing at a
- * time, and a lit window in the dim glides along the bar to the thing being
- * explained. A tap anywhere moves on (a swipe never moves the pages against
- * the finger; see touched); Skip ends it where it is.
+ * The first-run tutorial: the screen dims a little, a small card explains one
+ * thing at a time, and a lit window in the dim glides along the bar to the
+ * thing being explained. A tap anywhere moves on (a swipe never moves the
+ * pages against the finger; see touched).
  *
  * It begins on the page the app opens on (Community, on Find Players),
  * sliding there under the dim from whichever tab the player was on, and the
  * pages move along under its tips the way a swipe moves them (see each tip's
- * page in steps.ts): on to the threads while it shows the swipe, then on to
- * the Feed, where the bar's tips play out. The Feed's clips hold still under
- * the dim meanwhile (app/(tabs)/index.tsx).
+ * page in steps.ts): on to the threads while it shows the swipe, on to the
+ * Feed and its +, then Coaching and Profile. On those two a second window
+ * lights the very thing the tip names on the page (the Ask a coach box; the
+ * bell and paper plane), while the bar's button for that page stays lit too.
+ * The card steps aside while the pages turn and comes back once the page has
+ * landed, pointing at it. The Feed's clips hold still under the dim while it
+ * is up (app/(tabs)/index.tsx).
+ *
+ * Got it on the last tip, or Skip on any, and the pages glide back to the
+ * map, at its top (useBackToStart).
  *
  * It lives in the shell, beside the bar, so the dim can sit over the bar and
  * light one of its buttons. There is no browser twin of this file: the
@@ -88,6 +96,38 @@ const TITLE_ID = 'courtside-tour-title';
 /** The phone bar's glass starts 14 points in from each side; a lit tab never spills past it. */
 const BAR_SIDE = 15;
 /**
+ * How dark the dim is: light enough that the page reads clearly through it,
+ * so the player sees where they are. A dark page needs a little more of the
+ * same black to look dimmed at all, so both end up looking about as light.
+ */
+const DIM_LIGHT = 0.36;
+const DIM_DARK = 0.5;
+/**
+ * The soft light just outside a lit window, so it still stands out from a
+ * lighter dim. White shows more on a dark page, so there it is softer, with
+ * a faint light rim to mark the window's edge as well.
+ */
+const GLOW_LIGHT = 0.55;
+const GLOW_DARK = 0.32;
+/** Room above the phone bar where the bar's part of the dim begins (see the two windows, below). */
+const BAR_AIR = 18;
+/**
+ * Looking for a window on a page: from about when a page turn lands (they
+ * take 260 to 300ms; two readings alike tell a page still sliding from one
+ * at rest), this often, and for at most this long before the tip shows
+ * without it. Kept short: meanwhile the card is out of the way and taps
+ * wait, so a window that can't be found must never leave the screen dim
+ * and unanswering for long. Found, it takes about 100 to 200ms of this.
+ */
+const PAGE_LOOK_MS = 300;
+const PAGE_POLL_MS = 60;
+const PAGE_WAIT_MAX = 800;
+/** At the end, the tutorial fades first and the pages glide back once it has mostly gone, so the glide is seen. */
+const LEAVE_MS = 200;
+/** The card stepping aside while the pages turn under it, and coming back once the page has landed. */
+const AWAY_MS = 140;
+const BACK_MS = 260;
+/**
  * Android 8 and older draw no outer shadow at all, so there the dim is drawn
  * as a very wide border round the window instead: the same dim, a crisp edge.
  */
@@ -95,6 +135,8 @@ const NO_SHADOW_DIM = Platform.OS === 'android' && typeof Platform.Version === '
 
 type Layout = 'phone' | 'wide';
 type Hole = { x: number; y: number; w: number; h: number; r: number };
+/** A part of the screen with a window of its own (see the two windows, below). */
+type Region = { left: number; top: number; width: number; height: number };
 type Side = 'down' | 'up' | 'left';
 const SIDE_CODE: Record<Side, number> = { down: 1, up: 2, left: 3 };
 
@@ -156,6 +198,49 @@ function eatFollowUpClick() {
   const eat = (e: Event) => { e.preventDefault(); e.stopPropagation(); };
   kinds.forEach((k) => window.addEventListener(k, eat, true));
   setTimeout(() => kinds.forEach((k) => window.removeEventListener(k, eat, true)), 400);
+}
+
+/** When the tutorial last turned the pages: the turn back to the map waits for that one to land. */
+let lastTurnAt = 0;
+
+/** Turns the pages to a stop the way a swipe would; false when they are already there. */
+function turnPages(from: string, to: PageStop): boolean {
+  if (isAtStop(from, to)) return false;
+  lastTurnAt = Date.now();
+  slidePagesTo(from, to);
+  return true;
+}
+
+/**
+ * At the end (Got it, or Skip on any tip): the pages glide back to the map
+ * the app opens on, from its top, so the player finishes where the app
+ * starts. It waits for the tutorial to fade (LEAVE_MS), and for a turn still
+ * landing, since a browser's page turn takes a moment to let go. Not when a
+ * page has since opened over the tabs: that is where they went.
+ */
+function useBackToStart(run: TourRun, here: React.MutableRefObject<string>) {
+  const wasOpen = useRef(run.open);
+  useEffect(() => {
+    const was = wasOpen.current;
+    wasOpen.current = run.open;
+    if (!was || run.open || (run.ended !== 'done' && run.ended !== 'skipped')) return undefined;
+    const home: PageStop = { pathname: START_TAB, section: START_SECTION };
+    // A player who taps another tab the moment it closes has gone where they
+    // wanted: the glide doesn't drag them back. (A turn the tutorial itself
+    // started may still be landing, and that changes the page on its own.)
+    const closedOn = here.current;
+    const turning = lastTurnAt + SLIDE_MS > Date.now();
+    const timer = setTimeout(() => {
+      const from = here.current;
+      if (!isTabPage(from)) return;
+      if (!turning && from !== closedOn) return;
+      if (isAtStop(from, home)) { requestScrollToTop(START_TAB); return; }
+      // Arriving from another tab it is out of sight, so it jumps to its top; on the threads it glides there.
+      requestScrollToTop(START_TAB, from !== START_TAB);
+      turnPages(from, home);
+    }, Math.max(LEAVE_MS, lastTurnAt + SLIDE_MS - Date.now()));
+    return () => clearTimeout(timer);
+  }, [run.open, run.ended]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /**
@@ -265,6 +350,10 @@ export function TourOverlay({ eligible }: { eligible: boolean }) {
   useEffect(() => () => endTourQuietly(), []);
   useTourStarter(eligible);
   const run = useTour();
+  const pathname = usePathname();
+  const here = useRef(pathname);
+  here.current = pathname;
+  useBackToStart(run, here);
   // The last run on screen, kept for the moment it takes to fade out.
   const [drawn, setDrawn] = useState<TourRun | null>(null);
   useEffect(() => { if (run.open) setDrawn(run); }, [run]);
@@ -287,8 +376,17 @@ function useScreenReader(): boolean {
   return on;
 }
 
-/** The lit window around a target: round-ended around a tab, a circle around the +, a soft box around a sidebar row. */
+/** The lit window around a target: round-ended around a tab, a circle around the +, a soft box around a sidebar row, round-ended with air around something on a page. */
 function holeFor(r: TourRect, shape: HoleShape, W: number): Hole {
+  if (shape === 'round') {
+    const pad = 6;
+    const h = r.height + pad * 2;
+    return { x: r.x - pad, y: r.y - pad, w: r.width + pad * 2, h, r: h / 2 };
+  }
+  if (shape === 'box') {
+    const pad = 8;
+    return { x: r.x - pad, y: r.y - pad, w: r.width + pad * 2, h: r.height + pad * 2, r: radius.lg + pad };
+  }
   if (shape === 'circle') {
     const side = Math.max(r.width, r.height) + 20;
     return { x: r.x + r.width / 2 - side / 2, y: r.y + r.height / 2 - side / 2, w: side, h: side, r: side / 2 };
@@ -311,6 +409,12 @@ function holeFor(r: TourRect, shape: HoleShape, W: number): Hole {
 function pinhole(x: number, y: number): Hole {
   return { x: x - 1, y: y - 1, w: 2, h: 2, r: 1 };
 }
+
+/** A window closed down to a pinhole at its own middle, the way it opens and closes in place. */
+const closedAt = (h: Hole): Hole => pinhole(h.x + h.w / 2, h.y + h.h / 2);
+
+const sameRect = (a: TourRect, b: TourRect) =>
+  Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5 && Math.abs(a.width - b.width) < 0.5 && Math.abs(a.height - b.height) < 0.5;
 
 function parkingFor(steps: TourStep[], at: number, layout: Layout): TourTargetId | null {
   for (let i = at + 1; i < steps.length; i += 1) { const t = steps[i].target[layout]; if (t) return t.id; }
@@ -343,8 +447,7 @@ function placeCard(o: { hole: Hole | null; W: number; H: number; cardW: number; 
   for (const where of order) {
     if (where === 'above') {
       const y = hole.y - GAP - cardH;
-      // Clear of the Skip button.
-      if (y >= o.top + 52) return { x, y, side: 'down', ptr };
+      if (y >= o.top + M) return { x, y, side: 'down', ptr };
     } else if (where === 'below') {
       const y = hole.y + hole.h + GAP;
       if (y + cardH <= H - o.bottom - M) return { x, y, side: 'up', ptr };
@@ -356,7 +459,7 @@ function placeCard(o: { hole: Hole | null; W: number; H: number; cardW: number; 
       }
     }
   }
-  return { x, y: Math.max(o.top + 52, hole.y - GAP - cardH), side: 'down', ptr };
+  return { x, y: Math.max(o.top + M, hole.y - GAP - cardH), side: 'down', ptr };
 }
 
 type Sizes = Partial<Record<TourStep['key'], { words?: number; foot?: number }>>;
@@ -370,8 +473,8 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
   const reader = useScreenReader();
   const layout: Layout = isPhone ? 'phone' : 'wide';
   const dark = pageIsDark();
-  // The same black everywhere; a dark page needs a little more of it to read as dimmed at all.
-  const dimAlpha = dark ? 0.7 : 0.6;
+  const dimAlpha = dark ? DIM_DARK : DIM_LIGHT;
+  const glowAlpha = dark ? GLOW_DARK : GLOW_LIGHT;
 
   // The tab page on show, read when the pages are about to move rather than when the move was planned.
   const pathname = usePathname();
@@ -383,10 +486,12 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
   const wordsFor = (s: TourStep) => (reader && s.screenReader) || s[layout] || s.phone;
   const step = steps[run.step] ?? steps[0];
   const last = run.step >= run.total - 1;
+  // The bar's window (a sidebar row on a computer), and the second window on the page itself.
   const spot = step.target[layout];
+  const pageSpot: TourSpot | null = step.onPage?.[layout] ?? null;
   const parkId = spot ? null : parkingFor(steps, run.step, layout);
 
-  /* ---- Where the targets are ---- */
+  /* ---- Where the bar's targets are ---- */
   // Seeded with the measurements taken just before the tour opened, so the first tip can draw at once.
   const [rects, setRects] = useState<Partial<Record<TourTargetId, TourRect | null>>>(() => {
     const seed: Partial<Record<TourTargetId, TourRect | null>> = {};
@@ -417,7 +522,7 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
         if (r) {
           setRects((m) => {
             const was = m[id];
-            return was && was.x === r.x && was.y === r.y && was.width === r.width && was.height === r.height ? m : { ...m, [id]: r };
+            return was && sameRect(was, r) ? m : { ...m, [id]: r };
           });
           return;
         }
@@ -434,17 +539,75 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
     return () => sub.remove();
   }, []);
 
+  /* ---- Turning the pages underneath ---- */
+  // When this run last turned the pages: a window on a page is looked for once that turn has landed.
+  const [turnedAt, setTurnedAt] = useState(0);
+  const turn = (to: PageStop) => { if (turnPages(here.current, to)) setTurnedAt(lastTurnAt); };
+  // A tip with a window on its page starts that page from the top, so the
+  // thing is where the tip says: at once when the page is out of sight, a
+  // glide when it is the one on show.
+  const toTop = (to: PageStop) => requestScrollToTop(to.pathname, here.current !== to.pathname);
+  // Each later tip's page (steps.ts): on to it as soon as the tip is asked
+  // for, by the same slide a swipe makes (the first tip's page is the
+  // arrival's, below). The swipe tip moves the pages itself once its words
+  // are up (see the words, below). The end's glide back to the map is
+  // TourOverlay's (useBackToStart), which outlasts this layer.
+  const pagesAt = useRef(run.step);
+  useEffect(() => {
+    if (!open || run.step === pagesAt.current) return;
+    pagesAt.current = run.step;
+    const page = tourPageAt(steps, run.step);
+    if (!page) return;
+    if (steps[run.step]?.onPage?.[layout]) toTop(page);
+    turn(page);
+  }, [open, run.step]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ---- Where the window on a page is ---- */
+  // Looked for once the pages have turned there and come to rest: two
+  // readings alike, all of it on screen (a page mid-slide is neither). Never
+  // taken from an earlier visit, which may have been scrolled. Not found in
+  // time, the tip shows on the bar's window alone.
+  const [pageRect, setPageRect] = useState<{ step: number; rect: TourRect | null } | null>(null);
+  useEffect(() => {
+    if (!pageSpot) return undefined;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const at = run.step;
+    let since = 0;
+    let prev: TourRect | null = null;
+    const poll = () => {
+      if (!since) since = Date.now();
+      void measureTourTarget(pageSpot.id).then((r) => {
+        if (!alive) return;
+        const whole = r && r.x >= -1 && r.y >= -1 && r.x + r.width <= W + 1 && r.y + r.height <= H + 1 ? r : null;
+        if (whole && prev && sameRect(whole, prev)) { setPageRect({ step: at, rect: whole }); return; }
+        prev = whole;
+        if (Date.now() - since > PAGE_WAIT_MAX) { setPageRect({ step: at, rect: null }); return; }
+        timer = setTimeout(poll, PAGE_POLL_MS);
+      });
+    };
+    timer = setTimeout(poll, Math.max(0, lastTurnAt + PAGE_LOOK_MS - Date.now()));
+    return () => { alive = false; if (timer) clearTimeout(timer); };
+  }, [run.step, pageSpot?.id, turnedAt, W, H, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ---- The two windows ---- */
   const local = (r: TourRect): TourRect => ({ x: r.x - origin.x, y: r.y - origin.y, width: r.width, height: r.height });
   const spotRect = spot ? rects[spot.id] : null;
-  const lit = !!(spot && spotRect);
-  let hole: Hole;
-  if (spot && spotRect) hole = holeFor(local(spotRect), spot.shape, W);
+  const barLit = !!(spot && spotRect);
+  let barHole: Hole;
+  if (spot && spotRect) barHole = holeFor(local(spotRect), spot.shape, W);
   else {
     const park = parkId ? rects[parkId] : null;
     const at = park ? local(park) : { x: W / 2, y: H / 2, width: 0, height: 0 };
-    hole = pinhole(at.x + at.width / 2, at.y + at.height / 2);
+    barHole = pinhole(at.x + at.width / 2, at.y + at.height / 2);
   }
-  const measured = !spot || spotRect !== undefined;
+  const barMeasured = !spot || spotRect !== undefined;
+  const pageMeasured = !pageSpot || pageRect?.step === run.step;
+  const pageFound = pageSpot && pageRect?.step === run.step ? pageRect.rect : null;
+  const pageHole = pageSpot && pageFound ? holeFor(local(pageFound), pageSpot.shape, W) : null;
+  // The card points at the page's window when there is one, else at the bar's.
+  const mainHole = pageHole ?? (barLit ? barHole : null);
+  const mainShape = pageHole ? pageSpot?.shape : spot?.shape;
 
   /* ---- The card's size, from a hidden copy of every tip's words ---- */
   const cardW = layout === 'phone' ? Math.min(280, W - M * 2) : 300;
@@ -454,16 +617,54 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
     setSizes((s) => (s[key]?.[part] === h ? s : { ...s, [key]: { ...s[key], [part]: h } }));
   const size = sizes[step.key];
   const cardH = size?.words != null && size.foot != null ? 2 + PAD + size.words + FOOT_GAP + size.foot + PAD : null;
-  const ready = measured && cardH != null;
+  // The dim and the bar's window can come up (and the pages turn) once this much is known...
+  const barReady = barMeasured && cardH != null;
+  // ...and the card once its tip's window on the page has been looked for too.
+  const ready = barReady && pageMeasured;
+  // The pages are turning to a tip's window on a page: the card steps aside until it is found, and taps wait.
+  const waiting = open && !pageMeasured;
   const sidebarW = layout === 'wide' ? (isCompactSidebar ? LAYOUT.sidebarCompact : LAYOUT.sidebar) : 0;
-  const place = placeCard({ hole: lit ? hole : null, W, H, cardW, cardH: cardH ?? 160, top: insets.top, bottom: insets.bottom, left: sidebarW, wide: layout === 'wide' });
+  const place = placeCard({ hole: mainHole, W, H, cardW, cardH: cardH ?? 160, top: insets.top, bottom: insets.bottom, left: sidebarW, wide: layout === 'wide' });
+
+  // Each window has its own part of the screen, and each part dims all of
+  // itself but its own window: the window's shadow, spread past the part's
+  // edges and cut off there. The parts meet in one straight line at the same
+  // dim, so the join can't be seen: just above the bar on a phone (the bar's
+  // window always lives below it, the page's above), at the sidebar's edge
+  // on a computer. One shadow can only leave one window, hence two parts.
+  const split = layout === 'phone' ? Math.round(H - Math.max(insets.bottom, 12) - TAB_BAR_H - BAR_AIR) : Math.round(sidebarW);
+  const pageRegion: Region = layout === 'phone'
+    ? { left: 0, top: 0, width: W, height: Math.max(0, split) }
+    : { left: split, top: 0, width: Math.max(0, W - split), height: H };
+  const barRegion: Region = layout === 'phone'
+    ? { left: 0, top: split, width: W, height: Math.max(0, H - split) }
+    : { left: 0, top: 0, width: Math.max(0, split), height: H };
 
   /* ---- Motion ---- */
-  const hx = useSharedValue(hole.x);
-  const hy = useSharedValue(hole.y);
-  const hw = useSharedValue(hole.w);
-  const hh = useSharedValue(hole.h);
-  const hr = useSharedValue(hole.r);
+  // The bar's window.
+  const bx = useSharedValue(barHole.x);
+  const by = useSharedValue(barHole.y);
+  const bw = useSharedValue(barHole.w);
+  const bh = useSharedValue(barHole.h);
+  const br = useSharedValue(barHole.r);
+  const bLit = useSharedValue(0);
+  // The page's window: a pinhole in the middle of the page until a tip has one.
+  const firstPage = pinhole(pageRegion.left + pageRegion.width / 2, pageRegion.top + pageRegion.height / 2);
+  const px = useSharedValue(firstPage.x);
+  const py = useSharedValue(firstPage.y);
+  const pw = useSharedValue(firstPage.w);
+  const ph = useSharedValue(firstPage.h);
+  const pr = useSharedValue(firstPage.r);
+  const pLit = useSharedValue(0);
+  // Where each part of the screen starts, so each window is drawn inside its own part.
+  const pageLeft = useSharedValue(pageRegion.left);
+  const pageTop = useSharedValue(pageRegion.top);
+  const barLeft = useSharedValue(barRegion.left);
+  const barTop = useSharedValue(barRegion.top);
+  useEffect(() => {
+    pageLeft.value = pageRegion.left; pageTop.value = pageRegion.top;
+    barLeft.value = barRegion.left; barTop.value = barRegion.top;
+  }, [pageRegion.left, pageRegion.top, barRegion.left, barRegion.top]); // eslint-disable-line react-hooks/exhaustive-deps
   const cx = useSharedValue(place.x);
   const cy = useSharedValue(place.y);
   const ch = useSharedValue(cardH ?? 0);
@@ -471,65 +672,137 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
   const pOp = useSharedValue(0);
   const sideSV = useSharedValue(0);
   const rowSV = useSharedValue(0);
+  // Which window the soft ring leaves: the page's (1) or the bar's (0).
+  const ringOnPage = useSharedValue(0);
   const riseSV = useSharedValue(reduce ? 0 : 8);
   const dimIn = useSharedValue(0);
   const cardIn = useSharedValue(0);
+  // 1 while the card has stepped aside for a page turn.
+  const away = useSharedValue(0);
   const out = useSharedValue(1);
   const drop = useSharedValue(0);
   const fade = useSharedValue(1);
   const pulse = useSharedValue(0);
   const pulseOn = useSharedValue(0);
   useEffect(() => { riseSV.value = reduce ? 0 : 8; }, [reduce, riseSV]);
+  const landedAt = useRef(0);
 
-  // The window, the card and its pointer move together; the first placing is a jump, every one after a glide.
-  const placed = useRef(false);
+  // The bar's window moves as soon as it is measured: it glides along the
+  // bar while the pages turn, the first placing a jump.
+  const barPlaced = useRef(false);
+  useEffect(() => {
+    if (!barMeasured) return;
+    const glide = barPlaced.current && !reduce ? GLIDE : 0;
+    const go = (v: SharedValue<number>, to: number) => { v.value = glide ? withTiming(to, { duration: glide, easing: EASE, reduceMotion: NEVER }) : to; };
+    go(bx, barHole.x); go(by, barHole.y); go(bw, barHole.w); go(bh, barHole.h); go(br, barHole.r);
+    go(bLit, barLit ? 1 : 0);
+    barPlaced.current = true;
+  }, [barMeasured, barHole.x, barHole.y, barHole.w, barHole.h, barHole.r, barLit, reduce]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The card, its pointer and the page's window move together once the tip
+  // is ready: a glide from the last tip, or, after stepping aside for a page
+  // turn, straight to the new place while out of sight. The page's window
+  // opens in place from a pinhole at its middle and closes the same way.
+  const cardPlaced = useRef(false);
+  const cardAway = useRef(false);
+  const pageWas = useRef<Hole | null>(null);
+  const closePageWindow = (ms: number) => {
+    const was = pageWas.current;
+    if (!was) return;
+    const to = closedAt(was);
+    const go = (v: SharedValue<number>, end: number) => { v.value = ms ? withTiming(end, { duration: ms, easing: EASE, reduceMotion: NEVER }) : end; };
+    go(px, to.x); go(py, to.y); go(pw, to.w); go(ph, to.h); go(pr, to.r); go(pLit, 0);
+    pageWas.current = null;
+  };
   useEffect(() => {
     if (!ready || cardH == null) return;
-    const glide = placed.current && !reduce ? GLIDE : 0;
-    const go = (v: SharedValue<number>, to: number) => { v.value = glide ? withTiming(to, { duration: glide, easing: EASE, reduceMotion: NEVER }) : to; };
-    go(hx, hole.x); go(hy, hole.y); go(hw, hole.w); go(hh, hole.h); go(hr, hole.r);
+    const glide = cardPlaced.current && !cardAway.current && !reduce ? GLIDE : 0;
+    const go = (v: SharedValue<number>, to: number, ms = glide) => { v.value = ms ? withTiming(to, { duration: ms, easing: EASE, reduceMotion: NEVER }) : to; };
     go(cx, place.x); go(cy, place.y); go(ch, cardH); go(pOff, place.ptr);
-    rowSV.value = spot?.shape === 'row' ? 1 : 0;
+    rowSV.value = mainShape === 'row' ? 1 : 0;
+    ringOnPage.value = pageHole ? 1 : 0;
     const code = place.side ? SIDE_CODE[place.side] : 0;
     if (code !== sideSV.value) pOp.value = 0;
     sideSV.value = code;
     pOp.value = code
       ? (glide ? withDelay(glide / 2, withTiming(1, { duration: 180, reduceMotion: NEVER })) : 1)
       : 0;
-    placed.current = true;
-  }, [ready, hole.x, hole.y, hole.w, hole.h, hole.r, place.x, place.y, place.ptr, place.side, cardH, reduce, spot?.shape]); // eslint-disable-line react-hooks/exhaustive-deps
+    const opening = reduce ? 0 : GLIDE;
+    if (pageHole) {
+      const was = pageWas.current;
+      if (was) {
+        // Already open (a resize): on to its new place.
+        go(px, pageHole.x, opening); go(py, pageHole.y, opening); go(pw, pageHole.w, opening); go(ph, pageHole.h, opening); go(pr, pageHole.r, opening);
+      } else {
+        const from = closedAt(pageHole);
+        const grow = (v: SharedValue<number>, a: number, b: number) => {
+          v.value = opening
+            ? withSequence(withTiming(a, { duration: 0, reduceMotion: NEVER }), withTiming(b, { duration: opening, easing: EASE, reduceMotion: NEVER }))
+            : b;
+        };
+        grow(px, from.x, pageHole.x); grow(py, from.y, pageHole.y); grow(pw, from.w, pageHole.w); grow(ph, from.h, pageHole.h); grow(pr, from.r, pageHole.r);
+      }
+      go(pLit, 1, opening);
+      pageWas.current = pageHole;
+    } else closePageWindow(opening);
+    // Back from stepping aside: in at its new place, and taps count from here.
+    if (cardAway.current) {
+      cardAway.current = false;
+      away.value = withTiming(0, { duration: reduce ? 100 : BACK_MS, easing: EASE, reduceMotion: NEVER });
+      landedAt.current = Math.max(landedAt.current, Date.now());
+    }
+    cardPlaced.current = true;
+  }, [ready, place.x, place.y, place.ptr, place.side, cardH, reduce, mainShape, pageHole?.x, pageHole?.y, pageHole?.w, pageHole?.h, pageHole?.r]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The pages are turning to a tip's window on a page: the card steps aside
+  // and the last page's window closes, so nothing points at a page sliding by.
+  useEffect(() => {
+    if (!waiting || !cardPlaced.current || cardAway.current) return;
+    cardAway.current = true;
+    away.value = withTiming(1, { duration: reduce ? 80 : AWAY_MS, reduceMotion: NEVER });
+    closePageWindow(reduce ? 0 : AWAY_MS + 60);
+  }, [waiting]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Arriving: the dim fades up first. When the first tip's page is somewhere
   // else (the player was on the Feed), the pages slide there under the dim,
   // so the move plainly belongs to the tutorial, not a stray swipe; then the
   // card rises. Already there, the card follows the dim straight away.
-  const landedAt = useRef(0);
   const entered = useRef(false);
   // The card is up: the swipe tip's demo and slide wait for this.
   const [up, setUp] = useState(false);
   const arrival = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(() => () => arrival.current.forEach(clearTimeout), []);
   useEffect(() => {
-    if (!ready || entered.current) return;
+    if (!barReady || entered.current) return;
     entered.current = true;
     const page = tourPageAt(steps, run.step);
     const moving = !!page && !isAtStop(here.current, page);
-    const cardAfter = moving ? ARRIVE_DIM_MS + SLIDE_MS : 80;
-    landedAt.current = Date.now() + cardAfter;
+    landedAt.current = Date.now() + (moving ? ARRIVE_DIM_MS + SLIDE_MS : 80);
     dimIn.value = withTiming(1, { duration: reduce ? 160 : 280, easing: EASE, reduceMotion: NEVER });
-    cardIn.value = withDelay(cardAfter, withTiming(1, { duration: reduce ? 160 : 320, easing: EASE, reduceMotion: NEVER }));
     // The map from its top: at once when it is sliding in from another tab
-    // (not yet in view), a glide when the player is already on it.
+    // (not yet in view), a glide when the player is already on it. A page
+    // with a window on it (?tour=5, ?tour=6) the same way.
     const toStart = page?.pathname === START_TAB;
+    const fromTop = toStart || !!pageSpot;
     if (page && moving) {
       arrival.current.push(setTimeout(() => {
         if (toStart) requestScrollToTop(START_TAB, here.current !== START_TAB);
-        slidePagesTo(here.current, page);
+        else if (fromTop) toTop(page);
+        turn(page);
       }, ARRIVE_DIM_MS));
-    } else if (toStart) requestScrollToTop(START_TAB);
-    arrival.current.push(setTimeout(() => setUp(true), cardAfter));
-  }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps
-  // A later tip lands now; the first one when its card is up (above).
+    } else if (page && fromTop) requestScrollToTop(page.pathname);
+  }, [barReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The card rises once its tip is ready, and not before the arrival's slide has landed.
+  const risen = useRef(false);
+  useEffect(() => {
+    if (!ready || !entered.current || risen.current) return;
+    risen.current = true;
+    const after = Math.max(0, landedAt.current - Date.now());
+    landedAt.current = Date.now() + after;
+    cardIn.value = withDelay(after, withTiming(1, { duration: reduce ? 160 : 320, easing: EASE, reduceMotion: NEVER }));
+    arrival.current.push(setTimeout(() => setUp(true), after));
+  }, [ready, barReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A later tip lands now; the first one when its card is up (above); one on another page when its card is back.
   useEffect(() => { landedAt.current = Math.max(landedAt.current, Date.now()); }, [run.step]);
 
   // The words change in the card's own little fade: out, swap, in. The card's height glides meanwhile.
@@ -546,37 +819,26 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
   const shownWords = wordsFor(shown);
   const shownLast = shownStep >= run.total - 1;
 
-  /* ---- The pages underneath ---- */
-  // Each later tip's page (steps.ts): on to it as soon as the tip is asked
-  // for, while the card glides, by the same slide a swipe makes (the first
-  // tip's page is the arrival's, above). The swipe tip moves the pages
-  // itself once its words are up, with the fingertip's one stroke, so the
-  // finger and the page go together. Skip or Got it moves nothing: the
-  // player stays on the page they can see.
-  const pagesAt = useRef(run.step);
-  useEffect(() => {
-    if (!open || run.step === pagesAt.current) return;
-    pagesAt.current = run.step;
-    const page = tourPageAt(steps, run.step);
-    if (page) slidePagesTo(here.current, page);
-  }, [open, run.step]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The swipe tip moves the pages itself once its words are up, with the
+  // fingertip's one stroke, so the finger and the page go together.
   useEffect(() => {
     const to = steps[shownStep]?.slidesTo;
     if (!open || !up || !to || shownStep !== run.step) return undefined;
-    const timer = setTimeout(() => slidePagesTo(here.current, to), DEMO_LEAD);
+    const timer = setTimeout(() => turn(to), DEMO_LEAD);
     return () => clearTimeout(timer);
   }, [open, up, shownStep, run.step]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // A soft ring leaves the lit window every 1.8s, the live dot's rhythm, once the window has arrived.
+  // A soft ring leaves the window the card points at every 1.8s, the live dot's rhythm, once the window has arrived.
+  const mainLit = !!mainHole;
   useEffect(() => {
     cancelAnimation(pulse);
     cancelAnimation(pulseOn);
     pulse.value = 0;
     pulseOn.value = 0;
-    if (!ready || !up || !lit || reduce) return;
+    if (!ready || !up || !mainLit || reduce) return;
     pulseOn.value = withDelay(GLIDE + 500, withTiming(1, { duration: 0, reduceMotion: NEVER }));
     pulse.value = withDelay(GLIDE + 500, withRepeat(withTiming(1, { duration: 1800, easing: Easing.out(Easing.cubic), reduceMotion: NEVER }), -1, false));
-  }, [run.step, lit, ready, up, reduce]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [run.step, mainLit, ready, up, reduce]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Leaving: everything fades while the card settles a few points, then the overlay goes.
   useEffect(() => {
@@ -593,8 +855,10 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ---- Moving on ---- */
-  // Too soon after a tip landed for a touch to count (DWELL; longer on the swipe tip, until its slide has played).
-  const settling = () => !reader && Date.now() - landedAt.current < (step.slidesTo ? SWIPE_DWELL : DWELL);
+  // Too soon after a tip landed for a touch to count (DWELL; longer on the
+  // swipe tip, until its slide has played), and never while the card has
+  // stepped aside for a page turn: a tap then would skip a tip unread.
+  const settling = () => waiting || (!reader && Date.now() - landedAt.current < (step.slidesTo ? SWIPE_DWELL : DWELL));
   const tryNext = () => {
     if (!open || settling()) return false;
     nextStep();
@@ -613,7 +877,7 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
     const sideways = Math.abs(dx) > SIDEWAYS && Math.abs(dx) > Math.abs(dy);
     if (sideways && step.slidesTo && step.page) {
       const toward = dx < 0 ? step.slidesTo : step.page;
-      if (!isAtStop(here.current, toward)) { slidePagesTo(here.current, toward); return; }
+      if (!isAtStop(here.current, toward)) { turn(toward); return; }
       if (dx > 0) return;
     } else if (sideways && dx > 0) return;
     const ending = last;
@@ -696,22 +960,33 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
 
   /* ---- Drawing ---- */
   const dimStyle = useAnimatedStyle(() => ({ opacity: dimIn.value * out.value }));
-  const holeStyle = useAnimatedStyle(() => ({ left: hx.value, top: hy.value, width: hw.value, height: hh.value, borderRadius: hr.value }));
+  // Each window is drawn inside its own part of the screen, so its place there is its place on the screen less where the part starts.
+  const pageHoleStyle = useAnimatedStyle(() => ({ left: px.value - pageLeft.value, top: py.value - pageTop.value, width: pw.value, height: ph.value, borderRadius: pr.value }));
+  const barHoleStyle = useAnimatedStyle(() => ({ left: bx.value - barLeft.value, top: by.value - barTop.value, width: bw.value, height: bh.value, borderRadius: br.value }));
+  // The light round each window sits over both parts, so it is never cut at the join; it fades as its window closes.
+  const pageGlowStyle = useAnimatedStyle(() => ({ left: px.value, top: py.value, width: pw.value, height: ph.value, borderRadius: pr.value, opacity: pLit.value }));
+  const barGlowStyle = useAnimatedStyle(() => ({ left: bx.value, top: by.value, width: bw.value, height: bh.value, borderRadius: br.value, opacity: bLit.value }));
   // On a dark page the lit glass is dark too, so the ring starts brighter to be seen at all.
-  const ringPeak = dark ? 0.8 : 0.6;
+  const ringPeak = dark ? 0.8 : 0.7;
   const ringStyle = useAnimatedStyle(() => {
     const p = pulse.value;
-    // A tab or the + grows by a tenth; a long sidebar row by the same few points all round instead.
-    const sx = rowSV.value ? 1 + (12 * p) / Math.max(1, hw.value) : 1 + 0.12 * p;
-    const sy = rowSV.value ? 1 + (12 * p) / Math.max(1, hh.value) : 1 + 0.12 * p;
+    const onPage = ringOnPage.value === 1;
+    const x = onPage ? px.value : bx.value;
+    const y = onPage ? py.value : by.value;
+    const w = onPage ? pw.value : bw.value;
+    const h = onPage ? ph.value : bh.value;
+    // A tab or the + grows by a tenth; a long sidebar row or a box on a page by the same few points all round instead.
+    const even = rowSV.value || onPage;
+    const sx = even ? 1 + (12 * p) / Math.max(1, w) : 1 + 0.12 * p;
+    const sy = even ? 1 + (12 * p) / Math.max(1, h) : 1 + 0.12 * p;
     return {
-      left: hx.value, top: hy.value, width: hw.value, height: hh.value, borderRadius: hr.value,
+      left: x, top: y, width: w, height: h, borderRadius: onPage ? pr.value : br.value,
       opacity: pulseOn.value * ringPeak * (1 - p), transform: [{ scaleX: sx }, { scaleY: sy }],
     };
   });
   const cardStyle = useAnimatedStyle(() => ({
-    left: cx.value, top: cy.value, opacity: cardIn.value * out.value,
-    transform: [{ translateY: (1 - cardIn.value) * riseSV.value + drop.value }],
+    left: cx.value, top: cy.value, opacity: cardIn.value * out.value * (1 - away.value),
+    transform: [{ translateY: (1 - cardIn.value) * riseSV.value + away.value * riseSV.value * 0.5 + drop.value }],
   }));
   const boxStyle = useAnimatedStyle(() => ({ height: ch.value }));
   // The pointer is drawn through a small window that starts on the card's
@@ -728,19 +1003,22 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
     };
   });
   const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
-  const hintStyle = useAnimatedStyle(() => ({ top: ch.value + 12, opacity: fade.value }));
-  const skipStyle = useAnimatedStyle(() => ({ opacity: dimIn.value * out.value }));
+  const hintStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
 
-  // The dim is the window's own shadow, spread past every edge of the screen.
+  // The dim is each window's own shadow, spread past every edge of its part of the screen.
   // The inner shadow softens the window's edge by a few points, so it reads as light, not a cut-out.
   const reach = Math.ceil(Math.hypot(W, H));
-  const shade = `0px 0px 0px ${reach}px rgba(0, 0, 0, ${dimAlpha}), inset 0px 0px 10px 2px rgba(0, 0, 0, ${dimAlpha})`;
-  // Where there is no outer shadow (old Android): the window's frame is a border as wide as the screen, in the dim.
-  const frameStyle = useAnimatedStyle(() => ({
-    left: hx.value - reach, top: hy.value - reach, width: hw.value + reach * 2, height: hh.value + reach * 2, borderRadius: hr.value + reach,
+  const shade = `0px 0px 0px ${reach}px rgba(0, 0, 0, ${dimAlpha}), inset 0px 0px 8px 1px rgba(0, 0, 0, ${dimAlpha})`;
+  // Where there is no outer shadow (old Android): a window's frame is a border as wide as the screen, in the dim.
+  const pageFrameStyle = useAnimatedStyle(() => ({
+    left: px.value - pageLeft.value - reach, top: py.value - pageTop.value - reach, width: pw.value + reach * 2, height: ph.value + reach * 2, borderRadius: pr.value + reach,
   }));
-  // On a dark page the lit glass is nearly as dark as the dim, so the window gets a faint light rim to be found by.
-  const rim = dark ? styles.holeRim : null;
+  const barFrameStyle = useAnimatedStyle(() => ({
+    left: bx.value - barLeft.value - reach, top: by.value - barTop.value - reach, width: bw.value + reach * 2, height: bh.value + reach * 2, borderRadius: br.value + reach,
+  }));
+  const frame = { borderWidth: reach, borderColor: `rgba(0, 0, 0, ${dimAlpha})` };
+  // A soft light just outside each lit window, so it stands out from the lighter dim; on a dark page a faint light rim as well.
+  const glow = [{ boxShadow: `0px 0px 14px 2px rgba(255, 255, 255, ${glowAlpha})` }, dark ? styles.holeRim : null];
   const edge = dark ? colors.borderStrong : colors.border;
   const pointerSides = place.side === 'down' ? styles.pointerDown : place.side === 'up' ? styles.pointerUp : styles.pointerLeft;
   // The first tip, with no window, carries the "tap anywhere" line; the swipe tip the fingertip that shows the swipe.
@@ -776,19 +1054,31 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
       {...webDialog}
     >
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimStyle]}>
-        {NO_SHADOW_DIM
-          ? <Animated.View style={[styles.hole, { borderWidth: reach, borderColor: `rgba(0, 0, 0, ${dimAlpha})` }, frameStyle]} />
-          : <Animated.View style={[styles.hole, { boxShadow: shade }, rim, holeStyle]} />}
+        <View style={[styles.region, pageRegion]}>
+          {NO_SHADOW_DIM
+            ? <Animated.View style={[styles.hole, frame, pageFrameStyle]} />
+            : <Animated.View style={[styles.hole, { boxShadow: shade }, pageHoleStyle]} />}
+        </View>
+        <View style={[styles.region, barRegion]}>
+          {NO_SHADOW_DIM
+            ? <Animated.View style={[styles.hole, frame, barFrameStyle]} />
+            : <Animated.View style={[styles.hole, { boxShadow: shade }, barHoleStyle]} />}
+        </View>
+        <Animated.View style={[styles.hole, glow, pageGlowStyle]} />
+        <Animated.View style={[styles.hole, glow, barGlowStyle]} />
         <Animated.View style={[styles.ring, ringStyle]} />
       </Animated.View>
 
-      <Animated.View style={[styles.cardWrap, { width: cardW }, cardStyle]}>
+      {/* Stepped aside for a page turn, the card is out of sight, so its buttons don't answer either. */}
+      <Animated.View style={[styles.cardWrap, { width: cardW, pointerEvents: waiting ? 'none' : 'auto' }, cardStyle]}>
         {/* A thumb's swipe means nothing to a mouse, so a computer never gets the swipe tip at all (steps.ts). */}
         {swipeShown && layout === 'phone' && up ? <SwipeDemo reduce={reduce} cardW={cardW} fade={fade} hidden={hidden} /> : null}
         {mapShown ? (
-          <Animated.Text {...hidden} selectable={false} style={[styles.tapHint, hintStyle]}>
-            {layout === 'wide' ? 'Click anywhere to continue' : 'Tap anywhere to continue'}
-          </Animated.Text>
+          <Animated.View {...hidden} pointerEvents="none" style={[styles.tapHintRow, hintStyle]}>
+            <Text selectable={false} style={[styles.tapHint, { borderColor: edge }]}>
+              {layout === 'wide' ? 'Click anywhere to continue' : 'Tap anywhere to continue'}
+            </Text>
+          </Animated.View>
         ) : null}
         <Animated.View style={[styles.card, { borderColor: edge }, boxStyle]}>
           <View ref={cardRef} style={[StyleSheet.absoluteFill, styles.focusRing]} {...webFocus}>
@@ -807,14 +1097,24 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
             </Animated.View>
             <View style={[styles.footerRow, styles.footer]}>
               <Dots total={run.total} at={run.step} styles={styles} hidden={hidden} />
-              <Animated.View ref={nextRef} style={fadeStyle}>
-                {shownLast ? (
-                  <Button label={LAST_BUTTON} onPress={() => act.current.next()} style={styles.pill} />
-                ) : (
-                  <Pressable accessibilityRole="button" accessibilityLabel="Next tip" onPress={() => act.current.next()} style={styles.next}>
-                    <Text selectable={false} style={styles.nextText}>Next</Text>
+              <Animated.View style={[styles.actions, fadeStyle]}>
+                {/* Skip lives in the card, beside Next: with the lighter dim the page's own
+                    buttons show clearly in the top corner, where it used to sit on them. Not
+                    handed over to the dim mid-press, so a finger that moves a little still skips. */}
+                {shownLast ? null : (
+                  <Pressable ref={skipRef} cancelable={false} accessibilityRole="button" accessibilityLabel="Skip tutorial" onPress={skip} style={styles.skip}>
+                    <Text selectable={false} style={styles.skipText}>Skip</Text>
                   </Pressable>
                 )}
+                <View ref={nextRef}>
+                  {shownLast ? (
+                    <Button label={LAST_BUTTON} onPress={() => act.current.next()} style={styles.pill} />
+                  ) : (
+                    <Pressable accessibilityRole="button" accessibilityLabel="Next tip" onPress={() => act.current.next()} style={styles.next}>
+                      <Text selectable={false} style={styles.nextText}>Next</Text>
+                    </Pressable>
+                  )}
+                </View>
               </Animated.View>
             </View>
           </View>
@@ -824,16 +1124,6 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
         </Animated.View>
       </Animated.View>
 
-      {!last ? (
-        <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(160)} style={[styles.skipWrap, { top: insets.top + 8 }]}>
-          <Animated.View style={skipStyle}>
-            {/* Not handed over to the dim mid-press, so a finger that moves a little still skips. */}
-            <Pressable ref={skipRef} cancelable={false} accessibilityRole="button" accessibilityLabel="Skip tutorial" onPress={skip} style={styles.skip}>
-              <Text selectable={false} style={styles.skipText}>Skip</Text>
-            </Pressable>
-          </Animated.View>
-        </Animated.View>
-      ) : null}
 
       {/* A hidden copy of every tip's words at the card's width, so the card knows each one's height before it shows it. */}
       <View pointerEvents="none" {...hidden} style={[styles.measurer, { width: innerW }]}>
@@ -905,7 +1195,7 @@ function SwipeDemo({ reduce, cardW, fade, hidden }: { reduce: boolean; cardW: nu
       {reduce ? null : <Animated.View {...hidden} pointerEvents="none" style={[demo.ring, { left: (cardW - 26) / 2 }, ringStyle]} />}
       <Animated.View {...hidden} pointerEvents="none" style={[demo.still, { left: (cardW - 24) / 2 }, stillStyle]}>
         {/* Both ways: the words say left and right. */}
-        <Ionicons name="swap-horizontal" size={24} color="rgba(255, 255, 255, 0.9)" />
+        <Ionicons name="swap-horizontal" size={24} color="rgba(255, 255, 255, 0.95)" style={demo.shadow} />
       </Animated.View>
     </>
   );
@@ -914,8 +1204,13 @@ function SwipeDemo({ reduce, cardW, fade, hidden }: { reduce: boolean; cardW: nu
 const demo = StyleSheet.create({
   // A faint fill makes it read as a fingertip, not an outline, over a busy page.
   // Both sit on one line just above the card, where the ring travels sideways.
-  ring: { position: 'absolute', top: -46, width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.9)', backgroundColor: 'rgba(255, 255, 255, 0.22)' },
+  // A soft dark shadow keeps the white readable over a light page through the lighter dim.
+  ring: {
+    position: 'absolute', top: -46, width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)', boxShadow: '0px 1px 6px rgba(0, 0, 0, 0.35)',
+  },
   still: { position: 'absolute', top: -45, width: 24, height: 24 },
+  shadow: { textShadowColor: 'rgba(0, 0, 0, 0.4)', textShadowRadius: 5, textShadowOffset: { width: 0, height: 1 } },
 });
 
 const styleDefinitions = StyleSheet.create({
@@ -926,6 +1221,8 @@ const styleDefinitions = StyleSheet.create({
     // pinches on the dim reach the pagers and the page underneath. A fully clear one doesn't count.
     ...(Platform.OS === 'android' ? { backgroundColor: 'rgba(0, 0, 0, 0.01)' } : null),
   },
+  // A part of the screen with one window in it; what spreads past its edges is cut off there.
+  region: { position: 'absolute', overflow: 'hidden' },
   hole: { position: 'absolute', backgroundColor: 'transparent' },
   holeRim: { borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.35)' },
   ring: { position: 'absolute', borderWidth: 1.5, borderColor: 'rgba(255, 255, 255, 0.7)' },
@@ -937,7 +1234,8 @@ const styleDefinitions = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.lg,
     overflow: 'hidden',
-    boxShadow: '0px 6px 16px rgba(0, 0, 0, 0.18)',
+    // A touch deeper than a page's own cards: with the lighter dim, this is what lifts it off the page.
+    boxShadow: '0px 8px 24px rgba(0, 0, 0, 0.22)',
   },
   // A browser's focus ring would draw round the whole card each time a tip lands.
   focusRing: { outlineStyle: 'solid', outlineWidth: 0 },
@@ -964,10 +1262,17 @@ const styleDefinitions = StyleSheet.create({
   pointerDown: { left: 4, top: -5.5, borderRightWidth: 1, borderBottomWidth: 1 },
   pointerUp: { left: 4, top: 3.5, borderTopWidth: 1, borderLeftWidth: 1 },
   pointerLeft: { left: 3.5, top: 4, borderBottomWidth: 1, borderLeftWidth: 1 },
-  tapHint: { position: 'absolute', left: 0, right: 0, textAlign: 'center', ...typography.small, color: 'rgba(255, 255, 255, 0.85)' },
-  skipWrap: { position: 'absolute', right: 8 },
-  skip: { minWidth: 44, minHeight: 44, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
-  skipText: { ...typography.bodyStrong, color: 'rgba(255, 255, 255, 0.92)' },
+  // A small chip in the card's own colours: white words on the dim vanished over a light page once the dim was lighter.
+  // Above the card, over the map: under it, the chip covered the "Courts near you" heading.
+  tapHintRow: { position: 'absolute', left: 0, right: 0, bottom: '100%', marginBottom: 12, alignItems: 'center' },
+  tapHint: {
+    ...typography.small, color: colors.textMuted, backgroundColor: colors.surface, overflow: 'hidden',
+    borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 4,
+  },
+  actions: { flexDirection: 'row', alignItems: 'center' },
+  // Quieter than Next, with the same 44-point reach that takes no room.
+  skip: { paddingVertical: 14, marginVertical: -14, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
+  skipText: { ...typography.smallStrong, color: colors.textMuted },
   measurer: { position: 'absolute', left: 0, top: 0, opacity: 0 },
   measureOne: { position: 'absolute', left: 0, right: 0, top: 0, gap: FOOT_GAP },
 });

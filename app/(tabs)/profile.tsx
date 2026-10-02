@@ -23,6 +23,7 @@ import { TileViews } from '@/components/TileViews';
 import { TilePin } from '@/components/TilePin';
 import { colors, spacing, typography, font, lift } from '@/theme';
 import { wrappedYear } from '@/features/wrapped/yearInTennis';
+import { useTourTarget } from '@/features/tour/tourStore';
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
  // December to mid-January: the year's recap sits at the top of your links.
@@ -35,6 +36,8 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  // yours entirely, not just whichever of them the feed happens to hold.
  useEffect(() => { if (user?.id) void actions.loadPostsOf(user.id); }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
  const { width: windowWidth } = useWindowDimensions();
+ // The tutorial's last tip lights the bell and the paper plane together, so they share one box it can find.
+ const tourInbox = useTourTarget('profile-inbox');
  // The section lives here, not in the address (see discuss.tsx for why).
  const [localTab, setLocalTab] = useState<'Posts' | 'Clips' | 'Tagged'>('Posts');
  const section = previewSection ?? localTab;
@@ -171,14 +174,17 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
   return body;
  };
  return <Screen memoryKey="profile" title="Profile" wash subtitle={`@${user.handle}`} onRefresh={previewSection === undefined && !isDesktopBrowser() ? actions.refresh : undefined} right={<View style={styles.headerActions}>
-   <Tappable accessibilityRole="link" accessibilityLabel={unseen ? `Notifications, ${unseen} new` : 'Notifications'} onPress={() => router.push('/notifications')} hitSlop={10} style={styles.headerButton}>
-     <Ionicons name={unseen ? 'notifications' : 'notifications-outline'} size={27} color={colors.text}/>
-     {unseen > 0 && <View style={styles.headerBadge}><Text style={styles.headerBadgeText}>{unseen > 9 ? '9+' : unseen}</Text></View>}
-   </Tappable>
-   <Tappable accessibilityRole="link" accessibilityLabel={unread ? `Messages, ${unread} unread` : 'Messages'} onPress={() => router.push('/messages')} hitSlop={10} style={styles.headerButton}>
-     <Ionicons name={unread ? 'paper-plane' : 'paper-plane-outline'} size={27} color={colors.text}/>
-     {unread > 0 && <View style={styles.headerBadge}><Text style={styles.headerBadgeText}>{unread > 9 ? '9+' : unread}</Text></View>}
-   </Tappable>
+   {/* Never folded away by the phone's renderer (a plain box can be), or the tutorial could not measure it. */}
+   <View ref={tourInbox} collapsable={false} style={styles.headerActions}>
+     <Tappable accessibilityRole="link" accessibilityLabel={unseen ? `Notifications, ${unseen} new` : 'Notifications'} onPress={() => router.push('/notifications')} hitSlop={10} style={styles.headerButton}>
+       <Ionicons name={unseen ? 'notifications' : 'notifications-outline'} size={27} color={colors.text}/>
+       {unseen > 0 && <View style={styles.headerBadge}><Text style={styles.headerBadgeText}>{unseen > 9 ? '9+' : unseen}</Text></View>}
+     </Tappable>
+     <Tappable accessibilityRole="link" accessibilityLabel={unread ? `Messages, ${unread} unread` : 'Messages'} onPress={() => router.push('/messages')} hitSlop={10} style={styles.headerButton}>
+       <Ionicons name={unread ? 'paper-plane' : 'paper-plane-outline'} size={27} color={colors.text}/>
+       {unread > 0 && <View style={styles.headerBadge}><Text style={styles.headerBadgeText}>{unread > 9 ? '9+' : unread}</Text></View>}
+     </Tappable>
+   </View>
    <Tappable accessibilityRole="link" accessibilityLabel="Settings" onPress={() => router.push('/settings')} hitSlop={10} style={styles.headerButton}>
      <Ionicons name="menu-outline" size={30} color={colors.text}/>
    </Tappable>
