@@ -29,6 +29,7 @@ import { isOpenToHit } from '@/features/players/openToHit';
 import { LevelPill as Level } from '@/components/LevelPill';
 import type { User } from '@/data/types';
 import { countLabel } from '@/features/places/court';
+import { CityHaze } from '@/components/map/CityHaze';
 import { useCourtPosts } from '@/features/places/useCourtPosts';
 import { openCourt, openCourtReel, playHere, postFromCourt, sendCourtToChat } from '@/features/players/courtLink';
 import { Toggle } from '@/components/ui';
@@ -787,10 +788,11 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
     <>
       {/* The city's name is the top layer, so a player's ring or a court never
           sits over the words however busy the middle of town gets. Behind the
-          words, a soft rectangle of the page colour that fades out at its
-          edges like a shadow, so the name reads over roads and pins. */}
+          words, a soft haze of the page colour that fades to nothing on every
+          side (CityHaze), so the name reads over roads and pins. */}
       <View pointerEvents="none" style={styles.cityMark}>
         <View style={styles.cityGlow}>
+          <CityHaze />
           <Text style={styles.cityName} numberOfLines={1}>{cityName}</Text>
           <Text style={[styles.cityCount, (count > 0 || placeCount > 0) && styles.cityCountOn]}>{line}</Text>
           {hitCount ? <Text style={styles.cityHits}>{hitCount === 1 ? '1 open hit nearby' : `${hitCount} open hits nearby`}</Text>
@@ -956,10 +958,9 @@ const styleDefinitions = StyleSheet.create({
   postedPlay: { position: 'absolute', right: 5, bottom: 5, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
   // The still card's overlay: the city named the way a map names it, with a soft halo of the page colour so it reads over roads.
   cityMark: { position: 'absolute', left: spacing.xl, right: spacing.xl, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 10, elevation: 10 },
-  // A soft rectangle of the page colour behind the words, its edges fading out like a shadow
-  // rather than ending in a line (Oct 2, William: "more of a rectangle with like a shadow fade",
-  // then "more subtle, it shouldn't be clear that it is a rectangle": a thin fill, a wide fade).
-  cityGlow: { alignItems: 'center', gap: 2, paddingHorizontal: 28, paddingVertical: 16, borderRadius: 32, backgroundColor: `${colors.bg}63`, shadowColor: colors.bg, shadowOpacity: 0.86, shadowRadius: 34, shadowOffset: { width: 0, height: 0 } },
+  // Holds the words and their haze (CityHaze, drawn behind them). Oct 2, William: "more of a
+  // rectangle with like a shadow fade" but "it shouldn't be clear that it is a rectangle".
+  cityGlow: { alignItems: 'center', gap: 2, paddingHorizontal: 12, paddingVertical: 6 },
   cityName: { ...typography.title, fontSize: 26, letterSpacing: -0.6, color: colors.text, textShadowColor: colors.bg, textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },
   cityCount: { ...typography.smallStrong, color: colors.textMuted, textShadowColor: colors.bg, textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 } },
   cityCountOn: { color: colors.brand },
