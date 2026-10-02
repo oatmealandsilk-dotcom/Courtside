@@ -54,8 +54,9 @@ export default function NewMessage() {
   const [busy, setBusy] = useState(false);
   // Opening: ask the server again whether the locked people follow you now,
   // so the locks shown are today's rather than from when the app opened.
+  // Only people already known to be locked: nobody new is asked about here.
   useEffect(() => {
-    const locked = users.filter((u) => u.id !== currentUserId && !blockedIds.includes(u.id) && !actions.canAddToGroup(u.id)).map((u) => u.id);
+    const locked = actions.lockedNow(users.filter((u) => u.id !== currentUserId && !blockedIds.includes(u.id)).map((u) => u.id));
     if (locked.length) void actions.recheckFollows(locked);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const term = query.trim().replace(/^@/, '').toLowerCase();
@@ -109,8 +110,8 @@ export default function NewMessage() {
   const blockers = picked.length > 1 && !sameGroup ? picked.filter((id) => !actions.canAddToGroup(id)) : [];
   const toggle = async (id: string) => {
     if (picked.includes(id)) { setPicked((p) => p.filter((x) => x !== id)); setNote(null); return; }
-    // Locked, unless they have followed you since the app opened: ask before saying no.
-    if (lockedFor(id) && !(await actions.recheckFollows([id])).includes(id)) {
+    // Locked, unless they have followed you since the app opened (or the server says otherwise now): ask before saying no.
+    if (lockedFor(id) && !(await actions.reachNow(id))) {
       const [who] = namesOf([id]);
       setNote({ text: picked.length ? groupLockNote(who ? [who] : []) : chatLockNote(who) });
       return;

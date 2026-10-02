@@ -1,5 +1,6 @@
 import type { ID, Post, PracticeSession, SessionDetail, SessionPlayer, SessionTag, SessionTagRefusal, SessionTagRole, SessionWith, User } from '@/data/types';
 import { named, type Named } from '@/features/messages/groupRules';
+import type { AgeSource, OpennessMap } from '@/features/players/age';
 
 /*
  * Tagging who you played (migration 62). You pick CourtSide players in "Who
@@ -237,14 +238,22 @@ export function sessionPeople(s: SessionDetail | undefined, hidden: ID[] = []): 
  * counts. Blocks either way are hidden from the search before this; someone
  * not known to be an adult must follow you first, as for a new chat. In the
  * demo nobody's age is on file, so only a known teen is held back there.
+ *
+ * Since migration 64 nobody else's age reaches the app (`source`, see
+ * AgeSource): `told` is what the server said about people (open_to_you),
+ * and `ask` asks it about this person. Someone not answered yet, or that the
+ * server would not answer about, is not held back here; the server's own
+ * check, which follows every pick, has the last word.
  */
-export function localRefusal({ me, who, follows, real }: { me: ID | null; who: User | undefined; follows: { followerId: ID; followingId: ID }[]; real: boolean }): SessionTagRefusal | null {
+export function localRefusal({ me, who, follows, source, told, ask }: { me: ID | null; who: User | undefined; follows: { followerId: ID; followingId: ID }[]; source: AgeSource; told?: OpennessMap; ask?: (id: ID) => void }): SessionTagRefusal | null {
   if (!me) return 'signed_out';
   if (!who) return 'missing';
   if (who.id === me) return 'self';
-  const adult = real ? who.ageGroup === 'adult' : who.ageGroup !== 'teen';
-  if (!adult && !follows.some((e) => e.followerId === who.id && e.followingId === me)) return 'teen_closed';
-  return null;
+  if (follows.some((e) => e.followerId === who.id && e.followingId === me)) return null;
+  if (source === 'fixtures') return who.ageGroup !== 'teen' ? null : 'teen_closed';
+  if (source === 'ages') return who.ageGroup === 'adult' ? null : 'teen_closed';
+  ask?.(who.id);
+  return told?.[who.id]?.chat === false ? 'teen_closed' : null;
 }
 
 /** How a sentence names someone (with their @handle beside a first name someone else here shares). */

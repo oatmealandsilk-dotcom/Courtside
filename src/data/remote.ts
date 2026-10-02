@@ -24,6 +24,7 @@ import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, Coa
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
 import { isMapCourtId } from '@/features/places/courtName';
+import type { Openness } from '@/features/players/age';
 
 /** What a new player did first, after setup. */
 /** What the live handle check says about a handle. */
@@ -92,6 +93,10 @@ interface ProfileRow {
   is_admin?: boolean | null;
   suspended_at?: string | null;
   following_count?: number | null;
+  /**
+   * Only before migration 64, when every profile carried it. Since then
+   * nobody's age is on a profile; your own comes from your settings row.
+   */
   age_group?: string | null;
   read_receipts?: boolean | null;
 }
@@ -306,6 +311,12 @@ export interface RemoteData {
   activities?: DetectedActivity[];
   /** Whether this server can tag players on sessions (migration 62 has run); missing when it could not be told. */
   sessionTagsReady?: boolean;
+  /**
+   * Whether the profiles came down with everyone's age on them: true on a
+   * database from before migration 64, false since (nobody's age but your
+   * own reaches the app). Missing in saved copies.
+   */
+  agesOnProfiles?: boolean;
 }
 
 interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null }
@@ -449,7 +460,9 @@ const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
 /** One pin from map_players (migration 63). */
 interface MapPlayerRow { user_id: ID; lat: number; lng: number; place: MapPlace | string; court_id: string | null; court_name: string | null; city: string | null; seen_at: string | null; open_until: string | null }
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
-interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints'] } | null; map_visibility?: string | null }
+interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints'] } | null; map_visibility?: string | null;
+  /** Your own age group, readable only by you (migration 64). Absent before it. */
+  age_group?: string | null }
 
 interface PollRow { question_id: string; options: string[]; counts: number[] | null }
 /** Each thread's poll, with the totals and your own vote, laid onto the threads. */
@@ -781,8 +794,15 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // A post or hit an admin removed never shows in a feed; admins see it only on the Reports screen.
   const postRows = ((posts.data ?? []) as (PostRow & { comments?: CommentRow[]; removed_at?: string | null })[]).filter((row) => !row.removed_at);
   const storyRows = ((stories.data ?? []) as (StoryRow & { removed_at?: string | null })[]).filter((row) => !row.removed_at);
+  // Your own age: from your settings row, the only place it is since
+  // migration 64; before that, from your profile row like everyone's.
+  const ownState = (ustate.data ?? null) as UserStateRow | null;
+  const ownAge = ownState?.age_group ?? profileRows.find((row) => row.id === me)?.age_group ?? null;
+  // Which database this is: a profile row has an age_group column only before 64.
+  const agesOnProfiles = profileRows.some((row) => 'age_group' in row);
   return {
-    users: profileRows.map((row) => toUser(row, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
+    agesOnProfiles,
+    users: profileRows.map((row) => toUser(row.id === me ? { ...row, age_group: ownAge } : row, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
     posts: postRows.map(toPost),
     comments: [
       ...postRows.flatMap((row) => (row.comments ?? []).map(toComment)),
@@ -1317,6 +1337,54 @@ export const remote = {
     return data.map((e) => ({ followerId: e.follower_id, followingId: e.following_id }));
   },
 
+  /**
+   * What the server says about each of these people (migration 64,
+   * open_to_you): whether you may start a chat with them (or add them to a
+   * group, or tag them). Never their age. Someone it would not answer about
+   * (blocked either way, gone, or past the day's limit of people asked
+   * about) is left out. Up to 100 a question, so a longer list is asked in
+   * parts. Null when the database has no such question yet (before 64);
+   * throws when it could not be asked, so nobody is taken as closed for want
+   * of an answer.
+   */
+  async fetchOpenness(userIds: ID[]): Promise<Record<ID, Openness> | null> {
+    const ids = Array.from(new Set(userIds.filter((id) => UUID_RE.test(id))));
+    const out: Record<ID, Openness> = {};
+    for (let at = 0; at < ids.length; at += 100) {
+      const { data, error } = await need().rpc('open_to_you', { ids: ids.slice(at, at + 100) });
+      if (error) {
+        if (missingFunction(error)) return null;
+        fail('open to you')(error);
+        throw error;
+      }
+      for (const r of (data ?? []) as { user_id: string; chat: boolean | null }[]) out[r.user_id] = { chat: r.chat === true };
+    }
+    return out;
+  },
+  /**
+   * Of these posts, the ones that may show on a court's page for you
+   * (migration 64, shown_at_court: the teen rule, as court_rings counts
+   * posts). Up to 100 a question, so a longer list is asked in parts. Null
+   * when the database has no such question (before 64); throws when it could
+   * not be asked.
+   */
+  async fetchShownAtCourt(postIds: ID[]): Promise<Set<ID> | null> {
+    const ids = Array.from(new Set(postIds.filter((id) => UUID_RE.test(id))));
+    const out = new Set<ID>();
+    for (let at = 0; at < ids.length; at += 100) {
+      const { data, error } = await need().rpc('shown_at_court', { post_ids: ids.slice(at, at + 100) });
+      if (error) {
+        if (missingFunction(error)) return null;
+        fail('shown at court')(error);
+        throw error;
+      }
+      for (const r of (data ?? []) as (string | { shown_at_court?: string })[]) {
+        const id = typeof r === 'string' ? r : r?.shown_at_court;
+        if (id) out.add(id);
+      }
+    }
+    return out;
+  },
   /**
    * Which of these people follow you right now. Whether a teen account is
    * open to you depends on it, and the app's own copy is from when it

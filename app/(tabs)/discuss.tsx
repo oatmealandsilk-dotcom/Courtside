@@ -82,7 +82,7 @@ const joinedLabel = (iso: string) => {
 
 function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
-  const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, followingIds, saved, actions, detectedCoords, locationEnabled, hitRequests, lastSeen, lastSeenLoaded, followedCourts, onboardingComplete, mapLive, newOnCourtside, mapVisibility } = useApp();
+  const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, followingIds, saved, actions, detectedCoords, locationEnabled, hitRequests, lastSeen, lastSeenLoaded, followedCourts, onboardingComplete, mapLive, newOnCourtside, mapVisibility, seeing, ageSaysAdult } = useApp();
   // The section lives here, not in the address: listening to the address made
   // this whole tab re-render on every route change anywhere in the app.
   // Other pages ask for a section through requestSection before navigating;
@@ -171,8 +171,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // or muted, and only those the teen rule lets you see (as on court pages and the map).
   const seenHits = useMemo(() => {
     const usersById = new Map(users.map((u) => [u.id, u]));
-    return openHitsOf(hitRequests, { blockedIds, mutedIds }).filter((h) => canSeeHitAt(h, { usersById, followingIds, currentUserId }));
-  }, [hitRequests, users, blockedIds, mutedIds, followingIds, currentUserId]);
+    return openHitsOf(hitRequests, { blockedIds, mutedIds }).filter((h) => canSeeHitAt(h, { usersById, followingIds, currentUserId, seeing }));
+  }, [hitRequests, users, blockedIds, mutedIds, followingIds, currentUserId, seeing]);
   // Near first (within 25 km, the reach of hit matches), soonest first, with how far:
   // everything that close is near, so today's game beats next week's a mile closer.
   // A place only typed has no spot, so it follows by time (most are local); the rest wait under "Further away".
@@ -227,9 +227,10 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     const since = Date.now() - NEW_DAYS * 86_400_000;
     return users
       .filter((u) => u.id !== currentUserId && !blockedIds.includes(u.id) && !near.has(u.id) && Date.parse(u.joinedAt) >= since)
-      .filter((u) => followingIds.includes(u.id) || (viewerAdult && !notKnownAdult(u)))
+      // (Since migration 64 nobody's age but your own reaches the phone: then only people you follow.)
+      .filter((u) => followingIds.includes(u.id) || (viewerAdult && ageSaysAdult(u)))
       .sort((a, b) => b.joinedAt.localeCompare(a.joinedAt));
-  }, [users, currentUser, currentUserId, blockedIds, followingIds, nearPlayers, newOnCourtside]);
+  }, [users, currentUser, currentUserId, blockedIds, followingIds, nearPlayers, newOnCourtside, ageSaysAdult]);
   // "Who's up today": from the map's own pins only, measured from where you
   // are (the phone's fix, or your own last spot), never from a profile's city.
   const ownSpot = detectedCoords ?? (currentUserId && lastSeen[currentUserId] ? { lat: lastSeen[currentUserId].lat, lng: lastSeen[currentUserId].lng } : null);

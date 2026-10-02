@@ -59,7 +59,7 @@ const ringCourt = (r: CourtRing): Court => ({ id: r.courtId, name: r.name ?? 'Te
  * `focusHit` opens the map with that hit's card up.
  */
 export function useMapModel(me: User, players: User[], fix?: LatLng | null, focus?: TaggedCourt | null, card = false, focusHit?: string | null, focusUser?: string | null, focusSpot?: LatLng | null) {
-  const { lastSeen, actions, hitRequests, users, followingIds, currentUserId, blockedIds, mutedIds, courtRings } = useApp();
+  const { lastSeen, actions, hitRequests, users, followingIds, currentUserId, blockedIds, mutedIds, courtRings, seeing } = useApp();
   // One stable function (it never changes), so asking for rings never repeats because something else did.
   const { loadCourtRings } = actions;
   // Your profile's city (and a typed town looked up by name, so nobody from a
@@ -78,9 +78,9 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   const hits = useMemo<PlacedHit[]>(() => {
     const usersById = new Map(users.map((u) => [u.id, u]));
     return openHits(hitRequests, { blockedIds, mutedIds })
-      .filter((h) => canSeeHitAt(h, { usersById, followingIds, currentUserId }))
+      .filter((h) => canSeeHitAt(h, { usersById, followingIds, currentUserId, seeing }))
       .flatMap((hit) => { const at = hitSpot(hit); return at ? [{ hit, at }] : []; });
-  }, [hitRequests, users, blockedIds, mutedIds, followingIds, currentUserId]);
+  }, [hitRequests, users, blockedIds, mutedIds, followingIds, currentUserId, seeing]);
   // Opened on a hit (?hit=…): where it is, once the hits are in. Only a hit
   // you may see: one you may not (a minor's, a blocked player's, one called
   // off) opens the map on your town, the same as an id that does not exist.

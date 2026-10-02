@@ -50,7 +50,7 @@ export default function PickGroup() {
   const locked = !!person && !blocked && !actions.canAddToGroup(person.id);
   // Locked: ask the server again whether they follow you now (the app's copy
   // is from when it opened); if they do, the lock lifts.
-  useEffect(() => { if (person && locked) void actions.recheckFollows([person.id]); }, [person?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (person && locked) void actions.reachNow(person.id); }, [person?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const groups = useMemo(() => {
     if (!currentUserId) return [];
