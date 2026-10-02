@@ -10,6 +10,8 @@ import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { activityDay } from '@/features/activity/format';
 import { needsLogging, pickLine, pickTitle, postOf, postedIndex, recentSessions, type SessionPick } from '@/features/activity/recent';
 import { takeSessionPicker } from '@/features/activity/sessionPicker';
+import { peopleText, peopleWords } from '@/features/activity/sessionTags';
+import { LoggedTitle } from '@/components/LoggedTitle';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -27,7 +29,7 @@ import { colors, font, radius, spacing, typography } from '@/theme';
  */
 export default function PickSession() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUserId, sessions, detectedActivities, posts, actions } = useApp();
+  const { currentUserId, sessions, detectedActivities, posts, sessionTags, users, actions } = useApp();
   const flags = useTennisFlags();
   // Who asked: the post underneath, handed over as this sheet opened.
   const [onPick] = useState(() => takeSessionPicker());
@@ -107,7 +109,9 @@ export default function PickSession() {
                 : pick.session.kind === 'match' ? <Ionicons name="trophy-outline" size={18} color={colors.textMuted} />
                 : pick.session.kind === 'fitness' ? <Ionicons name="barbell-outline" size={18} color={colors.textMuted} />
                 : <CourtGlyph size={15} color={colors.textMuted} />;
-              const title = pickTitle(pick);
+              // Who you played, as your log says it: "vs Mira" (a tick once she accepted), "vs June · Waiting" until then.
+              const people = pick.session ? peopleWords(pick.session, sessionTags, users) : null;
+              const title = `${pickTitle(pick)}${people ? ` ${peopleText(people)}` : ''}`;
               // Not logged yet is part of what the row says, not a label in the +'s place: it can be picked like the rest.
               const line = needsLogging(pick) ? `${pickLine(pick)} · Not logged yet` : pickLine(pick);
               return (
@@ -122,7 +126,7 @@ export default function PickSession() {
                 >
                   <View style={styles.icon}>{icon}</View>
                   <View style={styles.words}>
-                    <Text style={styles.title} numberOfLines={1}>{title}</Text>
+                    <LoggedTitle label={pickTitle(pick)} people={people} style={styles.title} faint={styles.waiting} numberOfLines={1} />
                     <Text style={styles.sub} numberOfLines={2}>{line}</Text>
                   </View>
                   {busy === key ? <ActivityIndicator size="small" color={colors.textMuted} />
@@ -149,6 +153,7 @@ const styleDefinitions = StyleSheet.create({
   words: { flex: 1, minWidth: 0, gap: 1 },
   title: { ...typography.body, ...font('600'), color: colors.text },
   sub: { ...typography.small, color: colors.textMuted },
+  waiting: { ...typography.small, ...font('500'), color: colors.textFaint },
   tag: { ...typography.caption, ...font('600'), letterSpacing: 0, color: colors.textMuted },
   error: { ...typography.small, color: colors.danger, paddingHorizontal: spacing.sm },
   // A row's height while your posts are checked, so the sheet doesn't jump much when the list arrives.

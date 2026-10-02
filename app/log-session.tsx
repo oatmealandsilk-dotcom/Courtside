@@ -4,16 +4,18 @@ import { router, useLocalSearchParams } from 'expo-router';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { DragSheet } from '@/components/DragSheet';
-import { Field } from '@/components/ui';
 import { Chips, Section, SheetTitle, Submit, Tiles, formBody } from '@/components/sheet/SheetForm';
-import { activityDay, activityWhen, fromWho, privateLine, statsSourceOf } from '@/features/activity/format';
+import { WhoYouPlayed } from '@/components/WhoYouPlayed';
+import { activityDay, activityWhen, dayWords, fromWho, loggedLabel, privateLine, statsSourceOf } from '@/features/activity/format';
+import { andList, canTagKind, firstName as firstOfName, isActive, tagsOnSession } from '@/features/activity/sessionTags';
 import { postOf, postedIndex } from '@/features/activity/recent';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
-import { hitNote, hitPrefill, prefillFor } from '@/features/hits/followUp';
+import { hitPrefill, prefillFor } from '@/features/hits/followUp';
 import { localDay } from '@/features/practice/stats';
-import type { DetectedActivity, PracticeSession } from '@/data/types';
+import type { DetectedActivity, ID, PracticeSession, SessionPlayer, SessionTagStatus } from '@/data/types';
 import { confirm } from '@/lib/confirm';
 import { duration } from '@/lib/format';
+import { KeyboardScrollContext, useKeyboardReveal } from '@/lib/keyboardScroll';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -55,11 +57,21 @@ function lengthsFor(a: DetectedActivity) {
  * game, the prompt sends both (?activity=&hit=): the tracker's session is
  * the one logged, with its own day and length, and the hit fills in the
  * rest, so one game is never logged twice.
+ *
+ * "Who you played" (a match or a practice) tags CourtSide players, up to
+ * three, each asked to accept before their name shows on a post; a name
+ * typed that isn't on CourtSide stays private, as before (migration 62).
+ * From a hit, its people are offered first. Opened on a session already
+ * logged (?edit=, a row in Your sessions), the sheet is that part alone, so
+ * people can be tagged after the fact. A copy of someone else's session
+ * (from their tag) is theirs to tag, so it says so instead.
  */
 export default function LogSession() {
   const styles = useThemedStyles(styleDefinitions);
-  const { activity, hit } = useLocalSearchParams<{ activity?: string; hit?: string }>();
-  const { actions, detectedActivities, remoteLoaded, hitRequests, currentUserId, users, posts } = useApp();
+  const { activity, hit, edit } = useLocalSearchParams<{ activity?: string; hit?: string; edit?: string }>();
+  const { actions, detectedActivities, remoteLoaded, ready, hitRequests, currentUserId, users, posts, sessions, sessionTags, sessionTagsReady } = useApp();
+  // The box you type in stays above a phone's keyboard, and so do the names listed under it.
+  const { scroller, onScroll, reveal } = useKeyboardReveal();
   // The hit it was opened for: the prompt's words, or the hit itself if the app was reloaded on the way.
   const [fromHit] = useState(() => {
     if (!hit) return null;
@@ -115,13 +127,77 @@ export default function LogSession() {
   const [preset, setPreset] = useState(fresh?.id);
   if (fresh && preset !== fresh.id) { setPreset(fresh.id); setMinutes(fresh.minutes); }
   const [won, setWon] = useState<'won' | 'lost' | null>(null);
-  // From a hit, a match starts with who played in the opponent box.
-  const [opponent, setOpponent] = useState(fromHit?.kind === 'match' ? fromHit.who : '');
+  // Who you played: CourtSide players to tag, and any name typed that isn't on CourtSide.
+  // From a hit, its people are offered to tag; with no tagging yet, their names start in the box.
+  const [players, setPlayers] = useState<SessionPlayer[]>([]);
+  const [opponent, setOpponent] = useState(fromHit && !sessionTagsReady ? fromHit.who : '');
   const [when, setWhen] = useState<'today' | 'yesterday'>(fromHit && fromHit.day !== localDay(new Date()) ? 'yesterday' : 'today');
   const [saving, setSaving] = useState(false);
   // Which button the save came from, so only that one spins.
   const [andPost, setAndPost] = useState(false);
   const [error, setError] = useState('');
+
+  const firstOf = (id: ID) => users.find((u) => u.id === id)?.name.trim().split(/\s+/)[0] ?? 'They';
+
+  // Opened on a session already logged (?edit=): who you played, and nothing else.
+  const editing = edit ? sessions.find((x) => x.id === edit && x.userId === currentUserId) : undefined;
+  // Your log (and its tags) may still be on its way when the sheet opens from a link.
+  const loaded = isSupabaseConfigured ? remoteLoaded : ready;
+  const editTags = editing ? tagsOnSession(sessionTags, editing.id, currentUserId) : [];
+  const activeOn = editTags.filter(isActive).map((t) => ({ id: t.taggedId, role: t.role }));
+  // What the sheet opened with: the people tagged and the name typed. It is
+  // taken again if they arrive after the sheet opened, until anything is touched.
+  const [editStart, setEditStart] = useState<{ players: SessionPlayer[]; text: string }>({ players: activeOn, text: editing?.opponent ?? '' });
+  const [editPlayers, setEditPlayers] = useState<SessionPlayer[]>(editStart.players);
+  const [editText, setEditText] = useState(editStart.text);
+  const touched = useRef(false);
+  const seedKey = `${editing?.id ?? ''}|${editing?.opponent ?? ''}|${activeOn.map((p) => `${p.id}:${p.role}`).join(',')}`;
+  useEffect(() => {
+    if (!editing || touched.current) return;
+    setEditStart({ players: activeOn, text: editing.opponent ?? '' });
+    setEditPlayers(activeOn);
+    setEditText(editing.opponent ?? '');
+  }, [seedKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const editStatus: Record<ID, SessionTagStatus> = Object.fromEntries(editTags.map((t) => [t.taggedId, t.status]));
+  // A no (or a name taken back off) shows until you take it off your log here; the server keeps it, so they are never asked again.
+  const [drops, setDrops] = useState<ID[]>([]);
+  const editDeclined = editTags.filter((t) => !isActive(t) && !drops.includes(t.taggedId)).map((t) => ({ id: t.taggedId, status: t.status }));
+  const editClosed = editing ? tagsOnSession(sessionTags, editing.id, currentUserId, true).filter((t) => !isActive(t)).map((t) => t.taggedId) : [];
+  const fromTag = editing?.fromSessionId ? sessionTags.find((t) => t.taggedId === currentUserId && (t.mirroredSessionId === editing.id || t.sessionId === editing.fromSessionId)) : undefined;
+  const fromName = fromTag ? firstOfName(users.find((u) => u.id === fromTag.taggerId)?.name ?? '') : '';
+  const saveEdit = async () => {
+    if (!editing || saving) return;
+    setSaving(true);
+    setError('');
+    try {
+      await actions.setSessionOpponent(editing.id, editText);
+      // A no taken off your log: off it (the server keeps it, so they are not asked again).
+      for (const id of drops) {
+        const t = editTags.find((x) => x.taggedId === id && !isActive(x));
+        if (t) await actions.removeSessionTag(t.id);
+      }
+      // Only what was changed here is changed: anyone taken out comes off, anyone
+      // added is tagged, a side switched is switched. A tag that arrived from
+      // elsewhere in the meantime is left as it is.
+      const now = new Set(editPlayers.map((p) => p.id));
+      const removed = new Set(editStart.players.filter((p) => !now.has(p.id)).map((p) => p.id));
+      const standing = tagsOnSession(sessionTags, editing.id, currentUserId).filter(isActive);
+      const wanted: SessionPlayer[] = [
+        ...standing.filter((t) => !removed.has(t.taggedId)).map((t) => ({ id: t.taggedId, role: editPlayers.find((p) => p.id === t.taggedId)?.role ?? t.role })),
+        ...editPlayers.filter((p) => !standing.some((t) => t.taggedId === p.id)),
+      ];
+      const before = new Set(standing.map((t) => t.taggedId));
+      const added = wanted.filter((p) => !before.has(p.id));
+      const refused = sessionTagsReady ? await actions.setSessionPlayers(editing.id, wanted) : [];
+      for (const r of refused) showToast({ title: `${firstOf(r.id)} wasn’t tagged`, body: r.why, icon: 'pricetag-outline' });
+      const asked = andList(added.filter((p) => !refused.some((r) => r.id === p.id)).map((p) => firstOf(p.id)));
+      showToast({ title: 'Saved', body: asked ? `${asked} will be asked to accept.` : undefined, icon: 'checkmark-circle-outline' });
+      close();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'That didn’t save. Try again.');
+      setSaving(false);
+    }
+  };
 
   const save = async (post = false) => {
     if (!minutes || saving) return;
@@ -130,18 +206,29 @@ export default function LogSession() {
     setError('');
     const day = fresh ? activityDay(fresh) : when === 'today' ? localDay(new Date()) : localDay(Date.now() - 86_400_000);
     if (fresh) setFrozen(fresh);
+    // Who you played goes with a match or a practice only.
+    const tagging = canTagKind(kind) ? players : [];
+    // From a hit with nobody tagged and nothing typed, its people's names are kept as private words, as before.
+    const typed = canTagKind(kind) ? (opponent.trim() || (fromHit && !tagging.length ? fromHit.who : '')) : '';
     try {
-      await actions.logSession({
-        minutes, kind, won: won === 'won' ? true : won === 'lost' ? false : undefined, opponent, day,
+      const id = await actions.logSession({
+        minutes, kind, won: won === 'won' ? true : won === 'lost' ? false : undefined, opponent: typed, day,
         ...(fresh ? { activityId: fresh.id } : {}),
-        // From a hit: where it was (and who, unless they are in the opponent box) as the note; the opponent box only for a match.
-        ...(fromHit ? { note: hitNote(fromHit, kind), opponent: kind === 'match' ? opponent : undefined } : {}),
+        // From a hit: where it was, as the note.
+        ...(fromHit ? { note: `At ${fromHit.place}` } : {}),
       });
+      // Each person tagged is asked to accept; anyone the server turns away is said after.
+      if (tagging.length) {
+        void actions.setSessionPlayers(id, tagging).then((refused) => {
+          for (const r of refused) showToast({ title: `${firstOf(r.id)} wasn’t tagged`, body: r.why, icon: 'pricetag-outline' });
+        });
+      }
+      const asked = andList(tagging.map((p) => firstOf(p.id)));
       // Posting goes straight on to the new post, which only opens once the
       // save went through, and says "Posted" when shared. A toast there would
       // sit over its Share button for a few seconds.
       if (post && fresh) next.current = fresh.id;
-      else showToast({ title: 'Session logged', body: 'Your streak and numbers are up to date.', icon: 'checkmark-circle-outline' });
+      else showToast({ title: 'Session logged', body: asked ? `${asked} will be asked to accept.` : 'Your streak and numbers are up to date.', icon: 'checkmark-circle-outline' });
       close();
     } catch (e) {
       setFrozen(null);
@@ -161,7 +248,11 @@ export default function LogSession() {
     onConfirm: () => { setFrozen(x); actions.dismissActivity(x.id); close(); },
   });
 
-  const header = waiting ? (
+  const header = editing ? (
+    <SheetTitle title="Who you played" line={`${loggedLabel(editing)} · ${dayWords(editing.day)} · ${duration(editing.minutes)}`} onClose={close} />
+  ) : edit ? (
+    <SheetTitle title="Who you played" onClose={close} />
+  ) : waiting ? (
     <SheetTitle title="Log your tennis" onClose={close} />
   ) : fresh ? (
     <SheetTitle title={fromHit ? 'How was the hit?' : 'Log your tennis'} line={`${fromHit ? `${fromHit.place}. ` : ''}From ${fromWho(fresh)} · ${activityWhen(fresh)}. Only you see this.`} lines={2} onClose={close} />
@@ -177,8 +268,47 @@ export default function LogSession() {
   const dismissed = () => (next.current ? router.replace({ pathname: '/compose', params: { activity: next.current } }) : router.back());
 
   return (
-    <DragSheet fitContent closeSignal={closeSignal} onDismissed={dismissed} peekFraction={0.7} header={header}>
-      {waiting ? (
+    <DragSheet fitContent closeSignal={closeSignal} onDismissed={dismissed} peekFraction={edit ? 0.46 : 0.7} header={header}>
+      <KeyboardScrollContext.Provider value={reveal}>
+      {edit ? (
+        <ScrollView ref={scroller} onScroll={onScroll} scrollEventThrottle={32} contentContainerStyle={formBody} keyboardShouldPersistTaps="handled">
+          {!editing && !loaded ? (
+            <View style={styles.wait}><CourtSpinner size={34} /></View>
+          ) : !editing ? (
+            <>
+              <Text style={styles.notice}>That session is no longer here.</Text>
+              <Submit label="Close" onPress={close} />
+            </>
+          ) : editing.fromSessionId ? (
+            <>
+              <Text style={styles.hint}>{fromName ? `This session came from ${fromName}’s tag. It’s theirs to tag.` : 'This session came from someone else’s tag. It’s theirs to tag.'}</Text>
+              <Submit label="Close" onPress={close} />
+            </>
+          ) : !canTagKind(editing.kind) ? (
+            <>
+              <Text style={styles.hint}>Players can be tagged on a match or a practice.</Text>
+              <Submit label="Close" onPress={close} />
+            </>
+          ) : (
+            <>
+              <WhoYouPlayed
+                kind={editing.kind}
+                players={editPlayers}
+                onPlayers={(next) => { touched.current = true; setEditPlayers(next); }}
+                text={editText}
+                onText={(next) => { touched.current = true; setEditText(next); }}
+                search={sessionTagsReady}
+                status={editStatus}
+                declined={editDeclined}
+                closed={editClosed}
+                onDrop={(id) => { touched.current = true; setDrops((was) => [...was, id]); }}
+              />
+              {error ? <Text style={styles.error}>{error}</Text> : null}
+              <Submit label="Save" onPress={() => { void saveEdit(); }} busy={saving} />
+            </>
+          )}
+        </ScrollView>
+      ) : waiting ? (
         <View style={styles.wait}><CourtSpinner size={34} /></View>
       ) : done ? (
         <ScrollView contentContainerStyle={formBody}>
@@ -194,7 +324,7 @@ export default function LogSession() {
           )}
         </ScrollView>
       ) : (
-        <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={scroller} onScroll={onScroll} scrollEventThrottle={32} contentContainerStyle={formBody} keyboardShouldPersistTaps="handled">
           {gone ? <Text style={styles.notice}>That session is no longer here.</Text> : null}
           {numbers ? <Text style={styles.numbers}>{numbers}</Text> : null}
           <Section title="What was it">
@@ -207,7 +337,19 @@ export default function LogSession() {
           {kind === 'match' ? (
             <Section title="Result">
               <Chips clearable value={won ?? undefined} onChange={(v) => setWon(v ?? null)} options={[{ value: 'won', label: 'Won' }, { value: 'lost', label: 'Lost' }]} />
-              <Field soft value={opponent} onChangeText={setOpponent} placeholder="Opponent (optional)" />
+            </Section>
+          ) : null}
+          {canTagKind(kind) ? (
+            <Section title="Who you played">
+              <WhoYouPlayed
+                kind={kind}
+                players={players}
+                onPlayers={setPlayers}
+                text={opponent}
+                onText={setOpponent}
+                search={sessionTagsReady}
+                suggested={fromHit?.playerIds ?? []}
+              />
             </Section>
           ) : null}
           {/* A tracker's session already knows its day. */}
@@ -238,6 +380,7 @@ export default function LogSession() {
           ) : null}
         </ScrollView>
       )}
+      </KeyboardScrollContext.Provider>
     </DragSheet>
   );
 }

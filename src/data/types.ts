@@ -126,7 +126,84 @@ export interface PracticeSession {
   note?: string;
   /** The tracker session this was logged from (migration 58). */
   activityId?: ID;
+  /**
+   * When you accepted a tag with "Add to my sessions": the tagger's session
+   * this copy came from (migration 62, column from_session_id). Accepting the
+   * same session again finds this copy instead of making a second one.
+   */
+  fromSessionId?: ID;
   createdAt: string;
+}
+
+/* ------------------------------ Session tags ----------------------------- */
+
+/** In a match: an opponent or a doubles partner. Everyone tagged on a practice is a 'partner' ("with"). */
+export type SessionTagRole = 'opponent' | 'partner';
+
+/**
+ * Waiting for the tagged person; they said yes (public on posts); they said
+ * no (they can still change their mind); they took an accepted tag back off
+ * ('removed': final, they cannot put their name back by themselves).
+ */
+export type SessionTagStatus = 'pending' | 'accepted' | 'declined' | 'removed';
+
+/**
+ * Someone tagged in a session from a player's own log (migration 62), as
+ * my_session_tags() returns it: every tag you made and every tag of you.
+ * Only the tagger and the tagged person ever see one. The session's kind,
+ * day and length come with it so the tagged person can see what they are
+ * accepting; the tagger's notes, place and free-text opponent never do.
+ */
+export interface SessionTag {
+  id: ID;
+  /** The tagger's session. The tagged person cannot open it; these fields are all they get. */
+  sessionId: ID;
+  taggerId: ID;
+  taggedId: ID;
+  role: SessionTagRole;
+  status: SessionTagStatus;
+  /**
+   * The tagger took a no (or a removal) off their own log. The tag stays on
+   * the server so that person is never asked again on this session, and it
+   * can no longer be answered.
+   */
+  dropped?: boolean;
+  /** Your own copy in your log, when you are the tagged person and asked for one. Never set on tags you made. */
+  mirroredSessionId?: ID;
+  createdAt: string;
+  respondedAt?: string;
+  kind: PracticeSession['kind'];
+  /** YYYY-MM-DD, the tagger's day. */
+  day: string;
+  minutes: number;
+  /** A match's result from YOUR side: the tagger's result on tags you made, the mirrored one on tags of you. */
+  won?: boolean;
+}
+
+/**
+ * Why a tag was refused, as tag_session raises it (or session_tag_refusal
+ * returns it, for the first six). 'teen_closed': someone not known to be an
+ * adult who does not follow you yet. 'declined': they already said no to
+ * this session (or took their name off it). 'copy': the session is your
+ * copy of someone else's, so it is theirs to tag. 'removed' (an answer, not
+ * a tag): the tag was taken off and can no longer be accepted.
+ */
+export type SessionTagRefusal =
+  | 'missing' | 'self' | 'suspended' | 'blocked' | 'teen_closed' | 'signed_out'
+  | 'not_your_session' | 'copy' | 'not_a_match_or_practice' | 'bad_role' | 'declined' | 'too_many' | 'rate_limited' | 'removed';
+
+/** One accepted player on a post's session stats, kept by the server (migration 62). */
+export interface SessionWith {
+  id: ID;
+  handle: string;
+  name: string;
+  role: SessionTagRole;
+}
+
+/** Someone picked in "Who you played" on the log sheet: a CourtSide player, and which side of the net they were on. */
+export interface SessionPlayer {
+  id: ID;
+  role: SessionTagRole;
 }
 
 /** A tennis session a tracker recorded, waiting to be logged. Private to its owner (migration 58). */
@@ -215,6 +292,13 @@ export interface SessionDetail {
   kind?: PracticeSession['kind'];
   /** A match's result, when you said. */
   won?: boolean;
+  /**
+   * The players on the session who accepted their tag (migration 62):
+   * opponents first, then partners. Only the server writes it; whatever the
+   * phone sends is replaced. Absent when nobody has accepted. Pending and
+   * declined names never appear here.
+   */
+  with?: SessionWith[];
 }
 
 /** scale ≥ 1; x and y are the picture's centre offset as fractions of the frame's width and height. */
@@ -767,9 +851,17 @@ export type NotificationKind =
   /** Someone nearby posted a hit much like yours (or like what your open-to-hit ring says). Actor is them; the target is their hit (migration 53). */
   | 'hit-match'
   /** A tracker picked up a tennis session. Actor is you; the target is the detected activity (migration 58). */
-  | 'activity';
+  | 'activity'
+  /**
+   * Someone tagged you in a session from their log (migration 62). Actor is
+   * the tagger; the target is THEIR session's id (find your tag with
+   * my_session_tags() by sessionId); preview is 'match' or 'practice', for
+   * "tagged you in a match" / "in a practice". Filed once per session and
+   * person, so a tag taken off and put back never alerts twice.
+   */
+  | 'session-tag';
 
-export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application' | 'report' | 'coaching-request' | 'profile' | 'hit-request' | 'activity';
+export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application' | 'report' | 'coaching-request' | 'profile' | 'hit-request' | 'activity' | 'session-tag';
 
 /** A court a post is tagged with: the map's id for it, its name, and where it is. */
 export interface TaggedCourt { id: string; name: string; lat: number; lng: number }

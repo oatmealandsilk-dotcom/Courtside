@@ -107,6 +107,8 @@ export interface HitPrefill {
   place: string;
   /** First names of the others: "Mira", "Mira and Dev", "Mira, Dev and Sam". Empty when none are known. */
   who: string;
+  /** The others who played, as CourtSide players: offered first in "Who you played", ready to tag. */
+  playerIds: ID[];
 }
 
 /** "Mira, Dev and Sam". */
@@ -122,11 +124,8 @@ function namesOf(names: string[]): string {
 export function prefillFor(h: HitRequest, me: ID, users: User[]): HitPrefill {
   const others = [h.authorId, ...h.joinedIds].filter((id, i, all) => id !== me && all.indexOf(id) === i);
   const names = others.map((id) => users.find((u) => u.id === id)?.name.split(' ')[0]).filter((n): n is string => !!n);
-  return { hitId: h.id, kind: h.format === 'hit' ? 'practice' : 'match', minutes: HIT_MINUTES, day: localDay(h.startsAt), place: h.place.name, who: namesOf(names) };
+  return { hitId: h.id, kind: h.format === 'hit' ? 'practice' : 'match', minutes: HIT_MINUTES, day: localDay(h.startsAt), place: h.place.name, who: namesOf(names), playerIds: others.filter((id) => users.some((u) => u.id === id)) };
 }
-
-/** "At Alder Park · with Mira": what a session logged from a hit keeps as its note. The names go in the opponent box for a match instead. */
-export const hitNote = (p: HitPrefill, kind: string) => `At ${p.place}${p.who && kind !== 'match' ? ` · with ${p.who}` : ''}`;
 
 /** A place name short enough for one line of a note at the top of the screen: "Riverside Park Tennis C…". */
 export function shortPlace(name: string, max = 26): string {

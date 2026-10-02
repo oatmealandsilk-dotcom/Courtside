@@ -15,6 +15,7 @@ import { planStreakReminder } from '@/features/practice/reminder';
 import { TERMS_VERSION } from '@/lib/legal';
 
 import { fetchBootstrap, searchPosts as apiSearchPosts, signIn as apiSignIn, type Bootstrap } from '@/data/api';
+import * as demoApi from '@/data/api';
 import { auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ReportedChat, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type RemoteData } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
@@ -28,6 +29,7 @@ import { appleHealthAvailable, connectAppleHealth, readAppleHealth, readAppleNut
 import { tennisFlags } from '@/features/activity/flags';
 import { checkForTennis } from '@/features/activity/check';
 import { fromWho } from '@/features/activity/format';
+import { MAX_SESSION_TAGS, REFUSALS, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
 import { duration } from '@/lib/format';
 import { takeReferrer } from '@/features/invite/referral';
 import { endOfToday } from '@/features/players/openToHit';
@@ -78,6 +80,9 @@ import type {
   SavedItems,
   SessionDetail,
   PracticeSession,
+  SessionPlayer,
+  SessionTag,
+  SessionTagRefusal,
   CourtNote,
   LastSeen,
   HitRequest,
@@ -319,6 +324,18 @@ interface AppState extends Bootstrap {
   tips: Tip[];
   /** Your own practice log: where streaks, hours and win rate come from. */
   sessions: PracticeSession[];
+  /**
+   * People tagged in sessions (migration 62): every tag you made and every tag
+   * of you, as my_session_tags() returns them. Only the two people on a tag
+   * ever see it.
+   */
+  sessionTags: SessionTag[];
+  /**
+   * Whether the server can tag players on sessions yet (migration 62 has
+   * run). Until it says so, "Who you played" is a free-text box only.
+   * Always on in the demo.
+   */
+  sessionTagsReady: boolean;
   /** What players say about the courts opened on the map, by court id; loaded when a court is opened. */
   courtNotes: Record<string, CourtNote[]>;
   /** Last spots for the map, by id, your own included (migration 46). */
@@ -414,7 +431,7 @@ interface AppActions {
   /** Saves your report on a court, replacing any earlier one; a photo on the phone is uploaded first. */
   saveCourtNote: (input: Omit<CourtNote, 'userId' | 'updatedAt'>) => Promise<void>;
   /** `activityId`: the tracker session it was logged from, which then counts as logged. */
-  logSession: (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; opponent?: string; note?: string; day?: string; activityId?: ID }) => Promise<void>;
+  logSession: (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; opponent?: string; note?: string; day?: string; activityId?: ID }) => Promise<ID>;
   deleteSession: (id: ID) => void;
   /** Post a "Looking for a hit". Throws a plain sentence if it cannot be posted. */
   postHit: (input: Omit<HitRequest, 'id' | 'authorId' | 'createdAt' | 'joinedIds' | 'conversationId' | 'cancelled'>) => Promise<ID>;
@@ -431,6 +448,31 @@ interface AppActions {
    * demo's are already loaded.
    */
   loadMySessionPosts: () => Promise<boolean>;
+
+  /* Session tags (migration 62) */
+  /**
+   * Who you played, on a session of yours: tags the CourtSide players newly
+   * picked (each is told once and asked to accept), takes off the ones taken
+   * out, and changes anyone's side of the net. Someone who said no stays
+   * off. Resolves with anyone who could not be tagged and why, in words.
+   */
+  setSessionPlayers: (sessionId: ID, players: SessionPlayer[]) => Promise<{ id: ID; why: string }[]>;
+  /** A tag of you: Accept (with your own copy of the session unless addToMine is false) or Decline. Throws a plain sentence. */
+  respondSessionTag: (tagId: ID, accept: boolean, addToMine?: boolean) => Promise<void>;
+  /**
+   * "Remove tag". The tagger takes it off (a no, or a tag the other person
+   * took back off, leaves your log but stays on the server, so that person is
+   * never asked again); the one tagged takes their name back off (final: a
+   * waiting tag becomes a no, an accepted one 'removed'), and with dropMine
+   * their own copy of the session goes too. Their name leaves every post at once.
+   */
+  removeSessionTag: (tagId: ID, dropMine?: boolean) => Promise<void>;
+  /** Your session tags, fetched afresh (Your sessions, an alert opened). False when the server could not be asked or did not answer. */
+  refreshSessionTags: () => Promise<boolean>;
+  /** Why you may not tag someone, or null when you may: the server's answer on a real account, this phone's guess in the demo. */
+  sessionTagRefusal: (userId: ID) => Promise<SessionTagRefusal | null>;
+  /** The private name typed for who you played, changed on a session already in your log. */
+  setSessionOpponent: (sessionId: ID, opponent: string) => Promise<void>;
 
   toggleLike: (postId: ID) => void;
   addPost: (input: NewPostInput) => ID;
@@ -897,6 +939,7 @@ function dropFixtures(state: AppState): AppState {
     messages: real(state.messages),
     notifications: real(state.notifications),
     detectedActivities: real(state.detectedActivities),
+    sessionTags: real(state.sessionTags),
     tips: real(state.tips),
     // The lists that only hold ids follow the things they point at.
     followingIds: state.followingIds.filter((id) => UUID.test(id)),
@@ -1058,6 +1101,8 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       sessions: data.sessions ?? prev.sessions,
       hitRequests: data.hitRequests ?? prev.hitRequests,
       detectedActivities: data.activities ?? prev.detectedActivities,
+      // Asked with the rest of the open (migration 62): names on posts and the people search follow it.
+      sessionTagsReady: data.sessionTagsReady ?? prev.sessionTagsReady,
       notifications: [...data.notifications, ...prev.notifications.filter((n) => !data.notifications.some((x) => x.id === n.id) && !gone(n.id))],
       tips: [...data.tips, ...prev.tips.filter((t) => !data.tips.some((x) => x.id === t.id) && !gone(t.id))],
       coachApplications: [...data.coachApplications, ...prev.coachApplications.filter((a) => !data.coachApplications.some((x) => x.id === a.id))],
@@ -1182,6 +1227,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     prefs: { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true },
     tips: [],
     sessions: [],
+    sessionTags: [],
+    sessionTagsReady: !isSupabaseConfigured,
     courtNotes: {},
     lastSeen: {},
     hitRequests: [],
@@ -1406,6 +1453,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try { off = remote.onHits(refetch); } catch { /* live updates are a nicety */ }
     return () => { on = false; if (timer) clearTimeout(timer); off?.(); };
   }, [remoteLoaded, currentUserForLive, liveEpoch]);
+
+  // Session tags (migration 62): asked once per account whether the server
+  // has them; until it does, "Who you played" stays free text. Once it does,
+  // your tags load and stay live: a "Waiting" turns into the name within
+  // seconds of the other player accepting, and the list catches up whenever
+  // the app comes back to the front (the subscription reconnects with liveEpoch).
+  const tagsReady = state.sessionTagsReady;
+  useEffect(() => {
+    if (!isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive) || tagsReady) return;
+    let on = true;
+    void remote.sessionTagsReady().then((ready) => { if (on && ready) setState((prev) => (prev.currentUserId === currentUserForLive ? { ...prev, sessionTagsReady: true } : prev)); }).catch(() => undefined);
+    return () => { on = false; };
+  }, [remoteLoaded, currentUserForLive, tagsReady, liveEpoch]);
+  useEffect(() => {
+    if (!isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive) || !tagsReady) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let on = true;
+    const refetch = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void remote.mySessionTags().then((got) => {
+          if (on && got) setState((prev) => (prev.currentUserId === currentUserForLive ? { ...prev, sessionTags: got, posts: reconcileWith(prev.posts, currentUserForLive, prev.sessions, got, prev.users) } : prev));
+        }).catch(() => undefined);
+      }, 400);
+    };
+    let off: (() => void) | undefined;
+    try { off = remote.onSessionTags(currentUserForLive, () => new Set(stateRef.current.sessionTags.map((t) => t.id)), refetch); } catch { refetch(); }
+    return () => { on = false; if (timer) clearTimeout(timer); off?.(); };
+  }, [remoteLoaded, currentUserForLive, tagsReady, liveEpoch]);
 
   // Notifications for other people are never sent from this phone: the
   // database files them itself when the real like, comment or follow is
@@ -1737,7 +1813,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setState((prev) => ({ ...prev, savedAccounts }));
       throw err;
     }
-    setState((prev) => ({ ...prev, currentUserId: session.user.id, remoteLoaded: false, onboardingComplete: false, error: null, detectedActivities: [] }));
+    setState((prev) => ({ ...prev, currentUserId: session.user.id, remoteLoaded: false, onboardingComplete: false, error: null, detectedActivities: [], sessionTags: [] }));
     await loadRemote(session.user.id, session.user.email);
   }, [loadRemote]);
 
@@ -1790,7 +1866,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // This phone stops getting the account's alerts before the session ends (the removal needs it).
     if (isSupabaseConfigured) void forgetPushToken().finally(() => remoteAuth.signOut());
     // One account's health (its tracker sessions too) never carries over to the next one signed in.
-    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [] }));
+    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [], sessionTags: [] }));
   }, []);
 
   const patchCurrentUser = useCallback(
@@ -1903,11 +1979,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       (had ? prev.detectedActivities.map((a) => (a.id === had.id ? { ...a, ...patch } : a)) : prev.detectedActivities);
     haptics.commit();
     setState((prev) => ({ ...prev, sessions: [session, ...prev.sessions], detectedActivities: markActivity(prev, { status: 'logged', sessionId: session.id }) }));
-    if (!live(me)) return;
+    if (!live(me)) return session.id;
     try { await remote.insertSession(session); } catch (e) {
       setState((prev) => ({ ...prev, sessions: prev.sessions.filter((x) => x.id !== session.id), detectedActivities: markActivity(prev, { status: had?.status ?? 'new', sessionId: had?.sessionId }) }));
       throw e;
     }
+    return session.id;
   }, [requireUser]);
 
   const deleteSession = useCallback((id: ID) => {
@@ -1917,6 +1994,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       sessions: prev.sessions.filter((x) => x.id !== id),
       // A tracker session it was logged from is waiting to be logged again, as the database puts it back (migration 58).
       detectedActivities: prev.detectedActivities.map((a) => (a.sessionId === id && a.status === 'logged' ? { ...a, status: 'new', sessionId: undefined } : a)),
+      // Its tags go with it (the database deletes them too, migration 62); a copy of someone else's session only loses its link.
+      sessionTags: prev.sessionTags
+        .filter((t) => !(t.sessionId === id && t.taggerId === me))
+        .map((t) => (t.mirroredSessionId === id ? { ...t, mirroredSessionId: undefined } : t)),
     }));
     if (live(me)) void remote.deleteSession(id);
   }, []);
@@ -2048,6 +2129,215 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return true;
   }, []);
 
+  /* ------------------------------------------------ session tags (migration 62) */
+
+  /** Your tags, fetched afresh. Nothing to ask in the demo, or before the server can tag. */
+  const refreshSessionTags = useCallback(async (): Promise<boolean> => {
+    const me = stateRef.current.currentUserId;
+    // The demo holds its tags already: nothing to ask.
+    if (!live(me)) return true;
+    if (!stateRef.current.sessionTagsReady) {
+      // Not known yet whether this server can tag (the first look had no answer): asked once more.
+      const ready = await remote.sessionTagsReady().catch(() => null);
+      if (!ready) return false;
+      setState((prev) => (prev.currentUserId === me ? { ...prev, sessionTagsReady: true } : prev));
+    }
+    const got = await remote.mySessionTags().catch(() => null);
+    if (!got || stateRef.current.currentUserId !== me) return false;
+    // A tag answered or taken off elsewhere changes the names on posts here too.
+    setState((prev) => ({ ...prev, sessionTags: got, posts: reconcileWith(prev.posts, me!, prev.sessions, got, prev.users) }));
+    return true;
+  }, []);
+
+  /** A refusal word in plain English, naming the person when the app knows them. */
+  const tagWords = useCallback((code: string, userId?: ID) => {
+    const users = stateRef.current.users;
+    return refusalWords(REFUSALS.has(code) ? code : 'other', nameFor(users.find((u) => u.id === userId), users));
+  }, []);
+
+  const sessionTagRefusal = useCallback(async (userId: ID): Promise<SessionTagRefusal | null> => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    const guess = s.blockedIds.includes(userId) ? 'blocked' : localRefusal({ me, who: s.users.find((u) => u.id === userId), follows: s.followEdges, real: live(me, userId) });
+    if (!live(me, userId) || !s.sessionTagsReady) return guess;
+    // The server's answer counts; without one, this phone's guess.
+    return remote.sessionTagRefusal(userId).catch(() => guess);
+  }, []);
+
+  const setSessionPlayers = useCallback(async (sessionId: ID, players: SessionPlayer[]): Promise<{ id: ID; why: string }[]> => {
+    const me = requireUser();
+    const s = stateRef.current;
+    const session = s.sessions.find((x) => x.id === sessionId && x.userId === me);
+    if (!session || !canTagKind(session.kind)) return players.map((p) => ({ id: p.id, why: tagWords('not_a_match_or_practice') }));
+    // Before the server can tag (migration 62 not run), nobody is tagged: the screens offer only the free-text box then.
+    if (live(me) && !s.sessionTagsReady) return players.map((p) => ({ id: p.id, why: tagWords('other') }));
+    if (session.fromSessionId) return players.map((p) => ({ id: p.id, why: tagWords('copy') }));
+    const mine = tagsOnSession(s.sessionTags, sessionId, me, true);
+    const wanted = new Map(players.slice(0, MAX_SESSION_TAGS).map((p) => [p.id, roleOn(session.kind, p.role)]));
+    const refused: { id: ID; why: string }[] = players.slice(MAX_SESSION_TAGS).map((p) => ({ id: p.id, why: tagWords('too_many') }));
+    // Taken out first, so the three places have room; then sides changed; then the new people.
+    const drop = mine.filter((t) => isActive(t) && !wanted.has(t.taggedId));
+    // Someone switched to the other side of the net after saying yes is asked again (the server does the same).
+    const turn = mine.filter((t) => isActive(t) && wanted.has(t.taggedId) && wanted.get(t.taggedId) !== t.role);
+    const add: SessionPlayer[] = [];
+    for (const [id, role] of wanted) {
+      const had = mine.find((t) => t.taggedId === id);
+      // Someone who said no to this session (or took their name off it) is not asked again: the server refuses it too.
+      if (had && !isActive(had)) refused.push({ id, why: tagWords('declined', id) });
+      else if (!had) add.push({ id, role });
+    }
+    if (!drop.length && !turn.length && !add.length) return refused;
+    const now = new Date().toISOString();
+    const fresh: SessionTag[] = add.map((p) => ({
+      id: nextId('stag'), sessionId, taggerId: me, taggedId: p.id, role: p.role, status: 'pending', createdAt: now,
+      kind: session.kind, day: session.day, minutes: session.minutes, won: session.won,
+    }));
+    const dropped = new Set(drop.map((t) => t.id));
+    const turned = new Map(turn.map((t) => [t.id, wanted.get(t.taggedId)!]));
+    // Shown at once: the new ones waiting, the dropped ones gone (and off your posts), the sides changed.
+    setState((prev) => {
+      let posts = prev.posts;
+      for (const t of drop) if (t.status === 'accepted') posts = patchWith(posts, me, sessionId, t.taggedId, null);
+      // A side switched after a yes: off the posts until they say yes to the new side.
+      for (const t of turn) if (t.status === 'accepted') posts = patchWith(posts, me, sessionId, t.taggedId, null);
+      // Each new person hears about it once (the database files the real alert, migration 62).
+      const told = fresh.reduce((acc, t) => withNotification(acc, { userId: t.taggedId, actorId: me, kind: 'session-tag', targetId: sessionId, targetKind: 'session-tag', preview: session.kind === 'match' ? 'match' : 'practice' }), prev);
+      return {
+        ...told,
+        posts,
+        sessionTags: [
+          ...fresh,
+          ...prev.sessionTags.filter((t) => !dropped.has(t.id)).map((t) => (turned.has(t.id) ? { ...t, role: turned.get(t.id)!, status: t.status === 'accepted' ? 'pending' as const : t.status, respondedAt: t.status === 'accepted' ? undefined : t.respondedAt } : t)),
+        ],
+      };
+    });
+    const undoAdd = (tagId: ID) => setState((prev) => ({ ...prev, sessionTags: prev.sessionTags.filter((t) => t.id !== tagId) }));
+    if (!live(me, sessionId)) {
+      // The demo answers as the server would, refusals and all.
+      for (const t of fresh) {
+        try {
+          const refusal = await sessionTagRefusal(t.taggedId);
+          await demoApi.tagSession({ me, session, who: t.taggedId, role: t.role, tags: s.sessionTags, refusal, newId: t.id });
+        } catch (e) {
+          undoAdd(t.id);
+          refused.push({ id: t.taggedId, why: tagWords(e instanceof Error ? e.message : '', t.taggedId) });
+        }
+      }
+      return refused;
+    }
+    for (const t of drop) await remote.untagSession(t.id).catch(() => undefined);
+    for (const t of turn) await remote.tagSession(sessionId, t.taggedId, turned.get(t.id)).catch(() => undefined);
+    for (const t of fresh) {
+      try {
+        await remote.tagSession(sessionId, t.taggedId, t.role);
+      } catch (e) {
+        undoAdd(t.id);
+        refused.push({ id: t.taggedId, why: tagWords(e instanceof Error ? e.message : '', t.taggedId) });
+      }
+    }
+    // The server's own rows (their real ids) replace the ones made here.
+    await refreshSessionTags();
+    return refused;
+  }, [requireUser, tagWords, sessionTagRefusal, refreshSessionTags]);
+
+  const respondSessionTag = useCallback(async (tagId: ID, accept: boolean, addToMine = true) => {
+    const me = requireUser();
+    const s = stateRef.current;
+    const tag = s.sessionTags.find((t) => t.id === tagId && t.taggedId === me);
+    if (!tag) throw new Error('That tag is no longer here.');
+    const tagger = s.users.find((u) => u.id === tag.taggerId);
+    const self = s.users.find((u) => u.id === me);
+    const taggerName = firstName(tagger?.name.trim() || tagger?.handle || 'Someone').slice(0, 60);
+    // A no to a tag you had said yes to is taking your name back off: final, as on the server.
+    const after = accept ? 'accepted' as const : tag.status === 'accepted' ? 'removed' as const : tag.status === 'pending' ? 'declined' as const : tag.status;
+    accept ? haptics.commit() : haptics.tap();
+    // Answered here and now: the alert reads as seen, the post names you (or doesn't), and your copy is in your log.
+    const markRead = (list: Notification[]) => list.map((n) => (n.userId === me && n.kind === 'session-tag' && n.targetId === tag.sessionId && !n.read ? { ...n, read: true } : n));
+    const apply = (copy: PracticeSession | null) => setState((prev) => ({
+      ...prev,
+      notifications: markRead(prev.notifications),
+      sessionTags: prev.sessionTags.map((t) => (t.id === tagId ? { ...t, status: after, respondedAt: new Date().toISOString(), mirroredSessionId: copy?.id ?? t.mirroredSessionId } : t)),
+      sessions: copy && !prev.sessions.some((x) => x.id === copy.id) ? [copy, ...prev.sessions] : prev.sessions,
+      posts: patchWith(prev.posts, tag.taggerId, tag.sessionId, me, accept && self ? withEntry(self, tag.role) : null),
+    }));
+    const undo = (copyId?: ID) => setState((prev) => ({
+      ...prev,
+      sessionTags: prev.sessionTags.map((t) => (t.id === tagId ? tag : t)),
+      sessions: copyId && copyId !== tag.mirroredSessionId ? prev.sessions.filter((x) => x.id !== copyId) : prev.sessions,
+      posts: patchWith(prev.posts, tag.taggerId, tag.sessionId, me, tag.status === 'accepted' && self ? withEntry(self, tag.role) : null),
+    }));
+    // The copy the server would make, shown straight away and swapped for the server's own.
+    const hasCopy = s.sessions.some((x) => x.userId === me && (x.id === tag.mirroredSessionId || x.fromSessionId === tag.sessionId));
+    const guess = accept && (addToMine || hasCopy) ? mirrorCopy({ me, tag, sessions: s.sessions, taggerName, newId: nextId('ses') }) : null;
+    apply(guess);
+    if (!live(me, tagId)) {
+      try { await demoApi.respondSessionTag({ me, tag, accept, addToMine, sessions: s.sessions, tags: s.sessionTags, taggerName, newId: guess?.id ?? nextId('ses') }); } catch (e) {
+        undo(guess?.id);
+        throw new Error(tagWords(e instanceof Error ? e.message : ''));
+      }
+      return;
+    }
+    try {
+      const copy = await remote.respondSessionTag(tagId, accept, addToMine);
+      if (guess && copy && guess.id !== copy.id) {
+        setState((prev) => ({
+          ...prev,
+          sessions: [copy, ...prev.sessions.filter((x) => x.id !== guess.id && x.id !== copy.id)],
+          sessionTags: prev.sessionTags.map((t) => (t.id === tagId ? { ...t, mirroredSessionId: copy.id } : t)),
+        }));
+      } else if (guess && !copy) {
+        setState((prev) => ({ ...prev, sessions: prev.sessions.filter((x) => x.id !== guess.id || guess.id === tag.mirroredSessionId) }));
+      }
+    } catch (e) {
+      undo(guess?.id);
+      throw new Error(tagWords(e instanceof Error ? e.message : ''));
+    }
+  }, [requireUser, tagWords]);
+
+  const removeSessionTag = useCallback(async (tagId: ID, dropMine = false) => {
+    const me = requireUser();
+    const tag = stateRef.current.sessionTags.find((t) => t.id === tagId);
+    if (!tag || (tag.taggerId !== me && tag.taggedId !== me)) return;
+    const before = stateRef.current;
+    haptics.tap();
+    setState((prev) => {
+      const posts = tag.status === 'accepted' ? patchWith(prev.posts, tag.taggerId, tag.sessionId, tag.taggedId, null) : prev.posts;
+      // The tagger: gone; a no (or a tag taken back off) only leaves your log, so they are not asked again.
+      if (tag.taggerId === me) {
+        return { ...prev, posts, sessionTags: isActive(tag) ? prev.sessionTags.filter((t) => t.id !== tagId) : prev.sessionTags.map((t) => (t.id === tagId ? { ...t, dropped: true } : t)) };
+      }
+      // The one tagged: a waiting tag becomes a no, an accepted one is taken back off for good; their copy goes only if they asked.
+      const after = tag.status === 'pending' ? 'declined' as const : tag.status === 'accepted' ? 'removed' as const : tag.status;
+      return {
+        ...prev,
+        posts,
+        sessionTags: prev.sessionTags.map((t) => (t.id === tagId ? { ...t, status: after, respondedAt: isActive(tag) ? new Date().toISOString() : t.respondedAt, mirroredSessionId: dropMine ? undefined : t.mirroredSessionId } : t)),
+        sessions: dropMine && tag.mirroredSessionId ? prev.sessions.filter((x) => x.id !== tag.mirroredSessionId) : prev.sessions,
+        notifications: prev.notifications.map((n) => (n.userId === me && n.kind === 'session-tag' && n.targetId === tag.sessionId ? { ...n, read: true } : n)),
+      };
+    });
+    try {
+      if (live(me, tagId)) await remote.untagSession(tagId, dropMine);
+      else await demoApi.untagSession({ me, tag });
+    } catch (e) {
+      setState((prev) => ({ ...prev, posts: before.posts, sessionTags: before.sessionTags, sessions: before.sessions }));
+      throw new Error(tagWords(e instanceof Error ? e.message : ''));
+    }
+  }, [requireUser, tagWords]);
+
+  const setSessionOpponent = useCallback(async (sessionId: ID, opponent: string) => {
+    const me = requireUser();
+    const text = opponent.trim().slice(0, 80) || undefined;
+    const had = stateRef.current.sessions.find((x) => x.id === sessionId && x.userId === me);
+    if (!had || had.opponent === text) return;
+    setState((prev) => ({ ...prev, sessions: prev.sessions.map((x) => (x.id === sessionId ? { ...x, opponent: text } : x)) }));
+    if (!live(me, sessionId)) return;
+    try { await remote.updateSessionOpponent(sessionId, text ?? null); } catch (e) {
+      setState((prev) => ({ ...prev, sessions: prev.sessions.map((x) => (x.id === sessionId ? { ...x, opponent: had.opponent } : x)) }));
+      throw e;
+    }
+  }, [requireUser]);
+
   const cancelHit = useCallback((hitId: ID) => {
     const me = requireUser();
     setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.filter((h) => h.id !== hitId) }));
@@ -2106,6 +2396,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const already = source ? sending.current.get(source) : undefined;
       if (already) return already;
       haptics.commit();
+      const now = stateRef.current;
       const post: Post = {
         id: nextId('p'),
         authorId: me,
@@ -2113,6 +2404,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         likedBy: [],
         commentIds: [],
         ...input,
+        // Who accepted a tag on the session shows straight away; the server works it out again and keeps its own (migration 62).
+        session: withOnNewPost(input.session, me, now.sessions, now.sessionTags, now.users),
         // The server marks it too; this shows the tag before the round trip.
         isFirst: !stateRef.current.posts.some((p) => p.authorId === me) || undefined,
       };
@@ -2317,11 +2610,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // pull is exactly how someone asks it to try again.
     if (!me || !live(me)) { await new Promise((resolve) => setTimeout(resolve, 500)); return true; }
     const before = stateRef.current.feed;
+    void refreshSessionTags();
     if (await loadRemote(me, undefined, true)) { await drawn(() => stateRef.current.feed !== before); return true; }
     // An open on the saved copy that could not refresh has already said so.
     if (stateRef.current.remoteLoaded || !stateRef.current.snapshotShown) showToast({ title: 'Can’t refresh right now', body: 'Check your connection, then pull down to try again.', icon: 'cloud-offline-outline' });
     return false;
-  }, [loadRemote, drawn]);
+  }, [loadRemote, drawn, refreshSessionTags]);
 
   const addStory = useCallback(
     (input: NewStoryInput): ID => {
@@ -4440,6 +4734,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         conversations: blocking
           ? prev.conversations.filter((c) => !(isDirectChat(c) && c.participantIds.includes(userId) && c.participantIds.includes(me)))
           : prev.conversations,
+        // Session tags between the two end, either way round, and their name leaves your posts (the database does the same, migration 62).
+        ...(blocking ? {
+          sessionTags: prev.sessionTags.filter((t) => !((t.taggerId === me && t.taggedId === userId) || (t.taggerId === userId && t.taggedId === me))),
+          posts: prev.sessionTags
+            .filter((t) => t.taggerId === me && t.taggedId === userId && t.status === 'accepted')
+            .reduce((list, t) => patchWith(list, me, t.sessionId, userId, null), prev.posts),
+        } : {}),
       };
     });
   }, []);
@@ -4815,6 +5116,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cancelHit,
       recentHits,
       loadMySessionPosts,
+      setSessionPlayers,
+      respondSessionTag,
+      removeSessionTag,
+      refreshSessionTags,
+      sessionTagRefusal,
+      setSessionOpponent,
       updateIdentity,
       toggleLike,
       addPost,
@@ -4975,6 +5282,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cancelHit,
       recentHits,
       loadMySessionPosts,
+      setSessionPlayers,
+      respondSessionTag,
+      removeSessionTag,
+      refreshSessionTags,
+      sessionTagRefusal,
+      setSessionOpponent,
       updateIdentity,
       toggleLike,
       addPost,

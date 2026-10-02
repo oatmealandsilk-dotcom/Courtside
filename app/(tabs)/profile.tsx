@@ -23,6 +23,7 @@ import { TileViews } from '@/components/TileViews';
 import { TilePin } from '@/components/TilePin';
 import { colors, spacing, typography, font, lift } from '@/theme';
 import { wrappedYear } from '@/features/wrapped/yearInTennis';
+import { isTaggedIn } from '@/features/activity/sessionTags';
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
  // December to mid-January: the year's recap sits at the top of your links.
@@ -56,12 +57,12 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const [tabWidth, setTabWidth] = useState(0);
  const underline = useTabUnderline(tabIndex, TABS.length, tabWidth);
  const own = posts.filter(p => p.authorId === user?.id && !p.archived);
- const shown = (tab === 'Tagged' ? posts.filter(p => !!user && p.taggedUserIds?.includes(user.id) && !p.archived) : own.filter(p => tab !== 'Clips' || p.kind === 'clip')).sort((a,b) => Date.parse(b.createdAt)-Date.parse(a.createdAt));
+ const shown = (tab === 'Tagged' ? posts.filter(p => !!user && isTaggedIn(p, user.id) && !p.archived) : own.filter(p => tab !== 'Clips' || p.kind === 'clip')).sort((a,b) => Date.parse(b.createdAt)-Date.parse(a.createdAt));
  // How many of each, shown beside the section names.
  const counts: Record<typeof TABS[number], number> = {
    Posts: own.length,
    Clips: own.filter(p => p.kind === 'clip').length,
-   Tagged: user ? posts.filter(p => p.taggedUserIds?.includes(user.id) && !p.archived).length : 0,
+   Tagged: user ? posts.filter(p => isTaggedIn(p, user.id) && !p.archived).length : 0,
  };
  // Chats with something new, not messages (Instagram's count); a muted chat never counts.
  const unread = unreadChatCount(conversations);
@@ -84,7 +85,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const content = (selected: string) => {
    if (!user) return null;
    // Pinned first, then newest.
-   const items = (selected === 'Tagged' ? posts.filter(p => p.taggedUserIds?.includes(user.id) && !p.archived) : own.filter(p => selected !== 'Clips' || p.kind === 'clip')).sort((a,b) => Number(!!b.pinned) - Number(!!a.pinned) || Date.parse(b.createdAt)-Date.parse(a.createdAt));
+   const items = (selected === 'Tagged' ? posts.filter(p => isTaggedIn(p, user.id) && !p.archived) : own.filter(p => selected !== 'Clips' || p.kind === 'clip')).sort((a,b) => Number(!!b.pinned) - Number(!!a.pinned) || Date.parse(b.createdAt)-Date.parse(a.createdAt));
    return <View style={{ minHeight: 320, backgroundColor: colors.bg }}>
      <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>{items.map(p => <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.pinned && selected !== 'Tagged' ? 'pinned ' : ''}${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: selected === 'Clips' ? 'clips' : selected === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
        <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>

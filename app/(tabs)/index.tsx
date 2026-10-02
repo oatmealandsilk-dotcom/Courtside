@@ -54,6 +54,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { useSidePanel } from '@/features/feed/sidePanel';
 import { colors, radius, typography, spacing, font, lift } from '@/theme';
+import { isTaggedIn } from '@/features/activity/sessionTags';
 
 /**
  * The heart that blooms when you double tap a clip.
@@ -313,7 +314,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         const mine = ids && byId
           ? ids.flatMap((id) => { const p = byId.get(id); return p && !p.archived ? [p] : []; })
           : data.posts
-            .filter((p) => !p.archived && (set === 'tagged' ? !!userId && p.taggedUserIds?.includes(userId) : p.authorId === userId && (set !== 'clips' || p.kind === 'clip')))
+            .filter((p) => !p.archived && (set === 'tagged' ? isTaggedIn(p, userId) : p.authorId === userId && (set !== 'clips' || p.kind === 'clip')))
             .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
         setOrder(mine.map((p) => `p:${p.id}`));
         setActive(Math.max(0, mine.findIndex((p) => p.id === scope.start)));

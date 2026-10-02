@@ -18,8 +18,9 @@ import { activityNotifications, detectedActivities } from './mock/activities';
 import { users } from './mock/users';
 import { demoHits } from './mock/hits';
 import { demoLastSeen } from './mock/presence';
-import { demoSessions } from './mock/sessions';
+import { demoSessionTagNotifications, demoSessionTags, demoSessions } from './mock/sessions';
 import { supabase } from '@/lib/supabase';
+import { MAX_SESSION_TAGS, canTagKind, isActive, isClosed, mirrorCopy } from '@/features/activity/sessionTags';
 import type {
   Achievement,
   Answer,
@@ -39,6 +40,9 @@ import type {
   Notification,
   Post,
   PracticeSession,
+  SessionTag,
+  SessionTagRefusal,
+  SessionTagRole,
   Question,
   Story,
   HitRequest,
@@ -89,6 +93,8 @@ export interface Bootstrap {
   detectedActivities: DetectedActivity[];
   /** Demo only: your own log, so Your sessions and Add session stats have something on them. */
   sessions?: PracticeSession[];
+  /** Demo only: people tagged in sessions, yours and you in others' (migration 62). A real account's come from my_session_tags(). */
+  sessionTags?: SessionTag[];
 }
 
 export async function fetchBootstrap(): Promise<Bootstrap> {
@@ -113,7 +119,7 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       messages,
       // The demo's tracker session and its "Tennis detected" row. Only without
       // a database: a real account's come from the server.
-      notifications: supabase ? [] : activityNotifications,
+      notifications: supabase ? [] : [...activityNotifications, ...demoSessionTagNotifications],
       detectedActivities: supabase ? [] : detectedActivities,
       coachingRequests,
       integrations,
@@ -121,10 +127,73 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       achievements,
       // Only without a database: with one, these come from the server, and an
       // account's real hits must never be covered by the demo's.
-      ...(supabase ? {} : { hitRequests: demoHits, lastSeen: demoLastSeen, sessions: demoSessions }),
+      ...(supabase ? {} : { hitRequests: demoHits, lastSeen: demoLastSeen, sessions: demoSessions, sessionTags: demoSessionTags }),
     }),
   );
 }
+
+/* ------------------------------------------- Session tags (migration 62) */
+
+/*
+ * The demo's stand-ins for the session-tag functions in remote.ts: the same
+ * answers, the same refusals (thrown as the server's own word), worked out
+ * from what the demo holds, since there is no database to ask. The store
+ * shows each change straight away either way; these say whether it stands.
+ */
+
+/** Whether tagging players is open: always in the demo. */
+export async function sessionTagsReady(): Promise<boolean> {
+  return true;
+}
+
+/** Tags someone on a session of yours: tag_session's checks, in order. Resolves with the new tag's id (or the one already there). */
+export async function tagSession({ me, session, who, role, tags, refusal, newId }: {
+  me: ID; session: PracticeSession | undefined; who: ID; role?: SessionTagRole; tags: SessionTag[]; refusal: SessionTagRefusal | null; newId: ID;
+}): Promise<ID> {
+  await delay(null, 160);
+  if (!session || session.userId !== me) throw new Error('not_your_session');
+  if (session.fromSessionId) throw new Error('copy');
+  if (!canTagKind(session.kind)) throw new Error('not_a_match_or_practice');
+  if (role && role !== 'opponent' && role !== 'partner') throw new Error('bad_role');
+  if (refusal) throw new Error(refusal);
+  const on = tags.filter((t) => t.sessionId === session.id);
+  const there = on.find((t) => t.taggedId === who);
+  if (there) {
+    if (!isActive(there)) throw new Error('declined');
+    return there.id;
+  }
+  if (on.filter(isActive).length >= MAX_SESSION_TAGS) throw new Error('too_many');
+  if (tags.filter((t) => t.taggerId === me && Date.now() - Date.parse(t.createdAt) < 86_400_000).length >= 30) throw new Error('rate_limited');
+  return newId;
+}
+
+/** Takes a tag off: untag_session's rules. Anyone but the two on it is refused. */
+export async function untagSession({ me, tag }: { me: ID; tag: SessionTag | undefined }): Promise<void> {
+  await delay(null, 160);
+  if (tag && tag.taggerId !== me && tag.taggedId !== me) throw new Error('not_yours');
+}
+
+/**
+ * Accept or decline a tag of you: respond_session_tag's answer. Accepting
+ * with addToMine gives your own copy of the session (an existing one is used
+ * again): its day, length and kind, your side of the result, and who it was
+ * with as private words. A tag taken back off can no longer be accepted; a
+ * late yes to a no needs one of the three places to be free.
+ */
+export async function respondSessionTag({ me, tag, accept, addToMine, sessions, tags, taggerName, newId }: {
+  me: ID; tag: SessionTag | undefined; accept: boolean; addToMine: boolean; sessions: PracticeSession[]; tags: SessionTag[]; taggerName: string; newId: ID;
+}): Promise<PracticeSession | null> {
+  await delay(null, 200);
+  if (!tag || tag.taggedId !== me) throw new Error('not_yours');
+  if (!accept) return null;
+  if (isClosed(tag)) throw new Error('removed');
+  if (!canTagKind(tag.kind)) throw new Error('not_a_match_or_practice');
+  if (tag.status === 'declined' && tags.filter((t) => t.sessionId === tag.sessionId && t.id !== tag.id && isActive(t)).length >= MAX_SESSION_TAGS) throw new Error('too_many');
+  const have = sessions.some((s) => s.userId === me && (s.id === tag.mirroredSessionId || s.fromSessionId === tag.sessionId));
+  if (!have && !addToMine) return null;
+  return clone(mirrorCopy({ me, tag, sessions, taggerName, newId }));
+}
+
 
 /**
  * Posts matching a search that the app has not loaded yet. In the demo every

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { router } from 'expo-router';
 import { show as showToast } from '@/lib/toast';
@@ -13,7 +13,9 @@ import { Avatar, EmptyState, Screen } from '@/components/ui';
 import { FollowPill } from '@/components/FollowPill';
 import { BrandMark } from '@/components/BrandMark';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { relativeTime } from '@/lib/format';
+import { duration, relativeTime } from '@/lib/format';
+import { shortDay } from '@/features/activity/format';
+import { tagState, yourResult } from '@/features/activity/sessionTags';
 import { useApp } from '@/store/AppContext';
 import { confirmUnfollow } from '@/lib/confirm';
 import type { Notification, NotificationKind, PostKind } from '@/data/types';
@@ -57,6 +59,7 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap; tin
   'hit-join': { name: 'tennisball', tint: 'brand' },
   'hit-match': { name: 'people', tint: 'brand' },
   activity: { name: 'tennisball', tint: 'court' },
+  'session-tag': { name: 'pricetag', tint: 'court' },
 };
 
 const VERB: Record<NotificationKind, string> = {
@@ -84,6 +87,8 @@ const VERB: Record<NotificationKind, string> = {
   'hit-join': 'is in for your hit',
   'hit-match': 'is also looking for a hit',
   activity: 'Tap to log it.',
+  // "in a match" or "in a practice" comes from the row's preview (migration 62); see verbFor.
+  'session-tag': 'tagged you in a session',
 };
 
 interface Group {
@@ -101,6 +106,8 @@ interface Group {
 function routeFor(group: Group): string {
   // A tennis session a tracker picked up opens the log sheet, filled in from it.
   if (group.kind === 'activity') return `/log-session?activity=${group.targetId}`;
+  // Tagged in someone's session: the tag's sheet (its target is their session).
+  if (group.kind === 'session-tag') return `/session-tag?session=${group.targetId}`;
   // A coach application update opens the application, which shows where it stands.
   if (group.kind === 'coach-application') return '/coach-apply';
   // Anything about a booking opens the booking.
@@ -134,7 +141,22 @@ const SECTIONS = ['New', 'Today', 'This week', 'This month', 'Earlier'];
 
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
-  const { notifications, users, posts, stories, comments, hitRequests, conversations, currentUserId, followRequests, followingIds, actions } = useApp();
+  const { notifications, users, posts, stories, comments, hitRequests, conversations, currentUserId, followRequests, followingIds, sessionTags, actions } = useApp();
+  // A tag of you, for an alert about one: what it was, from your side, and whether you have answered.
+  const tagFor = (group: Group) => (group.kind === 'session-tag' ? sessionTags.find((t) => t.taggedId === currentUserId && t.sessionId === group.targetId) : undefined);
+  // Which tag is being answered, and which way, so only that button spins.
+  const [answering, setAnswering] = useState<{ id: string; accept: boolean } | null>(null);
+  const answerTag = async (tagId: string, accept: boolean) => {
+    if (answering) return;
+    setAnswering({ id: tagId, accept });
+    try {
+      await actions.respondSessionTag(tagId, accept);
+      showToast(accept ? { title: 'Tag accepted', body: 'It’s in your sessions too.', icon: 'checkmark-circle-outline' } : { title: 'Tag declined', body: 'Your name stays off their posts.', icon: 'close-circle-outline' });
+    } catch (e) {
+      showToast({ title: 'That didn’t go through', body: e instanceof Error ? e.message : undefined, icon: 'alert-circle-outline' });
+    }
+    setAnswering(null);
+  };
   // "Replied to your comment" opens the comments at that reply, its thread
   // unfolded. The reply is the one by that person on that post with the same
   // words (the notification keeps them), else the nearest in time. A post or
@@ -159,6 +181,7 @@ export default function Notifications() {
   // "liked your clip", "liked your photo": the verb names what was liked, not just "post".
   const verbFor = (group: Group) => {
     if (group.kind === 'milestone') return `just passed ${group.preview ?? 'a milestone'}`;
+    if (group.kind === 'session-tag') return `tagged you in a ${group.preview === 'match' ? 'match' : 'practice'}`;
     // A kind this build does not know yet (a newer server) still reads as a sentence.
     if (group.kind !== 'like' && group.kind !== 'comment' && group.kind !== 'share') return VERB[group.kind] ?? 'updated';
     const act = group.kind === 'like' ? 'liked' : group.kind === 'comment' ? 'commented on' : 'shared';
@@ -252,6 +275,8 @@ export default function Notifications() {
 
   const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? 'Someone';
   const photoOf = (id: string) => users.find((u) => u.id === id)?.avatarUrl;
+  // The face's colours, the same as on their profile and in every sheet they open.
+  const seedOf = (id: string) => users.find((u) => u.id === id)?.avatarSeed ?? id;
 
   return (
     <Screen title="Notifications" compactTitle onBack={() => goBack()} onRefresh={isDesktopBrowser() ? undefined : actions.refresh}>
@@ -282,6 +307,7 @@ export default function Notifications() {
             const heading = index === 0 || groups[index - 1].section !== group.section ? group.section : null;
             const thumb = thumbFor(group);
             const hitChat = hitChatFor(group);
+            const tag = tagFor(group);
 
             return (
               <React.Fragment key={group.key}>
@@ -306,10 +332,10 @@ export default function Notifications() {
                     <View style={styles.brandFace}><BrandMark size={24} /></View>
                   ) : rest.length ? (
                     <View style={styles.pair}>
-                      <View style={styles.pairBack}><Avatar name={nameOf(rest[0])} seed={rest[0]} uri={photoOf(rest[0])} size={32} /></View>
-                      <View style={styles.pairFront}><Avatar name={nameOf(first)} seed={first} uri={photoOf(first)} size={32} /></View>
+                      <View style={styles.pairBack}><Avatar name={nameOf(rest[0])} seed={seedOf(rest[0])} uri={photoOf(rest[0])} size={32} /></View>
+                      <View style={styles.pairFront}><Avatar name={nameOf(first)} seed={seedOf(first)} uri={photoOf(first)} size={32} /></View>
                     </View>
-                  ) : <Avatar name={nameOf(first)} seed={first} uri={photoOf(first)} size={44} />}
+                  ) : <Avatar name={nameOf(first)} seed={seedOf(first)} uri={photoOf(first)} size={44} />}
                   <View style={[styles.badge, { backgroundColor: colors[icon.tint] }]}>
                     <Ionicons name={icon.name} size={11} color={colors.brandInk} />
                   </View>
@@ -320,12 +346,43 @@ export default function Notifications() {
                     <Text style={styles.who}>{who}</Text>
                     <Text> {verbFor(group)}</Text>
                   </Text>
-                  {group.preview && group.kind !== 'milestone' ? (
+                  {group.kind === 'session-tag' ? (
+                    // Where the tag stands first (the one thing that changes), then what it was from your side: "Declined · You won · Sep 30 · 1h 15m".
+                    tag ? (
+                      <Text style={styles.preview} numberOfLines={1}>
+                        {[tagState(tag), yourResult(tag), shortDay(tag.day), duration(tag.minutes)].filter(Boolean).join(' · ')}
+                      </Text>
+                    ) : null
+                  ) : group.preview && group.kind !== 'milestone' ? (
                     <Text style={styles.preview} numberOfLines={1}>
                       {group.preview}
                     </Text>
                   ) : null}
                   <Text style={styles.time}>{relativeTime(group.createdAt)}</Text>
+                  {tag?.status === 'pending' && !tag.dropped ? (
+                    <View style={styles.askRow}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Accept ${nameOf(first)}’s tag`}
+                        accessibilityState={{ busy: answering?.id === tag.id && answering.accept, disabled: !!answering }}
+                        disabled={!!answering}
+                        onPress={() => { void answerTag(tag.id, true); }}
+                        style={({ pressed }) => [styles.accept, styles.answerBox, (pressed || (!!answering && !(answering.id === tag.id && answering.accept))) && styles.answerDim]}
+                      >
+                        {answering?.id === tag.id && answering.accept ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Text style={styles.acceptText}>Accept</Text>}
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Decline ${nameOf(first)}’s tag`}
+                        accessibilityState={{ busy: answering?.id === tag.id && !answering.accept, disabled: !!answering }}
+                        disabled={!!answering}
+                        onPress={() => { void answerTag(tag.id, false); }}
+                        style={({ pressed }) => [styles.decline, styles.answerBox, (pressed || (!!answering && !(answering.id === tag.id && !answering.accept))) && styles.answerDim]}
+                      >
+                        {answering?.id === tag.id && !answering.accept ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Text style={styles.declineText}>Decline</Text>}
+                      </Pressable>
+                    </View>
+                  ) : null}
                   {group.kind === 'follow-request' && followRequests.some((r) => r.fromId === first && r.toId === currentUserId) ? (
                     <View style={styles.askRow}>
                       <Pressable accessibilityRole="button" accessibilityLabel={`Accept ${nameOf(first)}`} onPress={() => actions.acceptFollowRequest(first)} style={styles.accept}><Text style={styles.acceptText}>Accept</Text></Pressable>
@@ -409,5 +466,8 @@ const styleDefinitions = StyleSheet.create({
   accept: { paddingHorizontal: spacing.lg, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.brand },
   acceptText: { ...typography.smallStrong, color: colors.brandInk },
   decline: { paddingHorizontal: spacing.lg, paddingVertical: 7, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border },
+  // A tag's Accept and Decline keep their width while one spins, and dim while pressed or while the other is going through.
+  answerBox: { minWidth: 84, minHeight: 32, alignItems: 'center', justifyContent: 'center' },
+  answerDim: { opacity: 0.6 },
   declineText: { ...typography.smallStrong, color: colors.text },
 });

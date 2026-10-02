@@ -19,8 +19,9 @@ import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, ChatEvent, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, TaggedCourt, Question, Story, Tip, User, CoachApplication } from './types';
+import type { Answer, ChatEvent, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, SessionTag, SessionTagRefusal, SessionTagRole, HitRequest, CourtNote, LastSeen, TaggedCourt, Question, Story, Tip, User, CoachApplication } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
+import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
 import { isMapCourtId } from '@/features/places/courtName';
 
 /** What a new player did first, after setup. */
@@ -187,7 +188,7 @@ const toPost = (row: PostRow): Post => ({
   volume: row.volume != null && Number(row.volume) > 0 && Number(row.volume) < 1 ? Number(row.volume) : undefined,
   taggedUserIds: row.tagged_user_ids?.length ? row.tagged_user_ids : undefined,
   match: row.match ?? undefined,
-  session: row.session ?? undefined,
+  session: trustedSession(row.session),
   likedBy: (row.post_likes ?? []).map((l) => l.user_id),
   commentIds: (row.comments ?? []).map((c) => c.id),
   tags: row.tags ?? [],
@@ -302,10 +303,31 @@ export interface RemoteData {
   hitRequests: HitRequest[];
   /** Your tracker sessions (migration 58); missing in older saved copies. */
   activities?: DetectedActivity[];
+  /** Whether this server can tag players on sessions (migration 62 has run); missing when it could not be told. */
+  sessionTagsReady?: boolean;
 }
 
-interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null }
-const toSession = (r: SessionRow): PracticeSession => ({ id: r.id, userId: r.user_id, day: r.day, minutes: r.minutes, kind: r.kind, won: r.won ?? undefined, opponent: r.opponent ?? undefined, note: r.note ?? undefined, activityId: r.activity_id ?? undefined, createdAt: r.created_at });
+interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null }
+const toSession = (r: SessionRow): PracticeSession => ({
+  id: r.id, userId: r.user_id, day: r.day, minutes: r.minutes, kind: r.kind, won: r.won ?? undefined, opponent: r.opponent ?? undefined, note: r.note ?? undefined,
+  activityId: r.activity_id ?? undefined, fromSessionId: r.from_session_id ?? undefined, createdAt: r.created_at,
+});
+
+/** A row of my_session_tags() (migration 62): a tag and what the tagged person may see of the session. */
+interface SessionTagRow {
+  id: string; session_id: string; tagger_id: string; tagged_id: string; role: SessionTagRole; status: SessionTag['status']; dropped?: boolean | null;
+  mirrored_session_id: string | null; created_at: string; responded_at: string | null;
+  kind: PracticeSession['kind']; day: string; minutes: number; won: boolean | null;
+}
+const toSessionTag = (r: SessionTagRow): SessionTag => ({
+  id: r.id, sessionId: r.session_id, taggerId: r.tagger_id, taggedId: r.tagged_id, role: r.role, status: r.status,
+  ...(r.dropped ? { dropped: true } : {}),
+  mirroredSessionId: r.mirrored_session_id ?? undefined, createdAt: r.created_at, respondedAt: r.responded_at ?? undefined,
+  // A date column arrives as "2026-09-29"; anything longer is cut to the day.
+  kind: r.kind, day: String(r.day).slice(0, 10), minutes: r.minutes, won: r.won ?? undefined,
+});
+/** The exact word a session-tag function raised ('teen_closed', 'too_many'…), or the message as it came. */
+const tagRefusal = (error: { message?: string }) => (error.message ?? '').trim();
 
 interface ActivityRow {
   id: string; user_id: string; source: DetectedActivity['source']; sport: 'tennis'; started_at: string; ended_at: string; tz_offset_min: number | null; minutes: number;
@@ -605,6 +627,10 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     const now = await chatList(MEMBERS_NOW);
     return now.error ? chatList(MEMBERS_BEFORE_54) : now;
   })();
+  // Whether this server tags players on sessions (migration 62), asked alongside
+  // everything else so it is known before any post is read: until it is, the
+  // names on posts' session stats are not shown (see trustedSession).
+  const tagsProbe = db.from('session_tags').select('id').limit(0).then(({ error }) => readinessOf(error), () => null);
   const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows, sessionRows, pollRows, myPollVotes, hitRows, prefRows, activityRows] = await Promise.all([
     // Every profile, in chunks, so nobody is left out past the first 1,000.
     allRows<ProfileRow>((from, to) => db.from('profiles').select('*').order('created_at', { ascending: true }).range(from, to)),
@@ -645,6 +671,8 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     activitiesQuery(me),
   ]);
   const coaching = await coachingLoad;
+  const tagsReady = await tagsProbe;
+  setSessionTagNamesLive(tagsReady);
   if (qs.error) console.warn('[remote] community tables missing; run the pending migrations', qs.error.message);
   const byTime = <T extends { created_at: string }>(a: T, b: T) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0);
   const questionRows = (qs.data ?? []) as (QuestionRow & { answers?: AnswerRow[] })[];
@@ -705,6 +733,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     sessions: ((sessionRows.data ?? []) as SessionRow[]).map(toSession),
     hitRequests: ((hitRows.data ?? []) as HitRow[]).map(toHit),
     activities: activityRows.error ? [] : ((activityRows.data ?? []) as ActivityRow[]).map(toActivity),
+    ...(tagsReady === null ? {} : { sessionTagsReady: tagsReady }),
     ...coaching,
   };
 }
@@ -1568,13 +1597,22 @@ export const remote = {
   async fetchUserPosts(userId: ID): Promise<{ posts: Post[]; comments: Comment[] } | null> {
     if (!UUID_RE.test(userId)) return null;
     const db = need();
-    const [own, tagged] = await Promise.all([
+    const [own, tagged, played] = await Promise.all([
       allRows<FullPostRow>((from, to) => db.from('posts').select(POST_SELECT).eq('author_id', userId).order('created_at', { ascending: false }).range(from, to), 3000),
       db.from('posts').select(POST_SELECT).contains('tagged_user_ids', [userId]).order('created_at', { ascending: false }).limit(300),
+      // Posts whose session they accepted a tag on (migration 62). The value
+      // goes as JSON text: handed an array, the client would write it as a
+      // Postgres array ({…}), which a jsonb column cannot compare. Only once
+      // the server is known to write these lists itself: before 62 a phone
+      // could write any list, so it is never searched.
+      sessionTagNamesLive()
+        ? db.from('posts').select(POST_SELECT).contains('session->with', JSON.stringify([{ id: userId }])).order('created_at', { ascending: false }).limit(300)
+        : Promise.resolve({ data: [] as FullPostRow[], error: null }),
     ]);
     if (own.error) { fail('their posts')(own.error); return null; }
     if (tagged.error) fail('tagged posts')(tagged.error);
-    const rows = [...own.data, ...((tagged.data ?? []) as FullPostRow[])];
+    if (played.error) fail('session-tagged posts')(played.error);
+    const rows = [...own.data, ...((tagged.data ?? []) as FullPostRow[]), ...((played.data ?? []) as FullPostRow[])];
     const byId = new Map(rows.map((row) => [row.id, row]));
     return toPosts([...byId.values()]);
   },
@@ -1745,6 +1783,77 @@ export const remote = {
     const { error } = await need().from('practice_sessions').delete().eq('id', id);
     if (error) fail('session delete')(error);
   },
+  /** The private name you typed for who you played, changed on a session already in your log. */
+  async updateSessionOpponent(id: ID, opponent: string | null) {
+    const { error } = await need().from('practice_sessions').update({ opponent }).eq('id', id);
+    if (error) { fail('session opponent')(error); throw new Error('That didn’t save. Try again.'); }
+  },
+
+  /* ---------------------------------------------- session tags (migration 62) */
+
+  /**
+   * Whether the database can tag players on sessions yet (migration 62):
+   * asked by looking at the table, which reads no rows and works signed in or
+   * out. False when it is not there; null when there was no answer (no
+   * signal), which says nothing either way.
+   */
+  async sessionTagsReady(): Promise<boolean | null> {
+    const { error } = await need().from('session_tags').select('id').limit(0);
+    const ready = readinessOf(error);
+    setSessionTagNamesLive(ready);
+    if (ready === false) console.warn('[remote] Tagging players on sessions needs the session tags update. Open Supabase → SQL Editor → New query, paste the file supabase/migrations/20261002000062_session_tags.sql and press Run. It is safe to run more than once.');
+    return ready;
+  },
+  /** Every tag you made and every tag of you, newest first. Null when they could not be read. */
+  async mySessionTags(): Promise<SessionTag[] | null> {
+    const { data, error } = await need().rpc('my_session_tags');
+    if (error) { fail('session tags')(error); return null; }
+    return ((data ?? []) as SessionTagRow[]).map(toSessionTag);
+  },
+  /** Tags someone on a session of yours; the tag's id. Throws with the server's word for a refusal ('teen_closed', 'too_many'…). */
+  async tagSession(sessionId: ID, who: ID, role?: SessionTagRole): Promise<ID> {
+    const { data, error } = await need().rpc('tag_session', { s: sessionId, who, as_role: role ?? null });
+    if (error) throw new Error(tagRefusal(error));
+    return data as string;
+  },
+  /** Takes a tag off: yours as the tagger, or "Remove tag" as the one tagged (with your own copy too when dropMine). */
+  async untagSession(tagId: ID, dropMine = false): Promise<void> {
+    const { error } = await need().rpc('untag_session', { t: tagId, drop_mine: dropMine });
+    if (error) throw new Error(tagRefusal(error));
+  },
+  /** Accept or decline a tag of you. Accepting with addToMine returns your own copy of the session. */
+  async respondSessionTag(tagId: ID, accept: boolean, addToMine = true): Promise<PracticeSession | null> {
+    const { data, error } = await need().rpc('respond_session_tag', { t: tagId, accept, add_to_mine: addToMine });
+    if (error) throw new Error(tagRefusal(error));
+    return data && typeof data === 'object' ? toSession(data as SessionRow) : null;
+  },
+  /** Why you may not tag this person, or null when you may. Null too when the server could not say. */
+  async sessionTagRefusal(who: ID): Promise<SessionTagRefusal | null> {
+    const { data, error } = await need().rpc('session_tag_refusal', { who });
+    if (error) return null;
+    return (typeof data === 'string' ? data : null) as SessionTagRefusal | null;
+  },
+  /**
+   * A tag of yours or of you made, answered or taken off anywhere: the caller
+   * asks for the list again. Also once on connecting, to catch up. New and
+   * changed rows are asked for as yours only (as the tagger or the one
+   * tagged). A deleted row arrives as its id alone, to everyone listening, so
+   * only one this phone holds (`known`) counts.
+   */
+  onSessionTags(me: ID, known: () => Set<ID>, changed: () => void): () => void {
+    const db = need();
+    const channel = db.channel(`session-tags-live-${me}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'session_tags', filter: `tagged_id=eq.${me}` }, () => changed())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'session_tags', filter: `tagged_id=eq.${me}` }, () => changed())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'session_tags', filter: `tagger_id=eq.${me}` }, () => changed())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'session_tags', filter: `tagger_id=eq.${me}` }, () => changed())
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'session_tags' }, (payload) => {
+        const gone = (payload.old as { id?: string } | null)?.id;
+        if (gone && known().has(gone)) changed();
+      })
+      .subscribe((status) => { if (status === 'SUBSCRIBED') changed(); });
+    return () => { void db.removeChannel(channel); };
+  },
 
   /* ------------------------------------------- tennis sessions (migration 58) */
 
@@ -1894,7 +2003,8 @@ export const remote = {
       thumbnail_url: post.thumbnailUrl ?? null,
       orientation: post.orientation ?? null,
       match: post.match ?? null,
-      session: post.session ?? null,
+      // The names on a session are the server's to write (migration 62); a list shown here early is never sent.
+      session: sessionToSend(post.session),
       tags: post.tags,
       tagged_user_ids: post.taggedUserIds ?? [],
       created_at: post.createdAt,

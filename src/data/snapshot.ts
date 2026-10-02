@@ -39,7 +39,7 @@ export function trimSnapshot(data: RemoteData, me: ID): RemoteData {
   const tips = [...data.tips].sort((a, b) => b.votes - a.votes).slice(0, 20);
   // Only the people these things mention (and you): never the whole directory.
   const people = new Set<ID>([me, ...data.followingIds]);
-  posts.forEach((p) => { people.add(p.authorId); p.taggedUserIds?.forEach((id) => people.add(id)); });
+  posts.forEach((p) => { people.add(p.authorId); p.taggedUserIds?.forEach((id) => people.add(id)); p.session?.with?.forEach((w) => people.add(w.id)); });
   comments.forEach((c) => people.add(c.authorId));
   data.stories.forEach((s) => people.add(s.authorId));
   questions.forEach((q) => people.add(q.authorId));

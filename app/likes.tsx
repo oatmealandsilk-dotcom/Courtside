@@ -16,12 +16,15 @@ import { colors, spacing, typography } from '@/theme';
  * Who liked a post or a hit, the way Instagram shows it: opened by holding
  * the heart. Newest likes first, with the people you follow at the top, a
  * search box, and a Follow button on each row. With `set=tagged`, the same
- * list shows everyone tagged in the post instead.
+ * list shows everyone tagged in the post instead; with `set=played`, the
+ * players who accepted their tag on the session the post carries.
  */
 export default function Likes() {
   const styles = useThemedStyles(styleDefinitions);
   const params = useLocalSearchParams<{ id?: string; kind?: string; set?: string }>();
-  const tagged = params.set === 'tagged';
+  // "played": the players who accepted their tag on the post's session (migration 62), the "+2" over a clip.
+  const played = params.set === 'played';
+  const tagged = params.set === 'tagged' || played;
   const { users, posts, stories, currentUserId, followingIds, blockedIds, ready, actions } = useApp();
   // Opened from a link before the app has the post: fetch it, and only then decide it is gone.
   const [looked, setLooked] = useState(false);
@@ -38,7 +41,8 @@ export default function Likes() {
     if (!item) return [];
     // Likes are stored oldest first; the newest go on top, and within that the people you follow lead.
     // Tagged people keep the order they were tagged in.
-    const source = tagged ? ('taggedUserIds' in item ? item.taggedUserIds ?? [] : []) : [...item.likedBy].reverse();
+    const source = played ? ('session' in item ? (item.session?.with ?? []).map((w) => w.id) : [])
+      : tagged ? ('taggedUserIds' in item ? item.taggedUserIds ?? [] : []) : [...item.likedBy].reverse();
     const newestFirst = source.filter((id) => !blockedIds.includes(id));
     const ordered = [...newestFirst.filter((id) => followingIds.includes(id) || id === currentUserId), ...newestFirst.filter((id) => !followingIds.includes(id) && id !== currentUserId)];
     return ordered.map((id) => users.find((u) => u.id === id)).filter((u): u is NonNullable<typeof u> => Boolean(u));
@@ -49,14 +53,14 @@ export default function Likes() {
   const count = tagged ? people.length : item?.likedBy.length ?? 0;
 
   return (
-    <Screen title={tagged ? 'Tagged' : 'Likes'} compactTitle onBack={() => goBack()}>
+    <Screen title={played ? 'Who played' : tagged ? 'Tagged' : 'Likes'} compactTitle onBack={() => goBack()}>
       {!item && !looked ? (
         <PeopleSkeleton />
       ) : !item ? (
         <EmptyState icon="lock-closed-outline" title="This post isn't available" body="It was deleted, or it's from a private account you don't follow." />
       ) : (
         <>
-          <Text style={styles.count}>{tagged ? (count === 1 ? '1 person tagged' : `${count} people tagged`) : count === 1 ? '1 like' : `${count.toLocaleString()} likes`}</Text>
+          <Text style={styles.count}>{played ? (count === 1 ? '1 player' : `${count} players`) : tagged ? (count === 1 ? '1 person tagged' : `${count} people tagged`) : count === 1 ? '1 like' : `${count.toLocaleString()} likes`}</Text>
           {people.length > 6 ? (
             <View style={styles.searchWrap}>
               <Field value={search} onChangeText={setSearch} placeholder="Search" autoCapitalize="none" />

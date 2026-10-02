@@ -7,6 +7,8 @@ import { SessionStats } from '@/components/SessionStats';
 import { Toggle } from '@/components/ui';
 import { fromWho } from '@/features/activity/format';
 import { statsOf, type SessionPick } from '@/features/activity/recent';
+import { pendingNote, tagsOnSession, withOnNewPost } from '@/features/activity/sessionTags';
+import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography } from '@/theme';
 
@@ -22,6 +24,11 @@ import { colors, spacing, typography } from '@/theme';
  * the post, and × leaves a row to put the stats back (none once it is
  * already on one of your posts). In a Post or a Clip
  * ("Add session stats") it sits among the rows, with Change to pick another.
+ *
+ * Players who accepted their tag on the session show in the stats as the
+ * post will ("Won vs @miraplays"). Anyone still waiting gets a quiet note
+ * ("Mira’s name shows once they accept."): their name joins the post by
+ * itself the moment they do (migration 62).
  */
 export function AttachSessionStats({ pick, attached, onAttach, adult, showHr, onShowHr, posted, loggedMinutes, onChange, justLogged }: {
   pick: SessionPick;
@@ -40,7 +47,16 @@ export function AttachSessionStats({ pick, attached, onAttach, adult, showHr, on
   justLogged?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
+  const { currentUserId, sessions, sessionTags, users } = useApp();
   const activity = pick.type === 'tracker' ? pick.activity : undefined;
+  // The session from your log this is (a tracker's, once logged), and who on it is still to answer.
+  const logged = pick.session;
+  const stats = currentUserId ? withOnNewPost(statsOf(pick, showHr, adult), currentUserId, sessions, sessionTags, users) ?? statsOf(pick, showHr, adult) : statsOf(pick, showHr, adult);
+  const waitingOn = logged ? tagsOnSession(sessionTags, logged.id, currentUserId)
+    .filter((t) => t.status === 'pending')
+    .map((t) => users.find((u) => u.id === t.taggedId)?.name.trim().split(/\s+/)[0])
+    .filter((n): n is string => !!n) : [];
+  const waitingNote = pendingNote(waitingOn);
   const canShowHr = adult && !!activity?.maxHr;
   const hint = !activity
     ? 'Shows on the post. The rest of your log stays private.'
@@ -64,7 +80,7 @@ export function AttachSessionStats({ pick, attached, onAttach, adult, showHr, on
               <Ionicons name="close-circle" size={20} color={colors.textFaint} />
             </Pressable>
           </View>
-          <SessionStats session={statsOf(pick, showHr, adult)} />
+          <SessionStats session={stats} />
           {canShowHr ? (
             <FormRow
               icon="heart-outline"
@@ -78,6 +94,12 @@ export function AttachSessionStats({ pick, attached, onAttach, adult, showHr, on
             />
           ) : null}
           <Text style={styles.note}>{hint}</Text>
+          {waitingNote ? (
+            <View style={styles.waiting}>
+              <Ionicons name="time-outline" size={13} color={colors.textFaint} />
+              <Text style={[styles.note, styles.waitingText]}>{waitingNote}</Text>
+            </View>
+          ) : null}
           {justLogged ? <Text style={styles.note}>Logged too. It counts toward your streak.</Text> : null}
           {/* The post always carries the tracker's own time (the server rebuilds it, migration 58), so a length changed on the log sheet is called out rather than quietly replaced. */}
           {activity && loggedMinutes != null && loggedMinutes !== activity.minutes ? (
@@ -102,4 +124,6 @@ const styleDefinitions = StyleSheet.create({
   remove: { padding: 2 },
   pressed: { opacity: 0.6 },
   note: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
+  waiting: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  waitingText: { flexShrink: 1 },
 });
