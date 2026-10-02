@@ -25,6 +25,10 @@ import { GROUP_CAP, eventText, findDirectChat, groupName, isDirectChat, isGroupA
 import { readReceiptPreference, saveReceiptPreference } from '@/features/messaging/preferences';
 import { connectProvider, disconnectProvider } from '@/lib/integrations';
 import { appleHealthAvailable, connectAppleHealth, readAppleHealth, readAppleNutrition } from '@/features/health/appleHealth';
+import { tennisFlags } from '@/features/activity/flags';
+import { checkForTennis } from '@/features/activity/check';
+import { fromWho } from '@/features/activity/format';
+import { duration } from '@/lib/format';
 import { takeReferrer } from '@/features/invite/referral';
 import { endOfToday } from '@/features/players/openToHit';
 import { pickNutritionExport } from '@/features/health/cronometer';
@@ -45,6 +49,7 @@ import { framesAt } from '@/features/compose/frames';
 import { noteStep, reportError } from '@/lib/crashReporting';
 import type {
   DailyHealth,
+  DetectedActivity,
   IntegrationProvider,
   Answer,
   Coach,
@@ -296,7 +301,7 @@ interface AppState extends Bootstrap {
   /** Open "Looking for a hit" posts. */
   hitRequests: HitRequest[];
   /** Small switches from Settings, kept with the account. */
-  prefs: { showActivity: boolean; pushLikes: boolean; pushCoach: boolean; pushMessages: boolean };
+  prefs: { showActivity: boolean; pushLikes: boolean; pushCoach: boolean; pushMessages: boolean; pushActivity: boolean };
   /** Whether the app may ask the device where you are, and the city it found. */
   locationEnabled: boolean;
   detectedLocation: string | null;
@@ -326,7 +331,7 @@ interface AppActions {
   checkHandle: (handle: string) => Promise<HandleStatus | null>;
   /** Changes your handle. Throws with a plain-English reason when it cannot. */
   changeHandle: (handle: string) => Promise<void>;
-  setPref: (key: 'showActivity' | 'pushLikes' | 'pushCoach' | 'pushMessages', value: boolean) => void;
+  setPref: (key: 'showActivity' | 'pushLikes' | 'pushCoach' | 'pushMessages' | 'pushActivity', value: boolean) => void;
   /** The asker marks the answer that solved it. */
   acceptAnswer: (questionId: ID, answerId: ID) => void;
   /** The asker marks their coach question as answered. */
@@ -377,7 +382,8 @@ interface AppActions {
   loadLastSeen: () => Promise<void>;
   /** Saves your report on a court, replacing any earlier one; a photo on the phone is uploaded first. */
   saveCourtNote: (input: Omit<CourtNote, 'userId' | 'updatedAt'>) => Promise<void>;
-  logSession: (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; opponent?: string; note?: string; day?: string }) => Promise<void>;
+  /** `activityId`: the tracker session it was logged from, which then counts as logged. */
+  logSession: (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; opponent?: string; note?: string; day?: string; activityId?: ID }) => Promise<void>;
   deleteSession: (id: ID) => void;
   /** Post a "Looking for a hit". Throws a plain sentence if it cannot be posted. */
   postHit: (input: Omit<HitRequest, 'id' | 'authorId' | 'createdAt' | 'joinedIds' | 'conversationId' | 'cancelled'>) => Promise<ID>;
@@ -426,9 +432,28 @@ interface AppActions {
   voteAnswer: (answerId: ID, direction: 1 | -1) => void;
 
   submitCoachingRequest: (coachId: ID, serviceId: ID, question: string, videoLabel?: string) => ID;
-  toggleIntegration: (provider: Integration['provider']) => Promise<void>;
+  /**
+   * Connects or disconnects a source. `tennis`: the screen has explained
+   * tennis sessions and the person said Continue, so connecting may ask for
+   * workouts too (only while that source's switch is on).
+   */
+  toggleIntegration: (provider: Integration['provider'], opts?: { tennis?: boolean }) => Promise<void>;
   /** Pull the latest from a connected source (Apple Health reads the phone; WHOOP asks the server; Cronometer asks for a fresh export). */
   syncHealth: (provider: Integration['provider']) => Promise<void>;
+  /* Tennis sessions from trackers (migration 58) */
+  /** Your tracker sessions fetched afresh (a log sheet opened from an alert before they had loaded). */
+  refreshActivities: () => Promise<void>;
+  /**
+   * Looks for new tennis sessions (Apple Health on this phone, WHOOP on the
+   * server) when the app opens or comes back, and says so when one is found.
+   * Does nothing unless a source has tennis sessions on and its switch is on.
+   */
+  checkForActivities: (force?: boolean) => Promise<void>;
+  /** "Not tennis": hides a session you have not logged, and its notification. */
+  dismissActivity: (id: ID) => void;
+  /** Asks the source for workouts (Apple Health's sheet, or WHOOP's sign-in again), then turns tennis sessions on for it. */
+  turnOnTennis: (provider: 'apple-health' | 'whoop') => Promise<void>;
+  turnOffTennis: (provider: 'apple-health' | 'whoop') => Promise<void>;
   /** If this person arrived through an invite link, it is claimed now: the two follow each other. */
   claimPendingReferral: () => Promise<void>;
   countReferrals: () => Promise<number>;
@@ -699,6 +724,13 @@ const cleanTitle = (title?: string) => (title ?? '').replace(/\s+/g, ' ').trim()
 /** A group function's answer that is a refusal rather than the chat's id. */
 const isRefusal = (result: string): result is GroupRefusal | 'failed' => ['blocked', 'teen', 'full', 'not-admin', 'failed'].includes(result);
 
+// In a browser, WHOOP's tennis sign-in comes back in its own small window
+// (?whoop=pending): that window hands the address to the one that opened it,
+// which collects the sign-in (connectWhoop). Every other page load: nothing.
+if (Platform.OS === 'web' && typeof window !== 'undefined' && /[?&]whoop=pending/.test(window.location?.search ?? '')) {
+  try { WebBrowser.maybeCompleteAuthSession(); } catch { /* the opener has gone; trying again starts afresh */ }
+}
+
 const AppContext = createContext<AppContextValue | null>(null);
 
 const emptyBootstrap: Bootstrap = {
@@ -721,6 +753,7 @@ const emptyBootstrap: Bootstrap = {
   conversations: [],
   messages: [],
   notifications: [],
+  detectedActivities: [],
 };
 
 let idCounter = 0;
@@ -770,6 +803,7 @@ function dropFixtures(state: AppState): AppState {
     conversations: real(state.conversations),
     messages: real(state.messages),
     notifications: real(state.notifications),
+    detectedActivities: real(state.detectedActivities),
     tips: real(state.tips),
     // The lists that only hold ids follow the things they point at.
     followingIds: state.followingIds.filter((id) => UUID.test(id)),
@@ -788,7 +822,7 @@ function dropFixtures(state: AppState): AppState {
     healthHistory: state.healthIsReal ? state.healthHistory : [],
     // The list of what can be connected stays; the demo's "already connected,
     // synced two hours ago" does not.
-    integrations: state.healthIsReal ? state.integrations : state.integrations.map((i) => (i.connected ? { ...i, connected: false, lastSyncedAt: undefined } : i)),
+    integrations: state.healthIsReal ? state.integrations : state.integrations.map((i) => (i.connected || i.readsWorkouts ? { ...i, connected: false, lastSyncedAt: undefined, readsWorkouts: undefined } : i)),
     // The demo's card on file. Nobody should open Payments and find a Visa
     // they never added.
     paymentMethods: [],
@@ -826,11 +860,13 @@ function snapshotOf(s: AppState, me: ID): RemoteData {
       mutedIds: s.mutedIds, blockedIds: s.blockedIds, savedQuestionIds: s.saved.questionIds, paymentMethods: s.paymentMethods,
       defaultPaymentId: s.defaultPaymentId, showActivity: s.prefs.showActivity, pushLikes: s.prefs.pushLikes, pushCoach: s.prefs.pushCoach,
       pushMessages: s.prefs.pushMessages,
+      pushActivity: s.prefs.pushActivity,
       constraints: self?.profile.constraints,
     },
     tips: s.tips, coachApplications: s.coachApplications, coaches: s.coaches, coachReviews: s.coachReviews, coachResults: s.coachResults,
     sessions: s.sessions,
     hitRequests: s.hitRequests,
+    // Tracker sessions are left out: private health numbers stay off the saved copy on the device.
   };
 }
 
@@ -909,6 +945,7 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       coachResults: data.coachResults,
       sessions: data.sessions ?? prev.sessions,
       hitRequests: data.hitRequests ?? prev.hitRequests,
+      detectedActivities: data.activities ?? prev.detectedActivities,
       notifications: [...data.notifications, ...prev.notifications.filter((n) => !data.notifications.some((x) => x.id === n.id) && !gone(n.id))],
       tips: [...data.tips, ...prev.tips.filter((t) => !data.tips.some((x) => x.id === t.id) && !gone(t.id))],
       coachApplications: [...data.coachApplications, ...prev.coachApplications.filter((a) => !data.coachApplications.some((x) => x.id === a.id))],
@@ -917,7 +954,7 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       paymentMethods: data.userState && data.userState.paymentMethods.length ? data.userState.paymentMethods : prev.paymentMethods,
       defaultPaymentId: data.userState?.defaultPaymentId ?? prev.defaultPaymentId,
       prefs: data.userState
-        ? { showActivity: data.userState.showActivity, pushLikes: data.userState.pushLikes, pushCoach: data.userState.pushCoach, pushMessages: data.userState.pushMessages ?? true }
+        ? { showActivity: data.userState.showActivity, pushLikes: data.userState.pushLikes, pushCoach: data.userState.pushCoach, pushMessages: data.userState.pushMessages ?? true, pushActivity: data.userState.pushActivity ?? true }
         : prev.prefs,
       // The saved copy shows the app; only the server's answer counts as loaded (live updates, settings sync and retries wait for it).
       remoteLoaded: fromSnapshot ? prev.remoteLoaded : true,
@@ -1030,7 +1067,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     alertIds: [],
     paymentMethods: STARTER_PAYMENTS,
     defaultPaymentId: readDefaultPayment(),
-    prefs: { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true },
+    prefs: { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true },
     tips: [],
     sessions: [],
     courtNotes: {},
@@ -1273,7 +1310,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       void remote.saveUserState(currentUserForLive, {
         mutedIds: s.mutedIds, blockedIds: s.blockedIds, savedQuestionIds: s.saved.questionIds, paymentMethods: s.paymentMethods,
         defaultPaymentId: s.defaultPaymentId, showActivity: s.prefs.showActivity, pushLikes: s.prefs.pushLikes, pushCoach: s.prefs.pushCoach,
-        pushMessages: s.prefs.pushMessages,
+        pushMessages: s.prefs.pushMessages, pushActivity: s.prefs.pushActivity,
       });
     }, 400);
     return () => clearTimeout(t);
@@ -1547,7 +1584,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setState((prev) => ({ ...prev, savedAccounts }));
       throw err;
     }
-    setState((prev) => ({ ...prev, currentUserId: session.user.id, remoteLoaded: false, onboardingComplete: false, error: null }));
+    setState((prev) => ({ ...prev, currentUserId: session.user.id, remoteLoaded: false, onboardingComplete: false, error: null, detectedActivities: [] }));
     await loadRemote(session.user.id, session.user.email);
   }, [loadRemote]);
 
@@ -1599,8 +1636,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (leaving) void clearSnapshot(leaving);
     // This phone stops getting the account's alerts before the session ends (the removal needs it).
     if (isSupabaseConfigured) void forgetPushToken().finally(() => remoteAuth.signOut());
-    // One account's health never carries over to the next one signed in.
-    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [] }));
+    // One account's health (its tracker sessions too) never carries over to the next one signed in.
+    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [] }));
   }, []);
 
   const patchCurrentUser = useCallback(
@@ -1695,25 +1732,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [patchCurrentUser],
   );
 
-  const logSession = useCallback(async (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; opponent?: string; note?: string; day?: string }) => {
+  const logSession = useCallback(async (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; opponent?: string; note?: string; day?: string; activityId?: ID }) => {
     const me = requireUser();
     const session: PracticeSession = {
       id: nextId('ses'), userId: me, day: input.day ?? localDay(new Date()), minutes: input.minutes, kind: input.kind,
       won: input.kind === 'match' ? input.won : undefined, opponent: input.opponent?.trim() || undefined, note: input.note?.trim() || undefined,
+      ...(input.activityId ? { activityId: input.activityId } : {}),
       createdAt: new Date().toISOString(),
     };
+    // A tracker session logged here counts as logged straight away (the database marks it too, migration 58).
+    const had = input.activityId ? stateRef.current.detectedActivities.find((a) => a.id === input.activityId) : undefined;
+    const markActivity = (prev: AppState, patch: Pick<DetectedActivity, 'status' | 'sessionId'>) =>
+      (had ? prev.detectedActivities.map((a) => (a.id === had.id ? { ...a, ...patch } : a)) : prev.detectedActivities);
     haptics.commit();
-    setState((prev) => ({ ...prev, sessions: [session, ...prev.sessions] }));
+    setState((prev) => ({ ...prev, sessions: [session, ...prev.sessions], detectedActivities: markActivity(prev, { status: 'logged', sessionId: session.id }) }));
     if (!live(me)) return;
     try { await remote.insertSession(session); } catch (e) {
-      setState((prev) => ({ ...prev, sessions: prev.sessions.filter((x) => x.id !== session.id) }));
+      setState((prev) => ({ ...prev, sessions: prev.sessions.filter((x) => x.id !== session.id), detectedActivities: markActivity(prev, { status: had?.status ?? 'new', sessionId: had?.sessionId }) }));
       throw e;
     }
   }, [requireUser]);
 
   const deleteSession = useCallback((id: ID) => {
     const me = stateRef.current.currentUserId;
-    setState((prev) => ({ ...prev, sessions: prev.sessions.filter((x) => x.id !== id) }));
+    setState((prev) => ({
+      ...prev,
+      sessions: prev.sessions.filter((x) => x.id !== id),
+      // A tracker session it was logged from is waiting to be logged again, as the database puts it back (migration 58).
+      detectedActivities: prev.detectedActivities.map((a) => (a.sessionId === id && a.status === 'logged' ? { ...a, status: 'new', sessionId: undefined } : a)),
+    }));
     if (live(me)) void remote.deleteSession(id);
   }, []);
 
@@ -4230,7 +4277,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       },
     );
   }, [requireUser]);
-  const setPref = useCallback((key: 'showActivity' | 'pushLikes' | 'pushCoach' | 'pushMessages', value: boolean) => {
+  const setPref = useCallback((key: 'showActivity' | 'pushLikes' | 'pushCoach' | 'pushMessages' | 'pushActivity', value: boolean) => {
     haptics.tap();
     setState((prev) => ({ ...prev, prefs: { ...prev.prefs, [key]: value } }));
   }, []);
@@ -4239,19 +4286,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // The three real sources: Apple Health (read on the phone), WHOOP (through
   // the server, which holds the keys), Cronometer (an export file). Without
   // Supabase the demo simply flips the flag.
-  const applyHealth = useCallback((got: { days: DailyHealth[]; connections: { provider: IntegrationProvider; lastSyncedAt?: string }[] }) => {
+  const applyHealth = useCallback((got: { days: DailyHealth[]; connections: { provider: IntegrationProvider; lastSyncedAt?: string; readsWorkouts?: boolean }[] }) => {
     setState((prev) => ({
       ...prev,
       healthHistory: got.days,
       healthIsReal: true,
-      integrations: prev.integrations.map((i) => { const c = got.connections.find((x) => x.provider === i.provider); return { ...i, connected: !!c, lastSyncedAt: c?.lastSyncedAt }; }),
+      integrations: prev.integrations.map((i) => { const c = got.connections.find((x) => x.provider === i.provider); return { ...i, connected: !!c, lastSyncedAt: c?.lastSyncedAt, readsWorkouts: c?.readsWorkouts }; }),
     }));
   }, []);
+  /** Fetches your sources again; resolves with what came back (null when nothing did) for a step that cannot wait for the screen to redraw. */
   const reloadHealth = useCallback(async () => {
     const me = stateRef.current.currentUserId;
-    if (!live(me)) return;
+    if (!live(me)) return null;
     const got = await remote.fetchHealth(me!).catch(() => null);
     if (got) applyHealth(got);
+    return got;
   }, [applyHealth]);
   useEffect(() => { if (live(state.currentUserId)) void reloadHealth(); }, [state.currentUserId, reloadHealth]);
 
@@ -4297,7 +4346,110 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return false;
   }, []);
 
-  const toggleIntegration = useCallback(async (provider: Integration['provider']) => {
+  /**
+   * WHOOP's sign-in. The server sends the browser to WHOOP; WHOOP sends it
+   * back to the server, which sends it back here. `tennis` also asks WHOOP
+   * for workouts, and turns tennis sessions on once WHOOP says yes.
+   */
+  const connectWhoop = useCallback(async (tennis: boolean) => {
+    const back = Linking.createURL('health');
+    const { url } = await remote.whoop<{ url: string }>('start', tennis ? { back, tennis: true } : { back });
+    const result = await WebBrowser.openAuthSessionAsync(url, back);
+    if (result.type !== 'success') throw new Error('WHOOP was not connected.');
+    if (!tennis) return;
+    // A tennis sign-in waits on the server until this phone, signed in as
+    // you, collects it, so a WHOOP link sent to someone else can never put
+    // their WHOOP on the sender's account.
+    const n = /[?&]n=([0-9a-f-]{36})/i.exec(result.url)?.[1];
+    if (!n) throw new Error('WHOOP was not connected.');
+    await remote.whoop('finish', { n });
+  }, []);
+
+  /**
+   * Looks for new tennis sessions and says so when one turns up. `rows` are
+   * the sources as just fetched, for a step (turning tennis on) that cannot
+   * wait for the screen to catch up; otherwise the ones on screen.
+   */
+  const checkWith = useCallback(async (force: boolean, rows: Pick<Integration, 'provider' | 'connected' | 'readsWorkouts'>[]) => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me) || !stateRef.current.remoteLoaded) return;
+    const apple = rows.find((i) => i.provider === 'apple-health');
+    const whoop = rows.find((i) => i.provider === 'whoop');
+    // Nothing has tennis sessions on (always so on a database without
+    // migration 58): no need to ask the server anything.
+    if (!(apple?.connected && apple.readsWorkouts) && !(whoop?.connected && whoop.readsWorkouts)) return;
+    const flags = await tennisFlags(me);
+    const src = { apple: !!(flags.apple && apple?.connected && apple.readsWorkouts), whoop: !!(flags.whoop && whoop?.connected && whoop.readsWorkouts) };
+    if (!src.apple && !src.whoop) return;
+    const filed = await checkForTennis(me!, src, force);
+    if (stateRef.current.currentUserId !== me) return;
+    const list = await remote.fetchActivities(me!);
+    if (stateRef.current.currentUserId !== me) return;
+    if (list) setState((prev) => ({ ...prev, detectedActivities: list }));
+    if (!filed.length) return;
+    // The "Tennis detected" rows the server just filed, into Notifications.
+    const notes = await remote.fetchActivityNotes(me!);
+    if (stateRef.current.currentUserId !== me) return;
+    if (notes.length) setState((prev) => ({ ...prev, notifications: [...notes.filter((n) => !prev.notifications.some((x) => x.id === n.id)), ...prev.notifications] }));
+    // The newest one gets a banner; the rest wait in Notifications.
+    const a = (list ?? stateRef.current.detectedActivities).filter((x) => filed.includes(x.id)).sort((x, y) => (x.startedAt < y.startedAt ? 1 : -1))[0];
+    if (a) showToast({ title: 'Tennis detected', body: `${duration(a.minutes)} from ${fromWho(a)}. Tap to log it.`, icon: 'tennisball-outline', href: `/log-session?activity=${a.id}` });
+  }, []);
+  const checkForActivities = useCallback((force = false) => checkWith(force, stateRef.current.integrations), [checkWith]);
+
+  const refreshActivities = useCallback(async () => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me)) return;
+    const list = await remote.fetchActivities(me!);
+    if (list && stateRef.current.currentUserId === me) setState((prev) => ({ ...prev, detectedActivities: list }));
+  }, []);
+
+  const dismissActivity = useCallback((id: ID) => {
+    const me = stateRef.current.currentUserId;
+    haptics.tap();
+    // Only one still waiting can be hidden; its "Tennis detected" row goes with it.
+    setState((prev) => ({
+      ...prev,
+      detectedActivities: prev.detectedActivities.map((a) => (a.id === id && (a.status === 'new' || a.status === 'duplicate') ? { ...a, status: 'dismissed' } : a)),
+      notifications: prev.notifications.filter((n) => !(n.kind === 'activity' && n.targetId === id)),
+    }));
+    if (live(me)) void remote.dismissActivity(id);
+  }, []);
+
+  const turnOnTennis = useCallback(async (provider: 'apple-health' | 'whoop') => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me)) {
+      // The demo: switched on at once.
+      setState((prev) => ({ ...prev, integrations: prev.integrations.map((i) => (i.provider === provider ? { ...i, connected: true, readsWorkouts: true, lastSyncedAt: i.lastSyncedAt ?? new Date().toISOString() } : i)) }));
+      haptics.commit();
+      return;
+    }
+    if (provider === 'apple-health') {
+      // The phone's own Health sheet, now asking for workouts and heart rate too.
+      await connectAppleHealth({ workouts: true });
+      if (!stateRef.current.integrations.find((i) => i.provider === 'apple-health')?.connected) await pullFrom(me!, 'apple-health');
+      await remote.setHealthConnection(me!, 'apple-health', true, { readsWorkouts: true });
+    } else {
+      await connectWhoop(true);
+    }
+    haptics.commit();
+    const got = await reloadHealth();
+    void checkWith(true, got ? got.connections.map((c) => ({ ...c, connected: true })) : stateRef.current.integrations);
+  }, [connectWhoop, pullFrom, reloadHealth, checkWith]);
+
+  const turnOffTennis = useCallback(async (provider: 'apple-health' | 'whoop') => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me)) {
+      setState((prev) => ({ ...prev, integrations: prev.integrations.map((i) => (i.provider === provider ? { ...i, readsWorkouts: false } : i)) }));
+      haptics.untap();
+      return;
+    }
+    await remote.setHealthConnection(me!, provider, true, { readsWorkouts: false });
+    haptics.untap();
+    await reloadHealth();
+  }, [reloadHealth]);
+
+  const toggleIntegration = useCallback(async (provider: Integration['provider'], opts: { tennis?: boolean } = {}) => {
     const me = stateRef.current.currentUserId;
     const current = stateRef.current.integrations.find((i) => i.provider === provider);
     if (!current) return;
@@ -4312,22 +4464,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await reloadHealth();
       return;
     }
+    // With its switch on, connecting Apple Health or WHOOP turns tennis sessions on too, but only when
+    // the screen said so first (it may not have, if it had not heard about the switch yet).
+    let tennis = false;
     if (provider === 'apple-health') {
-      await connectAppleHealth();
+      tennis = opts.tennis === true && (await tennisFlags(me)).apple;
+      await connectAppleHealth(tennis ? { workouts: true } : {});
       await pullFrom(me!, provider);
+      if (tennis) await remote.setHealthConnection(me!, provider, true, { readsWorkouts: true });
     } else if (provider === 'whoop') {
-      // The server sends the browser to WHOOP; WHOOP sends it back to the server, which sends it back here.
-      const back = Linking.createURL('health');
-      const { url } = await remote.whoop<{ url: string }>('start', { back });
-      const result = await WebBrowser.openAuthSessionAsync(url, back);
-      if (result.type !== 'success') throw new Error('WHOOP was not connected.');
+      tennis = opts.tennis === true && (await tennisFlags(me)).whoop;
+      await connectWhoop(tennis);
     } else if (provider === 'cronometer' || provider === 'myfitnesspal') {
       if (appleHealthAvailable()) await connectAppleHealth();
       if (!(await pullFrom(me!, provider))) return;
     }
     haptics.commit();
-    await reloadHealth();
-  }, [pullFrom, reloadHealth]);
+    const got = await reloadHealth();
+    if (tennis) void checkWith(true, got ? got.connections.map((c) => ({ ...c, connected: true })) : stateRef.current.integrations);
+  }, [pullFrom, reloadHealth, connectWhoop, checkWith]);
 
   const syncHealth = useCallback(async (provider: Integration['provider']) => {
     const me = stateRef.current.currentUserId;
@@ -4428,6 +4583,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       submitCoachingRequest,
       toggleIntegration,
       syncHealth,
+      refreshActivities,
+      checkForActivities,
+      dismissActivity,
+      turnOnTennis,
+      turnOffTennis,
       claimPendingReferral,
       countReferrals,
       askCoach,
@@ -4577,6 +4737,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       submitCoachingRequest,
       toggleIntegration,
       syncHealth,
+      refreshActivities,
+      checkForActivities,
+      dismissActivity,
+      turnOnTennis,
+      turnOffTennis,
       claimPendingReferral,
       countReferrals,
       askCoach,

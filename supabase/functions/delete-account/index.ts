@@ -11,6 +11,9 @@
 // keep using the project's storage — which is neither what "delete" means to
 // the person nor what privacy law and Apple expect of it.
 //
+// A connected WHOOP is disconnected first, through the whoop function, so
+// WHOOP revokes CourtSide's access and stops sending its webhooks.
+//
 // Deploy:  supabase functions deploy delete-account
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
@@ -59,6 +62,17 @@ Deno.serve(async (req) => {
   // whose files these were, and they would sit there for good.
   const media = await emptyFolder(admin, 'media', me);
   const resumes = await emptyFolder(admin, 'coach-applications', me);
+
+  // WHOOP is told first (CourtSide's access revoked, so its webhooks stop). The whoop function does it, refreshing the key if it must. Best effort.
+  const { data: whoop } = await admin.from('whoop_tokens').select('user_id').eq('user_id', me).maybeSingle();
+  if (whoop) {
+    try {
+      const stop = new AbortController();
+      const timer = setTimeout(() => stop.abort(), 5000);
+      await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/whoop/disconnect`, { method: 'POST', headers: { Authorization: auth, apikey: Deno.env.get('SUPABASE_ANON_KEY')!, 'content-type': 'application/json' }, body: '{}', signal: stop.signal }).then((r) => r.body?.cancel());
+      clearTimeout(timer);
+    } catch { /* the account still goes */ }
+  }
 
   const { error } = await admin.auth.admin.deleteUser(me);
   if (error) {

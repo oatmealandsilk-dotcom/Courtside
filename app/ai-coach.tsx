@@ -14,7 +14,7 @@ import { useAiCoachLive, useAiCoachOn } from '@/features/aiCoach/switch';
 import { planRemindersSupported, readPlanReminders, schedulePlanReminders, setPlanReminders } from '@/features/aiCoach/planReminder';
 import { show as showToast } from '@/lib/toast';
 import { duration, formatDate, experienceLabel } from '@/lib/format';
-import { healthSignal } from '@/lib/integrations';
+import { healthSignal, withoutSource } from '@/lib/integrations';
 import { useApp } from '@/store/AppContext';
 import type { AiMessage, PlayerProfile, TrainingBlockKind, TrainingPlan } from '@/data/types';
 import { colors, lift, spacing, typography } from '@/theme';
@@ -35,14 +35,24 @@ function fingerprint(text: string) {
   return (h >>> 0).toString(36);
 }
 
-/** What the coach is told about you: the profile, and recovery when a wearable is connected. */
-function aboutYou(p: PlayerProfile, signal: ReturnType<typeof healthSignal>) {
+/** The health line the coach is told: recovery, sleep and HRV, whichever another source than WHOOP gave. */
+function healthLine(signal: ReturnType<typeof healthSignal>, whoop: boolean) {
+  const sleep = signal.sleepHours !== undefined ? `sleep ${signal.sleepHours}h` : null;
+  const hrv = signal.hrvMs !== undefined ? `HRV ${signal.hrvMs}ms` : null;
+  if (signal.recovery !== undefined) return `Recovery ${signal.recovery}% (3-day avg)${sleep ? `, ${sleep}` : ''}${hrv ? `, ${hrv}` : ''}.`;
+  if (sleep || hrv) { const s = [sleep, hrv].filter(Boolean).join(', '); return `${s[0].toUpperCase()}${s.slice(1)} (3-day avg).`; }
+  if (whoop) return 'WHOOP is connected, but its numbers are not shared with the coach.';
+  return signal.hasWearable ? 'No recent wearable numbers.' : 'No wearable connected.';
+}
+
+/** What the coach is told about you: the profile, and recovery when a wearable gave some. */
+function aboutYou(p: PlayerProfile, signal: ReturnType<typeof healthSignal>, whoop: boolean) {
   return [
     `Rating: ${p.skillSystem} ${p.rating}. Style: ${p.playStyle}, ${p.handedness}-handed, ${p.backhand} backhand. Prefers ${p.preferredSurface}. Fitness: ${p.fitnessLevel}. ${p.sessionsPerWeek !== undefined ? `${p.sessionsPerWeek} sessions a week` : 'Sessions a week not given'}, ${p.yearsPlaying !== undefined ? `${experienceLabel(p.yearsPlaying)} playing` : 'years playing not given'}.`,
     `Goals: ${p.goals.map((g) => g.label).join('; ') || 'none set'}.`,
     `Injury and schedule notes: ${p.constraints.filter((c) => c.active).map((c) => `${c.kind}: ${c.label}`).join('; ') || 'none'}.`,
     p.tournaments[0] ? `Next tournament: ${p.tournaments[0].name} on ${formatDate(p.tournaments[0].startsAt)}.` : 'No tournament scheduled.',
-    signal.recovery !== undefined ? `Recovery ${signal.recovery}% (3-day avg)${signal.sleepHours !== undefined ? `, sleep ${signal.sleepHours}h` : ''}${signal.hrvMs !== undefined ? `, HRV ${signal.hrvMs}ms` : ''}.` : 'No wearable connected.',
+    healthLine(signal, whoop),
   ].join('\n');
 }
 
@@ -117,9 +127,15 @@ function Train() {
   const [remaining, setRemaining] = useState<number | undefined>(undefined);
   const [lines, setLines] = useState<Line[]>([]);
 
-  const signal = useMemo(() => healthSignal(healthHistory, integrations), [healthHistory, integrations]);
-  const about = currentUser ? aboutYou(currentUser.profile, signal) : '';
-  const standIn = useMemo(() => (currentUser ? generatePlan({ profile: currentUser.profile, health: healthHistory }) : null), [currentUser, healthHistory]);
+  // WHOOP's numbers stay out of everything the coach is told or writes from (WHOOP's terms bar AI use):
+  // the summary, and the stand-in week that goes into each question when the coach's own week is not in.
+  // The Recovery tile is only drawn here, on this phone, so it shows every source.
+  const shown = useMemo(() => healthSignal(healthHistory, integrations), [healthHistory, integrations]);
+  const shared = useMemo(() => withoutSource(healthHistory, 'whoop'), [healthHistory]);
+  const signal = useMemo(() => healthSignal(shared, integrations, { skipSource: 'whoop' }), [shared, integrations]);
+  const whoopOn = integrations.some((i) => i.provider === 'whoop' && i.connected);
+  const about = currentUser ? aboutYou(currentUser.profile, signal, whoopOn) : '';
+  const standIn = useMemo(() => (currentUser ? generatePlan({ profile: currentUser.profile, health: shared }) : null), [currentUser, shared]);
 
   // The week the coach wrote: asked for once per profile, kept by the server for the week.
   const [written, setWritten] = useState<TrainingPlan | null | undefined>(live ? undefined : null);
@@ -242,9 +258,9 @@ function Train() {
               <Pressable accessibilityRole="link" accessibilityLabel="Recovery and health" onPress={() => router.push('/health')} style={styles.statPress}>
                 <Stat
                   label="Recovery"
-                  value={signal.recovery !== undefined ? `${signal.recovery}%` : '—'}
-                  hint={signal.recovery !== undefined ? '3-day avg' : 'no wearable'}
-                  tint={signal.recovery !== undefined && signal.recovery < 65 ? colors.warning : undefined}
+                  value={shown.recovery !== undefined ? `${shown.recovery}%` : '—'}
+                  hint={shown.recovery !== undefined ? '3-day avg' : 'no wearable'}
+                  tint={shown.recovery !== undefined && shown.recovery < 65 ? colors.warning : undefined}
                 />
               </Pressable>
             </View>

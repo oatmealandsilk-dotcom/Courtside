@@ -63,7 +63,10 @@ module.exports = {
       // from the next App Store build.
       ['expo-audio', { microphonePermission: 'CourtSide uses the microphone for voice notes you send in chats.', enableBackgroundPlayback: false }],
       // Apple Health, in the App Store build only (Expo Go has no HealthKit).
-      ['react-native-health', { healthSharePermission: 'CourtSide reads your sleep, heart rate variability, resting heart rate, steps and active energy so the AI coach can plan around how recovered you are.', healthUpdatePermission: 'CourtSide does not write to Health.' }],
+      // The reason shown on Apple's Health sheet must name everything asked
+      // for: tennis workouts and heart rate (tennis sessions), plus the daily
+      // numbers and food totals. Takes effect from the next App Store build.
+      ['react-native-health', { healthSharePermission: 'CourtSide reads your tennis workouts and your heart rate during them, so you can log your sessions, plus sleep, heart rate variability, resting heart rate, steps, active energy and nutrition, for your Health page and your AI coach’s training plan.', healthUpdatePermission: 'CourtSide does not write to Health.' }],
     ],
     experiments: { baseUrl },
     // Instant updates: a build asks Expo for newer app code when it opens and

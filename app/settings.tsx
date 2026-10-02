@@ -15,6 +15,7 @@ import { leaveGently } from '@/components/SignOutCurtain';
 import { confirm } from '@/lib/confirm';
 import { replayTour } from '@/features/tour/tourStore';
 import { TOUR_ON } from '@/features/tour/tourSeen';
+import { useTennisFlags } from '@/features/activity/useTennisFlags';
 
 interface Row {
   icon: keyof typeof Ionicons.glyphMap;
@@ -45,6 +46,8 @@ export default function Settings() {
     setLocationNote(problem ?? '');
   };
   const { theme } = useTheme();
+  // The tennis-session alert switch shows once WHOOP's tennis sessions are switched on (migration 58).
+  const tennis = useTennisFlags();
 
   const sections: { title: string; rows: Row[] }[] = [
     {
@@ -62,6 +65,7 @@ export default function Settings() {
         { icon: 'paper-plane-outline' as const, label: 'Messages', detail: 'To quiet just one chat, mute it from its details', toggle: { value: prefs.pushMessages, onChange: (v: boolean) => actions.setPref('pushMessages', v) } },
         { icon: 'heart-outline' as const, label: 'Likes and comments', toggle: { value: prefs.pushLikes, onChange: (v: boolean) => actions.setPref('pushLikes', v) } },
         { icon: 'chatbubble-ellipses-outline' as const, label: 'Coach replies', toggle: { value: prefs.pushCoach, onChange: (v: boolean) => actions.setPref('pushCoach', v) } },
+        ...(tennis.whoop ? [{ icon: 'tennisball-outline' as const, label: 'Tennis sessions', detail: 'An alert when WHOOP picks one up', toggle: { value: prefs.pushActivity, onChange: (v: boolean) => actions.setPref('pushActivity', v) } }] : []),
       ],
     }]),
     {

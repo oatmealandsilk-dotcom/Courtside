@@ -1,6 +1,6 @@
 import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Platform, View } from 'react-native';
+import { AppState, Platform, View } from 'react-native';
 import { goBack, goHome } from '@/lib/goBack';
 import { router, useGlobalSearchParams, usePathname, useSegments } from 'expo-router';
 import { NavBar } from './NavBar';
@@ -74,7 +74,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [pathname]);
-  const { currentUserId, currentUser, ready, authResolved, remoteLoaded, onboardingComplete, termsVersion } = useApp();
+  const { currentUserId, currentUser, ready, authResolved, remoteLoaded, onboardingComplete, termsVersion, healthIsReal, actions } = useApp();
   // Crash reports say which screen they happened on.
   useEffect(() => { setCrashScreen(pathname); }, [pathname]);
   // Alerts: a tap on one opens what it is about. Once someone is signed in
@@ -88,6 +88,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     pushAskedFor.current = currentUserId;
     void registerForPush();
   }, [currentUserId, remoteLoaded, onboardingComplete, currentUser?.ageGroup]);
+  // Tennis sessions from a tracker: looked for when the app opens and each
+  // time it comes back to the front. It does nothing unless a source has
+  // tennis sessions on and its server switch is on (migration 58).
+  useEffect(() => {
+    if (!isSupabaseConfigured || !currentUserId || !remoteLoaded || !onboardingComplete || !healthIsReal) return;
+    void actions.checkForActivities();
+    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') void actions.checkForActivities(); });
+    return () => sub.remove();
+  }, [currentUserId, remoteLoaded, onboardingComplete, healthIsReal]); // eslint-disable-line react-hooks/exhaustive-deps
   // The age check: an account with no birthday on file is asked for one
   // before anything else, wherever it opens. (An answer given on this phone
   // counts too, in case the database's side of the check is not added yet.)

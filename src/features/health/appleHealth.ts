@@ -12,6 +12,9 @@ export type BodyDay = Pick<DailyHealth, 'date'> & Partial<Pick<DailyHealth, 'res
  * which world we are in.
  */
 type Sample = { startDate: string; endDate: string; value: number };
+/** One workout as the library hands it over (RCTAppleHealthKit+Queries.m, the workout branch of fetchSamplesOfType). */
+type AppleWorkout = { id: string; activityId: number; activityName: string; calories: number; start: string; end: string; sourceName: string; sourceId: string; device: string; tracked: boolean };
+type HrSample = { value: number; startDate: string; endDate: string; sourceId?: string; sourceName?: string };
 type HK = {
   initHealthKit: (perms: { permissions: { read: string[]; write: string[] } }, cb: (err: string | null) => void) => void;
   getDailyStepCountSamples: (o: object, cb: (err: string | null, r: Sample[]) => void) => void;
@@ -23,6 +26,8 @@ type HK = {
   getProteinSamples: (o: object, cb: (err: string | null, r: Sample[]) => void) => void;
   getCarbohydratesSamples: (o: object, cb: (err: string | null, r: Sample[]) => void) => void;
   getTotalFatSamples: (o: object, cb: (err: string | null, r: Sample[]) => void) => void;
+  getSamples: (o: object, cb: (err: string | null, r: AppleWorkout[]) => void) => void;
+  getHeartRateSamples: (o: object, cb: (err: string | null, r: HrSample[]) => void) => void;
   Constants: { Permissions: Record<string, string> };
 };
 
@@ -45,12 +50,68 @@ export const appleHealthAvailable = () => load() !== null;
 
 const call = <T,>(fn: (cb: (err: string | null, r: T) => void) => void) => new Promise<T>((res, rej) => fn((err, r) => (err ? rej(new Error(err)) : res(r))));
 
-/** Asks once for read access. Throws when refused or when HealthKit is not in this build. */
-export async function connectAppleHealth(): Promise<void> {
+/**
+ * Asks once for read access. Throws when refused or when HealthKit is not in this build.
+ * `workouts` adds workouts and heart rate, for tennis sessions: asked only
+ * from the tennis buttons, after CourtSide has said why (migration 58).
+ */
+export async function connectAppleHealth(opts: { workouts?: boolean } = {}): Promise<void> {
   const h = load();
   if (!h) throw new Error('Apple Health is not available in this version of CourtSide.');
   const P = h.Constants.Permissions;
-  await new Promise<void>((res, rej) => h.initHealthKit({ permissions: { read: [P.Steps, P.StepCount, P.ActiveEnergyBurned, P.HeartRateVariability, P.RestingHeartRate, P.SleepAnalysis, P.EnergyConsumed, P.Protein, P.Carbohydrates, P.FatTotal].filter(Boolean), write: [] } }, (err) => (err ? rej(new Error(err)) : res())));
+  const read = [P.Steps, P.StepCount, P.ActiveEnergyBurned, P.HeartRateVariability, P.RestingHeartRate, P.SleepAnalysis, P.EnergyConsumed, P.Protein, P.Carbohydrates, P.FatTotal, ...(opts.workouts ? [P.Workout, P.HeartRate] : [])].filter(Boolean);
+  await new Promise<void>((res, rej) => h.initHealthKit({ permissions: { read, write: [] } }, (err) => (err ? rej(new Error(err)) : res())));
+}
+
+/** The library writes '+0100' with no colon, which not every date parser takes. */
+const isoOf = (s: string) => new Date(s.replace(/([+-][0-9]{2})([0-9]{2})$/, '$1:$2')).toISOString();
+
+/** A tennis workout from Health, with its heart rate read over the same minutes. */
+export type TennisWorkout = { id: string; startedAt: string; endedAt: string; minutes: number; kcal?: number; avgHr?: number; maxHr?: number; device?: string; tzOffsetMin: number };
+
+/**
+ * Tennis workouts saved to Health since a moment, newest first, at most 10.
+ * `skipWhoop` leaves out the ones the WHOOP app copied into Health, when
+ * WHOOP already sends its own straight to the server. Never throws.
+ */
+export async function readTennisWorkouts(sinceIso: string, opts: { skipWhoop?: boolean } = {}): Promise<TennisWorkout[]> {
+  const h = load();
+  if (!h) return [];
+  const settle = async <T,>(p: Promise<T>) => { try { return await p; } catch { return null; } };
+  try {
+    // getSamples, not getAnchoredWorkouts: the anchored query drops any workout saved without metadata.
+    const all = await settle(call<AppleWorkout[]>((cb) => h.getSamples({ type: 'Workout', startDate: sinceIso, endDate: new Date().toISOString(), ascending: false }, cb)));
+    // 48 is HKWorkoutActivityType.tennis.
+    const tennis = (all ?? [])
+      .filter((w) => w.activityId === 48 || w.activityName === 'Tennis')
+      .filter((w) => !opts.skipWhoop || !/whoop/i.test(`${w.sourceName} ${w.sourceId}`))
+      .slice(0, 10);
+    const out: TennisWorkout[] = [];
+    for (const w of tennis) {
+      // A workout with an unreadable time is skipped on its own, not with the rest.
+      let startedAt: string;
+      let endedAt: string;
+      try { startedAt = isoOf(w.start); endedAt = isoOf(w.end); } catch { continue; }
+      const hr = await settle(call<HrSample[]>((cb) => h.getHeartRateSamples({ startDate: w.start, endDate: w.end, ascending: true }, cb)));
+      // The workout's own watch first; any other source's beats only when it saved none.
+      const own = (hr ?? []).filter((s) => s.sourceId === w.sourceId);
+      const vals = (own.length ? own : hr ?? []).map((s) => s.value).filter((v) => v >= 30 && v <= 250);
+      out.push({
+        id: w.id,
+        startedAt,
+        endedAt,
+        minutes: Math.round((Date.parse(endedAt) - Date.parse(startedAt)) / 60000),
+        kcal: w.calories > 0 ? Math.round(w.calories) : undefined,
+        maxHr: vals.length ? Math.round(Math.max(...vals)) : undefined,
+        avgHr: vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : undefined,
+        device: w.device || w.sourceName || undefined,
+        tzOffsetMin: -new Date(startedAt).getTimezoneOffset(),
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
 }
 
 const dayOf = (iso: string) => iso.slice(0, 10);

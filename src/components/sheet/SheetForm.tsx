@@ -15,14 +15,14 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
  * and green kept for the one thing to press.
  */
 
-/** The sheet's title, a line under it that can change as you fill it in, and a round close. */
-export function SheetTitle({ title, line, lineTone = 'muted', onClose }: { title: string; line?: string; lineTone?: 'muted' | 'brand'; onClose: () => void }) {
+/** The sheet's title, a line under it that can change as you fill it in, and a round close. `lines`: how many lines the line may run to (one unless said). */
+export function SheetTitle({ title, line, lineTone = 'muted', lines = 1, onClose }: { title: string; line?: string; lineTone?: 'muted' | 'brand'; lines?: number; onClose: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.titleRow}>
       <View style={{ flex: 1, gap: 3 }}>
         <Text style={styles.title}>{title}</Text>
-        {line ? <Text style={[styles.line, lineTone === 'brand' && styles.lineBrand]} numberOfLines={1}>{line}</Text> : null}
+        {line ? <Text style={[styles.line, lineTone === 'brand' && styles.lineBrand]} numberOfLines={lines}>{line}</Text> : null}
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={8} onPress={onClose} style={({ pressed }) => [styles.close, pressed && { opacity: 0.7 }]}>
         <Ionicons name="close" size={18} color={colors.textMuted} />

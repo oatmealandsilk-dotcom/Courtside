@@ -7,6 +7,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { Screen } from '@/components/ui';
 import { appleHealthAvailable } from '@/features/health/appleHealth';
+import { useTennisFlags } from '@/features/activity/useTennisFlags';
+import { confirm } from '@/lib/confirm';
 import { relativeTime } from '@/lib/format';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -21,6 +23,12 @@ const ABOUT: Partial<Record<Integration['provider'], { icon: keyof typeof Ionico
   myfitnesspal: { icon: 'restaurant-outline', line: 'Calories, protein, carbs, fat.', how: appleHealthAvailable() ? 'Through Apple Health: in MyFitnessPal, Settings → Sharing & Privacy → Apple Health.' : 'Reads MyFitnessPal\'s export file (Premium → Export data).' },
 };
 
+/** The same two, once tennis sessions are switched on for them on the server (migration 58). */
+const ABOUT_TENNIS: Partial<Record<Integration['provider'], { line: string; how: string }>> = {
+  'apple-health': { line: 'Tennis workouts and their heart rate, plus sleep, HRV, resting heart rate, steps.', how: 'Reads the Health app on this phone. Start a Tennis workout on your Apple Watch; CourtSide picks it up when you open the app.' },
+  whoop: { line: 'Tennis sessions, recovery, strain, HRV, sleep.', how: 'Sign in to WHOOP once. A tennis session it records arrives as an alert, usually within an hour.' },
+};
+
 /**
  * Where the coach's numbers come from. Three sources, each a row: what it
  * gives, whether it is connected, and one button that does the real thing —
@@ -32,17 +40,42 @@ export default function Health() {
   const [busy, setBusy] = useState<string | null>(null);
   const latest = healthHistory[0];
   const connected = integrations.filter((i) => i.connected).length;
+  // Tennis sessions, per source, once the server's switch for it is on. Off, this page is as it always was.
+  const flags = useTennisFlags();
+  const tennisOn = (provider: Integration['provider']) => (provider === 'apple-health' ? flags.apple : provider === 'whoop' ? flags.whoop : false);
 
-  const run = async (provider: Integration['provider'], what: 'toggle' | 'sync') => {
+  const run = async (provider: Integration['provider'], what: 'toggle' | 'sync' | 'tennis' | 'tennis-off') => {
     setBusy(provider);
     try {
-      if (what === 'toggle') await actions.toggleIntegration(provider); else await actions.syncHealth(provider);
+      // Workouts are asked for only when this screen has said so (Apple Health's explanation, or WHOOP's own sign-in).
+      if (what === 'toggle') await actions.toggleIntegration(provider, { tennis: tennisOn(provider) });
+      else if (what === 'sync') await actions.syncHealth(provider);
+      else if (provider === 'apple-health' || provider === 'whoop') await (what === 'tennis' ? actions.turnOnTennis(provider) : actions.turnOffTennis(provider));
     } catch (err) {
       showToast({ title: 'Could not connect', body: err instanceof Error ? err.message : 'Try again in a moment.', icon: 'alert-circle-outline' });
     } finally {
       setBusy(null);
     }
   };
+
+  // Apple Health's own permission sheet comes next, so CourtSide says why first.
+  const askApple = (what: 'toggle' | 'tennis') => confirm({
+    title: 'Tennis sessions from Apple Health',
+    message: 'CourtSide reads your Tennis workouts and your heart rate during them, so you can log and post them, plus sleep, HRV, resting heart rate and steps. Nothing is posted unless you choose to.',
+    confirmLabel: 'Continue',
+    onConfirm: () => run('apple-health', what),
+  });
+
+  // Once WHOOP's switch is on, disconnecting it also removes what it sent (the server does), so ask first.
+  const disconnect = (provider: Integration['provider']) => (provider === 'whoop' && flags.whoop
+    ? confirm({
+      title: 'Disconnect WHOOP?',
+      message: 'Its numbers and tennis sessions are removed from CourtSide. Connecting again brings back only the last week.',
+      confirmLabel: 'Disconnect',
+      destructive: true,
+      onConfirm: () => run('whoop', 'toggle'),
+    })
+    : run(provider, 'toggle'));
 
   const stat = (label: string, value: string | null) => (
     <View style={styles.stat}><Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{value ?? '—'}</Text><Text style={styles.statLabel} numberOfLines={1}>{label}</Text></View>
@@ -72,8 +105,10 @@ export default function Health() {
 
       <View style={styles.list}>
         {integrations.map((i, index) => {
-          const about = ABOUT[i.provider];
-          if (!about) return null;
+          const base = ABOUT[i.provider];
+          if (!base) return null;
+          const tennis = tennisOn(i.provider);
+          const about = tennis ? { ...base, ...ABOUT_TENNIS[i.provider] } : base;
           const loading = busy === i.provider;
           const needsBuild = i.provider === 'apple-health' && Platform.OS === 'ios' && !appleHealthAvailable();
           const wrongPhone = i.provider === 'apple-health' && Platform.OS !== 'ios';
@@ -97,16 +132,35 @@ export default function Health() {
                     <Pressable accessibilityRole="button" accessibilityLabel={`Sync ${i.label}`} disabled={loading} onPress={() => run(i.provider, 'sync')} style={styles.small}>
                       <Ionicons name="refresh" size={14} color={colors.text} /><Text style={styles.smallText}>{(i.provider === 'cronometer' || i.provider === 'myfitnesspal') && !appleHealthAvailable() ? 'Import again' : 'Sync now'}</Text>
                     </Pressable>
-                    <Pressable accessibilityRole="button" accessibilityLabel={`Disconnect ${i.label}`} disabled={loading} onPress={() => run(i.provider, 'toggle')} style={styles.smallGhost}>
+                    <Pressable accessibilityRole="button" accessibilityLabel={`Disconnect ${i.label}`} disabled={loading} onPress={() => disconnect(i.provider)} style={styles.smallGhost}>
                       <Text style={styles.smallGhostText}>Disconnect</Text>
                     </Pressable>
                   </View>
+                ) : null}
+                {i.connected && tennis ? (
+                  i.readsWorkouts ? (
+                    <View style={styles.tennisRow}>
+                      <Ionicons name="tennisball-outline" size={14} color={colors.textMuted} />
+                      <Text style={styles.tennisOn}>Tennis sessions on.</Text>
+                      <Pressable accessibilityRole="button" accessibilityLabel={`Turn off tennis sessions from ${i.label}`} disabled={loading} onPress={() => run(i.provider, 'tennis-off')} style={styles.smallGhost}>
+                        <Text style={styles.smallGhostText}>Turn off</Text>
+                      </Pressable>
+                    </View>
+                  ) : blocked ? null : (
+                    // Not offered where it could never work (Expo Go, or not an iPhone): the row is as it always was.
+                    <View style={styles.actions}>
+                      {/* WHOOP's own sign-in says what it shares; Apple Health is explained here first. */}
+                      <Pressable accessibilityRole="button" accessibilityLabel={`Turn on tennis sessions from ${i.label}`} disabled={loading} onPress={() => (i.provider === 'apple-health' ? askApple('tennis') : run(i.provider, 'tennis'))} style={styles.small}>
+                        <Ionicons name="tennisball-outline" size={14} color={colors.text} /><Text style={styles.smallText}>Turn on tennis sessions</Text>
+                      </Pressable>
+                    </View>
+                  )
                 ) : null}
               </View>
               {loading ? (
                 <CourtSpinner size={26} />
               ) : i.connected ? null : (
-                <Pressable accessibilityRole="button" accessibilityLabel={`Connect ${i.label}`} accessibilityState={{ disabled: blocked }} disabled={blocked} onPress={() => run(i.provider, 'toggle')} style={[styles.connect, blocked && styles.connectOff]}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Connect ${i.label}`} accessibilityState={{ disabled: blocked }} disabled={blocked} onPress={() => (tennis && i.provider === 'apple-health' ? askApple('toggle') : run(i.provider, 'toggle'))} style={[styles.connect, blocked && styles.connectOff]}>
                   <Text style={[styles.connectText, blocked && styles.connectTextOff]}>{(i.provider === 'cronometer' || i.provider === 'myfitnesspal') && !appleHealthAvailable() ? 'Import' : 'Connect'}</Text>
                 </Pressable>
               )}
@@ -115,7 +169,14 @@ export default function Health() {
         })}
       </View>
 
-      <Text style={styles.foot}>Only you and the coach see these. Disconnecting stops new numbers; what was already read stays until you delete your account.</Text>
+      {/* Says what the server does: WHOOP's numbers go on disconnect only once its switch is on. */}
+      <Text style={styles.foot}>
+        {flags.whoop
+          ? 'Only you and the AI coach see these, and WHOOP’s numbers never go to the coach. Tennis sessions stay private until you post one. Disconnecting WHOOP removes what it sent; other sources stay until you delete your account.'
+          : flags.apple
+            ? 'Only you and the AI coach see these. Tennis sessions stay private until you post one. Disconnecting stops new numbers; what was already read stays until you delete your account.'
+            : 'Only you and the coach see these. Disconnecting stops new numbers; what was already read stays until you delete your account.'}
+      </Text>
     </Screen>
   );
 }
@@ -145,6 +206,8 @@ const styleDefinitions = StyleSheet.create({
   smallText: { ...typography.smallStrong, color: colors.text },
   smallGhost: { height: 32, paddingHorizontal: 8, justifyContent: 'center' },
   smallGhostText: { ...typography.smallStrong, color: colors.textMuted },
+  tennisRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.xs },
+  tennisOn: { ...typography.small, color: colors.textMuted },
   connect: { height: 36, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', marginTop: 3 },
   connectOff: { backgroundColor: colors.surfaceAlt },
   connectText: { ...typography.smallStrong, color: colors.brandInk },

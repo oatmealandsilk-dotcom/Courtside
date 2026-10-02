@@ -55,6 +55,7 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap; tin
   joined: { name: 'hand-right', tint: 'court' },
   'hit-join': { name: 'tennisball', tint: 'brand' },
   'hit-match': { name: 'people', tint: 'brand' },
+  activity: { name: 'tennisball', tint: 'court' },
 };
 
 const VERB: Record<NotificationKind, string> = {
@@ -81,6 +82,7 @@ const VERB: Record<NotificationKind, string> = {
   joined: 'just joined CourtSide near you',
   'hit-join': 'is in for your hit',
   'hit-match': 'is also looking for a hit',
+  activity: 'Tap to log it.',
 };
 
 interface Group {
@@ -96,6 +98,8 @@ interface Group {
 }
 
 function routeFor(group: Group): string {
+  // A tennis session a tracker picked up opens the log sheet, filled in from it.
+  if (group.kind === 'activity') return `/log-session?activity=${group.targetId}`;
   // A coach application update opens the application, which shows where it stands.
   if (group.kind === 'coach-application') return '/coach-apply';
   // Anything about a booking opens the booking.
@@ -154,7 +158,8 @@ export default function Notifications() {
   // "liked your clip", "liked your photo": the verb names what was liked, not just "post".
   const verbFor = (group: Group) => {
     if (group.kind === 'milestone') return `just passed ${group.preview ?? 'a milestone'}`;
-    if (group.kind !== 'like' && group.kind !== 'comment' && group.kind !== 'share') return VERB[group.kind];
+    // A kind this build does not know yet (a newer server) still reads as a sentence.
+    if (group.kind !== 'like' && group.kind !== 'comment' && group.kind !== 'share') return VERB[group.kind] ?? 'updated';
     const act = group.kind === 'like' ? 'liked' : group.kind === 'comment' ? 'commented on' : 'shared';
     if (group.targetKind === 'hit') return `${act} your instant`;
     if (group.targetKind === 'question') return `${act} your thread`;
@@ -259,7 +264,7 @@ export default function Notifications() {
       ) : (
         <View style={styles.list}>
           {groups.map((group, index) => {
-            const icon = ICON[group.kind];
+            const icon = ICON[group.kind] ?? { name: 'notifications', tint: 'brand' };
             const [first, ...rest] = group.actorIds;
             const who =
               group.kind === 'milestone'
@@ -267,6 +272,7 @@ export default function Notifications() {
                 : group.kind === 'posted'
                 ? (group.preview?.startsWith('Instant') || group.preview?.startsWith('Hit')) ? 'Your instant' : group.targetKind === 'question' ? 'Your question' : 'Your post'
                 : group.kind === 'coach-application' || group.kind === 'refund' ? 'CourtSide'
+                : group.kind === 'activity' ? 'Tennis detected.'
                 : rest.length === 0
                 ? nameOf(first)
                 : rest.length === 1
@@ -294,7 +300,7 @@ export default function Notifications() {
               >
                 <View>
                   {/* Two faces, overlapped, when more than one person did it. */}
-                  {group.kind === 'coach-application' || group.kind === 'refund' ? (
+                  {group.kind === 'coach-application' || group.kind === 'refund' || group.kind === 'activity' ? (
                     // From CourtSide itself: the mark, not a person's face.
                     <View style={styles.brandFace}><BrandMark size={24} /></View>
                   ) : rest.length ? (

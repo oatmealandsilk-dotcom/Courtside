@@ -14,6 +14,7 @@ import { comments, posts } from './mock/feed';
 import { stories } from './mock/stories';
 import { conversations, messages } from './mock/messages';
 import { healthHistory, integrations } from './mock/health';
+import { activityNotifications, detectedActivities } from './mock/activities';
 import { users } from './mock/users';
 import { supabase } from '@/lib/supabase';
 import type {
@@ -29,6 +30,7 @@ import type {
   Comment,
   Conversation,
   DailyHealth,
+  DetectedActivity,
   Integration,
   Message,
   Notification,
@@ -74,6 +76,8 @@ export interface Bootstrap {
   conversations: Conversation[];
   messages: Message[];
   notifications: Notification[];
+  /** Tennis sessions a tracker picked up, waiting to be logged (migration 58). */
+  detectedActivities: DetectedActivity[];
 }
 
 export async function fetchBootstrap(): Promise<Bootstrap> {
@@ -95,7 +99,10 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       coachReviews,
       conversations,
       messages,
-      notifications: [],
+      // The demo's tracker session and its "Tennis detected" row. Only without
+      // a database: a real account's come from the server.
+      notifications: supabase ? [] : activityNotifications,
+      detectedActivities: supabase ? [] : detectedActivities,
       coachingRequests,
       integrations,
       healthHistory,
