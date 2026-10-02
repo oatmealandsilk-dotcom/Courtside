@@ -11,12 +11,12 @@ import { colors } from '@/theme';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { CourtSpinner } from '@/components/CourtSpinner';
 
-type Set = 'own' | 'clips' | 'tagged';
+type Set = 'own' | 'clips' | 'tagged' | 'archived';
 
 /**
  * A grid tile opens here: the same full-screen feed as Home, scoped to that
- * person's clips, posts or tagged posts, starting on the one that was tapped
- * and ending when they run out.
+ * person's clips, posts or tagged posts (or your own archived ones, from the
+ * Archive page), starting on the one that was tapped and ending when they run out.
  */
 export default function PlayerPosts() {
   // Hears a theme change, so its own colours never lag the page's.

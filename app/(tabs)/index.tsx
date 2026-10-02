@@ -139,9 +139,13 @@ function LikeBurst({ token }: { token: number }) {
   );
 }
 
-/** Show one player's things as a feed of their own (clips, posts or tagged posts), or a given list of posts in that order (a court's). */
+/**
+ * Show one player's things as a feed of their own (clips, posts or tagged
+ * posts; or, for yourself, the posts you archived), or a given list of posts
+ * in that order (a court's).
+ */
 export type FeedScope =
-  | { userId: string; set: 'own' | 'clips' | 'tagged'; start?: string; ids?: undefined }
+  | { userId: string; set: 'own' | 'clips' | 'tagged' | 'archived'; start?: string; ids?: undefined }
   | { ids: string[]; start?: string; userId?: undefined; set?: undefined };
 
 // On a phone — the app or a phone's browser — a vertical clip fills the whole
@@ -313,7 +317,10 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         const mine = ids && byId
           ? ids.flatMap((id) => { const p = byId.get(id); return p && !p.archived ? [p] : []; })
           : data.posts
-            .filter((p) => !p.archived && (set === 'tagged' ? !!userId && p.taggedUserIds?.includes(userId) : p.authorId === userId && (set !== 'clips' || p.kind === 'clip')))
+            // Archived posts only ever in your own archive's set, opened from the Archive page.
+            .filter((p) => (set === 'archived'
+              ? p.archived && p.authorId === userId && userId === data.currentUserId
+              : !p.archived && (set === 'tagged' ? !!userId && p.taggedUserIds?.includes(userId) : p.authorId === userId && (set !== 'clips' || p.kind === 'clip'))))
             .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
         setOrder(mine.map((p) => `p:${p.id}`));
         setActive(Math.max(0, mine.findIndex((p) => p.id === scope.start)));
@@ -601,7 +608,9 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       const id = key.slice(2);
       if (key.startsWith('p:')) {
         const post = postById.get(id);
-        return post && !hidden.has(post.authorId) && !post.archived ? [{ type: 'post' as const, post }] : [];
+        // In your archive's own set an archived post is the point, and one you
+        // unarchive from there stays on screen rather than vanishing under you.
+        return post && !hidden.has(post.authorId) && (!post.archived || scope?.set === 'archived') ? [{ type: 'post' as const, post }] : [];
       }
       if (key.startsWith('h:')) {
         // A hit leaves the feed the moment it expires or is put away.
@@ -611,7 +620,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       const question = questionById.get(id);
       return question && !hidden.has(question.authorId) ? [{ type: 'question' as const, question }] : [];
     });
-  }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds]);
+  }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds, scope?.set]);
   // This week's challenge, and its top clips so far. They are settled once
   // per visit: a like arriving mid-scroll must not reshuffle the pages.
   const challenge = useMemo(() => challengeFor(), []);

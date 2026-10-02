@@ -15,7 +15,7 @@ import { stories } from './mock/stories';
 import { conversations, messages } from './mock/messages';
 import { healthHistory, integrations } from './mock/health';
 import { activityNotifications, detectedActivities } from './mock/activities';
-import { users } from './mock/users';
+import { CURRENT_USER_ID, users } from './mock/users';
 import { demoHits } from './mock/hits';
 import { demoLastSeen } from './mock/presence';
 import { demoSessions } from './mock/sessions';
@@ -99,7 +99,9 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       // The demo written posts and threads stay, so the app is never empty,
       // and so does the one clip tagged at a demo court, for its page and reel.
       posts: posts.filter((p) => p.kind !== 'clip' || !!p.court),
-      stories: [],
+      // Nobody's live Instants either; only your own old ones, past their day
+      // or put away, so the Archive has something to show.
+      stories: stories.filter((s) => s.authorId === CURRENT_USER_ID && (s.archived || Date.parse(s.expiresAt) <= Date.now())),
       comments,
       questions,
       answers,
