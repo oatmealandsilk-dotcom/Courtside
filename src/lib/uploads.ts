@@ -89,6 +89,22 @@ export function subscribeUploads(fn: () => void): () => void {
   return subscribe(fn);
 }
 
+/**
+ * Uploads that never show on the strip, such as a new profile photo, still
+ * count: the app must not restart itself for an update halfway through one
+ * (that is how a friend's new photo once never saved). Returns the release.
+ */
+let quiet = 0;
+export function holdQuietUpload(): () => void {
+  quiet++;
+  let released = false;
+  return () => { if (!released) { released = true; quiet = Math.max(0, quiet - 1); } };
+}
+/** True while a quiet upload (see holdQuietUpload) is on its way up. */
+export function quietUploading(): boolean {
+  return quiet > 0;
+}
+
 /** True while anything is still on its way up. The app never restarts itself for an update then. */
 export function anyUploading(): boolean {
   return jobs.some((j) => j.state === 'uploading');

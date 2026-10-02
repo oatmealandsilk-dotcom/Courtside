@@ -28,6 +28,14 @@ export function preloadNearbyMap() {
   // A failure here is left for the map to meet and handle (below) when it is drawn.
   loadMap().catch(() => undefined);
 }
+/**
+ * Once the engine that was asked for is in (or failed), so background work
+ * (the Feed warming up) never takes the connection while the map still needs
+ * it. Straight away if nothing has asked for the map.
+ */
+export function nearbyMapSettled(): Promise<void> {
+  return loading ? loading.then(() => undefined, () => undefined) : Promise.resolve();
+}
 
 const WebMap = lazy(() => loadMap().then((m) => {
   try { sessionStorage.removeItem(RELOADED); } catch {}

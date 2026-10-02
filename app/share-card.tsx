@@ -1,10 +1,10 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 
 import { ShareCard } from '@/components/ShareCard';
 import { Button, EmptyState, Screen } from '@/components/ui';
-import { shareCard } from '@/features/share/shareCard';
+import { shareCard, warmShareCard } from '@/features/share/shareCard';
 import { goBack } from '@/lib/goBack';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
@@ -24,6 +24,8 @@ export default function ShareCardScreen() {
   const card = useRef<View>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
+  // In a browser the card's drawing kit comes down now, so Share is instant.
+  useEffect(() => { warmShareCard(); }, []);
 
   const share = async () => {
     if (!post) return;

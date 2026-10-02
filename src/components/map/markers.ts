@@ -62,8 +62,8 @@ export function mePinHtml(me: User, size: number): string {
 }
 
 /** The little court drawn on each court mark: an outline, the net, the centre line. */
-const courtGlyph = (color: string) =>
-  `<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.6" y="1.4" width="6.8" height="9.2" rx="0.9" fill="none" stroke="${color}" stroke-width="1.3"/><line x1="2.6" y1="6" x2="9.4" y2="6" stroke="${color}" stroke-width="1.3"/><line x1="6" y1="3.5" x2="6" y2="8.5" stroke="${color}" stroke-width="1"/></svg>`;
+const courtGlyph = (color: string, px = 12) =>
+  `<svg width="${px}" height="${px}" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.6" y="1.4" width="6.8" height="9.2" rx="0.9" fill="none" stroke="${color}" stroke-width="1.3"/><line x1="2.6" y1="6" x2="9.4" y2="6" stroke="${color}" stroke-width="1.3"/><line x1="6" y1="3.5" x2="6" y2="8.5" stroke="${color}" stroke-width="1"/></svg>`;
 
 /**
  * A court: a small round mark in the court colour with a tiny court on it,
@@ -78,12 +78,13 @@ export function courtPinHtml(court: Court, on: boolean): string {
 }
 
 /**
- * A court on the still card in Find Players: a small quiet dot, no glyph and
- * no name, just enough to show where the courts in your city are. Not
- * tappable: a tap anywhere on the card opens the full map.
+ * A court on the still card in Find Players: a small badge in the court
+ * colour with the tiny court drawn on it and a soft halo, so the courts in
+ * your city read as courts at a glance (a plain dot looked dull, Oct 2). No
+ * name, and not tappable: a tap anywhere on the card opens the full map.
  */
 export function courtDotHtml(): string {
-  return `<div style="width:10px;height:10px;border-radius:999px;background:${colors.court};border:2px solid ${colors.bg};box-sizing:content-box;box-shadow:0 1px 3px rgba(0,0,0,.18);pointer-events:none"></div>`;
+  return `<div style="width:18px;height:18px;border-radius:999px;background:${colors.court};border:2px solid ${colors.bg};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px ${colors.court}38,0 2px 5px rgba(0,0,0,.22);pointer-events:none">${courtGlyph(colors.brandInk, 10)}</div>`;
 }
 
 /** A tennis ball, drawn small enough for a flag: a filled ball with its two seams. */
