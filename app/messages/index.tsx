@@ -5,7 +5,7 @@ import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { GroupAvatar, eventText, groupName, hasGroupControls, isGroupChat, isMuted, leaveGroupMessage, othersIn } from '@/features/messages/groups';
+import { GroupAvatar, eventText, groupName, hasGroupControls, isGroupChat, isMuted, leaveGroupMessage, messageSummary, othersIn } from '@/features/messages/groups';
 import { ChatSheet, type SheetOption } from '@/features/messages/ChatSheet';
 import { MUTE_CHOICES, muteUntil } from '@/features/messages/mute';
 import { Avatar, Chip, EmptyState, Screen } from '@/components/ui';
@@ -72,17 +72,8 @@ export default function Inbox() {
     : section === 'clients' ? { title: 'No clients yet', body: 'Players who message you about coaching land here.' }
     : { title: 'No messages yet', body: 'Find a player in Community and start a conversation.' };
 
-  /** What the last message was, in a few words. */
-  const said = (m?: Message) => {
-    if (!m) return 'Say hello';
-    if (m.kind === 'court') return 'Sent a court';
-    if (m.kind === 'post') return 'Sent a clip';
-    if (m.kind === 'question') return 'Sent a discussion';
-    if (m.kind === 'profile') return 'Shared a profile';
-    if (m.kind === 'voice') return 'Sent a voice message';
-    if (m.kind === 'hit-request') return 'Sent a hit';
-    return m.body || 'Say hello';
-  };
+  /** What the last message was, in a few words (the message banner says it the same way). */
+  const said = messageSummary;
   /**
    * The row's second line. In a group it says whose it was ("Mira: see you
    * at 9", "You: on my way"); an event line ("Mira added Dev") reads as it

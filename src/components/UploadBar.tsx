@@ -6,6 +6,7 @@ import Reanimated, { Easing as REasing, runOnJS, useAnimatedStyle, useSharedValu
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useBelowBanner } from '@/features/messages/bannerSpace';
 import { revealPost } from '@/features/navigation/scrollToTop';
 import { goHome } from '@/lib/goBack';
 import { useUploads, type UploadJob } from '@/lib/uploads';
@@ -25,7 +26,12 @@ export function UploadBar() {
   const [shown, setShown] = useState<UploadJob | null>(null);
   // The strip's place, kept on the animation thread so a swipe never waits on the busy JS thread.
   const slide = useSharedValue(-110);
-  const slideStyle = useAnimatedStyle(() => ({ transform: [{ translateY: slide.value }] }));
+  // A message banner on the same strip: the posting strip sits just under it, never hidden behind it.
+  const below = useBelowBanner(spacing.xs);
+  const underBanner = useSharedValue(below);
+  useEffect(() => { underBanner.value = withTiming(below, { duration: 260, easing: REasing.out(REasing.cubic) }); }, [below, underBanner]);
+  // Hidden above the screen it is clear of the banner anyway, so that move fades out as it slides away.
+  const slideStyle = useAnimatedStyle(() => ({ transform: [{ translateY: slide.value + underBanner.value * Math.max(0, 1 + slide.value / 110) }] }));
   const fill = useSharedValue(0);
   const fillStyle = useAnimatedStyle(() => ({ width: `${fill.value * 100}%` }));
   const pop = useRef(new Animated.Value(0)).current;

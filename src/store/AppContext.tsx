@@ -21,6 +21,7 @@ import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } 
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { markMessagesOpened } from '@/features/messaging/readReceipts';
 import { GROUP_CAP, chatLockNote, eventText, findDirectChat, groupName, isDirectChat, isGroupAdmin, isGroupChat, named } from '@/features/messages/groupRules';
+import { heardMessage, heardUnsent } from '@/features/messages/incoming';
 import { readReceiptPreference, saveReceiptPreference } from '@/features/messaging/preferences';
 import { connectProvider, disconnectProvider } from '@/lib/integrations';
 import { appleHealthAvailable, connectAppleHealth, readAppleHealth, readAppleNutrition } from '@/features/health/appleHealth';
@@ -638,6 +639,14 @@ interface AppActions {
    */
   shareToChats: (targets: { conversationIds?: ID[]; userIds?: ID[] }, item: ShareItem, note?: string) => void;
   markConversationRead: (conversationId: ID) => void;
+  /**
+   * The demo only (no database): messages "arrive" from the demo's people,
+   * the way a real one comes in live, so the banner at the top can be seen
+   * without a second phone. 'one' is a message in a one-to-one chat,
+   * 'group' one in a group, 'pile' several chats at once. Does nothing with
+   * a real database.
+   */
+  demoIncoming: (kind: 'one' | 'group' | 'pile') => void;
 }
 
 interface AppContextValue extends AppState {
@@ -1246,6 +1255,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             // It also means the group itself changed (its people, name, photo
             // or admins): fetch it as it stands, so every screen shows it now.
             if (system) void refreshChat(message.conversationId);
+            // Someone else's message drops in as a banner at the top (MessageBanner decides whether it shows).
+            else if (message.senderId !== me) heardMessage(message);
             return;
           }
           void remote.fetchConversation(me, message.conversationId).then((got) => {
@@ -1255,6 +1266,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
               conversations: [got.conversation, ...prev.conversations],
               messages: [...prev.messages, ...got.messages.filter((m) => !prev.messages.some((p) => p.id === m.id))],
             });
+            // A chat someone has just started with you: its first message gets a banner too.
+            if (message.senderId !== me && message.kind !== 'system') heardMessage(message);
           });
         },
         // An edit, or a reaction, from the other phone: the words and reactions update in place.
@@ -1263,8 +1276,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ? { ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, body: message.body, editedAt: message.editedAt, reactions: message.reactions } : m)) }
             : prev);
         },
-        // Unsent by its sender: gone from this chat too.
+        // Unsent by its sender: gone from this chat too, and from the banner if it is on one.
         removed: (messageId) => {
+          heardUnsent(messageId);
           setState((prev) => prev.messages.some((m) => m.id === messageId) ? {
             ...prev,
             messages: prev.messages.filter((m) => m.id !== messageId),
@@ -3141,6 +3155,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const demoIncoming = useCallback((kind: 'one' | 'group' | 'pile') => {
+    const me = stateRef.current.currentUserId;
+    if (isSupabaseConfigured || !me) return;
+    const { conversations: chats, blockedIds: blocked } = stateRef.current;
+    // Newest first, the way the inbox lists them; never a chat with someone you blocked.
+    const open = chats
+      .filter((c) => c.participantIds.includes(me) && c.participantIds.some((id) => id !== me && !blocked.includes(id)))
+      .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+    const direct = open.filter((c) => !isGroupChat(c));
+    const groups = open.filter((c) => isGroupChat(c));
+    // In a group, the reply comes from its last-listed member (June, in the demo's Saturday hitters).
+    const sender = (c: Conversation) => c.participantIds.filter((id) => id !== me).pop()!;
+    type Reply = { chat?: Conversation; body: string; court?: { name: string; lat: number; lng: number } };
+    const plan: Reply[] = kind === 'group'
+      ? [{ chat: groups[0], body: 'Running ten minutes late, but count me in.' }]
+      : kind === 'pile'
+        ? [
+          { chat: direct[0], body: 'Running ten minutes late.' },
+          { chat: direct[0], body: 'Save me a court?' },
+          { chat: direct[1], body: 'Griffith Park Riverside Courts', court: { name: 'Griffith Park Riverside Courts', lat: 34.1105, lng: -118.2721 } },
+          { chat: direct[2], body: 'Same time next week?' },
+          { chat: groups[0], body: 'Who’s bringing balls?' },
+        ]
+        : [{ chat: direct[0], body: 'Running ten minutes late.' }];
+    // A beat apart, the way real ones land, so the banner's queue can be seen working.
+    plan.forEach(({ chat, body, court }, i) => {
+      if (!chat) return;
+      setTimeout(() => {
+        const message: Message = court ? { ...makeMessage(chat.id, sender(chat), body), kind: 'court', place: court } : makeMessage(chat.id, sender(chat), body);
+        setState((prev) => appendMessage(prev, message));
+        heardMessage(message);
+      }, i * 350);
+    });
+  }, [makeMessage, appendMessage]);
+
   const sendMessage = useCallback(
     (conversationId: ID, body: string) => {
       haptics.commit();
@@ -4592,6 +4641,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       deleteMessageForMe,
       shareToChats,
       markConversationRead,
+      demoIncoming,
     }),
     [
       addCoachResult,
@@ -4744,6 +4794,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       deleteMessageForMe,
       shareToChats,
       markConversationRead,
+      demoIncoming,
     ],
   );
 

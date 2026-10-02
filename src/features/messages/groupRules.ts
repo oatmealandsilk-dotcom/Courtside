@@ -35,6 +35,34 @@ export const findDirectChat = (conversations: Conversation[], me: ID, other: ID)
 export const isMuted = (c: Conversation) => !!c.mutedUntil && Date.parse(c.mutedUntil) > Date.now();
 
 /**
+ * Muted for this one message: the chat is muted and the message doesn't
+ * @mention you. The server's alert rule (push_for_message, migration 54):
+ * a mention still gets through a mute.
+ */
+export function isMutedFor(c: Conversation, m: Message, myHandle: string | undefined): boolean {
+  if (!isMuted(c)) return false;
+  if (!myHandle) return true;
+  const mine = myHandle.toLowerCase();
+  return ![...m.body.matchAll(/@([A-Za-z0-9_]{2,24})/g)].some((hit) => hit[1].toLowerCase() === mine);
+}
+
+/**
+ * What a message was, in a few words: its own words, or "Sent a court",
+ * "Sent a voice message" for the kinds with none. The inbox's second line
+ * and the message banner both say it this way.
+ */
+export function messageSummary(m?: Message): string {
+  if (!m) return 'Say hello';
+  if (m.kind === 'court') return 'Sent a court';
+  if (m.kind === 'post') return 'Sent a clip';
+  if (m.kind === 'question') return 'Sent a discussion';
+  if (m.kind === 'profile') return 'Shared a profile';
+  if (m.kind === 'voice') return 'Sent a voice message';
+  if (m.kind === 'hit-request') return 'Sent a hit';
+  return m.body || 'Say hello';
+}
+
+/**
  * The number on the Messages badge: how many chats have something new in
  * them (Instagram counts chats, not messages), never counting a muted one.
  */
