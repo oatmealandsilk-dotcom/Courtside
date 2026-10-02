@@ -1,7 +1,9 @@
 /**
  * The feed's rule for coming back to a clip, the way Instagram's Reels do it:
- * swipe away and back within a few seconds and it carries on where it was;
- * come back later and it starts over from the part its author kept.
+ * swipe away and straight back (about a second) and it carries on where it
+ * was; come back any later and it starts over from the part its author kept.
+ * It was 5 seconds; the owner wanted Instagram's feel, where only an instant
+ * change of mind resumes (Oct 1).
  *
  * The spot is kept here, by clip, rather than inside one player. The feed
  * keeps only the page behind built, and a re-deal rebuilds every page, so the
@@ -12,7 +14,7 @@
  * background is not a swipe. The players hold their own place for those and
  * carry on from it however long it took (see ClipVideo and ClipPlayback.web).
  */
-export const RESUME_WINDOW_MS = 5000;
+export const RESUME_WINDOW_MS = 1000;
 
 const spots = new Map<string, { time: number; at: number }>();
 
