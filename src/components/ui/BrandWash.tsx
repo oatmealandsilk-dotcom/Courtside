@@ -1,5 +1,5 @@
 import React, { useId } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { useTheme } from '@/theme/ThemeProvider';
@@ -29,10 +29,10 @@ function mix(a: string, b: string, t: number): string {
  * white barely shows on yellow.
  */
 // New York's is the quietest: a bright yellow takes very little before it glows.
-const LOOKS: Record<string, { toward: string; t: number; glow: number; sheen: string; sheenAt: number }> = {
+const LOOKS: Record<string, { toward: string; t: number; glow: number; sheen: string; sheenAt: number; rim?: string }> = {
   default: { toward: '#FFFFFF', t: 0.4, glow: 0.6, sheen: '#ECE4D3', sheenAt: 0.3 },
   'roland-garros': { toward: '#FFC79A', t: 0.55, glow: 0.7, sheen: '#F3E4CF', sheenAt: 0.34 },
-  'us-open': { toward: '#FFFFFF', t: 0.45, glow: 0.4, sheen: '#E9A93F', sheenAt: 0.22 },
+  'us-open': { toward: '#FFEFCF', t: 0.5, glow: 0.5, sheen: '#E9A93F', sheenAt: 0.24, rim: 'rgba(122, 84, 10, 0.14)' },
   night: { toward: '#E9F7E4', t: 0.5, glow: 0.65, sheen: '#ECE4D3', sheenAt: 0.3 },
   ao: { toward: '#D8F0FF', t: 0.5, glow: 0.62, sheen: '#EAF4FA', sheenAt: 0.3 },
   // London: fresh grass low, the club's purple catching the top corner.
@@ -40,6 +40,14 @@ const LOOKS: Record<string, { toward: string; t: number; glow: number; sheen: st
   // Clean: a plain white light, no beige, to match its white page.
   clean: { toward: '#FFFFFF', t: 0.42, glow: 0.58, sheen: '#FFFFFF', sheenAt: 0.26 },
 };
+
+/**
+ * An oval glow. Phones draw an SVG radial gradient's rx/ry as an oval; browsers ignore
+ * rx/ry and draw a circle, so on the web the same oval is drawn with a gradientTransform.
+ */
+const ellipse = (cx: number, cy: number, rx: number, ry: number) => (Platform.OS === 'web'
+  ? { cx: 0, cy: 0, r: 1, gradientTransform: `translate(${cx} ${cy}) scale(${rx} ${ry})` }
+  : { cx, cy, rx, ry });
 
 export function BrandWash({ radius = 999 }: { radius?: number }) {
   const { theme } = useTheme();
@@ -52,11 +60,11 @@ export function BrandWash({ radius = 999 }: { radius?: number }) {
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }]}>
       <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
         <Defs>
-          <RadialGradient id={`l${id}`} cx="4" cy="110" rx="120" ry="140" gradientUnits="userSpaceOnUse">
+          <RadialGradient id={`l${id}`} {...ellipse(4, 110, 120, 140)} gradientUnits="userSpaceOnUse">
             <Stop offset="0" stopColor={light} stopOpacity={look.glow} />
             <Stop offset="0.62" stopColor={light} stopOpacity={0} />
           </RadialGradient>
-          <RadialGradient id={`b${id}`} cx="96" cy="-10" rx="110" ry="150" gradientUnits="userSpaceOnUse">
+          <RadialGradient id={`b${id}`} {...ellipse(96, -10, 110, 150)} gradientUnits="userSpaceOnUse">
             <Stop offset="0" stopColor={look.sheen} stopOpacity={look.sheenAt} />
             <Stop offset="0.6" stopColor={look.sheen} stopOpacity={0} />
           </RadialGradient>
@@ -64,6 +72,8 @@ export function BrandWash({ radius = 999 }: { radius?: number }) {
         <Rect x="0" y="0" width="100" height="100" fill={`url(#l${id})`} />
         <Rect x="0" y="0" width="100" height="100" fill={`url(#b${id})`} />
       </Svg>
+      {/* A hairline of deeper amber just inside the edge, so the softer fill still holds its shape on the night blue. */}
+      {look.rim ? <View style={[StyleSheet.absoluteFill, { borderRadius: radius, borderWidth: 1, borderColor: look.rim }]} /> : null}
     </View>
   );
 }
