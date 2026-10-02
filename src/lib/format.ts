@@ -14,6 +14,27 @@ export function relativeTime(iso: string, now: Date = new Date()): string {
   return when.toLocaleDateString(undefined, sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+/**
+ * Just the clock time a message was sent, "9:41 AM", in the phone's own 12-
+ * or 24-hour style. A chat asks this for every message each time it draws,
+ * so the formatter is made once and kept, until the phone's clock moves to
+ * another time zone (flying to a tournament, or the clocks going forward):
+ * a formatter stays in the zone it was made in, so then it is made afresh,
+ * and these times keep agreeing with the chat's day lines.
+ */
+let clockFormat: { format: Intl.DateTimeFormat; offset: number } | null = null;
+export function chatTime(iso: string): string {
+  try {
+    const offset = new Date().getTimezoneOffset();
+    if (!clockFormat || clockFormat.offset !== offset) {
+      clockFormat = { format: new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }), offset };
+    }
+    return clockFormat.format.format(new Date(iso));
+  } catch {
+    return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  }
+}
+
 /** A time line in a chat: "Today 2:14 PM", "Yesterday 9:03 AM", "Mon 4:20 PM" this week, else the date and time. */
 export function chatStamp(iso: string, now: Date = new Date()): string {
   const when = new Date(iso);

@@ -106,7 +106,7 @@ export interface TileRect { x: number; y: number; w: number; h: number }
  * be sent, a small mark says so (the retry is under the bubble). A tap on a
  * photo says which one and where it sits, so full screen can grow out of it.
  */
-export function PhotoStack({ photos, width = PHOTO_W, mine, tail, progress, failed, idKey, onTile, onHold }: {
+export function PhotoStack({ photos, width = PHOTO_W, mine, tail, progress, failed, idKey, sentAt, onTile, onHold }: {
   photos: ChatPhoto[];
   /** How wide they sit; narrower on a small phone. */
   width?: number;
@@ -117,6 +117,8 @@ export function PhotoStack({ photos, width = PHOTO_W, mine, tail, progress, fail
   failed?: boolean;
   /** The message's id: each tile keeps it as its own key while the photos go up. */
   idKey?: string;
+  /** When they were sent ("9:41 AM"), for a screen reader. */
+  sentAt?: string;
   /** Which photo was tapped, and where every shown photo sits (one behind "+3" has no spot), so full screen grows out of it and goes back into its own. */
   onTile: (index: number, rects: (TileRect | undefined)[]) => void;
   onHold?: () => void;
@@ -147,7 +149,7 @@ export function PhotoStack({ photos, width = PHOTO_W, mine, tail, progress, fail
           key={i}
           ref={(node) => { refs.current[i] = node; }}
           accessibilityRole="imagebutton"
-          accessibilityLabel={photos.length > 1 ? `Photo ${i + 1} of ${photos.length}. Open` : 'Photo. Open'}
+          accessibilityLabel={`${photos.length > 1 ? `Photo ${i + 1} of ${photos.length}` : 'Photo'}${sentAt ? `, sent ${sentAt}` : ''}. Open`}
           onPress={() => press(i)}
           onLongPress={onHold}
           delayLongPress={320}
