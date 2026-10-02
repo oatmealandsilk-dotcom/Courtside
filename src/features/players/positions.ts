@@ -1,5 +1,6 @@
 import { PLACES, type Place } from '@/data/locations';
 import type { LastSeen, User } from '@/data/types';
+import { US_STATES } from '@/features/places/search';
 
 export interface LatLng { lat: number; lng: number; }
 
@@ -21,9 +22,12 @@ export function placeFor(location: string): Place | undefined {
   const wanted = plain(location);
   if (!wanted) return undefined;
   const alias = ALIASES[wanted];
+  // "Raleigh NC", written without the comma, is "Raleigh, NC" (but "Paris TX" is not Paris, FR).
+  const noComma = wanted.includes(',') ? null : wanted.match(/^(.+?)\s+([a-z]{2})$/);
   return PLACES.find((p) => plain(p.name) === wanted)
     ?? PLACES.find((p) => plain(p.name).split(',')[0] === wanted.split(',')[0].trim())
-    ?? (alias ? PLACES.find((p) => p.name === alias) : undefined);
+    ?? (alias ? PLACES.find((p) => p.name === alias) : undefined)
+    ?? (noComma ? PLACES.find((p) => plain(p.name) === `${noComma[1]}, ${noComma[2]}`) : undefined);
 }
 
 /**
@@ -39,12 +43,19 @@ const NEAREST_FOR_STATE: Record<string, string> = {
   NH: 'Boston, MA', VT: 'Boston, MA', ME: 'Boston, MA', AK: 'Seattle, WA', HI: 'Los Angeles, CA', AB: 'Vancouver, BC',
 };
 
-/** A city in the same state or country as the one typed, when the town itself is not in the bank. */
+/** "north carolina" → "NC", for a state written out in full. */
+const STATE_CODES: Record<string, string> = Object.fromEntries(Object.entries(US_STATES).map(([name, code]) => [name.toLowerCase(), code]));
+
+/**
+ * A city in the same state or country as the one typed, when the town itself
+ * is not in the bank. Reads "Cary, NC", "Cary NC" and "Cary, North Carolina".
+ */
 function regionFor(location: string): Place | undefined {
-  const parts = location.split(',');
-  if (parts.length < 2) return undefined;
-  const code = parts[parts.length - 1].trim().toUpperCase();
-  if (!code) return undefined;
+  const t = location.trim();
+  const parts = t.split(',');
+  const tail = parts.length >= 2 ? parts[parts.length - 1].trim() : (t.match(/\s([A-Za-z]{2})$/)?.[1] ?? '');
+  if (!tail) return undefined;
+  const code = (STATE_CODES[tail.toLowerCase()] ?? tail).toUpperCase();
   const named = NEAREST_FOR_STATE[code];
   return PLACES.find((p) => p.name.endsWith(`, ${code}`)) ?? (named ? PLACES.find((p) => p.name === named) : undefined);
 }

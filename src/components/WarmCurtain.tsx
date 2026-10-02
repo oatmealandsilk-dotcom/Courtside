@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { BrandMark } from '@/components/BrandMark';
-import { setCurtainDown, useFeedWarm } from '@/features/feed/warmup';
+import { setCurtainDown, setFeedWarm, useFeedWarm } from '@/features/feed/warmup';
 import { colors, spacing, font } from '@/theme';
 
 /**
@@ -12,6 +12,16 @@ import { colors, spacing, font } from '@/theme';
  * faded out once. It lives in the shell rather than on any one screen, so
  * the move from the splash route into the tabs happens underneath it.
  */
+/**
+ * The longest the curtain ever stays up, counted from the first time it is
+ * drawn. Whatever the feed is doing (no connection, nothing to show, a load
+ * that never finishes), the app is never left behind the logo with no way
+ * on: after this it lifts anyway, the bar comes up, and the feed shows what
+ * it has.
+ */
+const CURTAIN_MAX_MS = 10_000;
+let liftBy = 0;
+
 export function WarmCurtain() {
   const styles = useThemedStyles(styleDefinitions);
   const warm = useFeedWarm();
@@ -24,6 +34,12 @@ export function WarmCurtain() {
   }, [warm, shown, fade]);
   // Not shown at all (the feed was already warm): playback need not wait on it.
   useEffect(() => { if (!shown) setCurtainDown(); }, [shown]);
+  useEffect(() => {
+    if (warm) return undefined;
+    if (!liftBy) liftBy = Date.now() + CURTAIN_MAX_MS;
+    const t = setTimeout(() => setFeedWarm(true), Math.max(0, liftBy - Date.now()));
+    return () => clearTimeout(t);
+  }, [warm]);
   if (!shown) return null;
   return (
     <Animated.View pointerEvents={warm ? 'none' : 'auto'} style={[styles.curtain, style]}>

@@ -5,6 +5,7 @@ import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { reportError } from '@/lib/crashReporting';
+import { goHome } from '@/lib/goBack';
 
 /**
  * Push notifications: alerts on the phone's lock screen for likes, replies,
@@ -71,11 +72,15 @@ export function listenForPushTaps(): () => void {
     const id = response?.notification.request.identifier ?? null;
     if (id && id === opened) return;
     opened = id;
-    // The tap that opened the app waits a beat while its pages are set up.
-    // With the app already running the page opens at once: waiting let the
-    // clip on Home start again, with sound, before the page covered it.
-    if (Date.now() - since < 2000) setTimeout(() => router.push(href as never), 300);
-    else router.push(href as never);
+    // Home ('/') is reached with goHome, never pushed: '/' is also the splash
+    // screen's address, and pushing it built a second copy of the app.
+    const go = () => { if (href === '/') goHome(); else router.push(href as never); };
+    // The tap that opened the app waits a beat while its pages are set up
+    // (a launch lands on Home by itself). With the app already running the
+    // page opens at once: waiting let the clip on Home start again, with
+    // sound, before the page covered it.
+    if (Date.now() - since < 2000) { if (href !== '/') setTimeout(go, 300); }
+    else go();
   };
   void Notifications.getLastNotificationResponseAsync().then(open).catch(() => undefined);
   const sub = Notifications.addNotificationResponseReceivedListener(open);

@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Glass } from '@/components/ui/Glass';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
+import { goHome } from '@/lib/goBack';
 import { useToast, type ToastMessage } from '@/lib/toast';
 import { colors, spacing, typography } from '@/theme';
 
@@ -96,7 +97,8 @@ export function Toast() {
                   if (!toast.href) return;
                   hide();
                   // Home is a tab, not a page to push: go there and put the feed at the top.
-                  if (toast.href === '/') { router.navigate('/'); requestScrollToTop('/'); }
+                  // (goHome, never '/': that is also the splash screen's address.)
+                  if (toast.href === '/') { goHome(); requestScrollToTop('/'); }
                   else router.push(toast.href as never);
                 }}
                 style={[styles.info, action && styles.infoBeforeAction]}

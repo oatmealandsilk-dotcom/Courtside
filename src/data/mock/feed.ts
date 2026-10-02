@@ -28,7 +28,7 @@ export const posts: Post[] = [
       intensity: 3,
     },
     likedBy: ['u-dev', 'u-june'],
-    commentIds: ['c3'],
+    commentIds: ['c3', 'c7', 'c8'],
     tags: ['serve', 'practice'],
   },
   {
@@ -40,7 +40,7 @@ export const posts: Post[] = [
     body: 'Switched to a 16x19 pattern after four years on 18x20. More spin, obviously, but the real difference is how much easier the low volley is. Two weeks in and not going back.',
     mediaLabel: 'Racquet photo',
     likedBy: ['u-mira', 'u-dev', 'u-tomas', CURRENT_USER_ID],
-    commentIds: ['c4'],
+    commentIds: ['c4', 'c9'],
     tags: ['gear', 'racquets'],
   },
   {
@@ -128,6 +128,27 @@ export const comments: Comment[] = [
     createdAt: isoDaysAgo(0, 7),
     likedBy: [CURRENT_USER_ID, 'u-june'],
   },
+  // Replies sit under the comment they answer (parentId), Instagram-style.
+  {
+    id: 'c7',
+    postId: 'p2',
+    authorId: 'u-june',
+    body: '@tomascoach Learned that one the hard way. Six weeks off last spring.',
+    createdAt: isoDaysAgo(0, 6),
+    likedBy: ['u-tomas'],
+    parentId: 'c3',
+    replyToId: 'c3',
+  },
+  {
+    id: 'c8',
+    postId: 'p2',
+    authorId: CURRENT_USER_ID,
+    body: '@tomascoach That was the plan. 80 good ones beats 150 tired ones.',
+    createdAt: isoDaysAgo(0, 5),
+    likedBy: [],
+    parentId: 'c3',
+    replyToId: 'c3',
+  },
   {
     id: 'c4',
     postId: 'p3',
@@ -135,6 +156,16 @@ export const comments: Comment[] = [
     body: 'The low volley thing is real and nobody mentions it in reviews.',
     createdAt: isoDaysAgo(1),
     likedBy: ['u-june'],
+  },
+  {
+    id: 'c9',
+    postId: 'p3',
+    authorId: 'u-june',
+    body: '@miraplays Right? Every review is about spin. The volley is the part I actually feel.',
+    createdAt: isoDaysAgo(0, 20),
+    likedBy: ['u-mira'],
+    parentId: 'c4',
+    replyToId: 'c4',
   },
   {
     id: 'c5',

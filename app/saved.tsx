@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { goBack } from '@/lib/goBack';
+import { goBack, goHome } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { QuestionCard } from '@/components/QuestionCard';
@@ -80,7 +80,7 @@ export default function Saved() {
             icon="bookmark-outline"
             title="Nothing saved yet"
             body="Tap the bookmark on any clip or post to keep it here."
-            action={{ label: 'Browse the feed', onPress: () => router.navigate('/') }}
+            action={{ label: 'Browse the feed', onPress: goHome }}
           />
         )
       ) : savedQuestions.length ? (

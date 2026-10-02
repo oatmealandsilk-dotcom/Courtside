@@ -23,18 +23,22 @@ import { homeFor } from '@/features/players/positions';
 import type { TaggedCourt } from '@/data/types';
 import { colors, radius, spacing, typography, font } from '@/theme';
 import { challengeFor } from '@/features/challenge/weekly';
+import { goHome } from '@/lib/goBack';
 
 type Mode = 'clip' | 'post' | 'story' | 'hit';
 
 const goBackNow = () => router.back();
 /**
- * Posting lands you on the feed, whichever tab the Create box was opened
- * over, the way Instagram does: what you just posted is at the very top there
- * (still uploading, counting itself up), and the feed has been taken to it.
+ * Posting lands you on the feed, whichever tab (or challenge page) the Create
+ * box was opened over, the way Instagram does. The strip across the top
+ * counts the upload up; once your post has landed it goes to the very top of
+ * the feed. Every page over the tabs closes on the way (goHome), from any
+ * depth; never by '/', the splash screen's address too, which opened a second
+ * copy of the whole app on top.
  */
-// Back to the tabs, on Home. Not '/': that address is also the splash
-// screen's, which would open a second copy of the whole app on top.
-const landOnFeed = () => router.dismissTo('/(tabs)');
+// A Create box opened as the very first page (a browser refreshed on it) has
+// nothing to close down to: it is swapped for the tabs rather than left under them.
+const landOnFeed = () => { if (router.canDismiss()) goHome(); else router.replace('/(tabs)'); };
 /** Each choice in the Create box arrives a moment after the one above it. */
 const arrive = (index: number) => FadeInDown.delay(90 + index * 55).duration(260).easing(Easing.out(Easing.cubic));
 /** choose → library → form, with back always stepping one page left. */
@@ -52,6 +56,8 @@ export default function Compose() {
   // The story rail opens this straight at the library with ?mode=story.
   const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string }>();
   // Opened from the weekly challenge: its tag starts the caption, which is what makes the clip an entry.
+  // A challenge takes a clip and nothing else: no Post, Instant or Thread here,
+  // the phone's videos open straight away, and a photo is never taken.
   const challenge = useMemo(() => challengeFor(), []);
   const entering = params.challenge === challenge.tag;
   useEffect(() => { if (params.mode === 'story') router.replace('/hit'); }, [params.mode]);
@@ -101,7 +107,7 @@ export default function Compose() {
   const closeRef = useRef(closeMenu);
   closeRef.current = closeMenu;
   useEffect(() => (stage === 'choose' ? registerCreateClose(() => closeRef.current()) : undefined), [stage]);
-  const [mode, setMode] = useState<Mode>(isHit ? 'hit' : params.mode === 'story' ? 'story' : 'post');
+  const [mode, setMode] = useState<Mode>(isHit ? 'hit' : params.mode === 'story' ? 'story' : entering ? 'clip' : 'post');
   // A post is 4:5 upright, the way the feed shows it; a clip and a story fill a phone screen (9:16).
   const portraitRatio = mode === 'post' ? 4 / 5 : 9 / 16;
   const [media, setMedia] = useState<PickedMedia | null>(isHit ? { uri: shotUri as string, label: 'Instant', kind: 'photo', thumbnailUrl: shotUri as string, orientation: 'portrait' } : null);
@@ -175,6 +181,9 @@ export default function Compose() {
 
   const pick = (next: PickedMedia | null) => {
     if (!next) return;
+    // A challenge entry is a clip. The phone's library shows only videos for
+    // it; a browser's file box can still offer a photo, which is turned away.
+    if (entering && next.kind !== 'video') { setPickError(`The ${challenge.title.toLowerCase()} challenge takes a clip. Pick a video.`); return; }
     addToBank(next);
     setPicked(next);
     setMedia(next);
@@ -190,42 +199,71 @@ export default function Compose() {
   const [preparing, setPreparing] = useState<null | 'video' | 'all'>(null);
   // The ring closes fully before the note goes, so it is seen to finish.
   const [prepDone, setPrepDone] = useState(false);
+  // One library at a time: a tap on the clip button in the moment before the
+  // challenge opens the library by itself would otherwise ask for a second.
+  const picking = useRef(false);
   const openDevice = async (selection: 'video' | 'all') => {
+    if (picking.current) return;
+    picking.current = true;
     setPickError('');
     // The phone never says when the library closes and the converting starts,
     // so the note waits out the library's own slide-up rather than flashing
     // under it. A browser converts nothing, so it says nothing there.
     const hold = Platform.OS === 'web' ? null : setTimeout(() => setPreparing(selection), 600);
+    let chosen: PickedMedia | null = null;
+    let failed = false;
     try {
-      const next = await pickFromDevice(selection);
-      if (next) pick(next);
+      chosen = await pickFromDevice(selection);
+      if (chosen) pick(chosen);
     } catch (err) {
+      failed = true;
       setPickError(err instanceof Error ? err.message : String(err));
     } finally {
+      picking.current = false;
       if (hold) clearTimeout(hold);
       setPrepDone(true);
       setTimeout(() => { setPreparing(null); setPrepDone(false); }, 300);
     }
+    // Entering the challenge, this box is only the way to your videos:
+    // closing them without a pick closes it too, back to the challenge.
+    // (A pick that failed stays, with the reason and a way to try again.)
+    if (entering && !chosen && !failed) closeMenu();
   };
+
+  // Entering the challenge on a phone: no menu, straight into your videos,
+  // once the box has finished arriving (the phone will not open its library
+  // over a page still on its way in). A browser opens its file box only from
+  // a tap, so there the one clip button waits for that tap.
+  useEffect(() => {
+    if (!entering || isHit || Platform.OS === 'web') return undefined;
+    let opened = false;
+    const open = () => { if (opened) return; opened = true; void openDevice('video'); };
+    const events = navigation as unknown as { addListener: (name: string, fn: (e?: { data?: { closing?: boolean } }) => void) => () => void };
+    const stop = events.addListener('transitionEnd', (e) => { if (!e?.data?.closing) open(); });
+    // In case the page never says it has arrived.
+    const fallback = setTimeout(open, 700);
+    return () => { opened = true; clearTimeout(fallback); stop(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (stage === 'choose') return <View style={styles.choiceBackdrop}>
     <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimStyle]}><SheetBackdrop /></Reanimated.View>
     <Pressable accessibilityRole="button" accessibilityLabel="Close create menu" onPress={closeMenu} style={StyleSheet.absoluteFill}/>
     <Reanimated.View style={[styles.choiceSheet, popStyle]}>
-      <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>Create</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeMenu} hitSlop={10}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
-      <Reanimated.View entering={arrive(0)}><Pressable accessibilityRole="button" accessibilityLabel={entering ? `Create a clip for the ${challenge.title} challenge` : 'Create a clip'} onPress={() => { setMode('clip'); void openDevice('video'); }} style={[styles.choiceOption, entering && styles.choiceChallenge]}>
-        {preparing === 'video' ? <PreparingRing size={28} done={prepDone} /> : <Ionicons name={entering ? 'trophy-outline' : 'videocam-outline'} size={28} color={entering ? colors.brand : colors.textMuted}/>}<Text style={styles.choiceLabel}>{entering ? 'Clip for the challenge' : 'Clip'}</Text><Text style={styles.note}>{preparing === 'video' ? 'Getting your video ready — shrinking it so it posts fast.' : entering ? `${challenge.title}. #${challenge.tag} is already in the caption.` : 'Share a video from your device.'}</Text>
+      <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>{entering ? challenge.title : 'Create'}</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeMenu} hitSlop={10}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
+      <Reanimated.View entering={arrive(0)}><Pressable accessibilityRole="button" accessibilityLabel={entering ? `Choose your clip for the ${challenge.title} challenge` : 'Create a clip'} onPress={() => { setMode('clip'); void openDevice('video'); }} style={[styles.choiceOption, entering && styles.choiceChallenge]}>
+        {preparing === 'video' ? <PreparingRing size={28} done={prepDone} /> : <Ionicons name={entering ? 'trophy-outline' : 'videocam-outline'} size={28} color={entering ? colors.brand : colors.textMuted}/>}<Text style={styles.choiceLabel}>{entering ? 'Choose your clip' : 'Clip'}</Text><Text style={styles.note}>{preparing === 'video' ? 'Getting your video ready — shrinking it so it posts fast.' : entering ? `A video from your phone. #${challenge.tag} is already in the caption.` : 'Share a video from your device.'}</Text>
       </Pressable></Reanimated.View>
-      <Reanimated.View entering={arrive(1)}><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => { setMode('post'); void openDevice('all'); }} style={styles.choiceOption}>
+      {/* Entering the challenge: the clip is the only way in, so nothing else is offered. */}
+      {entering ? null : <Reanimated.View entering={arrive(1)}><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => { setMode('post'); void openDevice('all'); }} style={styles.choiceOption}>
         {preparing === 'all' ? <PreparingRing size={28} done={prepDone} /> : <Ionicons name="images-outline" size={28} color={colors.textMuted}/>}<Text style={styles.choiceLabel}>Post</Text><Text style={styles.note}>{preparing === 'all' ? 'Getting it ready…' : 'Choose from your photos and videos.'}</Text>
-      </Pressable></Reanimated.View>
+      </Pressable></Reanimated.View>}
       {pickError ? <Text style={styles.pickError}>{pickError}</Text> : null}
-      <Reanimated.View entering={arrive(2)}><Pressable accessibilityRole="button" accessibilityLabel="Take an instant" onPress={() => router.replace('/hit')} style={styles.choiceOption}>
+      {entering ? null : <Reanimated.View entering={arrive(2)}><Pressable accessibilityRole="button" accessibilityLabel="Take an instant" onPress={() => router.replace('/hit')} style={styles.choiceOption}>
         <Ionicons name="camera-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Instant</Text><Text style={styles.note}>A photo after you play. Up on the feed for a day.</Text>
-      </Pressable></Reanimated.View>
-      <Reanimated.View entering={arrive(3)}><Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={styles.choiceOption}>
+      </Pressable></Reanimated.View>}
+      {entering ? null : <Reanimated.View entering={arrive(3)}><Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={styles.choiceOption}>
         <Ionicons name="chatbubbles-outline" size={28} color={colors.textMuted}/><Text style={styles.choiceLabel}>Thread or question</Text><Text style={styles.note}>Ask the community or start a conversation.</Text>
-      </Pressable></Reanimated.View>
+      </Pressable></Reanimated.View>}
     </Reanimated.View>
   </View>;
 

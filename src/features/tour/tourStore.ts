@@ -1,7 +1,7 @@
 import { useCallback, useRef, useSyncExternalStore } from 'react';
 import { Dimensions, Platform, type View } from 'react-native';
-import { router } from 'expo-router';
 
+import { goHome } from '@/lib/goBack';
 import type { TourStep, TourTargetId } from './steps';
 
 /**
@@ -128,16 +128,14 @@ export function useTourRequest(): TourRequest | null {
 
 /**
  * "Show the tutorial" in Settings and Help: back down to Home, where the tour
- * starts once the page has settled. Home shares the splash screen's address,
- * so it cannot be dismissed to directly; the pages on top go first, then a
- * step across to Home, the way the shell's own tab bar does it.
+ * starts once the page has settled. The pages on top close and the tabs move
+ * across to Home in one step (goHome). Never by '/', which is also the splash
+ * screen's address and opened a second copy of the app with no bar.
  */
 export function replayTour(): void {
   request = { force: true, startAt: 0, markSeen: true };
   emit();
-  const r = router as unknown as { canDismiss?: () => boolean; dismissAll?: () => void };
-  try { if (r.canDismiss?.()) r.dismissAll?.(); } catch { /* Already at the bottom of the stack. */ }
-  setTimeout(() => router.navigate('/'), 30);
+  try { goHome(); } catch { /* The router is not up yet: the tour starts when Home is. */ }
 }
 
 /* ---- Targets: the bar's buttons put themselves on this list; the overlay measures them. ---- */

@@ -45,12 +45,19 @@ export const VideoSurface = forwardRef<VideoSurfaceHandle, {
   }, [uri]); // eslint-disable-line react-hooks/exhaustive-deps
   // Every call goes through this guard so a late call on a freed player is a no-op, not a crash.
   const safely = (work: () => void) => { try { work(); } catch { /* player already released */ } };
+  // Set while the editor holds the picture still by hand (its own pause(), as
+  // when a finger is on a trim handle or along the strip), cleared by its
+  // play(). The player reports its time after every seek, even when paused;
+  // a seek onto the end of the kept part would read as "playback ran past
+  // the end" and loop back to the start, so the picture flickered between
+  // the first frame and the handle on a slow drag. While held, it stays put.
+  const held = useRef(false);
   useEffect(() => () => {
     safely(() => { player.muted = true; player.pause(); });
     safely(() => player.release());
   }, [player]);
   useEffect(() => {
-    const sub = player.addListener('playToEnd', () => { if (!paused) safely(() => { player.currentTime = from; player.play(); }); });
+    const sub = player.addListener('playToEnd', () => { if (!paused && !held.current) safely(() => { player.currentTime = from; player.play(); }); });
     return () => sub.remove();
   }, [player, from, paused]);
   useEffect(() => { safely(() => { player.muted = muted; }); }, [player, muted]);
@@ -76,7 +83,7 @@ export const VideoSurface = forwardRef<VideoSurfaceHandle, {
     });
     const time = player.addListener('timeUpdate', ({ currentTime }) => {
       onTime?.(currentTime);
-      if (paused) return;
+      if (paused || held.current) return;
       safely(() => {
         if (to !== undefined && currentTime >= to) player.currentTime = from;
         else if (currentTime < from - 0.5) player.currentTime = from;
@@ -86,6 +93,9 @@ export const VideoSurface = forwardRef<VideoSurfaceHandle, {
     return () => { status.remove(); time.remove(); };
   }, [player, from, to, paused, onTime, onDuration]);
   useEffect(() => {
+    // Told to play by the editor's paused setting: any hold by hand ends too,
+    // or a clip left held after a tap-to-pause would play on without looping.
+    if (!paused) held.current = false;
     // Not while the app is out of the front; coming back starts it (below).
     safely(() => { if (paused) player.pause(); else if (AppState.currentState !== 'background' && AppState.currentState !== 'inactive') player.play(); });
     return () => safely(() => player.pause());
@@ -98,14 +108,20 @@ export const VideoSurface = forwardRef<VideoSurfaceHandle, {
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'background' || state === 'inactive') safely(() => player.pause());
-      else if (state === 'active' && !pausedRef.current) safely(() => player.play());
+      else if (state === 'active' && !pausedRef.current) { held.current = false; safely(() => player.play()); }
     });
     return () => sub.remove();
   }, [player]); // eslint-disable-line react-hooks/exhaustive-deps
   useImperativeHandle(ref, () => ({
     seek: (seconds) => safely(() => { player.currentTime = seconds; }),
-    play: () => safely(() => player.play()),
-    pause: () => safely(() => player.pause()),
+    // Not while the app is out of the front (a touch the phone took away
+    // can ask for play just as Control Centre opens); coming back starts it.
+    play: () => {
+      held.current = false;
+      if (AppState.currentState === 'background' || AppState.currentState === 'inactive') return;
+      safely(() => player.play());
+    },
+    pause: () => { held.current = true; safely(() => player.pause()); },
   }), [player]);
   return (
     <View style={StyleSheet.absoluteFill}>

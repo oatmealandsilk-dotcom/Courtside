@@ -1,8 +1,10 @@
 /**
- * "Something new of yours was just posted": Home hears this and puts that
+ * "Something new of yours has just landed": Home hears this and puts that
  * page ("p:<id>" for a post, "h:<id>" for an Instant) at the very top and
- * takes the feed there — straight away, while a clip is still uploading,
- * not once it has landed. With no page named, Home simply deals itself again.
+ * takes the feed there. It is sent once the post is saved and its picture or
+ * video is on the internet, never while it is still going up (the strip
+ * across the top shows that), so the feed only ever plays the hosted copy.
+ * With no page named, Home simply deals itself again.
  */
 type Listener = (key?: string) => void;
 const listeners = new Set<Listener>();

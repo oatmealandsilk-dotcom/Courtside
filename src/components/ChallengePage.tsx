@@ -6,11 +6,15 @@ import { router } from 'expo-router';
 import { ChallengeEntries } from '@/components/ChallengeEntries';
 import { Wash } from '@/components/Wash';
 import { challengeFor, entriesFor, timeLeft, type Challenge } from '@/features/challenge/weekly';
+import { useTagPosting } from '@/lib/uploads';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, radius, spacing, typography } from '@/theme';
 
-/** Opens the Create menu with the challenge's tag already in the caption. */
+/**
+ * Enters the challenge: the Create box opens straight onto your videos (a
+ * challenge takes a clip, nothing else), with the tag already in the caption.
+ */
 export const enterChallenge = (challenge: Challenge) => router.push({ pathname: '/compose', params: { challenge: challenge.tag } });
 
 /**
@@ -21,6 +25,9 @@ export function ChallengePage({ challenge }: { challenge: Challenge }) {
   const styles = useThemedStyles(styleDefinitions);
   const { posts, users } = useApp();
   const entries = useMemo(() => entriesFor(challenge, posts), [challenge, posts]);
+  // Your clip for it is still going up: the button says so (and waits) until
+  // it lands and joins the entries, so it is not entered twice.
+  const posting = useTagPosting(challenge.tag);
   const last = useMemo(() => {
     const previous = challengeFor(challenge.startsAt, -1);
     const winner = entriesFor(previous, posts)[0];
@@ -49,9 +56,16 @@ export function ChallengePage({ challenge }: { challenge: Challenge }) {
             </View>
           )}
           <View style={styles.actions}>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Enter the ${challenge.title} challenge with a clip`} onPress={() => enterChallenge(challenge)} style={({ pressed }) => [styles.primary, pressed && { opacity: 0.85 }]}>
-              <Ionicons name="add" size={18} color={colors.brandInk} />
-              <Text style={styles.primaryText}>Enter with a clip</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={posting ? 'Your entry is posting' : `Enter the ${challenge.title} challenge with a clip`}
+              accessibilityState={{ disabled: posting }}
+              disabled={posting}
+              onPress={() => enterChallenge(challenge)}
+              style={({ pressed }) => [styles.primary, posting && styles.primaryBusy, pressed && { opacity: 0.85 }]}
+            >
+              <Ionicons name={posting ? 'cloud-upload-outline' : 'add'} size={18} color={colors.brandInk} />
+              <Text style={styles.primaryText} numberOfLines={1}>{posting ? 'Your entry is posting…' : 'Enter with a clip'}</Text>
             </Pressable>
             {entries.length ? (
               <Pressable accessibilityRole="link" accessibilityLabel={`See all ${entries.length} entries`} onPress={() => router.push('/challenge')} style={({ pressed }) => [styles.secondary, pressed && { opacity: 0.7 }]}>
@@ -80,6 +94,7 @@ const styleDefinitions = StyleSheet.create({
   emptyText: { ...typography.small, color: colors.textMuted, flex: 1 },
   actions: { flexDirection: 'row', gap: spacing.sm },
   primary: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 48, borderRadius: radius.pill, backgroundColor: colors.brand },
+  primaryBusy: { opacity: 0.6 },
   primaryText: { ...typography.bodyStrong, color: colors.brandInk },
   secondary: { height: 48, paddingHorizontal: 20, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
   secondaryText: { ...typography.bodyStrong, color: colors.text },

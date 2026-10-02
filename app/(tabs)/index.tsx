@@ -36,8 +36,6 @@ import { setFeedWarm, useCurtainDown } from '@/features/feed/warmup';
 import { connectionIsQuick } from '@/lib/netSpeed';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { subscribeFeedRefresh } from '@/features/feed/feedBus';
-import { localCopyOf, pendingUploads, setShownInFeed, usePendingUploads } from '@/lib/uploads';
-import { PostingChip } from '@/components/PostingChip';
 import { BAR_TUCK, barCompact, setBarCompact } from '@/features/navigation/barShrink';
 import { BAR_OVERLAY_PX, useBarInset } from '@/features/navigation/barInset';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
@@ -68,23 +66,6 @@ import { colors, radius, typography, spacing, font, lift } from '@/theme';
  */
 /** Media the internet can reach: a file:// link only ever worked on the phone that made it. */
 const reachable = (p: { imageUrl?: string; videoUrl?: string }) => [p.imageUrl, p.videoUrl].every((u) => !u || /^(https?:|data:|blob:)/.test(u));
-
-/**
- * Your own post or Instant from this session plays from the file on this
- * phone, before it has landed and after: its page never reloads, or jumps,
- * the moment the hosted copy takes over. Kept per object, so a post that has
- * not changed is still the same object and its page does not redraw.
- */
-const withLocalCache = new WeakMap<object, object>();
-function withLocalMedia<T extends { id: string; imageUrl?: string; videoUrl?: string; thumbnailUrl?: string }>(item: T): T {
-  const local = localCopyOf(item.id);
-  if (!local) return item;
-  const kept = withLocalCache.get(item) as T | undefined;
-  if (kept) return kept;
-  const next = { ...item, imageUrl: local.imageUrl ?? item.imageUrl, videoUrl: local.videoUrl ?? item.videoUrl, thumbnailUrl: local.thumbnailUrl ?? item.thumbnailUrl };
-  withLocalCache.set(item, next);
-  return next;
-}
 
 /** When each page's post, thread or Instant was made, for putting new ones newest first. */
 function madeAt(data: { posts: { id: string; createdAt: string }[]; questions: { id: string; createdAt: string }[]; stories: { id: string; createdAt: string }[] }) {
@@ -204,14 +185,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const app = useApp();
   const { posts, questions, comments, stories, users, currentUserId, saved, actions, ready, followingIds, mutedIds, blockedIds, conversations } = app;
   const currentUser = users.find((u) => u.id === currentUserId);
-  // Your posts and Instants still going up: not in the store until they have
-  // landed, but at the top of the feed from the moment you post them.
-  const uploads = usePendingUploads();
-  const uploadingIds = useMemo(() => new Set(uploads.filter((u) => u.state === 'uploading').map((u) => u.id)), [uploads]);
-  // Their pages wear the posting chip until it has faded ("Posted" included).
-  const postingIds = useMemo(() => new Set(uploads.filter((u) => u.state !== 'failed').map((u) => u.id)), [uploads]);
-  const uploadingRef = useRef(uploadingIds);
-  uploadingRef.current = uploadingIds;
   // Everyone by id, so each page finds its author in one step rather than scanning every player.
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const [active, setActive] = useState(0);
@@ -289,14 +262,13 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     viewing.current = null;
     if (!view) return;
     const kind = signalKind(view.key);
-    // A post still going up is not in the database yet; there is nothing to note against.
-    if (!kind || uploadingRef.current.has(view.key.slice(2))) return;
+    if (!kind) return;
     const seconds = (Date.now() - view.since) / 1000;
     actions.noteFeedSignal({ kind, id: view.key.slice(2), seen: true, watched: seconds, skipped: seconds < 1.5 });
   };
   const tappedAuthor = (key: string) => {
     const kind = signalKind(key);
-    if (kind && !uploadingRef.current.has(key.slice(2))) actions.noteFeedSignal({ kind, id: key.slice(2), profileTap: true });
+    if (kind) actions.noteFeedSignal({ kind, id: key.slice(2), profileTap: true });
   };
   // A new page on screen (or the feed coming back to the front): the last one
   // is closed off and the new one's clock starts.
@@ -334,14 +306,13 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       }
       // A post whose picture or video is a link only its author's phone could
       // open (an upload that never finished) is left out of the deal.
-      // (Your own, posted from this phone this session, plays from the phone's copy, so it stays.)
-      const ranked = rankFeed(data.posts.filter((p) => reachable(p) || !!localCopyOf(p.id)), data.questions.filter((q) => !q.source), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st))).flatMap((i) =>
+      const ranked = rankFeed(data.posts.filter(reachable), data.questions.filter((q) => !q.source), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st))).flatMap((i) =>
         i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : [],
       );
       // Something of yours from the last few minutes goes first, so a fresh post
       // is right there. Newest first there is no such hold: what you post goes
-      // to the top the moment you post it (liftToTop, below), and from then on
-      // it sits by its time like everyone else's. Holding your own day's posts
+      // to the top the moment it has landed (liftToTop, below), and from then
+      // on it sits by its time like everyone else's. Holding your own day's posts
       // above everything put other people's newer posts pages down after a pull.
       const justMine: string[] = NEWEST_FIRST ? [] : data.posts
         .filter((p) => p.authorId === data.currentUserId && !p.archived && Date.now() - Date.parse(p.createdAt) < 5 * 60_000)
@@ -399,29 +370,26 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         if (lead.length) { const rest = final.filter((k) => !lead.includes(k)); final.splice(0, final.length, ...lead, ...rest); }
       }
       dealtAt.current = Date.now();
-      // Anything of yours still going up stays at the very top, whatever deals the feed again.
-      const going = pendingUploads().flatMap((u) => (u.state === 'uploading' && u.key ? [u.key] : [])).reverse();
-      if (going.length) { const rest = final.filter((k) => !going.includes(k)); final.splice(0, final.length, ...going, ...rest); }
       setOrder(final);
       setActive(0);
       if (remount) setVisit((v) => v + 1);
   }, [scope?.userId, scope?.set, scope?.start, scope?.ids?.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Something of yours just posted (or "Posted — tap to see it" on the
-  // strip): its page goes to the very top — while it is still uploading too —
+  // Something of yours has just landed (saved, its picture or video hosted),
+  // or "Posted — tap to see it" on the strip: its page goes to the very top
   // and the feed is taken there. Only that page moves; nothing else is dealt
-  // again, so when the upload lands the real post takes the same place.
+  // again. A post still going up is never in the feed: it plays from the
+  // internet once it is there, never from the file still being shrunk and
+  // sent on this phone (two readers of one big video at once is how a phone
+  // runs out of memory). The strip across the top shows how it is going.
   const liftToTop = useCallback((key: string) => {
     setOrder((prev) => [key, ...prev.filter((k) => k !== key)]);
     setActive(0);
     setVisit((v) => v + 1);
-    // Its own page shows how the upload is going, so the strip steps aside at once.
-    setShownInFeed(key.slice(2));
   }, []);
   useEffect(() => subscribeReveal((id) => {
     if (scope) return;
     const data = latest.current;
-    const key = pendingUploads().find((u) => u.id === id && u.key)?.key
-      ?? (data.posts.some((p) => p.id === id) ? `p:${id}` : data.stories.some((st) => st.id === id) ? `h:${id}` : null);
+    const key = data.posts.some((p) => p.id === id) ? `p:${id}` : data.stories.some((st) => st.id === id) ? `h:${id}` : null;
     if (key) liftToTop(key); else rerank();
   }), [scope, rerank, liftToTop]);
   useFocusEffect(
@@ -485,7 +453,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     });
   }, [app.remoteLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Something of yours just posted: straight to the top (see liftToTop). With
+  // Something of yours just landed: straight to the top (see liftToTop). With
   // no page named, the feed is dealt again.
   useEffect(() => subscribeFeedRefresh((key) => {
     if (scope) return;
@@ -605,27 +573,21 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     const postById = new Map(posts.map((p) => [p.id, p]));
     const storyById = new Map(stories.map((st) => [st.id, st]));
     const questionById = new Map(questions.map((q) => [q.id, q]));
-    // Your own things still going up are not in the store yet: their previews stand in until they land.
-    for (const u of uploads) {
-      if (u.state === 'failed') continue;
-      if (u.post && !postById.has(u.id)) postById.set(u.id, u.post);
-      if (u.story && !storyById.has(u.id)) storyById.set(u.id, u.story);
-    }
     return order.flatMap<FeedItem>((key) => {
       const id = key.slice(2);
       if (key.startsWith('p:')) {
         const post = postById.get(id);
-        return post && !hidden.has(post.authorId) && !post.archived ? [{ type: 'post' as const, post: withLocalMedia(post) }] : [];
+        return post && !hidden.has(post.authorId) && !post.archived ? [{ type: 'post' as const, post }] : [];
       }
       if (key.startsWith('h:')) {
         // A hit leaves the feed the moment it expires or is put away.
         const story = storyById.get(id);
-        return story && !hidden.has(story.authorId) && isLive(story) ? [{ type: 'hit' as const, story: withLocalMedia(story) }] : [];
+        return story && !hidden.has(story.authorId) && isLive(story) ? [{ type: 'hit' as const, story }] : [];
       }
       const question = questionById.get(id);
       return question && !hidden.has(question.authorId) ? [{ type: 'question' as const, question }] : [];
     });
-  }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds, uploads]);
+  }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds]);
   // This week's challenge, and its top clips so far. They are settled once
   // per visit: a like arriving mid-scroll must not reshuffle the pages.
   const challenge = useMemo(() => challengeFor(), []);
@@ -720,15 +682,12 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const likedNow = useRef({ posts, stories: app.stories, me: currentUserId });
   likedNow.current = { posts, stories: app.stories, me: currentUserId };
   const likeByTap = (postId: string, _alreadyLiked?: boolean) => {
-    // Still going up: nothing to like yet, so no heart either.
-    if (uploadingRef.current.has(postId)) return;
     const { posts: all, me } = likedNow.current;
     const post = all.find((p) => p.id === postId);
     if (post && me && !(wantsOn(`p:${postId}`) ?? post.likedBy.includes(me))) actions.toggleLike(postId);
     setBurst((b) => ({ id: postId, n: b.n + 1 }));
   };
   const likeHitByTap = (storyId: string, _alreadyLiked?: boolean) => {
-    if (uploadingRef.current.has(storyId)) return;
     const { stories, me } = likedNow.current;
     const story = stories.find((s) => s.id === storyId);
     if (story && me && !(wantsOn(`h:${storyId}`) ?? story.likedBy.includes(me))) actions.toggleLikeStory(storyId);
@@ -875,26 +834,11 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     if (!focused || !showing) return;
     // A hit counts as watched through the story viewer, not here.
     if (showing.type === 'hit' || showing.type === 'tip' || showing.type === 'challenge') return;
-    // A post still going up is not in the database yet; its view counts once it lands.
-    if (showing.type === 'post' && uploadingIds.has(showing.post.id)) return;
     actions.recordView(
       showing.type === 'post' ? 'post' : 'question',
       showing.type === 'post' ? showing.post.id : showing.question.id,
     );
-  }, [focused, showing, actions, uploadingIds]);
-
-  // Which page is on screen in the main feed: when it is one of yours still
-  // going up, it shows its own progress and the posting strip steps aside.
-  const onScreenId = !scope && focused && showing ? (showing.type === 'post' ? showing.post.id : showing.type === 'hit' ? showing.story.id : null) : null;
-  useEffect(() => {
-    if (scope) return undefined;
-    if (onScreenId) { setShownInFeed(onScreenId); return undefined; }
-    // A moment's grace: posting closes the Create box over the feed (and may
-    // slide the tabs across to it), and the feed counts as hidden meanwhile.
-    const t = setTimeout(() => setShownInFeed(null), 600);
-    return () => clearTimeout(t);
-  }, [onScreenId, scope]);
-  useEffect(() => () => { if (!scope) setShownInFeed(null); }, [scope]);
+  }, [focused, showing, actions]);
 
   // The last page of the main feed: a small congratulations for getting
   // there this early, a way to post, and a way back to the top.
@@ -1003,7 +947,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     <ReelScrim bottom={wordsBottom} />
                     {openWords === `h:${story.id}` ? <ReelDim onClose={() => setOpenWords(null)} /> : null}
                     <Reanimated.View style={[styles.caption, { bottom: wordsBottom }, tuckStyle]}>
-                      {postingIds.has(story.id) ? <PostingChip id={story.id} onPicture /> : null}
                       <View style={styles.words}>
                         <ReelWho author={author} onAuthor={() => { tappedAuthor(`h:${story.id}`); router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`); }} />
                         {story.caption ? <FoldedWords text={story.caption} open={openWords === `h:${story.id}`} onOpenChange={(open) => setOpenWords(open ? `h:${story.id}` : null)} /> : null}
@@ -1011,8 +954,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       </View>
                       {index === 0 && !scope ? <SwipeHint /> : null}
                     </Reanimated.View>
-                    {/* Still going up: no buttons yet, there is nothing on the server to like or answer. */}
-                    {uploadingIds.has(story.id) ? null : <Reanimated.View style={[styles.actions, { bottom: wordsBottom + RAIL_DROP }, tuckStyle]}>
+                    <Reanimated.View style={[styles.actions, { bottom: wordsBottom + RAIL_DROP }, tuckStyle]}>
                       <RailShade />
                       <LikeButton ledgerKey={`h:${story.id}`} liked={hitLiked} count={story.likedBy.length} onToggle={() => actions.toggleLikeStory(story.id)} likesRoute={{ pathname: '/likes', params: { id: story.id, kind: 'hit' } }} pop={burst.id === story.id ? burst.n : 0} what="hit" size={RAIL_ICONS[0][1]} style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
                       <Tappable accessibilityLabel="Hit comments" onPress={() => router.push({ pathname: '/comments', params: { kind: 'hit', id: story.id } })} scaleTo={0.78} style={styles.action}>
@@ -1022,7 +964,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       <Tappable accessibilityLabel="More options" onPress={() => router.push({ pathname: '/post-menu', params: { id: story.id, kind: 'hit' } })} scaleTo={0.78} style={styles.action}>
                         <Ionicons name="ellipsis-horizontal" size={RAIL_ICONS[4][1]} color="white" style={styles.actionGlyph} />
                       </Tappable>
-                    </Reanimated.View>}
+                    </Reanimated.View>
                     </Reanimated.View>
                    </Reanimated.View></PinchZone>
                     {story.videoUrl ? cover(story.id, 'word', story.thumbnailUrl) : null}
@@ -1095,10 +1037,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                       onReady={(ok) => markReady(post.id, ok)}
                     />
                     {cover(post.id, 'mark')}
-                    {/* Still going up: a clear pane over the page takes the taps (there is nothing on the
-                        server yet to like, answer or send), while a swipe still moves the feed on. */}
-                    {uploadingIds.has(post.id) ? <View accessible={false} style={StyleSheet.absoluteFill} /> : null}
-                    {postingIds.has(post.id) ? <View pointerEvents="none" style={[styles.postingDock, { bottom: wordsBottom }]}><PostingChip id={post.id} style={styles.postingDockChip} /></View> : null}
                   </View>
                 );
               }
@@ -1202,14 +1140,12 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                   {openWords === `p:${post.id}` ? <ReelDim onClose={() => setOpenWords(null)} /> : null}
 
                   <Reanimated.View style={[styles.caption, { bottom: wordsBottom }, tuckStyle]}>
-                    {postingIds.has(post.id) ? <PostingChip id={post.id} onPicture /> : null}
                     <ReelCaption post={post} author={author} onAuthor={() => { tappedAuthor(`p:${post.id}`); router.push(`/user/${author.id}`); }} open={openWords === `p:${post.id}`} onOpenChange={(open) => setOpenWords(open ? `p:${post.id}` : null)} />
                     {index === 0 && !scope ? <SwipeHint /> : null}
                   </Reanimated.View>
 
-                  {/* The rail stands on the words' bottom line, as on TikTok and Reels, so it rises only as high as it must.
-                      Still going up: no rail yet, there is nothing on the server to like, answer or send. */}
-                  {uploadingIds.has(post.id) ? null : <Reanimated.View style={[styles.actions, { bottom: wordsBottom + RAIL_DROP }, tuckStyle]}>
+                  {/* The rail stands on the words' bottom line, as on TikTok and Reels, so it rises only as high as it must. */}
+                  <Reanimated.View style={[styles.actions, { bottom: wordsBottom + RAIL_DROP }, tuckStyle]}>
                     <RailShade />
                     <LikeButton ledgerKey={`p:${post.id}`} liked={liked} count={post.likedBy.length} onToggle={() => actions.toggleLike(post.id)} likesRoute={{ pathname: '/likes', params: { id: post.id } }} pop={burst.id === post.id ? burst.n : 0} what="clip" size={RAIL_ICONS[0][1]} style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
                     <Tappable
@@ -1247,7 +1183,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     >
                       <Ionicons name="ellipsis-horizontal" size={RAIL_ICONS[4][1]} color="white" style={styles.actionGlyph} />
                     </Tappable>
-                  </Reanimated.View>}
+                  </Reanimated.View>
                   </Reanimated.View>
                  </Reanimated.View></PinchZone>
                   {post.videoUrl ? cover(post.id, 'word', post.thumbnailUrl, post.orientation === 'landscape') : null}
@@ -1383,9 +1319,6 @@ const styleDefinitions = StyleSheet.create({
     gap: 8,
   },
   words: { gap: 6 },
-  // A photo post still going up: its posting chip, centred over where its buttons will be.
-  postingDock: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
-  postingDockChip: { alignSelf: 'center' },
   author: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   // The rail: 12 from the edge, one item every 63pt or so (TikTok's and Reels' rhythm). `bottom` is set per phone.
   actions: { position: 'absolute', right: 12, gap: 16 },

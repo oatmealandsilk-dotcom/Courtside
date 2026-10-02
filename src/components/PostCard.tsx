@@ -23,6 +23,7 @@ import type { Post, QuestionTopic, User } from '@/data/types';
 import { RichText } from '@/components/RichText';
 import { requestSection } from '@/features/navigation/swipeOrder';
 import { colors, radius, spacing, typography } from '@/theme';
+import { tagsNotInCaption } from '@/features/feed/tags';
 
 interface Props {
   /** Opens the comments; without it the comment button behaves like a tap on the card. */
@@ -190,9 +191,10 @@ function PostCardInner({
 
         {post.mediaLabel && !post.imageUrl && !post.videoUrl && post.kind !== 'clip' ? <MediaPlaceholder label={post.mediaLabel} seed={post.id}  /> : null}
 
-        {post.tags.length > 0 ? (
+        {/* Tags the caption does not already say: a #tag written in it is not repeated as a chip. */}
+        {tagsNotInCaption(post.body, post.tags).length > 0 ? (
           <View style={styles.tagRow}>
-            {post.tags.map((tag) => (
+            {tagsNotInCaption(post.body, post.tags).map((tag) => (
               <Chip key={tag} label={`#${tag}`} onPress={() => router.push({pathname:"/search",params:{q:`#${tag}`}})} small />
             ))}
           </View>

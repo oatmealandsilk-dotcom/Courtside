@@ -18,6 +18,7 @@ import { compactNumber, relativeTime, timeLeft } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useTourBusy } from '@/features/tour/tourStore';
 import { font } from '@/theme';
+import { tagsNotInCaption } from '@/features/feed/tags';
 
 /*
  * Every word over a clip or an Instant follows one set of rules, the ones
@@ -74,7 +75,8 @@ export const railCount = (n: number) => (n > 0 ? compactNumber(n) : ' ');
  */
 export function ReelCaption({ post, author, onAuthor, open, onOpenChange }: { post: Post; author: User; onAuthor: () => void; open?: boolean; onOpenChange?: (open: boolean) => void }) {
   const { users, blockedIds } = useApp();
-  const tags = post.tags.length ? post.tags.map((t) => `#${t}`).join(' ') : '';
+  // Only the tags the caption does not already say (a challenge entry has its #tag in both).
+  const tags = tagsNotInCaption(post.body, post.tags).map((t) => `#${t}`).join(' ');
   const text = [post.body?.trim(), tags].filter(Boolean).join(' ');
   const tagged = (post.taggedUserIds ?? []).filter((id) => !blockedIds.includes(id)).map((id) => users.find((u) => u.id === id)).filter((u): u is User => !!u);
   const first = (name: string) => name.split(' ')[0];

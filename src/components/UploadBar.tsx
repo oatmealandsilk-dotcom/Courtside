@@ -2,13 +2,13 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { router } from 'expo-router';
 import Reanimated, { Easing as REasing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { revealPost } from '@/features/navigation/scrollToTop';
-import { useEasedFraction, useShownInFeed, useUploads, type UploadJob } from '@/lib/uploads';
+import { goHome } from '@/lib/goBack';
+import { useUploads, type UploadJob } from '@/lib/uploads';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /**
@@ -16,13 +16,6 @@ import { colors, radius, spacing, typography } from '@/theme';
  * a small picture of it on the left, the percentage on the right and a thin
  * line filling underneath. Turns into a tick when it lands, then lifts away.
  */
-/**
- * To Home: pages pushed on top are closed down to the tabs; already on a
- * tab, the tabs move across. Never by '/' straight after a close, which is
- * also the splash screen's address and opened a second copy of the app.
- */
-const toHome = () => { if (router.canDismiss()) router.dismissTo('/(tabs)'); else router.navigate('/(tabs)'); };
-
 export function UploadBar() {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
@@ -56,32 +49,43 @@ export function UploadBar() {
   const awayRef = useRef<string | null>(null);
   awayRef.current = awayKey;
 
-  // Your post's own page is on screen in the feed and shows its progress
-  // itself: the strip steps up out of the way, and comes back when you
-  // scroll on. A failure always shows here, since that page is gone.
-  const inFeed = useShownInFeed();
-  const covered = !!job && job.id === inFeed && job.state !== 'failed';
-  const wasCovered = useRef(false);
   const hide = () => setShown(null);
+  const [displayed, setDisplayed] = useState(0);
+  const target = useRef(0);
   useEffect(() => {
     if (job && awayKey === away) return;
     if (job) {
-      const fresh = !shown || !!away;
-      if (fresh) { setAway(null); fill.value = 0; pop.setValue(0); }
-      // Fully off the top (past the notch), not just tucked under it.
-      if (covered) slide.value = fresh ? -(insets.top + 130) : withTiming(-(insets.top + 130), { duration: 220, easing: REasing.in(REasing.cubic) });
-      else if (fresh || wasCovered.current) slide.value = withTiming(0, { duration: 340, easing: REasing.out(REasing.cubic) });
-      wasCovered.current = covered;
+      if (!shown || away) { setAway(null); }
+      if (!shown || away) { fill.value = 0; pop.setValue(0); setDisplayed(0); slide.value = withTiming(0, { duration: 340, easing: REasing.out(REasing.cubic) }); }
       setShown(job);
+      target.current = job.state === 'uploading' ? job.fraction : 1;
       if (job.state !== 'uploading') Animated.spring(pop, { toValue: 1, useNativeDriver: true, speed: 16, bounciness: 3 }).start();
     } else if (shown) {
-      slide.value = withTiming(wasCovered.current ? -(insets.top + 130) : -110, { duration: 240, easing: REasing.in(REasing.cubic) }, (finished) => { if (finished) runOnJS(hide)(); });
+      slide.value = withTiming(-110, { duration: 240, easing: REasing.in(REasing.cubic) }, (finished) => { if (finished) runOnJS(hide)(); });
     }
-  }, [job, shown, slide, fill, pop, away, awayKey, covered, insets.top]);
-  // The figure on show, eased in the uploads store so the strip and the
-  // post's own page in the feed always read the same number.
-  const displayed = useEasedFraction(shown?.id);
-  useEffect(() => { if (shown) fill.value = withTiming(displayed, { duration: 60, easing: REasing.linear }); }, [displayed, shown, fill]);
+  }, [job, shown, slide, fill, pop, away, awayKey]);
+  // The number eases toward the latest report and keeps creeping a touch
+  // ahead of it (never past 97% until it truly lands), so it is always moving.
+  useEffect(() => {
+    if (!shown) return;
+    const uploading = shown.state === 'uploading';
+    // Thirty times a second: a slow approach toward the latest report plus a
+    // creep that shrinks the higher it gets — quick out of the gate, patient
+    // near the end, never standing still, never past 98% until it truly lands.
+    const tick = setInterval(() => {
+      setDisplayed((d) => {
+        const goal = target.current;
+        const cap = uploading ? Math.min(0.985, goal + 0.08) : 1;
+        const creep = uploading ? 0.0035 * Math.pow(1 - d, 2.2) + 0.00015 : 0.03;
+        const next = Math.min(cap, d + Math.max(0, goal - d) * 0.06 + creep);
+        return next < d ? d : next;
+      });
+    }, 33);
+    return () => clearInterval(tick);
+  }, [shown]);
+  // The line follows the number. Set here rather than inside the number's own
+  // update, which React may run in the middle of drawing (and twice).
+  useEffect(() => { fill.value = withTiming(displayed, { duration: 60, easing: REasing.linear }); }, [displayed, fill]);
 
   if (!shown || (job && awayKey === away)) return null;
   const pct = Math.round(displayed * 100);
@@ -89,7 +93,7 @@ export function UploadBar() {
   return (
     <GestureDetector gesture={swipe}>
     <Reanimated.View pointerEvents="box-none" style={[styles.wrap, { top: insets.top + spacing.xs }, slideStyle]}>
-      <Pressable accessibilityRole={shown.state === 'done' ? 'link' : 'text'} accessibilityLabel={shown.state === 'done' ? 'See it at the top of your feed' : title} disabled={shown.state !== 'done'} onPress={() => { toHome(); revealPost(shown.id); }} style={styles.card}>
+      <Pressable accessibilityRole={shown.state === 'done' ? 'link' : 'text'} accessibilityLabel={shown.state === 'done' ? 'See it at the top of your feed' : title} disabled={shown.state !== 'done'} onPress={() => { goHome(); revealPost(shown.id); }} style={styles.card}>
         <View style={styles.row}>
           {shown.thumb ? <Image accessibilityIgnoresInvertColors source={{ uri: shown.thumb }} style={styles.thumb} /> : <View style={[styles.thumb, styles.thumbBlank]}><Ionicons name="tennisball" size={18} color={colors.brand} /></View>}
           <View style={{ flex: 1 }}>

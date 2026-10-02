@@ -23,13 +23,21 @@ export const VideoSurface = forwardRef<VideoSurfaceHandle, {
   onSize?: (width: number, height: number) => void;
 }>(function VideoSurface({ uri, muted = true, fit = 'contain', from = 0, to, paused = false, rate, volume, onTime, onDuration, onSize }, ref) {
   const el = useRef<HTMLVideoElement>(null);
+  // Held still by the editor's own pause() (a finger on a trim handle or along
+  // the strip), let go by its play(). A seek onto the end of the kept part
+  // would otherwise read as "ran past the end" and loop back to the start,
+  // and the effect below, re-run as the trim moves, would start it playing.
+  const held = useRef(false);
+  // Told to play by the paused setting: any hold by hand ends too. Declared
+  // before the effect below so that effect already sees it let go.
+  useEffect(() => { if (!paused) held.current = false; }, [paused]);
   useEffect(() => {
     const video = el.current;
     if (!video) return;
     const onMeta = () => { if (Number.isFinite(video.duration)) onDuration?.(video.duration); if (video.videoWidth && video.videoHeight) onSize?.(video.videoWidth, video.videoHeight); };
     const onTick = () => {
       onTime?.(video.currentTime);
-      if (paused) return;
+      if (paused || held.current) return;
       if (to !== undefined && video.currentTime >= to) video.currentTime = from;
       else if (video.currentTime < from - 0.5) video.currentTime = from;
     };
@@ -41,13 +49,13 @@ export const VideoSurface = forwardRef<VideoSurfaceHandle, {
     // happens right on the end, not up to a quarter second past it.
     let frame = 0;
     const watchEnd = () => {
-      if (to !== undefined && !video.paused && video.currentTime >= to) video.currentTime = from;
+      if (to !== undefined && !video.paused && !held.current && video.currentTime >= to) video.currentTime = from;
       frame = requestAnimationFrame(watchEnd);
     };
     if (!paused) frame = requestAnimationFrame(watchEnd);
     // Browsers only let a video start on its own when it is silent; a tap on
     // the sound button lifts that.
-    if (paused) video.pause(); else video.play().catch(() => undefined);
+    if (paused || held.current) video.pause(); else video.play().catch(() => undefined);
     return () => { cancelAnimationFrame(frame); video.removeEventListener('loadedmetadata', onMeta); video.removeEventListener('timeupdate', onTick); video.pause(); };
   }, [from, to, paused, onTime, onDuration, onSize]);
   // Speed and level live on the element, in their own effects: the one above
@@ -62,8 +70,8 @@ export const VideoSurface = forwardRef<VideoSurfaceHandle, {
   useEffect(() => { if (el.current) el.current.volume = volume ?? 1; }, [volume]);
   useImperativeHandle(ref, () => ({
     seek: (seconds) => { if (el.current) el.current.currentTime = seconds; },
-    play: () => { el.current?.play().catch(() => undefined); },
-    pause: () => el.current?.pause(),
+    play: () => { held.current = false; el.current?.play().catch(() => undefined); },
+    pause: () => { held.current = true; el.current?.pause(); },
   }), []);
   return <video ref={el} src={uri} muted={muted} loop playsInline style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: fit, background: '#000' }} />;
 });

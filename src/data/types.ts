@@ -257,6 +257,14 @@ export interface Comment {
   likedBy: ID[];
   /** A photo with the comment (shrunk before upload), like Instagram's. */
   imageUrl?: string;
+  /**
+   * A reply: the top-level comment it sits under. Always top-level, the way
+   * Instagram keeps one level: a reply to a reply goes under the same comment
+   * and @mentions the person (migration 56). Absent on a top-level comment.
+   */
+  parentId?: ID;
+  /** The comment actually answered (the parent, or a reply in its thread): whose "replied to your comment" this is. */
+  replyToId?: ID;
 }
 
 /* ------------------------------- Discussions ----------------------------- */
@@ -669,6 +677,8 @@ export interface SavedItems {
 export type NotificationKind =
   | 'like'
   | 'comment'
+  /** Someone replied to your comment on a post or an Instant (migration 56). The target is the post or Instant. */
+  | 'comment-reply'
   | 'answer'
   | 'coach-reply'
   | 'helpful'

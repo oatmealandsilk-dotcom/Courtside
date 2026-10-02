@@ -36,12 +36,13 @@ import * as haptics from '@/lib/haptics';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import * as toast from '@/lib/toast';
-import { finishUpload, setUploadProgress, simulateUpload, startUpload } from '@/lib/uploads';
+import { anyUploading, finishUpload, setUploadProgress, simulateUpload, startUpload } from '@/lib/uploads';
 import { requestFeedRefresh } from '@/features/feed/feedBus';
 import { blockDevice, groupFor, rememberAnswered, yearsOld, type AgeGroup } from '@/features/age/ageCheck';
 import { show as showToast } from '@/lib/toast';
 import { forgetPushToken } from '@/features/push/push';
 import { framesAt } from '@/features/compose/frames';
+import { noteStep, reportError } from '@/lib/crashReporting';
 import type {
   DailyHealth,
   IntegrationProvider,
@@ -140,13 +141,14 @@ interface NewQuestionInput {
  * Files a notification, unless you caused it yourself — nobody wants to be told
  * they liked their own post. Pure, so it composes inside a setState updater.
  */
-/** Everyone written as @handle in a text is told, once each — never the writer, never someone already told. */
-function notifyMentions(state: AppState, text: string, actorId: ID, targetId: ID, targetKind: NotificationTarget, alreadyTold?: ID): AppState {
+/** Everyone written as @handle in a text is told, once each — never the writer, never someone already told (one person, or several). */
+function notifyMentions(state: AppState, text: string, actorId: ID, targetId: ID, targetKind: NotificationTarget, alreadyTold?: ID | (ID | undefined)[]): AppState {
   const handles = new Set((text.match(/@([a-z0-9_]+)/gi) ?? []).map((h) => h.slice(1).toLowerCase()));
+  const told = new Set(Array.isArray(alreadyTold) ? alreadyTold : [alreadyTold]);
   let next = state;
   for (const handle of handles) {
     const who = state.users.find((u) => u.handle.toLowerCase() === handle);
-    if (!who || who.id === actorId || who.id === alreadyTold) continue;
+    if (!who || who.id === actorId || told.has(who.id)) continue;
     next = withNotification(next, { userId: who.id, actorId, kind: 'tag', targetId, targetKind, preview: snippet(text) });
   }
   return next;
@@ -397,11 +399,18 @@ interface AppActions {
   /** Fetches what is new. False when it could not (no connection, a failed load), so a page does not say "Updated". */
   refresh: () => Promise<boolean>;
   deletePost: (postId: ID) => void;
-  /** A comment on a post; `photo` is a picture picked on this device, shrunk and uploaded here. */
-  addComment: (postId: ID, body: string, photo?: string) => void;
+  /**
+   * A comment on a post; `photo` is a picture picked on this device, shrunk and uploaded here.
+   * `replyTo` makes it a reply to that comment: it goes under the thread's top comment
+   * (one level, as on Instagram) and tells that comment's writer.
+   */
+  addComment: (postId: ID, body: string, photo?: string, replyTo?: ID) => void;
   toggleLikeStory: (storyId: ID) => void;
   toggleLikeComment: (commentId: ID) => void;
-  addStoryComment: (storyId: ID, body: string) => void;
+  /** A comment on an Instant; `replyTo` as for addComment. */
+  addStoryComment: (storyId: ID, body: string, replyTo?: ID) => void;
+  /** New and deleted comments on one post or Instant arrive live while its comments are open. Returns the way to stop. */
+  watchComments: (targetId: ID, kind: 'post' | 'hit') => () => void;
 
   /* Stories */
   addStory: (input: NewStoryInput) => ID;
@@ -926,6 +935,56 @@ function addPosts(prev: AppState, got: { posts: Post[]; comments: Comment[] }): 
   const freshComments = got.comments.filter((c) => !haveComment.has(c.id));
   if (!fresh.length && !freshComments.length) return prev;
   return { ...prev, posts: [...prev.posts, ...fresh], comments: [...prev.comments, ...freshComments] };
+}
+
+/**
+ * Where a reply goes: under the top comment of the thread it answers (one
+ * level, the way Instagram keeps it), answering the comment that was tapped.
+ * Nothing when there is no such comment on this post or Instant.
+ */
+function replyFields(comments: Comment[], replyTo: ID | undefined, targetId: ID): Pick<Comment, 'parentId' | 'replyToId'> {
+  const answered = replyTo ? comments.find((c) => c.id === replyTo && c.postId === targetId) : undefined;
+  return answered ? { parentId: answered.parentId ?? answered.id, replyToId: answered.id } : {};
+}
+
+/**
+ * Who a new comment tells, on this screen (the database files the real ones,
+ * migration 56): the writer of the comment it answers hears "replied to your
+ * comment"; the owner hears "commented" unless they were the one answered;
+ * an @mention never tells either of them twice. Pure, for a setState updater.
+ */
+function notifyComment(state: AppState, comment: Comment, ownerId: ID | undefined, targetKind: 'post' | 'hit', mentions: boolean): AppState {
+  const repliedTo = comment.replyToId ? state.comments.find((c) => c.id === comment.replyToId)?.authorId : undefined;
+  const preview = snippet(comment.body);
+  let next = state;
+  if (repliedTo) next = withNotification(next, { userId: repliedTo, actorId: comment.authorId, kind: 'comment-reply', targetId: comment.postId, targetKind, preview });
+  if (ownerId && ownerId !== repliedTo) next = withNotification(next, { userId: ownerId, actorId: comment.authorId, kind: 'comment', targetId: comment.postId, targetKind, preview });
+  return mentions ? notifyMentions(next, comment.body, comment.authorId, comment.postId, targetKind, [ownerId, repliedTo]) : next;
+}
+
+/** Comments heard live (or caught up on), each added once, with its post's or Instant's count. */
+function addLiveComments(prev: AppState, got: Comment[], kind: 'post' | 'hit'): AppState {
+  const have = new Set(prev.comments.map((c) => c.id));
+  const fresh = got.filter((c) => !have.has(c.id) && !prev.blockedIds.includes(c.authorId));
+  // Each one shown is counted on its post or Instant, including any held but not yet counted.
+  const shown = [...got.filter((c) => have.has(c.id)), ...fresh];
+  const grow = <T extends { id: ID; commentIds: ID[] }>(x: T): T => {
+    const missing = shown.filter((c) => c.postId === x.id && !x.commentIds.includes(c.id)).map((c) => c.id);
+    return missing.length ? { ...x, commentIds: [...x.commentIds, ...missing] } : x;
+  };
+  const posts = kind === 'post' ? prev.posts.map(grow) : prev.posts;
+  const stories = kind === 'hit' ? prev.stories.map(grow) : prev.stories;
+  const same = posts.every((x, i) => x === prev.posts[i]) && stories.every((x, i) => x === prev.stories[i]);
+  if (!fresh.length && same) return prev;
+  return { ...prev, comments: [...prev.comments, ...fresh], posts, stories };
+}
+
+/** A comment deleted elsewhere: gone here too, with its replies (the database removes them with it). */
+function dropComment(prev: AppState, commentId: ID): AppState {
+  if (!prev.comments.some((c) => c.id === commentId)) return prev;
+  const gone = new Set(prev.comments.filter((c) => c.id === commentId || c.parentId === commentId).map((c) => c.id));
+  const shrink = <T extends { commentIds: ID[] }>(x: T): T => (x.commentIds.some((i) => gone.has(i)) ? { ...x, commentIds: x.commentIds.filter((i) => !gone.has(i)) } : x);
+  return { ...prev, comments: prev.comments.filter((c) => !gone.has(c.id)), posts: prev.posts.map(shrink), stories: prev.stories.map(shrink) };
 }
 
 /**
@@ -1563,12 +1622,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const updateIdentity = useCallback((patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string; cityAt?: { lat: number; lng: number } | null }) => {
+    const before = stateRef.current.users.find((u) => u.id === stateRef.current.currentUserId)?.avatarUrl;
     patchCurrentUser(u => ({ ...u, ...patch, cityAt: patch.cityAt === null ? undefined : patch.cityAt ?? u.cityAt }));
     const me = stateRef.current.currentUserId;
     if (!live(me)) return;
     (async () => {
-      const avatarUrl = isLocalMedia(patch.avatarUrl) ? await uploadMedia(me!, patch.avatarUrl!, 'photo') : patch.avatarUrl;
-      if (avatarUrl && avatarUrl !== patch.avatarUrl) patchCurrentUser(u => ({ ...u, avatarUrl }));
+      let avatarUrl = patch.avatarUrl;
+      if (isLocalMedia(patch.avatarUrl)) {
+        // A new photo is shown at once but only exists on this phone until it uploads. If the
+        // upload fails, say so and put the old photo back: before, the failure was silent, the
+        // owner kept seeing the new photo and everyone else saw their initials.
+        try {
+          avatarUrl = await uploadMedia(me!, patch.avatarUrl!, 'photo');
+        } catch (err) {
+          void reportError(err, { where: 'avatar upload' });
+          patchCurrentUser(u => ({ ...u, avatarUrl: before }));
+          showToast({ title: 'Couldn’t save your photo', body: 'Check your connection and try again.', icon: 'cloud-offline-outline' });
+          const { avatarUrl: _skip, ...rest } = patch;
+          await remote.updateProfile(me!, rest).catch(() => undefined);
+          return;
+        }
+        if (avatarUrl && avatarUrl !== patch.avatarUrl) patchCurrentUser(u => ({ ...u, avatarUrl }));
+      }
       await remote.updateProfile(me!, { ...patch, avatarUrl });
     })();
   }, [patchCurrentUser]);
@@ -1796,9 +1871,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [requireUser],
   );
 
+  // Each picked file on its way up, and the post it belongs to. A second
+  // Share of the same file while the first is still going (a tap that got
+  // through twice, a second Create box) is that same post, never a new one.
+  const sending = useRef(new Map<string, ID>());
+
   const addPost = useCallback(
     (input: NewPostInput): ID => {
       const me = requireUser();
+      const source = [input.videoUrl, input.imageUrl].find((uri) => isLocalMedia(uri));
+      const already = source ? sending.current.get(source) : undefined;
+      if (already) return already;
       haptics.commit();
       const post: Post = {
         id: nextId('p'),
@@ -1825,17 +1908,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       );
       const tellAll = (state: AppState) => notifyMentions(tell(state), post.body, me, post.id, 'post');
       if (uploading) {
-        // The post is not in the store until it has actually landed (a like or
-        // a comment on it before then would have nothing to attach to). The
-        // feed shows it at the top straight away all the same, counting the
-        // upload up on its own page, from the preview handed over here.
-        startUpload(post.id, label, post.thumbnailUrl ?? post.imageUrl, { post });
+        // The strip across the top counts the upload up. The post is not in
+        // the store, or the feed, until it has actually landed (a like or a
+        // comment before then would have nothing to attach to); then it goes
+        // to the very top of Home, playing from the internet, never from the
+        // file still being shrunk and sent here.
+        startUpload(post.id, label, post.thumbnailUrl ?? post.imageUrl, post.tags);
+        if (source) sending.current.set(source, post.id);
       } else {
-        if (post.videoUrl || post.imageUrl) simulateUpload(post.id, label, post.thumbnailUrl ?? post.imageUrl, { post });
+        if (post.videoUrl || post.imageUrl) simulateUpload(post.id, label, post.thumbnailUrl ?? post.imageUrl, post.tags);
         setState((prev) => tellAll(celebratePosted({ ...prev, posts: [post, ...prev.posts] }, { ...celebration, quiet: !!(post.videoUrl || post.imageUrl) })));
+        // Nothing to send first (words only, or media already online): it is at the top of Home straight away.
+        requestFeedRefresh(`p:${post.id}`);
       }
-      // Whatever you post is at the very top of Home the moment you post it, and the feed is taken there.
-      requestFeedRefresh(`p:${post.id}`);
       if (live(me)) {
         (async () => {
           try {
@@ -1852,17 +1937,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
             const thumbnailUrl = post.thumbnailUrl === post.imageUrl ? imageUrl
               : local[2] ? await uploadMedia(me, post.thumbnailUrl!, 'photo', report(2)) : post.thumbnailUrl;
             const hosted = { ...post, imageUrl, videoUrl, thumbnailUrl };
+            // Saved under the id made on this phone when Share was tapped:
+            // sent twice, it is still one post (see remote.insertPost).
+            await noteStep('saving the post');
             await remote.insertPost(hosted);
+            // Kept in the note a few seconds more: Home rebuilds its pages around the new post now.
+            void noteStep('post saved, Home moving it to the top');
             if (uploading) {
-              // Its page is already at the top of the feed: the real post takes
-              // its place there without the feed being dealt again.
+              // Landed: into the store, and to the very top of Home.
               finishUpload(post.id);
               setState((prev) => tellAll(celebratePosted({ ...prev, posts: [hosted, ...prev.posts.filter((p) => p.id !== post.id)] }, { ...celebration, quiet: true })));
+              requestFeedRefresh(`p:${post.id}`);
             } else {
               setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === post.id ? { ...p, imageUrl, videoUrl, thumbnailUrl } : p)) }));
             }
           } catch (error) {
             console.warn('[remote] post did not land', error);
+            void reportError(error, { where: uploading ? 'post upload' : 'post save' });
             const reason = error instanceof Error ? error.message : 'Something went wrong.';
             if (uploading) finishUpload(post.id, false, reason);
             else toast.show({ title: 'Could not post', body: reason, icon: 'alert' });
@@ -1870,6 +1961,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             // show something nobody else can see.
             setState((prev) => ({ ...prev, posts: prev.posts.filter((p) => p.id !== post.id) }));
             haptics.reject();
+          } finally {
+            if (source && sending.current.get(source) === post.id) sending.current.delete(source);
+            // Cleared a few seconds on, unless another post is still going up (its own steps stay).
+            setTimeout(() => { if (!anyUploading()) void noteStep(''); }, 5000);
           }
         })();
       }
@@ -2030,11 +2125,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         requestFeedRefresh(`h:${story.id}`);
         return story.id;
       }
-      // The hit is not in the store until it has landed, and a failure says
-      // so instead of leaving a hit only this phone can see. The feed shows
-      // it at the top straight away all the same, counting the upload up.
-      startUpload(story.id, 'Posting instant', story.thumbnailUrl ?? story.imageUrl, { story });
-      requestFeedRefresh(`h:${story.id}`);
+      // The hit is not in the store, or the feed, until it has landed: the
+      // strip across the top counts the upload up, and a failure says so
+      // instead of leaving a hit only this phone can see. Once it lands it
+      // goes to the very top of Home.
+      startUpload(story.id, 'Posting instant', story.thumbnailUrl ?? story.imageUrl);
       (async () => {
         try {
           const local = [isLocalMedia(story.imageUrl), isLocalMedia(story.videoUrl), isLocalMedia(story.thumbnailUrl) && story.thumbnailUrl !== story.imageUrl];
@@ -2051,9 +2146,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const hosted = { ...story, imageUrl, videoUrl, thumbnailUrl };
           await remote.insertStory(hosted);
           finishUpload(story.id);
-          setState((prev) => celebratePosted({ ...prev, stories: [hosted, ...prev.stories] }, { ...celebration, quiet: true }));
+          setState((prev) => celebratePosted({ ...prev, stories: [hosted, ...prev.stories.filter((st) => st.id !== story.id)] }, { ...celebration, quiet: true }));
+          requestFeedRefresh(`h:${story.id}`);
         } catch (error) {
           console.warn('[remote] hit did not land', error);
+          void reportError(error, { where: 'instant upload' });
           finishUpload(story.id, false, error instanceof Error ? error.message : 'Something went wrong.');
           haptics.reject();
         }
@@ -2146,11 +2243,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const addStoryComment = useCallback(
-    (storyId: ID, body: string) => {
+    (storyId: ID, body: string, replyTo?: ID) => {
       const me = requireUser();
-      const comment: Comment = { id: nextId('c'), postId: storyId, authorId: me, body, createdAt: new Date().toISOString(), likedBy: [] };
+      const comment: Comment = {
+        id: nextId('c'), postId: storyId, authorId: me, body, createdAt: new Date().toISOString(), likedBy: [],
+        ...replyFields(stateRef.current.comments, replyTo, storyId),
+      };
       haptics.commit();
-      if (live(me, storyId)) remote.insertStoryComment(comment);
+      // A plain comment has no parent; only a reply needs its parent to be a saved row.
+      if (live(me, storyId) && (!comment.parentId || live(comment.parentId))) remote.insertStoryComment(comment);
       setState((prev) => {
         const story = prev.stories.find((st) => st.id === storyId);
         const next: AppState = {
@@ -2158,16 +2259,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           comments: [...prev.comments, comment],
           stories: prev.stories.map((st) => (st.id === storyId ? { ...st, commentIds: [...st.commentIds, comment.id] } : st)),
         };
-        return story && story.authorId !== me
-          ? withNotification(next, { userId: story.authorId, actorId: me, kind: 'comment', targetId: story.id, targetKind: 'hit', preview: snippet(body) })
-          : next;
+        return notifyComment(next, comment, story?.authorId, 'hit', false);
       });
     },
     [requireUser],
   );
 
   const addComment = useCallback(
-    (postId: ID, body: string, photo?: string) => {
+    (postId: ID, body: string, photo?: string, replyTo?: ID) => {
       const me = requireUser();
       const comment: Comment = {
         id: nextId('c'),
@@ -2178,18 +2277,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         likedBy: [],
         // Shows straight away from the phone; the web address replaces it once uploaded.
         ...(photo ? { imageUrl: photo } : {}),
+        // A reply sits under its thread's top comment and answers the one tapped.
+        ...replyFields(stateRef.current.comments, replyTo, postId),
       };
       haptics.commit();
-      if (live(me, postId)) {
+      // A plain comment has no parent; only a reply needs its parent to be a saved row.
+      if (live(me, postId) && (!comment.parentId || live(comment.parentId))) {
         if (!photo) remote.insertComment(comment);
         else void (async () => {
           // Shrunk first (about 1080 px, a couple of hundred KB), then uploaded, then saved with its address.
           let imageUrl: string | undefined;
+          // The words beyond the "@them" a reply starts with: a reply that was only a photo has none.
+          const said = (comment.parentId ? body.replace(/^@[A-Za-z0-9_]+\s*/, '') : body).trim();
           try { imageUrl = await uploadMedia(me, await shrinkPhoto(photo), 'photo'); }
-          catch { showToast({ title: 'The photo didn’t upload', body: body.trim() ? 'Your comment was posted without it.' : 'Try again in a moment.', icon: 'alert-circle-outline' }); }
+          catch { showToast({ title: 'The photo didn’t upload', body: said ? 'Your comment was posted without it.' : 'Try again in a moment.', icon: 'alert-circle-outline' }); }
           setState((prev) => ({ ...prev, comments: imageUrl ? prev.comments.map((c) => (c.id === comment.id ? { ...c, imageUrl } : c)) : prev.comments.map((c) => (c.id === comment.id ? { ...c, imageUrl: undefined } : c)) }));
           // A comment that was only a photo, which did not upload, is not saved empty.
-          if (!imageUrl && !body.trim()) return;
+          if (!imageUrl && !said) return;
           await remote.insertComment({ ...comment, imageUrl });
         })();
       }
@@ -2202,21 +2306,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
             p.id === postId ? { ...p, commentIds: [...p.commentIds, comment.id] } : p,
           ),
         };
-        const told = post
-          ? withNotification(next, {
-              userId: post.authorId,
-              actorId: me,
-              kind: 'comment',
-              targetId: post.id,
-              targetKind: 'post',
-              preview: snippet(body),
-            })
-          : next;
-        return notifyMentions(told, body, me, post?.id ?? postId, 'post', post?.authorId);
+        return notifyComment(next, comment, post?.authorId, 'post', true);
       });
     },
     [requireUser],
   );
+
+  // An open comment sheet (or Instant page) hears new and deleted comments on
+  // what it shows, and catches up on any it missed each time it connects.
+  const watchComments = useCallback((targetId: ID, kind: 'post' | 'hit') => {
+    if (!live(stateRef.current.currentUserId, targetId)) return () => undefined;
+    try {
+      return remote.onComments({ id: targetId, kind }, {
+        added: (comment) => setState((prev) => addLiveComments(prev, [comment], kind)),
+        removed: (commentId) => setState((prev) => dropComment(prev, commentId)),
+        connected: () => {
+          if (kind !== 'post') return;
+          void remote.fetchPost(targetId).then((got) => { if (got) setState((prev) => addLiveComments(prev, got.comments, 'post')); }).catch(() => undefined);
+        },
+      });
+    } catch { return () => undefined; /* live updates are a nicety */ }
+  }, []);
 
   const addQuestion = useCallback(
     (input: NewQuestionInput): ID => {
@@ -4248,6 +4358,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleLikeStory,
       toggleLikeComment,
       addStoryComment,
+      watchComments,
       addQuestion,
       voteQuestion,
       votePoll,
@@ -4395,6 +4506,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleLikeStory,
       toggleLikeComment,
       addStoryComment,
+      watchComments,
       addQuestion,
       voteQuestion,
       votePoll,

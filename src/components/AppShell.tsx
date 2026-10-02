@@ -1,7 +1,7 @@
 import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Platform, View } from 'react-native';
-import { goBack } from '@/lib/goBack';
+import { goBack, goHome } from '@/lib/goBack';
 import { router, useGlobalSearchParams, usePathname, useSegments } from 'expo-router';
 import { NavBar } from './NavBar';
 import { setInstantExit } from '@/features/navigation/instantExit';
@@ -147,21 +147,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         setInstantExit(true);
         // One frame for the stack to take the "no slide" setting before the page is dismissed.
         requestAnimationFrame(() => requestAnimationFrame(() => {
-          if (destination === '/') { if (r.canGoBack?.()) { router.back(); setTimeout(() => router.navigate('/'), 30); } else router.navigate('/'); }
+          if (destination === '/') goHome();
           else if (r.dismissTo) r.dismissTo(destination);
           else router.navigate(destination);
           setTimeout(() => setInstantExit(false), 450);
         }));
         return;
       }
-      // Home's address is also the splash screen's, so it cannot be dismissed
-      // to directly: step back to the tabs first, then glide across to Home.
-      if (destination === '/') {
-        if (r.canGoBack?.()) { router.back(); setTimeout(() => router.navigate('/'), 30); }
-        else router.navigate('/');
-      } else if (r.dismissTo) r.dismissTo(destination);
+      // Home's address ('/') is also the splash screen's: going there from a
+      // page on top replayed the logo and built a second copy of the app,
+      // with no bar while the logo was up. goHome closes every page on top,
+      // however deep, down to the tabs, and the tabs move across to Home.
+      if (destination === '/') goHome();
+      else if (r.dismissTo) r.dismissTo(destination);
       else router.navigate(destination);
     }
+    else if (destination === '/') goHome();
     else router.navigate(destination);
   } }} />;
   return <View style={{ flex: 1, minHeight: 0, backgroundColor: colors.bg, flexDirection: isPhone ? 'column' : 'row' }}>

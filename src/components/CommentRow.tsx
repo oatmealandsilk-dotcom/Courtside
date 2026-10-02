@@ -12,16 +12,24 @@ import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
 
+/** How far a reply sits in: its picture lines up with the words of the comment it is under. */
+export const replyIndent = (big: boolean) => (big ? 40 : 32) + spacing.md;
+
 /**
  * One comment, Instagram-shaped: who, when, what, and a heart on the right
- * with its count. Used by the comments sheet and the post and hit pages.
+ * with its count, and "Reply" under the words. A reply is the same row a step
+ * in, with a smaller picture. Used by the comments sheet and the post and hit pages.
  */
-export function CommentRow({ comment, big = false, onPressBody, onLayout }: {
+export function CommentRow({ comment, big = false, reply = false, onPressBody, onReply, onLayout }: {
   comment: Comment;
   /** The post page's cut: bigger picture, name and words. */
   big?: boolean;
+  /** A reply under another comment: indented, with a smaller picture. */
+  reply?: boolean;
   /** A tap on the words themselves. */
   onPressBody?: () => void;
+  /** Shows "Reply" under the words. */
+  onReply?: () => void;
   onLayout?: (y: number) => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -32,22 +40,30 @@ export function CommentRow({ comment, big = false, onPressBody, onLayout }: {
   // A photo in the comment opens to the whole screen; a tap anywhere puts it away.
   const [viewing, setViewing] = useState(false);
   return (
-    <View style={styles.row} onLayout={onLayout ? (e) => onLayout(e.nativeEvent.layout.y) : undefined}>
+    <View style={[styles.row, reply && { marginLeft: replyIndent(big) }]} onLayout={onLayout ? (e) => onLayout(e.nativeEvent.layout.y) : undefined}>
       <Pressable accessibilityRole="link" accessibilityLabel={who ? `Open ${who.name}'s profile` : undefined} onPress={openProfile}>
-        <Avatar name={who?.name ?? '?'} seed={who?.avatarSeed ?? comment.authorId} uri={who?.avatarUrl} size={big ? 40 : 32} />
+        <Avatar name={who?.name ?? '?'} seed={who?.avatarSeed ?? comment.authorId} uri={who?.avatarUrl} size={reply ? (big ? 30 : 24) : big ? 40 : 32} />
       </Pressable>
-      <Pressable accessibilityRole={onPressBody ? 'button' : undefined} onPress={onPressBody} disabled={!onPressBody} style={styles.body}>
-        <Text style={[styles.meta, big && styles.metaBig]}>
-          <Text style={[styles.name, big && styles.nameBig]} onPress={openProfile}>{who?.name ?? 'Unknown'}</Text>
-          {'  '}{relativeTime(comment.createdAt)}
-        </Text>
-        {comment.body.trim() ? <RichText style={[styles.text, big && styles.textBig]}>{comment.body}</RichText> : null}
-        {comment.imageUrl ? (
-          <Pressable accessibilityRole="imagebutton" accessibilityLabel="Photo in the comment. Open it larger" onPress={() => setViewing(true)} style={styles.photo}>
-            <ExpoImage source={{ uri: comment.imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+      <View style={styles.body}>
+        <Pressable accessibilityRole={onPressBody ? 'button' : undefined} onPress={onPressBody} disabled={!onPressBody} style={styles.bodyPress}>
+          <Text style={[styles.meta, big && styles.metaBig]}>
+            <Text style={[styles.name, big && styles.nameBig]} onPress={openProfile}>{who?.name ?? 'Unknown'}</Text>
+            {'  '}{relativeTime(comment.createdAt)}
+          </Text>
+          {comment.body.trim() ? <RichText style={[styles.text, big && styles.textBig]}>{comment.body}</RichText> : null}
+          {comment.imageUrl ? (
+            <Pressable accessibilityRole="imagebutton" accessibilityLabel="Photo in the comment. Open it larger" onPress={() => setViewing(true)} style={styles.photo}>
+              <ExpoImage source={{ uri: comment.imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+            </Pressable>
+          ) : null}
+        </Pressable>
+        {/* Beside the words' own button, not inside it: a button may not hold another on the web. */}
+        {onReply ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${who?.name ?? 'this comment'}`} hitSlop={{ top: 6, bottom: 8, left: 8, right: 16 }} onPress={onReply} style={styles.replyButton}>
+            <Text style={[styles.replyText, big && styles.replyTextBig]}>Reply</Text>
           </Pressable>
         ) : null}
-      </Pressable>
+      </View>
       {comment.imageUrl ? (
         <Modal visible={viewing} transparent animationType="fade" onRequestClose={() => setViewing(false)} statusBarTranslucent>
           <Pressable accessibilityRole="button" accessibilityLabel="Close the photo" onPress={() => setViewing(false)} style={styles.viewer}>
@@ -65,7 +81,8 @@ export function CommentRow({ comment, big = false, onPressBody, onLayout }: {
 
 const styleDefinitions = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
-  body: { flex: 1, gap: 3 },
+  body: { flex: 1 },
+  bodyPress: { gap: 3 },
   meta: { ...typography.caption, color: colors.textFaint, letterSpacing: 0 },
   name: { ...typography.smallStrong, color: colors.text },
   text: { ...typography.small, color: colors.text, lineHeight: 20 },
@@ -75,6 +92,9 @@ const styleDefinitions = StyleSheet.create({
   like: { alignItems: 'center', gap: 2, paddingTop: 4, minWidth: 24 },
   count: { ...typography.caption, color: colors.textFaint, letterSpacing: 0 },
   photo: { width: 168, height: 210, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surfaceAlt, marginTop: 4 },
+  replyButton: { alignSelf: 'flex-start', paddingTop: 6 },
+  replyText: { ...typography.smallStrong, fontSize: 12, color: colors.textFaint },
+  replyTextBig: { fontSize: 13 },
   // The viewer is a dark room whatever the theme: a photo reads best on black.
   viewer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
   viewerImage: { width: '100%', height: '80%' },

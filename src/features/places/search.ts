@@ -1,5 +1,7 @@
-import { searchPlaces } from '@/data/locations';
+import { PLACES, type Place } from '@/data/locations';
+import { milesBetween } from '@/features/players/geo';
 import type { LatLng } from '@/features/players/positions';
+import { plain, startsWord } from '@/features/search/words';
 
 /** A place you could say a post was at: a city, a park, a club. */
 export interface PlaceHit {
@@ -23,7 +25,8 @@ const SKIP = new Set(['house', 'street']);
  */
 export async function searchPlacesRemote(query: string, near?: LatLng | null, signal?: AbortSignal): Promise<PlaceHit[]> {
   const q = query.trim();
-  if (q.length < 2) return [];
+  // From the first letter: with the bias toward you, "P" already brings Pullen Park.
+  if (!q) return [];
   const bias = near ? `&lat=${near.lat.toFixed(4)}&lon=${near.lng.toFixed(4)}` : '';
   const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=12&lang=en${bias}`, { signal });
   if (!res.ok) throw new Error(`places ${res.status}`);
@@ -44,12 +47,43 @@ export async function searchPlacesRemote(query: string, near?: LatLng | null, si
   return out;
 }
 
-/** The local bank's answers, in the same shape, for the first instant and for offline. */
-export function searchPlacesLocal(query: string): PlaceHit[] {
-  return searchPlaces(query, 6).map((p) => ({ value: p.name, title: p.name.split(',')[0], sub: p.name.split(',').slice(1).join(',').trim() }));
+/**
+ * The built-in list of big cities, in the same shape, for the first instant
+ * and for offline: a city whose name has a word starting with what was typed
+ * ("r" finds Raleigh, not every city with an r in it, nor "Detroit, MI" for
+ * "mi"), nearest to you first, a few at most. For one or two letters only
+ * the ones within a couple of hours' drive: "r" is Raleigh, not Rome.
+ */
+export function searchPlacesLocal(query: string, near?: LatLng | null, limit = 3): PlaceHit[] {
+  const text = plain(query);
+  const words = text.split(' ').filter(Boolean);
+  if (!words.length) return [];
+  const away = (p: Place) => (near ? milesBetween(near, p) : 0);
+  return PLACES
+    .filter((p) => startsWord(plain(p.name.split(',')[0]), words[0]) && words.every((w) => startsWord(plain(p.name), w)))
+    .filter((p) => text.length >= 3 || !near || away(p) <= 150)
+    .sort((a, b) => away(a) - away(b))
+    .slice(0, limit)
+    .map((p) => ({ value: p.name, title: p.name.split(',')[0], sub: p.name.split(',').slice(1).join(',').trim() }));
 }
 
-const US_STATES: Record<string, string> = {
+/** Where a profile's town is, looked up by its name once per visit ("Cary NC" → Cary). Null when it cannot say. */
+const towns = new Map<string, Promise<LatLng | null>>();
+export function townAt(location: string): Promise<LatLng | null> {
+  const key = location.trim().toLowerCase();
+  if (!key) return Promise.resolve(null);
+  const known = towns.get(key);
+  if (known) return known;
+  const ask = searchCitiesRemote(location)
+    .then(([hit]) => (hit ? { lat: hit.lat, lng: hit.lng } : null))
+    .catch(() => null);
+  towns.set(key, ask);
+  // Not found, or offline: asked again next time.
+  void ask.then((at) => { if (!at) towns.delete(key); });
+  return ask;
+}
+
+export const US_STATES: Record<string, string> = {
   Alabama: 'AL', Alaska: 'AK', Arizona: 'AZ', Arkansas: 'AR', California: 'CA', Colorado: 'CO', Connecticut: 'CT', Delaware: 'DE',
   'District of Columbia': 'DC', Florida: 'FL', Georgia: 'GA', Hawaii: 'HI', Idaho: 'ID', Illinois: 'IL', Indiana: 'IN', Iowa: 'IA',
   Kansas: 'KS', Kentucky: 'KY', Louisiana: 'LA', Maine: 'ME', Maryland: 'MD', Massachusetts: 'MA', Michigan: 'MI', Minnesota: 'MN',

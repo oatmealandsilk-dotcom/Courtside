@@ -323,6 +323,22 @@ export function MediaEditor({ media, initial, onBack, onDone, portraitRatio = 9 
   const [chipW, setChipW] = useState(56);
   const snapped = useRef(false);
   const startAt = useRef(0);
+  // A handle let go, or its touch taken away by the phone itself (Control
+  // Centre, a call, a swipe the system claims): either way the trim lands
+  // where it is and the clip plays on from its start. Before, a touch taken
+  // away left the picture stopped with no pause sign on it.
+  const letGoHandle = () => {
+    setHeld(null);
+    if (rangeFrame.current !== null) { cancelAnimationFrame(rangeFrame.current); rangeFrame.current = null; }
+    setRange(rangeRef.current);
+    if (seekTimer.current) { clearTimeout(seekTimer.current); seekTimer.current = null; }
+    const from = rangeRef.current[0];
+    head.value = from;
+    player.current?.seek(from);
+    startPlayer();
+    // The seek's own report lands a beat later; ignore it too.
+    setTimeout(() => { scrubbing.current = false; }, 250);
+  };
   const makeHandle = (side: 0 | 1) => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
@@ -352,19 +368,8 @@ export function MediaEditor({ media, initial, onBack, onDone, portraitRatio = 9 
       head.value = at;
       seekSoon(at);
     },
-    onPanResponderRelease: () => {
-      setHeld(null);
-      if (rangeFrame.current !== null) { cancelAnimationFrame(rangeFrame.current); rangeFrame.current = null; }
-      setRange(rangeRef.current);
-      if (seekTimer.current) { clearTimeout(seekTimer.current); seekTimer.current = null; }
-      const from = rangeRef.current[0];
-      head.value = from;
-      player.current?.seek(from);
-      startPlayer();
-      // The seek's own report lands a beat later; ignore it too.
-      setTimeout(() => { scrubbing.current = false; }, 250);
-    },
-    onPanResponderTerminate: () => { setHeld(null); scrubbing.current = false; },
+    onPanResponderRelease: letGoHandle,
+    onPanResponderTerminate: letGoHandle,
   });
   // Dragging along the frames (the white line follows) skips to wherever the
   // finger is, within the kept part; letting go plays on from there.
@@ -391,11 +396,15 @@ export function MediaEditor({ media, initial, onBack, onDone, portraitRatio = 9 
       head.value = at;
       seekSoon(at);
     },
+    // Let go, or the touch taken away by the phone: plays on from there either way.
     onPanResponderRelease: () => {
       startPlayer();
       setTimeout(() => { scrubbing.current = false; }, 250);
     },
-    onPanResponderTerminate: () => { scrubbing.current = false; },
+    onPanResponderTerminate: () => {
+      startPlayer();
+      setTimeout(() => { scrubbing.current = false; }, 250);
+    },
   }), [duration, stripWidth]); // eslint-disable-line react-hooks/exhaustive-deps
   const startHandle = useMemo(() => makeHandle(0), [duration, stripWidth]); // eslint-disable-line react-hooks/exhaustive-deps
   const endHandle = useMemo(() => makeHandle(1), [duration, stripWidth]); // eslint-disable-line react-hooks/exhaustive-deps

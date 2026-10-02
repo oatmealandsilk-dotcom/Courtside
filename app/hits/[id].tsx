@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useIsFocused } from '@/lib/useIsFocused';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type TextInput } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as haptics from '@/lib/haptics';
@@ -12,7 +12,8 @@ import { ClipPlayback } from '@/components/ClipPlayback';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { PlayerName } from '@/components/PlayerName';
 import { RichText } from '@/components/RichText';
-import { CommentRow } from '@/components/CommentRow';
+import { CommentThread, threadOf, threadsOf, useReplyDraft } from '@/components/CommentThread';
+import type { ID } from '@/data/types';
 import { Tappable } from '@/components/Tappable';
 import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
 import { relativeTime, timeLeft } from '@/lib/format';
@@ -34,6 +35,19 @@ export default function HitThread() {
   // Ticks once a minute so the countdown stays honest while you read.
   const [, tick] = useState(0);
   useEffect(() => { const timer = setInterval(() => tick((n) => n + 1), 60_000); return () => clearInterval(timer); }, []);
+  // New comments and replies arrive while the page is open.
+  useEffect(() => (id ? actions.watchComments(String(id), 'hit') : undefined), [id, actions]);
+  // Replies, as in the comment sheet: "Reply" puts "@them " in the box with a
+  // "Replying to @them ×" line above it; each thread stays folded until opened.
+  const input = useRef<TextInput>(null);
+  const [openThreads, setOpenThreads] = useState<Set<ID>>(() => new Set());
+  const { replyingTo, start: startReply, change: changeDraft, stop: stopReplying, done: doneReplying, words } = useReplyDraft(setDraft, () => input.current?.focus());
+  // Words of your own, beyond the "@them " Reply put in: a bare "@them" is not sent.
+  const hasWords = !!words(draft).trim();
+  const toggleThread = (topId: ID) => {
+    haptics.tap();
+    setOpenThreads((s) => { const next = new Set(s); if (next.has(topId)) next.delete(topId); else next.add(topId); return next; });
+  };
 
   if (!story || !author) {
     return (
@@ -44,12 +58,16 @@ export default function HitThread() {
   }
 
   const liked = !!currentUserId && story.likedBy.includes(currentUserId);
-  const thread = comments.filter((c) => c.postId === story.id).sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+  const count = comments.filter((c) => c.postId === story.id).length;
+  const thread = threadsOf(comments, story.id, 'oldest');
   const submit = () => {
     const text = draft.trim();
-    if (!text) return;
-    actions.addStoryComment(story.id, text);
+    if (!hasWords) return;
+    const answering = replyingTo?.id;
+    if (answering) { const top = threadOf(comments, answering); if (top) setOpenThreads((s) => new Set(s).add(top)); }
+    actions.addStoryComment(story.id, text, answering);
     setDraft('');
+    doneReplying();
   };
 
   return (
@@ -84,11 +102,21 @@ export default function HitThread() {
       {story.caption ? <RichText style={styles.caption}>{story.caption}</RichText> : null}
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{thread.length} {thread.length === 1 ? 'comment' : 'comments'}</Text>
-        {thread.map((comment) => <CommentRow key={comment.id} comment={comment} />)}
+        <Text style={styles.sectionTitle}>{count} {count === 1 ? 'comment' : 'comments'}</Text>
+        {thread.map((t) => (
+          <CommentThread key={t.top.id} thread={t} open={openThreads.has(t.top.id)} onToggle={() => toggleThread(t.top.id)} onReply={startReply} />
+        ))}
         <View style={styles.composer}>
-          <Field value={draft} onChangeText={setDraft} placeholder="Add a comment" multiline minHeight={70} onSubmitEditing={submit} mentions />
-          <Button label="Post comment" onPress={submit} disabled={draft.trim().length === 0} />
+          {replyingTo ? (
+            <View style={styles.replying}>
+              <Text style={styles.replyingText} numberOfLines={1}>Replying to {replyingTo.self ? 'your comment' : <Text style={styles.replyingHandle}>@{replyingTo.handle}</Text>}</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Stop replying" hitSlop={10} onPress={stopReplying}>
+                <Ionicons name="close" size={16} color={colors.textMuted} />
+              </Pressable>
+            </View>
+          ) : null}
+          <Field inputRef={input} value={draft} onChangeText={changeDraft} placeholder={replyingTo ? (replyingTo.self ? 'Add a reply' : `Reply to @${replyingTo.handle}`) : 'Add a comment'} multiline minHeight={70} onSubmitEditing={submit} mentions />
+          <Button label={replyingTo ? 'Post reply' : 'Post comment'} onPress={submit} disabled={!hasWords} />
         </View>
       </View>
     </Screen>
@@ -113,4 +141,7 @@ const styleDefinitions = StyleSheet.create({
   commentMeta: { ...typography.caption, color: colors.textFaint },
   commentText: { ...typography.small, color: colors.text, lineHeight: 20 },
   composer: { gap: spacing.md, paddingTop: spacing.md },
+  replying: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 8, borderRadius: radius.md, backgroundColor: colors.surfaceAlt, marginBottom: -spacing.xs },
+  replyingText: { ...typography.small, color: colors.textMuted, flex: 1 },
+  replyingHandle: { ...typography.smallStrong, color: colors.text },
 });

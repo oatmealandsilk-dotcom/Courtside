@@ -1,4 +1,5 @@
 import { AppState, Platform } from 'react-native';
+import { File as DeviceFile } from 'expo-file-system';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 /**
@@ -15,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
 import { shrinkPhoto } from '@/lib/shrinkPhoto';
 import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
+import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import type { Answer, ChatEvent, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, TaggedCourt, Question, Story, Tip, User, CoachApplication } from './types';
@@ -106,6 +108,8 @@ interface PostRow {
 }
 interface CommentRow {
   id: string; post_id: string; author_id: string; body: string; created_at: string; image_url?: string | null;
+  /** A reply's thread and the comment it answers (migration 56); absent before it. */
+  parent_id?: string | null; reply_to_id?: string | null;
   comment_likes?: { user_id: string }[];
 }
 interface StoryRow {
@@ -113,7 +117,7 @@ interface StoryRow {
   media_label: string | null; caption: string | null; archived: boolean; created_at: string; expires_at: string;
   story_views?: { user_id: string }[];
   story_likes?: { user_id: string }[];
-  story_comments?: { id: string; story_id: string; author_id: string; body: string; created_at: string; story_comment_likes?: { user_id: string }[] }[];
+  story_comments?: { id: string; story_id: string; author_id: string; body: string; created_at: string; parent_id?: string | null; reply_to_id?: string | null; story_comment_likes?: { user_id: string }[] }[];
 }
 
 const toUser = (row: ProfileRow, followers: number, following: number): User => ({
@@ -148,7 +152,8 @@ const toUser = (row: ProfileRow, followers: number, following: number): User => 
  * comments. Used by the opening load and by every later page, so a post that
  * comes in later is never a thinner version of the same thing.
  */
-const POST_SELECT = '*, post_likes(user_id), post_saves(user_id), comments(id, post_id, author_id, body, image_url, created_at, comment_likes(user_id))';
+// Comments come whole (`*`): a database with or without the reply columns (migration 56) answers the same ask.
+const POST_SELECT = '*, post_likes(user_id), post_saves(user_id), comments(*, comment_likes(user_id))';
 /** How many posts come at a time: on open, and each time the feed nears its end. */
 export const POST_PAGE = 40;
 type FullPostRow = PostRow & { comments?: CommentRow[]; removed_at?: string | null };
@@ -206,6 +211,8 @@ const toComment = (row: CommentRow): Comment => ({
   createdAt: row.created_at,
   likedBy: (row.comment_likes ?? []).map((l) => l.user_id),
   imageUrl: row.image_url ?? undefined,
+  parentId: row.parent_id ?? undefined,
+  replyToId: row.reply_to_id ?? undefined,
 });
 
 const toStory = (row: StoryRow): Story => ({
@@ -228,7 +235,35 @@ const toStory = (row: StoryRow): Story => ({
 const toStoryComment = (row: NonNullable<StoryRow['story_comments']>[number]): Comment => ({
   id: row.id, postId: row.story_id, authorId: row.author_id, body: row.body, createdAt: row.created_at,
   likedBy: (row.story_comment_likes ?? []).map((l) => l.user_id),
+  parentId: row.parent_id ?? undefined,
+  replyToId: row.reply_to_id ?? undefined,
 });
+
+/** How many comment watches have opened, for unique channel names. */
+let commentWatches = 0;
+
+/**
+ * Saves a comment row, as a reply when it is one: its thread (`parent_id`)
+ * and the comment it answers (`reply_to_id`). The database files a reply to a
+ * reply under the same top comment itself. Two things are tried again: a
+ * reply sent before the comment it answers has finished saving (a moment
+ * later), and a database without replies yet (before migration 56), where the
+ * words still go up, as a plain comment.
+ */
+async function insertReplying(table: 'comments' | 'story_comments', row: Record<string, unknown>, comment: Comment) {
+  const db = need();
+  if (!comment.parentId) return db.from(table).insert(row);
+  const reply = { ...row, parent_id: comment.parentId, reply_to_id: comment.replyToId ?? comment.parentId };
+  let { error } = await db.from(table).insert(reply);
+  if (error && /reply_parent_missing/.test(error.message)) {
+    await new Promise((r) => setTimeout(r, 1500));
+    ({ error } = await db.from(table).insert(reply));
+  }
+  // Only a database that has no such columns yet (the API's "unknown column"
+  // or Postgres's): a refused reply (its comment deleted meanwhile) is not re-sent as a comment.
+  if (error && (error.code === 'PGRST204' || error.code === '42703') && /parent_id|reply_to_id/.test(error.message)) return db.from(table).insert(row);
+  return { error };
+}
 
 /* ---------------------------------------------------------------- reads */
 
@@ -530,7 +565,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // not had those tables added yet the request is refused, so it falls back
   // to the plain shape rather than taking the whole load down with it — that
   // is what left people re-doing the quiz: their profile never arrived.
-  const storiesFull = db.from('stories').select('*, story_views(user_id), story_likes(user_id), story_comments(id, story_id, author_id, body, created_at, story_comment_likes(user_id))').order('created_at', { ascending: false }).limit(40);
+  const storiesFull = db.from('stories').select('*, story_views(user_id), story_likes(user_id), story_comments(*, story_comment_likes(user_id))').order('created_at', { ascending: false }).limit(40);
   const storiesPlain = () => db.from('stories').select('*, story_views(user_id)').order('created_at', { ascending: false }).limit(40);
   // Coaches load alongside everything else rather than after it: one round
   // trip to the server fewer on every open. A failure just means no coaches.
@@ -1677,6 +1712,14 @@ export const remote = {
     if (error) fail('profile create')(error);
   },
 
+  /**
+   * Saves a new post under the id the phone gave it when Share was tapped.
+   * That id makes it safe to send twice: a second try (a reply lost on the
+   * way back, a retry) finds the post already there and counts as done, so
+   * one post can never become two. Throws when it truly could not be saved,
+   * so the app says "Could not post" rather than "Posted" for a post nobody
+   * else will ever see.
+   */
   async insertPost(post: Post) {
     const row = {
       id: post.id,
@@ -1709,9 +1752,27 @@ export const remote = {
     };
     const sending = { ...extras };
     const dropped: string[] = [];
+    // Whether the post is already saved under its id (an answer lost on the way back still saved it).
+    const landed = async () => {
+      try {
+        const { data } = await need().from('posts').select('id').eq('id', post.id).maybeSingle();
+        return !!data;
+      } catch { return false; }
+    };
+    let dropouts = 0;
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const { error } = await need().from('posts').insert({ ...row, ...sending });
       if (!error) { if (dropped.length) console.warn(missingColumnsNote(dropped)); return; }
+      // Already saved under this id: the same post, sent again. Nothing more to do.
+      if (error.code === '23505') return;
+      // The connection dropped (no answer from the database at all): the same
+      // post, same id, is simply sent again, twice at most. If the first one
+      // did get there, the second is told so (above) and it is still one post.
+      if (!error.code && /network|fetch|timed? ?out|abort/i.test(error.message) && dropouts < 2) {
+        dropouts += 1;
+        await new Promise((r) => setTimeout(r, 1500 * dropouts));
+        continue;
+      }
       // PostgREST names the column it does not know: "Could not find the 'speed' column of 'posts' in the schema cache".
       const named = /'([a-z_]+)' column/.exec(error.message)?.[1] ?? /column "?([a-z_]+)"?/.exec(error.message)?.[1];
       if (named && named in sending) {
@@ -1728,9 +1789,13 @@ export const remote = {
         for (const key of Object.keys(sending)) delete sending[key];
         continue;
       }
+      // Before saying it failed (and you post it again, as a second post): is it there after all?
+      if (await landed()) return;
       fail('post insert')(error);
-      return;
+      throw new Error('Your post could not be saved. Check your connection and try again.');
     }
+    if (await landed()) return;
+    throw new Error('Your post could not be saved. Try again in a moment.');
   },
 
   async deletePost(postId: ID) {
@@ -1784,14 +1849,16 @@ export const remote = {
 
   async insertComment(comment: Comment) {
     const row = { id: comment.id, post_id: comment.postId, author_id: comment.authorId, body: comment.body, created_at: comment.createdAt };
-    let { error } = await need().from('comments').insert({ ...row, ...(comment.imageUrl ? { image_url: comment.imageUrl } : {}) });
+    const insert = (r: Record<string, unknown>) => insertReplying('comments', r, comment);
+    let { error } = await insert({ ...row, ...(comment.imageUrl ? { image_url: comment.imageUrl } : {}) });
     // Before migration 52 there is nowhere for the photo: the words still go up.
-    if (error && comment.imageUrl && /image_url/.test(error.message)) ({ error } = await need().from('comments').insert(row));
+    if (error && comment.imageUrl && /image_url/.test(error.message)) ({ error } = await insert(row));
     if (error) fail('comment insert')(error);
   },
 
+  /** The same as insertPost: saved under the phone's own id, safe to send twice, throws when it could not be saved. */
   async insertStory(story: Story) {
-    const { error } = await need().from('stories').insert({
+    const row = {
       id: story.id,
       author_id: story.authorId,
       image_url: story.imageUrl ?? null,
@@ -1801,8 +1868,19 @@ export const remote = {
       caption: story.caption ?? null,
       created_at: story.createdAt,
       expires_at: story.expiresAt,
-    });
-    if (error) fail('story insert')(error);
+    };
+    let { error } = await need().from('stories').insert(row);
+    // The connection dropped: sent once more under the same id (a copy that got there the first time answers 23505).
+    if (error && !error.code && /network|fetch|timed? ?out|abort/i.test(error.message)) {
+      await new Promise((r) => setTimeout(r, 1500));
+      ({ error } = await need().from('stories').insert(row));
+    }
+    if (!error || error.code === '23505') return;
+    // Before saying it failed (and it is posted again, as a second one): is it there after all?
+    const { data: there } = await need().from('stories').select('id').eq('id', story.id).maybeSingle().then((r) => r, () => ({ data: null }));
+    if (there) return;
+    fail('story insert')(error);
+    throw new Error('Your instant could not be saved. Check your connection and try again.');
   },
 
   async setStoryArchived(storyId: ID, archived: boolean) {
@@ -1829,10 +1907,36 @@ export const remote = {
   },
 
   async insertStoryComment(comment: Comment) {
-    const { error } = await need().from('story_comments').insert({
+    const { error } = await insertReplying('story_comments', {
       id: comment.id, story_id: comment.postId, author_id: comment.authorId, body: comment.body, created_at: comment.createdAt,
-    });
+    }, comment);
     if (error) fail('hit comment insert')(error);
+  },
+
+  /**
+   * New and deleted comments on one post or Instant, while its comments are
+   * open (migration 56 streams both tables). Each new row has already passed
+   * the reading rules (blocked people, private accounts) on the server. A
+   * deleted one comes as its id alone, so deletes are heard table-wide and
+   * the caller drops the ids it holds.
+   */
+  onComments(target: { id: ID; kind: 'post' | 'hit' }, handle: { added: (comment: Comment) => void; removed: (commentId: ID) => void; connected?: () => void }): () => void {
+    const db = need();
+    const table = target.kind === 'hit' ? 'story_comments' : 'comments';
+    const column = target.kind === 'hit' ? 'story_id' : 'post_id';
+    // Its own name each time: the sheet and the Instant page may watch the same thing at once.
+    commentWatches += 1;
+    const channel = db.channel(`comments-live:${target.kind}:${target.id}:${commentWatches}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table, filter: `${column}=eq.${target.id}` }, (payload) => {
+        const row = payload.new as CommentRow & { story_id?: string };
+        handle.added(target.kind === 'hit' ? toStoryComment({ ...row, story_id: row.story_id ?? target.id }) : toComment(row));
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table }, (payload) => {
+        const id = (payload.old as { id?: string } | null)?.id;
+        if (id) handle.removed(id);
+      })
+      .subscribe((status) => { if (status === 'SUBSCRIBED') handle.connected?.(); });
+    return () => { void db.removeChannel(channel); };
   },
 
   async recordStoryView(storyId: ID, me: ID) {
@@ -1980,6 +2084,25 @@ async function uploadWithProgress(path: string, uri: string, contentType: string
 
 /** The bucket's limit, which is also the most Supabase's free plan accepts per file. */
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+/** A size for the crash note: "24 MB", or "unknown-size". */
+const megabytes = (bytes: number) => (bytes ? `${Math.max(1, Math.round(bytes / 1048576))} MB` : 'unknown-size');
+
+/**
+ * How big a picked file is, in bytes (0 when it cannot be told). A phone
+ * asks the file system, which reads nothing into memory; a browser's picked
+ * file is already in memory, so it is simply looked at.
+ */
+async function sizeOf(uri: string): Promise<number> {
+  if (Platform.OS !== 'web') {
+    try {
+      const file = new DeviceFile(uri);
+      return file.exists ? file.size ?? 0 : 0;
+    } catch {
+      return 0;
+    }
+  }
+  return fetch(uri).then((r) => r.blob()).then((b) => b.size).catch(() => 0);
+}
 
 /**
  * Sends a picked file to the bucket and returns its public address. Throws
@@ -1996,10 +2119,15 @@ export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'vid
     // part of the upload bar is the shrinking, the rest the sending.
     const shrinking = kind === 'video' && canShrinkVideo();
     const upload = shrinking ? (f: number) => onProgress?.(0.35 + 0.65 * f) : onProgress;
+    // Noted before the shrinker (the phone's own code) starts: if it takes the app down, the next open says so.
+    if (shrinking) await noteStep(`shrinking a ${megabytes(await sizeOf(uri))} video`);
     const sent = shrinking ? await shrinkVideo(uri, (f) => onProgress?.(0.35 * f)) : uri;
     // Too big is the usual reason an upload fails, and it is worth saying
-    // before the bytes go up rather than after.
-    const size = await fetch(sent).then((r) => r.blob()).then((b) => b.size).catch(() => 0);
+    // before the bytes go up rather than after. On a phone the size is read
+    // from the file itself: reading a long clip into memory just to measure
+    // it (hundreds of MB if it could not be shrunk) is enough for the phone
+    // to close the app.
+    const size = await sizeOf(sent);
     if (size > MAX_UPLOAD_BYTES) {
       const mb = Math.round(size / 1024 / 1024);
       throw new Error(`This ${kind} is ${mb} MB; the limit is ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB. Pick a shorter one — about a minute or less.`);
@@ -2011,10 +2139,16 @@ export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'vid
     if (!ALLOWED_MEDIA.test(contentType)) throw new Error('Only photos and videos can be posted.');
     const ext = contentType.split('/')[1] || (kind === 'video' ? 'mp4' : 'jpg');
     const path = `${me}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    await noteStep(`sending a ${megabytes(size)} ${kind}${shrinking && sent === uri ? ' that could not be shrunk' : ''}`);
     try {
       await uploadWithProgress(path, sent, contentType, upload);
     } catch (direct) {
       console.warn('[remote] direct upload fell back', direct);
+      // The plain upload needs the whole file in memory. On a phone that is
+      // only done for a file known to be under the limit; one whose size
+      // could not be read is never loaded blind (see sizeOf above).
+      if (Platform.OS !== 'web' && !size) throw direct;
+      await noteStep(`sending a ${megabytes(size)} ${kind} from memory (the direct send failed)`);
       const response = await fetch(sent);
       const bytes = await response.arrayBuffer();
       const { error } = await db.storage.from('media').upload(path, bytes, { contentType, upsert: false, cacheControl: '31536000' });

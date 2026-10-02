@@ -4,34 +4,36 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { CourtGlyph } from '@/components/map/MapChrome';
-import { fetchCourts, type Court } from '@/features/players/courts';
+import { courtRows, fetchCourts, type Court } from '@/features/players/courts';
 import { formatMiles, milesBetween } from '@/features/players/geo';
 import type { LatLng } from '@/features/players/positions';
+import { plain, wordStartIndex } from '@/features/search/words';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 
 export interface ChosenPlace { name: string; lat?: number; lng?: number }
 
-/** Lower case, no accents, single spaces: "Pullen  Park" and "pullen park" are the same search. */
-export const plain = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+export { plain };
 /** OpenStreetMap leaves most public courts unnamed; the list calls those "Public courts". */
 export const labelOf = (c: Court) => (c.name === 'Tennis courts' ? 'Public courts' : c.name);
 
 /**
- * How well a court's name answers what was typed, like a search box should:
- * every word typed must be in the name; a name that starts with it beats one
- * with a word starting with it, which beats one that only contains it.
- * Null when it does not match at all.
+ * How well a court's name answers what was typed, the way Search reads it:
+ * every word typed must start a word of the name ("pu" finds Pullen Park,
+ * not Campus); 0 when the name starts with the first word typed (a leading
+ * "The" aside: "ra" is The Raleigh Raquet Club's start too), 1 when a later
+ * word of it does. Null when it does not match.
  */
 export function score(name: string, words: string[]): number | null {
   const n = plain(name);
-  let total = 0;
-  for (const w of words) {
-    const at = n.indexOf(w);
+  const start = n.startsWith('the ') ? 4 : 0;
+  let rank = 1;
+  for (const [i, w] of words.entries()) {
+    const at = i === 0 && start && n.startsWith(w, start) ? start : wordStartIndex(n, w);
     if (at < 0) return null;
-    total += at === 0 ? 0 : n.includes(` ${w}`) ? 1 : 2;
+    if (i === 0 && (at === 0 || at === start)) rank = 0;
   }
-  return total;
+  return rank;
 }
 
 /**
@@ -40,8 +42,9 @@ export function score(name: string, words: string[]): number | null {
  * matches that way, so "s" does not light every s in a sentence).
  */
 export function Highlighted({ text, words, style, strong, lines = 2, wordStart = false }: { text: string; words: string[]; style: object; strong: object; lines?: number; wordStart?: boolean }) {
-  const lower = plain(text);
-  // Only the ascii-equivalent positions line up; accents make plain() shorter, so fall back to no highlight.
+  // Letter by letter, so every position lines up with the text as written:
+  // "é" reads as "e", and a double space in a name still bolds what follows.
+  const lower = Array.from(text, (ch) => { const p = ch.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); return p.length === ch.length ? p : ch.toLowerCase(); }).join('');
   if (lower.length !== text.length || !words.length) return <Text style={style} numberOfLines={lines}>{text}</Text>;
   const marks = new Array(text.length).fill(false);
   for (const w of words) { let i = lower.indexOf(w); while (i >= 0) { if (!wordStart || i === 0 || !/[\p{L}\p{N}]/u.test(lower[i - 1])) for (let k = i; k < i + w.length; k++) marks[k] = true; i = lower.indexOf(w, i + 1); } }
@@ -67,36 +70,41 @@ export function CourtSearch({ home, nearby, chosen, onChoose, typed, onType }: {
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const input = useRef<TextInput>(null);
-  // Typing looks further afield than the courts around you: about 15 miles.
+  // Typing looks further afield than the courts around you: about 15 miles,
+  // loaded as the form opens so the first letter already finds them.
   const [wide, setWide] = useState<Court[] | null>(null);
   const [loadingWide, setLoadingWide] = useState(false);
   const query = typed.trim();
+  const homeLat = home?.lat;
+  const homeLng = home?.lng;
   useEffect(() => {
-    if (!query || wide || loadingWide || !home) return;
+    if (homeLat === undefined || homeLng === undefined) return;
+    let on = true;
     setLoadingWide(true);
     // A slow answer never holds the list up: after a few seconds it searches the courts already here.
     const late = new Promise<Court[]>((resolve) => setTimeout(() => resolve([]), 8000));
-    Promise.race([fetchCourts(home, 25000), late]).then(setWide).catch(() => setWide([])).finally(() => setLoadingWide(false));
-  }, [query, wide, loadingWide, home]);
+    Promise.race([fetchCourts({ lat: homeLat, lng: homeLng }, 25000), late])
+      .then((list) => { if (on) setWide(list); })
+      .catch(() => { if (on) setWide([]); })
+      .finally(() => { if (on) setLoadingWide(false); });
+    return () => { on = false; };
+  }, [homeLat, homeLng]);
 
   const words = useMemo(() => plain(query).split(' ').filter(Boolean), [query]);
+  // Every letter narrows this at once: a name with a word starting with each word typed, the name starting with it first, then nearest.
+  const pool = useMemo(() => courtRows(query ? [...nearby, ...(wide ?? [])] : nearby, home), [query, wide, nearby, home]);
   const rows = useMemo(() => {
-    const pool = query ? [...(wide ?? []), ...nearby] : nearby;
-    const seen = new Set<string>();
     const out: { c: Court; miles: number; rank: number }[] = [];
-    for (const c of pool) {
-      const key = `${c.lat.toFixed(3)},${c.lng.toFixed(3)}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
+    for (const { c, miles } of pool) {
       const rank = query ? score(labelOf(c), words) : 0;
-      if (rank === null) continue;
-      out.push({ c, miles: home ? milesBetween(home, c) : 0, rank });
+      // Typing, an unnamed "Public courts" never stands above a court actually called what you typed ("Pu" is Pullen Park first).
+      if (rank !== null) out.push({ c, miles, rank: query && c.name === 'Tennis courts' ? rank + 2 : rank });
     }
     out.sort((a, b) => a.rank - b.rank || a.miles - b.miles);
     // Nearest first when nothing is typed; at most two unnamed ones, which say little.
     let unnamed = 0;
-    return out.filter(({ c }) => (c.name === 'Tennis courts' ? ++unnamed <= 2 : true)).slice(0, query ? 6 : 4);
-  }, [query, words, wide, nearby, home]);
+    return out.filter(({ c }) => (c.name === 'Tennis courts' ? ++unnamed <= 2 : true)).slice(0, query ? 8 : 4);
+  }, [query, words, pool]);
 
   if (chosen) {
     const court = chosen.lat !== undefined;
@@ -119,7 +127,7 @@ export function CourtSearch({ home, nearby, chosen, onChoose, typed, onType }: {
       <View style={styles.search}>
         <Ionicons name="search" size={16} color={colors.textFaint} />
         <TextInput ref={input} value={typed} onChangeText={onType} placeholder="Search courts" placeholderTextColor={colors.textFaint} style={styles.searchInput} accessibilityLabel="Where" autoCorrect={false} returnKeyType="done" onSubmitEditing={() => { if (rows[0] && query) onChoose({ name: labelOf(rows[0].c), lat: rows[0].c.lat, lng: rows[0].c.lng }); }} />
-        {loadingWide ? <ActivityIndicator size="small" color={colors.textFaint} /> : typed ? (
+        {loadingWide && query ? <ActivityIndicator size="small" color={colors.textFaint} /> : typed ? (
           <Pressable accessibilityRole="button" accessibilityLabel="Clear" hitSlop={8} onPress={() => onType('')}><Ionicons name="close-circle" size={17} color={colors.textFaint} /></Pressable>
         ) : null}
       </View>
@@ -129,7 +137,7 @@ export function CourtSearch({ home, nearby, chosen, onChoose, typed, onType }: {
           <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${labelOf(c)}, ${formatMiles(miles)}`} onPress={() => onChoose({ name: labelOf(c), lat: c.lat, lng: c.lng })} style={({ pressed }) => [styles.row, i > 0 && styles.rule, pressed && styles.pressed]}>
             <View style={styles.tile}><CourtGlyph size={14} color={colors.brand} /></View>
             <View style={styles.rowWords}>
-              <Highlighted text={labelOf(c)} words={words} style={styles.rowName} strong={styles.rowNameMatch} />
+              <Highlighted text={labelOf(c)} words={words} style={styles.rowName} strong={styles.rowNameMatch} wordStart />
               <Text style={styles.rowMeta} numberOfLines={1}>{[formatMiles(miles), c.count > 1 ? `${c.count} courts` : null, c.lit ? 'lights' : null].filter(Boolean).join(' · ')}</Text>
             </View>
           </Pressable>

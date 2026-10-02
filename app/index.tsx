@@ -1,8 +1,9 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
-import { Redirect } from 'expo-router';
+import { Redirect, useNavigation } from 'expo-router';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { goHome } from '@/lib/goBack';
 
 import { BrandMark } from '@/components/BrandMark';
 import { useApp } from '@/store/AppContext';
@@ -38,6 +39,25 @@ export default function Index() {
   const opacity = useRef(new Animated.Value(1)).current;
   const rise = useRef(new Animated.Value(0)).current;
 
+  // Opened on top of the app that is already running: something went to '/'
+  // (this splash's address, which Home shares) from a page over the tabs.
+  // Played out, the logo would come back, the bar would go, and a whole
+  // second copy of the app — a second feed full of video players — would be
+  // built on top of the first. Instead, once the account is known, every page
+  // over the tabs closes and the app that is already there is shown again.
+  // (A real launch starts with nothing under this page, so it never applies.)
+  const navigation = useNavigation();
+  const [overTabs] = useState(() => {
+    try {
+      const below = (navigation.getState() as { routes?: { name: string }[] } | undefined)?.routes ?? [];
+      return below.some((route) => route.name === '(tabs)');
+    } catch {
+      return false;
+    }
+  });
+  const backToApp = overTabs && settled && !!currentUserId && onboardingComplete;
+  useEffect(() => { if (backToApp) goHome(); }, [backToApp]);
+
   useEffect(() => {
     if (Platform.OS === 'web') {
       try {
@@ -61,6 +81,9 @@ export default function Index() {
       if (finished) setGone(true);
     });
   }, [settled, held, gone, opacity, currentUserId, onboardingComplete]);
+
+  // On its way back to the app underneath: a plain page for the moment it takes, no logo.
+  if (backToApp) return <View style={styles.splash} />;
 
   // Signed in, but the account never came down even after retries: the app
   // does not open on a guess (the quiz would overwrite what is saved). It

@@ -4,7 +4,7 @@ import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { router } from 'expo-router';
 import { show as showToast } from '@/lib/toast';
 import { requestSection } from '@/features/navigation/swipeOrder';
-import { goBack } from '@/lib/goBack';
+import { goBack, goHome } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image as ExpoImage } from 'expo-image';
 
@@ -34,6 +34,7 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
 const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap; tint: keyof typeof colors }> = {
   like: { name: 'heart', tint: 'danger' },
   comment: { name: 'chatbubble', tint: 'info' },
+  'comment-reply': { name: 'chatbubble-ellipses', tint: 'info' },
   answer: { name: 'chatbubbles', tint: 'info' },
   'coach-reply': { name: 'shield-checkmark', tint: 'brand' },
   helpful: { name: 'ribbon', tint: 'warning' },
@@ -59,6 +60,7 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap; tin
 const VERB: Record<NotificationKind, string> = {
   like: 'liked your post',
   comment: 'commented on your post',
+  'comment-reply': 'replied to your comment',
   answer: 'answered your question',
   'coach-reply': 'replied to your question',
   helpful: 'found your reply helpful',
@@ -127,7 +129,22 @@ const SECTIONS = ['New', 'Today', 'This week', 'This month', 'Earlier'];
 
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
-  const { notifications, users, posts, stories, hitRequests, conversations, currentUserId, followRequests, followingIds, actions } = useApp();
+  const { notifications, users, posts, stories, comments, hitRequests, conversations, currentUserId, followRequests, followingIds, actions } = useApp();
+  // "Replied to your comment" opens the comments at that reply, its thread
+  // unfolded. The reply is the one by that person on that post with the same
+  // words (the notification keeps them), else the nearest in time. A post or
+  // Instant not loaded here opens on its own page instead, which fetches it.
+  const replyAt = (group: Group): { kind: 'post' | 'hit'; id: string; at?: string } | null => {
+    if (group.kind !== 'comment-reply') return null;
+    const kind = group.targetKind === 'hit' ? 'hit' : 'post';
+    if (!(kind === 'hit' ? stories.some((st) => st.id === group.targetId) : posts.some((p) => p.id === group.targetId))) return null;
+    const flat = (text: string) => { const f = text.replace(/\s+/g, ' ').trim(); return f.length > 80 ? `${f.slice(0, 79)}…` : f; };
+    const when = Date.parse(group.createdAt);
+    const theirs = comments.filter((c) => c.postId === group.targetId && c.authorId === group.actorIds[0] && c.parentId);
+    const reply = theirs.find((c) => group.preview !== undefined && flat(c.body) === group.preview)
+      ?? [...theirs].sort((a, b) => Math.abs(Date.parse(a.createdAt) - when) - Math.abs(Date.parse(b.createdAt) - when))[0];
+    return { kind, id: group.targetId, ...(reply ? { at: reply.id } : {}) };
+  };
   // Someone is in for your hit: the hit's group chat, when it is here to open.
   const hitChatFor = (group: Group): string | undefined => {
     if (group.kind !== 'hit-join') return undefined;
@@ -265,7 +282,14 @@ export default function Notifications() {
               <Pressable
                 accessibilityRole="link"
                 accessibilityLabel={`${who} ${verbFor(group)}`}
-                onPress={() => { const to = routeFor(group); if (to === '/') { router.navigate('/'); requestScrollToTop('/'); } else router.push(to); }}
+                onPress={() => {
+                  const reply = replyAt(group);
+                  if (reply) { router.push({ pathname: '/comments', params: reply }); return; }
+                  const to = routeFor(group);
+                  // "Clip posted" and the like open Home: goHome closes this page down to the
+                  // tabs. Never '/', the splash screen's address too, which opened a second app on top.
+                  if (to === '/') { goHome(); requestScrollToTop('/'); } else router.push(to);
+                }}
                 style={[styles.row, group.unread && styles.rowUnread]}
               >
                 <View>

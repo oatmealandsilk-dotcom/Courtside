@@ -1,4 +1,5 @@
-import { labelOf, plain, score } from '@/components/CourtSearch';
+import { labelOf, score } from '@/components/CourtSearch';
+import { atWordStart, plain, startsWord, wordStartIndex } from '@/features/search/words';
 import type { Court } from '@/features/players/courts';
 import { milesBetween } from '@/features/players/geo';
 import type { LatLng } from '@/features/players/positions';
@@ -26,18 +27,8 @@ export function parseQuery(raw: string): Query {
   return { raw: t, mode, text, words: text.split(' ').filter(Boolean) };
 }
 
-/** Whether position `i` of `text` begins a word: the start, or after a space or a mark. */
-const atWordStart = (text: string, i: number) => i === 0 || !/[\p{L}\p{N}]/u.test(text[i - 1]);
-
-/** Where `needle` first starts a word in `hay` (both plain), or -1. */
-export function wordStartIndex(hay: string, needle: string): number {
-  if (!needle) return -1;
-  for (let i = hay.indexOf(needle); i >= 0; i = hay.indexOf(needle, i + 1)) if (atWordStart(hay, i)) return i;
-  return -1;
-}
-
-/** Whether `needle` starts a word somewhere in `hay` (both plain): "serve" in "kick serve", not in "observe". */
-export const startsWord = (hay: string, needle: string): boolean => wordStartIndex(hay, needle) >= 0;
+/** The word-start matching lives with `plain()` so every search box shares it; kept importable from here. */
+export { startsWord, wordStartIndex };
 
 /** "Raleigh, NC" → "raleigh". */
 export const townOf = (location: string | undefined) => plain((location ?? '').split(',')[0]);

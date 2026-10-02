@@ -18,6 +18,7 @@ import {
   type TourRect, type TourRun,
 } from '@/features/tour/tourStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { sinceLastPost, useAnyUploading } from '@/lib/uploads';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
@@ -69,6 +70,12 @@ type Hole = { x: number; y: number; w: number; h: number; r: number };
 type Side = 'down' | 'up' | 'left';
 const SIDE_CODE: Record<Side, number> = { down: 1, up: 2, left: 3 };
 
+/**
+ * Just after posting, the tour does not start on its own for this long: a
+ * new player who posts before it has appeared lands on Home with their post
+ * on its way up, and a dim over everything then would hide it.
+ */
+const AFTER_POST_MS = 30_000;
 /** Started on its own this launch, per account, in case storage is slow to say so. */
 const startedThisLaunch = new Set<string>();
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -93,11 +100,14 @@ function useTourStarter(eligible: boolean) {
   // Before the account has come down, the stand-in profile says "joined just now"; it is not trusted until then.
   const accountReady = !!currentUserId && onboardingComplete && (remoteLoaded || !isSupabaseConfigured);
   const startedFor = useRef<string | null>(null);
+  // A post or Instant still going up: the tour waits until it has landed.
+  const posting = useAnyUploading();
 
   useEffect(() => {
     if (run.open || !accountReady || !eligible || !onHome || !curtainDown || !currentUserId) return;
     const forced = !!request?.force;
     if (!forced) {
+      if (posting) return;
       // A computer's sidebar is labelled row by row; there it only runs when asked for.
       if (!isPhone) return;
       // Switched off for now: it plays only when asked for (Settings, Help).
@@ -113,6 +123,9 @@ function useTourStarter(eligible: boolean) {
       const seen = !forced && (await hasSeenTour(currentUserId));
       if (cancelled) return;
       if (seen) { setTourPending(false); return; }
+      // Posted a moment ago (and landed): the post gets its moment first.
+      if (!forced) await wait(Math.max(0, AFTER_POST_MS - sinceLastPost()));
+      if (cancelled) return;
       await wait(SETTLE_MS);
       if (cancelled) return;
       // The bar at full size, labels showing, before any of it is measured.
@@ -140,7 +153,7 @@ function useTourStarter(eligible: boolean) {
       openTour(keys, wanted ? keys.indexOf(wanted.key) : 0, forced);
     })();
     return () => { cancelled = true; setTourPending(false); };
-  }, [run.open, accountReady, eligible, onHome, curtainDown, currentUserId, isPhone, request, joinedAt]);
+  }, [run.open, accountReady, eligible, onHome, curtainDown, currentUserId, isPhone, request, joinedAt, posting]);
 
   // Leaving Home (a tapped alert opening a chat), a gate coming up, or a
   // different account: the tour just goes. It already counts as seen.

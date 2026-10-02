@@ -13,7 +13,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Heart } from '@/components/Heart';
 
 import { PostVideo } from '@/components/PostVideo';
-import { CommentRow } from '@/components/CommentRow';
+import { CommentThread, threadsOf } from '@/components/CommentThread';
 import { useApp } from '@/store/AppContext';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
@@ -29,6 +29,7 @@ import { RichText } from '@/components/RichText';
 import { compactNumber, relativeTime } from '@/lib/format';
 import type { Post, User } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
+import { tagsNotInCaption } from '@/features/feed/tags';
 
 interface Props {
   post: Post;
@@ -79,7 +80,8 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
   const styles = useThemedStyles(styleDefinitions);
   const { comments, currentUser, currentUserId, actions } = useApp();
   // Newest first, the way the sheet lists them; they fill the bottom of the page.
-  const thread = comments.filter((c) => c.postId === post.id).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  // Replies stay folded on the page: "View 2 replies" opens the sheet at them.
+  const thread = threadsOf(comments, post.id, 'newest');
   const [captionOpen, setCaptionOpen] = useState(false);
   // A photo: one tap opens it full screen (pinch to look closer, it snaps
   // back), two taps like it. The single tap waits out the double-tap window.
@@ -234,9 +236,10 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
             <Text numberOfLines={captionOpen ? undefined : 4} style={styles.caption}><Text style={styles.captionName}>{author.handle} </Text><RichText style={styles.caption}>{post.body}</RichText></Text>
           </Pressable>
         ) : null}
-        {post.tags.length ? (
+        {/* Tags the caption does not already say: a #tag written in it is not repeated as a chip. */}
+        {tagsNotInCaption(post.body, post.tags).length ? (
           <View style={styles.tags}>
-            {post.tags.map((tag) => <Chip key={tag} label={`#${tag}`} onPress={() => router.push({ pathname: '/search', params: { q: `#${tag}` } })} small />)}
+            {tagsNotInCaption(post.body, post.tags).map((tag) => <Chip key={tag} label={`#${tag}`} onPress={() => router.push({ pathname: '/search', params: { q: `#${tag}` } })} small />)}
           </View>
         ) : null}
         {/* The clip's buttons, laid across instead of down: same glyphs, same
@@ -269,7 +272,17 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
             the line at the bottom opens the sheet to write one. */}
         {thread.length ? (
           <ScrollView style={styles.thread} contentContainerStyle={styles.threadInner} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-            {thread.map((c) => <CommentRow key={c.id} comment={c} big onPressBody={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, at: c.id } })} />)}
+            {thread.map((t) => (
+              <CommentThread
+                key={t.top.id}
+                thread={t}
+                big
+                open={false}
+                onToggle={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, at: t.replies[0]?.id ?? t.top.id } })}
+                onReply={(c) => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, reply: c.id } })}
+                onPressBody={(c) => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, at: c.id } })}
+              />
+            ))}
           </ScrollView>
         ) : null}
         <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, focus: '1' } })} style={styles.addComment}>

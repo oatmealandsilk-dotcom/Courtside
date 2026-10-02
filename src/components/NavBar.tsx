@@ -5,7 +5,7 @@ import { PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { interpolate, runOnJS, useAnimatedReaction, useAnimatedStyle } from 'react-native-reanimated';
 import { Animated as RNAnimated } from 'react-native';
 import { BAR_TUCK, barCompact, DUCK } from '@/features/navigation/barShrink';
-import { useFeedWarm } from '@/features/feed/warmup';
+import { useCurtainDown, useFeedWarm } from '@/features/feed/warmup';
 import { useCallback, useEffect, useRef } from 'react';
 import { Easing, useSharedValue, withTiming } from 'react-native-reanimated';
 import { router, usePathname } from 'expo-router';
@@ -24,6 +24,20 @@ import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 
 /** The screen's pixels per point, read once: the bar's moves are rounded to whole pixels. */
 const PX = PixelRatio.get();
+
+/**
+ * The bar's rise on a fresh open, kept for the whole run of the app rather
+ * than per copy of the bar: once it has come up it never waits below the
+ * edge again, and the longest it ever waits is counted from the first time
+ * it was drawn. (Kept per copy, every time the bar was taken away and put
+ * back while the feed was still loading — the logo coming back, a page
+ * opening and closing — it went back below the edge and its wait started
+ * over, so it could stay out of sight far longer than meant.)
+ */
+let barUp = false;
+let waitUntil = 0;
+/** The longest the bar waits for the feed on a fresh open. */
+const BAR_WAIT_MS = 7000;
 
 /**
  * Minimal shape of what react-navigation hands a custom tabBar. Typed locally
@@ -90,11 +104,17 @@ export function NavBar({ state, navigation }: NavBarProps) {
     if (pathname !== '/compose') { router.push('/compose'); return; }
     closeCreateMenu();
   };
-  const behindCurtain = !warm && (pathname === '/' || pathname === '/index');
+  const curtainDown = useCurtainDown();
+  const behindCurtain = !barUp && !warm && !curtainDown && (pathname === '/' || pathname === '/index');
+  if (behindCurtain && !waitUntil) waitUntil = Date.now() + BAR_WAIT_MS;
   const entrance = useSharedValue(behindCurtain ? 1 : 0);
   useEffect(() => {
-    if (!behindCurtain) { entrance.value = withTiming(0, { duration: 480, easing: Easing.out(Easing.cubic) }); return; }
-    const t = setTimeout(() => { entrance.value = withTiming(0, { duration: 480, easing: Easing.out(Easing.cubic) }); }, 7000);
+    const rise = () => {
+      barUp = true;
+      entrance.value = withTiming(0, { duration: 480, easing: Easing.out(Easing.cubic) });
+    };
+    if (!behindCurtain) { rise(); return; }
+    const t = setTimeout(rise, Math.max(0, waitUntil - Date.now()));
     return () => clearTimeout(t);
   }, [behindCurtain, entrance]);
   // Ducking tucks the pill a little toward the edge and lets the labels go,
