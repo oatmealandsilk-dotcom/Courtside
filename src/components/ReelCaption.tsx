@@ -155,7 +155,7 @@ export function ReelCaption({ post, author, onAuthor, onOpenComments }: { post: 
           doubles match never cuts them off; the first player's handle opens them, "+2" everyone who played. */}
       {post.session && hasSessionStats(post.session) ? (
         <View style={styles.metaItem}>
-          <Ionicons name="tennisball-outline" size={12} color={META_INK} style={EDGE_SMALL} />
+          <Ionicons name="stopwatch-outline" size={12} color={META_INK} style={EDGE_SMALL} />
           <StatsWords
             chunks={reelStatsChunks(post.session, blockedIds)}
             style={styles.metaText}

@@ -1384,7 +1384,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                         <View style={styles.net} />
                         <View style={styles.service} />
                       </View>
-                      <Ionicons name="tennisball-outline" size={54} color={colors.court} />
+                      <Ionicons name="cloud-offline-outline" size={54} color={colors.court} />
                       <Text style={styles.previewTitle}>{post.mediaLabel}</Text>
                       <Text style={styles.previewNote}>
                         This clip didn’t finish uploading

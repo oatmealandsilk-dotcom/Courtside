@@ -69,7 +69,7 @@ export function AttachSessionStats({ pick, attached, onAttach, adult, showHr, on
       {attached ? (
         <>
           <View style={styles.head}>
-            <Ionicons name="tennisball-outline" size={16} color={colors.court} />
+            <Ionicons name="stopwatch-outline" size={16} color={colors.court} />
             <Text style={styles.headText}>Session stats</Text>
             {onChange ? (
               <Pressable accessibilityRole="button" accessibilityLabel="Pick a different session" hitSlop={10} onPress={onChange} style={({ pressed }) => [styles.change, pressed && styles.pressed]}>

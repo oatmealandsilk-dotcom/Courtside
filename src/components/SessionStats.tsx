@@ -91,7 +91,7 @@ export function SessionStats({ session, compact = false }: { session: SessionDet
   if (compact) {
     return (
       <View style={styles.line} accessibilityLabel={spoken}>
-        <Ionicons name="tennisball-outline" size={14} color={colors.court} />
+        <Ionicons name="stopwatch-outline" size={14} color={colors.court} />
         {/* Two lines at most (three with players named, so a doubles match never loses its time), wrapping rather than cutting off where the numbers came from. */}
         <StatsWords chunks={statsChunks(session, blockedIds)} style={styles.lineText} handleStyle={styles.handle} numberOfLines={people.vs || people.with ? 3 : 2} maxFontSizeMultiplier={MAX_GROW} />
       </View>

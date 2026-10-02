@@ -126,7 +126,7 @@ export default function YourSessions() {
     <Screen title="Your sessions" subtitle="Only you see this." compactTitle onBack={() => goBack('/profile')} right={logButton}>
       {!waiting.length && !groups.length && !taggedYou.length ? (
         <EmptyState
-          icon="tennisball-outline"
+          icon="stopwatch-outline"
           title="No sessions yet"
           body="Log one after you play. It keeps your streak going, and only you see it."
           action={{ label: 'Log a session', onPress: () => router.push('/log-session') }}
@@ -213,7 +213,7 @@ function Waiting({ activity, line }: { activity: DetectedActivity; line: boolean
   const source = pickSource({ type: 'tracker', activity });
   return (
     <View style={[styles.row, line && styles.line]}>
-      <View style={styles.icon}><Ionicons name="tennisball-outline" size={17} color={colors.court} /></View>
+      <View style={styles.icon}><Ionicons name="stopwatch-outline" size={17} color={colors.court} /></View>
       <View style={styles.words}>
         <Text style={styles.title} numberOfLines={1}>{activityTitle(activity)}</Text>
         <Text style={styles.sub}>{activityWhen(activity)} · {duration(activity.minutes)} · {source}</Text>

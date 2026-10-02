@@ -22,6 +22,7 @@ import { compactNumber, duration, relativeTime } from '@/lib/format';
 import type { Post, QuestionTopic, User } from '@/data/types';
 import { RichText } from '@/components/RichText';
 import { SessionStats } from '@/components/SessionStats';
+import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { hasSessionStats } from '@/features/activity/format';
 import { requestSection } from '@/features/navigation/swipeOrder';
 import { goToTab } from '@/features/navigation/startTab';
@@ -58,14 +59,20 @@ const KIND_TOPIC: Record<Post['kind'], QuestionTopic | 'all'> = {
   clip: 'technique', match: 'strategy', session: 'fitness', note: 'all', gear: 'gear', milestone: 'mental',
 };
 
-const KIND_META: Record<Post['kind'], { label: string; icon: keyof typeof Ionicons.glyphMap; tint: string }> = {
-  clip: { label: 'Clip', icon: 'videocam-outline', tint: colors.brand },
-  match: { label: 'Set play', icon: 'trophy-outline', tint: colors.brand },
-  session: { label: 'Session', icon: 'barbell-outline', tint: colors.court },
-  note: { label: 'Note', icon: 'chatbubble-ellipses-outline', tint: colors.hard },
-  gear: { label: 'Gear', icon: 'pricetag-outline', tint: colors.clay },
-  milestone: { label: 'Milestone', icon: 'flag-outline', tint: colors.warning },
+/** An Ionicon, or 'court' for the court drawn the app's way (the game itself). */
+type KindIcon = keyof typeof Ionicons.glyphMap | 'court';
+type KindMeta = { label: string; icon: KindIcon; tint: keyof typeof colors };
+// Tints are palette slots, looked up as the card draws: a colour read once at
+// load would stay the light theme's on every other court.
+const KIND_META: Record<Post['kind'], KindMeta> = {
+  clip: { label: 'Clip', icon: 'videocam-outline', tint: 'brand' },
+  match: { label: 'Set play', icon: 'trophy-outline', tint: 'brand' },
+  session: { label: 'Session', icon: 'barbell-outline', tint: 'court' },
+  note: { label: 'Note', icon: 'chatbubble-ellipses-outline', tint: 'hard' },
+  gear: { label: 'Gear', icon: 'pricetag-outline', tint: 'clay' },
+  milestone: { label: 'Milestone', icon: 'flag-outline', tint: 'warning' },
 };
+const TENNIS_META: KindMeta = { label: 'Tennis', icon: 'court', tint: 'court' };
 
 function PostCardInner({
   onComment,
@@ -87,8 +94,10 @@ function PostCardInner({
   const [menuOpen, setMenuOpen] = useState(false);
   // The tutorial never starts under this menu.
   useHoldTour(menuOpen);
-  // A post carrying a tennis session (a tracker's, or one from your log) is labelled for the game itself, not as a generic session.
-  const meta = post.session?.activityId || (post.session?.sessionId && post.session.kind !== 'fitness') ? { label: 'Tennis', icon: 'tennisball-outline' as const, tint: colors.court } : KIND_META[post.kind];
+  // A post carrying a tennis session (a tracker's, or one from your log) is labelled for the game itself, not as a generic session:
+  // the court, as in Your sessions; the stopwatch stays for the time and stats under it.
+  const kind = post.session?.activityId || (post.session?.sessionId && post.session.kind !== 'fitness') ? TENNIS_META : KIND_META[post.kind];
+  const meta = { ...kind, tint: colors[kind.tint] };
   // The heart fills on the tap; the store's own redraw follows without changing anything on screen.
   const like = useOptimisticToggle(`p:${post.id}`, liked, onToggleLike);
 
@@ -154,7 +163,9 @@ function PostCardInner({
           onPress={() => { requestSection('/discuss', 'discussions'); requestSection('/discuss#topic', KIND_TOPIC[post.kind]); goToTab('/discuss'); }}
           style={[styles.kindRow, { borderColor: `${meta.tint}55` }]}
         >
-          <Ionicons name={meta.icon} size={13} color={meta.tint} />
+          {meta.icon === 'court'
+            ? <View style={styles.kindGlyph}><CourtGlyph size={10.4} color={meta.tint} /></View>
+            : <Ionicons name={meta.icon} size={13} color={meta.tint} />}
           <Text style={[styles.kindLabel, { color: meta.tint }]}>{meta.label}</Text>
           <Ionicons name="chevron-forward" size={11} color={meta.tint} />
         </Tappable>
@@ -287,6 +298,8 @@ const styleDefinitions = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
   },
+  // The court is narrower than an icon: as wide as one, so the label sits where it always did.
+  kindGlyph: { width: 13, alignItems: 'center' },
   kindLabel: { ...typography.caption, fontSize: 12, letterSpacing: 0 },
   text: { ...typography.body, color: colors.text, lineHeight: 22 },
   detailBox: {

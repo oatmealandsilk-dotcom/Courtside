@@ -187,7 +187,7 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
       }
       setCourts(list);
     } catch {
-      showToast({ title: 'Could not load courts', body: 'Check your connection and try again.', icon: 'tennisball-outline' });
+      showToast({ title: 'Could not load courts', body: 'Check your connection and try again.', icon: 'cloud-offline-outline' });
     } finally {
       setCourtsLoading(false);
       setCourtsLoads((n) => n + 1);

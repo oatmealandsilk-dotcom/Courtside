@@ -21,6 +21,7 @@ import { confirmUnfollow } from '@/lib/confirm';
 import type { Notification, NotificationKind, PostKind } from '@/data/types';
 import { colors, radius, spacing, surfaceColorFor, typography } from '@/theme';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
+import { HitGlyph } from '@/components/HitGlyph';
 import { showCourtOnMap } from '@/features/players/courtLink';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 
@@ -35,7 +36,8 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
  * so you can still see what was new.
  */
 
-const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap; tint: keyof typeof colors }> = {
+// 'hit' is the app's own hit mark (HitGlyph), the one the map, the hit cards and Settings use.
+const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap | 'hit'; tint: keyof typeof colors }> = {
   like: { name: 'heart', tint: 'danger' },
   comment: { name: 'chatbubble', tint: 'info' },
   'comment-reply': { name: 'chatbubble-ellipses', tint: 'info' },
@@ -57,16 +59,19 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap; tin
   'upvote-reply': { name: 'arrow-up', tint: 'brand' },
   milestone: { name: 'flame', tint: 'warning' },
   joined: { name: 'hand-right', tint: 'court' },
-  'hit-join': { name: 'tennisball', tint: 'brand' },
-  'hit-match': { name: 'people', tint: 'brand' },
-  activity: { name: 'tennisball', tint: 'court' },
-  'map-friend-hit': { name: 'tennisball', tint: 'brand' },
+  'hit-join': { name: 'hit', tint: 'brand' },
+  'hit-match': { name: 'hit', tint: 'brand' },
+  // The outline: filled, the dial closes up at badge size.
+  activity: { name: 'stopwatch-outline', tint: 'court' },
+  'map-friend-hit': { name: 'hit', tint: 'brand' },
   'map-new-hit': { name: 'navigate', tint: 'brand' },
   'map-new-player': { name: 'location', tint: 'court' },
   // The court's own heart: the one you tapped to follow it.
   'court-activity': { name: 'heart', tint: 'court' },
   'session-tag': { name: 'pricetag', tint: 'court' },
 };
+// The hit mark fills the badge's inside (19 less its 2pt rim on each side), drawn bold for that size.
+const HIT_BADGE = 14;
 
 const VERB: Record<NotificationKind, string> = {
   like: 'liked your post',
@@ -359,7 +364,9 @@ export default function Notifications() {
                     </View>
                   ) : <Avatar name={nameOf(first)} seed={seedOf(first)} uri={photoOf(first)} size={44} />}
                   <View style={[styles.badge, { backgroundColor: colors[icon.tint] }]}>
-                    <Ionicons name={icon.name} size={11} color={colors.brandInk} />
+                    {icon.name === 'hit'
+                      ? <HitGlyph size={HIT_BADGE} color={colors.brandInk} rim={colors[icon.tint]} />
+                      : <Ionicons name={icon.name} size={11} color={colors.brandInk} />}
                   </View>
                 </View>
 

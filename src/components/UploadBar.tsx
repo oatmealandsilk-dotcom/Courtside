@@ -101,7 +101,7 @@ export function UploadBar() {
     <Reanimated.View pointerEvents="box-none" style={[styles.wrap, { top: insets.top + spacing.xs }, slideStyle]}>
       <Pressable accessibilityRole={shown.state === 'done' ? 'link' : 'text'} accessibilityLabel={shown.state === 'done' ? 'See it at the top of your feed' : title} disabled={shown.state !== 'done'} onPress={() => { goHome(); revealPost(shown.id); }} style={styles.card}>
         <View style={styles.row}>
-          {shown.thumb ? <Image accessibilityIgnoresInvertColors source={{ uri: shown.thumb }} style={styles.thumb} /> : <View style={[styles.thumb, styles.thumbBlank]}><Ionicons name="tennisball" size={18} color={colors.brand} /></View>}
+          {shown.thumb ? <Image accessibilityIgnoresInvertColors source={{ uri: shown.thumb }} style={styles.thumb} /> : <View style={[styles.thumb, styles.thumbBlank]}><Ionicons name="cloud-upload-outline" size={18} color={colors.brand} /></View>}
           <View style={{ flex: 1 }}>
             <Text style={styles.title} numberOfLines={1}>{title}</Text>
             <Text style={styles.body} numberOfLines={2}>{shown.state === 'done' ? 'Tap to see it.' : shown.state === 'failed' ? (shown.reason ?? 'Check your connection and try again.') : shown.label}</Text>

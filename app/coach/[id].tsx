@@ -135,7 +135,7 @@ export default function CoachDetail() {
             <View key={c} style={styles.fact}><Ionicons name="checkmark" size={14} color={colors.brand} /><Text style={styles.factText}>{c}</Text></View>
           ))}
           {coach.specialties.length ? (
-            <View style={styles.fact}><Ionicons name="tennisball-outline" size={14} color={colors.brand} /><Text style={styles.factText}>{coach.specialties.map((x) => SPECIALTY_LABEL[x] ?? x).join(', ')}{coach.yearsCoaching ? ` · ${coach.yearsCoaching} years coaching` : ''}</Text></View>
+            <View style={styles.fact}><Ionicons name="clipboard-outline" size={14} color={colors.brand} /><Text style={styles.factText}>{coach.specialties.map((x) => SPECIALTY_LABEL[x] ?? x).join(', ')}{coach.yearsCoaching ? ` · ${coach.yearsCoaching} years coaching` : ''}</Text></View>
           ) : null}
         </View>
       ) : null}

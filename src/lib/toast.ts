@@ -4,7 +4,7 @@ export interface ToastMessage {
   id: number;
   title: string;
   body?: string;
-  /** Ionicons glyph name. */
+  /** Ionicons glyph name, or 'hit' for the app's own hit mark (HitGlyph). */
   icon?: string;
   /** Where a tap on the toast goes. */
   href?: string;

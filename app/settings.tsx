@@ -17,6 +17,7 @@ import { replayTour } from '@/features/tour/tourStore';
 import { TOUR_ON } from '@/features/tour/tourSeen';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { notKnownAdult } from '@/features/players/age';
+import { HitGlyph } from '@/components/HitGlyph';
 
 interface Row {
   icon: keyof typeof Ionicons.glyphMap;
@@ -72,7 +73,7 @@ export default function Settings() {
         { icon: 'paper-plane-outline' as const, label: 'Messages', detail: 'To quiet just one chat, mute it from its details', toggle: { value: prefs.pushMessages, onChange: (v: boolean) => actions.setPref('pushMessages', v) } },
         { icon: 'heart-outline' as const, label: 'Likes and comments', toggle: { value: prefs.pushLikes, onChange: (v: boolean) => actions.setPref('pushLikes', v) } },
         { icon: 'chatbubble-ellipses-outline' as const, label: 'Coach replies', toggle: { value: prefs.pushCoach, onChange: (v: boolean) => actions.setPref('pushCoach', v) } },
-        ...(tennis.whoop ? [{ icon: 'tennisball-outline' as const, label: 'Tennis sessions', detail: 'An alert when WHOOP picks one up', toggle: { value: prefs.pushActivity, onChange: (v: boolean) => actions.setPref('pushActivity', v) } }] : []),
+        ...(tennis.whoop ? [{ icon: 'stopwatch-outline' as const, label: 'Tennis sessions', detail: 'An alert when WHOOP picks one up', toggle: { value: prefs.pushActivity, onChange: (v: boolean) => actions.setPref('pushActivity', v) } }] : []),
       ],
     }]),
     // The map's own alerts, each with its own switch. On a computer too: they also land in your Notifications.
@@ -82,7 +83,7 @@ export default function Settings() {
       note: mapAdult ? 'At most one a day from the map, and one a day from your courts.' : 'At most one a day.',
       rows: [
         ...(mapAdult ? [
-          { icon: 'tennisball-outline' as const, label: 'Friends up for a hit', detail: 'Someone you follow turns on Open to hit nearby', toggle: { value: prefs.pushMapFriends, onChange: (v: boolean) => actions.setPref('pushMapFriends', v) } },
+          { icon: 'people-outline' as const, leading: <HitGlyph size={20} color={colors.textMuted} />, label: 'Friends up for a hit', detail: 'Someone you follow turns on Open to hit nearby', toggle: { value: prefs.pushMapFriends, onChange: (v: boolean) => actions.setPref('pushMapFriends', v) } },
           { icon: 'navigate-outline' as const, label: 'New open hits', detail: 'A hit posted within 15 miles of you', toggle: { value: prefs.pushMapHits, onChange: (v: boolean) => actions.setPref('pushMapHits', v) } },
           { icon: 'location-outline' as const, label: 'New players nearby', detail: 'A new player shares their spot near you', toggle: { value: prefs.pushMapPlayers, onChange: (v: boolean) => actions.setPref('pushMapPlayers', v) } },
         ] : []),

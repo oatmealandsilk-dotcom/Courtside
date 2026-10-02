@@ -5037,7 +5037,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (notes.length) setState((prev) => ({ ...prev, notifications: [...notes.filter((n) => !prev.notifications.some((x) => x.id === n.id)), ...prev.notifications] }));
     // The newest one gets a banner; the rest wait in Notifications.
     const a = (list ?? stateRef.current.detectedActivities).filter((x) => filed.includes(x.id)).sort((x, y) => (x.startedAt < y.startedAt ? 1 : -1))[0];
-    if (a) showToast({ title: 'Tennis detected', body: `${duration(a.minutes)} from ${fromWho(a)}. Tap to log it.`, icon: 'tennisball-outline', href: `/log-session?activity=${a.id}` });
+    if (a) showToast({ title: 'Tennis detected', body: `${duration(a.minutes)} from ${fromWho(a)}. Tap to log it.`, icon: 'stopwatch-outline', href: `/log-session?activity=${a.id}` });
   }, []);
   const checkForActivities = useCallback((force = false) => checkWith(force, stateRef.current.integrations), [checkWith]);
 

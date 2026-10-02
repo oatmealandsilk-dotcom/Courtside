@@ -659,7 +659,7 @@ export default function Compose() {
                   )}
                   {/* A Post or a Clip can carry one of your sessions: a row to pick it, then its stats in the row's place. */}
                   {statsRow && !statsPick ? (
-                    <FormRow line icon="tennisball-outline" label="Add session stats" chevron onPress={pickStats} />
+                    <FormRow line icon="stopwatch-outline" label="Add session stats" chevron onPress={pickStats} />
                   ) : null}
                   {statsRow && statsPick ? (
                     <View style={styles.statsCard}>

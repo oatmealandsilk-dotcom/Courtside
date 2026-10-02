@@ -8,6 +8,7 @@ import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Glass } from '@/components/ui/Glass';
+import { HitGlyph } from '@/components/HitGlyph';
 import { useBelowBanner } from '@/features/messages/bannerSpace';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { goHome } from '@/lib/goBack';
@@ -114,7 +115,7 @@ export function Toast() {
   }));
 
   if (!toast) return null;
-  const icon = (toast.icon ?? 'checkmark') as keyof typeof Ionicons.glyphMap;
+  const icon = toast.icon ?? 'checkmark';
   const action = toast.action;
   return (
     <GestureDetector gesture={flick}>
@@ -137,7 +138,10 @@ export function Toast() {
                 }}
                 style={[styles.info, action && styles.infoBeforeAction]}
               >
-                <Ionicons name={icon} size={16} color={colors.text} />
+                {/* 'hit' is the app's own hit mark, as on the map and the hit cards. */}
+                {icon === 'hit'
+                  ? <HitGlyph size={17} color={colors.text} />
+                  : <Ionicons name={icon as keyof typeof Ionicons.glyphMap} size={16} color={colors.text} />}
                 <View style={styles.words}>
                   {/* Cut to one line only when it is a quick note; one that has to be read wraps. */}
                   <Text style={styles.title} numberOfLines={toast.long ? 3 : 1}>{toast.title}</Text>

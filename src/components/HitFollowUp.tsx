@@ -113,7 +113,7 @@ export function HitFollowUp({ enabled }: { enabled: boolean }) {
       const open = () => router.push({ pathname: '/log-session', params });
       toastId.current = showToast({
         title: `How was the hit at ${shortPlace(prefill.place)}?`,
-        icon: 'tennisball-outline',
+        icon: 'hit',
         href: tracked ? `/log-session?activity=${tracked.id}&hit=${first.id}` : `/log-session?hit=${first.id}`,
         action: { label: 'Log it', onPress: open },
         holdMs: HOLD_MS,
