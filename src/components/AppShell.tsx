@@ -17,7 +17,8 @@ import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { isStartTab } from '@/features/navigation/startTab';
 import { useCurtainDown } from '@/features/feed/warmup';
 import { useApp } from '@/store/AppContext';
-import { recallAnswered } from '@/features/age/ageCheck';
+import { claimCarriedBirthDate, isDeviceBlocked, recallAnswered } from '@/features/age/ageCheck';
+import { auth as remoteAuth } from '@/data/remote';
 import { setCrashScreen } from '@/lib/crashReporting';
 import { listenForPushTaps, registerForPush } from '@/features/push/push';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -74,7 +75,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [pathname]);
-  const { currentUserId, currentUser, ready, authResolved, remoteLoaded, onboardingComplete, termsVersion } = useApp();
+  const { currentUserId, currentUser, ready, authResolved, remoteLoaded, onboardingComplete, termsVersion, actions } = useApp();
   // Crash reports say which screen they happened on.
   useEffect(() => { setCrashScreen(pathname); }, [pathname]);
   // Alerts: a tap on one opens what it is about. Once someone is signed in
@@ -92,10 +93,43 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // before anything else, wherever it opens. (An answer given on this phone
   // counts too, in case the database's side of the check is not added yet.)
   const [answered, setAnswered] = useState<string | null | undefined>(undefined);
+  // Only once the account's own record is in is it known whether its age is on file.
+  const accountIn = remoteLoaded && !!currentUser;
   useEffect(() => {
     setAnswered(undefined);
-    if (currentUserId) void recallAnswered(currentUserId).then(setAnswered);
-  }, [currentUserId, currentUser?.ageGroup]);
+    if (!currentUserId) return;
+    let stale = false;
+    void (async () => {
+      let answer: string | null = await recallAnswered(currentUserId);
+      // A birthday given at sign-up and not saved yet: typed on the email
+      // form (it rides on the account, which can open before it is saved or
+      // only from the email link), or typed before tapping Apple or Google
+      // (carried on this phone for a few minutes). It is saved now, the same
+      // way the birthday page saves one, so whoever typed it is not asked again.
+      if (isSupabaseConfigured && accountIn) {
+        const who = await remoteAuth.signedInUser().catch(() => null);
+        // A phone that has had an under-13 answer takes no birthday from
+        // anywhere: an account with no age goes to the birthday page, which
+        // says CourtSide is not available.
+        const blocked = await isDeviceBlocked();
+        if (!stale && who?.id === currentUserId) {
+          // What Apple or Google carried is used up by the first account to open after it.
+          const carried = claimCarriedBirthDate({ createdAt: who.createdAt });
+          const typed = who.birthDate ?? carried;
+          // (An answer only this phone remembers, from a save that did not
+          // reach the server, is saved again here too.)
+          if (typed && !currentUser?.ageGroup && !blocked) {
+            const saved = await actions.confirmBirthDate(typed).catch(() => null);
+            if (saved === 'teen' || saved === 'adult') answer = saved;
+          }
+          // The form's birthday rode on the account only to get here; with the age on file it comes off.
+          if (who.birthDate && currentUser?.ageGroup) void remoteAuth.forgetSignUpBirthDate().catch(() => undefined);
+        }
+      }
+      if (!stale) setAnswered(answer);
+    })();
+    return () => { stale = true; };
+  }, [currentUserId, currentUser?.ageGroup, accountIn]);
   const needsBirthday = isSupabaseConfigured && !!currentUserId && remoteLoaded && !!currentUser && !currentUser.ageGroup
     && answered === null && !['/birthday', '/sign-in'].includes(pathname);
   // The terms: an account that has not agreed to the current ones — a Google

@@ -925,6 +925,12 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
     // settings row and goes back into your profile here, on your phone only.
     const ownConstraints = data.userState?.constraints;
     if (ownConstraints) users = users.map((u) => (u.id === me ? { ...u, profile: { ...u.profile, constraints: ownConstraints } } : u));
+    // Your age, once known, never goes back to unknown on the server. A load
+    // that set off just before your birthday was saved (sign-up starts one
+    // the moment the account exists) must not wipe it here, or the age
+    // check would ask again.
+    const ownAge = prev.users.find((u) => u.id === me)?.ageGroup;
+    if (ownAge) users = users.map((u) => (u.id === me && !u.ageGroup ? { ...u, ageGroup: ownAge } : u));
     // The profile row is created by a trigger; if it has not landed yet,
     // stand in for it so the screens have someone to show.
     if (!remoteUsers.has(me) && !fromSnapshot) {
@@ -1543,7 +1549,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [signIn]);
 
   const signUp = useCallback(async (email: string, password: string, name: string, handle: string, birthDate?: string) => {
-    const session = await remoteAuth.signUp(email, password, name, handle);
+    const session = await remoteAuth.signUp(email, password, name, handle, birthDate);
     if (!session) return 'confirm' as const;
     // The birthday typed on the sign-up form is kept before the account
     // opens, so it is never asked for a second time.

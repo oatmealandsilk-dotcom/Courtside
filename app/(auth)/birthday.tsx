@@ -23,12 +23,15 @@ export default function Birthday() {
   const styles = useThemedStyles(styleDefinitions);
   // Clear of the status bar and the home bar, the same as every page before the app.
   const space = useGateSpace();
-  const { currentUserId, actions } = useApp();
+  const { currentUserId, currentUser, actions } = useApp();
   const [date, setDate] = useState({ month: '', day: '', year: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [blocked, setBlocked] = useState(false);
   useEffect(() => { void isDeviceBlocked().then((b) => { if (b) setBlocked(true); }); }, []);
+  // The age is on file after all (the sign-up form's birthday was saved a
+  // moment after this page opened): carry on into the app rather than ask again.
+  useEffect(() => { if (currentUser?.ageGroup && !blocked) leave(() => router.replace('/')); }, [currentUser?.ageGroup, blocked, leave]);
 
   const submit = async () => {
     if (busy) return;

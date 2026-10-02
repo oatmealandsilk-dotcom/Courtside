@@ -2,7 +2,8 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { Wash } from '@/components/Wash';
 import React, { useEffect, useState } from 'react';
 import { BirthDateField } from '@/components/BirthDateField';
-import { blockDevice, isDeviceBlocked, toBirthDate, yearsOld } from '@/features/age/ageCheck';
+import { blockDevice, carryBirthDate, dropCarriedBirthDate, isDeviceBlocked, toBirthDate, yearsOld } from '@/features/age/ageCheck';
+import { readableInk } from '@/lib/badges';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { Submit } from '@/components/sheet/SheetForm';
@@ -91,6 +92,8 @@ export default function SignIn() {
   const birthDate = toBirthDate(birth.month, birth.day, birth.year);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Apple and Google sit at the top of the form, so what went wrong with them is said up there too.
+  const [providerError, setProviderError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   // Coming back from Google, the session can land a moment after this screen
@@ -110,7 +113,7 @@ export default function SignIn() {
       const stored = sessionStorage.getItem('courtside-auth-error');
       const message = fromHash.get('error_description') || fromQuery.get('error_description') || stored;
       if (message) {
-        setError(`Google sign-in did not go through: ${message.replace(/\+/g, ' ')}`);
+        setProviderError(`Google sign-in did not go through: ${message.replace(/\+/g, ' ')}`);
         sessionStorage.removeItem('courtside-auth-error');
       }
     } catch { /* No storage, no message to show. */ }
@@ -134,17 +137,43 @@ export default function SignIn() {
   // Apple's own button, iPhone only, above Google: App Review asks for it wherever another company's sign-in is offered.
   const [appleReady, setAppleReady] = useState(false);
   useEffect(() => { if (Platform.OS === 'ios') AppleAuthentication.isAvailableAsync().then(setAppleReady).catch(() => setAppleReady(false)); }, []);
+  // Apple's button comes only in black or white: black on the light pages, white on the dark ones (Night, New York).
+  const appleLook = readableInk(colors.bg) === '#FFFFFF' ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK;
+  // A birthday already typed on the sign-up form goes along with Apple or
+  // Google, so the age check does not ask for it again once the account
+  // opens. Too young stops here, the same as the form's own button.
+  const carryBirthday = async (): Promise<'carried' | 'none' | 'too-young'> => {
+    // Each tap starts clean: nothing an earlier tap (or someone else's) carried goes along.
+    dropCarriedBirthDate();
+    if (mode !== 'sign-up' || !birthDate) return 'none';
+    if (yearsOld(birthDate) < 13) {
+      await blockDevice();
+      setAgeBlocked(true);
+      setProviderError("Sorry, you can't create a CourtSide account.");
+      return 'too-young';
+    }
+    // A phone that has had an under-13 answer carries nothing: a new account
+    // meets the birthday page, which says CourtSide is not available.
+    if (ageBlocked || await isDeviceBlocked()) return 'none';
+    carryBirthDate(birthDate);
+    return 'carried';
+  };
   const apple = async () => {
     if (busy || via) return;
     setVia('apple');
     setError(null);
+    setProviderError(null);
     setNotice(null);
+    const carried = await carryBirthday();
+    if (carried === 'too-young') { setVia(null); return; }
     try {
       if (await actions.signInWithApple()) { leave(() => router.replace('/')); return; }
+      if (carried === 'carried') dropCarriedBirthDate();
       setVia(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      if (!/cancel/i.test(message)) setError(message);
+      if (!/cancel/i.test(message)) setProviderError(message);
+      if (carried === 'carried') dropCarriedBirthDate();
       setVia(null);
     }
   };
@@ -152,14 +181,18 @@ export default function SignIn() {
     if (busy || via) return;
     setVia('google');
     setError(null);
+    setProviderError(null);
     setNotice(null);
+    const carried = await carryBirthday();
+    if (carried === 'too-young') { setVia(null); return; }
     try {
       const done = await actions.signInWithGoogle();
       // On the web a success leaves the page for Google's; on a phone the app opens here.
       if (done && Platform.OS !== 'web') { leave(() => router.replace('/')); return; }
-      if (!done) setVia(null);
+      if (!done) { if (carried === 'carried') dropCarriedBirthDate(); setVia(null); }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not sign in with Google.');
+      setProviderError(err instanceof Error ? err.message : 'Could not sign in with Google.');
+      if (carried === 'carried') dropCarriedBirthDate();
       setVia(null);
     }
   };
@@ -189,6 +222,9 @@ export default function SignIn() {
         if (!birthDate) return;
         // Too young: no account is made, and this phone will not offer one again.
         if (yearsOld(birthDate) < 13) { await blockDevice(); setAgeBlocked(true); return; }
+        // The birthday rides on the new account itself (see auth.signUp), so
+        // nothing carried for Apple or Google earlier applies to this one.
+        dropCarriedBirthDate();
         const result = await actions.signUp(email, password, name, cleanHandle, birthDate);
         if (result === 'confirm') {
           setSent({ kind: 'confirm', to: email.trim() });
@@ -206,7 +242,7 @@ export default function SignIn() {
 
   const chooser = remembered.length > 0 && !sent;
   const welcome = !add && !started && !sent && !chooser && !useAnother;
-  const begin = (next: Mode) => { setMode(next); setStarted(true); setError(null); };
+  const begin = (next: Mode) => { setMode(next); setStarted(true); setError(null); setProviderError(null); };
   const title = chooser ? 'Welcome back' : mode === 'sign-up' ? 'Create your account' : 'Sign in';
   const line = chooser ? 'Pick an account to carry on.' : mode === 'sign-up' ? 'Free, and it takes a minute.' : 'Tennis clips, people to hit with, and real coaches.';
 
@@ -291,7 +327,7 @@ export default function SignIn() {
           ) : (
             <>
               {started && !chooser ? (
-                <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => { setStarted(false); setError(null); }} hitSlop={12} style={styles.back}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => { setStarted(false); setError(null); setProviderError(null); }} hitSlop={12} style={styles.back}>
                   <Ionicons name="chevron-back" size={22} color={colors.text} />
                 </Pressable>
               ) : null}
@@ -325,7 +361,7 @@ export default function SignIn() {
                       </Pressable>
                     </Animated.View>
                   ))}
-                  {error ? <Text style={styles.error}>{error}</Text> : null}
+                  {error || providerError ? <Text style={styles.error}>{error ?? providerError}</Text> : null}
                   <Pressable accessibilityRole="button" onPress={() => setUseAnother(true)} style={({ pressed }) => [styles.secondary, { marginTop: spacing.sm }, pressed && styles.pressed]}>
                     <Ionicons name="add" size={18} color={colors.text} />
                     <Text style={styles.secondaryText}>Use another account</Text>
@@ -338,6 +374,34 @@ export default function SignIn() {
                 <View style={styles.form}>
                   {isSupabaseConfigured ? (
                     <>
+              {/* Apple and Google first, full width and the same size, Apple on
+                  top (App Review wants it at least as easy to find as any other
+                  company's sign-in), then a clear line before the email form. */}
+              {appleReady ? (
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={mode === 'sign-up' ? AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP : AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                  buttonStyle={appleLook}
+                  cornerRadius={26}
+                  style={styles.provider}
+                  onPress={apple}
+                />
+              ) : null}
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={mode === 'sign-up' ? 'Sign up with Google' : 'Continue with Google'}
+                        onPress={google}
+                        disabled={busy || !!via}
+                        style={({ pressed }) => [styles.secondary, styles.provider, styles.google, pressed && styles.pressed, (busy || !!via) && { opacity: 0.6 }]}
+                      >
+                        <Ionicons name="logo-google" size={18} color={colors.text} />
+                        <Text style={styles.secondaryText}>{mode === 'sign-up' ? 'Sign up with Google' : 'Continue with Google'}</Text>
+                      </Pressable>
+                      {providerError ? <Text style={styles.error}>{providerError}</Text> : null}
+                      <View style={styles.divider}>
+                        <View style={styles.rule} />
+                        <Text style={styles.dividerText}>or {mode === 'sign-up' ? 'sign up' : 'sign in'} with email</Text>
+                        <View style={styles.rule} />
+                      </View>
               {mode === 'sign-up' ? (
                 <>
                   <Field soft value={name} onChangeText={setName} placeholder="Name" autoCapitalize="words" />
@@ -345,7 +409,7 @@ export default function SignIn() {
                     soft
                     value={handle}
                     onChangeText={setHandle}
-                    placeholder="Handle"
+                    placeholder="Username"
                     autoCapitalize="none"
                     hint={handleGone ? `@${cleanHandle} is taken. Try another.`
                       : handleStatus === 'ok' ? `@${cleanHandle} is free`
@@ -367,7 +431,7 @@ export default function SignIn() {
                     </>
                   ) : (
             <Field
-              label="Handle"
+              label="Username"
               value={demoHandle}
               onChangeText={setDemoHandle}
               autoCapitalize="none"
@@ -379,29 +443,9 @@ export default function SignIn() {
                   <Submit label={!isSupabaseConfigured ? 'Enter' : mode === 'sign-in' ? 'Sign in' : 'Create account'} busyLabel={mode === 'sign-up' ? 'Creating your account…' : 'Signing in…'} onPress={() => { void submit(); }} disabled={!ready} busy={busy} />
                   {isSupabaseConfigured ? (
                     <>
-                      <Text style={styles.or}>or</Text>
-              {appleReady ? (
-                <AppleAuthentication.AppleAuthenticationButton
-                  buttonType={mode === 'sign-up' ? AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP : AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-                  cornerRadius={12}
-                  style={styles.apple}
-                  onPress={apple}
-                />
-              ) : null}
                       <Pressable
                         accessibilityRole="button"
-                        accessibilityLabel="Continue with Google"
-                        onPress={google}
-                        disabled={busy || !!via}
-                        style={({ pressed }) => [styles.secondary, pressed && styles.pressed, (busy || !!via) && { opacity: 0.6 }]}
-                      >
-                        <Ionicons name="logo-google" size={18} color={colors.text} />
-                        <Text style={styles.secondaryText}>Continue with Google</Text>
-                      </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => { setMode(mode === 'sign-in' ? 'sign-up' : 'sign-in'); setError(null); setNotice(null); }}
+                        onPress={() => { setMode(mode === 'sign-in' ? 'sign-up' : 'sign-in'); setError(null); setProviderError(null); setNotice(null); }}
                         style={styles.switch}
                       >
                         <Text style={styles.switchText}>
@@ -469,10 +513,16 @@ const styleDefinitions = StyleSheet.create({
   forgot: { alignSelf: 'flex-end', paddingVertical: 2 },
   link: { ...typography.smallStrong, fontSize: 14, color: colors.brand },
   linkButton: { alignSelf: 'center', paddingVertical: spacing.sm },
-  or: { ...typography.small, color: colors.textFaint, textAlign: 'center' },
   error: { ...typography.small, color: colors.danger },
   notice: { ...typography.small, color: colors.success },
-  apple: { height: 52, width: '100%' },
+  // Apple's and Google's buttons: the same full width and height, so neither is the smaller way in.
+  provider: { height: 52, width: '100%' },
+  // Google's is outlined, so it reads as a button and not as one more white box to type in.
+  google: { borderWidth: 1, borderColor: colors.borderStrong },
+  // "or sign up with email", between two hairlines.
+  divider: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginVertical: spacing.xs },
+  rule: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.borderStrong },
+  dividerText: { ...typography.small, color: colors.textMuted },
   switch: { alignSelf: 'center', paddingVertical: spacing.sm },
   switchText: { ...typography.small, fontSize: 14, color: colors.textMuted },
   switchLink: { ...typography.smallStrong, fontSize: 14, color: colors.brand },
