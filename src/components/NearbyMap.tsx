@@ -95,8 +95,10 @@ export function NearbyMap(props: NearbyMapProps) {
     const list: CanvasMarker[] = (expanded ? model.courts : []).map((c) => ({ id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, c.id === selectedCourtId), z: c.id === selectedCourtId ? 4 : 1 }));
     // The still card: your city's courts as quiet dots, under everything.
     if (!expanded) for (const c of model.cardCourts) list.push({ id: `d:${c.id}`, lat: c.lat, lng: c.lng, html: courtDotHtml(), z: 0 });
-    // Open hits as flags, hung above any court pin at the same spot: the still card shows the soonest few near you.
-    for (const h of expanded ? model.hits : model.cardFlags) {
+    // Open hits as flags, hung above any court pin at the same spot — on the
+    // full map only. On the still card the flags crowded the city's name in the
+    // middle, and the hits are listed just below it anyway (Oct 2).
+    for (const h of expanded ? model.hits : []) {
       const on = h.hit.id === selectedHitId;
       list.push({ id: `h:${h.hit.id}`, lat: h.at.lat, lng: h.at.lng, html: hitPinHtml(h.hit, on), anchor: 'bottom', offsetY: HIT_LIFT, z: on ? 5 : 2 });
     }
