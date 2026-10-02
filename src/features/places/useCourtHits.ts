@@ -10,11 +10,11 @@ import { useApp } from '@/store/AppContext';
  * teen rule), then only those at this court.
  */
 export function useCourtHits(place: { id?: string; lat: number; lng: number } | null): HitRequest[] {
-  const { hitRequests, users, followingIds, currentUserId, blockedIds, mutedIds } = useApp();
+  const { hitRequests, users, followingIds, currentUserId, blockedIds, mutedIds, seeing } = useApp();
   return useMemo(() => {
     if (!place) return [];
     const usersById = new Map(users.map((u) => [u.id, u]));
-    const seen = openHits(hitRequests, { blockedIds, mutedIds }).filter((h) => canSeeHitAt(h, { usersById, followingIds, currentUserId }));
+    const seen = openHits(hitRequests, { blockedIds, mutedIds }).filter((h) => canSeeHitAt(h, { usersById, followingIds, currentUserId, seeing }));
     return hitsAtCourt(seen, place);
-  }, [hitRequests, users, followingIds, currentUserId, blockedIds, mutedIds, place?.id, place?.lat, place?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hitRequests, users, followingIds, currentUserId, blockedIds, mutedIds, seeing, place?.id, place?.lat, place?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 }

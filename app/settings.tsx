@@ -8,6 +8,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Screen, Toggle } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
+import { askWhoSeesYou, canChooseVisibility } from '@/features/players/mapPrivacy';
 import { useTheme, themeList, themes, type ThemeName } from '@/theme/ThemeProvider';
 import { Wash } from '@/components/Wash';
 import { colors, radius, spacing, typography, lift } from '@/theme';
@@ -40,9 +41,11 @@ interface Row {
  */
 export default function Settings() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras } = useApp();
+  const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras, mapLive, mapVisibility } = useApp();
   const [locationNote, setLocationNote] = useState('');
   const toggleLocation = async (next: boolean) => {
+    // Never said who can see you on the map (migration 63): that comes first, the same as on the map.
+    if (next && canChooseVisibility(mapLive, currentUser) && mapVisibility === null && !(await askWhoSeesYou('first'))) return;
     setLocationNote(next ? 'Asking…' : '');
     const problem = await actions.setLocationEnabled(next);
     setLocationNote(problem ?? '');

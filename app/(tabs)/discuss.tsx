@@ -11,6 +11,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { LevelPill } from '@/components/LevelPill';
 import { NearbyMap } from '@/components/NearbyMap';
+import { UpToday, useUpToday } from '@/components/UpToday';
 import { HitGlyph } from '@/components/HitGlyph';
 import { useLocationToggle } from '@/features/players/useLocationToggle';
 import { QuestionCard, TOPIC_META } from '@/components/QuestionCard';
@@ -24,6 +25,8 @@ import { EarlyInvite } from '@/components/EarlyInvite';
 import { FollowPill } from '@/components/FollowPill';
 import { takeInviteCourt } from '@/features/invite/referral';
 import { notKnownAdult } from '@/features/players/age';
+import { askWhoSeesYouOnLaunch, canChooseVisibility } from '@/features/players/mapPrivacy';
+import { isTourOpen, useTourOpen } from '@/features/tour/tourStore';
 import { IN_TOWN_MILES } from '@/features/players/mapModel';
 import { isClosedCourt } from '@/features/players/courts';
 import { agoLabel } from '@/components/map/markers';
@@ -32,7 +35,8 @@ import { NEAR_HIT_MILES, canSeeHitAt, hitSpot, openHits as openHitsOf } from '@/
 import { labelOf, looksPublic } from '@/features/places/courtName';
 import { useCourtSearch } from '@/features/places/useCourtSearch';
 import { openCourt, playHere } from '@/features/players/courtLink';
-import { formatMiles, milesBetween } from '@/features/players/geo';
+import { formatMiles, formatSpotMiles, milesBetween } from '@/features/players/geo';
+import { isRoughSpot } from '@/features/players/positions';
 import { useMyCity } from '@/features/players/useMyCity';
 import { isOpenToHit as isOpenToHitNow } from '@/features/players/openToHit';
 import { plain } from '@/features/search/words';
@@ -78,7 +82,7 @@ const joinedLabel = (iso: string) => {
 
 function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
-  const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, followingIds, saved, actions, detectedCoords, locationEnabled, hitRequests, lastSeen, lastSeenLoaded, followedCourts, onboardingComplete } = useApp();
+  const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, followingIds, saved, actions, detectedCoords, locationEnabled, hitRequests, lastSeen, lastSeenLoaded, followedCourts, onboardingComplete, mapLive, newOnCourtside, mapVisibility, seeing, ageSaysAdult } = useApp();
   // The section lives here, not in the address: listening to the address made
   // this whole tab re-render on every route change anywhere in the app.
   // Other pages ask for a section through requestSection before navigating;
@@ -118,6 +122,19 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const underline = useTabUnderline(sectionIndex, 2, tabWidth);
   const [search, setSearch] = useState('');
   const location = useLocationToggle();
+  // Already sharing your location but never asked who can see you on the
+  // map (migration 63; from before it, or an older version of the app): the
+  // question comes here, where the app opens, a moment after the page has
+  // drawn, once per launch until answered (never over the tutorial). Until
+  // then the server shows you to about a kilometre for everyone, as before.
+  const tourOpen = useTourOpen();
+  const askOnLaunch = !previewSection && section === 'players' && !!onboardingComplete && !tourOpen && locationEnabled
+    && mapVisibility === null && canChooseVisibility(mapLive, currentUser);
+  useEffect(() => {
+    if (!askOnLaunch) return undefined;
+    const t = setTimeout(() => { if (!isTourOpen()) void askWhoSeesYouOnLaunch('card'); }, 1200);
+    return () => clearTimeout(t);
+  }, [askOnLaunch]);
   // The account that threads are pulled in under (Reddit) is not a player.
   const myCity = (currentUser?.location ?? '').split(',')[0].trim().toLowerCase();
   const sameCity = (u: (typeof users)[number]) => !!myCity && (u.location ?? '').toLowerCase().startsWith(myCity);
@@ -154,8 +171,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // or muted, and only those the teen rule lets you see (as on court pages and the map).
   const seenHits = useMemo(() => {
     const usersById = new Map(users.map((u) => [u.id, u]));
-    return openHitsOf(hitRequests, { blockedIds, mutedIds }).filter((h) => canSeeHitAt(h, { usersById, followingIds, currentUserId }));
-  }, [hitRequests, users, blockedIds, mutedIds, followingIds, currentUserId]);
+    return openHitsOf(hitRequests, { blockedIds, mutedIds }).filter((h) => canSeeHitAt(h, { usersById, followingIds, currentUserId, seeing }));
+  }, [hitRequests, users, blockedIds, mutedIds, followingIds, currentUserId, seeing]);
   // Near first (within 25 km, the reach of hit matches), soonest first, with how far:
   // everything that close is near, so today's game beats next week's a mile closer.
   // A place only typed has no spot, so it follows by time (most are local); the rest wait under "Further away".
@@ -185,23 +202,40 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     if (!nearFrom) return [];
     return users
       .filter((u) => u.id !== currentUserId && !blockedIds.includes(u.id))
-      .flatMap((user) => { const seen = lastSeen[user.id]; if (!seen) return []; const miles = milesBetween(nearFrom, seen); return miles <= IN_TOWN_MILES ? [{ user, miles, seenAt: seen.seenAt }] : []; })
+      .flatMap((user) => { const seen = lastSeen[user.id]; if (!seen) return []; const miles = milesBetween(nearFrom, seen); return miles <= IN_TOWN_MILES ? [{ user, miles, seenAt: seen.seenAt, rough: isRoughSpot(seen) }] : []; })
       .sort((a, b) => a.miles - b.miles);
   }, [users, lastSeen, currentUserId, blockedIds, nearFrom?.lat, nearFrom?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
-  // "New on CourtSide": who joined in the last two weeks, newest first. Only
-  // known adults and people you already follow, so a teen is never put in
-  // front of adult strangers with a one-tap Follow; a teen viewer sees only
-  // the people they follow.
+  // "New on CourtSide": who joined in the last two weeks, newest first. With
+  // the map's round 2 on the database (migration 63) the server decides who
+  // (new_on_courtside): known adults, 16 and 17 year olds with public
+  // accounts, and anyone you already follow; never under 16. Before it, the
+  // phone works it out the old way: known adults and people you follow, so a
+  // teen is never put in front of adult strangers with a one-tap Follow; a
+  // teen viewer sees only the people they follow. Either way, nobody already
+  // listed under Near you.
   const [newOpen, setNewOpen] = useState(false);
+  const { loadNewOnCourtside } = actions;
+  const usersIn = users.length > 0;
+  useEffect(() => { if (currentUserId && usersIn) void loadNewOnCourtside(); }, [currentUserId, mapLive, usersIn, followingIds.length, loadNewOnCourtside]);
   const newPlayers = useMemo(() => {
-    const viewerAdult = !!currentUser && !notKnownAdult(currentUser);
     const near = new Set(nearPlayers.map((p) => p.user.id));
+    if (newOnCourtside) {
+      const byId = new Map(users.map((u) => [u.id, u]));
+      return newOnCourtside.flatMap((r) => { const u = byId.get(r.userId); return u && !near.has(u.id) && !blockedIds.includes(u.id) ? [u] : []; });
+    }
+    const viewerAdult = !!currentUser && !notKnownAdult(currentUser);
     const since = Date.now() - NEW_DAYS * 86_400_000;
     return users
       .filter((u) => u.id !== currentUserId && !blockedIds.includes(u.id) && !near.has(u.id) && Date.parse(u.joinedAt) >= since)
-      .filter((u) => followingIds.includes(u.id) || (viewerAdult && !notKnownAdult(u)))
+      // (Since migration 64 nobody's age but your own reaches the phone: then only people you follow.)
+      .filter((u) => followingIds.includes(u.id) || (viewerAdult && ageSaysAdult(u)))
       .sort((a, b) => b.joinedAt.localeCompare(a.joinedAt));
-  }, [users, currentUser, currentUserId, blockedIds, followingIds, nearPlayers]);
+  }, [users, currentUser, currentUserId, blockedIds, followingIds, nearPlayers, newOnCourtside, ageSaysAdult]);
+  // "Who's up today": from the map's own pins only, measured from where you
+  // are (the phone's fix, or your own last spot), never from a profile's city.
+  const ownSpot = detectedCoords ?? (currentUserId && lastSeen[currentUserId] ? { lat: lastSeen[currentUserId].lat, lng: lastSeen[currentUserId].lng } : null);
+  const upToday = useUpToday({ users, lastSeen, me: currentUserId, from: ownSpot, blockedIds });
+  const showUpToday = !!currentUser && !notKnownAdult(currentUser);
   // Nobody sharing a spot within 30 miles (once the spots have come down): the map fills up with the people you already play with.
   // Only somewhere we know: with no spot and no city, "early here" would be a guess.
   // Only for a known adult: anyone else is shown nobody's spot (migration 46),
@@ -267,6 +301,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           ? <NearbyMap me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} />
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : <View style={styles.mapStandIn} />) : null}
+        {/* Who's up today: you first (one tap, never Location), then who near you is up for a hit. */}
+        {currentUser && !search && showUpToday ? <UpToday me={currentUser} people={upToday} locationOn={location.locationOn} onLocation={ownSpot ? undefined : location.toggle} onToggle={actions.setOpenToHit} /> : null}
         {/* Nobody sharing a spot within 30 miles: the way to fill the map, right under it. */}
         {!search && early ? <EarlyInvite city={myCityName} court={inviteCourt} /> : null}
         {/* A quiet area leads with where to play (your courts, then the others
@@ -280,7 +316,6 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             <View style={styles.hitsHead}>
               <Text style={styles.playersTitle}>Open hits</Text>
               <View style={styles.hitsLinks}>
-                <Pressable accessibilityRole="link" accessibilityLabel="See open hits on the map" onPress={() => router.push('/map')} hitSlop={8}><Text style={styles.postHit}>Map</Text></Pressable>
                 {/* "Post a hit", not just "Post": a post elsewhere is a photo or clip. */}
                 <Pressable accessibilityRole="button" onPress={() => router.push('/hit-request/new')} hitSlop={8}><Text style={styles.postHit}>Post a hit</Text></Pressable>
               </View>
@@ -366,13 +401,13 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
               <Text style={styles.playersTitle}>Near you</Text>
               <Text style={styles.playersBody}>Shared their spot within 30 miles</Text>
             </View>
-            {nearPlayers.map(({ user, miles, seenAt }, index) => (
-              <Pressable key={user.id} accessibilityRole="link" accessibilityLabel={`${user.name}, ${formatMiles(miles)}, open profile`} onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
+            {nearPlayers.map(({ user, miles, seenAt, rough }, index) => (
+              <Pressable key={user.id} accessibilityRole="link" accessibilityLabel={`${user.name}, ${formatSpotMiles(miles, rough)}, open profile`} onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
                 <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} />
                 <View style={[styles.playerBody, styles.playerFollowBody, index > 0 && styles.playerLine]}>
                   <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
                     <View style={styles.playerTop}><Text style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
-                    <Text style={styles.playerMeta} numberOfLines={1}>{[formatMiles(miles), seenAt ? agoLabel(seenAt) : null, isOpenToHitNow(user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
+                    <Text style={styles.playerMeta} numberOfLines={1}>{[formatSpotMiles(miles, rough), seenAt ? agoLabel(seenAt) : null, isOpenToHitNow(user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
                   </View>
                   <FollowPill small following={followingIds.includes(user.id)} userId={user.id} onPress={() => followRow(user.id)} name={user.name.split(' ')[0]} />
                 </View>

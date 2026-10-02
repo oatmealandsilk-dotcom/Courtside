@@ -36,7 +36,7 @@ const FORMAT_LABEL: Record<HitRequest['format'], string> = { singles: 'Singles',
  */
 export default function NewHit() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, detectedCoords, users, actions } = useApp();
+  const { currentUser, detectedCoords, users, openness, actions } = useApp();
   const [closeSignal, setCloseSignal] = useState(0);
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + i); return d; }), []);
   // Late in the evening there is no hour left today: start on tomorrow.
@@ -50,8 +50,9 @@ export default function NewHit() {
   // (when it has one) so the hit shows on the court's page.
   const params = useLocalSearchParams<{ courtId?: string; courtName?: string; lat?: string; lng?: string; ask?: string }>();
   // "Ask to hit": the players it also goes to, in your chat with each. Only people you may message (an adult, or a teen who follows you).
+  // Worked out again once the server has said who may be messaged (openness, migration 64).
   const asked = useMemo(() => (params.ask ?? '').split(',').filter((id, i, all) => !!id && all.indexOf(id) === i && id !== currentUser?.id && actions.canMessage(id))
-    .flatMap((id) => { const u = users.find((x) => x.id === id); return u ? [u] : []; }).slice(0, 5), [params.ask, users, currentUser?.id, actions]);
+    .flatMap((id) => { const u = users.find((x) => x.id === id); return u ? [u] : []; }).slice(0, 5), [params.ask, users, currentUser?.id, actions, openness]);
   const askedNames = asked.length === 1 ? asked[0].name.split(' ')[0] : asked.length === 2 ? `${asked[0].name.split(' ')[0]} and ${asked[1].name.split(' ')[0]}` : `${asked.length} players`;
   const [place, setPlace] = useState<HitRequest['place'] | null>(() => {
     const name = params.courtName?.trim();

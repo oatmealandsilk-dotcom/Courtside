@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { User } from '@/data/types';
+import type { ID, Post, User } from '@/data/types';
 import { sameCourt } from '@/features/places/court';
-import { notKnownAdult } from '@/features/players/age';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { useApp } from '@/store/AppContext';
 
@@ -18,23 +17,29 @@ const HIDE_TEENS = true;
 
 export type CourtPostsStatus = 'loading' | 'ready' | 'failed';
 
-/** What deciding whose posts a court shows needs: everyone loaded, who you hide, who you follow, and you. */
-export interface CourtSeeing { byId: Map<string, User>; hidden: Set<string>; following: Set<string>; me: string | null }
-export function courtSeeing(s: { users: User[]; blockedIds: string[]; mutedIds: string[]; followingIds: string[]; currentUserId: string | null }): CourtSeeing {
-  return { byId: new Map(s.users.map((u) => [u.id, u])), hidden: new Set([...s.blockedIds, ...s.mutedIds]), following: new Set(s.followingIds), me: s.currentUserId };
+/**
+ * What deciding whose posts a court shows needs: everyone loaded, who you
+ * hide, who you follow, you, and the app's answer for the teen rule about
+ * each post (useApp().shownAtCourt: nobody's age but your own reaches the
+ * app since migration 64, so the server is asked about the post).
+ */
+export interface CourtSeeing { byId: Map<string, User>; hidden: Set<string>; following: Set<string>; me: string | null; shown: (postId: ID, author: User) => boolean }
+export function courtSeeing(s: { users: User[]; blockedIds: string[]; mutedIds: string[]; followingIds: string[]; currentUserId: string | null; shownAtCourt: (postId: ID, author: User) => boolean }): CourtSeeing {
+  return { byId: new Map(s.users.map((u) => [u.id, u])), hidden: new Set([...s.blockedIds, ...s.mutedIds]), following: new Set(s.followingIds), me: s.currentUserId, shown: s.shownAtCourt };
 }
 
 /**
- * Whether a post by this author may show on a court (its page, its reel, the
- * map's card, the "2 clips" on Courts near you), so every one of them agrees.
- * A post whose author is not loaded cannot draw in the reel; leaving it out
+ * Whether this post may show on a court (its page, its reel, the map's
+ * card, the "2 clips" on Courts near you), so every one of them agrees. A
+ * post whose author is not loaded cannot draw in the reel; leaving it out
  * keeps tile N on page N.
  */
-export function canSeeAtCourt(author: User | undefined, ctx: CourtSeeing): boolean {
+export function canSeeAtCourt(post: Pick<Post, 'id' | 'authorId'>, ctx: CourtSeeing): boolean {
+  const author = ctx.byId.get(post.authorId);
   if (!author || ctx.hidden.has(author.id)) return false;
   const mineOrFollowed = author.id === ctx.me || ctx.following.has(author.id);
   if (author.isPrivate && !mineOrFollowed) return false;
-  if (HIDE_TEENS && notKnownAdult(author) && !mineOrFollowed) return false;
+  if (HIDE_TEENS && !mineOrFollowed && !ctx.shown(post.id, author)) return false;
   return true;
 }
 
@@ -48,7 +53,7 @@ export function canSeeAtCourt(author: User | undefined, ctx: CourtSeeing): boole
  * and the teen rule above.
  */
 export function useCourtPosts(place: { id?: string; lat: number; lng: number } | null) {
-  const { posts, users, blockedIds, mutedIds, followingIds, currentUserId, actions } = useApp();
+  const { posts, users, blockedIds, mutedIds, followingIds, currentUserId, shownAtCourt, actions } = useApp();
   const key = place ? `${place.lat.toFixed(4)},${place.lng.toFixed(4)}` : '';
   const at = useRef(place);
   at.current = place;
@@ -77,11 +82,11 @@ export function useCourtPosts(place: { id?: string; lat: number; lng: number } |
 
   const list = useMemo(() => {
     if (!place) return [];
-    const ctx = courtSeeing({ users, blockedIds, mutedIds, followingIds, currentUserId });
+    const ctx = courtSeeing({ users, blockedIds, mutedIds, followingIds, currentUserId, shownAtCourt });
     return posts
-      .filter((p) => !!p.court && !p.archived && sameCourt(p.court, place) && canSeeAtCourt(ctx.byId.get(p.authorId), ctx))
+      .filter((p) => !!p.court && !p.archived && sameCourt(p.court, place) && canSeeAtCourt(p, ctx))
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-  }, [posts, users, blockedIds, mutedIds, followingIds, currentUserId, place?.id, place?.lat, place?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [posts, users, blockedIds, mutedIds, followingIds, currentUserId, shownAtCourt, place?.id, place?.lat, place?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadOlder = useCallback(async () => {
     const spot = at.current;

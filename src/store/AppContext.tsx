@@ -46,6 +46,7 @@ import * as toast from '@/lib/toast';
 import { anyUploading, cancelUpload, finishUpload, holdQuietUpload, setUploadProgress, simulateUpload, startUpload } from '@/lib/uploads';
 import { requestFeedRefresh } from '@/features/feed/feedBus';
 import { blockDevice, groupFor, rememberAnswered, yearsOld, type AgeGroup } from '@/features/age/ageCheck';
+import { knownOpen, notKnownAdult, type AgeSource, type Openness, type OpennessMap } from '@/features/players/age';
 import { show as showToast } from '@/lib/toast';
 import { forgetPushToken } from '@/features/push/push';
 import { framesAt } from '@/features/compose/frames';
@@ -86,6 +87,7 @@ import type {
   SessionTag,
   SessionTagRefusal,
   LastSeen,
+  MapVisibility,
   HitRequest,
   ChatEvent,
   ChatPhoto,
@@ -277,6 +279,18 @@ function readDefaultPayment(): ID {
   }
 }
 
+/** The demo's answer to "Who can see you on the map?", kept in the browser; null until chosen. */
+const DEMO_VISIBILITY_KEY = 'courtside-demo-map-visibility';
+function readDemoVisibility(): MapVisibility | null {
+  try {
+    if (Platform.OS !== 'web') return null;
+    const v = localStorage.getItem(DEMO_VISIBILITY_KEY);
+    return v === 'nearby' || v === 'mutuals' || v === 'none' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The switches in Settings, kept with the account. */
 export interface Prefs {
   showActivity: boolean; pushLikes: boolean; pushCoach: boolean; pushMessages: boolean; pushActivity: boolean;
@@ -347,10 +361,41 @@ interface AppState extends Bootstrap, CourtLifeState {
    * Always on in the demo.
    */
   sessionTagsReady: boolean;
+  /**
+   * What the server has said about people (migration 64, open_to_you):
+   * whether you may start a chat with them. Nobody's age but your own
+   * reaches the app, so this is how it knows. Asked only about the people it
+   * is about to show or act on, kept for this session and account.
+   */
+  openness: OpennessMap;
+  /**
+   * Of the posts with a court that the app asked about (migration 64,
+   * shown_at_court), which may show on a court's page for you: the teen
+   * rule, which needs ages the app no longer has.
+   */
+  courtShown: Record<ID, boolean>;
+  /**
+   * Whether the last load found everyone's age on the profiles: true before
+   * migration 64, false since. Null until a load from the server says
+   * (treated like true: with no ages on the profiles, nobody counts as an
+   * adult, so nothing is opened or shown that should not be).
+   */
+  agesOnProfiles: boolean | null;
   /** Last spots for the map, by id, your own included (migration 46). */
   lastSeen: Record<ID, LastSeen>;
   /** Whether the last spots have come down once since signing in, so an empty map is known to be empty, not still loading. */
   lastSeenLoaded: boolean;
+  /**
+   * Whether the database has the map's round 2 (migration 63: exact pins at
+   * courts and for people who follow each other, "Who can see you on the
+   * map?", New on CourtSide decided by the server). Null until it is known;
+   * always true in the demo, which plays the server's part.
+   */
+  mapLive: boolean | null;
+  /** Your answer to "Who can see you on the map?": null never chosen; undefined not known (or a database before 63). */
+  mapVisibility: MapVisibility | null | undefined;
+  /** New on CourtSide as the server lists it for you (migration 63), newest first; null until asked, or before 63. */
+  newOnCourtside: { userId: ID; joinedAt: string }[] | null;
   /** Open "Looking for a hit" posts. */
   hitRequests: HitRequest[];
   /** Small switches from Settings, kept with the account. */
@@ -371,6 +416,10 @@ interface AppState extends Bootstrap, CourtLifeState {
 interface AppActions extends CourtLifeActions {
   /* Location */
   setLocationEnabled: (enabled: boolean) => Promise<string | null>;
+  /** "Who can see you on the map?": takes effect at once. Resolves false when it could not be saved. */
+  setMapVisibility: (v: MapVisibility) => Promise<boolean>;
+  /** Asks who is new on CourtSide for you (migration 63); before it, the screen works the list out itself. */
+  loadNewOnCourtside: () => Promise<void>;
 
   /* Payments */
   setDefaultPayment: (id: ID) => void;
@@ -435,8 +484,12 @@ interface AppActions extends CourtLifeActions {
   updateIdentity: (patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string; cityAt?: { lat: number; lng: number } | null }) => void;
   updateProfile: (patch: Partial<PlayerProfile>) => void;
   /** Log a session you played (today unless a day is given). Throws a plain sentence when it cannot be saved. */
-  /** Fetches the spots the map may show; the map asks each time it opens. */
-  loadLastSeen: () => Promise<void>;
+  /**
+   * Fetches the spots the map may show: round where you are (each time the
+   * map opens), or, with `view`, the part of the full map in view as it
+   * moves (migration 63 answers for one part of the map at a time).
+   */
+  loadLastSeen: (view?: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null) => Promise<void>;
   /** `activityId`: the tracker session it was logged from, which then counts as logged. */
   logSession: (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; opponent?: string; note?: string; day?: string; activityId?: ID }) => Promise<ID>;
   deleteSession: (id: ID) => void;
@@ -731,6 +784,25 @@ interface AppActions extends CourtLifeActions {
    */
   recheckFollows: (userIds: ID[]) => Promise<ID[]>;
   /**
+   * Whether you may message this person, or put them in a group, right now:
+   * asks the server again (whom they follow, and what it says about them)
+   * rather than trusting the app's copy. For a lock about to be shown as final.
+   */
+  reachNow: (userId: ID) => Promise<boolean>;
+  /**
+   * Of these people, the ones the app already has as locked for a group (see
+   * canAddToGroup), without asking the server about anyone new: for a page
+   * that re-checks its locks as it opens, so it never asks about everyone.
+   */
+  lockedNow: (userIds: ID[]) => ID[];
+  /**
+   * This phone's quick answer for the tag picker (Who you played): why this
+   * person cannot be tagged, or null. Asks the server about them in the
+   * background (migration 64), so a lock shows a moment later; the server's
+   * own check after each pick has the last word.
+   */
+  tagHint: (userId: ID) => SessionTagRefusal | null;
+  /**
    * Before opening a one-to-one chat from a button: null when you may
    * message them (asking the server again first if the app's copy says no);
    * otherwise why not, naming them, ready to show in a long note.
@@ -764,6 +836,28 @@ interface AppActions extends CourtLifeActions {
 interface AppContextValue extends AppState {
   currentUser: User | null;
   actions: AppActions;
+  /**
+   * Whether the teen rule lets someone's open hits show to you (leaving
+   * aside whether you follow them, which shows them anyway). Since migration
+   * 64 the server sends only the hits you may see, so every hit it sent may
+   * show; before it, by the author's age.
+   */
+  seeing: (u: Pick<User, 'id' | 'ageGroup'>) => boolean;
+  /**
+   * Whether this post may show on a court's page, its reel, the map's card
+   * and Courts near you under the teen rule (leaving aside you and people you
+   * follow, who show anyway): since migration 64 the server's answer about
+   * the post (asked in the background; not answered yet is not shown yet),
+   * before it the author's age.
+   */
+  shownAtCourt: (postId: ID, author: Pick<User, 'id' | 'ageGroup'>) => boolean;
+  /**
+   * Whether the age the app holds says this person is an adult. Only ever
+   * true for someone else on a database from before migration 64, or in the
+   * demo; for the few lists that still fall back on it (New on CourtSide,
+   * if the server's list cannot be had).
+   */
+  ageSaysAdult: (u: Pick<User, 'id' | 'ageGroup'>) => boolean;
 }
 
 
@@ -871,9 +965,10 @@ if (Platform.OS === 'web' && typeof window !== 'undefined' && /[?&]whoop=pending
  * server and its fixtures carry no ages, so there only someone marked as a
  * teen is closed; otherwise the whole demo would be locked.
  */
-function openToYou(userId: ID, them: User | undefined, me: ID, edges: { followerId: ID; followingId: ID }[], real: boolean): boolean {
-  const known = real ? them?.ageGroup === 'adult' : them?.ageGroup !== 'teen';
-  return known || edges.some((e) => e.followerId === userId && e.followingId === me);
+function openToYou(userId: ID, them: User | undefined, me: ID, edges: { followerId: ID; followingId: ID }[], source: AgeSource, told: OpennessMap, ask?: (id: ID) => void): boolean {
+  if (edges.some((e) => e.followerId === userId && e.followingId === me)) return true;
+  // Before migration 64 every profile carried its age; since, only the server's answer says.
+  return knownOpen(them, userId, source, told, ask);
 }
 
 /** Why a new one-to-one chat was refused, naming who when the app knows them (see chatLockNote). */
@@ -1004,6 +1099,15 @@ const withAccounts = (savedAccounts: SavedAccount[]) => (prev: AppState): AppSta
 /** Whether an id names a row in Supabase rather than a fixture. */
 const live = (...ids: (ID | null | undefined)[]) => isSupabaseConfigured && ids.every((id) => !!id && UUID.test(id));
 
+/** Where the app learns how the teen rules apply to `other` (see AgeSource). */
+const ageSource = (s: Pick<AppState, 'currentUserId' | 'agesOnProfiles'>, other: ID | null | undefined): AgeSource =>
+  !live(s.currentUserId, other) ? 'fixtures' : s.agesOnProfiles === false ? 'server' : 'ages';
+
+/** How long what the server said about someone (migration 64) stands before it is asked again on their next showing: their follows change. */
+const OPENNESS_KEPT = 10 * 60_000;
+/** After a question that got no answer (no connection, say), how soon it may be asked again. */
+const OPENNESS_RETRY = 30_000;
+
 /** The moment of the oldest post in a batch: where the next page carries on from. */
 const oldestOf = (posts: Post[]) => posts.reduce<string | null>((old, p) => (!old || p.createdAt < old ? p.createdAt : old), null);
 
@@ -1120,6 +1224,8 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       detectedActivities: data.activities ?? prev.detectedActivities,
       // Asked with the rest of the open (migration 62): names on posts and the people search follow it.
       sessionTagsReady: data.sessionTagsReady ?? prev.sessionTagsReady,
+      // Which database this is (migration 64), from what the profiles came down with; a saved copy does not say.
+      agesOnProfiles: !fromSnapshot && data.agesOnProfiles !== undefined ? data.agesOnProfiles : prev.agesOnProfiles,
       notifications: [...data.notifications, ...prev.notifications.filter((n) => !data.notifications.some((x) => x.id === n.id) && !gone(n.id))],
       tips: [...data.tips, ...prev.tips.filter((t) => !data.tips.some((x) => x.id === t.id) && !gone(t.id))],
       coachApplications: [...data.coachApplications, ...prev.coachApplications.filter((a) => !data.coachApplications.some((x) => x.id === a.id))],
@@ -1127,6 +1233,9 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       blockedIds: data.userState ? data.userState.blockedIds : prev.blockedIds,
       paymentMethods: data.userState && data.userState.paymentMethods.length ? data.userState.paymentMethods : prev.paymentMethods,
       defaultPaymentId: data.userState?.defaultPaymentId ?? prev.defaultPaymentId,
+      // The settings row carries map_visibility only once migration 63 has run: its key says the map's round 2 is live.
+      mapVisibility: data.userState && data.userState.mapVisibility !== undefined ? data.userState.mapVisibility : prev.mapVisibility,
+      mapLive: data.userState && data.userState.mapVisibility !== undefined ? true : prev.mapLive,
       prefs: data.userState
         ? {
           showActivity: data.userState.showActivity, pushLikes: data.userState.pushLikes, pushCoach: data.userState.pushCoach, pushMessages: data.userState.pushMessages ?? true, pushActivity: data.userState.pushActivity ?? true,
@@ -1249,8 +1358,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     sessions: [],
     sessionTags: [],
     sessionTagsReady: !isSupabaseConfigured,
+    openness: {},
+    courtShown: {},
+    agesOnProfiles: null,
     lastSeen: {},
     lastSeenLoaded: false,
+    mapLive: isSupabaseConfigured ? null : true,
+    mapVisibility: isSupabaseConfigured ? undefined : readDemoVisibility(),
+    newOnCourtside: null,
     ...emptyCourtLife,
     hitRequests: [],
     locationEnabled: readFlag('courtside-location'),
@@ -1711,6 +1826,148 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const stateRef = React.useRef(state);
   stateRef.current = state;
 
+  /*
+   * What the server says about people and posts (migration 64). Nobody's age
+   * but your own reaches the app any more, so two things are asked:
+   * open_to_you (may you message this person) and shown_at_court (may this
+   * post show on a court's page). Only about what a screen is about to show
+   * or act on (never everyone at once), a few at a time, and kept for this
+   * session and account. Until an answer comes the careful one stands
+   * (locked, not shown), the same as an account with no birthday on file.
+   * The server sends only the open hits you may see, so hits need no asking.
+   */
+  type Book = { me: ID | null; at: Map<ID, number> };
+  const opennessAsked = useRef<Book>({ me: null, at: new Map() });
+  const opennessQueue = useRef<Set<ID>>(new Set());
+  const opennessTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const courtAsked = useRef<Book>({ me: null, at: new Map() });
+  const courtQueue = useRef<Set<ID>>(new Set());
+  const courtTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A new account: nothing said about anyone yet.
+  useEffect(() => {
+    opennessAsked.current = { me: state.currentUserId, at: new Map() };
+    opennessQueue.current.clear();
+    courtAsked.current = { me: state.currentUserId, at: new Map() };
+    courtQueue.current.clear();
+    setState((prev) => (!Object.keys(prev.openness).length && !Object.keys(prev.courtShown).length ? prev : { ...prev, openness: {}, courtShown: {} }));
+  }, [state.currentUserId]);
+  /** Of these ids, the ones not asked about lately (all with `fresh`), marked as asked now. */
+  const dueFrom = (book: Book, me: ID, ids: ID[], fresh: boolean): ID[] => {
+    if (book.me !== me) { book.me = me; book.at = new Map(); }
+    const now = Date.now();
+    const due = Array.from(new Set(ids)).filter((id) => id !== me && live(id) && (fresh || !(now - (book.at.get(id) ?? -Infinity) < OPENNESS_KEPT)));
+    for (const id of due) book.at.set(id, now);
+    return due;
+  };
+  /** After a question that got no answer (no connection): asked again a little later, not on every redraw. */
+  const retrySoon = (book: Book, ids: ID[]) => { const now = Date.now(); for (const id of ids) book.at.set(id, now - OPENNESS_KEPT + OPENNESS_RETRY); };
+  /**
+   * Asks the server about these people (all of them with `fresh`, otherwise
+   * only those not asked in the last few minutes) and keeps the answers.
+   * Resolves with every answer the app now has. Nothing is asked before the
+   * first load has said this is a database with migration 64.
+   */
+  const askOpenness = useCallback(async (userIds: ID[], fresh = false): Promise<OpennessMap> => {
+    const s0 = stateRef.current;
+    const me = s0.currentUserId;
+    if (!me || !live(me) || s0.agesOnProfiles !== false) return s0.openness;
+    const want = dueFrom(opennessAsked.current, me, userIds, fresh);
+    if (!want.length) return s0.openness;
+    let got: Record<ID, Openness> | null;
+    try {
+      got = await remote.fetchOpenness(want);
+    } catch {
+      retrySoon(opennessAsked.current, want);
+      return stateRef.current.openness;
+    }
+    // Someone the server left out (blocked either way, gone, past the day's
+    // limit; or no such question at all): no answer, so nothing is locked on
+    // it and the server decides when you act.
+    const answers: Record<ID, Openness> = Object.fromEntries(want.map((id) => [id, got?.[id] ?? { chat: null }]));
+    if (stateRef.current.currentUserId !== me) return stateRef.current.openness;
+    setState((prev) => (prev.currentUserId === me ? { ...prev, openness: { ...prev.openness, ...answers } } : prev));
+    return { ...stateRef.current.openness, ...answers };
+  }, []);
+  /** Someone a screen is showing: asked about a moment later, with whoever else came up meanwhile. Nothing if asked lately. */
+  const wantOpenness = useCallback((userId: ID) => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    if (!me || userId === me || ageSource(s, userId) !== 'server') return;
+    const book = opennessAsked.current;
+    if (book.me === me && Date.now() - (book.at.get(userId) ?? -Infinity) < OPENNESS_KEPT) return;
+    opennessQueue.current.add(userId);
+    if (opennessTimer.current) return;
+    opennessTimer.current = setTimeout(() => {
+      opennessTimer.current = null;
+      const ids = Array.from(opennessQueue.current);
+      opennessQueue.current.clear();
+      void askOpenness(ids);
+    }, 40);
+  }, [askOpenness]);
+  /** Asks the server which of these posts may show on a court's page for you, and keeps the answers. */
+  const askCourt = useCallback(async (postIds: ID[]) => {
+    const s0 = stateRef.current;
+    const me = s0.currentUserId;
+    if (!me || !live(me) || s0.agesOnProfiles !== false) return;
+    const want = dueFrom(courtAsked.current, me, postIds, false);
+    if (!want.length) return;
+    let got: Set<ID> | null;
+    try {
+      got = await remote.fetchShownAtCourt(want);
+    } catch {
+      retrySoon(courtAsked.current, want);
+      return;
+    }
+    // No such question (a database without 64): nothing is shown on it until the next load says which database this is.
+    if (got === null || stateRef.current.currentUserId !== me) return;
+    const answers: Record<ID, boolean> = Object.fromEntries(want.map((id) => [id, got.has(id)]));
+    setState((prev) => (prev.currentUserId === me ? { ...prev, courtShown: { ...prev.courtShown, ...answers } } : prev));
+  }, []);
+  /** A post a court's page is showing: asked about a moment later, with the rest of the page. */
+  const wantCourt = useCallback((postId: ID) => {
+    const me = stateRef.current.currentUserId;
+    if (!me || !live(me, postId)) return;
+    const book = courtAsked.current;
+    if (book.me === me && Date.now() - (book.at.get(postId) ?? -Infinity) < OPENNESS_KEPT) return;
+    courtQueue.current.add(postId);
+    if (courtTimer.current) return;
+    courtTimer.current = setTimeout(() => {
+      courtTimer.current = null;
+      const ids = Array.from(courtQueue.current);
+      courtQueue.current.clear();
+      void askCourt(ids);
+    }, 40);
+  }, [askCourt]);
+  useEffect(() => () => {
+    if (opennessTimer.current) clearTimeout(opennessTimer.current);
+    if (courtTimer.current) clearTimeout(courtTimer.current);
+  }, []);
+  const seeing = useMemo(() => {
+    const me = state.currentUserId;
+    const agesOnProfiles = state.agesOnProfiles;
+    return (u: Pick<User, 'id' | 'ageGroup'>): boolean => {
+      if (me && u.id === me) return true;
+      // Since 64 the server sent only the hits you may see; before it (and in the demo) the author's age says.
+      return ageSource({ currentUserId: me, agesOnProfiles }, u.id) === 'server' || !notKnownAdult(u);
+    };
+  }, [state.currentUserId, state.agesOnProfiles]);
+  const shownAtCourt = useMemo(() => {
+    const me = state.currentUserId;
+    const agesOnProfiles = state.agesOnProfiles;
+    const told = state.courtShown;
+    return (postId: ID, author: Pick<User, 'id' | 'ageGroup'>): boolean => {
+      if (me && author.id === me) return true;
+      if (ageSource({ currentUserId: me, agesOnProfiles }, author.id) !== 'server') return !notKnownAdult(author);
+      if (!(postId in told)) wantCourt(postId);
+      return told[postId] === true;
+    };
+  }, [state.currentUserId, state.agesOnProfiles, state.courtShown, wantCourt]);
+  const ageSaysAdult = useMemo(() => {
+    const me = state.currentUserId;
+    const agesOnProfiles = state.agesOnProfiles;
+    return (u: Pick<User, 'id' | 'ageGroup'>): boolean => (me !== null && u.id === me ? !notKnownAdult(u) : ageSource({ currentUserId: me, agesOnProfiles }, u.id) !== 'server' && !notKnownAdult(u));
+  }, [state.currentUserId, state.agesOnProfiles]);
+
   // Your numbers come from what you logged and posted (features/practice/stats),
   // and a streak with nothing yet today gets its 7pm reminder on the phone.
   useEffect(() => {
@@ -1892,7 +2149,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (isSupabaseConfigured) void forgetPushToken().finally(() => remoteAuth.signOut());
     // One account's health (its tracker sessions too) never carries over to the next one signed in.
     // Nor do its courts: who it follows, what it said, where it checked in.
-    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [], ...emptyCourtLife, lastSeenLoaded: false, sessionTags: [] }));
+    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [], ...emptyCourtLife, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null, mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility }));
   }, []);
 
   const patchCurrentUser = useCallback(
@@ -2028,14 +2285,90 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (live(me)) void remote.deleteSession(id);
   }, []);
 
-  const loadLastSeen = useCallback(async () => {
+  // What the map's two kinds of load last brought (migration 63 answers for
+  // one part of the map at a time): round where you are, which Find Players,
+  // Near you and Who's up today read, and the part of the full map in view.
+  // The map shows both; a new load of a kind replaces only its own.
+  const seenAround = useRef<Record<ID, LastSeen>>({});
+  const seenInView = useRef<Record<ID, LastSeen>>({});
+  const seenFor = useRef<ID | null>(null);
+  const loadLastSeen = useCallback(async (view?: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null) => {
     const me = stateRef.current.currentUserId;
     if (!live(me)) return;
-    const rows = await remote.fetchLastSeen();
+    if (seenFor.current !== me) { seenFor.current = me; seenAround.current = {}; seenInView.current = {}; }
+    // The map's own function first (migration 63): each pin where you may see
+    // it. A database without it yet answers 'missing', and the map reads the
+    // old table (everyone about a kilometre out) the way it always has.
+    let rows: LastSeen[] | null = null;
+    let mapLive = stateRef.current.mapLive;
+    if (mapLive !== false) {
+      // Round you: about 80 km each way (the tray lists people up to 50
+      // miles out), from the phone's fix or else your own last spot. Without
+      // either, the server answers only for you, which still says whether it is there.
+      const s = stateRef.current;
+      const from = s.detectedCoords ?? (s.lastSeen[me!] ? { lat: s.lastSeen[me!].lat, lng: s.lastSeen[me!].lng } : null);
+      const around = from ? { minLat: from.lat - 0.75, maxLat: from.lat + 0.75, minLng: from.lng - Math.min(1, 0.75 / Math.max(0.2, Math.cos((from.lat * Math.PI) / 180))), maxLng: from.lng + Math.min(1, 0.75 / Math.max(0.2, Math.cos((from.lat * Math.PI) / 180))) } : null;
+      const got = await remote.fetchMapPlayers(view ?? around);
+      if (got === 'missing') mapLive = false;
+      else { if (got) mapLive = true; rows = got; }
+    }
+    if (mapLive === false) rows = await remote.fetchLastSeen();
+    if (stateRef.current.currentUserId !== me) return;
+    // Live, and the settings row said nothing (an account with no settings saved yet): never chosen.
+    if (mapLive !== stateRef.current.mapLive || (mapLive && stateRef.current.mapVisibility === undefined && stateRef.current.remoteLoaded)) {
+      setState((prev) => ({ ...prev, mapLive, mapVisibility: mapLive && prev.mapVisibility === undefined && prev.remoteLoaded ? null : prev.mapVisibility }));
+    }
     // A failed load keeps what was there and is not "loaded": an error must
     // never read as nobody near you (the "You're early" card waits on this).
+    if (!rows) return;
+    const loaded = Object.fromEntries(rows.map((r) => [r.userId, r]));
+    // The old table answers for everywhere at once: it replaces both.
+    if (mapLive === false) { seenAround.current = loaded; seenInView.current = {}; }
+    else if (view) seenInView.current = loaded;
+    else seenAround.current = loaded;
+    const merged = { ...seenAround.current, ...seenInView.current };
+    setState((prev) => ({ ...prev, lastSeen: merged, lastSeenLoaded: true }));
+  }, []);
+
+  const setMapVisibility = useCallback(async (v: MapVisibility): Promise<boolean> => {
+    const me = stateRef.current.currentUserId;
+    const was = stateRef.current.mapVisibility;
+    haptics.tap();
+    setState((prev) => ({ ...prev, mapVisibility: v }));
+    if (!live(me)) {
+      // The demo keeps it in the browser, the way the server keeps it with the account.
+      try { if (Platform.OS === 'web') localStorage.setItem(DEMO_VISIBILITY_KEY, v); } catch {}
+      return true;
+    }
+    const ok = await remote.setMapVisibility(v);
+    if (!ok && stateRef.current.currentUserId === me) setState((prev) => ({ ...prev, mapVisibility: was }));
+    if (ok) {
+      // Your spot again at once, so the choice takes effect now: the server
+      // keeps your exact spot only for Players nearby or follow-back only.
+      const s = stateRef.current;
+      if (s.locationEnabled && s.detectedCoords) {
+        markedAt.current = { lat: s.detectedCoords.lat, lng: s.detectedCoords.lng, at: Date.now() };
+        await remote.markLastSeen(s.detectedCoords.lat, s.detectedCoords.lng, s.detectedLocation ?? undefined);
+      }
+      // Who you see does not change, but your own row's look does: fetch again.
+      void loadLastSeen();
+    }
+    return ok;
+  }, [loadLastSeen]);
+
+  const loadNewOnCourtside = useCallback(async () => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    if (!me) return;
+    if (!live(me)) {
+      setState((prev) => ({ ...prev, newOnCourtside: demoApi.newOnCourtside({ me, users: prev.users, followingIds: prev.followingIds, blockedIds: prev.blockedIds }) }));
+      return;
+    }
+    if (s.mapLive === false) return;
+    const rows = await remote.fetchNewOnCourtside(14);
     if (!rows || stateRef.current.currentUserId !== me) return;
-    setState((prev) => ({ ...prev, lastSeen: Object.fromEntries(rows.map((r) => [r.userId, r])), lastSeenLoaded: true }));
+    // (Every profile comes down with the app's first load, so each one listed is already on the phone.)
+    setState((prev) => ({ ...prev, newOnCourtside: rows, mapLive: true }));
   }, []);
 
   const postHit = useCallback(async (input: Omit<HitRequest, 'id' | 'authorId' | 'createdAt' | 'joinedIds' | 'conversationId' | 'cancelled'>): Promise<ID> => {
@@ -2158,7 +2491,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const sessionTagRefusal = useCallback(async (userId: ID): Promise<SessionTagRefusal | null> => {
     const s = stateRef.current;
     const me = s.currentUserId;
-    const guess = s.blockedIds.includes(userId) ? 'blocked' : localRefusal({ me, who: s.users.find((u) => u.id === userId), follows: s.followEdges, real: live(me, userId) });
+    const guess = s.blockedIds.includes(userId) ? 'blocked' : localRefusal({ me, who: s.users.find((u) => u.id === userId), follows: s.followEdges, source: ageSource(s, userId), told: s.openness });
     if (!live(me, userId) || !s.sessionTagsReady) return guess;
     // The server's answer counts; without one, this phone's guess.
     return remote.sessionTagRefusal(userId).catch(() => guess);
@@ -3824,10 +4157,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (why === 'blocked') return ids.length === 1 ? ids : [];
     if (why !== 'teen') return [];
     const following = await recheckFollows(ids);
+    // The server's answer, asked again: the app's may be from before an unfollow.
+    const told = await askOpenness(ids.filter((id) => !following.includes(id)), true);
     const users = stateRef.current.users;
     // Anyone who doesn't follow you and isn't known to be an adult.
-    return ids.filter((id) => !following.includes(id) && !openToYou(id, users.find((u) => u.id === id), me, [], live(me, id)));
-  }, [recheckFollows]);
+    return ids.filter((id) => !following.includes(id) && !openToYou(id, users.find((u) => u.id === id), me, [], ageSource(stateRef.current, id), told));
+  }, [recheckFollows, askOpenness]);
 
   /** A group with the people picked (two or more others) and an optional name. */
   const createGroup = useCallback(async (memberIds: ID[], title?: string): Promise<GroupOutcome | null> => {
@@ -4170,20 +4505,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return 'under13' as const;
     };
     const years = yearsOld(birthDate);
-    if (years < 13) return tooYoung();
-    let group: AgeGroup = groupFor(years);
+    let group: AgeGroup | null = null;
     if (live(me)) {
+      // The database first: it keeps the first date ever given and answers
+      // from that, so an account whose age is already on file (asked again
+      // because the age could not be read, say) is never deleted over a
+      // mistyped year here.
       const answer = await remote.setBirthDate(birthDate);
       if (answer === 'under_13') return tooYoung();
-      // The database's answer wins (it keeps the first date given); without its age check yet, the typed one stands.
-      if (answer) group = answer;
+      group = answer;
     }
+    // Without the database's answer (the demo, or its age check not reachable), the typed date stands.
+    if (!group) {
+      if (years < 13) return tooYoung();
+      group = groupFor(years);
+    }
+    const label: AgeGroup = group;
     setState((prev) => ({
       ...prev,
-      users: prev.users.map((u) => (u.id === me ? { ...u, ageGroup: group, isPrivate: group === 'teen' && !u.ageGroup ? true : u.isPrivate } : u)),
+      users: prev.users.map((u) => (u.id === me ? { ...u, ageGroup: label, isPrivate: label === 'teen' && !u.ageGroup ? true : u.isPrivate } : u)),
     }));
-    await rememberAnswered(me, group);
-    return group;
+    await rememberAnswered(me, label);
+    return label;
   }, [requireUser]);
 
   const canMessage = useCallback((userId: ID) => {
@@ -4192,8 +4535,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!me) return false;
     // A chat you already have carries on: the server hands it back before it checks anything (open_conversation).
     if (findDirectChat(s.conversations, me, userId)) return true;
-    return openToYou(userId, s.users.find((u) => u.id === userId), me, s.followEdges, live(me, userId));
-  }, []);
+    return openToYou(userId, s.users.find((u) => u.id === userId), me, s.followEdges, ageSource(s, userId), s.openness, wantOpenness);
+  }, [wantOpenness]);
 
   // The group rule has no "already chatting" exception: a teen you message
   // one-to-one still has to follow you before you can put them in a group.
@@ -4201,14 +4544,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const s = stateRef.current;
     const me = s.currentUserId;
     if (!me || userId === me) return false;
-    return openToYou(userId, s.users.find((u) => u.id === userId), me, s.followEdges, live(me, userId));
+    return openToYou(userId, s.users.find((u) => u.id === userId), me, s.followEdges, ageSource(s, userId), s.openness, wantOpenness);
+  }, [wantOpenness]);
+
+  const reachNow = useCallback(async (userId: ID): Promise<boolean> => {
+    const me = stateRef.current.currentUserId;
+    if (!me || userId === me) return false;
+    const [following, told] = await Promise.all([recheckFollows([userId]), askOpenness([userId], true)]);
+    if (following.includes(userId)) return true;
+    const s = stateRef.current;
+    return openToYou(userId, s.users.find((u) => u.id === userId), me, [], ageSource(s, userId), told);
+  }, [recheckFollows, askOpenness]);
+
+  const lockedNow = useCallback((userIds: ID[]): ID[] => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    if (!me) return [];
+    // Not asked about yet is not "locked" here: only an answer already in (or, before migration 64, an age) counts.
+    return userIds.filter((id) => id !== me && (ageSource(s, id) !== 'server' || !!s.openness[id])
+      && !openToYou(id, s.users.find((u) => u.id === id), me, s.followEdges, ageSource(s, id), s.openness));
   }, []);
+
+  const tagHint = useCallback((userId: ID): SessionTagRefusal | null => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    return localRefusal({ me, who: s.users.find((u) => u.id === userId), follows: s.followEdges, source: ageSource(s, userId), told: s.openness, ask: wantOpenness });
+  }, [wantOpenness]);
 
   // A lock on a Message button is checked with the server before it is final.
   const messageLock = useCallback(async (userId: ID): Promise<string | null> => {
-    if (canMessage(userId) || (await recheckFollows([userId])).includes(userId)) return null;
+    if (canMessage(userId) || (await reachNow(userId))) return null;
     return chatLockNoteFor(stateRef.current.users, userId);
-  }, [canMessage, recheckFollows]);
+  }, [canMessage, reachNow]);
 
   /**
    * Sends something into chats, Instagram style: a post, thread, profile or
@@ -4551,8 +4918,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!enabled) {
       remember(false);
       // Location off means off: the spot others saw goes too, and with it any "I'm playing here" (the server drops both).
+      // Your own pin goes from this phone's map at once as well.
+      const self = stateRef.current.currentUserId;
+      if (self) { delete seenAround.current[self]; delete seenInView.current[self]; }
       setState((prev) => ({
         ...prev, locationEnabled: false, locationAsked: true, detectedLocation: null, detectedCoords: null,
+        lastSeen: self && prev.lastSeen[self] ? Object.fromEntries(Object.entries(prev.lastSeen).filter(([id]) => id !== self)) : prev.lastSeen,
         courtNow: Object.fromEntries(Object.entries(prev.courtNow).map(([id, row]) => [id, { ...row, youHere: false }])),
         followedCourts: prev.followedCourts?.map((c) => ({ ...c, youHere: false })) ?? null,
       }));
@@ -4578,14 +4949,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return null;
   }, []);
 
-  // Where you are, for other players' maps: kept to about a kilometre by the
-  // database, and sent again only after a real move or a quarter of an hour.
+  // Where you are, for other players' maps: the database keeps the exact spot
+  // to itself and shows each player only what they may see (about a kilometre
+  // out, on your court, or exact for people who follow each other with you;
+  // migration 63). Sent again only after a real move or a quarter of an hour.
   useEffect(() => {
     const me = state.currentUserId;
     const at = state.detectedCoords;
     if (!state.locationEnabled || !at || !live(me)) return;
     const last = markedAt.current;
-    const moved = !last || Math.abs(last.lat - at.lat) > 0.01 || Math.abs(last.lng - at.lng) > 0.01;
+    // A real move: about a kilometre before migration 63 (the spot was kept no finer); since it,
+    // about 150 m, the reach of "at a court", so arriving at one moves your pin onto it.
+    const step = stateRef.current.mapLive ? 0.0015 : 0.01;
+    const moved = !last || Math.abs(last.lat - at.lat) > step || Math.abs(last.lng - at.lng) > step;
     if (!moved && Date.now() - last!.at < 15 * 60 * 1000) return;
     markedAt.current = { lat: at.lat, lng: at.lng, at: Date.now() };
     void remote.markLastSeen(at.lat, at.lng, state.detectedLocation ?? undefined);
@@ -5158,6 +5534,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       approveCoachApplication,
       rejectCoachApplication,
       setLocationEnabled,
+      setMapVisibility,
+      loadNewOnCourtside,
       setDefaultPayment,
       addPaymentMethod,
       removePaymentMethod,
@@ -5302,6 +5680,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       canMessage,
       canAddToGroup,
       recheckFollows,
+      reachNow,
+      lockedNow,
+      tagHint,
       messageLock,
       editMessage,
       retryMessage,
@@ -5331,6 +5712,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       approveCoachApplication,
       rejectCoachApplication,
       setLocationEnabled,
+      setMapVisibility,
+      loadNewOnCourtside,
       setDefaultPayment,
       addPaymentMethod,
       removePaymentMethod,
@@ -5469,6 +5852,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       canMessage,
       canAddToGroup,
       recheckFollows,
+      reachNow,
+      lockedNow,
+      tagHint,
       messageLock,
       editMessage,
       retryMessage,
@@ -5481,8 +5867,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<AppContextValue>(
-    () => ({ ...state, ready: state.ready && state.authResolved, currentUser, actions }),
-    [state, currentUser, actions],
+    () => ({ ...state, ready: state.ready && state.authResolved, currentUser, actions, seeing, shownAtCourt, ageSaysAdult }),
+    [state, currentUser, actions, seeing, shownAtCourt, ageSaysAdult],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

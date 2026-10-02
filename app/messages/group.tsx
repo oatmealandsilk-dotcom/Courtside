@@ -80,7 +80,8 @@ export default function ChatDetails() {
   // people in the list follow you now, so the locks shown are today's.
   useEffect(() => {
     if (!addOnly || !conversation) return;
-    const locked = users.filter((u) => u.id !== currentUserId && !conversation.participantIds.includes(u.id) && !actions.canAddToGroup(u.id)).map((u) => u.id);
+    // Only people already known to be locked: nobody new is asked about here.
+    const locked = actions.lockedNow(users.filter((u) => u.id !== currentUserId && !conversation.participantIds.includes(u.id)).map((u) => u.id));
     if (locked.length) void actions.recheckFollows(locked);
   }, [addOnly, conversation?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -98,8 +99,9 @@ export default function ChatDetails() {
   const nm = (u: User) => named(u, users);
   const namesOf = (ids: string[]) => ids.map((uid) => users.find((u) => u.id === uid)).filter((u): u is User => !!u).map(nm);
   // Before a lock is final, the server is asked again whether they follow
-  // you now (the app's copy is from when it opened). True once they do.
-  const followsNow = async (uid: string) => (await actions.recheckFollows([uid])).includes(uid);
+  // you now (the app's copy is from when it opened) and what it says of
+  // them (migration 64). True once you may add them.
+  const followsNow = (uid: string) => actions.reachNow(uid);
   // Message someone from here; locked, it says why in a note that stays to be read.
   const message = async (u: User) => {
     const lock = await actions.messageLock(u.id);

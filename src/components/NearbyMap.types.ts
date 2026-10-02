@@ -23,4 +23,6 @@ export interface NearbyMapProps {
   focusUser?: string | null;
   /** Opened on a spot (?lat=…&lng=…, from an alert): the map starts there. */
   focusSpot?: LatLng | null;
+  /** "Who can see you on the map?" is up (or about to be) over the full map: its first pins wait to come in until it has gone. */
+  holdPins?: boolean;
 }

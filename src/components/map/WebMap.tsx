@@ -12,6 +12,7 @@ import { CardStage } from '@/components/map/CardStage';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { milesBetween } from '@/features/players/geo';
 import { useMapModel } from '@/features/players/mapModel';
+import { askWhoSeesYou, canChooseVisibility } from '@/features/players/mapPrivacy';
 import { askToHit } from '@/features/players/courtLink';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { useBarInset } from '@/features/navigation/barInset';
@@ -22,12 +23,18 @@ import { levelBadge } from '@/lib/badges';
 import { useWeather } from '@/features/players/useWeather';
 import { colors, radius, spacing, typography } from '@/theme';
 import { STYLE, applyLook, cardLook, lookFor } from '@/components/map/look';
-import { CLOSE_ZOOM_NAMES, FAR_ZOOM, HIT_LIFT, MAP_PIN_CSS, OPEN_CLASS, courtLift, setOpen, youLift, courtDotHtml, courtPinHtml, discSize, hitPinHtml, mePinHtml, playerPinClass, playerPinHtml } from '@/components/map/markers';
+import { CLOSE_ZOOM_NAMES, FAR_ZOOM, MAP_PIN_CSS, SHORT_ZOOM, clusterTemplates, courtLift, youLift } from '@/components/map/markers';
+import { CARD_BOX, FULL_MAP_BOX, PIN_ENGINE_JS, type PinEngine, type PinEngineFactory } from '@/components/map/pinEngine';
+import { mapMarkers } from '@/components/map/pinList';
 
 const HEIGHT = 330;
 const START_ZOOM = 11.5;
-/** Your face on your own pin, a touch bigger than everyone else's. */
-const ME_SIZE = 34;
+/**
+ * The pins' engine: the very text the phone's map runs inside its web view
+ * (pinEngine), made into a function here, so the browser and the phone
+ * gather, split and cascade their pins the same way.
+ */
+const makePins = new Function(`return ${PIN_ENGINE_JS}`)() as PinEngineFactory;
 /** Close enough to read street names, when the map goes to someone. */
 const CLOSE_ZOOM = 13.5;
 // MapLibre does its heavy lifting in a background worker script. The bundler
@@ -44,12 +51,14 @@ maplibregl.setWorkerUrl(`${BASE}/maplibre/maplibre-gl-worker.mjs`);
  * marks. The controls laid over it are shared with the phone.
  */
 export function NearbyMap(props: NearbyMapProps) {
-  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot } = props;
+  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, holdPins = false } = props;
   const styles = useThemedStyles(styleDefinitions);
   const { theme, night } = useTheme();
   const insets = useSafeAreaInsets();
   const barInset = useBarInset();
-  const { followingIds, actions } = useApp();
+  const { followingIds, actions, mapLive, mapVisibility } = useApp();
+  // Who can see you on the map (migration 63): from your card and the location button, once there is a choice to make.
+  const choosing = canChooseVisibility(mapLive, me);
   // Your own pin, tapped: the card with your open-to-hit switch.
   const [meOpen, setMeOpen] = useState(false);
   const openToHit = isOpenToHit(me);
@@ -66,26 +75,38 @@ export function NearbyMap(props: NearbyMapProps) {
   // Which map the marks are on: a new one (a new look, or your location arriving
   // and the map starting again there) counts up, so every mark is drawn onto it afresh.
   const [mapGen, setMapGen] = useState(0);
-  const latest = useRef({ onOpen, select: model.select, selectCourt: model.selectCourt, selectHit: model.selectHit, loadCourts: model.loadCourts, loadRings: model.loadRings, courtsOn: model.courtsOn, openMe: () => undefined as void });
+  const latest = useRef({ onOpen, select: model.select, selectCourt: model.selectCourt, selectHit: model.selectHit, loadCourts: model.loadCourts, loadRings: model.loadRings, loadPlayersIn: model.loadPlayersIn, courtsOn: model.courtsOn, openMe: () => undefined as void, expand: onExpand });
   // A pin tapped while your own card is up swaps your card for its one (as on the phone), rather than staying behind it.
   latest.current = {
     onOpen,
     select: (id: string | null) => { if (id) setMeOpen(false); model.select(id); },
     selectCourt: (id: string | null) => { if (id) setMeOpen(false); model.selectCourt(id); },
     selectHit: (id: string | null) => { if (id) setMeOpen(false); model.selectHit(id); },
-    loadCourts: model.loadCourts, loadRings: model.loadRings, courtsOn: model.courtsOn,
+    loadCourts: model.loadCourts, loadRings: model.loadRings, loadPlayersIn: model.loadPlayersIn, courtsOn: model.courtsOn,
     openMe: () => { if (expanded) { model.select(null); model.selectCourt(null); model.selectHit(null); setMeOpen(true); } else onExpand?.(); },
+    expand: onExpand,
   };
+  // The pins on the map now (pinEngine), and whether this visit's first ones have cascaded in yet: a map made again (a new look) never replays it.
+  const pinsOn = useRef<PinEngine | null>(null);
+  const cascaded = useRef(false);
+  // Held while "Who can see you on the map?" is over the map, read when a map is made.
+  const holdNow = useRef(expanded && holdPins);
+  holdNow.current = expanded && holdPins;
+  // Where the full map was looking when it last came to rest, so a map made again (a new theme) stays there.
+  const camera = useRef<{ center: [number, number]; zoom: number } | null>(null);
 
-  // The map itself: made once per look and home, kept across everything else.
+  // The map itself: made once per look, kept across everything else. Your
+  // location arriving moves it (below) rather than making it again, which
+  // faded every pin out and in and reloaded the map under the first-time flow.
   useEffect(() => {
     const el = host.current;
     if (!el) return;
+    const opening = (expanded && camera.current) || { center: [view.center.lng, view.center.lat] as [number, number], zoom: view.zoom };
     const instance = new maplibregl.Map({
       container: el,
       style: STYLE,
-      center: [view.center.lng, view.center.lat],
-      zoom: view.zoom,
+      center: opening.center,
+      zoom: opening.zoom,
       interactive: expanded,
       attributionControl: false,
       // Handled below, so a two-finger scroll pans and a pinch zooms.
@@ -103,7 +124,9 @@ export function NearbyMap(props: NearbyMapProps) {
     instance.on('style.load', () => applyLook(instance, expanded ? lookFor(themes[theme]) : cardLook(lookFor(themes[theme]))));
     // The pins' shared styles, once per page, and the zoom classes they answer to.
     if (!document.getElementById('cs-pin-css')) { const css = document.createElement('style'); css.id = 'cs-pin-css'; css.textContent = MAP_PIN_CSS; document.head.appendChild(css); }
-    const zoomClass = () => { const z = instance.getZoom(); el.classList.toggle('cs-close', z >= CLOSE_ZOOM_NAMES); el.classList.toggle('cs-far', z < FAR_ZOOM); };
+    const zoomClass = () => { const z = instance.getZoom(); el.classList.toggle('cs-close', z >= CLOSE_ZOOM_NAMES); el.classList.toggle('cs-far', z < FAR_ZOOM); el.classList.toggle('cs-short', z < SHORT_ZOOM); };
+    // The still card: its pins only show who is there; the card itself takes the tap.
+    el.classList.toggle('cs-quiet', !expanded);
     zoomClass();
     instance.on('zoom', zoomClass);
     instance.on('click', () => { latest.current.select(null); latest.current.selectCourt(null); latest.current.selectHit(null); setMeOpen(false); });
@@ -117,8 +140,12 @@ export function NearbyMap(props: NearbyMapProps) {
       if (courtsTimer) clearTimeout(courtsTimer);
       courtsTimer = setTimeout(() => {
         const c = instance.getCenter();
+        const b = instance.getBounds();
+        camera.current = { center: [c.lng, c.lat], zoom: instance.getZoom() };
         latest.current.loadRings({ lat: c.lat, lng: c.lng }, instance.getZoom());
         if (latest.current.courtsOn) void latest.current.loadCourts({ lat: c.lat, lng: c.lng }, instance.getZoom());
+        // Who is in view (migration 63 answers for one part of the map at a time).
+        latest.current.loadPlayersIn({ minLat: b.getSouth(), minLng: b.getWest(), maxLat: b.getNorth(), maxLng: b.getEast() });
       }, 250);
     });
     // Trackpad: a pinch arrives as a wheel with Ctrl held and zooms around the
@@ -154,9 +181,27 @@ export function NearbyMap(props: NearbyMapProps) {
       if (!frame) frame = requestAnimationFrame(flush);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
+    // Every pin, through the same engine as the phone's map. A tap on one does what a tap does there.
+    pinsOn.current = makePins(instance, maplibregl, {
+      popIn: expanded && !cascaded.current,
+      hold: holdNow.current,
+      cascaded: () => { cascaded.current = true; },
+      quiet: !expanded,
+      box: expanded ? FULL_MAP_BOX : CARD_BOX,
+      pad: { top: 130, bottom: 260, left: 60, right: 60 },
+      tap: (id: string) => {
+        const now = latest.current;
+        // The still card is one button: any tap on it opens the full map.
+        if (!expanded) { now.expand?.(); return; }
+        if (id === 'me') now.openMe();
+        else if (id.startsWith('c:')) now.selectCourt(id.slice(2));
+        else if (id.startsWith('h:')) now.selectHit(id.slice(2));
+        else if (id.startsWith('p:')) now.select(id.slice(2));
+      },
+    });
     map.current = instance;
     setMapGen((n) => n + 1);
-    const settle = setTimeout(() => { instance.resize(); instance.jumpTo({ center: [view.center.lng, view.center.lat] }); }, 60);
+    const settle = setTimeout(() => { instance.resize(); instance.jumpTo({ center: opening.center }); }, 60);
     const watcher = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => instance.resize()) : null;
     watcher?.observe(el);
     return () => {
@@ -165,161 +210,49 @@ export function NearbyMap(props: NearbyMapProps) {
       if (frame) cancelAnimationFrame(frame);
       watcher?.disconnect();
       el.removeEventListener('wheel', onWheel);
+      pinsOn.current?.destroy();
+      pinsOn.current = null;
       instance.remove();
       map.current = null;
-      // The players' pins were on the map just removed: the next one draws its own.
-      pins.current.forEach((p) => { if (p.leaving) clearTimeout(p.leaving); });
-      pins.current.clear();
-      mePin.current = null;
     };
-  }, [expanded, theme, view.center.lat, view.center.lng, view.zoom, !expanded && !model.city]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [expanded, theme, !expanded && !model.city]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The sheet over the map has gone: the first pins come in.
+  useEffect(() => { pinsOn.current?.hold(expanded && holdPins); }, [expanded, holdPins, mapGen]);
+  // A fix arriving after the map is up moves the map to it (as on the phone);
+  // opened on a tagged court, a hit or a spot, the map stays there.
+  const lastHome = useRef(home);
+  useEffect(() => {
+    if (lastHome.current.lat === home.lat && lastHome.current.lng === home.lng) return;
+    lastHome.current = home;
+    if (expanded && model.homeKnown && !focusCourt && !focusHit && !focusSpot && !model.selected) map.current?.flyTo({ center: [home.lng, home.lat], zoom: START_ZOOM, duration: 600 });
+  }, [home]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The still card follows a change of city on the profile.
+  const cityKey = model.city ? `${model.city.lat},${model.city.lng}` : '';
+  useEffect(() => { if (!expanded && model.city) map.current?.jumpTo({ center: [model.city.lng, model.city.lat], zoom: START_ZOOM }); }, [cityKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Pins: rebuilt when who is shown or who is picked changes.
+  // Pins: the same list the phone's map draws (pinList), handed to the engine, which keeps
+  // each pin between changes and gathers, splits and fades them (pinEngine).
   const shown = expanded ? model.shown : model.inCity;
   const selectedId = model.selected?.user.id ?? null;
-  // Players' pins persist between changes: a new filter fades out the ones
-  // that leave and fades in the ones that arrive, and the rest never flicker.
-  const pins = useRef(new Map<string, { marker: maplibregl.Marker; html: string; node: HTMLDivElement; leaving?: ReturnType<typeof setTimeout> }>());
-  // Your own pin, kept between changes, so turning Open to hit on or off is a class and a transition, not a redraw.
-  const mePin = useRef<{ marker: maplibregl.Marker; html: string; node: HTMLDivElement } | null>(null);
-  useEffect(() => () => { pins.current.forEach((p) => p.marker.remove()); pins.current.clear(); }, [expanded, theme]);
-  useEffect(() => {
-    const instance = map.current;
-    if (!instance) return;
-    const seen = new Set<string>();
-    for (const p of shown) {
-      const on = p.user.id === selectedId;
-      const size = on ? 38 : 30;
-      const html = playerPinHtml(p.user, { size, on, label: expanded, seenAt: p.seenAt });
-      // Open to hit rides on a class, so it eases on and off in place (see MAP_PIN_CSS).
-      const open = !!playerPinClass(p.user);
-      const z = on ? '5' : open ? '4' : '3';
-      seen.add(p.user.id);
-      const kept = pins.current.get(p.user.id);
-      if (kept) {
-        if (kept.leaving) { clearTimeout(kept.leaving); kept.leaving = undefined; kept.node.style.opacity = '1'; }
-        if (kept.html !== html) {
-          kept.node.innerHTML = html;
-          kept.html = html;
-          kept.marker.setOffset(expanded ? [0, -discSize(size) / 2] : [0, 0]);
-        }
-        kept.node.style.zIndex = z;
-        setOpen(kept.node, open);
-        kept.marker.setLngLat([p.at.lng, p.at.lat]);
-        continue;
-      }
-      const node = document.createElement('div');
-      node.innerHTML = html;
-      // Already open when it appears: drawn as it is, no pop.
-      node.classList.toggle(OPEN_CLASS, open);
-      // Players stand above courts, an open player above the plain ones beside them, the one you picked above everyone.
-      node.style.zIndex = z;
-      node.style.opacity = '0';
-      node.style.transition = 'opacity 180ms ease-out';
-      node.setAttribute('role', expanded ? 'button' : 'link');
-      node.setAttribute('aria-label', expanded ? p.user.name : `${p.user.name}, open profile`);
-      const id = p.user.id;
-      node.addEventListener('click', (event) => { event.stopPropagation(); if (expanded) latest.current.select(id); else latest.current.onOpen(id); });
-      const marker = new maplibregl.Marker({ element: node, anchor: expanded ? 'top' : 'center', offset: expanded ? [0, -discSize(size) / 2] : [0, 0] }).setLngLat([p.at.lng, p.at.lat]).addTo(instance);
-      pins.current.set(id, { marker, html, node });
-      requestAnimationFrame(() => { node.style.opacity = '1'; });
-    }
-    for (const [id, pin] of pins.current) {
-      if (seen.has(id) || pin.leaving) continue;
-      pin.node.style.opacity = '0';
-      pin.leaving = setTimeout(() => { pin.marker.remove(); pins.current.delete(id); }, 180);
-    }
-  }, [shown, selectedId, expanded, night, openToHit, mapGen]);
-
-  // You: one pin, kept on the map and only moved or restyled. Open to hit
-  // switches a class on it, so the green ring draws in (or eases away) while
-  // your card is still up, rather than the pin being swapped for a new one.
-  useEffect(() => {
-    const instance = map.current;
-    // Your pin only where you last shared your location; location off, no pin.
-    // Not on the still card: it shows your city, never your spot in it.
-    const mine = expanded ? model.mePos : null;
-    if (!instance || !mine) { mePin.current?.marker.remove(); mePin.current = null; return; }
-    const html = mePinHtml(me, ME_SIZE);
-    let pin = mePin.current;
-    if (!pin) {
-      const node = document.createElement('div');
-      node.innerHTML = html;
-      // Already open when it appears: drawn as it is, no pop.
-      node.classList.toggle(OPEN_CLASS, openToHit);
-      node.style.zIndex = '6';
-      node.setAttribute('role', 'button');
-      node.setAttribute('aria-label', 'You');
-      node.addEventListener('click', (event) => { event.stopPropagation(); latest.current.openMe(); });
-      const marker = new maplibregl.Marker({ element: node, anchor: 'top', offset: [0, -discSize(ME_SIZE) / 2] }).setLngLat([mine.lng, mine.lat]).addTo(instance);
-      pin = { marker, html, node };
-      mePin.current = pin;
-    } else {
-      if (pin.html !== html) { pin.node.innerHTML = html; pin.html = html; }
-      pin.marker.setLngLat([mine.lng, mine.lat]);
-      setOpen(pin.node, openToHit);
-    }
-  }, [expanded, model.mePos, me, night, openToHit, mapGen]);
-  useEffect(() => () => { mePin.current?.marker.remove(); mePin.current = null; }, []);
-
-  // Courts, when that layer is on: full pins on the full map only.
   const selectedCourtId = model.selectedCourt?.id ?? null;
-  useEffect(() => {
-    const instance = map.current;
-    if (!instance) return;
-    const markers: maplibregl.Marker[] = [];
-    for (const c of expanded ? model.courts : []) {
-      const on = c.id === selectedCourtId;
-      const node = document.createElement('div');
-      // A court played on this week wears the green story ring (courts only, never a random spot).
-      node.innerHTML = courtPinHtml(c, on, model.ringed.has(c.id));
-      node.style.zIndex = on ? '4' : '1';
-      node.setAttribute('role', 'button'); node.setAttribute('aria-label', c.name);
-      node.addEventListener('click', (event) => { event.stopPropagation(); latest.current.selectCourt(c.id); });
-      markers.push(new maplibregl.Marker({ element: node, anchor: 'center' }).setLngLat([c.lng, c.lat]).addTo(instance));
-    }
-    return () => { markers.forEach((m) => m.remove()); };
-  }, [model.courts, model.ringed, selectedCourtId, night, expanded, mapGen]);
-
-  // The still card: your city's courts as quiet dots, not tappable (the card itself opens the map).
-  useEffect(() => {
-    const instance = map.current;
-    if (!instance || expanded) return;
-    const markers = model.cardCourts.map((c) => {
-      const node = document.createElement('div');
-      node.innerHTML = courtDotHtml(c, model.cardRinged.has(c.id));
-      node.style.zIndex = '0';
-      node.style.pointerEvents = 'none';
-      return new maplibregl.Marker({ element: node, anchor: 'center' }).setLngLat([c.lng, c.lat]).addTo(instance);
-    });
-    return () => { markers.forEach((m) => m.remove()); };
-  }, [model.cardCourts, model.cardRinged, expanded, night, mapGen]);
-
-  // Open hits as flags, hung above any court pin at the same spot, on the full
-  // map only, where a flag opens the hit's card. The still card leaves them out:
-  // they crowded the city's name in the middle, and the hits are listed just below (Oct 2).
   const selectedHitId = model.selectedHit?.hit.id ?? null;
-  const hitList = useMemo(() => (expanded ? model.hits : []), [expanded, model.hits]);
-  useEffect(() => {
-    const instance = map.current;
-    if (!instance) return;
-    const markers = hitList.map(({ hit, at: spot }) => {
-      const on = hit.id === selectedHitId;
-      const node = document.createElement('div');
-      node.innerHTML = hitPinHtml(hit, on);
-      node.style.zIndex = on ? '5' : '2';
-      if (expanded) {
-        node.setAttribute('role', 'button');
-        node.setAttribute('aria-label', `Open hit at ${hit.place.name}`);
-        node.addEventListener('click', (event) => { event.stopPropagation(); latest.current.selectHit(hit.id); });
-      } else node.style.pointerEvents = 'none';
-      return new maplibregl.Marker({ element: node, anchor: 'bottom', offset: [0, HIT_LIFT] }).setLngLat([spot.lng, spot.lat]).addTo(instance);
-    });
-    return () => { markers.forEach((m) => m.remove()); };
-  }, [hitList, selectedHitId, expanded, night, mapGen]);
+  const markers = useMemo(
+    () => mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden: choosing && mapVisibility === 'none' }),
+    [model.courts, model.ringed, model.cardCourts, model.cardRinged, model.hits, shown, selectedId, selectedCourtId, selectedHitId, expanded, me, night, theme, openToHit, model.mePos, choosing, mapVisibility], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  // What "+N" pins look like, in this theme's colours.
+  const tpl = useMemo(() => clusterTemplates(), [theme, night]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { pinsOn.current?.set({ items: markers, tpl }); }, [markers, tpl, mapGen]);
 
   // Picking someone, a court, a hit, or typing a city takes the map there.
-  useEffect(() => { if (model.selected) map.current?.flyTo({ center: [model.selected.at.lng, model.selected.at.lat], zoom: Math.max(map.current.getZoom(), CLOSE_ZOOM), duration: 500 }); }, [model.selected]);
+  // (Again on a map made afresh, as when your location lands: a player opened from "Who's up today" stays in view.)
+  // A beat later than the new map's own settling (its jump back to the middle), so the move is not undone.
+  useEffect(() => {
+    const at = model.selected?.at;
+    if (!at) return undefined;
+    const t = setTimeout(() => { const m = map.current; if (m) m.flyTo({ center: [at.lng, at.lat], zoom: Math.max(m.getZoom(), CLOSE_ZOOM), duration: 500 }); }, 90);
+    return () => clearTimeout(t);
+  }, [model.selected?.user.id, mapGen]); // eslint-disable-line react-hooks/exhaustive-deps
   // A court's card is tall (who may play, right now, what players say): its court lands above it, not under it.
   useEffect(() => { if (model.selectedCourt) map.current?.flyTo({ center: [model.selectedCourt.lng, model.selectedCourt.lat], zoom: Math.max(map.current.getZoom(), CLOSE_ZOOM), duration: 500, offset: [0, -courtLift(host.current?.clientHeight ?? 800)] }); }, [model.selectedCourt]);
   useEffect(() => { if (model.selectedHit) map.current?.flyTo({ center: [model.selectedHit.at.lng, model.selectedHit.at.lat], zoom: Math.max(map.current.getZoom(), CLOSE_ZOOM), duration: 500 }); }, [model.selectedHit]);
@@ -327,7 +260,8 @@ export function NearbyMap(props: NearbyMapProps) {
   useEffect(() => { if (meOpen && model.mePos) map.current?.flyTo({ center: [model.mePos.lng, model.mePos.lat], zoom: map.current.getZoom(), duration: 500, offset: [0, -youLift(host.current?.clientHeight ?? 800)] }); }, [meOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (model.place) map.current?.flyTo({ center: [model.place.lng, model.place.lat], zoom: START_ZOOM, duration: 700 }); }, [model.place]);
 
-  const canvas = <div ref={host} style={{ position: 'absolute', inset: 0, background: colors.bg }} />;
+  // On the still card the pins say nothing a screen reader needs (the card says it all, and takes the tap).
+  const canvas = <div ref={host} aria-hidden={expanded ? undefined : true} style={{ position: 'absolute', inset: 0, background: colors.bg }} />;
 
   if (!expanded && !model.city) {
     // A city still being looked up holds the card's place; no city at all asks for one.
@@ -363,7 +297,7 @@ export function NearbyMap(props: NearbyMapProps) {
     <View style={styles.fill}>
       {canvas}
       <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
-        <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} />
+        <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} locationMenu={choosing} />
         <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
       </View>
       <View pointerEvents="box-none" style={styles.bottom}>
@@ -378,7 +312,7 @@ export function NearbyMap(props: NearbyMapProps) {
           ) : stageKey === 'tray' ? (
             <NearbyRail items={model.tray} cityName={model.place ? model.place.name.split(',')[0] : cityName} selectedId={null} onSelect={model.select} weather={weather} query={model.query} filter={model.filter} courts={model.nearestCourts} onPickCourt={model.selectCourt} />
           ) : meOpen ? (
-            <YouSheet me={me} open={openToHit} onToggle={actions.setOpenToHit} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} />
+            <YouSheet me={me} open={openToHit} onToggle={actions.setOpenToHit} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} seenBy={mapVisibility} onSeenBy={choosing ? () => { void askWhoSeesYou('manage'); } : undefined} />
           ) : model.selected ? (
             <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onAskToHit={actions.canMessage(model.selected.user.id) ? () => askToHit([model.selected!.user.id]) : undefined} onAddToGroup={() => addToGroup(model.selected!.user.id)} onFollow={() => { const who = model.selected!.user; if (followingIds.includes(who.id)) confirmUnfollow(who, () => actions.toggleFollow(who.id)); else actions.toggleFollow(who.id); }} />
           ) : model.selectedCourt ? (

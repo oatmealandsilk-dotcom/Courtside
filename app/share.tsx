@@ -181,8 +181,8 @@ export default function ShareSheet() {
     return users
       .filter((u) => u.id !== currentUserId && !blockedIds.includes(u.id) && !inRecent.has(`u:${u.id}`))
       .sort((a, b) => Number(followingIds.includes(b.id)) - Number(followingIds.includes(a.id)) || a.name.localeCompare(b.name))
-      .map((u) => ({ key: `u:${u.id}`, name: u.name, user: u, words: `${u.name} ${u.handle}`.toLowerCase(), locked: !actions.canMessage(u.id) }));
-  }, [users, currentUserId, blockedIds, followingIds, recent, actions]);
+      .map((u) => ({ key: `u:${u.id}`, name: u.name, user: u, words: `${u.name} ${u.handle}`.toLowerCase() }));
+  }, [users, currentUserId, blockedIds, followingIds, recent]);
 
   /**
    * What shows: what matches the search, or the top of each list. A chat
@@ -196,7 +196,9 @@ export default function ShareSheet() {
     return [...pickedElsewhere, ...top];
   };
   const recentShown = shown(recent, RECENT_SHOWN);
-  const peopleShown = shown(people, PEOPLE_SHOWN);
+  // Locks only for the people on screen: whether someone can be messaged is
+  // asked of the server person by person (migration 64), never for everyone.
+  const peopleShown = shown(people, PEOPLE_SHOWN).map((t) => ({ ...t, locked: !!t.user && !actions.canMessage(t.user.id) }));
 
   const toggle = (target: Target) => {
     if (selected.includes(target.key)) { setSelected((prev) => prev.filter((x) => x !== target.key)); return; }

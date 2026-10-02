@@ -20,10 +20,11 @@ import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, TaggedCourt, Question, Story, Tip, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole } from './types';
+import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Story, Tip, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
 import { isMapCourtId } from '@/features/places/courtName';
+import type { Openness } from '@/features/players/age';
 
 /** What a new player did first, after setup. */
 /** What the live handle check says about a handle. */
@@ -92,6 +93,10 @@ interface ProfileRow {
   is_admin?: boolean | null;
   suspended_at?: string | null;
   following_count?: number | null;
+  /**
+   * Only before migration 64, when every profile carried it. Since then
+   * nobody's age is on a profile; your own comes from your settings row.
+   */
   age_group?: string | null;
   read_receipts?: boolean | null;
 }
@@ -306,6 +311,12 @@ export interface RemoteData {
   activities?: DetectedActivity[];
   /** Whether this server can tag players on sessions (migration 62 has run); missing when it could not be told. */
   sessionTagsReady?: boolean;
+  /**
+   * Whether the profiles came down with everyone's age on them: true on a
+   * database from before migration 64, false since (nobody's age but your
+   * own reaches the app). Missing in saved copies.
+   */
+  agesOnProfiles?: boolean;
 }
 
 interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null }
@@ -369,6 +380,12 @@ export interface UserState {
   pushMapFriends?: boolean; pushMapHits?: boolean; pushMapPlayers?: boolean; pushCourts?: boolean;
   /** What the coach works around (injuries, schedule, gear): kept in this private row, never on the public profile. Undefined on a database without migration 19. */
   constraints?: PlayerProfile['constraints'];
+  /**
+   * Who can see you on the map (migration 63). Undefined on a database
+   * without it; null once it has it but you never chose (the app asks
+   * "Who can see you on the map?").
+   */
+  mapVisibility?: MapVisibility | null;
 }
 
 /* Courts, migration 60: players' facts, follows, right now, rings. */
@@ -440,8 +457,12 @@ const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
   services: services.filter((s) => s.coach_id === r.id && (s.active || r.user_id === me)).sort((a, b) => a.position - b.position).map(toService),
   listed: r.listed, payoutsReady: r.payouts_ready, payoutsStarted: r.payouts_started,
 });
+/** One pin from map_players (migration 63). */
+interface MapPlayerRow { user_id: ID; lat: number; lng: number; place: MapPlace | string; court_id: string | null; court_name: string | null; city: string | null; seen_at: string | null; open_until: string | null }
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
-interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints'] } | null }
+interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints'] } | null; map_visibility?: string | null;
+  /** Your own age group, readable only by you (migration 64). Absent before it. */
+  age_group?: string | null }
 
 interface PollRow { question_id: string; options: string[]; counts: number[] | null }
 /** Each thread's poll, with the totals and your own vote, laid onto the threads. */
@@ -490,7 +511,10 @@ const toUserState = (r: UserStateRow): UserState => ({
   pushMapPlayers: typeof r.push_map_players === 'boolean' ? r.push_map_players : undefined,
   pushCourts: typeof r.push_courts === 'boolean' ? r.push_courts : undefined,
   constraints: Array.isArray(r.private_profile?.constraints) ? r.private_profile!.constraints : undefined,
+  // The key is there only once migration 63 has run; null means never chosen.
+  mapVisibility: 'map_visibility' in r ? asVisibility(r.map_visibility) : undefined,
 });
+const asVisibility = (v: unknown): MapVisibility | null => (v === 'nearby' || v === 'mutuals' || v === 'none' ? v : null);
 
 interface CoachApplicationRow {
   id: string; user_id: string; full_name: string; email: string; phone: string; utr: string | null; ntrp: string | null; utr_link?: string | null; ntrp_link?: string | null;
@@ -770,8 +794,15 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // A post or hit an admin removed never shows in a feed; admins see it only on the Reports screen.
   const postRows = ((posts.data ?? []) as (PostRow & { comments?: CommentRow[]; removed_at?: string | null })[]).filter((row) => !row.removed_at);
   const storyRows = ((stories.data ?? []) as (StoryRow & { removed_at?: string | null })[]).filter((row) => !row.removed_at);
+  // Your own age: from your settings row, the only place it is since
+  // migration 64; before that, from your profile row like everyone's.
+  const ownState = (ustate.data ?? null) as UserStateRow | null;
+  const ownAge = ownState?.age_group ?? profileRows.find((row) => row.id === me)?.age_group ?? null;
+  // Which database this is: a profile row has an age_group column only before 64.
+  const agesOnProfiles = profileRows.some((row) => 'age_group' in row);
   return {
-    users: profileRows.map((row) => toUser(row, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
+    agesOnProfiles,
+    users: profileRows.map((row) => toUser(row.id === me ? { ...row, age_group: ownAge } : row, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
     posts: postRows.map(toPost),
     comments: [
       ...postRows.flatMap((row) => (row.comments ?? []).map(toComment)),
@@ -1306,6 +1337,54 @@ export const remote = {
     return data.map((e) => ({ followerId: e.follower_id, followingId: e.following_id }));
   },
 
+  /**
+   * What the server says about each of these people (migration 64,
+   * open_to_you): whether you may start a chat with them (or add them to a
+   * group, or tag them). Never their age. Someone it would not answer about
+   * (blocked either way, gone, or past the day's limit of people asked
+   * about) is left out. Up to 100 a question, so a longer list is asked in
+   * parts. Null when the database has no such question yet (before 64);
+   * throws when it could not be asked, so nobody is taken as closed for want
+   * of an answer.
+   */
+  async fetchOpenness(userIds: ID[]): Promise<Record<ID, Openness> | null> {
+    const ids = Array.from(new Set(userIds.filter((id) => UUID_RE.test(id))));
+    const out: Record<ID, Openness> = {};
+    for (let at = 0; at < ids.length; at += 100) {
+      const { data, error } = await need().rpc('open_to_you', { ids: ids.slice(at, at + 100) });
+      if (error) {
+        if (missingFunction(error)) return null;
+        fail('open to you')(error);
+        throw error;
+      }
+      for (const r of (data ?? []) as { user_id: string; chat: boolean | null }[]) out[r.user_id] = { chat: r.chat === true };
+    }
+    return out;
+  },
+  /**
+   * Of these posts, the ones that may show on a court's page for you
+   * (migration 64, shown_at_court: the teen rule, as court_rings counts
+   * posts). Up to 100 a question, so a longer list is asked in parts. Null
+   * when the database has no such question (before 64); throws when it could
+   * not be asked.
+   */
+  async fetchShownAtCourt(postIds: ID[]): Promise<Set<ID> | null> {
+    const ids = Array.from(new Set(postIds.filter((id) => UUID_RE.test(id))));
+    const out = new Set<ID>();
+    for (let at = 0; at < ids.length; at += 100) {
+      const { data, error } = await need().rpc('shown_at_court', { post_ids: ids.slice(at, at + 100) });
+      if (error) {
+        if (missingFunction(error)) return null;
+        fail('shown at court')(error);
+        throw error;
+      }
+      for (const r of (data ?? []) as (string | { shown_at_court?: string })[]) {
+        const id = typeof r === 'string' ? r : r?.shown_at_court;
+        if (id) out.add(id);
+      }
+    }
+    return out;
+  },
   /**
    * Which of these people follow you right now. Whether a teen account is
    * open to you depends on it, and the app's own copy is from when it
@@ -2038,7 +2117,42 @@ export const remote = {
     return (data as { user_id: ID; lat: number; lng: number; city: string | null; seen_at: string; show_activity: boolean }[])
       .map((r) => ({ userId: r.user_id, lat: r.lat, lng: r.lng, city: r.city ?? undefined, seenAt: r.show_activity ? r.seen_at : undefined }));
   },
-  /** Your own spot; the database rounds it to about a kilometre. */
+  /**
+   * Everyone the map may show you in one part of the map, each where you
+   * may see them (migration 63's map_players): on their court, exactly (you,
+   * and people who follow each other with you) or about a kilometre out;
+   * with until when they are up for a hit today. The server answers for at
+   * most 2° each way round the middle of `view`, and with no view only for
+   * you. 'missing' on a database without it (the app reads last_seen
+   * instead); null when the ask failed.
+   */
+  async fetchMapPlayers(view?: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null): Promise<LastSeen[] | null | 'missing'> {
+    const area = view ? { min_lat: view.minLat, min_lng: view.minLng, max_lat: view.maxLat, max_lng: view.maxLng } : {};
+    const { data, error } = await need().rpc('map_players', area);
+    if (error) { if (missingFunction(error)) return 'missing'; fail('map players')(error); return null; }
+    return ((data ?? []) as MapPlayerRow[]).map((r) => ({
+      userId: r.user_id, lat: r.lat, lng: r.lng, city: r.city ?? undefined, seenAt: r.seen_at ?? undefined,
+      place: r.place === 'court' || r.place === 'exact' ? r.place : 'approx',
+      courtId: r.court_id ?? undefined, courtName: r.court_name ?? undefined, openUntil: r.open_until ?? undefined,
+    }));
+  },
+  /** "Who can see you on the map?" (migration 63). Resolves false when it could not be saved. */
+  async setMapVisibility(v: MapVisibility): Promise<boolean> {
+    const { error } = await need().rpc('set_map_visibility', { v });
+    if (error) { fail('map visibility')(error); return false; }
+    return true;
+  },
+  /**
+   * New on CourtSide, decided by the server (migration 63): who joined in
+   * the last `days` days that you may be shown, newest first. Null on a
+   * database without it (the app works it out the old way) or a failed ask.
+   */
+  async fetchNewOnCourtside(days = 14): Promise<{ userId: ID; joinedAt: string }[] | null> {
+    const { data, error } = await need().rpc('new_on_courtside', { days });
+    if (error) { if (!missingFunction(error)) fail('new on courtside')(error); return null; }
+    return ((data ?? []) as { user_id: ID; joined_at: string }[]).map((r) => ({ userId: r.user_id, joinedAt: r.joined_at }));
+  },
+  /** Your own spot; the database keeps it to itself and shows others only what each may see. */
   async markLastSeen(lat: number, lng: number, city?: string) {
     const { error } = await need().rpc('mark_last_seen', { p_lat: lat, p_lng: lng, p_city: city ?? null });
     if (error) fail('mark last seen')(error);
@@ -2126,13 +2240,14 @@ export const remote = {
     return 'That didn’t go through. Try again.';
   },
   /** "I'm playing here": when it ends, or why not, as the server says it. */
-  async checkInAtCourt(courtId: string): Promise<{ until: string } | { error: 'adults_only' | 'location_off' | 'too_far' | 'closed_court' | 'slow_down' | 'failed' }> {
+  async checkInAtCourt(courtId: string): Promise<{ until: string } | { error: 'adults_only' | 'location_off' | 'too_far' | 'closed_court' | 'slow_down' | 'hidden' | 'failed' }> {
     const { data, error } = await need().rpc('check_in_at_court', { p_court: courtId });
     if (!error && typeof data === 'string') return { until: data };
     if (error) fail('check in')(error);
     const said = error?.message ?? '';
+    // 'hidden': you chose Only me on the map (migration 63), so nobody sees you at a court either.
     return { error: /adults_only/.test(said) ? 'adults_only' : /location_off/.test(said) ? 'location_off' : /too_far/.test(said) ? 'too_far'
-      : /closed_court/.test(said) ? 'closed_court' : /slow down/.test(said) ? 'slow_down' : 'failed' };
+      : /closed_court/.test(said) ? 'closed_court' : /slow down/.test(said) ? 'slow_down' : /hidden/.test(said) ? 'hidden' : 'failed' };
   },
   async checkOutOfCourt() {
     const { error } = await need().rpc('check_out_of_court');

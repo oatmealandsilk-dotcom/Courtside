@@ -1,5 +1,5 @@
 import React, { useLayoutEffect, useRef } from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { sheetFling } from '@/components/map/sheetFling';
 import { layerZ, useStageLayers, type StageKind, type StageLayer } from '@/components/map/stageLayers';
@@ -101,16 +101,16 @@ export function CardStage({ cardKey, kind, crown, children }: { cardKey: string;
   });
 
   return (
-    <View style={{ position: 'relative', pointerEvents: 'box-none' }}>
+    <View style={styles.stage}>
       {layers.map((layer: StageLayer) => (
         <View
           key={layer.id}
           ref={(el) => { if (el) els.current.set(layer.id, el as unknown as HTMLElement); }}
           // The tray always under the cards; the newest card above the one leaving, which no longer takes taps.
-          style={[{ zIndex: layerZ(layer), pointerEvents: layer.out ? 'none' : 'box-none' }, layer.out && { position: 'absolute', left: 0, right: 0, bottom: 0 }]}
+          style={[{ zIndex: layerZ(layer) }, layer.out ? styles.out : styles.through]}
         >
           {crown ? (
-            <View ref={(el) => { if (el) crowns.current.set(layer.id, el as unknown as HTMLElement); }} style={{ pointerEvents: 'box-none' }}>
+            <View ref={(el) => { if (el) crowns.current.set(layer.id, el as unknown as HTMLElement); }} style={styles.through}>
               {crown}
             </View>
           ) : null}
@@ -120,3 +120,13 @@ export function CardStage({ cardKey, kind, crown, children }: { cardKey: string;
     </View>
   );
 }
+
+// Taps pass through the stage to the map wherever no card or button is (the
+// strip above a card, round the map's buttons). In the browser this only
+// works from a compiled style: an inline pointerEvents is ignored there
+// (react-native-web), which left that strip of map untappable.
+const styles = StyleSheet.create({
+  stage: { position: 'relative', pointerEvents: 'box-none' },
+  through: { pointerEvents: 'box-none' },
+  out: { pointerEvents: 'none', position: 'absolute', left: 0, right: 0, bottom: 0 },
+});

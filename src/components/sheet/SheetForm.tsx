@@ -16,12 +16,12 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
  */
 
 /** The sheet's title, a line under it that can change as you fill it in, and a round close. `lines`: how many lines the line may run to (one unless said). */
-export function SheetTitle({ title, line, lineTone = 'muted', lines = 1, onClose }: { title: string; line?: string; lineTone?: 'muted' | 'brand'; lines?: number; onClose: () => void }) {
+export function SheetTitle({ title, line, lineTone = 'muted', lines = 1, onClose, titleSize }: { title: string; line?: string; lineTone?: 'muted' | 'brand'; lines?: number; onClose: () => void; /** A little smaller than the usual 24, for a longer title that should stay on one line on a phone. */ titleSize?: number }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.titleRow}>
       <View style={{ flex: 1, gap: 3 }}>
-        <Text style={styles.title}>{title}</Text>
+        <Text style={[styles.title, titleSize ? { fontSize: titleSize, letterSpacing: -0.03 * titleSize } : null]}>{title}</Text>
         {line ? <Text style={[styles.line, lineTone === 'brand' && styles.lineBrand]} numberOfLines={lines}>{line}</Text> : null}
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={8} onPress={onClose} style={({ pressed }) => [styles.close, pressed && { opacity: 0.7 }]}>

@@ -4,11 +4,10 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Field } from '@/components/ui';
 import type { ID, PracticeSession, SessionPlayer, SessionTagStatus, User } from '@/data/types';
-import { MAX_SESSION_TAGS, flipRole, localRefusal, nameFor, nextRole, refusalWords, rolesForMatch } from '@/features/activity/sessionTags';
+import { MAX_SESSION_TAGS, flipRole, nameFor, nextRole, refusalWords, rolesForMatch } from '@/features/activity/sessionTags';
 import { useMentionCandidates, type MentionCandidate } from '@/features/mentions/useMentionCandidates';
 import * as haptics from '@/lib/haptics';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
-import { isSupabaseConfigured } from '@/lib/supabase';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
@@ -60,7 +59,7 @@ export function WhoYouPlayed({ kind, players, onPlayers, text, onText, search, s
   onDrop?: (id: ID) => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { users, currentUserId, followEdges, actions } = useApp();
+  const { users, actions } = useApp();
   const candidates = useMentionCandidates(suggested);
   const box = useRef<TextInput>(null);
   const block = useRef<View>(null);
@@ -109,7 +108,8 @@ export function WhoYouPlayed({ kind, players, onPlayers, text, onText, search, s
   const showing = open && (listed.length > 0 || !!query);
   useEffect(() => { if (showing) reveal(block.current); }, [showing, listed.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const refusal = (u: User) => localRefusal({ me: currentUserId, who: u, follows: followEdges, real: isSupabaseConfigured });
+  // This phone's quick answer (the server is asked about each person listed, so a lock shows a moment later); the server's own check after each pick has the last word.
+  const refusal = (u: User) => actions.tagHint(u.id);
   const pick = (u: User) => {
     setNote('');
     if (picked.has(u.id)) { onPlayers((now) => now.filter((p) => p.id !== u.id)); haptics.untap(); return; }

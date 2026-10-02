@@ -919,7 +919,29 @@ export interface LastSeen {
   lng: number;
   city?: string;
   seenAt?: string;
+  /**
+   * How exact the spot is, as the server decided for you (map_players,
+   * migration 63): 'court' snapped onto the court they were at, 'exact'
+   * (you, and people who follow each other with you), 'approx' about a
+   * kilometre out. Absent on a database before 63, where every spot is
+   * rounded to about a kilometre (so it reads as approx).
+   */
+  place?: MapPlace;
+  /** The court they were at (place 'court'). */
+  courtId?: string;
+  courtName?: string;
+  /** Up for a hit until then (today); absent when not, or before migration 63. */
+  openUntil?: string;
 }
+
+/** How exact a player's pin is. */
+export type MapPlace = 'court' | 'exact' | 'approx';
+
+/**
+ * Who can see you on the map (migration 63): Players nearby, Only people
+ * you follow back, or Only me.
+ */
+export type MapVisibility = 'nearby' | 'mutuals' | 'none';
 
 /* ---------------------------- Courts (migration 60) ---------------------------- */
 
