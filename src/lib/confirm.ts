@@ -1,4 +1,4 @@
-import { Alert, Platform } from 'react-native';
+import { AccessibilityInfo, Platform } from 'react-native';
 
 export interface ConfirmOptions {
   /** A short question, the way other apps ask it: "Delete post?" */
@@ -9,67 +9,74 @@ export interface ConfirmOptions {
   confirmLabel: string;
   /** Red, for something that removes, cuts someone off or cannot be taken back. */
   destructive?: boolean;
-  /** Runs only on yes. Cancel, a tap outside or Escape does nothing. */
+  /** Runs only on yes. Cancel, a tap outside, Escape or Android's back does nothing. */
   onConfirm: () => void | Promise<void>;
 }
 
 type Show = (request: ConfirmOptions) => void;
 let host: Show | null = null;
+/** Questions asked before the card was drawn (the first frames of a launch), in the order they came. */
+const waiting: ConfirmOptions[] = [];
 
-/** The in-app dialog registers itself here (see ConfirmHost); only the browser uses it. */
+/** The card registers itself here (see ConfirmHost), on a phone and in a browser alike. */
 export function setConfirmHost(show: Show | null) {
   host = show;
+  // Anything asked before it was ready is asked now, so a question is never dropped.
+  if (show) waiting.splice(0).forEach(show);
 }
 
 /**
  * "Are you sure?" for one tap that would otherwise be final, asked the way
- * every other app asks it: a short question, one line on what happens, Cancel
- * and the action. On a phone it is the phone's own alert, with the action in
- * red when it deletes or cuts someone off. In a browser it is the app's own
- * small card over a dimmed page, because the browser's built-in box is grey,
- * titled with the site's address and can only say "OK".
+ * Instagram and TikTok ask it: the app's own small card over a dimmed
+ * screen, with a short question, one muted line, the action's own word and
+ * then Cancel. It is the same card on a phone and in a browser, in every
+ * court's colours. The phone's grey system alert is left to what only the
+ * phone can ask (the camera, the microphone, photos, location and so on).
  */
 export function confirm(options: ConfirmOptions) {
-  const yes = () => { void options.onConfirm(); };
-  if (Platform.OS === 'web') {
-    if (host) host(options);
-    // Only if the root layout has not drawn the dialog (yet), so a question is never silently dropped.
-    else if (window.confirm(options.message ? `${options.title}\n${options.message}` : options.title)) yes();
-    return;
-  }
-  Alert.alert(
-    options.title,
-    options.message,
-    [
-      { text: 'Cancel', style: 'cancel' },
-      { text: options.confirmLabel, style: options.destructive ? 'destructive' : 'default', onPress: yes },
-    ],
-    // Android: a tap outside the alert counts as Cancel, as it does everywhere else.
-    { cancelable: true },
-  );
+  if (host) host(options);
+  else waiting.push(options);
 }
 
 /**
- * How long a menu takes to leave the screen. A question asked from a menu
- * waits this long on a phone, so the menu is gone before the alert arrives
- * instead of fading out underneath it, the way iPhone apps sequence the two.
+ * How long a menu takes to leave the screen. Anything a menu opens that is
+ * the phone's own (a new page sliding up) waits this long on a phone, so the
+ * menu is gone before it arrives.
  */
 const MENU_GONE_MS = 350;
 
 /**
  * Runs something chosen in a menu that closes in the same tap (opening a
- * sheet, asking a question) once the menu has gone. On a phone a new screen
- * presented while the menu is still fading out can fail to appear; a browser
- * has nothing to wait for.
+ * sheet) once the menu has gone. On a phone a new screen presented while the
+ * menu is still fading out can fail to appear; a browser has nothing to wait for.
  */
 export function afterMenu(run: () => void) {
   if (Platform.OS === 'web') run();
   else setTimeout(run, MENU_GONE_MS);
 }
 
-/** `confirm`, for a choice made in a menu that closes in the same tap. */
+// Whether VoiceOver or TalkBack is on, kept current (see confirmAfterMenu).
+let screenReader = false;
+if (Platform.OS !== 'web') {
+  try {
+    void AccessibilityInfo.isScreenReaderEnabled().then((on) => { screenReader = on; }).catch(() => undefined);
+    AccessibilityInfo.addEventListener('screenReaderChanged', (on: boolean) => { screenReader = on; });
+  } catch {
+    // A phone that cannot say: questions from menus simply come straight away.
+  }
+}
+
+/**
+ * `confirm`, for a choice made in a menu that closes in the same tap. The
+ * card is drawn above everything, a menu still fading out included, so it
+ * comes at once and the two cross over, the way Instagram's do. With
+ * VoiceOver or TalkBack on it waits for the menu to finish going: a closing
+ * menu hands the reader back to the page beneath, which would pull it off
+ * the question.
+ */
 export function confirmAfterMenu(options: ConfirmOptions) {
-  afterMenu(() => confirm(options));
+  if (screenReader) afterMenu(() => confirm(options));
+  else confirm(options);
 }
 
 /**

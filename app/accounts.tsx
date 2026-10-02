@@ -62,7 +62,7 @@ export default function Accounts() {
                 {busy === account.id ? <Text style={styles.meta}>Switching…</Text> : current ? <Ionicons name="checkmark-circle" size={22} color={colors.brand} /> : null}
               </Pressable>
               {!current ? (
-                <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${account.name} from this device`} onPress={() => confirm({ title: 'Remove this login?', message: `${account.handle ? `@${account.handle}` : 'It'} comes off this device. You'll need to sign in again to add it back.`, confirmLabel: 'Remove', destructive: true, onConfirm: () => actions.forgetSavedAccount(account.id) })} hitSlop={8} style={styles.remove}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${account.name} from this device`} onPress={() => confirm({ title: 'Remove this login?', message: `${account.handle ? `@${account.handle}` : 'It'} comes off this device until you sign in again.`, confirmLabel: 'Remove', destructive: true, onConfirm: () => actions.forgetSavedAccount(account.id) })} hitSlop={8} style={styles.remove}>
                   <Ionicons name="close" size={18} color={colors.textFaint} />
                 </Pressable>
               ) : null}
