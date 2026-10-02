@@ -17,7 +17,11 @@ const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
  * there is nothing to hitch on landing.
  *
  * The pane on show sets the height; the neighbours ride alongside it, clipped
- * to that height until they land. A swipe past the first or last pane is
+ * to that height until they land. Settled, the page ends where the pane on
+ * show ends: a short Discussions next to a long Find Players used to leave
+ * room to scroll on into nothing (Oct 2, William: "it should be like a
+ * bottom to the page"). While a swipe or a glide is under way the strip is
+ * as tall as the tallest, so the pane coming in is never cut off. A swipe past the first or last pane is
  * handed up to the tab row when `delegateLeft` / `delegateRight` say so,
  * otherwise the row gives a little and springs back.
  */
@@ -51,6 +55,10 @@ export function SectionPager({ index, panes, onIndex, progress, depth = 1, deleg
   const position = useSharedValue(index);
   const [shown, setShown] = useState(index);
   const shownRef = useRef(index);
+  // Each pane's own height, and whether the row is moving between panes.
+  const [heights, setHeights] = useState<number[]>([]);
+  const [moving, setMoving] = useState(false);
+  const noteHeight = (i: number, h: number) => setHeights((was) => (was[i] === h ? was : Object.assign([...was], { [i]: h })));
   const locked = useSharedValue(false);
   const config = useSharedValue({ enabled: isPhone, delegateLeft, delegateRight, depth, last });
   useEffect(() => { config.value = { enabled: isPhone, delegateLeft, delegateRight, depth, last }; }, [isPhone, delegateLeft, delegateRight, depth, last, config]);
@@ -67,7 +75,10 @@ export function SectionPager({ index, panes, onIndex, progress, depth = 1, deleg
     shownRef.current = index;
     setShown(index);
     if (Math.abs(position.value - index) <= 0.01) return;
-    if (tabActive) position.value = withTiming(index, { duration: 240, easing: EASE });
+    if (tabActive) {
+      setMoving(true);
+      position.value = withTiming(index, { duration: 240, easing: EASE }, (finished) => { if (finished) runOnJS(setMoving)(false); });
+    }
     else { position.value = index; if (progress) progress.value = 0; }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, position]);
@@ -77,6 +88,7 @@ export function SectionPager({ index, panes, onIndex, progress, depth = 1, deleg
   const land = (dest: number) => {
     shownRef.current = dest;
     setShown(dest);
+    setMoving(false);
     latest.current(dest);
   };
 
@@ -117,6 +129,7 @@ export function SectionPager({ index, panes, onIndex, progress, depth = 1, deleg
       startPosition.value = position.value;
       settled.value = false;
       runOnJS(setPageDragging)(true);
+      runOnJS(setMoving)(true);
     })
     .onUpdate((e) => {
       'worklet';
@@ -167,13 +180,13 @@ export function SectionPager({ index, panes, onIndex, progress, depth = 1, deleg
 
   return (
     <GestureDetector gesture={pan}>
-      <View onLayout={(e) => { const w = e.nativeEvent.layout.width; if (w > 0) setMeasured(w); }} style={{ overflow: 'hidden', alignSelf: 'stretch' }}>
-        <Animated.View style={[{ flexDirection: 'row', width: width * count }, row]}>
+      <View onLayout={(e) => { const w = e.nativeEvent.layout.width; if (w > 0) setMeasured(w); }} style={{ overflow: 'hidden', alignSelf: 'stretch', height: !moving && heights[shown] ? heights[shown] : undefined }}>
+        <Animated.View style={[{ flexDirection: 'row', alignItems: 'flex-start', width: width * count }, row]}>
           {panes.map((pane, i) => (
-            // All panes stay in the row at their own height: the strip is as
-            // tall as the tallest, and landing never re-lays the page out —
-            // which is what made fast back-and-forth swiping hitch.
-            <View key={i} style={{ width }} pointerEvents={i === shown ? 'auto' : 'none'}>
+            // All panes stay in the row at their own height, so landing never
+            // re-lays the panes out (that made fast back-and-forth swiping
+            // hitch); only the clip above them takes the shown pane's height.
+            <View key={i} style={{ width }} pointerEvents={i === shown ? 'auto' : 'none'} onLayout={(e) => noteHeight(i, e.nativeEvent.layout.height)}>
               {pane}
             </View>
           ))}

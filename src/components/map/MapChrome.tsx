@@ -734,9 +734,10 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
       : 'No one here yet';
   return (
     <>
-      {/* The city's name is the top layer, with a soft fog of the page colour
-          behind it, so a player's ring or a court never sits over the words
-          however busy the middle of town gets (Oct 2). */}
+      {/* The city's name is the top layer, so a player's ring or a court never
+          sits over the words however busy the middle of town gets. Behind the
+          words, only their own soft glow of the page colour, as it was first:
+          the oval backdrop added on Oct 2 came back out the same day (William). */}
       <View pointerEvents="none" style={styles.cityMark}>
         <View style={styles.cityGlow}>
           <Text style={styles.cityName} numberOfLines={1}>{cityName}</Text>
@@ -895,7 +896,7 @@ const styleDefinitions = StyleSheet.create({
   // The still card's overlay: the city named the way a map names it, with a soft halo of the page colour so it reads over roads.
   cityMark: { position: 'absolute', left: spacing.xl, right: spacing.xl, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 10, elevation: 10 },
   // A soft oval of the page colour behind the words: dense in the middle, feathered at the edge by its own glow.
-  cityGlow: { alignItems: 'center', gap: 2, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 999, backgroundColor: `${colors.bg}9E`, shadowColor: colors.bg, shadowOpacity: 0.75, shadowRadius: 18, shadowOffset: { width: 0, height: 0 } },
+  cityGlow: { alignItems: 'center', gap: 2 },
   cityName: { ...typography.title, fontSize: 26, letterSpacing: -0.6, color: colors.text, textShadowColor: colors.bg, textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },
   cityCount: { ...typography.smallStrong, color: colors.textMuted, textShadowColor: colors.bg, textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 } },
   cityCountOn: { color: colors.brand },
