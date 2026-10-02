@@ -58,11 +58,14 @@ interface NavItem {
 
 /**
  * In the strip's order, left to right (Community is where the app opens).
- * On the phone the + sits in the middle, between Home and Coaching.
+ * On the phone the + sits in the middle, between Feed and Coaching. The
+ * feed's tab is called Feed, not Home: the app no longer opens on it, and a
+ * Home that isn't where you start reads as wrong. A play icon, not a house,
+ * because it is the clips.
  */
 const ITEMS: NavItem[] = [
   { route: 'discuss', label: 'Community', icon: 'people-outline', activeIcon: 'people' },
-  { route: 'index', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
+  { route: 'index', label: 'Feed', icon: 'play-circle-outline', activeIcon: 'play-circle' },
   { route: 'coaches', label: 'Coaching', icon: 'clipboard-outline', activeIcon: 'clipboard' },
   { route: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
 ];

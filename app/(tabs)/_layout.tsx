@@ -26,7 +26,7 @@ export default function TabsLayout() {
             does set is the "first tab" that Android's Back returns to. */}
         <Tabs tabBar={() => null} screenOptions={{ headerShown: false, animation: 'none' }}>
           <Tabs.Screen name="discuss" options={{ title: 'Community' }} />
-          <Tabs.Screen name="index" options={{ title: 'Home' }} />
+          <Tabs.Screen name="index" options={{ title: 'Feed' }} />
           <Tabs.Screen name="coaches" options={{ title: 'Coaching' }} />
           <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
         </Tabs>

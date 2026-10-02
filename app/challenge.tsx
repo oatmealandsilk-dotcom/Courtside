@@ -29,7 +29,7 @@ export default function ChallengeScreen() {
             <Ionicons name="trophy-outline" size={14} color={colors.brand} />
             <Text style={styles.eyebrowText}>Weekly challenge · {timeLeft(challenge)} · {entries.length} {entries.length === 1 ? 'entry' : 'entries'}</Text>
           </View>
-          <Text style={styles.lead}>{challenge.ask} Post a clip with <Text style={styles.tag}>#{challenge.tag}</Text> in the caption. The most-liked are featured on Home.</Text>
+          <Text style={styles.lead}>{challenge.ask} Post a clip with <Text style={styles.tag}>#{challenge.tag}</Text> in the caption. The most-liked are featured on the feed.</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={posting ? 'Your entry is posting' : `Enter the ${challenge.title} challenge with a clip`}

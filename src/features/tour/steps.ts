@@ -40,8 +40,8 @@ export const TOUR_STEPS: TourStep[] = [
   {
     key: 'feed',
     target: { phone: { id: 'tab-home', shape: 'pill' }, wide: { id: 'tab-home', shape: 'row' } },
-    phone: { title: 'Clips and posts', body: 'Home is the feed. Swipe up for more; double-tap a clip to like it.' },
-    wide: { title: 'Clips and posts', body: 'Home is the feed. Double-click a clip to like it.' },
+    phone: { title: 'Your feed', body: 'Clips, photos and posts from players. Swipe up for more; double-tap a clip to like it.' },
+    wide: { title: 'Your feed', body: 'Clips, photos and posts from players. Double-click a clip to like it.' },
     screenReader: { title: 'Your feed', body: 'Clips, photos and threads from players, one at a time.' },
   },
   {

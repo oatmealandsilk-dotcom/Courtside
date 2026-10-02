@@ -72,7 +72,7 @@ export default function TabsLayout() {
       {/* In the strip's order, Community first. '/(tabs)' still means Home: an
           address picks its screen by name, never by this order. */}
       <Tabs.Screen name="discuss" options={{ title: 'Community' }} />
-      <Tabs.Screen name="index" options={{ title: 'Home' }} />
+      <Tabs.Screen name="index" options={{ title: 'Feed' }} />
       <Tabs.Screen name="coaches" options={{ title: 'Coaching' }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
     </Tabs>
