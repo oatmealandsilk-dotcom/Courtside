@@ -339,9 +339,10 @@ let hintThisLaunch: Promise<boolean> | null = null;
 let hintShown = false;
 
 /**
- * "↑ Next moment · ← Community" just above the first clip's words, for a few
+ * "↑ Next moment · → Community" just above the first clip's words, for a few
  * seconds, on the first few opens of the app only: a nudge for someone new,
- * not a fixture an everyday player keeps seeing. It floats rather than taking
+ * not a fixture an everyday player keeps seeing. Community sits to Home's left
+ * now, so its arrow points right: the way the finger moves. It floats rather than taking
  * a line, so nothing jumps when it appears or goes.
  */
 export function SwipeHint() {
@@ -368,14 +369,15 @@ export function SwipeHint() {
     return () => { on = false; if (t) clearTimeout(t); };
   }, []);
   if (!shown || touring) return null;
-  return <Animated.Text exiting={FadeOut.duration(400)} style={styles.hint} maxFontSizeMultiplier={MAX_GROW}>↑ Next moment   ·   ← Community</Animated.Text>;
+  return <Animated.Text exiting={FadeOut.duration(400)} style={styles.hint} maxFontSizeMultiplier={MAX_GROW}>↑ Next moment   ·   → Community</Animated.Text>;
 }
 
 const styles = StyleSheet.create({
   // The caption sits close under the name (one post's words); the small line keeps a little more air.
   wrap: { gap: 6 },
   who: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', maxWidth: '100%' },
-  avatarRing: { borderRadius: 17, borderWidth: 1, borderColor: 'rgba(255,255,255,0.8)' },
+  // No ring: the photo sits on the clip as it is (the owner's call, Oct 1).
+  avatarRing: { borderRadius: 16 },
   avatarSpace: { width: 34, height: 34 },
   // The level and the welcome tag never shrink and sit centred on the name's line, 6 apart.
   badge: { alignSelf: 'center', flexShrink: 0, marginLeft: -2 },

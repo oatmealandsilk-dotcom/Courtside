@@ -11,6 +11,9 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button } from '@/components/ui/Button';
 import { useCurtainDown } from '@/features/feed/warmup';
 import { setBarCompact } from '@/features/navigation/barShrink';
+import { START_SECTION, START_TAB, isStartTab } from '@/features/navigation/startTab';
+import { requestScrollToTop } from '@/features/navigation/scrollToTop';
+import { requestSection, useShownSection } from '@/features/navigation/swipeOrder';
 import { LAST_BUTTON, TOUR_STEPS, type HoleShape, type TourStep, type TourTargetId } from '@/features/tour/steps';
 import { TOUR_ON, hasSeenTour, isNewAccount, markTourSeen } from '@/features/tour/tourSeen';
 import {
@@ -28,8 +31,8 @@ import { colors, pageIsDark, radius, typography } from '@/theme';
 /**
  * The first-run tour: the screen dims, a small card explains one thing at a
  * time, and a lit window in the dim glides along the bar to the thing being
- * explained. A tap anywhere moves on; Skip ends it. The first clip keeps
- * playing underneath the whole time.
+ * explained. A tap anywhere moves on; Skip ends it. It plays over the page
+ * the app opens on (Community, on Find Players), which stays put underneath.
  *
  * It lives in the shell, beside the bar, so the dim can sit over the bar and
  * light one of its buttons. There is no browser twin of this file: the
@@ -47,9 +50,11 @@ const GLIDE = 360;
 const GAP = 14;
 /** The screen margin a card never crosses. */
 const M = 16;
+/** How far the first tip's demo fingertip travels, right to left, above the card. */
+const SLIDE = 72;
 /** For this long after a tip lands, a tap does not move on, so a quick double tap can't skip one unread. */
 const DWELL = 400;
-/** The wait on Home before the dim arrives: the first clip gets a moment, and anything first-move opens wins. */
+/** The wait on the start page before the dim arrives: the map gets a moment, and anything first-move opens wins. */
 const SETTLE_MS = 1200;
 /** The bar's own return to full size, before anything on it is measured. */
 const BAR_SETTLE_MS = 260;
@@ -72,8 +77,8 @@ const SIDE_CODE: Record<Side, number> = { down: 1, up: 2, left: 3 };
 
 /**
  * Just after posting, the tour does not start on its own for this long: a
- * new player who posts before it has appeared lands on Home with their post
- * on its way up, and a dim over everything then would hide it.
+ * new player who posts before it has appeared is taken to Home to see their
+ * post go up, and a dim arriving the moment they come back would bury that.
  */
 const AFTER_POST_MS = 30_000;
 /** Started on its own this launch, per account, in case storage is slow to say so. */
@@ -83,19 +88,26 @@ const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, 
 /**
  * When the tour starts, and when it ends without being asked to.
  *
- * On its own it starts only for a new account, set up, fully loaded, on Home
- * with nothing in the way, on the phone layout, the first time on this
- * device. Asked for (Settings, Help, ?tour=N) it skips the "new" and "seen"
- * checks, on either layout.
+ * On its own it starts only for a new account, set up, fully loaded, on the
+ * start page (see startTab) showing the map, with nothing in the way, on the
+ * phone layout, the first time on this device. Asked for (Settings, Help, ?tour=N) it
+ * skips the "new" and "seen" checks, on either layout.
  */
 function useTourStarter(eligible: boolean) {
   const { currentUserId, currentUser, onboardingComplete, remoteLoaded } = useApp();
   const pathname = usePathname();
-  const onHome = pathname === '/' || pathname === '/index';
+  const onStart = isStartTab(pathname);
+  // On its own it begins only over the map (Find Players): someone who has
+  // moved on to the threads is never pulled back to it. When they come back
+  // to the map, it tries again.
+  const shownStart = useShownSection(START_TAB);
+  const request = useTourRequest();
+  // Asked for, it goes ahead wherever Community is, and puts the map under itself (below).
+  const mapReady = !!request?.force || (shownStart ?? START_SECTION) === START_SECTION;
+  // The splash curtain lifts off the start page before anything here is measured.
   const curtainDown = useCurtainDown();
   const { isPhone } = useResponsive();
   const run = useTour();
-  const request = useTourRequest();
   const joinedAt = currentUser?.joinedAt;
   // Before the account has come down, the stand-in profile says "joined just now"; it is not trusted until then.
   const accountReady = !!currentUserId && onboardingComplete && (remoteLoaded || !isSupabaseConfigured);
@@ -104,7 +116,7 @@ function useTourStarter(eligible: boolean) {
   const posting = useAnyUploading();
 
   useEffect(() => {
-    if (run.open || !accountReady || !eligible || !onHome || !curtainDown || !currentUserId) return;
+    if (run.open || !accountReady || !eligible || !onStart || !curtainDown || !currentUserId) return;
     const forced = !!request?.force;
     if (!forced) {
       if (posting) return;
@@ -114,12 +126,13 @@ function useTourStarter(eligible: boolean) {
       if (!TOUR_ON) return;
       if (startedThisLaunch.has(currentUserId)) return;
       if (!request?.pretendNew && !isNewAccount(joinedAt)) return;
+      if (!mapReady) return;
     }
     let cancelled = false;
     // The tour is on its way: the feed's own swipe hint holds back meanwhile.
     setTourPending(true);
     void (async () => {
-      // Anything that changes during this wait (left Home, a gate came up) cancels it and starts it again.
+      // Anything that changes during this wait (left Community or its map, a gate came up) cancels it and starts it again.
       const seen = !forced && (await hasSeenTour(currentUserId));
       if (cancelled) return;
       if (seen) { setTourPending(false); return; }
@@ -130,6 +143,13 @@ function useTourStarter(eligible: boolean) {
       if (cancelled) return;
       // The bar at full size, labels showing, before any of it is measured.
       setBarCompact(false);
+      // The first tip is about the map. Asked for (a replay), Find Players,
+      // from its top, is put under it, wherever Community was left. Started
+      // on its own, it is already on the map (above) and stays where it is.
+      if (forced) {
+        requestSection(START_TAB, START_SECTION);
+        requestScrollToTop(START_TAB);
+      }
       await wait(BAR_SETTLE_MS);
       if (cancelled) return;
       const layout: Layout = isPhone ? 'phone' : 'wide';
@@ -153,14 +173,14 @@ function useTourStarter(eligible: boolean) {
       openTour(keys, wanted ? keys.indexOf(wanted.key) : 0, forced);
     })();
     return () => { cancelled = true; setTourPending(false); };
-  }, [run.open, accountReady, eligible, onHome, curtainDown, currentUserId, isPhone, request, joinedAt, posting]);
+  }, [run.open, accountReady, eligible, onStart, mapReady, curtainDown, currentUserId, isPhone, request, joinedAt, posting]);
 
-  // Leaving Home (a tapped alert opening a chat), a gate coming up, or a
-  // different account: the tour just goes. It already counts as seen.
+  // Leaving the start page (a tapped alert opening a chat), a gate coming up,
+  // or a different account: the tour just goes. It already counts as seen.
   useEffect(() => {
     if (!run.open) return;
-    if (!eligible || !onHome || currentUserId !== startedFor.current) endTourQuietly();
-  }, [run.open, eligible, onHome, currentUserId]);
+    if (!eligible || !onStart || currentUserId !== startedFor.current) endTourQuietly();
+  }, [run.open, eligible, onStart, currentUserId]);
 }
 
 export function TourOverlay({ eligible }: { eligible: boolean }) {
@@ -579,7 +599,8 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
   const rim = dark ? styles.holeRim : null;
   const edge = dark ? colors.borderStrong : colors.border;
   const pointerSides = place.side === 'down' ? styles.pointerDown : place.side === 'up' ? styles.pointerUp : styles.pointerLeft;
-  const feedShown = shown.key === 'feed';
+  // The first tip, the one with no window, carries the swipe demo and the "tap anywhere" line.
+  const mapShown = shown.key === 'map';
   const hidden = { accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' as const, 'aria-hidden': true };
   const webDialog = Platform.OS === 'web' ? { role: 'dialog' as const, 'aria-modal': true, 'aria-labelledby': TITLE_ID } : {};
   const webFocus = Platform.OS === 'web' ? { tabIndex: -1 as const } : {};
@@ -610,7 +631,7 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
       </Animated.View>
 
       <Animated.View style={[styles.cardWrap, { width: cardW }, cardStyle]}>
-        {feedShown ? (
+        {mapShown ? (
           <>
             {/* A thumb's swipe means nothing to a mouse, so a computer gets the words alone. */}
             {layout === 'phone' ? <SwipeDemo reduce={reduce} cardW={cardW} fade={fade} hidden={hidden} /> : null}
@@ -699,10 +720,10 @@ function Dots({ total, at, styles, hidden }: { total: number; at: number; styles
 }
 
 /**
- * On the first tip, a small ring rises above the card the way a thumb
- * would, three times, then a still arrow takes its place and stays, so the
- * tip never ends up with nothing above it. Under Reduce Motion it is the
- * still arrow from the start.
+ * On the first tip, a small ring slides leftward above the card the way a
+ * thumb would to reach Discussions, three times, then a still arrow takes its
+ * place and stays, so the tip never ends up with nothing above it. Under
+ * Reduce Motion it is the still arrow from the start.
  */
 function SwipeDemo({ reduce, cardW, fade, hidden }: { reduce: boolean; cardW: number; fade: SharedValue<number>; hidden: Hidden }) {
   const rise = useSharedValue(0);
@@ -710,10 +731,10 @@ function SwipeDemo({ reduce, cardW, fade, hidden }: { reduce: boolean; cardW: nu
   const rest = useSharedValue(reduce ? 1 : 0);
   useEffect(() => {
     if (reduce) { rest.value = 1; return; }
-    // Three rises of 1.5s each, after half a second: then the arrow fades in.
+    // Three slides of 1.5s each, after half a second: then the arrow fades in.
     rest.value = 0;
     rest.value = withDelay(500 + 3 * 1500, withTiming(1, { duration: 200, reduceMotion: NEVER }));
-    // 900ms up, its last 200ms fading, then 600ms of rest: three times over.
+    // 900ms across, its last 200ms fading, then 600ms of rest: three times over.
     rise.value = withDelay(500, withRepeat(withSequence(
       withTiming(1, { duration: 900, easing: EASE, reduceMotion: NEVER }),
       withDelay(600, withTiming(0, { duration: 0, reduceMotion: NEVER })),
@@ -725,30 +746,32 @@ function SwipeDemo({ reduce, cardW, fade, hidden }: { reduce: boolean; cardW: nu
     ), 3, false));
     return () => { cancelAnimation(rise); cancelAnimation(seen); cancelAnimation(rest); };
   }, [reduce, rise, seen, rest]);
-  const ringStyle = useAnimatedStyle(() => ({ opacity: seen.value * fade.value, transform: [{ translateY: -64 * rise.value }] }));
+  // From a little right of the middle to a little left of it, right to left, the way the finger goes.
+  const ringStyle = useAnimatedStyle(() => ({ opacity: seen.value * fade.value, transform: [{ translateX: SLIDE / 2 - SLIDE * rise.value }] }));
   const stillStyle = useAnimatedStyle(() => ({ opacity: rest.value * fade.value }));
   return (
     <>
       {reduce ? null : <Animated.View {...hidden} pointerEvents="none" style={[demo.ring, { left: (cardW - 26) / 2 }, ringStyle]} />}
       <Animated.View {...hidden} pointerEvents="none" style={[demo.still, { left: (cardW - 24) / 2 }, stillStyle]}>
-        <Ionicons name="chevron-up" size={24} color="rgba(255, 255, 255, 0.9)" />
+        <Ionicons name="chevron-back" size={24} color="rgba(255, 255, 255, 0.9)" />
       </Animated.View>
     </>
   );
 }
 
 const demo = StyleSheet.create({
-  // A faint fill makes it read as a fingertip, not an outline, over a busy clip.
-  ring: { position: 'absolute', top: -66, width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.9)', backgroundColor: 'rgba(255, 255, 255, 0.22)' },
-  still: { position: 'absolute', top: -64, width: 24, height: 24 },
+  // A faint fill makes it read as a fingertip, not an outline, over a busy page.
+  // Both sit on one line just above the card, where the ring travels sideways.
+  ring: { position: 'absolute', top: -46, width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.9)', backgroundColor: 'rgba(255, 255, 255, 0.22)' },
+  still: { position: 'absolute', top: -45, width: 24, height: 24 },
 });
 
 const styleDefinitions = StyleSheet.create({
-  // Over the bar (30), the upload bar (40) and toasts (50); under the splash curtain (60), long gone by now.
+  // Over the bar (30), the upload bar (40) and toasts (50); under the feed's splash curtain (60), never up by now.
   root: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 55,
     // On Android the gesture library only stops at a view with a background; without one, swipes and
-    // pinches on the dim reach the pager and the clip underneath. A fully clear one doesn't count.
+    // pinches on the dim reach the pagers and the page underneath. A fully clear one doesn't count.
     ...(Platform.OS === 'android' ? { backgroundColor: 'rgba(0, 0, 0, 0.01)' } : null),
   },
   hole: { position: 'absolute', backgroundColor: 'transparent' },

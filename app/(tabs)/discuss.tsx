@@ -16,7 +16,9 @@ import { useLocationToggle } from '@/features/players/useLocationToggle';
 import { QuestionCard, TOPIC_META } from '@/components/QuestionCard';
 import { HitCard } from '@/components/HitCard';
 import { Avatar, Chip, EmptyState, Screen } from '@/components/ui';
-import { reportSection, subscribeSectionRequest } from '@/features/navigation/swipeOrder';
+import { askedSection, reportSection, subscribeSectionRequest, takeAskedSection } from '@/features/navigation/swipeOrder';
+import { START_SECTION, START_TAB } from '@/features/navigation/startTab';
+import { setStartDrawn } from '@/features/feed/warmup';
 import { useApp } from '@/store/AppContext';
 import type { QuestionTopic } from '@/data/types';
 import { colors, radius, spacing, typography, font, lift } from '@/theme';
@@ -33,6 +35,12 @@ const TOPICS: (QuestionTopic | 'all')[] = [
   'mental',
 ];
 
+/** The two sections, left to right. Anything that is not Discussions means Find Players, the first. */
+type Section = 'players' | 'discussions';
+const asSection = (value: string): Section => (value === 'discussions' ? 'discussions' : 'players');
+/** A topic asked for by name; anything unknown is all of them. */
+const asTopic = (value: string | undefined): QuestionTopic | 'all' => (value && value in TOPIC_META ? (value as QuestionTopic) : 'all');
+
 const SORT_LABEL = { new: 'New', hot: 'Hot', top: 'Top', unanswered: 'Unanswered' } as const;
 const SORT_HINT = { new: 'Newest first', hot: 'Busiest right now', top: 'Most upvoted', unanswered: 'Nobody has replied yet' } as const;
 
@@ -42,15 +50,36 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // The section lives here, not in the address: listening to the address made
   // this whole tab re-render on every route change anywhere in the app.
   // Other pages ask for a section through requestSection before navigating.
-  const [localSection, setLocalSection] = useState<'players' | 'discussions'>('discussions');
-  const section = previewSection ? (previewSection === 'players' ? 'players' : 'discussions') : localSection;
+  // It starts on Find Players: the app opens here, on the map (see startTab).
+  // Unless a page asked for a section before this tab was built (a thread
+  // opened from a link, then swiped back): that ask was kept for it.
+  const [localSection, setLocalSection] = useState<Section>(() => asSection((!previewSection && askedSection('/discuss')) || START_SECTION));
+  const section = previewSection ? asSection(previewSection) : localSection;
   // Held locally only: pushing it into the address on every swipe made the
   // whole app re-render mid-gesture.
-  const setSection = (value: string) => setLocalSection(value === 'players' ? 'players' : 'discussions');
-  useEffect(() => subscribeSectionRequest('/discuss', (value) => setLocalSection(value === 'players' ? 'players' : 'discussions')), []);
+  const setSection = (value: string) => setLocalSection(asSection(value));
+  // The real tab takes each ask as it hears it, so an old one can't come back
+  // if the tab is rebuilt later. A picture of the tab sliding in (previewSection)
+  // leaves the ask for the real one.
+  useEffect(() => {
+    const off = subscribeSectionRequest('/discuss', (value) => {
+      if (!previewSection) takeAskedSection('/discuss');
+      setLocalSection(asSection(value));
+    });
+    if (!previewSection) { const late = takeAskedSection('/discuss'); if (late) setLocalSection(asSection(late)); }
+    return off;
+  }, [previewSection]);
   if (!previewSection) reportSection('/discuss', section);
-  // The underline under Discussions / Find Players follows the finger.
-  const sectionIndex = section === 'players' ? 1 : 0;
+  // The app opens here: the splash curtain stays up over a fresh open until
+  // this page has drawn once, then fades (see warmup). A frame after it is
+  // built, so the curtain lifts onto the page and never onto a blank.
+  useEffect(() => {
+    if (previewSection || START_TAB !== '/discuss') return undefined;
+    const frame = requestAnimationFrame(() => setStartDrawn(true));
+    return () => { cancelAnimationFrame(frame); setStartDrawn(false); };
+  }, [previewSection]);
+  // The underline under Find Players / Discussions follows the finger.
+  const sectionIndex = section === 'players' ? 0 : 1;
   const [tabWidth, setTabWidth] = useState(0);
   const underline = useTabUnderline(sectionIndex, 2, tabWidth);
   const [search, setSearch] = useState('');
@@ -62,13 +91,21 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const players = users
     .filter(u => u.id !== currentUserId && !blockedIds.includes(u.id) && `${u.name} ${u.handle} ${u.location}`.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => Number(sameCity(b)) - Number(sameCity(a)));
-  const [topic, setTopic] = useState<QuestionTopic | 'all'>('all');
+  // A topic asked for before this tab was built is kept for it, the same as the section.
+  const [topic, setTopic] = useState<QuestionTopic | 'all'>(() => asTopic(previewSection ? undefined : askedSection('/discuss#topic')));
   // A topic picked from a thread's label may sit off the end of the strip: the strip slides it into view.
   const topicStrip = useRef<ScrollView>(null);
   const chipX = useRef<Record<string, number>>({});
   useEffect(() => { const x = chipX.current[topic]; if (x !== undefined) topicStrip.current?.scrollTo({ x: Math.max(0, x - 16), animated: true }); }, [topic]);
   // A post's category label asks for its topic before opening this tab.
-  useEffect(() => subscribeSectionRequest('/discuss#topic', (value) => setTopic(value in TOPIC_META ? (value as QuestionTopic) : 'all')), []);
+  useEffect(() => {
+    const off = subscribeSectionRequest('/discuss#topic', (value) => {
+      if (!previewSection) takeAskedSection('/discuss#topic');
+      setTopic(asTopic(value));
+    });
+    if (!previewSection) { const late = takeAskedSection('/discuss#topic'); if (late) setTopic(asTopic(late)); }
+    return off;
+  }, [previewSection]);
 
 
   // How the list is ordered, the way Reddit offers it. New stays the default.
@@ -238,17 +275,20 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       }
     >
       <View style={styles.sections} onLayout={e => setTabWidth(e.nativeEvent.layout.width / 2)}>
-        {(['discussions', 'players'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: section === value }} onPress={() => setSection(value)} style={styles.section}><Text style={{ ...typography.bodyStrong, fontSize: 16, color: section === value ? colors.text : colors.textMuted }}>{value === 'discussions' ? 'Discussions' : 'Find Players'}</Text></Pressable>)}
+        {(['players', 'discussions'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: section === value }} onPress={() => setSection(value)} style={styles.section}><Text style={{ ...typography.bodyStrong, fontSize: 16, color: section === value ? colors.text : colors.textMuted }}>{value === 'discussions' ? 'Discussions' : 'Find Players'}</Text></Pressable>)}
         {tabWidth > 0 && <Reanimated.View pointerEvents="none" style={[styles.sectionUnderline, { width: tabWidth }, underline.style]} />}
       </View>
+      {/* Find Players on the left, Discussions on the right. Community is the
+          strip's first tab, so a swipe right from Find Players only gives a
+          little at the edge; a swipe left from Discussions goes on to Home. */}
       <SectionPager
         index={sectionIndex}
-        panes={[content('discussions'), content('players')]}
+        panes={[content('players'), content('discussions')]}
         progress={underline.progress}
         depth={1}
         delegateLeft
         delegateRight
-        onIndex={(i) => setSection(i === 1 ? 'players' : 'discussions')}
+        onIndex={(i) => setSection(i === 0 ? 'players' : 'discussions')}
       />
     </Screen>
   );

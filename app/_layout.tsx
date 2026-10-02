@@ -67,7 +67,7 @@ export default function RootLayout() {
             animation: instantExit ? 'none' : 'slide_from_right',
           }}
         >
-          {/* Splash and sign-in fade; the feed opens behind a curtain that is
+          {/* Splash and sign-in fade; the app opens behind a curtain that is
               the splash again, so it cuts straight in — a fade between two
               identical screens only ever reads as a flicker. Pages opened
               from inside the app slide. */}

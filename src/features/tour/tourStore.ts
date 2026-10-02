@@ -1,8 +1,8 @@
 import { useCallback, useRef, useSyncExternalStore } from 'react';
 import { Dimensions, Platform, type View } from 'react-native';
 
-import { goHome } from '@/lib/goBack';
-import type { TourStep, TourTargetId } from './steps';
+import { goToStart } from '@/features/navigation/startTab';
+import { TOUR_STEPS, type TourStep, type TourTargetId } from './steps';
 
 /**
  * The tour's shared state, the way warmup.ts and pendingTab.ts share theirs:
@@ -41,9 +41,8 @@ export function useTourOpen(): boolean {
 }
 
 /**
- * Set while the tour is on its way (the short wait on Home before the dim
- * arrives), so the feed's own swipe hint doesn't flash up a second before the
- * tour teaches the same thing.
+ * Set while the tour is on its way (the short wait on the start page before
+ * the dim arrives), so the feed's own swipe hint keeps out of its way.
  */
 let pending = false;
 export function setTourPending(on: boolean): void {
@@ -77,7 +76,7 @@ export function skipTour(): void {
   close();
 }
 
-/** Ended by something else (the player left Home, signed out): no fuss. */
+/** Ended by something else (the player left Community, signed out): no fuss. */
 export function endTourQuietly(): void {
   close();
 }
@@ -103,9 +102,10 @@ export interface TourRequest {
 
 /**
  * The demo switch, in a browser only, read once as the page loads, the way
- * ?as= is: ?tour=1 to ?tour=5 open the tour at that tip whoever is signed in,
- * and ?tour=new runs the real first-run check as if the account were new.
- * It does nothing the Settings row doesn't, so it is harmless anywhere.
+ * ?as= is: ?tour=1 to ?tour=5 (one per tip) open the tour at that tip
+ * whoever is signed in, and ?tour=new runs the real first-run check as if
+ * the account were new. It does nothing the Settings row doesn't, so it is
+ * harmless anywhere.
  */
 let request: TourRequest | null = (() => {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
@@ -114,7 +114,7 @@ let request: TourRequest | null = (() => {
     if (!asked) return null;
     if (asked === 'new') return { force: false, startAt: 0, pretendNew: true };
     const n = Number(asked);
-    if (Number.isInteger(n) && n >= 1 && n <= 5) return { force: true, startAt: n - 1 };
+    if (Number.isInteger(n) && n >= 1 && n <= TOUR_STEPS.length) return { force: true, startAt: n - 1 };
     return null;
   } catch { return null; }
 })();
@@ -127,15 +127,16 @@ export function useTourRequest(): TourRequest | null {
 }
 
 /**
- * "Show the tutorial" in Settings and Help: back down to Home, where the tour
- * starts once the page has settled. The pages on top close and the tabs move
- * across to Home in one step (goHome). Never by '/', which is also the splash
- * screen's address and opened a second copy of the app with no bar.
+ * "Show the tutorial" in Settings and Help: back down to the start page
+ * (Community, on Find Players), where the tour starts once the page has
+ * settled. The pages on top close and the tabs move across in one step
+ * (goToStart). Never by '/', which is also the splash screen's address and
+ * opened a second copy of the app with no bar.
  */
 export function replayTour(): void {
   request = { force: true, startAt: 0, markSeen: true };
   emit();
-  try { goHome(); } catch { /* The router is not up yet: the tour starts when Home is. */ }
+  try { goToStart(); } catch { /* The router is not up yet: the tour starts when the start page is. */ }
 }
 
 /* ---- Targets: the bar's buttons put themselves on this list; the overlay measures them. ---- */

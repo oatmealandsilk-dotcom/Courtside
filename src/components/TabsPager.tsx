@@ -5,8 +5,8 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { router } from 'expo-router';
 
-import Home from '../../app/(tabs)/index';
 import Discuss from '../../app/(tabs)/discuss';
+import Home from '../../app/(tabs)/index';
 import Coaches from '../../app/(tabs)/coaches';
 import Profile from '../../app/(tabs)/profile';
 import { TabFocus } from '@/features/navigation/tabFocus';
@@ -16,7 +16,12 @@ import { requestSection } from '@/features/navigation/swipeOrder';
 import { isPageSwipeLocked, setPageDragging, subscribePageSwipeLock } from '@/features/navigation/swipeLock';
 import { useResponsive } from '@/lib/useResponsive';
 
-export const TAB_PATHS = ['/', '/discuss', '/coaches', '/profile'] as const;
+/**
+ * The strip, left to right: Community (where the app opens, Find Players
+ * then Discussions), Home, Coaching, Profile. The bar's buttons and the
+ * shell's TAB_ORDER follow the same order.
+ */
+export const TAB_PATHS = ['/discuss', '/', '/coaches', '/profile'] as const;
 
 /** One tab's slot in the row; it can be lifted next door for a far glide. */
 function TabSlot({ index, width, jumpTab, jumpOffset, children }: { index: number; width: number; jumpTab: SharedValue<number>; jumpOffset: SharedValue<number>; children: React.ReactNode }) {
@@ -44,7 +49,7 @@ export function TabsPager({ pathname }: { pathname: string }) {
   const activeRef = useRef(Math.max(0, tabIndex));
   const target = tabIndex >= 0 ? tabIndex : activeRef.current;
 
-  // Where the row sits, as a fractional tab index; 1.4 is most of the way from Community to Coaching.
+  // Where the row sits, as a fractional tab index; 1.4 is partway from Home to Coaching.
   const position = useSharedValue(target);
   const widthValue = useSharedValue(width || 1);
   useEffect(() => { widthValue.value = width || 1; }, [width, widthValue]);
@@ -59,7 +64,7 @@ export function TabsPager({ pathname }: { pathname: string }) {
 
   // A tap on the bottom bar, a link, or a back gesture changes the address;
   // the row glides there.
-  // A far tab (Profile to Home) is lifted out of its slot and set down next
+  // A far tab (Profile to Community) is lifted out of its slot and set down next
   // door to the current one for the length of the glide, so the two slide
   // past each other the way neighbours do — nothing in between is dragged by.
   const jumpTab = useSharedValue(-1);
@@ -87,11 +92,16 @@ export function TabsPager({ pathname }: { pathname: string }) {
   const heading = (index: number | null) => {
     setPendingTab(index === null ? null : TAB_PATHS[index]);
     if (index === null) return;
-    // The section strips line up with the tab strip: coming from Coaching you
-    // arrive at Find Players, from Home at Discussions, and Profile opens on Posts.
+    // A drag that springs back to the tab it began on asks for nothing: on
+    // Find Players, a pull past the left end would otherwise flip the page to
+    // Discussions.
     const from = activeRef.current;
-    if (index === 1) requestSection('/discuss', from > 1 ? 'players' : 'discussions');
-    if (index === 3) requestSection('/profile', 'Posts');
+    if (index === from) return;
+    // The section strips line up with the tab strip. Community is leftmost,
+    // so a swipe only ever reaches it from Home, its right-hand neighbour, and
+    // lands on Discussions, the section next to Home. Profile opens on Posts.
+    if (TAB_PATHS[index] === '/discuss') requestSection('/discuss', 'discussions');
+    if (TAB_PATHS[index] === '/profile') requestSection('/profile', 'Posts');
   };
   const land = (index: number) => {
     arrived(index, activeRef.current);
@@ -205,7 +215,8 @@ export function TabsPager({ pathname }: { pathname: string }) {
   const row = useAnimatedStyle(() => ({ transform: [{ translateX: -position.value * widthValue.value }] }));
   // Built once. React skips re-rendering an element it has seen before, so
   // the address or the bar changing costs nothing inside the tabs themselves.
-  const panes = useMemo(() => [Home, Discuss, Coaches, Profile].map((Tab, i) => <Tab key={TAB_PATHS[i]} />), []);
+  // In TAB_PATHS order.
+  const panes = useMemo(() => [Discuss, Home, Coaches, Profile].map((Tab, i) => <Tab key={TAB_PATHS[i]} />), []);
 
   return (
     <GestureDetector gesture={pan}>

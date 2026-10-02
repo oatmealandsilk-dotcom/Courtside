@@ -3,7 +3,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
 import { Redirect, useNavigation } from 'expo-router';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { goHome } from '@/lib/goBack';
+import { START_HREF, goToStart } from '@/features/navigation/startTab';
+import { raiseCurtain } from '@/features/feed/warmup';
+import { preloadNearbyMap } from '@/components/NearbyMap';
 
 import { BrandMark } from '@/components/BrandMark';
 import { useApp } from '@/store/AppContext';
@@ -17,8 +19,9 @@ const FADE_MS = 260;
 
 /**
  * Splash: the mark and the name, held for a moment, then faded out into
- * whatever comes next — sign-in for a new visitor, the feed for a returning
- * one. The fade is the whole transition; the next screen must not slide.
+ * whatever comes next — sign-in for a new visitor, the start page for a
+ * returning one (Community, on the map: see startTab). The fade is the whole
+ * transition; the next screen must not slide.
  */
 export default function Index() {
   const styles = useThemedStyles(styleDefinitions);
@@ -44,8 +47,12 @@ export default function Index() {
   // Played out, the logo would come back, the bar would go, and a whole
   // second copy of the app — a second feed full of video players — would be
   // built on top of the first. Instead, once the account is known, every page
-  // over the tabs closes and the app that is already there is shown again.
-  // (A real launch starts with nothing under this page, so it never applies.)
+  // over the tabs closes and the app that is already there is shown again,
+  // on the start page. (A real launch starts with nothing under this page, so
+  // it never applies.) Everything that comes this way is someone getting into
+  // the app — switching account, adding one, signing in again, a gate, an
+  // invite — so it lands where a fresh open does, not on the feed. Pages that
+  // mean the feed go there with goHome and never pass through here.
   const navigation = useNavigation();
   const [overTabs] = useState(() => {
     try {
@@ -56,7 +63,7 @@ export default function Index() {
     }
   });
   const backToApp = overTabs && settled && !!currentUserId && onboardingComplete;
-  useEffect(() => { if (backToApp) goHome(); }, [backToApp]);
+  useEffect(() => { if (backToApp) goToStart(); }, [backToApp]);
 
   useEffect(() => {
     if (Platform.OS === 'web') {
@@ -71,16 +78,25 @@ export default function Index() {
     return () => clearTimeout(timer);
   }, [rise]);
 
+  // Someone signed in is on their way to the map (see startTab; after setup,
+  // if that is still to do). Its engine, the one big download the map needs
+  // in a browser, starts as soon as the sign-in is known — while the logo is
+  // up and the account is still coming down — rather than once the map is
+  // already on screen.
+  useEffect(() => { if (currentUserId) preloadNearbyMap(); }, [currentUserId]);
+
   useEffect(() => {
     if (!settled || !held || gone) return;
-    // Into the feed: no fade here. The feed opens behind its own curtain —
-    // the same mark and name — and that curtain does the one fade, once the
-    // first pages are in. Fading here too showed a blank beat in between.
-    if (currentUserId && onboardingComplete) { setGone(true); return; }
+    // Into the app: no fade here. The page it opens on is built behind the
+    // shell's curtain — the same mark and name — and that curtain does the
+    // one fade, once the page has drawn (see warmup). Fading here too showed
+    // a blank beat in between, then the page all at once. (Over the app
+    // already running, the page is already there: no curtain.)
+    if (currentUserId && onboardingComplete) { if (!overTabs) raiseCurtain(); setGone(true); return; }
     Animated.timing(opacity, { toValue: 0, duration: FADE_MS, useNativeDriver: true }).start(({ finished }) => {
       if (finished) setGone(true);
     });
-  }, [settled, held, gone, opacity, currentUserId, onboardingComplete]);
+  }, [settled, held, gone, opacity, currentUserId, onboardingComplete, overTabs]);
 
   // On its way back to the app underneath: a plain page for the moment it takes, no logo.
   if (backToApp) return <View style={styles.splash} />;
@@ -105,7 +121,9 @@ export default function Index() {
     if (!currentUserId && Platform.OS === 'web' && /[?&]code=/.test(window.location.search) && !settledCode) return null;
     if (!currentUserId) return <Redirect href="/sign-in" />;
     if (!onboardingComplete) return <Redirect href="/onboarding" />;
-    return <Redirect href="/(tabs)" />;
+    // Into the app on its start page. Nothing is built under a real launch, so
+    // Community starts on its own first section, Find Players, by itself.
+    return <Redirect href={START_HREF} />;
   }
 
   return (

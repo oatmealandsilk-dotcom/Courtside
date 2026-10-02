@@ -75,10 +75,11 @@ export function listenForPushTaps(): () => void {
     // Home ('/') is reached with goHome, never pushed: '/' is also the splash
     // screen's address, and pushing it built a second copy of the app.
     const go = () => { if (href === '/') goHome(); else router.push(href as never); };
-    // The tap that opened the app waits a beat while its pages are set up
-    // (a launch lands on Home by itself). With the app already running the
-    // page opens at once: waiting let the clip on Home start again, with
-    // sound, before the page covered it.
+    // The tap that opened the app waits a beat while its pages are set up.
+    // One meaning Home is left alone at launch: the app opens on its own start
+    // page (Community, see startTab), and no alert sent today points at
+    // Home. With the app already running the page opens at once: waiting let
+    // the clip on Home start again, with sound, before the page covered it.
     if (Date.now() - since < 2000) { if (href !== '/') setTimeout(go, 300); }
     else go();
   };

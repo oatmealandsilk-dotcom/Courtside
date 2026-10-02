@@ -9,8 +9,9 @@ import { colors } from '@/theme';
 
 /**
  * Where an invite link lands. The handle on it is remembered, then the
- * person is sent to make an account (or, already signed in, straight home —
- * the store claims the invite the moment there is an account to claim it).
+ * person is sent to make an account (or, already signed in, straight into
+ * the app on its start page — the store claims the invite the moment there
+ * is an account to claim it).
  */
 export default function Join() {
   const { ref } = useLocalSearchParams<{ ref?: string }>();
