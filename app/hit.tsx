@@ -195,7 +195,8 @@ export default function Hit() {
         <Pressable accessibilityRole="button" accessibilityLabel="Cancel" onPress={() => router.back()} style={styles.iconButton}>
           <Ionicons name="close" size={24} color="white" />
         </Pressable>
-        <View style={styles.retake}><Ionicons name="tennisball" size={13} color="white" /><Text style={styles.retakeText}>Instant</Text></View>
+        {/* The word alone in a quiet frosted pill: the cartoon ball read as childish (Oct 2). */}
+        <View style={styles.retake}><Text style={styles.retakeText}>Instant</Text></View>
       </View>
       <View style={styles.centre} pointerEvents="none">
         {failed ? (
@@ -231,8 +232,8 @@ const styleDefinitions = StyleSheet.create({
   note: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
   topBar: { position: 'absolute', left: spacing.lg, right: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 2 },
   iconButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
-  retake: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 40, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: 'rgba(0,0,0,0.45)' },
-  retakeText: { ...typography.smallStrong, color: 'white' },
+  retake: { flexDirection: 'row', alignItems: 'center', height: 36, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: 'rgba(0,0,0,0.38)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.22)' },
+  retakeText: { ...typography.smallStrong, color: 'white', letterSpacing: 0.3 },
   hours: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   hoursText: { ...typography.small, color: 'rgba(255,255,255,0.85)' },
   count: { fontSize: 140, ...font('700'), color: 'white', textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 18 },
