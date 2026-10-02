@@ -159,6 +159,18 @@ export const posts: Post[] = [
     location: 'Cypress Hollow Park',
     court: courtTag(3),
   },
+  {
+    // A post with a session from your own log on it (ses-demo-3): "Posted" in Your sessions, "Already posted" in the picker.
+    id: 'p-demo-drills',
+    authorId: CURRENT_USER_ID,
+    kind: 'note',
+    createdAt: isoDaysAgo(4, -1),
+    body: 'Forty-five minutes of crosscourt backhands before work. Ugly start, clean finish.',
+    session: { focus: 'Drills', minutes: 45, drills: [], sessionId: 'ses-demo-3', kind: 'drills' },
+    likedBy: ['u-mira'],
+    commentIds: [],
+    tags: [],
+  },
 ];
 
 export const comments: Comment[] = [

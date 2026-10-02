@@ -19,6 +19,7 @@ import { users } from './mock/users';
 import { demoHits } from './mock/hits';
 import { demoLastSeen } from './mock/presence';
 import { DEMO_FOLLOWING, DEMO_MAP_ALERTS } from './mock/courtLife';
+import { demoSessions } from './mock/sessions';
 import { supabase } from '@/lib/supabase';
 import type {
   Achievement,
@@ -38,6 +39,7 @@ import type {
   Message,
   Notification,
   Post,
+  PracticeSession,
   Question,
   Story,
   HitRequest,
@@ -88,6 +90,8 @@ export interface Bootstrap {
   followingIds?: ID[];
   /** Tennis sessions a tracker picked up, waiting to be logged (migration 58). */
   detectedActivities: DetectedActivity[];
+  /** Demo only: your own log, so Your sessions and Add session stats have something on them. */
+  sessions?: PracticeSession[];
 }
 
 export async function fetchBootstrap(): Promise<Bootstrap> {
@@ -121,7 +125,7 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       achievements,
       // Only without a database: with one, these come from the server, and an
       // account's real hits must never be covered by the demo's.
-      ...(supabase ? {} : { hitRequests: demoHits, lastSeen: demoLastSeen, followingIds: DEMO_FOLLOWING }),
+      ...(supabase ? {} : { hitRequests: demoHits, lastSeen: demoLastSeen, followingIds: DEMO_FOLLOWING, sessions: demoSessions }),
     }),
   );
 }

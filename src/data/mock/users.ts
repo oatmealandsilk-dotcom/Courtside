@@ -14,6 +14,8 @@ export const users: User[] = [
     joinedAt: isoDaysAgo(410),
     avatarSeed: 'alex-rivera',
     isCoach: false,
+    // A confirmed adult, so the demo shows what an adult sees (the heart-rate switch on a session's post).
+    ageGroup: 'adult',
     followers: 184,
     following: 231,
     achievementIds: [

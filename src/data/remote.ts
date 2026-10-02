@@ -1629,6 +1629,20 @@ export const remote = {
     const byId = new Map(rows.map((row) => [row.id, row]));
     return toPosts([...byId.values()]);
   },
+  /**
+   * Your own posts from the last two months that carry a session, put away
+   * ones included, for "Already posted": one session goes on one post, and
+   * the app may hold only the newest few of yours (the feed's first page, or
+   * your profile once it has been opened). Null when they could not be read.
+   */
+  async fetchMySessionPosts(me: ID): Promise<{ posts: Post[]; comments: Comment[] } | null> {
+    if (!UUID_RE.test(me)) return null;
+    const db = need();
+    const since = new Date(Date.now() - 60 * 86_400_000).toISOString();
+    const { data, error } = await db.from('posts').select(POST_SELECT).eq('author_id', me).not('session', 'is', null).gte('created_at', since).order('created_at', { ascending: false }).limit(200);
+    if (error) { fail('your session posts')(error); return null; }
+    return toPosts(data as FullPostRow[]);
+  },
 
   /**
    * The posts this player bookmarked, however far back they go, so nothing
@@ -1716,6 +1730,24 @@ export const remote = {
     const { data, error } = await need().from('hit_requests').select('*, hit_joins(user_id)').eq('cancelled', false)
       .gte('starts_at', new Date(Date.now() - 3_600_000).toISOString()).order('starts_at', { ascending: true }).limit(100);
     if (error) { fail('hits')(error); return null; }
+    return (data as HitRow[]).map(toHit);
+  },
+  /**
+   * Your own hits, posted or joined, that started in the last two days,
+   * called-off ones included (so they are never asked about), for "How was
+   * the hit?". The open-hits list above lets a hit go an hour after it
+   * starts, before it has ended. Empty when they could not be read.
+   */
+  async fetchMyRecentHits(me: ID): Promise<HitRequest[]> {
+    if (!UUID_RE.test(me)) return [];
+    const db = need();
+    const since = new Date(Date.now() - 2 * 86_400_000).toISOString();
+    // A hit can be joined up to 30 days before it starts (migration 43's rule for posting one).
+    const joined = await db.from('hit_joins').select('hit_id').eq('user_id', me).gte('created_at', new Date(Date.now() - 32 * 86_400_000).toISOString()).limit(100);
+    const ids = ((joined.data ?? []) as { hit_id: string }[]).map((r) => r.hit_id).filter((id) => UUID_RE.test(id));
+    const base = db.from('hit_requests').select('*, hit_joins(user_id)').gte('starts_at', since).lte('starts_at', new Date().toISOString());
+    const { data, error } = await (ids.length ? base.or(`author_id.eq.${me},id.in.(${ids.join(',')})`) : base.eq('author_id', me)).order('starts_at', { ascending: false }).limit(20);
+    if (error) return [];
     return (data as HitRow[]).map(toHit);
   },
   /** A hit posted, changed, joined or left anywhere (migration 53): the caller asks for the list again. Also once on connecting, to catch up. */
