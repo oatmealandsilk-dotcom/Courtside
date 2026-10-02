@@ -1,13 +1,14 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { WebView } from 'react-native-webview';
+import { useReducedMotion } from 'react-native-reanimated';
 
 import { STYLE, type Look } from '@/components/map/look';
-import { CLOSE_ZOOM_NAMES, FAR_ZOOM, MAP_PIN_CSS } from '@/components/map/markers';
+import { CLOSE_ZOOM_NAMES, FAR_ZOOM, JUST_OPEN_CLASS, MAP_PIN_CSS, OPEN_CLASS, POP_MS } from '@/components/map/markers';
 import type { LatLng } from '@/features/players/positions';
 
 /** One thing drawn on the map, as the HTML MapLibre will place there. */
-export interface CanvasMarker { id: string; lat: number; lng: number; html: string; /** Which part of it sits on the spot: a hit's flag hangs from its point. */ anchor?: 'center' | 'top' | 'bottom'; offsetY?: number; /** Stacking: higher sits on top (courts under players under you). */ z?: number }
+export interface CanvasMarker { id: string; lat: number; lng: number; html: string; /** Which part of it sits on the spot: a hit's flag hangs from its point. */ anchor?: 'center' | 'top' | 'bottom'; offsetY?: number; /** Stacking: higher sits on top (courts under players under you). */ z?: number; /** Classes on the marker itself (OPEN_CLASS): a change of these animates in place, where a change of `html` redraws it. */ cls?: string }
 
 /** `offsetY`: where the spot ends up, in pixels from the middle (negative is higher: clear of a tall card). */
 export interface MapCanvasHandle { flyTo: (to: LatLng, zoom?: number, ms?: number, offsetY?: number) => void }
@@ -54,6 +55,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
   const markersNow = useRef(markerJson);
   markersNow.current = markerJson;
   useEffect(() => { send(`window.__cs.set(${markerJson})`); }, [markerJson]);
+  // Reduce Motion, from the phone's own setting: the pins' pulse holds still and the ring only fades.
+  const still = useReducedMotion();
+  const stillNow = useRef(still);
+  stillNow.current = still;
+  useEffect(() => { send(`document.body.classList.toggle('cs-still',${still ? 'true' : 'false'})`); }, [still]);
   const lookJson = JSON.stringify(look);
   // Same for the theme's colours: whatever is current when the map is ready is what it wears.
   const lookNow = useRef(lookJson);
@@ -80,9 +86,18 @@ map.on('load',function(){look(LOOK);post({type:'ready'})});
 var box=document.getElementById('m');function zoomClass(){var z=map.getZoom();box.classList.toggle('cs-close',z>=${CLOSE_ZOOM_NAMES});box.classList.toggle('cs-far',z<${FAR_ZOOM})}zoomClass();map.on('zoom',zoomClass);
 map.on('click',function(){post({type:'maptap'})});
 map.on('moveend',function(){var c=map.getCenter();post({type:'move',lat:c.lat,lng:c.lng,zoom:map.getZoom()})});
-var ms=[];
+var ms={};
+function has(c,n){return (' '+(c||'')+' ').indexOf(' '+n+' ')>=0}
+function cls(k,c,fresh){if(c===k.cls)return;var was=has(k.cls,'${OPEN_CLASS}'),now=has(c,'${OPEN_CLASS}');(k.cls||'').split(' ').forEach(function(n){if(n)k.el.classList.remove(n)});(c||'').split(' ').forEach(function(n){if(n)k.el.classList.add(n)});k.cls=c;
+  if(now&&!was&&!fresh){k.el.classList.add('${JUST_OPEN_CLASS}');clearTimeout(k.pop);k.pop=setTimeout(function(){k.el.classList.remove('${JUST_OPEN_CLASS}')},${POP_MS})}else if(!now)k.el.classList.remove('${JUST_OPEN_CLASS}')}
 window.__cs={
-  set:function(list){ms.forEach(function(m){m.remove()});ms=[];list.forEach(function(it){var el=document.createElement('div');el.innerHTML=it.html;if(it.z!=null)el.style.zIndex=String(it.z);el.addEventListener('click',function(e){e.stopPropagation();post({type:'tap',id:it.id})});ms.push(new maplibregl.Marker({element:el,anchor:it.anchor||'center',offset:[0,it.offsetY||0]}).setLngLat([it.lng,it.lat]).addTo(map))})},
+  set:function(list){var seen={};list.forEach(function(it){var a=it.anchor||'center';var k=ms[it.id];seen[it.id]=1;
+    if(k&&k.a!==a){k.m.remove();k=null}
+    var fresh=!k;
+    if(!k){var el=document.createElement('div');el.innerHTML=it.html;var id=it.id;el.addEventListener('click',function(e){e.stopPropagation();post({type:'tap',id:id})});k=ms[it.id]={el:el,html:it.html,a:a,cls:''};k.m=new maplibregl.Marker({element:el,anchor:a,offset:[0,it.offsetY||0]}).setLngLat([it.lng,it.lat]).addTo(map)}
+    else{if(k.html!==it.html){k.el.innerHTML=it.html;k.html=it.html}k.m.setLngLat([it.lng,it.lat]);k.m.setOffset([0,it.offsetY||0])}
+    k.el.style.zIndex=it.z!=null?String(it.z):'';cls(k,it.cls||'',fresh)});
+    for(var id in ms){if(!seen[id]){ms[id].m.remove();delete ms[id]}}},
   fly:function(lat,lng,z,ms,oy){map.flyTo({center:[lng,lat],zoom:z==null?map.getZoom():Math.max(map.getZoom(),z),duration:ms,offset:[0,oy||0]})},
   look:function(l){LOOK=l;document.body.style.background=(l.background&&l.background.fill)||'#F4EFE6';if(map.loaded())look(l)}
 };
@@ -107,6 +122,7 @@ window.__cs={
           try { msg = JSON.parse(e.nativeEvent.data); } catch { return; }
           if (msg.type === 'ready') {
             ready.current = true;
+            send(`document.body.classList.toggle('cs-still',${stillNow.current ? 'true' : 'false'})`);
             send(`window.__cs.look(${lookNow.current})`);
             send(`window.__cs.set(${markersNow.current})`);
             const move = pendingMove.current;

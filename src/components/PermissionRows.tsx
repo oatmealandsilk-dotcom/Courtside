@@ -79,6 +79,8 @@ export function PermissionRows({ only, footnote }: { only?: DevicePermission[]; 
               accessibilityLabel={`${meta.label}, ${STATUS[state]}`}
               accessibilityHint={meta.why}
               accessibilityState={{ checked: on, disabled: unavailable }}
+              // The switch drawn in the row only shows it, so the row itself says whether it is on (in a browser too).
+              aria-checked={on}
               disabled={unavailable}
               onPress={() => change(!on)}
               style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
@@ -95,7 +97,10 @@ export function PermissionRows({ only, footnote }: { only?: DevicePermission[]; 
                   </Text>
                   <Text style={styles.why}>{meta.why}</Text>
                 </View>
-                <Toggle value={on} disabled={unavailable} accessibilityLabel={`${meta.label} ${on ? 'on' : 'off'}`} onChange={change} />
+                {/* The whole row is the switch, so this one only shows it: a tap is never counted twice (no second permission prompt or note). */}
+                <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                  <Toggle value={on} disabled={unavailable} accessibilityLabel={`${meta.label} ${on ? 'on' : 'off'}`} onChange={change} />
+                </View>
               </View>
             </Pressable>
           );

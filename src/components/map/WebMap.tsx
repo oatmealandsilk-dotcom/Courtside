@@ -8,6 +8,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CitylessCard, CourtSheet, FilterChips, HitSheet, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlayerSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CourtSpinner } from '@/components/CourtSpinner';
+import { CardStage } from '@/components/map/CardStage';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { milesBetween } from '@/features/players/geo';
 import { useMapModel } from '@/features/players/mapModel';
@@ -21,10 +22,12 @@ import { levelBadge } from '@/lib/badges';
 import { useWeather } from '@/features/players/useWeather';
 import { colors, radius, spacing, typography } from '@/theme';
 import { STYLE, applyLook, cardLook, lookFor } from '@/components/map/look';
-import { CLOSE_ZOOM_NAMES, FAR_ZOOM, HIT_LIFT, MAP_PIN_CSS, courtLift, courtDotHtml, courtPinHtml, hitPinHtml, mePinHtml, playerPinHtml } from '@/components/map/markers';
+import { CLOSE_ZOOM_NAMES, FAR_ZOOM, HIT_LIFT, MAP_PIN_CSS, OPEN_CLASS, courtLift, setOpen, youLift, courtDotHtml, courtPinHtml, discSize, hitPinHtml, mePinHtml, playerPinClass, playerPinHtml } from '@/components/map/markers';
 
 const HEIGHT = 330;
 const START_ZOOM = 11.5;
+/** Your face on your own pin, a touch bigger than everyone else's. */
+const ME_SIZE = 34;
 /** Close enough to read street names, when the map goes to someone. */
 const CLOSE_ZOOM = 13.5;
 // MapLibre does its heavy lifting in a background worker script. The bundler
@@ -51,6 +54,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const [meOpen, setMeOpen] = useState(false);
   const openToHit = isOpenToHit(me);
   const model = useMapModel(me, players, at, focusCourt, !expanded, focusHit, focusUser, focusSpot);
+  // Anything else picked (a search result, a pin) takes the place of your own card.
+  useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit]);
   const { home, start } = model;
   // The full map opens where you are; the still card always on your profile's city.
   const view = expanded ? { center: start.center, zoom: start.zoom ?? START_ZOOM } : { center: model.city ?? start.center, zoom: START_ZOOM };
@@ -62,7 +67,15 @@ export function NearbyMap(props: NearbyMapProps) {
   // and the map starting again there) counts up, so every mark is drawn onto it afresh.
   const [mapGen, setMapGen] = useState(0);
   const latest = useRef({ onOpen, select: model.select, selectCourt: model.selectCourt, selectHit: model.selectHit, loadCourts: model.loadCourts, loadRings: model.loadRings, courtsOn: model.courtsOn, openMe: () => undefined as void });
-  latest.current = { onOpen, select: model.select, selectCourt: model.selectCourt, selectHit: model.selectHit, loadCourts: model.loadCourts, loadRings: model.loadRings, courtsOn: model.courtsOn, openMe: () => { if (expanded) { model.select(null); model.selectCourt(null); model.selectHit(null); setMeOpen(true); } else onExpand?.(); } };
+  // A pin tapped while your own card is up swaps your card for its one (as on the phone), rather than staying behind it.
+  latest.current = {
+    onOpen,
+    select: (id: string | null) => { if (id) setMeOpen(false); model.select(id); },
+    selectCourt: (id: string | null) => { if (id) setMeOpen(false); model.selectCourt(id); },
+    selectHit: (id: string | null) => { if (id) setMeOpen(false); model.selectHit(id); },
+    loadCourts: model.loadCourts, loadRings: model.loadRings, courtsOn: model.courtsOn,
+    openMe: () => { if (expanded) { model.select(null); model.selectCourt(null); model.selectHit(null); setMeOpen(true); } else onExpand?.(); },
+  };
 
   // The map itself: made once per look and home, kept across everything else.
   useEffect(() => {
@@ -157,6 +170,7 @@ export function NearbyMap(props: NearbyMapProps) {
       // The players' pins were on the map just removed: the next one draws its own.
       pins.current.forEach((p) => { if (p.leaving) clearTimeout(p.leaving); });
       pins.current.clear();
+      mePin.current = null;
     };
   }, [expanded, theme, view.center.lat, view.center.lng, view.zoom, !expanded && !model.city]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -166,6 +180,8 @@ export function NearbyMap(props: NearbyMapProps) {
   // Players' pins persist between changes: a new filter fades out the ones
   // that leave and fades in the ones that arrive, and the rest never flicker.
   const pins = useRef(new Map<string, { marker: maplibregl.Marker; html: string; node: HTMLDivElement; leaving?: ReturnType<typeof setTimeout> }>());
+  // Your own pin, kept between changes, so turning Open to hit on or off is a class and a transition, not a redraw.
+  const mePin = useRef<{ marker: maplibregl.Marker; html: string; node: HTMLDivElement } | null>(null);
   useEffect(() => () => { pins.current.forEach((p) => p.marker.remove()); pins.current.clear(); }, [expanded, theme]);
   useEffect(() => {
     const instance = map.current;
@@ -175,6 +191,9 @@ export function NearbyMap(props: NearbyMapProps) {
       const on = p.user.id === selectedId;
       const size = on ? 38 : 30;
       const html = playerPinHtml(p.user, { size, on, label: expanded, seenAt: p.seenAt });
+      // Open to hit rides on a class, so it eases on and off in place (see MAP_PIN_CSS).
+      const open = !!playerPinClass(p.user);
+      const z = on ? '5' : open ? '4' : '3';
       seen.add(p.user.id);
       const kept = pins.current.get(p.user.id);
       if (kept) {
@@ -182,23 +201,26 @@ export function NearbyMap(props: NearbyMapProps) {
         if (kept.html !== html) {
           kept.node.innerHTML = html;
           kept.html = html;
-          kept.node.style.zIndex = on ? '5' : '3';
-          kept.marker.setOffset(expanded ? [0, -(size + 6) / 2] : [0, 0]);
+          kept.marker.setOffset(expanded ? [0, -discSize(size) / 2] : [0, 0]);
         }
+        kept.node.style.zIndex = z;
+        setOpen(kept.node, open);
         kept.marker.setLngLat([p.at.lng, p.at.lat]);
         continue;
       }
       const node = document.createElement('div');
       node.innerHTML = html;
-      // Players stand above courts; the one you picked above everyone.
-      node.style.zIndex = on ? '5' : '3';
+      // Already open when it appears: drawn as it is, no pop.
+      node.classList.toggle(OPEN_CLASS, open);
+      // Players stand above courts, an open player above the plain ones beside them, the one you picked above everyone.
+      node.style.zIndex = z;
       node.style.opacity = '0';
       node.style.transition = 'opacity 180ms ease-out';
       node.setAttribute('role', expanded ? 'button' : 'link');
       node.setAttribute('aria-label', expanded ? p.user.name : `${p.user.name}, open profile`);
       const id = p.user.id;
       node.addEventListener('click', (event) => { event.stopPropagation(); if (expanded) latest.current.select(id); else latest.current.onOpen(id); });
-      const marker = new maplibregl.Marker({ element: node, anchor: expanded ? 'top' : 'center', offset: expanded ? [0, -(size + 6) / 2] : [0, 0] }).setLngLat([p.at.lng, p.at.lat]).addTo(instance);
+      const marker = new maplibregl.Marker({ element: node, anchor: expanded ? 'top' : 'center', offset: expanded ? [0, -discSize(size) / 2] : [0, 0] }).setLngLat([p.at.lng, p.at.lat]).addTo(instance);
       pins.current.set(id, { marker, html, node });
       requestAnimationFrame(() => { node.style.opacity = '1'; });
     }
@@ -209,22 +231,36 @@ export function NearbyMap(props: NearbyMapProps) {
     }
   }, [shown, selectedId, expanded, night, openToHit, mapGen]);
 
-  // You: one pin, rebuilt only when you or where you are changes.
+  // You: one pin, kept on the map and only moved or restyled. Open to hit
+  // switches a class on it, so the green ring draws in (or eases away) while
+  // your card is still up, rather than the pin being swapped for a new one.
   useEffect(() => {
     const instance = map.current;
     // Your pin only where you last shared your location; location off, no pin.
     // Not on the still card: it shows your city, never your spot in it.
     const mine = expanded ? model.mePos : null;
-    if (!instance || !mine) return;
-    const markers: maplibregl.Marker[] = [];
-    const pin = (html: string) => { const node = document.createElement('div'); node.innerHTML = html; return node; };
-    const meSize = expanded ? 34 : 26;
-    markers.push(new maplibregl.Marker({
-      element: (() => { const node = pin(mePinHtml(me, meSize)); node.style.zIndex = '6'; node.setAttribute('role', 'button'); node.setAttribute('aria-label', 'You'); node.addEventListener('click', (event) => { event.stopPropagation(); latest.current.openMe(); }); return node; })(),
-      anchor: 'center',
-    }).setLngLat([mine.lng, mine.lat]).addTo(instance));
-    return () => { markers.forEach((m) => m.remove()); };
+    if (!instance || !mine) { mePin.current?.marker.remove(); mePin.current = null; return; }
+    const html = mePinHtml(me, ME_SIZE);
+    let pin = mePin.current;
+    if (!pin) {
+      const node = document.createElement('div');
+      node.innerHTML = html;
+      // Already open when it appears: drawn as it is, no pop.
+      node.classList.toggle(OPEN_CLASS, openToHit);
+      node.style.zIndex = '6';
+      node.setAttribute('role', 'button');
+      node.setAttribute('aria-label', 'You');
+      node.addEventListener('click', (event) => { event.stopPropagation(); latest.current.openMe(); });
+      const marker = new maplibregl.Marker({ element: node, anchor: 'top', offset: [0, -discSize(ME_SIZE) / 2] }).setLngLat([mine.lng, mine.lat]).addTo(instance);
+      pin = { marker, html, node };
+      mePin.current = pin;
+    } else {
+      if (pin.html !== html) { pin.node.innerHTML = html; pin.html = html; }
+      pin.marker.setLngLat([mine.lng, mine.lat]);
+      setOpen(pin.node, openToHit);
+    }
   }, [expanded, model.mePos, me, night, openToHit, mapGen]);
+  useEffect(() => () => { mePin.current?.marker.remove(); mePin.current = null; }, []);
 
   // Courts, when that layer is on: full pins on the full map only.
   const selectedCourtId = model.selectedCourt?.id ?? null;
@@ -287,6 +323,8 @@ export function NearbyMap(props: NearbyMapProps) {
   // A court's card is tall (who may play, right now, what players say): its court lands above it, not under it.
   useEffect(() => { if (model.selectedCourt) map.current?.flyTo({ center: [model.selectedCourt.lng, model.selectedCourt.lat], zoom: Math.max(map.current.getZoom(), CLOSE_ZOOM), duration: 500, offset: [0, -courtLift(host.current?.clientHeight ?? 800)] }); }, [model.selectedCourt]);
   useEffect(() => { if (model.selectedHit) map.current?.flyTo({ center: [model.selectedHit.at.lng, model.selectedHit.at.lat], zoom: Math.max(map.current.getZoom(), CLOSE_ZOOM), duration: 500 }); }, [model.selectedHit]);
+  // Your card up: your pin glides into the clear strip above it, so the ring switching on is there to see.
+  useEffect(() => { if (meOpen && model.mePos) map.current?.flyTo({ center: [model.mePos.lng, model.mePos.lat], zoom: map.current.getZoom(), duration: 500, offset: [0, -youLift(host.current?.clientHeight ?? 800)] }); }, [meOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (model.place) map.current?.flyTo({ center: [model.place.lng, model.place.lat], zoom: START_ZOOM, duration: 700 }); }, [model.place]);
 
   const canvas = <div ref={host} style={{ position: 'absolute', inset: 0, background: colors.bg }} />;
@@ -307,6 +345,12 @@ export function NearbyMap(props: NearbyMapProps) {
     );
   }
 
+  // Which card is up: yours, a player's, a court's, a hit's, or none (the tray; or, not knowing where you are, the card asking).
+  const stageKey = meOpen ? 'me'
+    : model.selected ? `p:${model.selected.user.id}`
+      : model.selectedCourt ? `c:${model.selectedCourt.id}`
+        : model.selectedHit ? `h:${model.selectedHit.hit.id}`
+          : !model.homeKnown && !model.place ? 'where' : 'tray';
   // Locked (checked with the server first), it says why in a note that stays to be read.
   const message = async (id: string) => {
     const lock = await actions.messageLock(id);
@@ -323,20 +367,26 @@ export function NearbyMap(props: NearbyMapProps) {
         <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
       </View>
       <View pointerEvents="box-none" style={styles.bottom}>
-        <MapButtons onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); map.current?.flyTo({ center: [model.homeView.center.lng, model.homeView.center.lat], zoom: model.homeView.zoom ?? START_ZOOM, duration: 600 }); }} onZoomIn={() => map.current?.zoomIn()} onZoomOut={() => map.current?.zoomOut()} />
-        {meOpen ? (
-          <YouSheet me={me} open={openToHit} onToggle={actions.setOpenToHit} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} />
-        ) : model.selected ? (
-          <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onAskToHit={actions.canMessage(model.selected.user.id) ? () => askToHit([model.selected!.user.id]) : undefined} onAddToGroup={() => addToGroup(model.selected!.user.id)} onFollow={() => { const who = model.selected!.user; if (followingIds.includes(who.id)) confirmUnfollow(who, () => actions.toggleFollow(who.id)); else actions.toggleFollow(who.id); }} />
-        ) : model.selectedCourt ? (
-          <CourtSheet court={model.selectedCourt} miles={milesBetween(home, model.selectedCourt)} ringed={model.ringed.has(model.selectedCourt.id)} onClose={() => model.selectCourt(null)} />
-        ) : model.selectedHit ? (
-          <HitSheet hit={model.selectedHit.hit} miles={milesBetween(home, model.selectedHit.at)} onClose={() => model.selectHit(null)} />
-        ) : !model.homeKnown && !model.place ? (
-          <WhereCard locating={locating} onLocation={onToggleLocation} />
-        ) : (
-          <NearbyRail items={model.tray} cityName={model.place ? model.place.name.split(',')[0] : cityName} selectedId={null} onSelect={model.select} weather={weather} query={model.query} filter={model.filter} courts={model.nearestCourts} onPickCourt={model.selectCourt} />
-        )}
+        {/* What is up along the bottom (the tray or a card) glides in and out, the map's buttons riding on top of it: CardStage. */}
+        <CardStage
+          cardKey={stageKey}
+          kind={stageKey === 'tray' || stageKey === 'where' ? 'tray' : 'card'}
+          crown={<View pointerEvents="box-none" style={styles.crown}><MapButtons onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); map.current?.flyTo({ center: [model.homeView.center.lng, model.homeView.center.lat], zoom: model.homeView.zoom ?? START_ZOOM, duration: 600 }); }} onZoomIn={() => map.current?.zoomIn()} onZoomOut={() => map.current?.zoomOut()} /></View>}
+        >
+          {stageKey === 'where' ? (
+            <WhereCard locating={locating} onLocation={onToggleLocation} />
+          ) : stageKey === 'tray' ? (
+            <NearbyRail items={model.tray} cityName={model.place ? model.place.name.split(',')[0] : cityName} selectedId={null} onSelect={model.select} weather={weather} query={model.query} filter={model.filter} courts={model.nearestCourts} onPickCourt={model.selectCourt} />
+          ) : meOpen ? (
+            <YouSheet me={me} open={openToHit} onToggle={actions.setOpenToHit} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} />
+          ) : model.selected ? (
+            <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onAskToHit={actions.canMessage(model.selected.user.id) ? () => askToHit([model.selected!.user.id]) : undefined} onAddToGroup={() => addToGroup(model.selected!.user.id)} onFollow={() => { const who = model.selected!.user; if (followingIds.includes(who.id)) confirmUnfollow(who, () => actions.toggleFollow(who.id)); else actions.toggleFollow(who.id); }} />
+          ) : model.selectedCourt ? (
+            <CourtSheet court={model.selectedCourt} miles={milesBetween(home, model.selectedCourt)} ringed={model.ringed.has(model.selectedCourt.id)} onClose={() => model.selectCourt(null)} />
+          ) : model.selectedHit ? (
+            <HitSheet hit={model.selectedHit.hit} miles={milesBetween(home, model.selectedHit.at)} onClose={() => model.selectHit(null)} />
+          ) : null}
+        </CardStage>
         {/* The tray's own colour runs on beneath the floating tab bar, so no map shows between them. */}
         {barInset ? <View style={{ height: barInset, backgroundColor: colors.surface, marginTop: -spacing.md - 1 }} /> : null}
       </View>
@@ -349,5 +399,7 @@ const styleDefinitions = StyleSheet.create({
   waiting: { alignItems: 'center', justifyContent: 'center' },
   fill: { flex: 1, backgroundColor: colors.bgElevated, overflow: 'hidden' },
   top: { position: 'absolute', left: 0, right: 0, top: 0, gap: 2, zIndex: 10 },
+  // The map's buttons, riding on whatever is up along the bottom.
+  crown: { marginBottom: spacing.md },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', gap: spacing.md, zIndex: 10 },
 });

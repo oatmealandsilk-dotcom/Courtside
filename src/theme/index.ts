@@ -7,10 +7,21 @@ export const lightColors = {
   brand: '#3F7049', brandInk: '#FAF8F0', brandDim: '#E3E7D9',
   court: '#527C56', clay: '#A06F53', hard: '#3E6982', grass: '#748360',
   info: '#3E6982', success: '#527C56', warning: '#957328', danger: '#A34D40',
+  // Open to hit: the live green ring (and its pill) a player wears on the map for the day. A
+  // fresher green than the brand, so it reads as "up for it now" on every court, New York's included.
+  open: '#1A8147',
   overlay: 'rgba(24, 32, 27, 0.5)',
 } as const;
 
 export const colors: Record<keyof typeof lightColors, string> = { ...lightColors };
+
+/** A palette colour (`#RRGGBB`) at an opacity, as rgba(), which animations on the phone and in a browser both read. */
+export function withAlpha(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(h)) return hex;
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 /** Whether the current page is dark (Night, New York): shadows there are plain dark, never a coloured glow. */
 export function pageIsDark(): boolean {

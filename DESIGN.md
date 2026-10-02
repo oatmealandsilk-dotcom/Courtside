@@ -22,6 +22,7 @@ colors:
   success: "#527C56"
   warning: "#957328"
   danger: "#A34D40"
+  open: "#1A8147"
   overlay: "rgba(24, 32, 27, 0.5)"
 typography:
   display:
@@ -201,6 +202,13 @@ scale.
 - **Clay** (`clay`): warm brick; the wash's warm half.
 - **Hard** (`hard` / `info`): cool blue; the Coaching tab's active tint.
 - **Grass** (`grass`): desaturated lawn. `warning` is the Community tab's active tint.
+- **Open Green** (`open`): Open to hit, and nothing else. The ring a
+  player wears on the map, in the tray and on their card; the dot before a name (and before "You"
+  on your own pin) and before "Open to hit today"; the track of the Open to hit switch on your card,
+  the one switch not in the brand colour, because it is the switch that puts the green ring on.
+  Fresher than the brand so it reads as "up for it now", and green on every court, New York's
+  included (the one green that palette carries), because the copy promises "a green ring". Never
+  a solid green pill: that is a posted hit's flag.
 
 ### Neutral
 - **Ball Can Cream** (`bg`): the page and the tab bar.
@@ -394,6 +402,16 @@ Motion it appears already drawn. Sits in the 56px brand-dim tile at 30px.
 `LiveDot`: an 8px brand dot with a ring that leaves it every 1.8s (scale to 2.8, fading from 55%),
 the waitlist scoreboard's "in play" mark, for anything still waiting on a person ("Awaiting a
 coach"). Still under Reduce Motion.
+
+### The Open Ring (signature)
+Open to hit, on the map (`markers.ts`) and on a card (`OpenRing`): the face, a gap, then a 2.5px
+`open` ring. Switched on, the ring draws itself clockwise from the top (0.75s), the face pops once,
+and a soft halo breathes out from it every 2.8s, each pin on its own beat. Off, the ring unwinds
+and the halo fades. Only a real switch from off to on pops the face; a pin that appears already
+open never does. A plain pin is calm by contrast: the face in a page-coloured ring, and your own
+pin carries a small "You" tag; open, a green dot slides in before it and "· Open to hit" after it,
+the same idiom as everyone else's name tag. Reduce Motion: the ring fades in whole and the halo
+holds still.
 
 ### Empty State
 Icon at 24px in brand on a 56px brand-dim tile, Heading title, Small muted body at 19px line height

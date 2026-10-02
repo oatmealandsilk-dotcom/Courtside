@@ -153,6 +153,8 @@ export default function Settings() {
                 accessibilityRole={row.toggle ? 'switch' : 'button'}
                 accessibilityLabel={row.value ? `${row.label}, ${row.value}` : row.label}
                 accessibilityState={row.toggle ? { checked: row.toggle.value } : undefined}
+                // The switch drawn in the row only shows it, so the row itself says whether it is on (in a browser too).
+                aria-checked={row.toggle ? row.toggle.value : undefined}
                 disabled={!row.onPress && !row.toggle}
                 onPress={row.toggle ? () => row.toggle?.onChange(!row.toggle.value) : row.onPress}
                 style={({ pressed }) => [styles.row, pressed && (row.onPress || row.toggle) ? styles.rowPressed : null]}
@@ -165,7 +167,10 @@ export default function Settings() {
                   </View>
                   {row.value ? <Text style={styles.rowValue} numberOfLines={1}>{row.value}</Text> : null}
                   {row.toggle ? (
-                    <Toggle value={row.toggle.value} onChange={row.toggle.onChange} accessibilityLabel={row.label} />
+                    // The whole row is the switch (it flips on a press anywhere along it), so this one only shows it: a tap is never counted twice.
+                    <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                      <Toggle value={row.toggle.value} onChange={row.toggle.onChange} accessibilityLabel={row.label} />
+                    </View>
                   ) : (
                     <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
                   )}

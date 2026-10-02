@@ -6,9 +6,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CitylessCard, CourtSheet, FilterChips, HitSheet, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlayerSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CourtSpinner } from '@/components/CourtSpinner';
+import { CardStage } from '@/components/map/CardStage';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle } from '@/components/map/MapCanvas';
 import { cardLook, lookFor } from '@/components/map/look';
-import { HIT_LIFT, courtLift, courtDotHtml, courtPinHtml, hitPinHtml, mePinHtml, playerPinHtml } from '@/components/map/markers';
+import { HIT_LIFT, courtLift, youLift, courtDotHtml, courtPinHtml, discSize, hitPinHtml, mePinHtml, playerPinClass, playerPinHtml } from '@/components/map/markers';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { milesBetween } from '@/features/players/geo';
 import { useMapModel } from '@/features/players/mapModel';
@@ -22,6 +23,8 @@ import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing } from '@/theme';
 
 const HEIGHT = 330;
+/** Your face on your own pin, a touch bigger than everyone else's. */
+const ME_SIZE = 34;
 /** How far in the map starts: roughly a city. */
 const CITY_ZOOM = 11.5;
 /** Close enough to read street names, when the map goes to someone. */
@@ -65,6 +68,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const [meOpen, setMeOpen] = useState(false);
   const openToHit = isOpenToHit(me);
   const model = useMapModel(me, players, at, focusCourt, !expanded, focusHit, focusUser, focusSpot);
+  // Anything else picked (a search result, a pin) takes the place of your own card.
+  useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit]);
   const { home, start } = model;
   // The full map opens where you are; the still card always on your profile's city.
   const view = expanded ? { center: start.center, zoom: start.zoom ?? CITY_ZOOM } : { center: model.city ?? start.center, zoom: CITY_ZOOM };
@@ -87,6 +92,8 @@ export function NearbyMap(props: NearbyMapProps) {
   // A court's card is tall (who may play, right now, what players say): its court lands above it, not under it.
   useEffect(() => { if (model.selectedCourt) canvas.current?.flyTo(model.selectedCourt, CLOSE_ZOOM, 500, -courtLift(windowH)); }, [model.selectedCourt]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (model.selectedHit) canvas.current?.flyTo(model.selectedHit.at, CLOSE_ZOOM); }, [model.selectedHit]);
+  // Your card up: your pin glides into the clear strip above it, so the ring switching on is there to see.
+  useEffect(() => { if (meOpen && model.mePos) canvas.current?.flyTo(model.mePos, undefined, 500, -youLift(windowH)); }, [meOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (model.place) canvas.current?.flyTo(model.place, CITY_ZOOM, 700); }, [model.place]);
 
   const shown = expanded ? model.shown : model.inCity;
@@ -109,12 +116,15 @@ export function NearbyMap(props: NearbyMapProps) {
     for (const p of shown) {
       const on = p.user.id === selectedId;
       const size = on ? 38 : 30;
-      list.push({ id: `p:${p.user.id}`, lat: p.at.lat, lng: p.at.lng, html: playerPinHtml(p.user, { size, on, label: expanded, seenAt: p.seenAt }), anchor: expanded ? 'top' : 'center', offsetY: expanded ? -(size + 6) / 2 : 0, z: on ? 5 : 3 });
+      // Open to hit is a class on the pin (cls), so it eases on and off in place rather than redrawing;
+      // an open player stands above the plain ones beside them, so a neighbour never covers their ring.
+      list.push({ id: `p:${p.user.id}`, lat: p.at.lat, lng: p.at.lng, html: playerPinHtml(p.user, { size, on, label: expanded, seenAt: p.seenAt }), cls: playerPinClass(p.user), anchor: expanded ? 'top' : 'center', offsetY: expanded ? -discSize(size) / 2 : 0, z: on ? 5 : isOpenToHit(p.user) ? 4 : 3 });
     }
     // Your pin only where you last shared your location; location off, no pin.
     // Not on the still card: it shows your city, never your spot in it.
     const mine = expanded ? model.mePos : null;
-    if (mine) list.push({ id: 'me', lat: mine.lat, lng: mine.lng, html: mePinHtml(me, expanded ? 34 : 26), z: 6 });
+    // Hung by its top, the face on your spot; Open to hit switches its class, so the green ring draws in behind your card.
+    if (mine) list.push({ id: 'me', lat: mine.lat, lng: mine.lng, html: mePinHtml(me, ME_SIZE), cls: playerPinClass(me), anchor: 'top', offsetY: -discSize(ME_SIZE) / 2, z: 6 });
     return list;
   }, [model.courts, model.ringed, model.cardCourts, model.cardRinged, model.hits, shown, selectedId, selectedCourtId, selectedHitId, expanded, me, theme, openToHit, model.mePos]);
 
@@ -154,6 +164,12 @@ export function NearbyMap(props: NearbyMapProps) {
     );
   }
 
+  // Which card is up: yours, a player's, a court's, a hit's, or none (the tray; or, not knowing where you are, the card asking).
+  const stageKey = meOpen ? 'me'
+    : model.selected ? `p:${model.selected.user.id}`
+      : model.selectedCourt ? `c:${model.selectedCourt.id}`
+        : model.selectedHit ? `h:${model.selectedHit.hit.id}`
+          : !model.homeKnown && !model.place ? 'where' : 'tray';
   // Locked (checked with the server first), it says why in a note that stays to be read.
   const message = async (id: string) => {
     const lock = await actions.messageLock(id);
@@ -170,20 +186,26 @@ export function NearbyMap(props: NearbyMapProps) {
         <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
       </View>
       <View pointerEvents="box-none" style={styles.bottom}>
-        <MapButtons onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); canvas.current?.flyTo(model.homeView.center, model.homeView.zoom ?? CITY_ZOOM, 600); }} />
-        {meOpen ? (
-          <YouSheet me={me} open={openToHit} onToggle={actions.setOpenToHit} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} />
-        ) : model.selected ? (
-          <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onAskToHit={actions.canMessage(model.selected.user.id) ? () => askToHit([model.selected!.user.id]) : undefined} onAddToGroup={() => addToGroup(model.selected!.user.id)} onFollow={() => { const who = model.selected!.user; if (followingIds.includes(who.id)) confirmUnfollow(who, () => actions.toggleFollow(who.id)); else actions.toggleFollow(who.id); }} />
-        ) : model.selectedCourt ? (
-          <CourtSheet court={model.selectedCourt} miles={milesBetween(home, model.selectedCourt)} ringed={model.ringed.has(model.selectedCourt.id)} onClose={() => model.selectCourt(null)} />
-        ) : model.selectedHit ? (
-          <HitSheet hit={model.selectedHit.hit} miles={milesBetween(home, model.selectedHit.at)} onClose={() => model.selectHit(null)} />
-        ) : !model.homeKnown && !model.place ? (
-          <WhereCard locating={locating} onLocation={onToggleLocation} />
-        ) : (
-          <NearbyRail items={model.tray} cityName={model.place ? model.place.name.split(',')[0] : cityName} selectedId={null} onSelect={model.select} weather={weather} query={model.query} filter={model.filter} courts={model.nearestCourts} onPickCourt={model.selectCourt} />
-        )}
+        {/* What is up along the bottom (the tray or a card) glides in and out, the map's buttons riding on top of it: CardStage. */}
+        <CardStage
+          cardKey={stageKey}
+          kind={stageKey === 'tray' || stageKey === 'where' ? 'tray' : 'card'}
+          crown={<View pointerEvents="box-none" style={styles.crown}><MapButtons onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); canvas.current?.flyTo(model.homeView.center, model.homeView.zoom ?? CITY_ZOOM, 600); }} /></View>}
+        >
+          {stageKey === 'where' ? (
+            <WhereCard locating={locating} onLocation={onToggleLocation} />
+          ) : stageKey === 'tray' ? (
+            <NearbyRail items={model.tray} cityName={model.place ? model.place.name.split(',')[0] : cityName} selectedId={null} onSelect={model.select} weather={weather} query={model.query} filter={model.filter} courts={model.nearestCourts} onPickCourt={model.selectCourt} />
+          ) : meOpen ? (
+            <YouSheet me={me} open={openToHit} onToggle={actions.setOpenToHit} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} />
+          ) : model.selected ? (
+            <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onAskToHit={actions.canMessage(model.selected.user.id) ? () => askToHit([model.selected!.user.id]) : undefined} onAddToGroup={() => addToGroup(model.selected!.user.id)} onFollow={() => { const who = model.selected!.user; if (followingIds.includes(who.id)) confirmUnfollow(who, () => actions.toggleFollow(who.id)); else actions.toggleFollow(who.id); }} />
+          ) : model.selectedCourt ? (
+            <CourtSheet court={model.selectedCourt} miles={milesBetween(home, model.selectedCourt)} ringed={model.ringed.has(model.selectedCourt.id)} onClose={() => model.selectCourt(null)} />
+          ) : model.selectedHit ? (
+            <HitSheet hit={model.selectedHit.hit} miles={milesBetween(home, model.selectedHit.at)} onClose={() => model.selectHit(null)} />
+          ) : null}
+        </CardStage>
         {/* The tray's own colour runs on beneath the floating tab bar, so no map shows between them. */}
         {barInset ? <View style={{ height: barInset, backgroundColor: colors.surface, marginTop: -spacing.md - 1 }} /> : null}
       </View>
@@ -196,5 +218,7 @@ const styleDefinitions = StyleSheet.create({
   waiting: { alignItems: 'center', justifyContent: 'center' },
   fill: { flex: 1, backgroundColor: colors.bgElevated, overflow: 'hidden' },
   top: { position: 'absolute', left: 0, right: 0, top: 0, gap: 2 },
+  // The map's buttons, riding on whatever is up along the bottom.
+  crown: { marginBottom: spacing.md },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', gap: spacing.md },
 });

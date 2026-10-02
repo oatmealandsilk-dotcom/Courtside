@@ -4766,7 +4766,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setOpenToHit = useCallback((on: boolean) => {
     const me = requireUser();
     const until = on ? endOfToday() : undefined;
-    on ? haptics.commit() : haptics.untap();
+    // The switch that sets it gives the tap (Toggle's `haptic`), the moment it flips.
     patchCurrentUser((u) => ({ ...u, openToHitUntil: until }));
     if (live(me)) remote.updateProfile(me, { openToHitUntil: until ?? null });
   }, [requireUser, patchCurrentUser]);

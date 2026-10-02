@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Gesture, GestureDetector, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
-import Animated, { Easing, FadeIn, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, interpolateColor, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
 import { Avatar, BrandWash } from '@/components/ui';
 import { Glass } from '@/components/ui/Glass';
@@ -34,11 +34,14 @@ import { openCourt, openCourtReel, playHere, postFromCourt, sendCourtToChat } fr
 import { Toggle } from '@/components/ui';
 import type { MapFilter, Placed } from '@/features/players/mapModel';
 import type { Weather } from '@/lib/weather';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, withAlpha } from '@/theme';
 import { agoLabel, agoShort } from '@/components/map/markers';
 import { MAP_CREDITS } from '@/components/map/credits';
 import { AccessTag, CourtFactsLine, FollowHeart, NowTags, RegularsRow } from '@/components/place/CourtLife';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
+import { sheetFling } from '@/components/map/sheetFling';
+import { OpenRing } from '@/components/map/OpenRing';
+import { mix } from '@/components/map/look';
 import { notKnownAdult } from '@/features/players/age';
 
 // Kept here too, for the screens that already import it from the map's chrome.
@@ -453,14 +456,19 @@ export function NearbyRail({ items, cityName, onSelect, weather, query = '', fil
   );
 }
 
-/** Pulling a card down closes it, the way a sheet does. */
+/**
+ * Pulling a card down closes it, the way a sheet does. Let go far enough
+ * (or flick it) and it closes there and then: the card stage carries it on
+ * down from where the finger left it, at speed (sheetFling), so the
+ * swipe, the card sliding away and the tray settling back are one motion.
+ */
 function useDragToClose(onClose: () => void) {
   const y = useSharedValue(0);
   const gesture = Gesture.Pan()
     .activeOffsetY(8)
     .onUpdate((e) => { y.value = Math.max(0, e.translationY); })
     .onEnd((e) => {
-      if (e.translationY > 60 || e.velocityY > 600) { y.value = withTiming(300, { duration: 160 }, () => runOnJS(onClose)()); }
+      if (e.translationY > 60 || e.velocityY > 600) { sheetFling.value = 1; runOnJS(onClose)(); }
       else y.value = withSpring(0, { damping: 18, stiffness: 240 });
     });
   const style = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
@@ -514,8 +522,9 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
     <Animated.View style={[styles.sheet, pull.style]}>
       <View style={styles.grabber} />
       <View style={styles.personRow}>
-        <Pressable accessibilityRole="link" accessibilityLabel={`${user.name}, open profile`} onPress={onProfile}>
-          <Avatar name={user.name} seed={user.avatarSeed} size={56} ring={user.isCoach} />
+        <Pressable accessibilityRole="link" accessibilityLabel={`${user.name}, open profile`} onPress={onProfile} style={styles.faceSlot}>
+          {/* Open to hit, they wear the same green ring here as on their pin. */}
+          <OpenRing open={isOpenToHit(user)} size={50}><Avatar name={user.name} seed={user.avatarSeed} size={50} ring={user.isCoach} /></OpenRing>
         </Pressable>
         {/* The name opens the profile too, so a card with Ask to hit still reaches it in one tap. */}
         <Pressable accessibilityRole="link" accessibilityLabel={`${user.name}, open profile`} onPress={onProfile} style={styles.personWords}>
@@ -569,17 +578,37 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
   );
 }
 
-/** You, tapped on the map: whether you are up for a hit today, and your profile. */
+/**
+ * You, tapped on the map: whether you are up for a hit today, and your
+ * profile. Flip the switch and the change shows everywhere at once: your
+ * face here draws on its green ring, the box around the switch warms to
+ * green, and your pin on the map behind does the same.
+ */
 export function YouSheet({ me, open, onToggle, onProfile, onClose }: { me: User; open: boolean; onToggle: (on: boolean) => void; onProfile: () => void; onClose: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const pull = useDragToClose(onClose);
+  const reduce = useReducedMotion();
+  const lit = useSharedValue(open ? 1 : 0);
+  useEffect(() => { lit.value = withTiming(open ? 1 : 0, { duration: reduce ? 200 : 420, easing: Easing.bezier(0.4, 0, 0.2, 1) }); }, [open, reduce]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Off, the box is the card's own quiet grey; on, it takes a wash of the open green and a fine green edge.
+  const quiet = colors.surfaceAlt;
+  const warm = mix(colors.surfaceAlt, colors.open, 0.13);
+  const edgeOff = withAlpha(colors.open, 0);
+  const edgeOn = withAlpha(colors.open, 0.4);
+  const box = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(lit.value, [0, 1], [quiet, warm]),
+    borderColor: interpolateColor(lit.value, [0, 1], [edgeOff, edgeOn]),
+  }), [quiet, warm, edgeOff, edgeOn]);
+  // The words under it hand over as it flips, one fading out as the other fades in, rather than cutting.
+  const noteOff = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - lit.value * 2) }));
+  const noteOn = useAnimatedStyle(() => ({ opacity: Math.max(0, lit.value * 2 - 1) }));
   return (
     <GestureDetector gesture={pull.gesture}>
     <Animated.View style={[styles.sheet, pull.style]}>
       <View style={styles.grabber} />
       <View style={styles.personRow}>
-        <View style={[styles.youRing, open && styles.youRingOn]}>
-          <Avatar name={me.name} seed={me.avatarSeed} size={50} />
+        <View style={styles.faceSlot}>
+          <OpenRing open={open} size={50} hairline><Avatar name={me.name} seed={me.avatarSeed} size={50} /></OpenRing>
         </View>
         <View style={styles.personWords}>
           <View style={styles.personTop}>
@@ -592,13 +621,18 @@ export function YouSheet({ me, open, onToggle, onProfile, onClose }: { me: User;
           <Ionicons name="close" size={18} color={colors.textMuted} />
         </Pressable>
       </View>
-      <View style={styles.openCard}>
+      <Animated.View style={[styles.openCard, box]}>
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={styles.openTitle}>Open to hit today</Text>
-          <Text style={styles.openNote}>{open ? 'Players nearby see a green ring around you until midnight.' : 'Put a green ring around you on the map, until midnight.'}</Text>
+          {/* Both sentences hold the same place (the longer one keeps the room), so the card never changes height as they hand over. */}
+          <View>
+            <Animated.Text style={[styles.openNote, noteOn]} aria-hidden={!open} accessibilityElementsHidden={!open} importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}>Players nearby see your green ring until midnight.</Animated.Text>
+            <Animated.Text style={[styles.openNote, styles.noteOver, noteOff]} aria-hidden={open} accessibilityElementsHidden={open} importantForAccessibility={open ? 'no-hide-descendants' : 'auto'}>Wear a green ring on the map until midnight.</Animated.Text>
+          </View>
         </View>
-        <Toggle value={open} onChange={onToggle} accessibilityLabel="Open to hit today" />
-      </View>
+        {/* Green like the ring it puts on, not the court's colour: the one switch in the app that is (see DESIGN.md, Open Green). */}
+        <Toggle value={open} onChange={onToggle} haptic tint={colors.open} accessibilityLabel="Open to hit today" />
+      </Animated.View>
       <View style={styles.personActions}>
         <Pressable accessibilityRole="link" accessibilityLabel="Your profile" onPress={onProfile} style={styles.secondary}>
           <Text style={styles.secondaryText}>Your profile</Text>
@@ -902,7 +936,7 @@ const styleDefinitions = StyleSheet.create({
   railItem: { width: 76, alignItems: 'center', gap: 4, paddingVertical: 6, borderRadius: radius.lg },
   railItemOn: { backgroundColor: colors.brandDim },
   railRing: { padding: 2, borderRadius: 27, borderWidth: 2, borderColor: 'transparent' },
-  railRingOn: { borderColor: colors.brand },
+  railRingOn: { borderColor: colors.open },
   railName: { ...typography.smallStrong, color: colors.text },
   railMeta: { ...typography.caption, color: colors.textMuted, letterSpacing: 0 },
   personRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg },
@@ -921,13 +955,15 @@ const styleDefinitions = StyleSheet.create({
   groupLink: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginHorizontal: spacing.lg, marginTop: -spacing.xs, paddingBottom: spacing.sm },
   groupLinkText: { ...typography.smallStrong, color: colors.textMuted },
   openRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
-  openDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.brand },
-  openText: { ...typography.smallStrong, color: colors.brand },
-  youRing: { padding: 2, borderRadius: 30, borderWidth: 1.5, borderColor: colors.borderStrong },
-  youRingOn: { borderWidth: 2.5, borderColor: colors.brand },
-  openCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginHorizontal: spacing.lg, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surfaceAlt },
+  // Open to hit, on a player's card: the map's green, never the brand (New York's is yellow).
+  openDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.open },
+  openText: { ...typography.smallStrong, color: colors.text },
+  // A face that may wear the open ring: the ring's room is kept either way, so nothing shifts when it comes on.
+  faceSlot: { marginVertical: -4, marginHorizontal: -4 },
+  openCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginHorizontal: spacing.lg, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: 'transparent' },
   openTitle: { ...typography.bodyStrong, color: colors.text },
   openNote: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
+  noteOver: { position: 'absolute', left: 0, right: 0, top: 0 },
   courtDisc: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   // Members only or someone's home: the same disc, greyed.
   courtDiscClosed: { backgroundColor: colors.surfaceAlt },
