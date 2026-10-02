@@ -97,7 +97,13 @@ export default function Profile() {
 
       {isMe && recent.length ? (
         <>
-          <Text style={styles.sectionTitle}>Recent sessions</Text>
+          {/* Every session you logged, week by week, with Post it beside each: Your sessions. */}
+          <View style={styles.sectionHead}>
+            <Text style={[styles.sectionTitle, { flex: 1 }]}>Recent sessions</Text>
+            <Pressable accessibilityRole="link" accessibilityLabel="See all your sessions" hitSlop={10} onPress={() => router.push('/your-sessions')}>
+              <Text style={styles.sectionLink}>See all</Text>
+            </Pressable>
+          </View>
           <View style={styles.group}>
             {recent.map((s, index) => (
               <View key={s.id} style={[styles.row, index > 0 && styles.line]}>

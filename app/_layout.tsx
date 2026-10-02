@@ -14,7 +14,7 @@ import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_7
 import { AppProvider } from '@/store/AppContext';
 import { AppShell } from '@/components/AppShell';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
-import { colors, font } from '@/theme';
+import { colors, font, lightColors } from '@/theme';
 import { BrandMark } from '@/components/BrandMark';
 import { installCrashReporting, reportError } from '@/lib/crashReporting';
 import { isDesktopBrowser } from '@/lib/browserDevice';
@@ -54,7 +54,8 @@ export default function RootLayout() {
   const desktop = isDesktopBrowser();
   const instantExit = useInstantExit();
   const [fontsReady] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, ...Ionicons.font });
-  if (!fontsReady) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+  // While the fonts load, the launch picture's cream (not the theme's colour), so nothing changes colour under the logo.
+  if (!fontsReady) return <View style={{ flex: 1, backgroundColor: lightColors.bg }} />;
   return (
     <GestureHandlerRootView style={{ flex: 1 }}><ThemeProvider><SafeAreaProvider>
       <AppProvider>
@@ -94,6 +95,8 @@ export default function RootLayout() {
           />
           {/* "Add to a group" from a profile or the map: a sheet that brings its own rise (DragSheet). */}
           <Stack.Screen name="pick-group" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+          {/* "Add session stats" from a new Post or Clip: a sheet over the post, with its own rise (DragSheet). */}
+          <Stack.Screen name="pick-session" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           {/* The question page grows out of the Coaching tab's box itself (see ask-coach), so no stock animation. */}
           <Stack.Screen name="ask-coach" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           {/* On a computer, New message is a box over the inbox (Instagram's way); on a phone it is a page. */}

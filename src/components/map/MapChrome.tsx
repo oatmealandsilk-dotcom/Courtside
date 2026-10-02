@@ -692,7 +692,10 @@ export function CourtSheet({ court, miles, onClose }: { court: Court; miles: num
           <Text style={styles.groupLinkText}>{mine ? 'Update yours' : 'Add what you know'}</Text>
         </Pressable>
       ) : null}
-      {noteable ? <Text style={styles.courtSource}>{said.players ? `From ${said.players} ${said.players === 1 ? 'player' : 'players'} and OpenStreetMap` : 'From OpenStreetMap. Know it? Add the lights, nets and how busy it gets.'}</Text> : null}
+      {/* Who the facts came from, only once players have added some. The map's
+          own credit (the ⓘ in its corner, and About) covers OpenStreetMap, so the
+          card no longer repeats it (Oct 2: it read as clutter). */}
+      {noteable && said.players ? <Text style={styles.courtSource}>{`From ${said.players} ${said.players === 1 ? 'player' : 'players'}`}</Text> : null}
     </Animated.View>
     </GestureDetector>
   );
@@ -732,10 +735,15 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
       : 'No one here yet';
   return (
     <>
+      {/* The city's name is the top layer, with a soft fog of the page colour
+          behind it, so a player's ring or a court never sits over the words
+          however busy the middle of town gets (Oct 2). */}
       <View pointerEvents="none" style={styles.cityMark}>
-        <Text style={styles.cityName} numberOfLines={1}>{cityName}</Text>
-        <Text style={[styles.cityCount, (count > 0 || placeCount > 0) && styles.cityCountOn]}>{line}</Text>
-        {hitCount ? <Text style={styles.cityHits}>{hitCount === 1 ? '1 open hit nearby' : `${hitCount} open hits nearby`}</Text> : null}
+        <View style={styles.cityGlow}>
+          <Text style={styles.cityName} numberOfLines={1}>{cityName}</Text>
+          <Text style={[styles.cityCount, (count > 0 || placeCount > 0) && styles.cityCountOn]}>{line}</Text>
+          {hitCount ? <Text style={styles.cityHits}>{hitCount === 1 ? '1 open hit nearby' : `${hitCount} open hits nearby`}</Text> : null}
+        </View>
       </View>
       {onToggleLocation ? (
         <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? 'Turn location off' : 'Turn location on'} hitSlop={6} onPress={onToggleLocation} style={[styles.previewSwitch, locationOn && styles.roundOn]}>
@@ -886,7 +894,9 @@ const styleDefinitions = StyleSheet.create({
   postedPressed: { opacity: 0.85 },
   postedPlay: { position: 'absolute', right: 5, bottom: 5, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
   // The still card's overlay: the city named the way a map names it, with a soft halo of the page colour so it reads over roads.
-  cityMark: { position: 'absolute', left: spacing.xl, right: spacing.xl, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  cityMark: { position: 'absolute', left: spacing.xl, right: spacing.xl, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 10, elevation: 10 },
+  // A soft oval of the page colour behind the words: dense in the middle, feathered at the edge by its own glow.
+  cityGlow: { alignItems: 'center', gap: 2, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 999, backgroundColor: `${colors.bg}9E`, shadowColor: colors.bg, shadowOpacity: 0.75, shadowRadius: 18, shadowOffset: { width: 0, height: 0 } },
   cityName: { ...typography.title, fontSize: 26, letterSpacing: -0.6, color: colors.text, textShadowColor: colors.bg, textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },
   cityCount: { ...typography.smallStrong, color: colors.textMuted, textShadowColor: colors.bg, textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 } },
   cityCountOn: { color: colors.brand },

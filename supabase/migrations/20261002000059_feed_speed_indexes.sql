@@ -1,8 +1,7 @@
 -- 59: indexes for the opening load, so it stays quick as CourtSide grows.
 --
--- *** NOT APPLIED. Nothing here has been run on the live database. ***
--- It needs the owner's go-ahead first; until then the app works exactly as
--- it does today (it does not depend on any of this).
+-- Applied to the live database on Oct 2, 2026, with the owner's go-ahead.
+-- The app never depended on it; it only keeps the opening load quick.
 --
 -- Why: today every table is tiny (42 posts, 19 people) and each of the
 -- opening load's asks takes 1 to 60 ms on the server. Several of them,

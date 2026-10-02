@@ -140,17 +140,24 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // asynchronously — so the app opens on the default and switches to the saved
   // theme on the first frame after. Without this the choice lasted until the
   // app was closed.
+  // Nothing is drawn in the default colours first: on a phone the app waits
+  // (a few milliseconds, at most 0.8 s) for the saved theme, showing the launch
+  // picture's cream meanwhile, so the loading screen opens in your own theme
+  // instead of snapping to it (Oct 2).
+  const [loaded, setLoaded] = useState(Platform.OS === 'web');
   useEffect(() => {
     if (Platform.OS === 'web') return undefined;
     let live = true;
+    const giveUp = setTimeout(() => { if (live) setLoaded(true); }, 800);
     AsyncStorage.getItem(STORAGE_KEY)
       .then((saved) => {
         if (!live || !saved || !(saved in themes)) return;
         Object.assign(colors, themes[saved as ThemeName]);
         updateTheme(saved as ThemeName);
       })
-      .catch(() => {});
-    return () => { live = false; };
+      .catch(() => {})
+      .finally(() => { if (live) { clearTimeout(giveUp); setLoaded(true); } });
+    return () => { live = false; clearTimeout(giveUp); };
   }, []);
 
   // A theme change redraws the whole app — every tab, the feed, the map —
@@ -226,8 +233,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme, night: theme === 'night', setNight }}>
-      <View style={{ flex: 1 }}>
-        {children}
+      <View style={{ flex: 1, backgroundColor: loaded ? undefined : lightColors.bg }}>
+        {loaded ? children : null}
         {shot ? (
           <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 9999 }, shotStyle]}>
             <Image source={{ uri: shot }} onLoad={shotShown} onError={shotShown} fadeDuration={0} resizeMode="cover" style={StyleSheet.absoluteFill} />
