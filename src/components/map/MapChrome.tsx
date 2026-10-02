@@ -959,7 +959,7 @@ const styleDefinitions = StyleSheet.create({
   // A soft rectangle of the page colour behind the words, its edges fading out like a shadow
   // rather than ending in a line (Oct 2, William: "more of a rectangle with like a shadow fade",
   // then "more subtle, it shouldn't be clear that it is a rectangle": a thin fill, a wide fade).
-  cityGlow: { alignItems: 'center', gap: 2, paddingHorizontal: 28, paddingVertical: 16, borderRadius: 32, backgroundColor: `${colors.bg}52`, shadowColor: colors.bg, shadowOpacity: 0.8, shadowRadius: 34, shadowOffset: { width: 0, height: 0 } },
+  cityGlow: { alignItems: 'center', gap: 2, paddingHorizontal: 28, paddingVertical: 16, borderRadius: 32, backgroundColor: `${colors.bg}63`, shadowColor: colors.bg, shadowOpacity: 0.86, shadowRadius: 34, shadowOffset: { width: 0, height: 0 } },
   cityName: { ...typography.title, fontSize: 26, letterSpacing: -0.6, color: colors.text, textShadowColor: colors.bg, textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },
   cityCount: { ...typography.smallStrong, color: colors.textMuted, textShadowColor: colors.bg, textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 } },
   cityCountOn: { color: colors.brand },
