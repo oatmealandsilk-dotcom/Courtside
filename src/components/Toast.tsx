@@ -8,6 +8,7 @@ import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Glass } from '@/components/ui/Glass';
+import { useBelowBanner } from '@/features/messages/bannerSpace';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { goHome } from '@/lib/goBack';
 import { useToast, type ToastMessage } from '@/lib/toast';
@@ -44,6 +45,10 @@ export function Toast() {
   const shown = useSharedValue(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const screenReader = useRef(false);
+  // A message banner on the same strip: the toast sits just under it, never hidden behind it.
+  const below = useBelowBanner(spacing.xs);
+  const underBanner = useSharedValue(below);
+  useEffect(() => { underBanner.value = withTiming(below, { duration: 260, easing: IN }); }, [below, underBanner]);
 
   // Only the phone is asked: a browser cannot tell, and always answers yes.
   useEffect(() => {
@@ -86,7 +91,7 @@ export function Toast() {
 
   const style = useAnimatedStyle(() => ({
     opacity: shown.value,
-    transform: [{ translateY: y.value }, { scale: 0.96 + shown.value * 0.04 }],
+    transform: [{ translateY: y.value + underBanner.value }, { scale: 0.96 + shown.value * 0.04 }],
   }));
 
   if (!toast) return null;

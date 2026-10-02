@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { reportError } from '@/lib/crashReporting';
 import { goHome } from '@/lib/goBack';
+import { heardAlert } from '@/features/messages/incoming';
 
 /**
  * Push notifications: alerts on the phone's lock screen for likes, replies,
@@ -18,10 +19,24 @@ import { goHome } from '@/lib/goBack';
  * web, or in the simulator, it quietly does nothing.
  */
 
-// An alert that arrives while the app is open still shows as a banner.
+// An alert that arrives while the app is open still shows as a banner. One
+// about a message (it opens a chat) shows as the app's own banner instead
+// (MessageBanner), never the phone's as well: heardAlert drops it if the
+// message already came in live, so one message is one banner. Whenever the
+// app's banner can't show it (a story or the camera is up, the tutorial, the
+// app half-hidden behind Control Center or the app switcher), heardAlert
+// says so and the phone's shows as before, so a message is never silent.
 if (Platform.OS !== 'web') {
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: false, shouldSetBadge: false }),
+    handleNotification: async (notification) => {
+      const { title, body, data } = notification.request.content;
+      const href = typeof data?.href === 'string' ? data.href : '';
+      const chat = href.startsWith('/messages/') ? href.slice('/messages/'.length).split(/[/?#]/)[0] : '';
+      if (chat && heardAlert(chat, title ?? '', body ?? '')) {
+        return { shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false };
+      }
+      return { shouldShowBanner: true, shouldShowList: true, shouldPlaySound: false, shouldSetBadge: false };
+    },
   });
 }
 

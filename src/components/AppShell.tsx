@@ -10,6 +10,7 @@ import { WarmCurtain } from '@/components/WarmCurtain';
 import { TourOverlay } from '@/components/TourOverlay';
 import { isTourOpen, useTourOpen } from '@/features/tour/tourStore';
 import { Toast } from './Toast';
+import { MessageBanner } from './MessageBanner';
 import { RouteTransition } from './RouteTransition';
 import { useResponsive } from '@/lib/useResponsive';
 import { getPendingTab, setPendingTab, subscribePendingTab } from '@/features/navigation/pendingTab';
@@ -227,6 +228,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     {/* While the tour is up, TalkBack reads only the tour, not the page under the dim. */}
     <View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={{ flex: 1, minWidth: 0, minHeight: 0 }}><RouteTransition>{children}</RouteTransition><Toast /><UploadBar /></View>
     {showNav && isPhone && nav}
+    {/* A new message drops in at the top, over the bar too; never on the pages the app keeps to themselves. */}
+    <MessageBanner enabled={!!currentUserId && !hideEverywhere && !onSplash && !detour} />
     {/* The splash curtain, from the splash's hand-over until the page the app opens on has drawn (see warmup). */}
     {!curtainDown && !!currentUserId && !hideEverywhere && (onSplash || isStartTab(pathname)) ? <WarmCurtain /> : null}
     {/* The first-run tour: over the bar, so it can light the bar's own buttons. */}

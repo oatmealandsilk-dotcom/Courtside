@@ -40,6 +40,13 @@ export const commit = () => run(() => Haptics.impactAsync(Haptics.ImpactFeedback
  */
 export const reward = () => run(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light), 9);
 
+/**
+ * Something arrived for you while the app is open: a message banner dropping
+ * in. The soft tap the phone gives its own banners. A browser stays still: a
+ * buzz out of nowhere on a web page reads as a fault.
+ */
+export const arrive = () => run(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft), 0);
+
 /** Something went wrong and the person needs to notice. */
 export const reject = () => run(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning), [0, 18, 50, 18]);
 
