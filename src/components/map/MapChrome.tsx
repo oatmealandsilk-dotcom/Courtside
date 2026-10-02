@@ -691,7 +691,10 @@ export function CourtSheet({ court, miles, onClose }: { court: Court; miles: num
           <Text style={styles.groupLinkText}>{mine ? 'Update yours' : 'Add what you know'}</Text>
         </Pressable>
       ) : null}
-      {noteable ? <Text style={styles.courtSource}>{said.players ? `From ${said.players} ${said.players === 1 ? 'player' : 'players'} and OpenStreetMap` : 'From OpenStreetMap. Know it? Add the lights, nets and how busy it gets.'}</Text> : null}
+      {/* Who the facts came from, only once players have added some. The map's
+          own credit (the ⓘ in its corner, and About) covers OpenStreetMap, so the
+          card no longer repeats it (Oct 2: it read as clutter). */}
+      {noteable && said.players ? <Text style={styles.courtSource}>{`From ${said.players} ${said.players === 1 ? 'player' : 'players'}`}</Text> : null}
     </Animated.View>
     </GestureDetector>
   );
