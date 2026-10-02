@@ -7,7 +7,6 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { Tappable } from '@/components/Tappable';
-import { TennisBallIcon } from '@/components/TennisBallIcon';
 import { BrandWash } from '@/components/ui/BrandWash';
 import * as haptics from '@/lib/haptics';
 import { Screen } from '@/components/ui';
@@ -144,17 +143,13 @@ export default function Health() {
                 ) : null}
                 {i.connected && tennis ? (
                   i.readsWorkouts ? (
-                    // On: the ball settles in its own soft disc and a tick pops onto it, so
-                    // switching on reads as something happening, not a line of text swapping.
+                    // On: a plain tick in the brand colour springs in, the way iPhone's own
+                    // Settings confirms a choice, so switching on reads as something happening
+                    // (no cartoon ball: William found it childish).
                     <Reanimated.View key="tennis-on" entering={FadeIn.duration(260)} exiting={FadeOut.duration(140)} style={styles.tennisCard}>
-                      <View style={styles.tennisDisc}>
-                        <Reanimated.View entering={ZoomIn.springify().damping(12).stiffness(220).delay(60)}>
-                          <TennisBallIcon size={20} fill={colors.brand} seam={colors.surface} />
-                        </Reanimated.View>
-                        <Reanimated.View entering={ZoomIn.springify().damping(10).stiffness(260).delay(220)} style={styles.tennisTick}>
-                          <Ionicons name="checkmark" size={10} color={colors.brandInk} />
-                        </Reanimated.View>
-                      </View>
+                      <Reanimated.View entering={ZoomIn.springify().damping(12).stiffness(240).delay(60)} style={styles.tennisTick}>
+                        <Ionicons name="checkmark" size={14} color={colors.brandInk} />
+                      </Reanimated.View>
                       <View style={styles.tennisWords}>
                         <Text style={styles.tennisTitle}>Tennis sessions on</Text>
                       </View>
@@ -170,7 +165,7 @@ export default function Health() {
                           works, the pill itself says so rather than the row going quiet. */}
                       <Tappable accessibilityRole="button" accessibilityLabel={`Turn on tennis sessions from ${i.label}`} disabled={loading} scaleTo={0.96} onPress={() => { haptics.tap(); if (i.provider === 'apple-health') askApple('tennis'); else run(i.provider, 'tennis'); }} style={styles.turnOn}>
                         <BrandWash />
-                        {loading ? <ActivityIndicator size="small" color={colors.brandInk} /> : <TennisBallIcon size={16} fill={colors.brandInk} seam={colors.brand} />}
+                        {loading ? <ActivityIndicator size="small" color={colors.brandInk} /> : null}
                         <Text style={styles.turnOnText}>{loading ? 'Turning on…' : 'Turn on tennis sessions'}</Text>
                       </Tappable>
                     </Reanimated.View>
@@ -227,11 +222,10 @@ const styleDefinitions = StyleSheet.create({
   smallText: { ...typography.smallStrong, color: colors.text },
   smallGhost: { height: 32, paddingHorizontal: 8, justifyContent: 'center' },
   smallGhostText: { ...typography.smallStrong, color: colors.textMuted },
-  turnOn: { flexDirection: 'row', alignItems: 'center', gap: 7, height: 36, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.brand, overflow: 'hidden' },
+  turnOn: { flexDirection: 'row', alignItems: 'center', gap: 7, height: 36, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: colors.brand, overflow: 'hidden' },
   turnOnText: { ...typography.smallStrong, color: colors.brandInk },
   tennisCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm, padding: spacing.sm, paddingRight: spacing.xs, borderRadius: radius.md, backgroundColor: colors.bgElevated },
-  tennisDisc: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
-  tennisTick: { position: 'absolute', right: -2, bottom: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: colors.brand, borderWidth: 2, borderColor: colors.bgElevated, alignItems: 'center', justifyContent: 'center' },
+  tennisTick: { width: 24, height: 24, borderRadius: 12, marginLeft: 4, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   tennisWords: { flex: 1, gap: 1 },
   tennisTitle: { ...typography.smallStrong, color: colors.text },
   pressedDim: { opacity: 0.55 },

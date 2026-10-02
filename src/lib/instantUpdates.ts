@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { AppState, Platform } from 'react-native';
+import { useEffect } from 'react';
+import { AppState } from 'react-native';
 import * as Updates from 'expo-updates';
 
 import { crashScreen, noteRestartCancelled, noteRestartForUpdate, setCrashRelease } from '@/lib/crashReporting';
@@ -11,32 +11,6 @@ const CHECK_EVERY_MS = 10 * 60_000;
 const AWAY_MS = 30_000;
 /** After posting, this long with no restart: the post's landing and its "Posted" are seen. */
 const QUIET_AFTER_POST_MS = 2 * 60_000;
-/**
- * At launch, how long the loading screen waits to hear whether newer app
- * code exists, and, once it is coming down, how long it may take before the
- * app opens on what it already has.
- */
-const LAUNCH_CHECK_MS = 2500;
-const LAUNCH_DOWNLOAD_MS = 8000;
-/**
- * The reload looks like the launch picture (cream, the mark and the name),
- * never the plain white screen the update library shows by default.
- */
-const RELOAD_LOOK = {
-  reloadScreenOptions: {
-    backgroundColor: '#F8F7F2',
-    image: require('../../assets/splash.png') as number,
-    imageResizeMode: 'contain' as const,
-    imageFullScreen: true,
-    fade: true,
-    spinner: { enabled: false },
-  },
-};
-const launchLive = !__DEV__ && Platform.OS !== 'web' && Updates.isEnabled;
-/** Only the first loading screen of a run waits; later ones (a sign-in, a switch of account) never do. */
-let launchDecided = !launchLive;
-/** When this run of the app started: the caps count from here, so the wait never adds up past them. */
-const launchedAt = Date.now();
 
 /**
  * Pages where someone is in the middle of writing or making something a
@@ -68,29 +42,11 @@ function busy(): boolean {
  * the new version straight away. No update, no wait beyond the check.
  */
 export function useLaunchUpdate(): { holding: boolean; downloading: boolean } {
-  const state = launchLive ? Updates.useUpdates() : null;
-  const [over, setOver] = useState(launchDecided);
-  const downloading = !!state && state.isDownloading;
-  const pending = !!state && state.isUpdatePending;
-  const asking = !!state && (state.isStartupProcedureRunning || state.isChecking || downloading);
-  useEffect(() => {
-    if (over) return undefined;
-    const cap = downloading ? LAUNCH_DOWNLOAD_MS : LAUNCH_CHECK_MS;
-    const timer = setTimeout(() => { launchDecided = true; setOver(true); }, Math.max(0, cap - (Date.now() - launchedAt)));
-    return () => clearTimeout(timer);
-  }, [over, downloading]);
-  useEffect(() => {
-    if (over || !pending) return;
-    launchDecided = true;
-    void noteRestartForUpdate()
-      .then(() => Updates.reloadAsync(RELOAD_LOOK))
-      .catch(() => { noteRestartCancelled(); setOver(true); });
-  }, [over, pending]);
-  // Nothing new and nothing out asking: the wait ends now, not at the cap.
-  useEffect(() => {
-    if (!over && state && !asking && !pending) { launchDecided = true; setOver(true); }
-  }, [over, state, asking, pending]);
-  return { holding: !over, downloading: !over && downloading };
+  // OFF (Oct 2, ~3pm): switching to the new version on the loading screen crashed
+  // the app about a second after opening on iPhone (William's phone). Until it has
+  // been tried on a real iPhone, a new version goes on the next time the app is
+  // fully closed and opened again, or after a while away (useInstantUpdates).
+  return { holding: false, downloading: false };
 }
 
 /**
@@ -129,7 +85,7 @@ export function useInstantUpdates() {
         if (busy() || restarting) return;
         restarting = true;
         // Noted first, so the next open knows this was an update, not a crash.
-        void noteRestartForUpdate().then(() => Updates.reloadAsync(RELOAD_LOOK)).catch(() => { restarting = false; noteRestartCancelled(); });
+        void noteRestartForUpdate().then(() => Updates.reloadAsync()).catch(() => { restarting = false; noteRestartCancelled(); });
         return;
       }
       void check();
