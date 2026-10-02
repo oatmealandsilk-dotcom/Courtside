@@ -159,6 +159,30 @@ export const posts: Post[] = [
     location: 'Cypress Hollow Park',
     court: courtTag(3),
   },
+  // Two of yours put away, so the archive's Posts has something in it.
+  {
+    id: 'p-archived-1',
+    authorId: CURRENT_USER_ID,
+    kind: 'note',
+    createdAt: isoDaysAgo(12),
+    body: 'Trying a two-handed backhand for a month. Writing it down so I actually stick with it.',
+    likedBy: ['u-june'],
+    commentIds: [],
+    tags: ['backhand'],
+    archived: true,
+  },
+  {
+    id: 'p-archived-2',
+    authorId: CURRENT_USER_ID,
+    kind: 'session',
+    createdAt: isoDaysAgo(20),
+    body: 'Rain cut it short. Twenty minutes of serves before the lines got slick.',
+    session: { focus: 'First serve rhythm', minutes: 20, drills: ['Flat serves, deuce side'], intensity: 2 },
+    likedBy: [],
+    commentIds: [],
+    tags: ['serve'],
+    archived: true,
+  },
 ];
 
 export const comments: Comment[] = [

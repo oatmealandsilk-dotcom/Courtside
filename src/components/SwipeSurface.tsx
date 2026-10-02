@@ -14,7 +14,7 @@ import { activationDistance, claimedDepth, waitsForDeeper } from '@/features/nav
  * JavaScript only hears from the gesture at three moments: when it starts (to
  * mount the preview), when it is known to be going through, and when it lands.
  */
-export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false, settledKey, progress: progressValue, depth = 1, slideRef }: {
+export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false, settledKey, progress: progressValue, depth = 1, slideRef, onRest }: {
   children: React.ReactNode; onSwipe: (direction: 1 | -1) => void;
   /** Fires the instant the gesture is known to be going through, before the animation. */
   onCommit?: (direction: 1 | -1) => void;
@@ -39,6 +39,13 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
    * when it can't right now (mid-swipe, no page that way).
    */
   slideRef?: React.MutableRefObject<((direction: 1 | -1) => boolean) | null>;
+  /** Fires once the page is still again after a swipe or a turn from code, landed or sprung back. */
+  onRest?: () => void;
+  /**
+   * Only the browser's surface reads this (see SwipeSurface.web). Here the
+   * page is put back on the animation thread in the same step as it lands.
+   */
+  landInPlace?: boolean;
 }) {
   const { isPhone } = useResponsive();
   const enabled = requestedEnabled && isPhone;
@@ -61,8 +68,8 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
   const [dragging, setDragging] = useState(false);
 
   // Callbacks the UI thread can reach without re-creating the gesture.
-  const latest = React.useRef({ onSwipe, onCommit, onDragTo, onProgress });
-  latest.current = { onSwipe, onCommit, onDragTo, onProgress };
+  const latest = React.useRef({ onSwipe, onCommit, onDragTo, onProgress, onRest });
+  latest.current = { onSwipe, onCommit, onDragTo, onProgress, onRest };
   const begin = (next: 1 | -1) => { setPageDragging(true); setDragging(true); setDirection(next); };
   const turn = (next: 1 | -1) => setDirection(next);
   const heading = (next: 1 | -1 | null) => latest.current.onDragTo?.(next);
@@ -73,7 +80,7 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
     else latest.current.onDragTo?.(null);
     latest.current.onProgress?.(commit ? next : 0);
   };
-  const release = () => { offset.value = 0; setDragging(false); busy.value = false; };
+  const release = () => { offset.value = 0; setDragging(false); busy.value = false; latest.current.onRest?.(); };
   const awaiting = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const landed = (commit: boolean, next: 1 | -1) => {
     if (!commit) return release();

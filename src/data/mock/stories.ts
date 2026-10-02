@@ -17,4 +17,7 @@ export const stories: Story[] = [
   seed('s5', 'u-tomas', 14, { mediaLabel: 'Toss drill', caption: 'Same bounce, same breath, every time.' }),
   // Yesterday's story: already off the rail and sitting in the archive.
   seed('s6', 'u-you', 30, { mediaLabel: 'Match point · 0:08', caption: 'First tiebreak win of the season.' }),
+  // Older ones, so the archive has a few to show; one was put away before its day was up.
+  seed('s7', 'u-you', 74, { mediaLabel: 'Volley drill · 0:14', caption: 'Hands out front, no backswing.' }),
+  seed('s8', 'u-you', 150, { mediaLabel: 'New grips', caption: 'Overgrip day.', archived: true }),
 ];

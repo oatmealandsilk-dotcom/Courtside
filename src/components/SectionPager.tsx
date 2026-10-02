@@ -9,9 +9,12 @@ import { useResponsive } from '@/lib/useResponsive';
 import { useTabActive } from '@/features/navigation/tabFocus';
 
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
+/** How far in from the left edge a touch counts as the phone's own back swipe (iOS takes about this much). */
+const BACK_EDGE = 24;
 
 /**
- * Sections inside a tab (Discussions / Find Players, Posts / Clips / Tagged),
+ * Sections inside a tab (Discussions / Find Players, Posts / Clips / Tagged)
+ * or a page (Archive's Instants / Posts),
  * kept mounted side by side and slid between on the animation thread — the
  * same idea as the tab row, one level down. Nothing is built mid-drag, so
  * there is nothing to hitch on landing.
@@ -21,7 +24,7 @@ const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
  * handed up to the tab row when `delegateLeft` / `delegateRight` say so,
  * otherwise the row gives a little and springs back.
  */
-export function SectionPager({ index, panes, onIndex, progress, depth = 1, delegateLeft = false, delegateRight = false }: {
+export function SectionPager({ index, panes, onIndex, progress, depth = 1, delegateLeft = false, delegateRight = false, fill = false, edgeBack = false }: {
   index: number;
   panes: React.ReactNode[];
   onIndex: (next: number) => void;
@@ -36,6 +39,23 @@ export function SectionPager({ index, panes, onIndex, progress, depth = 1, deleg
    * changes, so a section asked for is the slide.
    */
   slideChannel?: string;
+  /**
+   * The row fills the height it is given and each pane gets all of it, for
+   * panes that are scrollers of their own (Archive). Without it the row is
+   * as tall as its tallest pane and the page around it scrolls.
+   */
+  fill?: boolean;
+  /**
+   * On a page pushed on top of another: a swipe right that starts at the
+   * screen's left edge is the phone's back gesture, on any pane, so the row
+   * stands aside for it.
+   */
+  edgeBack?: boolean;
+  /**
+   * Only the browser's pager reads this (see SectionPager.web). This one
+   * already glides whenever `index` changes, a tapped tab included.
+   */
+  slideOnTap?: boolean;
 }) {
   const { isPhone } = useResponsive();
   const count = panes.length;
@@ -52,8 +72,8 @@ export function SectionPager({ index, panes, onIndex, progress, depth = 1, deleg
   const [shown, setShown] = useState(index);
   const shownRef = useRef(index);
   const locked = useSharedValue(false);
-  const config = useSharedValue({ enabled: isPhone, delegateLeft, delegateRight, depth, last });
-  useEffect(() => { config.value = { enabled: isPhone, delegateLeft, delegateRight, depth, last }; }, [isPhone, delegateLeft, delegateRight, depth, last, config]);
+  const config = useSharedValue({ enabled: isPhone, delegateLeft, delegateRight, depth, last, edgeBack });
+  useEffect(() => { config.value = { enabled: isPhone, delegateLeft, delegateRight, depth, last, edgeBack }; }, [isPhone, delegateLeft, delegateRight, depth, last, edgeBack, config]);
   useEffect(() => {
     locked.value = isPageSwipeLocked();
     return subscribePageSwipeLock(() => { locked.value = isPageSwipeLocked(); });
@@ -84,6 +104,8 @@ export function SectionPager({ index, panes, onIndex, progress, depth = 1, deleg
   const armed = useSharedValue(false);
   const settled = useSharedValue(true);
   const startY = useSharedValue(0);
+  // Where the finger came down on the screen itself, for the back-swipe edge.
+  const startScreenX = useSharedValue(0);
   const startPosition = useSharedValue(0);
   const pan = useMemo(() => Gesture.Pan()
     .manualActivation(true)
@@ -94,6 +116,7 @@ export function SectionPager({ index, panes, onIndex, progress, depth = 1, deleg
       startX.value = t.x;
       armed.value = false;
       startY.value = t.y;
+      startScreenX.value = t.absoluteX;
     })
     .onTouchesMove((e, state) => {
       'worklet';
@@ -104,7 +127,7 @@ export function SectionPager({ index, panes, onIndex, progress, depth = 1, deleg
       const c = config.value;
       if (Math.abs(dx) > activationDistance(c.depth) && Math.abs(dx) > Math.abs(dy) * 1.4) {
         const at = Math.round(position.value);
-        const handedOff = (c.delegateRight && dx > 0 && at <= 0) || (c.delegateLeft && dx < 0 && at >= c.last);
+        const handedOff = (c.delegateRight && dx > 0 && at <= 0) || (c.delegateLeft && dx < 0 && at >= c.last) || (c.edgeBack && dx > 0 && startScreenX.value < BACK_EDGE);
         if (!c.enabled || locked.value || handedOff || claimedDepth.value > c.depth + 1) state.fail();
         else if (waitsForDeeper(c.depth) && !armed.value) armed.value = true;
         else { claimedDepth.value = c.depth + 1; state.activate(); }
@@ -167,12 +190,13 @@ export function SectionPager({ index, panes, onIndex, progress, depth = 1, deleg
 
   return (
     <GestureDetector gesture={pan}>
-      <View onLayout={(e) => { const w = e.nativeEvent.layout.width; if (w > 0) setMeasured(w); }} style={{ overflow: 'hidden', alignSelf: 'stretch' }}>
-        <Animated.View style={[{ flexDirection: 'row', width: width * count }, row]}>
+      <View onLayout={(e) => { const w = e.nativeEvent.layout.width; if (w > 0) setMeasured(w); }} style={{ overflow: 'hidden', alignSelf: 'stretch', flex: fill ? 1 : undefined }}>
+        <Animated.View style={[{ flexDirection: 'row', width: width * count, flex: fill ? 1 : undefined }, row]}>
           {panes.map((pane, i) => (
             // All panes stay in the row at their own height: the strip is as
             // tall as the tallest, and landing never re-lays the page out —
-            // which is what made fast back-and-forth swiping hitch.
+            // which is what made fast back-and-forth swiping hitch. (With
+            // `fill`, every pane is simply the row's full height.)
             <View key={i} style={{ width }} pointerEvents={i === shown ? 'auto' : 'none'}>
               {pane}
             </View>

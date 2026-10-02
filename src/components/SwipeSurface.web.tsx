@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { withTiming, type SharedValue } from 'react-native-reanimated';
 import { useResponsive } from '@/lib/useResponsive';
 
@@ -31,6 +31,19 @@ export interface SwipeSurfaceProps {
    * the layout has no swipe).
    */
   slideRef?: React.MutableRefObject<((direction: 1 | -1) => boolean) | null>;
+  /**
+   * Fires once the surface is still again: a swipe or a turn from code has
+   * landed or sprung back, or the layout lost its swipe part way. A turn
+   * asked for while it was moving (slideRef answered false) can be asked again now.
+   */
+  onRest?: () => void;
+  /**
+   * The destination is drawn in the very render that changes `settledKey`
+   * (a section of a page, not a route that arrives a beat later), so the page
+   * is put back in place before that render is painted. Waiting a frame left
+   * one empty frame on every landing.
+   */
+  landInPlace?: boolean;
 }
 
 const SETTLE_MS = 300;
@@ -44,7 +57,7 @@ const EASE = 'cubic-bezier(.22,.61,.36,1)';
  * preview) and when it ends. Routing every pointer move through state meant
  * re-rendering the whole page per frame, which is what made swipes stutter.
  */
-export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false, settledKey, progress, slideRef }: SwipeSurfaceProps) {
+export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false, settledKey, progress, slideRef, onRest, landInPlace = false }: SwipeSurfaceProps) {
   const { isPhone } = useResponsive();
   const enabled = requestedEnabled && isPhone;
   const start = useRef<{ x: number; y: number; lastX: number; time: number; velocity: number; horizontal: boolean; delegateOnly?: boolean; delegateDirection?: string | null } | null>(null);
@@ -58,8 +71,8 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
   const queued = useRef<1 | -1 | null>(null);
   const [direction, setDirection] = useState<1 | -1>(1);
   const [dragging, setDragging] = useState(false);
-  const latest = useRef({ onSwipe, onCommit, onDragTo, onProgress, renderPreview });
-  latest.current = { onSwipe, onCommit, onDragTo, onProgress, renderPreview };
+  const latest = useRef({ onSwipe, onCommit, onDragTo, onProgress, renderPreview, onRest });
+  latest.current = { onSwipe, onCommit, onDragTo, onProgress, renderPreview, onRest };
 
   const place = (offset: number, animate: boolean) => {
     const transition = animate ? `transform ${SETTLE_MS}ms ${EASE}` : 'none';
@@ -82,6 +95,7 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
       queued.current = null;
       setDragging(false);
       place(0, false);
+      latest.current.onRest?.();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled]);
@@ -114,13 +128,25 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
     settling.current = false;
     setDragging(false);
     requestAnimationFrame(() => place(0, false));
+    latest.current.onRest?.();
   };
   const awaiting = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!awaiting.current) return;
+    if (landInPlace || !awaiting.current) return;
     clearTimeout(awaiting.current);
     awaiting.current = null;
     release();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settledKey]);
+  // The same, before paint and with no frame's wait (see landInPlace).
+  useLayoutEffect(() => {
+    if (!landInPlace || !awaiting.current) return;
+    clearTimeout(awaiting.current);
+    awaiting.current = null;
+    settling.current = false;
+    setDragging(false);
+    place(0, false);
+    latest.current.onRest?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settledKey]);
 
@@ -174,7 +200,15 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
       if (!point) return;
       const dx = event.clientX - point.x;
       const dy = event.clientY - point.y;
-      if ((delegateRight && dx > 0) || (delegateLeft && dx < 0) || (point.delegateOnly && (point.delegateDirection === "right" ? dx < 0 : dx > 0))) { start.current = null; return; }
+      if ((delegateRight && dx > 0) || (delegateLeft && dx < 0) || (point.delegateOnly && (point.delegateDirection === "right" ? dx < 0 : dx > 0))) {
+        start.current = null;
+        // A drag that had already taken the page and then turned back past
+        // where it began is let go: the page springs back and the surface is
+        // still again. Simply dropped, it stayed where the finger left it, and
+        // a page that waits for its swipe to finish (Archive's tabs) never moved again.
+        if (point.horizontal) { suppressClick.current = true; settle(false, direction); }
+        return;
+      }
       if (!point.horizontal) {
         if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { start.current = null; return; }
         if (Math.abs(dx) < 10 || Math.abs(dx) < Math.abs(dy) * 1.6) return;

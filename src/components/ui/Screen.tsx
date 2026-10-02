@@ -82,6 +82,13 @@ interface Props {
    * over it, and its bottom must not move when one opens.
    */
   bar?: boolean;
+  /**
+   * For a page that does not scroll as a whole (scroll={false}) but holds
+   * scrollers of its own (Archive's two sections): they run on down behind
+   * the floating bar the way a scrolling page does, and keep clear of it at
+   * the end of their own content, so no room is kept here.
+   */
+  scrollsInside?: boolean;
 }
 
 export function Screen({
@@ -100,6 +107,7 @@ export function Screen({
   onRefresh,
   wash = true,
   bar = true,
+  scrollsInside = false,
 }: Props) {
   // The floating tab bar covers this much of the bottom; a page's last line stays above it.
   const barInset = useBarInset();
@@ -172,6 +180,7 @@ export function Screen({
     if (IOS && keysCover) room = Math.max(keysCover.truly, barRoom) - keysCover.avoided;
     else if (!IOS && keysUp) room = bar ? barInset : 0;
   }
+  if (!scroll && scrollsInside) room = 0;
   // Pull-to-refresh: the disc while it runs, then a small note that
   // slides in under the header and fades — enough to know it happened.
   const updated = useRef(new Animated.Value(0)).current;
