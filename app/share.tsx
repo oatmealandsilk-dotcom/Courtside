@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -64,28 +64,6 @@ interface Target {
   photoUrl?: string;
   /** Someone who only gets messages from people they follow, and doesn't follow you. */
   locked?: boolean;
-}
-
-/** Springs a tick over the sheet so a send lands instead of just vanishing. */
-function SentTick() {
-  const scale = useRef(new Animated.Value(0.4)).current;
-  useEffect(() => {
-    Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 14, bounciness: 14 }).start();
-  }, [scale]);
-  return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <Animated.View style={{ transform: [{ scale }] }}>
-          <View style={{
-            width: 86, height: 86, borderRadius: 43, backgroundColor: colors.brand,
-            alignItems: 'center', justifyContent: 'center',
-          }}>
-            <Ionicons name="checkmark" size={46} color={colors.brandInk} />
-          </View>
-        </Animated.View>
-      </View>
-    </View>
-  );
 }
 
 export default function ShareSheet() {
@@ -244,8 +222,16 @@ export default function ShareSheet() {
     );
     haptics.reward();
     setSent(true);
-    // Long enough to read the confirmation, short enough not to wait on it.
-    setTimeout(dismiss, 900);
+    // The way Instagram does it: the button says Sent, the sheet goes, and a
+    // small note names who got it. (A big tick used to spring up over the
+    // middle of the sheet, landing on top of the faces and their names.)
+    // A person by first name; a group by its whole name ("Saturday hitters", not "Saturday").
+    const names = selected.map((k) => { const name = [...recent, ...people].find((t) => t.key === k)?.name; return k.startsWith('u:') ? name?.split(' ')[0] : name; }).filter(Boolean);
+    const to = names.length === 1 ? names[0] : names.length === 2 ? `${names[0]} and ${names[1]}` : `${names.length} chats`;
+    setTimeout(() => {
+      dismiss();
+      showToast({ title: to ? `Sent to ${to}` : 'Sent', icon: 'paper-plane-outline' });
+    }, 350);
   };
 
   const outside = sending?.outside;
@@ -305,8 +291,6 @@ export default function ShareSheet() {
       }
     >
       <View style={styles.sheet}>
-        {sent ? <SentTick /> : null}
-
         <View style={styles.itemPreview}>
           {sending ? sending.icon : <Ionicons name="alert-circle-outline" size={20} color={colors.textMuted} />}
           <Text numberOfLines={2} style={styles.itemText}>
@@ -340,10 +324,12 @@ export default function ShareSheet() {
 
         <View style={styles.footer}>
           {/* Several picked: each gets its own copy in its own chat; nobody is put in a group together. */}
+          {/* Once sent it stays lit, not greyed like a button that can't be pressed;
+              send() itself ignores a second tap. */}
           <Button
-            label={sent ? 'Sent ✓' : many ? `Send separately · ${selected.length}` : 'Send'}
+            label={sent ? 'Sent' : many ? `Send separately · ${selected.length}` : 'Send'}
             onPress={send}
-            disabled={!selected.length || sent || !sending}
+            disabled={!selected.length || !sending}
             full
           />
           {outside ? (
