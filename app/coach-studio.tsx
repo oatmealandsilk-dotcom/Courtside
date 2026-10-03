@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent, type ScrollView } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 
@@ -99,6 +99,20 @@ export default function CoachStudio() {
     void actions.checkPayouts().catch(() => false).finally(() => setBusy(null));
   }, [coach, cameBack, actions]);
 
+  // Stripe often finishes its checks a few minutes after the coach comes
+  // back, and the iPhone never brings ?stripe= back here. So while payouts
+  // are started but not on yet, ask Stripe again each time the studio comes
+  // into view.
+  const focusChecked = useRef(false);
+  const waitingOnStripe = !!coach?.payoutsStarted && !coach.payoutsReady && payments.on === true;
+  useFocusEffect(useCallback(() => {
+    if (waitingOnStripe && !cameBack && !focusChecked.current) {
+      focusChecked.current = true;
+      void actions.checkPayouts().catch(() => false);
+    }
+    return () => { focusChecked.current = false; };
+  }, [waitingOnStripe, cameBack, actions]));
+
   if (!coach) {
     return (
       // The same scroller as the studio below: this page can draw first, before the coach has loaded, and the scroller is kept.
@@ -166,8 +180,10 @@ export default function CoachStudio() {
 
   const priceCents = draft ? Math.round(Number(draft.price.replace(/[^0-9.]/g, '')) * 100) : 0;
   const draftOk = !!draft && draft.title.trim().length >= 2 && priceCents >= 500 && priceCents <= 100000;
-  // What the coach keeps: the price, less CourtSide's share and Stripe's card fee (about 2.9% + 30¢).
-  const keeps = priceCents ? Math.max(0, priceCents - Math.round(priceCents * payments.feePercent / 100) - Math.round(priceCents * 0.029 + 30)) : 0;
+  // What the coach keeps: the price, less CourtSide's share, worked out the
+  // same way as the server does. Stripe's card fee comes out of CourtSide's
+  // share, not the coach's.
+  const keeps = priceCents ? priceCents - Math.round(priceCents * payments.feePercent / 100) : 0;
   const saveDraft = () => {
     if (!draft || !draftOk) return;
     void run('service', async () => {
@@ -201,7 +217,7 @@ export default function CoachStudio() {
         <Text style={[styles.meta, styles.priceNote]}>
           {!priceCents ? 'Prices run from $5 to $1,000.'
             : priceCents < 500 || priceCents > 100000 ? 'Prices run from $5 to $1,000.'
-            : `You receive about ${money(keeps)}. CourtSide keeps ${payments.feePercent}%, and Stripe takes about 2.9% + 30¢ for the card.`}
+            : `You receive ${money(keeps)}. CourtSide keeps ${payments.feePercent}%, which covers Stripe’s card fee.`}
         </Text>
       </View>
       <Text style={styles.label}>Answered within</Text>
@@ -377,7 +393,7 @@ export default function CoachStudio() {
               {payments.on === false
                 ? 'CourtSide hasn’t switched payments on yet. Your page and services can be ready before then.'
                 : coach.payoutsReady
-                  ? `Each booking’s money lands in your bank a few days after it is paid, less CourtSide’s ${payments.feePercent}% and Stripe’s card fee.`
+                  ? `Each booking’s money lands in your bank a few days after it is paid, less CourtSide’s ${payments.feePercent}%.`
                   : coach.payoutsStarted
                     ? 'Stripe needs a few more details before it can pay you. It takes a couple of minutes.'
                     : 'CourtSide pays coaches through Stripe, which handles the money, your bank details and tax forms. Setup takes about five minutes: your name, date of birth, the last four of your SSN and a bank account.'}
@@ -389,6 +405,7 @@ export default function CoachStudio() {
                 label={busy === 'payouts' ? 'Opening Stripe…' : coach.payoutsStarted ? 'Continue with Stripe' : 'Set up payouts'}
                 onPress={() => void run('payouts', actions.setupPayouts)}
                 loading={busy === 'payouts'}
+                disabled={payments.on === undefined}
                 full
               />
             )}

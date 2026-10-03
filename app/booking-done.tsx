@@ -6,6 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { Button, Screen } from '@/components/ui';
 import { goBack } from '@/lib/goBack';
+import { goToTab } from '@/features/navigation/startTab';
 import { money } from '@/lib/format';
 import { dueText, turnaround } from '@/features/coaching/bookings';
 import { useApp } from '@/store/AppContext';
@@ -21,7 +22,8 @@ export default function BookingDone() {
   const styles = useThemedStyles(styleDefinitions);
   const { request: requestId, paid, cancelled } = useLocalSearchParams<{ request?: string; paid?: string; cancelled?: string }>();
   const { coachingRequests, coaches, users, ready, actions } = useApp();
-  const [state, setState] = useState<'checking' | 'paid' | 'unpaid' | 'cancelled'>(cancelled === '1' ? 'cancelled' : paid === '1' ? 'paid' : 'checking');
+  // With no booking id to ask about, there is nothing to wait for.
+  const [state, setState] = useState<'checking' | 'paid' | 'unpaid' | 'cancelled'>(cancelled === '1' ? 'cancelled' : paid === '1' ? 'paid' : requestId ? 'checking' : 'unpaid');
   const asked = useRef(false);
 
   useEffect(() => {
@@ -42,9 +44,17 @@ export default function BookingDone() {
   const coachUser = users.find((u) => u.id === coach?.userId);
   const service = coach?.services.find((s) => s.id === request?.serviceId);
   const first = coachUser?.name.split(' ')[0] ?? 'Your coach';
+  // Back to a page already underneath, rather than stacking a second copy
+  // of it (or of the whole tabs) on top.
+  const toCoach = () => {
+    if (!coach) return;
+    if (router.canDismiss()) router.dismissTo(`/coach/${coach.id}`);
+    else router.replace(`/coach/${coach.id}`);
+  };
+  const toCoaching = () => goToTab('/coaches');
 
   return (
-    <Screen title="Booking" compactTitle onBack={() => (coach ? router.replace(`/coach/${coach.id}`) : goBack('/coaches'))}>
+    <Screen title="Booking" compactTitle onBack={() => (coach ? toCoach() : goBack('/coaches'))}>
       <View style={styles.body}>
         {state === 'checking' ? (
           <>
@@ -63,7 +73,7 @@ export default function BookingDone() {
             {request?.priceCents ? <Text style={styles.fine}>Paid {money(request.priceCents)}. If {first} has not answered in time, you can have it back.</Text> : null}
             <View style={styles.actions}>
               {request ? <Button label="See your booking" onPress={() => router.replace(`/coach-request/${request.id}`)} full /> : null}
-              <Button label="Back to Coaching" variant="secondary" onPress={() => router.replace('/coaches')} full />
+              <Button label="Back to Coaching" variant="secondary" onPress={toCoaching} full />
             </View>
           </>
         ) : (
@@ -73,11 +83,11 @@ export default function BookingDone() {
             <Text style={styles.lead}>
               {state === 'cancelled'
                 ? 'Nothing was charged. You can book again whenever you like.'
-                : 'Stripe has not confirmed a payment for this booking. If money left your account, it will show up here within a minute, or write to support@courtsidebase.com.'}
+                : 'Stripe has not confirmed a payment for this booking. If your card was charged, the booking will show up under Coaching within a few minutes. If it doesn’t, write to support@courtsidebase.com.'}
             </Text>
             <View style={styles.actions}>
-              {coach ? <Button label={`Back to ${first}`} onPress={() => router.replace(`/coach/${coach.id}`)} full /> : null}
-              <Button label="Back to Coaching" variant="secondary" onPress={() => router.replace('/coaches')} full />
+              {coach ? <Button label={`Back to ${first}`} onPress={toCoach} full /> : null}
+              <Button label="Back to Coaching" variant="secondary" onPress={toCoaching} full />
             </View>
           </>
         )}
