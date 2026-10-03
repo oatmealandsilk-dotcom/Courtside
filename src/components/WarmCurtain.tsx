@@ -1,10 +1,10 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { StyleSheet, Text } from 'react-native';
+import Animated, { Easing, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { BrandMark } from '@/components/BrandMark';
-import { curtainLiftBy, curtainReadyAnyway, setCurtainDown, useCurtainReady } from '@/features/feed/warmup';
+import { MAP_WAIT_MS, curtainLiftBy, curtainReadyAnyway, launchSettle, setCurtainDown, setMapWaitOver, useCurtainReady, useStartDrawn } from '@/features/feed/warmup';
 import { colors, spacing, font } from '@/theme';
 
 /**
@@ -14,6 +14,13 @@ import { colors, spacing, font } from '@/theme';
  * app opens on Community (see startTab): the curtain lifts as soon as that
  * page has drawn, not when the feed is in, and the feed shows its own
  * loading pages the first time you get to it rather than the logo again.
+ *
+ * "Drawn" includes the map card at the top of Find Players (see
+ * useStartMapHold), for at most MAP_WAIT_MS: lifting onto an empty card that
+ * then filled in read as a second cut. The lift is one motion: the logo
+ * fades and drifts up and away while the page beneath settles from a touch
+ * large into place (launchSettle, in AppShell), on the same curve. With
+ * Reduce Motion on, it is a plain fade.
  */
 /**
  * The longest the curtain ever stays up, counted from the first time it is
@@ -23,17 +30,35 @@ import { colors, spacing, font } from '@/theme';
  * page shows what it has.
  */
 const CURTAIN_MAX_MS = 10_000;
+/** The lift: long enough to read as the page arriving, short enough not to keep anyone waiting. */
+const LIFT_MS = 560;
+const LIFT_EASE = Easing.bezier(0.33, 0, 0.15, 1);
 
 export function WarmCurtain() {
   const styles = useThemedStyles(styleDefinitions);
   const warm = useCurtainReady();
+  const drawn = useStartDrawn();
+  const still = useReducedMotion();
   const [shown, setShown] = useState(!warm);
+  // 1 while the curtain covers everything, 0 once it has gone.
   const fade = useSharedValue(1);
   const style = useAnimatedStyle(() => ({ opacity: fade.value }));
+  // The mark and name drift up and grow a touch as they go: away, not just out.
+  const brandStyle = useAnimatedStyle(() => (still ? {} : {
+    transform: [{ translateY: (1 - fade.value) * -14 }, { scale: 1 + (1 - fade.value) * 0.05 }],
+  }));
+  // Hidden under the curtain, the page waits a touch large, ready to settle.
+  useEffect(() => {
+    if (shown && !still) launchSettle.value = 1;
+    // However the curtain goes (lifted, or taken away by a change of page), the page is left at rest.
+    return () => { launchSettle.value = 0; };
+  }, [shown, still]);
   useEffect(() => {
     if (!warm || !shown) return;
-    fade.value = withTiming(0, { duration: 420 }, (finished) => { if (finished) { runOnJS(setShown)(false); runOnJS(setCurtainDown)(); } });
-  }, [warm, shown, fade]);
+    const timing = { duration: still ? 320 : LIFT_MS, easing: LIFT_EASE };
+    launchSettle.value = still ? 0 : withTiming(0, timing);
+    fade.value = withTiming(0, timing, (finished) => { if (finished) { runOnJS(setShown)(false); runOnJS(setCurtainDown)(); } });
+  }, [warm, shown, fade, still]);
   // Not shown at all (the page was already ready): playback need not wait on it.
   useEffect(() => { if (!shown) setCurtainDown(); }, [shown]);
   useEffect(() => {
@@ -41,13 +66,19 @@ export function WarmCurtain() {
     const t = setTimeout(curtainReadyAnyway, Math.max(0, curtainLiftBy(CURTAIN_MAX_MS) - Date.now()));
     return () => clearTimeout(t);
   }, [warm]);
+  // The page has drawn: its map gets a short grace to draw too, never longer.
+  useEffect(() => {
+    if (warm || !drawn) return undefined;
+    const t = setTimeout(setMapWaitOver, MAP_WAIT_MS);
+    return () => clearTimeout(t);
+  }, [warm, drawn]);
   if (!shown) return null;
   return (
     <Animated.View pointerEvents={warm ? 'none' : 'auto'} style={[styles.curtain, style]}>
-      <View style={styles.brand}>
+      <Animated.View style={[styles.brand, brandStyle]}>
         <BrandMark size={84} />
         <Text style={styles.wordmark}>CourtSide</Text>
-      </View>
+      </Animated.View>
       <Text style={styles.tagline}>Growing the game</Text>
     </Animated.View>
   );

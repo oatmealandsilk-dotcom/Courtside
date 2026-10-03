@@ -26,6 +26,7 @@ import { STYLE, applyLook, cardLook, lookFor } from '@/components/map/look';
 import { CLOSE_ZOOM_NAMES, FAR_ZOOM, MAP_PIN_CSS, SHORT_ZOOM, clusterTemplates, courtLift, youLift } from '@/components/map/markers';
 import { CARD_BOX, FULL_MAP_BOX, PIN_ENGINE_JS, type PinEngine, type PinEngineFactory } from '@/components/map/pinEngine';
 import { mapMarkers } from '@/components/map/pinList';
+import { useStartMapHold } from '@/features/feed/warmup';
 
 const HEIGHT = 330;
 const START_ZOOM = 11.5;
@@ -63,6 +64,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const [meOpen, setMeOpen] = useState(false);
   const openToHit = isOpenToHit(me);
   const model = useMapModel(me, players, at, focusCourt, !expanded, focusHit, focusUser, focusSpot);
+  // The still card on the start page holds the opening curtain until its streets are drawn (see warmup).
+  const painted = useStartMapHold(!expanded && (!!model.city || model.cityPending));
   // Anything else picked (a search result, a pin) takes the place of your own card.
   useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit]);
   const { home, start } = model;
@@ -122,6 +125,8 @@ export function NearbyMap(props: NearbyMapProps) {
     // with every street name, for a moment each time a map was made: a white
     // flash on a dark theme.
     instance.on('style.load', () => applyLook(instance, expanded ? lookFor(themes[theme]) : cardLook(lookFor(themes[theme]))));
+    // First time everything in view has drawn: the curtain over the start page may lift onto it.
+    if (!expanded) instance.once('idle', () => requestAnimationFrame(painted));
     // The pins' shared styles, once per page, and the zoom classes they answer to.
     if (!document.getElementById('cs-pin-css')) { const css = document.createElement('style'); css.id = 'cs-pin-css'; css.textContent = MAP_PIN_CSS; document.head.appendChild(css); }
     const zoomClass = () => { const z = instance.getZoom(); el.classList.toggle('cs-close', z >= CLOSE_ZOOM_NAMES); el.classList.toggle('cs-far', z < FAR_ZOOM); el.classList.toggle('cs-short', z < SHORT_ZOOM); };

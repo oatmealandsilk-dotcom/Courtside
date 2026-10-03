@@ -6,6 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
+import { useStartMapHold } from '@/features/feed/warmup';
 import { Button } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -52,16 +53,21 @@ const WebMap = lazy(() => loadMap().then((m) => {
 }));
 
 export function NearbyMap(props: NearbyMapProps) {
-  const styles = useThemedStyles(styleDefinitions);
-  const standIn = (
-    <View style={props.expanded ? styles.fill : styles.card}>
-      <CourtSpinner size={24} />
-    </View>
-  );
   return (
-    <Suspense fallback={standIn}>
+    <Suspense fallback={<StandIn expanded={!!props.expanded} />}>
       <WebMap {...props} />
     </Suspense>
+  );
+}
+
+/** The map's place while its engine downloads. As a still card on the start page, it holds the opening curtain too (see warmup), handing over to the map itself. */
+function StandIn({ expanded }: { expanded: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  useStartMapHold(!expanded);
+  return (
+    <View style={expanded ? styles.fill : styles.card}>
+      <CourtSpinner size={24} />
+    </View>
   );
 }
 

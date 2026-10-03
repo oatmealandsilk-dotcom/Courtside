@@ -22,6 +22,7 @@ import { useWeather } from '@/features/players/useWeather';
 import { show as showToast } from '@/lib/toast';
 import { confirmUnfollow } from '@/lib/confirm';
 import { useApp } from '@/store/AppContext';
+import { useStartMapHold } from '@/features/feed/warmup';
 import { colors, radius, spacing } from '@/theme';
 
 const HEIGHT = 330;
@@ -70,6 +71,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const [meOpen, setMeOpen] = useState(false);
   const openToHit = isOpenToHit(me);
   const model = useMapModel(me, players, at, focusCourt, !expanded, focusHit, focusUser, focusSpot);
+  // The still card on the start page holds the opening curtain until its streets are drawn (see warmup).
+  const painted = useStartMapHold(!expanded && (!!model.city || model.cityPending));
   // Anything else picked (a search result, a pin) takes the place of your own card.
   useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit]);
   const { home, start } = model;
@@ -121,6 +124,7 @@ export function NearbyMap(props: NearbyMapProps) {
       tpl={tpl}
       // The full map's first pins come in as one wave (once any sheet over it has gone); a tap on "+N" zooms in clear of the bars and the tray.
       popIn={expanded}
+      onPainted={expanded ? undefined : painted}
       holdPins={expanded && holdPins}
       pad={{ top: insets.top + 120, bottom: 250, left: 50, right: 50 }}
       onTap={(id) => {
