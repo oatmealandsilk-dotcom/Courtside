@@ -3,7 +3,6 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { BrandMark } from '@/components/BrandMark';
 import { GLYPH_EDGE } from '@/components/ReelCaption';
 import { TOP_BAND_HEIGHT, TOP_BAND_TOP } from '@/features/feed/topBand';
 import { colors, font } from '@/theme';
@@ -45,10 +44,6 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   const words = [{ id: null as string | null, name: 'For you' }, ...groups];
   return (
     <View pointerEvents={hidden ? 'none' : 'box-none'} style={[styles.layer, { top: insets.top + TOP_BAND_TOP, opacity: hidden ? 0 : 1 }]}>
-      {/* The CourtSide mark in the corner (Oct 3), as Instagram keeps its name at the top; on a picture it sits on a small tile so it reads. */}
-      <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.mark, onPicture && styles.markTile]}>
-        <BrandMark size={onPicture ? 22 : 26} />
-      </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row} style={styles.scroller}>
         {words.map((w, i) => {
           const on = w.id === selected;
@@ -78,9 +73,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
 
 const styleDefinitions = StyleSheet.create({
   layer: { position: 'absolute', left: 0, right: 0, height: TOP_BAND_HEIGHT, zIndex: 8, alignItems: 'center', justifyContent: 'center' },
-  scroller: { flexGrow: 0, maxWidth: '72%' },
-  mark: { position: 'absolute', left: 16, top: 0, bottom: 0, justifyContent: 'center' },
-  markTile: { top: (TOP_BAND_HEIGHT - 32) / 2, bottom: undefined, width: 32, height: 32, borderRadius: 10, alignItems: 'center', backgroundColor: colors.bg, opacity: 0.94 },
+  scroller: { flexGrow: 0, maxWidth: '100%' },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 8, height: TOP_BAND_HEIGHT },
   word: { fontSize: 16, lineHeight: 22, ...font('500'), letterSpacing: -0.2, maxWidth: 150, paddingVertical: 2 },
   wordOn: { ...font('700') },
