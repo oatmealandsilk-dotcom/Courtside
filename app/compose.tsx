@@ -13,7 +13,8 @@ import { MediaEditor, type EditedMedia } from '@/components/MediaEditor';
 import { takePendingShot } from '@/features/compose/pendingShot';
 import { registerCreateClose } from '@/features/compose/createMenu';
 import { SheetBackdrop } from '@/components/SheetBackdrop';
-import { Button, Field, Screen, Toggle } from '@/components/ui';
+import { Button, Chip, Field, Screen, Toggle } from '@/components/ui';
+import { openGroupFeed } from '@/features/groups/openGroupFeed';
 import { FormRow } from '@/components/FormRow';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { openPlacePicker } from '@/features/places/picker';
@@ -76,10 +77,15 @@ type Stage = 'choose' | 'library' | 'edit' | 'form';
  */
 export default function Compose() {
   const styles = useThemedStyles(styleDefinitions);
-  const { actions, posts, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions, sessionTags } = useApp();
+  const { actions, posts, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions, sessionTags, feedGroups } = useApp();
 
   // The story rail opens this straight at the library with ?mode=story.
-  const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string; activity?: string; session?: string }>();
+  const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string; activity?: string; session?: string; group?: string }>();
+  // Share to: everyone (the default) or one group you are in (migration 67). A group's feed opens this with ?group=<id>.
+  const [shareTo, setShareTo] = useState<string | null>(params.group ?? null);
+  useEffect(() => { if (shareTo && !feedGroups.some((g) => g.id === shareTo)) setShareTo(null); }, [feedGroups, shareTo]);
+  // A group post stays out of everything public: no map court, never offered for CourtSide's Instagram.
+  const groupPost = !!shareTo;
   // The session being posted, held from the moment the page opens so a
   // refresh of your sessions in the meantime cannot change what is posted.
   const [opened] = useState<SessionPick | undefined>(() => {
@@ -312,8 +318,9 @@ export default function Compose() {
         tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
         taggedUserIds: tagged.length ? tagged : undefined,
         location: location.trim() || undefined,
-        court: location.trim() && court ? court : undefined,
-        featureOk: stats ? false : featureOk ? undefined : false,
+        court: location.trim() && court && !groupPost ? court : undefined,
+        featureOk: stats || groupPost ? false : featureOk ? undefined : false,
+        groupId: shareTo ?? undefined,
         imageUrl: media?.kind === 'photo' ? media.uri : undefined,
         videoUrl: media?.kind === 'video' ? media.uri : undefined,
         mediaLabel: media?.label,
@@ -321,7 +328,7 @@ export default function Compose() {
         session: stats ? statsOf(opened, showHr, adult) : undefined,
       });
       const firstPost = !posts.some((p) => p.authorId === currentUserId);
-      landOnFeed();
+      if (shareTo) openGroupFeed(shareTo); else landOnFeed();
       if (firstPost) setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800);
       return;
     }
@@ -340,8 +347,9 @@ export default function Compose() {
       tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
       taggedUserIds: tagged.length ? tagged : undefined,
       location: location.trim() || undefined,
-      court: location.trim() && court ? court : undefined,
-      featureOk: stats ? false : featureOk ? undefined : false,
+      court: location.trim() && court && !groupPost ? court : undefined,
+      featureOk: stats || groupPost ? false : featureOk ? undefined : false,
+      groupId: shareTo ?? undefined,
       imageUrl: media?.kind === 'photo' ? media.uri : undefined,
       videoUrl: media?.kind === 'video' ? media.uri : undefined,
       mediaLabel: media?.label,
@@ -354,7 +362,7 @@ export default function Compose() {
     // The first post is the moment to ask who they hit with, but only after
     // they have seen it go up: a light nudge on the feed, not a whole screen.
     const firstPost = !posts.some((p) => p.authorId === currentUserId);
-    landOnFeed();
+    if (shareTo) openGroupFeed(shareTo); else landOnFeed();
     if (firstPost) setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800);
   };
 
@@ -624,6 +632,17 @@ export default function Compose() {
                     <Text style={styles.challengeChipText}>Entering {challenge.title}</Text>
                   </View>
                 ) : null}
+                {/* Share to: shown once you are in a group. Everyone is the default. */}
+                {feedGroups.length && !inChallenge ? (
+                  <View style={styles.shareTo} accessibilityRole="radiogroup" accessibilityLabel="Share to">
+                    <Text style={styles.shareToLabel}>Share to</Text>
+                    <View style={styles.shareToChips}>
+                      <Chip label="Everyone" selected={!shareTo} onPress={() => setShareTo(null)} />
+                      {feedGroups.map((g) => <Chip key={g.id} label={g.name} selected={shareTo === g.id} onPress={() => setShareTo(g.id)} />)}
+                    </View>
+                    {shareTo ? <Text style={styles.shareToNote}>Only people in {feedGroups.find((g) => g.id === shareTo)?.name ?? 'the group'} will see this.</Text> : null}
+                  </View>
+                ) : null}
                 {/* One list of rows, the Settings rows' size without their card. */}
                 <View style={styles.rows}>
                   <TagPlayers variant="row" tagged={tagged} onChange={setTagged} fromSession={fromSession} />
@@ -704,7 +723,7 @@ export default function Compose() {
                     }
                   />}
                   {/* A post with session stats is never offered for CourtSide's Instagram. */}
-                  {(opened && withStats) || (statsRow && statsPick) ? null : <FormRow
+                  {(opened && withStats) || (statsRow && statsPick) || groupPost ? null : <FormRow
                     line
                     icon="megaphone-outline"
                     label="Feature on CourtSide's Instagram"
@@ -763,6 +782,10 @@ const styleDefinitions = StyleSheet.create({
   // A clip or post: the caption 24 under the preview, the challenge chip 8
   // under that, and the rows 16 under whichever is last.
   caption: { marginTop: spacing.xl },
+  shareTo: { gap: spacing.sm, marginTop: spacing.md },
+  shareToLabel: { ...typography.smallStrong, color: colors.textMuted },
+  shareToChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  shareToNote: { ...typography.small, color: colors.textMuted },
   challengeChip: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, marginTop: spacing.sm, paddingVertical: 5, paddingHorizontal: 10, borderRadius: radius.pill, backgroundColor: colors.brandDim },
   challengeChipText: { ...typography.smallStrong, color: colors.brand },
   rows: { marginTop: spacing.lg },

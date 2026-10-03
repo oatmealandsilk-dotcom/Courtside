@@ -355,6 +355,48 @@ export interface Post {
   isFirst?: boolean;
   /** When the author last changed it; shown as "Edited". */
   editedAt?: string;
+  /**
+   * Shared to one group only (migration 67): just that group's members can
+   * open it, it shows in that group's feed, and never in For you. Fixed once posted.
+   */
+  groupId?: ID;
+}
+
+/* --------------------------------- Groups -------------------------------- */
+
+/** A member of a group, and whether they are its admin. */
+export interface FeedGroupMember {
+  id: ID;
+  admin: boolean;
+}
+
+/**
+ * A group with a feed of its own (migration 67). Anyone can start one; its
+ * starter is the admin, who says yes to requests and can remove people.
+ * Nobody is in more than MAX_GROUPS.
+ */
+export interface FeedGroup {
+  id: ID;
+  name: string;
+  description?: string;
+  /** Ask to join: an admin says yes first. Otherwise anyone with the link is straight in. */
+  ask: boolean;
+  createdAt: string;
+  /** Everyone in it you can see (someone you are blocked with is left out), oldest first. */
+  members: FeedGroupMember[];
+  /** People asking to join; only filled in for its admins. */
+  requests: ID[];
+}
+
+/** What a group's invite link shows before you are in it. */
+export interface FeedGroupCard {
+  id: ID;
+  name: string;
+  description?: string;
+  ask: boolean;
+  memberCount: number;
+  member: boolean;
+  requested: boolean;
 }
 
 /* --------------------------------- Stories ------------------------------- */

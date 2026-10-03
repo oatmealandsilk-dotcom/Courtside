@@ -12,8 +12,8 @@ const BASE = PREVIEWS_LIVE ? 'https://share.courtsidebase.com' : 'https://app.co
  * thread or a "Looking for a hit". The preview robot only knows the first
  * three; any other path it passes straight on to the app.
  */
-export function shareLink(kind: 'post' | 'profile' | 'question' | 'hit-request', id: string): string {
-  return `${BASE}/${kind === 'profile' ? 'user' : kind}/${id}`;
+export function shareLink(kind: 'post' | 'profile' | 'question' | 'hit-request' | 'group', id: string): string {
+  return `${BASE}/${kind === 'profile' ? 'user' : kind === 'group' ? 'g' : kind}/${id}`;
 }
 
 /** A court as a map link anyone can open, in or out of the app. */

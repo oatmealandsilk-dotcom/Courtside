@@ -11,6 +11,7 @@ import { coaches, coachingRequests, coachResults, coachReviews } from './mock/co
 import { answers, questions } from './mock/discussions';
 import { coachQuestions, coachReplies } from './mock/coachQuestions';
 import { comments, posts } from './mock/feed';
+import { demoGroupPosts } from './mock/groups';
 import { stories } from './mock/stories';
 import { conversations, messages } from './mock/messages';
 import { healthHistory, integrations } from './mock/health';
@@ -107,7 +108,7 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       // The demo reels are gone: real clips and hits come from people now.
       // The demo written posts and threads stay, so the app is never empty,
       // and so does the one clip tagged at a demo court, for its page and reel.
-      posts: posts.filter((p) => p.kind !== 'clip' || !!p.court),
+      posts: [...posts.filter((p) => p.kind !== 'clip' || !!p.court), ...(supabase ? [] : demoGroupPosts)],
       // Nobody's live Instants either; only your own old ones, past their day
       // or put away, so the Archive has something to show.
       stories: stories.filter((s) => s.authorId === CURRENT_USER_ID && (s.archived || Date.parse(s.expiresAt) <= Date.now())),

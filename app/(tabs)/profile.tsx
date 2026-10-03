@@ -31,7 +31,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  // December to mid-January: the year's recap sits at the top of your links.
  const wrapped = wrappedYear();
   const styles = useThemedStyles(styleDefinitions);
- const { currentUser: user, posts, questions, answers, saved, notifications, currentUserId, savedAccounts, coaches, coachingRequests, coachQuestions, actions } = useApp();
+ const { currentUser: user, posts, questions, answers, saved, notifications, currentUserId, savedAccounts, coaches, coachingRequests, coachQuestions, actions, feedGroups } = useApp();
  // A coach's studio, first of your links: what is waiting there, or how far setup has got.
  const myCoach = coaches.find((c) => c.userId === currentUserId);
  const studio = myCoach ? studioLine(myCoach, coachingRequests, coachQuestions, currentUserId) : null;
@@ -63,14 +63,17 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const tabIndex = TABS.indexOf(tab);
  const [tabWidth, setTabWidth] = useState(0);
  const underline = useTabUnderline(tabIndex, TABS.length, tabWidth);
- const own = posts.filter(p => p.authorId === user?.id && !p.archived);
- const shown = (tab === 'Tagged' ? posts.filter(p => !!user && isTaggedIn(p, user.id) && !p.archived) : own.filter(p => tab !== 'Clips' || p.kind === 'clip')).sort((a,b) => Date.parse(b.createdAt)-Date.parse(a.createdAt));
+ // A post shared to a group lives in that group's feed only (migration 67).
+ const own = posts.filter(p => p.authorId === user?.id && !p.archived && !p.groupId);
+ const shown = (tab === 'Tagged' ? posts.filter(p => !!user && isTaggedIn(p, user.id) && !p.archived && !p.groupId) : own.filter(p => tab !== 'Clips' || p.kind === 'clip')).sort((a,b) => Date.parse(b.createdAt)-Date.parse(a.createdAt));
  // How many of each, shown beside the section names.
  const counts: Record<typeof TABS[number], number> = {
    Posts: own.length,
    Clips: own.filter(p => p.kind === 'clip').length,
-   Tagged: user ? posts.filter(p => isTaggedIn(p, user.id) && !p.archived).length : 0,
+   Tagged: user ? posts.filter(p => isTaggedIn(p, user.id) && !p.archived && !p.groupId).length : 0,
  };
+ // People asking to join the groups you run.
+ const groupsAsking = feedGroups.reduce((n, g) => n + (g.members.some((m) => m.id === currentUserId && m.admin) ? g.requests.length : 0), 0);
  const unseen = notifications.filter(n => n.userId === currentUserId && !n.read).length;
  const savedCount = saved.postIds.length + saved.questionIds.length;
  const swipe = (direction: 1 | -1) => {
@@ -90,7 +93,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const content = (selected: string) => {
    if (!user) return null;
    // Pinned first, then newest.
-   const items = (selected === 'Tagged' ? posts.filter(p => isTaggedIn(p, user.id) && !p.archived) : own.filter(p => selected !== 'Clips' || p.kind === 'clip')).sort((a,b) => Number(!!b.pinned) - Number(!!a.pinned) || Date.parse(b.createdAt)-Date.parse(a.createdAt));
+   const items = (selected === 'Tagged' ? posts.filter(p => isTaggedIn(p, user.id) && !p.archived && !p.groupId) : own.filter(p => selected !== 'Clips' || p.kind === 'clip')).sort((a,b) => Number(!!b.pinned) - Number(!!a.pinned) || Date.parse(b.createdAt)-Date.parse(a.createdAt));
    return <View style={{ minHeight: 320, backgroundColor: colors.bg }}>
      <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>{items.map(p => <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.pinned && selected !== 'Tagged' ? 'pinned ' : ''}${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: selected === 'Clips' ? 'clips' : selected === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
        <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
@@ -159,6 +162,8 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    <View style={styles.links}>
      {studio ? <Pressable accessibilityRole="link" accessibilityLabel={`Coach studio. ${studio.line}`} onPress={() => router.push('/coach-studio')} style={({ pressed }) => [styles.linkRow, pressed && styles.linkPressed]}><Ionicons name="ribbon-outline" size={20} color={colors.brand}/><Text style={styles.linkText}>Coach studio</Text>{studio.waiting ? <Text style={styles.linkValue}>{studio.waiting} waiting</Text> : studio.doneCount < 4 ? <Text style={styles.linkValue}>{studio.doneCount} of 4</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable> : null}
      <Pressable accessibilityRole="link" accessibilityLabel="Saved videos and discussions" onPress={() => router.push('/saved')} style={({ pressed }) => [styles.linkRow, studio && styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="bookmark-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Saved</Text>{savedCount ? <Text style={styles.linkValue}>{savedCount}</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
+     {/* Your groups (migration 67): start one, see who is asking to join. */}
+     <Pressable accessibilityRole="link" accessibilityLabel={groupsAsking ? `Groups, ${groupsAsking} asking to join` : 'Groups'} onPress={() => router.push('/groups')} style={({ pressed }) => [styles.linkRow, styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="people-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Groups</Text>{groupsAsking ? <Text style={styles.linkValue}>{groupsAsking} asking</Text> : feedGroups.length ? <Text style={styles.linkValue}>{feedGroups.length}</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
      {wrapped ? <Pressable accessibilityRole="link" accessibilityLabel={`Your ${wrapped} in tennis`} onPress={() => router.push('/wrapped')} style={({ pressed }) => [styles.linkRow, styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="sparkles-outline" size={20} color={colors.brand}/><Text style={styles.linkText}>Your {wrapped} in tennis</Text><Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable> : null}
      {/* Always here, streak or not: the way to every session you logged, and to post one. Only you see it. */}
      <Pressable accessibilityRole="link" accessibilityLabel="Your sessions. Only you see them" onPress={() => router.push('/your-sessions')} style={({ pressed }) => [styles.linkRow, styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="stopwatch-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Your sessions</Text><Ionicons name="lock-closed-outline" size={13} color={colors.textFaint}/><Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>

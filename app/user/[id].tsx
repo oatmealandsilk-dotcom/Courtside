@@ -69,10 +69,11 @@ export default function UserProfile() {
   const coach = coaches.find((c) => c.userId === user.id);
   // What a private account keeps behind the door until they say yes.
   const locked = !!user.isPrivate && !isMe && !following;
-  const own = posts.filter((p) => p.authorId === user.id && !p.archived);
-  const itemsFor = (section: (typeof TABS)[number]) => (section === 'Tagged' ? posts.filter((p) => isTaggedIn(p, user.id) && !p.archived) : own.filter((p) => section !== 'Clips' || p.kind === 'clip'))
+  // A post shared to a group lives in that group's feed only (migration 67).
+  const own = posts.filter((p) => p.authorId === user.id && !p.archived && !p.groupId);
+  const itemsFor = (section: (typeof TABS)[number]) => (section === 'Tagged' ? posts.filter((p) => isTaggedIn(p, user.id) && !p.archived && !p.groupId) : own.filter((p) => section !== 'Clips' || p.kind === 'clip'))
     .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
-  const counts = { Posts: own.length, Clips: own.filter((p) => p.kind === 'clip').length, Tagged: posts.filter((p) => isTaggedIn(p, user.id) && !p.archived).length };
+  const counts = { Posts: own.length, Clips: own.filter((p) => p.kind === 'clip').length, Tagged: posts.filter((p) => isTaggedIn(p, user.id) && !p.archived && !p.groupId).length };
   const unlocked = evaluateAchievements(user).filter((a) => a.unlocked);
   const profile = user.profile;
 

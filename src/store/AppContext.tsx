@@ -52,6 +52,7 @@ import { forgetPushToken } from '@/features/push/push';
 import { framesAt } from '@/features/compose/frames';
 import { noteStep, reportError } from '@/lib/crashReporting';
 import { emptyCourtLife, useCourtLife, type CourtLifeActions, type CourtLifeState } from '@/store/courtLife';
+import { emptyFeedGroups, useFeedGroups, type FeedGroupsActions, type FeedGroupsState } from '@/store/feedGroups';
 import type {
   DailyHealth,
   DetectedActivity,
@@ -107,6 +108,8 @@ interface NewStoryInput {
 
 interface NewPostInput {
   kind: PostKind;
+  /** Shared to one group you are in, not everyone (migration 67). */
+  groupId?: ID;
   /** Where it was, if they said. */
   location?: string;
   /** The court it was played on, picked from the map's courts. */
@@ -300,7 +303,7 @@ export interface Prefs {
 export type PrefKey = keyof Prefs;
 const DEFAULT_PREFS: Prefs = { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true, pushMapFriends: true, pushMapHits: true, pushMapPlayers: true, pushCourts: true };
 
-interface AppState extends Bootstrap, CourtLifeState {
+interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
   ready: boolean;
   /** Health came from this account's own connections, not the demo; a reload must keep it. */
   healthIsReal?: boolean;
@@ -413,7 +416,7 @@ interface AppState extends Bootstrap, CourtLifeState {
   detectedCoords: { lat: number; lng: number } | null;
 }
 
-interface AppActions extends CourtLifeActions {
+interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /* Location */
   setLocationEnabled: (enabled: boolean) => Promise<string | null>;
   /** "Who can see you on the map?": takes effect at once. Resolves false when it could not be saved. */
@@ -1367,6 +1370,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     mapVisibility: isSupabaseConfigured ? undefined : readDemoVisibility(),
     newOnCourtside: null,
     ...emptyCourtLife,
+    ...emptyFeedGroups,
     hitRequests: [],
     locationEnabled: readFlag('courtside-location'),
     locationAsked: readAsked('courtside-location'),
@@ -2151,7 +2155,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (isSupabaseConfigured) void forgetPushToken().finally(() => remoteAuth.signOut());
     // One account's health (its tracker sessions too) never carries over to the next one signed in.
     // Nor do its courts: who it follows, what it said, where it checked in.
-    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [], ...emptyCourtLife, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null, mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility }));
+    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [], ...emptyCourtLife, ...emptyFeedGroups, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null, mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility }));
   }, []);
 
   const patchCurrentUser = useCallback(
@@ -2747,7 +2751,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const celebration = {
         userId: me, targetId: post.id, targetKind: 'post' as const, preview: snippet(post.body || (post.kind === 'clip' ? 'Clip' : 'Post')),
         title: post.kind === 'clip' ? 'Clip posted' : 'Posted',
-        body: post.kind === 'clip' ? 'It is in the feed and on your profile.' : 'It is live in the feed.',
+        body: post.groupId ? 'It is in the group’s feed.' : post.kind === 'clip' ? 'It is in the feed and on your profile.' : 'It is live in the feed.',
         href: '/', icon: post.kind === 'clip' ? 'play' : 'checkmark',
       };
       const uploading = live(me) && (isLocalMedia(post.imageUrl) || isLocalMedia(post.videoUrl) || isLocalMedia(post.thumbnailUrl));
@@ -5532,10 +5536,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // The courts' own state (migration 60): its actions are written in store/courtLife.
   const courtLife = useCourtLife(stateRef, setState, live);
+  // Groups with a feed of their own (migration 67): its actions are written in store/feedGroups.
+  const feedGroups = useFeedGroups(stateRef, setState, live);
 
   const actions = useMemo<AppActions>(
     () => ({
       ...courtLife,
+      ...feedGroups,
       addCoachResult,
       addCoachReview,
       bookCoach,
@@ -5714,6 +5721,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }),
     [
       courtLife,
+      feedGroups,
       addCoachResult,
       addCoachReview,
       bookCoach,
