@@ -38,7 +38,12 @@ function GroupPage() {
   const [note, setNote] = useState<string | null>(null);
 
   // Asked once signed in (a link opened cold signs in first), after your own groups are read.
-  const readCard = useCallback(async () => { if (id && currentUserId) setCard(await actions.feedGroupCard(id)); }, [id, currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A request that didn't go through (no connection) is not "no such group": it says so, with Try again.
+  const [cardFailed, setCardFailed] = useState(false);
+  const readCard = useCallback(async () => {
+    if (!id || !currentUserId) return;
+    try { setCard(await actions.feedGroupCard(id)); setCardFailed(false); } catch { setCardFailed(true); }
+  }, [id, currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
   const [groupsRead, setGroupsRead] = useState(false);
   useEffect(() => { if (currentUserId) void actions.loadFeedGroups().finally(() => setGroupsRead(true)); }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!group && groupsRead) void readCard(); }, [group, groupsRead, readCard]);
@@ -63,6 +68,13 @@ function GroupPage() {
     onConfirm: () => { void act(() => actions.leaveFeedGroup(id)).then(() => goBack('/groups')); },
   });
 
+  if (!group && card === undefined && cardFailed) {
+    return (
+      <Screen title="Group" compactTitle onBack={() => goBack('/groups')}>
+        <EmptyState icon="cloud-offline-outline" title="This group didn’t load" body="Check your connection and try again." action={{ label: 'Try again', onPress: () => { setCardFailed(false); void readCard(); } }} />
+      </Screen>
+    );
+  }
   if (!group && card === undefined) {
     return <Screen title="Group" compactTitle onBack={() => goBack('/groups')}><View style={styles.loading}><CourtSpinner size={28} /></View></Screen>;
   }
@@ -92,7 +104,7 @@ function GroupPage() {
         <GroupTile name={title} look={group?.look ?? card?.look} size={88} />
         <Text style={styles.title} numberOfLines={2}>{title}</Text>
         {description ? <Text style={styles.about}>{description}</Text> : null}
-        <Text style={styles.headMeta}>{members} · {ask ? 'Ask to join' : 'Anyone with the link can join'}</Text>
+        <Text style={styles.headMeta}>{members} · {ask ? 'Ask to join' : 'Open'}</Text>
       </View>
 
       {group ? (

@@ -1,4 +1,5 @@
 import type { Conversation, HitRequest, ID, Message, User } from '@/data/types';
+import { readGroupInvite } from '@/features/groups/inviteMessage';
 
 /**
  * The rules of group chats, as plain functions with no drawing in them, so
@@ -61,7 +62,9 @@ export function messageSummary(m?: Message): string {
   if (m.kind === 'profile') return 'Shared a profile';
   if (m.kind === 'voice') return 'Sent a voice message';
   if (m.kind === 'hit-request') return 'Sent a hit';
-  if (m.kind === 'group') return m.body || 'Sent a group invite';
+  // A group invite's words carry its link: the inbox says what it is instead.
+  const invite = m.kind === 'text' ? readGroupInvite(m.body) : null;
+  if (invite) return `Group invite: ${invite.name}`;
   return m.body || 'Say hello';
 }
 

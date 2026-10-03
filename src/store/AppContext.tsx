@@ -53,6 +53,7 @@ import { forgetPushToken } from '@/features/push/push';
 import { framesAt } from '@/features/compose/frames';
 import { noteStep, reportError } from '@/lib/crashReporting';
 import { emptyCourtLife, useCourtLife, type CourtLifeActions, type CourtLifeState } from '@/store/courtLife';
+import { groupInviteText } from '@/features/groups/inviteMessage';
 import { emptyFeedGroups, useFeedGroups, type FeedGroupsActions, type FeedGroupsState } from '@/store/feedGroups';
 import type {
   DailyHealth,
@@ -4676,8 +4677,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ? { ...makeMessage(conversationId, me, original.body, original.kind, original.sharedId), place: original.place, audio: original.audio }
             : makeMessage(conversationId, me, '');
         }
-        // A group invite carries its words too: the phone's alert reads them, and so would an older app.
-        if (item.kind === 'group') return makeMessage(conversationId, me, `Invited you to ${item.name}`, 'group', item.id);
+        // A group invite is a plain message, its words and the group's link (see
+        // features/groups/inviteMessage): an app from before invites, and the
+        // phone's alert, read it as it is; this app draws it as the group's card.
+        if (item.kind === 'group') return makeMessage(conversationId, me, groupInviteText(item.name, item.id));
         return makeMessage(conversationId, me, '', item.kind, item.id);
       };
       const outgoing: Message[] = [];

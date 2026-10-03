@@ -42,6 +42,7 @@ import { MAX_CHAT_PHOTOS, useChatPhotosReady, useSendProgress } from '@/features
 import { pickPhotos } from '@/components/MediaPicker';
 import { Tappable, useDoubleTap } from '@/components/Tappable';
 import { GroupInviteCard } from '@/features/groups/GroupInviteCard';
+import { readGroupInvite } from '@/features/groups/inviteMessage';
 import { chatStamp, chatTime } from '@/lib/format';
 import { Slide, TimeAnchor, TimeSwipeArea } from '@/features/messages/MessageTimes';
 import { RichText } from '@/components/RichText';
@@ -565,6 +566,9 @@ export default function Thread() {
           // When it was sent: shown at the right edge when the chat is swiped to the left.
           const sentAt = chatTime(message.createdAt);
 
+          // A group invite is a plain message (its words and the group's link), drawn as the group's card.
+          const invite = message.kind === 'text' ? readGroupInvite(message.body) : null;
+
           let body: React.ReactNode;
           if (message.kind === 'voice' && message.audio) {
             body = (
@@ -661,13 +665,12 @@ export default function Thread() {
                 </HoldArea>
               </Row>
             );
-          } else if (message.kind === 'group' && message.sharedId) {
-            // A group invite (Start a group's last step): the group's face and name; it opens the group's page.
-            const groupId = message.sharedId;
+          } else if (invite) {
+            // A group invite (Start a group's last step, or Invite on its page): the group's face and name; it opens the group's page.
             body = (
               <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles} time={sentAt}>
                 <HoldArea onHold={(rect) => openMenu({ message, mine, rect })} style={styles.sharedCardArea}>
-                  {(hold) => <GroupInviteCard groupId={groupId} words={message.body} sentAt={sentAt} onLongPress={hold} />}
+                  {(hold) => <GroupInviteCard groupId={invite.id} name={invite.name} sentAt={sentAt} onLongPress={hold} />}
                 </HoldArea>
               </Row>
             );

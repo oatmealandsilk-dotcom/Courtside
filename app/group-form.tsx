@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Dimensions, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, BackHandler, Dimensions, Keyboard, Platform, ScrollView, StyleSheet, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { Easing, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -7,57 +7,71 @@ import Animated, { Easing, ReduceMotion, useAnimatedStyle, useSharedValue, withT
 import { DragSheet } from '@/components/DragSheet';
 import { Section, Submit } from '@/components/sheet/SheetForm';
 import { Field } from '@/components/ui';
-import type { GroupLook, ID } from '@/data/types';
+import type { FeedGroup, GroupLook, ID } from '@/data/types';
 import { Celebrate } from '@/features/groups/create/Celebrate';
+import { FlowHeader } from '@/features/groups/create/FlowHeader';
 import { GroupPreview } from '@/features/groups/create/GroupPreview';
 import { InvitePeople } from '@/features/groups/create/InvitePeople';
 import { JoinChoice, ListedCard } from '@/features/groups/create/JoinChoice';
 import { LookPicker } from '@/features/groups/create/LookPicker';
-import { StepDots } from '@/features/groups/create/StepDots';
 import { plainLook } from '@/features/groups/look';
 import { openGroupFeed } from '@/features/groups/openGroupFeed';
+import { confirm } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
 import { KeyboardScrollContext, afterKeyboard, currentKeyboardHeight, type Measurable } from '@/lib/keyboardScroll';
+import { show as showToast } from '@/lib/toast';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useApp } from '@/store/AppContext';
-import { ABOUT_MAX, GROUPS_AGE_LINE, MAX_GROUPS, NAME_MAX, NAME_MIN, groupsOpenTo, tidyGroupName } from '@/store/feedGroups';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { ABOUT_MAX, GROUPS_AGE_LINE, GROUPS_BIRTHDAY_LINE, MAX_GROUPS, NAME_MAX, NAME_MIN, groupsOpenTo, tidyGroupName } from '@/store/feedGroups';
+import { colors, font, lift, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
 /*
  * Start a group, in three short steps on one tall sheet (the way Strava
  * starts a club or WhatsApp a community), with three dots saying where you
  * are, Back between steps, and the one green button pinned at the bottom,
- * riding on the keyboard so nothing is ever typed behind it:
+ * riding on the keyboard so nothing is ever typed behind it. Held above
+ * what scrolls on the first two steps, one row shows the group exactly as
+ * Find groups (or its invite link) will, redrawn with every letter and
+ * choice, so it stays in view while you type.
  *
- *   1. Name & look: a big name box (it has the keyboard as the sheet
- *      settles) under a live preview of the group exactly where people will
- *      meet it, the Feed's top row and Find groups. Then its face: a colour
- *      and an emoji or its initials, or a photo. 2 to 30 characters, and
- *      not the name of a group you already run; the button says what is
- *      missing until it can go.
+ *   1. Name & look: a big name box first (it has the keyboard as the sheet
+ *      settles), then its face: a colour and an emoji or its initials, or a
+ *      photo. 2 to 30 characters, and not the name of a group you already
+ *      run; the button says what is missing until it can go. (Before
+ *      migration 73 runs a look can't be saved, so the Look part waits.)
  *   2. About & who can join: a line about it (optional, 120), Open or Ask
  *      to join as two big cards, and whether it shows in Find groups.
  *      "Create group" makes it here, so the next step has a real link.
  *   3. Invite: its link to copy or share, and the people you follow to
- *      tick, each sent the invite as a card in your chat with them.
+ *      tick, each sent the invite in your chat with them.
  *
  * Then a short "ready" moment (a tick, a little confetti, a soft tap on a
  * phone) and the sheet goes, landing on the new group's feed, whose empty
- * page offers "Post to <group>". Back from step 3 still works: Next then
- * saves the change instead of making a second group. Closing at any point
- * after it was made lands on it too.
+ * page offers "Post to <group>". With a screen reader on it waits for "Go
+ * to …" instead of leaving by itself. Back from step 3 still works: Next
+ * then saves the change instead of making a second group, and anything the
+ * server didn't keep the first time (its look, or hiding it) is tried again.
+ *
+ * Nothing is lost without asking: closing (X, a drag down, a tap outside,
+ * Escape, Android's Back) before the group is made asks "Discard this
+ * group?"; with people ticked on the last step it asks "Send N invites?";
+ * while it is being made the sheet stays until it is done. Each new step is
+ * read out to a screen reader ("Step 2 of 3, About & who can join"), and so
+ * is a problem with the name.
  *
  * Who can't start one is told before filling anything in: under 18 (the
- * server's rule too), already in 3 groups, or groups not loading (with Try
- * again). With ?id=, the same parts on one page edit a group you run.
+ * server's rule too), no birthday on file yet, already in 3 groups, or
+ * groups not loading (with Try again). With ?id=, the same parts on one page
+ * edit a group you run.
  */
 
 type Step = 0 | 1 | 2 | 3;
+type Gate = 'young' | 'birthday' | 'loading' | 'off' | 'full' | 'gone';
 
 /** A group's fields as one string, for "has anything changed since it was saved". */
 const snap = (v: { name: string; about: string; ask: boolean; listed: boolean; look: GroupLook }) =>
-  JSON.stringify({ n: tidyGroupName(v.name), a: v.about.trim(), ask: v.ask, listed: v.listed, look: plainLook(v.look) });
+  JSON.stringify({ n: tidyGroupName(v.name), a: v.about.replace(/\s+/g, ' ').trim(), ask: v.ask, listed: v.listed, look: plainLook(v.look) });
 
 const TITLES: Record<0 | 1 | 2, { title: string; line: string }> = {
   0: { title: 'Name your group', line: 'A feed only the group sees. Give it a name and a face.' },
@@ -65,13 +79,31 @@ const TITLES: Record<0 | 1 | 2, { title: string; line: string }> = {
   2: { title: 'Invite your people', line: 'Pick people you follow, or share the link.' },
 };
 
+/** Whether VoiceOver or TalkBack is on. A browser can't say, so there it is taken as off. */
+function useScreenReader(): boolean {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    if (Platform.OS === 'web') return undefined;
+    AccessibilityInfo.isScreenReaderEnabled().then(setOn).catch(() => undefined);
+    const sub = AccessibilityInfo.addEventListener('screenReaderChanged', setOn);
+    return () => sub.remove();
+  }, []);
+  return on;
+}
+
+/** How long the ready moment stays before the sheet takes you to the group. */
+const READY_MS = 3500;
+
 export default function GroupForm() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { feedGroups, feedGroupsOn, currentUser, currentUserId, actions } = useApp();
+  const { feedGroups, feedGroupsOn, feedGroupsLooks, currentUser, currentUserId, actions } = useApp();
   const isEdit = !!id;
   const editing = id ? feedGroups.find((g) => g.id === id) : undefined;
   const reduced = useReducedMotion();
+  const screenReader = useScreenReader();
+  // A look can be saved only once migration 73 has run (my_feed_groups says so).
+  const looksOn = feedGroupsLooks;
 
   const [step, setStep] = useState<Step>(0);
   const [name, setName] = useState(editing?.name ?? '');
@@ -91,16 +123,22 @@ export default function GroupForm() {
   const nameBox = useRef<TextInput>(null);
   // Where to go once the sheet has gone: the new group's feed, or another page.
   const landing = useRef<{ group?: ID; href?: string } | null>(null);
+  // A save on its way (a second tap can't start another), and whether the sheet has already gone.
+  const inFlight = useRef(false);
+  const gone = useRef(false);
 
   // ---------------------------------------------------------------- can you?
-  useEffect(() => { if (currentUserId && feedGroupsOn !== true) void actions.loadFeedGroups(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Read once signed in (a link opened cold signs in first).
+  useEffect(() => { if (currentUserId && feedGroupsOn !== true) void actions.loadFeedGroups(); }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
   const tooYoung = !isEdit && !groupsOpenTo(currentUser);
+  // Not known to be an adult because there is no birthday on file, rather than a known teen.
+  const noBirthday = tooYoung && !!currentUser && !currentUser.ageGroup;
   const loading = !isEdit && feedGroupsOn === null;
   const off = !isEdit && feedGroupsOn === false;
   // Once this sheet has made the group, being in 3 is the point, not a stop.
   const full = !isEdit && !createdId && feedGroups.length >= MAX_GROUPS;
-  const gate: 'young' | 'loading' | 'off' | 'full' | 'gone' | null = id && !editing ? (feedGroupsOn === null ? 'loading' : 'gone')
-    : tooYoung ? 'young' : loading ? 'loading' : off ? 'off' : full ? 'full' : null;
+  const gate: Gate | null = id && !editing ? (feedGroupsOn === null ? 'loading' : feedGroupsOn === false ? 'off' : 'gone')
+    : noBirthday ? 'birthday' : tooYoung ? 'young' : loading ? 'loading' : off ? 'off' : full ? 'full' : null;
   const retry = async () => { setRetrying(true); await actions.loadFeedGroups().catch(() => undefined); setRetrying(false); };
 
   // ---------------------------------------------------------------- the name
@@ -117,17 +155,32 @@ export default function GroupForm() {
   const nameIssue = dup ? `You already run a group called “${dup.name}”. Pick another name.`
     : short && nameTouched ? `At least ${NAME_MIN} characters.` : null;
   const nameWaiting = !chars ? 'Give it a name' : short ? 'A little longer' : dup ? 'Pick another name' : undefined;
+  // VoiceOver doesn't read a line that changes under the box (TalkBack does, from its live region): it is said.
+  useEffect(() => { if (nameIssue && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(nameIssue); }, [nameIssue]);
 
-  // What was last saved, so going Back and Next again only saves a real change.
-  const snapshot = () => snap({ name: clean, about, ask, listed, look });
-  const saved = useRef<string | null>(editing ? snap({ name: editing.name, about: editing.description ?? '', ask: editing.ask, listed: editing.discoverable !== false, look: editing.look ?? {} }) : null);
+  // What the server last kept, so going Back and Next again saves only a real change, and retries what didn't stick.
+  const fromGroup = (g: FeedGroup) => snap({ name: g.name, about: g.description ?? '', ask: g.ask, listed: g.discoverable !== false, look: looksOn ? g.look ?? {} : {} });
+  const snapshot = () => snap({ name: clean, about, ask, listed, look: looksOn ? look : {} });
+  const saved = useRef<string | null>(editing ? fromGroup(editing) : null);
   const dirty = saved.current !== snapshot();
   // A group to edit that arrives after the sheet opened (its link opened cold): filled in once it does.
   useEffect(() => {
     if (!editing || saved.current !== null) return;
     setName(editing.name); setAbout(editing.description ?? ''); setAsk(editing.ask); setListed(editing.discoverable !== false); setLook(editing.look ?? {});
-    saved.current = snap({ name: editing.name, about: editing.description ?? '', ask: editing.ask, listed: editing.discoverable !== false, look: editing.look ?? {} });
+    saved.current = fromGroup(editing);
   }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The group just made, as the server holds it (a photo that didn't upload, or a group that couldn't be
+  // hidden, stays a change to send again): read once it is in the groups.
+  const confirmPending = useRef(false);
+  useEffect(() => {
+    if (!confirmPending.current || !createdId) return;
+    const g = feedGroups.find((x) => x.id === createdId);
+    if (!g) return;
+    confirmPending.current = false;
+    // The photo now lives at its address on the server: the form takes that, so it isn't sent again.
+    if (look.photoUrl && g.look?.photoUrl && look.photoUrl !== g.look.photoUrl) setLook((now) => ({ ...now, photoUrl: g.look?.photoUrl }));
+    saved.current = fromGroup(g);
+  }, [feedGroups, createdId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------------------------------------------------------------- moving between steps
   const scroller = useRef<ScrollView | null>(null);
@@ -145,9 +198,13 @@ export default function GroupForm() {
   useEffect(() => {
     scroller.current?.scrollTo({ y: 0, animated: false });
     enter.value = withTiming(1, { duration: reduced ? 120 : 260, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.Never });
-    // Back on the name: its box takes the keyboard again. (On the way in the sheet
-    // does that once it has settled: focusing a box mid-rise makes a browser scroll for it.)
-    if (step === 0 && !isEdit && shownOnce.current) setTimeout(() => nameBox.current?.focus(), 60);
+    if (shownOnce.current) {
+      // Back on the name: its box takes the keyboard again. (On the way in the sheet
+      // does that once it has settled: focusing a box mid-rise makes a browser scroll for it.)
+      if (step === 0 && !isEdit) setTimeout(() => nameBox.current?.focus(), 60);
+      // A screen reader hears where it is now: the button it was on only changed its words.
+      if (step < 3 && !isEdit) AccessibilityInfo.announceForAccessibility(`Step ${step + 1} of 3. ${TITLES[step as 0 | 1 | 2].title}`);
+    }
     shownOnce.current = true;
   }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
   const stepStyle = useAnimatedStyle(() => ({
@@ -169,57 +226,101 @@ export default function GroupForm() {
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => { offset.current = e.nativeEvent.contentOffset.y; };
 
   // ---------------------------------------------------------------- saving
-  const fields = () => ({ name: clean, description: about, ask, discoverable: listed, look });
+  // Before migration 73 the look isn't sent at all: it would not be kept.
+  const fields = () => ({ name: clean, description: about, ask, discoverable: listed, look: looksOn ? look : undefined });
   const commit = async (): Promise<boolean> => {
-    if (busy) return false;
+    if (inFlight.current) return false;
+    inFlight.current = true;
     setBusy(true);
     setError(null);
     try {
       if (isEdit && editing) {
         await actions.updateFeedGroup(editing.id, fields());
+        saved.current = snapshot();
       } else if (!createdId) {
         const made = await actions.createFeedGroup(fields());
-        setCreatedId(made);
         landing.current = { group: made };
+        // Closed some other way while it was being made: it still takes you to it.
+        if (gone.current) { openGroupFeed(made); return true; }
+        confirmPending.current = true;
+        setCreatedId(made);
       } else if (dirty) {
         await actions.updateFeedGroup(createdId, fields());
+        saved.current = snapshot();
       }
-      saved.current = snapshot();
       return true;
     } catch (e) {
       haptics.reject();
       setError(e instanceof Error ? e.message : 'That didn’t go through. Check your connection and try again.');
       return false;
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   };
 
+  const sendNow = () => {
+    if (!createdId || !picked.length) return 0;
+    actions.shareToChats({ userIds: picked }, { kind: 'group', id: createdId, name: clean });
+    return picked.length;
+  };
   const sendInvites = () => {
-    if (!createdId) return;
-    if (picked.length) actions.shareToChats({ userIds: picked }, { kind: 'group', id: createdId, name: clean });
-    setInvited(picked.length);
+    setInvited(sendNow());
+    setPicked([]);
     haptics.reward();
     go(3);
   };
 
-  // The ready moment lasts long enough to read, then the sheet goes to the group.
+  // The ready moment lasts long enough to read, then the sheet goes to the group (not with a screen reader on: it waits for the button).
+  const leaving = !screenReader;
   useEffect(() => {
-    if (step !== 3) return undefined;
-    const t = setTimeout(dismiss, 2600);
+    if (step !== 3 || !leaving) return undefined;
+    const t = setTimeout(dismiss, READY_MS);
     return () => clearTimeout(t);
-  }, [step]);
+  }, [step, leaving]);
 
   const done = () => {
+    gone.current = true;
     router.back();
     const next = landing.current;
     if (next?.group) openGroupFeed(next.group);
     else if (next?.href) router.push(next.href as never);
   };
 
+  // ---------------------------------------------------------------- closing without losing anything
+  const hasInput = !!clean || !!about.trim() || ask || !listed || Object.keys(plainLook(look)).length > 0;
+  const askDiscard = (title: string, message: string) => confirm({ title, message, confirmLabel: 'Discard', destructive: true, onConfirm: dismiss });
+  const askSend = () => {
+    const n = picked.length;
+    confirm({
+      title: `Send ${n} ${n === 1 ? 'invite' : 'invites'}?`,
+      message: `You picked ${n === 1 ? 'someone' : `${n} people`} to invite to ${clean} but haven’t sent ${n === 1 ? 'it' : 'them'} yet.`,
+      confirmLabel: 'Send',
+      onConfirm: () => {
+        const sent = sendNow();
+        if (sent) showToast({ title: `${sent === 1 ? 'Invite' : `${sent} invites`} sent`, body: `To join ${clean}.`, icon: 'paper-plane-outline' });
+        dismiss();
+      },
+      also: { label: 'Don’t send', onPress: dismiss },
+    });
+  };
+  /** Whether a close the person started can go ahead now; if not, the question that decides it is asked. */
+  const mayClose = (): boolean => {
+    if (inFlight.current) return false;
+    if (gate || step === 3) return true;
+    if (!isEdit && step === 2 && createdId && picked.length) { askSend(); return false; }
+    if (!isEdit && !createdId && hasInput) { askDiscard('Discard this group?', 'It hasn’t been made yet, so what you’ve filled in will be lost.'); return false; }
+    if (dirty && (isEdit || (createdId && step < 2))) { askDiscard('Discard your changes?', `Your changes to ${clean || 'the group'} won’t be saved.`); return false; }
+    return true;
+  };
+  const guard = useRef(mayClose);
+  guard.current = mayClose;
+  const requestClose = () => { if (guard.current()) dismiss(); };
+
   // ---------------------------------------------------------------- the button
   let primary: { label: string; busyLabel?: string; waiting?: string; disabled: boolean; onPress: () => void } | null = null;
   if (gate === 'young' || gate === 'gone') primary = { label: 'OK', disabled: false, onPress: dismiss };
+  else if (gate === 'birthday') primary = { label: 'Add your birthday', disabled: false, onPress: () => { landing.current = { href: '/birthday' }; dismiss(); } };
   else if (gate === 'off') primary = { label: retrying ? 'Trying again…' : 'Try again', disabled: retrying, onPress: () => { void retry(); } };
   else if (gate === 'full') primary = { label: 'See your groups', disabled: false, onPress: () => { landing.current = { href: '/groups' }; dismiss(); } };
   else if (gate === 'loading') primary = null;
@@ -231,7 +332,21 @@ export default function GroupForm() {
 
   const canBack = !isEdit && !gate && (step === 1 || step === 2) && !busy;
   const heading = gate ? (isEdit ? 'Edit group' : 'Start a group') : isEdit ? 'Edit group' : step < 3 ? TITLES[step as 0 | 1 | 2].title : '';
-  const subline = gate || isEdit || step === 3 ? undefined : TITLES[step as 0 | 1 | 2].line;
+  const subline = gate || isEdit || step === 3 ? undefined
+    : step === 0 && !looksOn ? 'A feed only the group sees. Give it a name.' : TITLES[step as 0 | 1 | 2].line;
+
+  // Android's Back: a step back while there is one, otherwise the same as the close button.
+  const back = useRef<() => boolean>(() => false);
+  back.current = () => {
+    if (canBack) go((step - 1) as Step);
+    else requestClose();
+    return true;
+  };
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => back.current());
+    return () => sub.remove();
+  }, []);
 
   // ---------------------------------------------------------------- the parts
   const nameField = (
@@ -250,13 +365,13 @@ export default function GroupForm() {
           returnKeyType={isEdit ? 'done' : 'next'}
           onSubmitEditing={() => { setNameTouched(true); if (!isEdit && nameOk) go(1); }}
           accessibilityLabel="Group name"
-          accessibilityHint={`${NAME_MIN} to ${nameMax} characters`}
+          accessibilityHint={nameIssue ?? `${NAME_MIN} to ${nameMax} characters`}
           style={styles.nameInput}
         />
         <Text style={[styles.counter, chars > nameMax - 5 && styles.counterNear]} accessibilityLabel={`${chars} of ${nameMax} characters`}>{chars}/{nameMax}</Text>
       </View>
       <Text style={nameIssue ? styles.issue : styles.help} accessibilityLiveRegion="polite">
-        {nameIssue ?? 'Your crew, your club, your team. You can change it later.'}
+        {nameIssue ?? (isEdit ? `${NAME_MIN} to ${nameMax} characters.` : 'Your crew, your club, your team. You can change it later.')}
       </Text>
     </View>
   );
@@ -274,26 +389,28 @@ export default function GroupForm() {
       soft
     />
   );
-  const preview = <GroupPreview name={clean} look={look} ask={ask} listed={listed} about={about} members={editing?.members.length ?? 1} />;
-  const lookPart = (
+  const lookPart = looksOn ? (
     <Section title="Look" hint="A colour and an emoji or its initials, or a photo.">
       <LookPicker name={clean} look={look} onChange={setLook} />
     </Section>
-  );
+  ) : null;
   const joinPart = (
     <>
       <Section title="Who can join"><JoinChoice ask={ask} onChange={setAsk} /></Section>
       <ListedCard listed={listed} onChange={setListed} />
     </>
   );
+  // The preview stays above what scrolls on the steps that change it, and in Edit.
+  const showPreview = !gate && (isEdit || step < 2);
 
   let body: React.ReactNode;
   if (gate === 'loading') {
-    body = <View style={styles.center}><ActivityIndicator color={colors.textFaint} /><Text style={styles.gateBody}>Checking your groups…</Text></View>;
+    body = <View style={styles.center}><ActivityIndicator color={colors.textFaint} /><Text style={styles.gateBody}>{isEdit ? 'Opening the group…' : 'Checking your groups…'}</Text></View>;
   } else if (gate) {
     const g = {
       gone: { icon: 'help-circle-outline', title: 'This group isn’t here any more', line: 'It may have been changed by another admin, or you’re no longer its admin.' },
       young: { icon: 'lock-closed-outline', title: GROUPS_AGE_LINE, line: 'Until then the For you feed is all yours, and you can still message the people you follow.' },
+      birthday: { icon: 'calendar-outline', title: GROUPS_BIRTHDAY_LINE, line: 'Groups are for adults. Add your birthday, and if you’re 18 or over you can start one straight away.' },
       off: { icon: 'cloud-offline-outline', title: 'Groups didn’t load', line: 'Check your connection and try again. If it keeps happening, groups may not be switched on yet.' },
       full: { icon: 'people-outline', title: `You’re in ${MAX_GROUPS} groups`, line: `That’s the most anyone can be in. Leave one to start another.` },
     }[gate];
@@ -307,7 +424,6 @@ export default function GroupForm() {
   } else if (isEdit) {
     body = (
       <>
-        {preview}
         <Section title="Name">{nameField}</Section>
         {lookPart}
         {aboutField}
@@ -315,44 +431,39 @@ export default function GroupForm() {
       </>
     );
   } else if (step === 0) {
-    body = <>{preview}{nameField}{lookPart}</>;
+    body = <>{nameField}{lookPart}</>;
   } else if (step === 1) {
-    body = <>{preview}{aboutField}{joinPart}</>;
+    body = <>{aboutField}{joinPart}</>;
   } else if (step === 2 && createdId) {
     body = <InvitePeople groupId={createdId} groupName={clean} picked={picked} onPicked={setPicked} />;
   } else {
-    body = <Celebrate name={clean} look={look} invited={invited} />;
+    body = <Celebrate name={clean} look={looksOn ? look : {}} invited={invited} leaving={leaving} />;
   }
-
-  const round = (icon: 'chevron-back' | 'close', label: string, onPress: () => void) => (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} hitSlop={8} onPress={onPress} style={({ pressed }) => [styles.round, pressed && styles.pressed]}>
-      <Ionicons name={icon} size={icon === 'close' ? 18 : 20} color={colors.textMuted} />
-    </Pressable>
-  );
 
   return (
     <DragSheet
       closeSignal={closeSignal}
       onDismissed={done}
+      beforeClose={() => guard.current()}
       peekFraction={0.94}
       onSettled={() => { if (!isEdit && !gate && step === 0) nameBox.current?.focus(); }}
       header={(
-        <View style={styles.head}>
-          <View style={styles.topRow}>
-            {canBack ? round('chevron-back', 'Back', () => go((step - 1) as Step)) : <View style={styles.roundSpace} />}
-            {!isEdit && !gate && step < 3 ? <StepDots step={step} /> : null}
-            {round('close', 'Close', dismiss)}
-          </View>
-          {heading ? (
-            <View style={styles.titles}>
-              <Text style={styles.title} accessibilityRole="header">{heading}</Text>
-              {subline ? <Text style={styles.line}>{subline}</Text> : null}
-            </View>
-          ) : null}
-        </View>
+        <FlowHeader
+          title={heading}
+          line={subline}
+          onClose={requestClose}
+          closeDisabled={busy}
+          onBack={canBack ? () => go((step - 1) as Step) : undefined}
+          step={!isEdit && !gate && step < 3 ? step : undefined}
+        />
       )}
     >
       <View style={styles.fill}>
+        {showPreview ? (
+          <View style={styles.previewBar}>
+            <GroupPreview name={clean} look={looksOn ? look : {}} ask={ask} listed={listed} about={about} members={editing?.members.length ?? 1} />
+          </View>
+        ) : null}
         <KeyboardScrollContext.Provider value={reveal}>
           <ScrollView
             ref={scroller}
@@ -369,7 +480,7 @@ export default function GroupForm() {
         {primary ? (
           <View style={styles.footer}>
             {error ? (
-              <View style={styles.errorRow} accessibilityLiveRegion="assertive">
+              <View style={styles.errorRow} accessibilityLiveRegion="assertive" accessibilityRole="alert">
                 <Ionicons name="alert-circle" size={16} color={colors.danger} />
                 <Text style={styles.error}>{error}</Text>
               </View>
@@ -391,14 +502,7 @@ export default function GroupForm() {
 
 const styleDefinitions = StyleSheet.create({
   fill: { flex: 1, minHeight: 0 },
-  head: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.md },
-  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  round: { ...lift, width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
-  roundSpace: { width: 34, height: 34 },
-  pressed: { opacity: 0.7 },
-  titles: { gap: 3 },
-  title: { ...typography.title, fontSize: 26, letterSpacing: -0.9, color: colors.text },
-  line: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
+  previewBar: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.sm },
   body: { flexGrow: 1, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xl },
   stepBody: { gap: 20 },
   // The ready moment and the can't-start notes sit in the middle of the sheet, not at its top.
@@ -412,11 +516,12 @@ const styleDefinitions = StyleSheet.create({
   nameInput: { flex: 1, minWidth: 0, ...font('600'), fontSize: 21, letterSpacing: -0.5, color: colors.text, paddingVertical: 14, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
   counter: { ...typography.small, color: colors.textFaint, fontVariant: ['tabular-nums'] },
   counterNear: { color: colors.warning },
-  help: { ...typography.small, color: colors.textMuted, paddingHorizontal: spacing.xs, lineHeight: 18 },
-  issue: { ...typography.small, color: colors.danger, paddingHorizontal: spacing.xs, lineHeight: 18 },
+  // Lined up with the section titles and the cards' edges.
+  help: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
+  issue: { ...typography.small, color: colors.danger, lineHeight: 18 },
   count: { ...typography.small, color: colors.textFaint, fontVariant: ['tabular-nums'] },
   footer: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.md, gap: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.bg },
-  errorRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, paddingHorizontal: spacing.xs },
+  errorRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
   error: { ...typography.small, color: colors.danger, flex: 1, lineHeight: 18 },
   center: { alignItems: 'center', gap: spacing.md, paddingVertical: 60 },
   gate: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xxl, paddingHorizontal: spacing.md },

@@ -12,13 +12,15 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
  * club is open or approval-only: an icon, the choice in a word or two, and
  * one line on what it means. The chosen one is outlined in green with a
  * filled round tick. Under them, "Show in Find groups" as its own card with
- * a switch and a line that changes with it.
+ * a switch and a line that changes with it; a tap anywhere on the card
+ * flips it. Open is said the same way everywhere a group is: "Open", anyone
+ * can join straight away (from Find groups too, not only its link).
  */
 
 export function JoinChoice({ ask, onChange }: { ask: boolean; onChange: (ask: boolean) => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const options = [
-    { ask: false, icon: 'lock-open-outline' as const, title: 'Open', line: 'Anyone with the link joins straight away.' },
+    { ask: false, icon: 'lock-open-outline' as const, title: 'Open', line: 'Anyone can join straight away.' },
     { ask: true, icon: 'hand-left-outline' as const, title: 'Ask to join', line: 'You approve each person before they’re in.' },
   ];
   return (
@@ -54,7 +56,14 @@ export function JoinChoice({ ask, onChange }: { ask: boolean; onChange: (ask: bo
 export function ListedCard({ listed, onChange }: { listed: boolean; onChange: (listed: boolean) => void }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <View style={[styles.card, styles.listed]}>
+    <Pressable
+      accessibilityRole="switch"
+      accessibilityState={{ checked: listed }}
+      accessibilityLabel="Show in Find groups"
+      accessibilityHint={listed ? 'People can find it from the + on the Feed.' : 'Hidden. Only people with your invite link can find it.'}
+      onPress={() => { (listed ? haptics.untap : haptics.tap)(); onChange(!listed); }}
+      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+    >
       <View style={styles.icon}>
         <Ionicons name={listed ? 'search-outline' : 'eye-off-outline'} size={19} color={colors.textMuted} />
       </View>
@@ -62,8 +71,11 @@ export function ListedCard({ listed, onChange }: { listed: boolean; onChange: (l
         <Text style={styles.title}>Show in Find groups</Text>
         <Text style={styles.line}>{listed ? 'People can find it from the + on the Feed.' : 'Hidden. Only people with your invite link can find it.'}</Text>
       </View>
-      <Toggle value={listed} onChange={onChange} accessibilityLabel="Show in Find groups" haptic />
-    </View>
+      {/* The card is the switch: this one only shows where it is. */}
+      <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <Toggle value={listed} onChange={onChange} />
+      </View>
+    </Pressable>
   );
 }
 
@@ -76,7 +88,6 @@ const styleDefinitions = StyleSheet.create({
   },
   cardOn: { borderColor: colors.brand },
   pressed: { opacity: 0.8 },
-  listed: { borderColor: colors.surface },
   icon: { width: 40, height: 40, borderRadius: 13, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   iconOn: { backgroundColor: colors.brand },
   words: { flex: 1, minWidth: 0, gap: 2 },

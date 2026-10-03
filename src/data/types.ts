@@ -806,7 +806,7 @@ export interface Tip {
  * group ("Mira added Dev"): only the server writes those (migration 54).
  * 'photo' is one to ten pictures from the camera roll (migration 61).
  */
-export type MessageKind = 'text' | 'post' | 'question' | 'profile' | 'court' | 'voice' | 'hit-request' | 'system' | 'photo' | 'group';
+export type MessageKind = 'text' | 'post' | 'question' | 'profile' | 'court' | 'voice' | 'hit-request' | 'system' | 'photo';
 
 /**
  * One picture in a chat. Chat photos sit on a private shelf only the chat's
@@ -849,7 +849,7 @@ export interface Message {
   body: string;
   createdAt: string;
   kind: MessageKind;
-  /** Set when kind is 'post', 'question', 'profile', 'hit-request' or 'group' — the shared item. */
+  /** Set when kind is 'post', 'question', 'profile' or 'hit-request' — the shared item. */
   sharedId?: ID;
   /** Set when kind is 'system': what happened in the group. */
   event?: ChatEvent;
@@ -900,7 +900,7 @@ export type ShareItem =
   | { kind: 'post' | 'question' | 'profile' | 'hit-request'; id: ID }
   | { kind: 'court'; place: { id?: string; name: string; lat: number; lng: number } }
   | { kind: 'message'; id: ID }
-  /** An invite to a group (its page, /g/<id>): a card in the chat; its words name the group for an alert. */
+  /** An invite to a group (its page, /g/<id>): sent as a plain message with the group's link, drawn as a card (features/groups/inviteMessage). */
   | { kind: 'group'; id: ID; name: string };
 
 /* -------------------------------- Payments ------------------------------- */

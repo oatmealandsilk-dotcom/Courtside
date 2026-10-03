@@ -953,7 +953,7 @@ const toGroup = (row: GroupRow): FeedGroup => ({
 /** The server's word for why a group action said no (migration 67), or 'failed'. */
 const groupWord = (error: { code?: string; message: string }) =>
   missingFunction(error) ? 'not_ready'
-    : /adults_only|their_age|group_limit|their_limit|not_admin|not_found|name_needed|slow_down/.exec(error.message)?.[0] ?? 'failed';
+    : /adults_only|their_age|group_limit|their_limit|not_admin|not_found|name_needed|slow_down|bad_photo|bad_look/.exec(error.message)?.[0] ?? 'failed';
 
 export const remote = {
   /* ------------------------ discussions and coaching ------------------------ */
@@ -2077,12 +2077,46 @@ export const remote = {
     return ready;
   },
   /* ---------------------------------------------------------- groups (67) */
-  /** Your groups and the groups you asked to join. Null on a database without groups (before migration 67). */
-  async myFeedGroups(): Promise<{ groups: FeedGroup[]; asked: { id: ID; name: string; look?: GroupLook }[] } | null> {
+  /**
+   * Your groups and the groups you asked to join, and whether a group's look
+   * can be saved here (`looks`: migration 73 has run). Null on a database
+   * without groups (before migration 67).
+   */
+  async myFeedGroups(): Promise<{ groups: FeedGroup[]; asked: { id: ID; name: string; look?: GroupLook }[]; looks: boolean } | null> {
     const { data, error } = await need().rpc('my_feed_groups');
     if (error) { if (!missingFunction(error)) fail('groups')(error); return null; }
-    const raw = (data ?? {}) as { groups?: GroupRow[]; asked?: ({ id: ID; name: string } & LookRow)[] };
-    return { groups: (raw.groups ?? []).map(toGroup), asked: (raw.asked ?? []).map((a) => ({ id: a.id, name: a.name, look: lookFrom(a) })) };
+    const raw = (data ?? {}) as { groups?: GroupRow[]; asked?: ({ id: ID; name: string } & LookRow)[]; looks?: boolean };
+    return { groups: (raw.groups ?? []).map(toGroup), asked: (raw.asked ?? []).map((a) => ({ id: a.id, name: a.name, look: lookFrom(a) })), looks: raw.looks === true };
+  },
+  /**
+   * Starts a group with everything the form asks in one go (migration 73,
+   * start_feed_group): whether it shows in Find groups, and its colour and
+   * emoji. Its id. Throws with the server's word ('group_limit',
+   * 'name_needed', 'slow_down', 'bad_look', or 'not_ready' before 73).
+   */
+  async startFeedGroup(input: { name: string; description: string; ask: boolean; discoverable: boolean; look: GroupLook }): Promise<ID> {
+    const { data, error } = await need().rpc('start_feed_group', {
+      p_name: input.name, p_description: input.description || null, p_ask: input.ask,
+      p_discoverable: input.discoverable, p_color: input.look.color ?? null, p_emoji: input.look.emoji ?? null,
+    });
+    if (error) throw new Error(groupWord(error));
+    return data as string;
+  },
+  /**
+   * Of these people, which can join a group (migration 73, can_join_groups:
+   * known to be an adult), never their age. Someone left out of the answer
+   * (blocked, gone, past the day's limit) is not in the map. Null when the
+   * database cannot say (before 73, or the question didn't go through).
+   */
+  async canJoinGroups(userIds: ID[]): Promise<Record<ID, boolean> | null> {
+    const ids = Array.from(new Set(userIds.filter((id) => UUID_RE.test(id))));
+    const out: Record<ID, boolean> = {};
+    for (let at = 0; at < ids.length; at += 100) {
+      const { data, error } = await need().rpc('can_join_groups', { ids: ids.slice(at, at + 100) });
+      if (error) { if (!missingFunction(error)) fail('can join groups')(error); return null; }
+      for (const r of (data ?? []) as { user_id: string; ok: boolean | null }[]) out[r.user_id] = r.ok === true;
+    }
+    return out;
   },
   /** Starts a group; its id. Throws with the server's word ('group_limit', 'name_needed', 'slow_down'). */
   async createFeedGroup(name: string, description: string, ask: boolean): Promise<ID> {
@@ -2090,11 +2124,16 @@ export const remote = {
     if (error) throw new Error(groupWord(error));
     return data as string;
   },
-  /** What an invite link shows. Null when there is no such group (or no groups yet). */
+  /**
+   * What an invite link shows. Null when there is no such group (or no
+   * groups yet); throws when it could not be asked (no connection), so a
+   * group is never taken as gone for want of an answer.
+   */
   async feedGroupCard(id: ID): Promise<FeedGroupCard | null> {
     if (!UUID_RE.test(id)) return null;
     const { data, error } = await need().rpc('feed_group_card', { g: id });
-    if (error || !data) return null;
+    if (error) { if (missingFunction(error)) return null; throw new Error(groupWord(error)); }
+    if (!data) return null;
     const c = data as { id: ID; name: string; description: string | null; ask: boolean; members: number; member: boolean; requested: boolean } & LookRow;
     return { id: c.id, name: c.name, description: c.description ?? undefined, ask: c.ask, look: lookFrom(c), memberCount: Number(c.members) || 0, member: c.member, requested: c.requested };
   },
@@ -2137,9 +2176,10 @@ export const remote = {
   },
   /**
    * An admin sets a group's look (migration 73): its colour, emoji and photo
-   * (already uploaded to the media bucket, in your own folder), all at once.
-   * Throws with the server's word ('not_admin', 'bad_photo', 'bad_look', or
-   * 'not_ready' before migration 73, when the group simply keeps its initials).
+   * (already uploaded to the media bucket, in the GROUP's folder, never
+   * yours: see uploadMedia's first argument), all at once. Throws with the
+   * server's word ('not_admin', 'bad_photo', 'bad_look', or 'not_ready'
+   * before migration 73).
    */
   async setFeedGroupLook(id: ID, look: GroupLook) {
     const { error } = await need().rpc('set_feed_group_look', { g: id, p_color: look.color ?? null, p_emoji: look.emoji ?? null, p_photo: look.photoUrl ?? null });
@@ -2931,6 +2971,8 @@ async function roomForSmallCover(me: ID): Promise<boolean> {
  * with a plain-words message if it cannot — a post must never be saved
  * pointing at a file that only exists on one phone. With `smallCover`, a
  * photo that will be a post's cover also gets its small copy for grid tiles.
+ * `me` is the folder it goes in: your own id, or a group's id for a group's
+ * photo (migration 73 lets only that group's admins put files there).
  */
 export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'video' | 'audio', onProgress?: (fraction: number) => void, options?: { smallCover?: boolean }): Promise<string> {
   try {

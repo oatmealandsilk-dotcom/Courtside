@@ -14,7 +14,9 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
  * The moment a group is ready: its face, big, with a green tick that pops on
  * at its corner and a small burst of confetti in the theme's own court
  * colours, then a line on who was invited. With Reduce Motion the tick is
- * simply there and nothing flies.
+ * simply there and nothing flies. `leaving` says the sheet is about to take
+ * you to the group by itself (not with a screen reader on: then it waits
+ * for "Go to …", so nothing is cut off mid-sentence).
  */
 
 const PIECES = 18;
@@ -40,7 +42,7 @@ function Piece({ i, p, tint }: { i: number; p: SharedValue<number>; tint: string
   return <Animated.View style={[{ position: 'absolute', width: size, height: i % 3 === 0 ? size * 1.8 : size, borderRadius: i % 3 === 0 ? 2 : size / 2, backgroundColor: tint }, style]} />;
 }
 
-export function Celebrate({ name, look, invited }: { name: string; look: GroupLook; invited: number }) {
+export function Celebrate({ name, look, invited, leaving = true }: { name: string; look: GroupLook; invited: number; leaving?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const reduced = useReducedMotion();
   const burst = useSharedValue(0);
@@ -57,9 +59,8 @@ export function Celebrate({ name, look, invited }: { name: string; look: GroupLo
   const tickStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   const wordsStyle = useAnimatedStyle(() => ({ opacity: rise.value, transform: [{ translateY: 8 * (1 - rise.value) }] }));
 
-  const line = invited
-    ? `${invited} ${invited === 1 ? 'invite' : 'invites'} sent. Taking you to the group…`
-    : 'Taking you to the group…';
+  const sent = invited ? `${invited} ${invited === 1 ? 'invite' : 'invites'} sent.` : '';
+  const line = leaving ? `${sent}${sent ? ' ' : ''}Taking you to the group…` : sent || 'Its feed is ready for a first post.';
   return (
     <View style={styles.wrap} accessible accessibilityRole="alert" accessibilityLabel={`${name} is ready. ${line}`}>
       <View style={styles.stage}>

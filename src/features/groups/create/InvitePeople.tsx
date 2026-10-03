@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Clipboard from 'expo-clipboard';
@@ -25,15 +25,19 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
  *
  * The same people New message offers, under the same rules: nobody you are
  * blocked with; someone the chat rules lock (a teen who doesn't follow you,
- * say) shows a lock, is asked about again on tap, and says why in a note if
- * still locked; someone known to be under 18 can't join a group, so they
- * show that instead; anyone already in the group says so.
+ * say) shows a lock and "Can't message yet", is asked about again on tap,
+ * and says why in a note if still locked; anyone already in the group says
+ * so. Who can join a group at all (known to be an adult) is the server's
+ * answer (can_join_groups, migration 73), asked as the step opens, since
+ * nobody's age but your own reaches the app: someone it says no about (a
+ * teen, or an account with no birthday yet) shows "Can't join groups yet"
+ * and can't be picked, so nobody gets an invite they can't use.
  */
 
 export const INVITE_MAX = 20;
 
 export function InvitePeople({ groupId, groupName, picked, onPicked }: {
-  groupId: ID; groupName: string; picked: ID[]; onPicked: (next: ID[]) => void;
+  groupId: ID; groupName: string; picked: ID[]; onPicked: React.Dispatch<React.SetStateAction<ID[]>>;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { users, followingIds, blockedIds, conversations, currentUserId, currentUser, feedGroups, actions } = useApp();
@@ -52,29 +56,47 @@ export function InvitePeople({ groupId, groupName, picked, onPicked }: {
       .filter((u): u is User => !!u && u.id !== currentUserId && !blockedIds.includes(u.id))
       .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
   }, [users, followingIds, blockedIds, conversations, currentUserId]);
+  // Who can join a group, asked once as the step opens (a tap before the answer waits for it).
+  const [joinable, setJoinable] = useState<Record<ID, boolean> | null>(null);
+  const asking = useRef<Promise<Record<ID, boolean>> | null>(null);
   // The chat locks the app already knows about are asked about again as the step opens.
   useEffect(() => {
     const locked = actions.lockedNow(people.map((u) => u.id));
     if (locked.length) void actions.recheckFollows(locked);
+    let live = true;
+    asking.current = actions.groupJoinable(people.map((u) => u.id)).catch(() => ({}));
+    void asking.current.then((got) => { if (live) setJoinable(got); });
+    return () => { live = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // The latest picks, for a tap that finishes after waiting on the server.
+  const pickedNow = useRef(picked);
+  pickedNow.current = picked;
 
   const term = query.trim().replace(/^@/, '').toLowerCase();
   const shown = term ? people.filter((u) => `${u.name} ${u.handle}`.toLowerCase().includes(term)) : people;
   const pickedUsers = picked.map((pid) => users.find((u) => u.id === pid)).filter((u): u is User => !!u);
 
-  const why = (u: User): 'member' | 'teen' | 'locked' | null => (inGroup.has(u.id) ? 'member' : u.ageGroup === 'teen' ? 'teen' : !actions.canMessage(u.id) ? 'locked' : null);
+  // A missing answer (the database can't say yet) locks nobody: the server decides if they try.
+  const cantJoin = (u: User, told = joinable) => !!told && told[u.id] === false;
+  const why = (u: User): 'member' | 'cant' | 'locked' | null => (inGroup.has(u.id) ? 'member' : cantJoin(u) ? 'cant' : !actions.canMessage(u.id) ? 'locked' : null);
+  const cantNote = (u: User) => `${u.name.split(' ')[0]} can’t join groups yet, so an invite wouldn’t work for them.`;
 
   const toggle = async (u: User) => {
-    if (picked.includes(u.id)) { haptics.untap(); onPicked(picked.filter((x) => x !== u.id)); setNote(null); return; }
+    if (pickedNow.current.includes(u.id)) { haptics.untap(); onPicked((now) => now.filter((x) => x !== u.id)); setNote(null); return; }
     const w = why(u);
     if (w === 'member') return;
-    if (w === 'teen') { setNote(`${u.name.split(' ')[0]} can’t join groups yet. They open at 18.`); return; }
+    if (w === 'cant') { setNote(cantNote(u)); return; }
+    // Not answered yet: wait for who can join before picking.
+    if (!joinable && asking.current && cantJoin(u, await asking.current)) { setNote(cantNote(u)); return; }
     // Locked, unless they have followed you since the app opened: ask before saying no.
     if (w === 'locked' && !(await actions.reachNow(u.id))) { setNote(chatLockNote(named(u, users))); return; }
-    if (picked.length >= INVITE_MAX) { setNote(`You can invite up to ${INVITE_MAX} people at once. Share the link for more.`); return; }
+    // The picks as they are now, not as they were before the wait: two quick taps both count.
+    if (pickedNow.current.includes(u.id)) return;
+    if (pickedNow.current.length >= INVITE_MAX) { setNote(`You can invite up to ${INVITE_MAX} people at once. Share the link for more.`); return; }
     haptics.tap();
     setNote(null);
-    onPicked([...picked, u.id]);
+    pickedNow.current = [...pickedNow.current, u.id];
+    onPicked((now) => (now.includes(u.id) ? now : [...now, u.id]));
   };
 
   const copy = async () => {
@@ -147,25 +169,25 @@ export function InvitePeople({ groupId, groupName, picked, onPicked }: {
           {shown.map((u, i) => {
             const on = picked.includes(u.id);
             const w = on ? null : why(u);
-            const status = w === 'member' ? 'In the group' : w === 'teen' ? 'Groups open at 18' : `@${u.handle}`;
+            const status = w === 'member' ? 'In the group' : w === 'cant' ? 'Can’t join groups yet' : w === 'locked' ? 'Can’t message yet' : `@${u.handle}`;
             return (
               <Pressable
                 key={u.id}
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: on, disabled: w === 'member' }}
-                accessibilityLabel={`${u.name}, ${w === 'member' ? 'already in the group' : w === 'teen' ? 'can’t join groups until 18' : w === 'locked' ? 'can’t be messaged yet' : `@${u.handle}`}`}
+                accessibilityLabel={`${u.name}, ${w === 'member' ? 'already in the group' : w === 'cant' ? 'can’t join groups yet' : w === 'locked' ? 'can’t be messaged yet' : `@${u.handle}`}`}
                 disabled={w === 'member'}
                 onPress={() => { void toggle(u); }}
                 style={({ pressed }) => [styles.row, i > 0 && styles.line, pressed && styles.rowPressed]}
               >
-                <View style={(w === 'member' || w === 'teen') && styles.dim}>
+                <View style={(w === 'member' || w === 'cant') && styles.dim}>
                   <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={42} />
                 </View>
-                <View style={[styles.words, (w === 'member' || w === 'teen') && styles.dim]}>
+                <View style={[styles.words, (w === 'member' || w === 'cant') && styles.dim]}>
                   <Text style={styles.name} numberOfLines={1}>{u.name}</Text>
                   <Text style={styles.handle} numberOfLines={1}>{status}</Text>
                 </View>
-                {w === 'locked' || w === 'teen' ? <Ionicons name="lock-closed" size={14} color={colors.textFaint} /> : null}
+                {w === 'locked' || w === 'cant' ? <Ionicons name="lock-closed" size={14} color={colors.textFaint} /> : null}
                 {w === 'member' ? <Ionicons name="checkmark-circle" size={24} color={colors.textFaint} /> : (
                   <View style={[styles.tick, on && styles.tickOn]}>{on ? <Ionicons name="checkmark" size={15} color={colors.brandInk} /> : null}</View>
                 )}
@@ -191,7 +213,7 @@ const styleDefinitions = StyleSheet.create({
   linkActions: { flexDirection: 'row', gap: spacing.sm },
   linkBtn: { flex: 1, height: 40, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   linkBtnText: { ...typography.smallStrong, color: colors.text },
-  headRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: spacing.xs, marginTop: spacing.xs },
+  headRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: spacing.xs },
   section: { ...typography.smallStrong, color: colors.textMuted },
   count: { ...typography.smallStrong, color: colors.brand },
   chips: { gap: spacing.sm, paddingVertical: 2 },
@@ -210,5 +232,5 @@ const styleDefinitions = StyleSheet.create({
   empty: { alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.xl, paddingHorizontal: spacing.lg },
   emptyTitle: { ...typography.bodyStrong, color: colors.text, marginTop: spacing.xs },
   emptyBody: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
-  none: { ...typography.small, color: colors.textMuted, paddingHorizontal: spacing.xs },
+  none: { ...typography.small, color: colors.textMuted },
 });

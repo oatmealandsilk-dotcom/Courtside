@@ -61,7 +61,8 @@ export function LookPicker({ name, look, onChange }: { name: string; look: Group
       {photo.element}
       <View style={styles.swatches} accessibilityRole="radiogroup" accessibilityLabel="Colour">
         {choices.map((c) => {
-          const on = c.id === color;
+          // A colour this theme draws in the same shade as another is chosen under that one.
+          const on = c.id === color || c.also.includes(color);
           return (
             <Pressable
               key={c.id}

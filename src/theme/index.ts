@@ -7,6 +7,9 @@ export const lightColors = {
   brand: '#3F7049', brandInk: '#FAF8F0', brandDim: '#E3E7D9',
   court: '#527C56', clay: '#A06F53', hard: '#3E6982', grass: '#748360',
   info: '#3E6982', success: '#527C56', warning: '#957328', danger: '#A34D40',
+  // Two colours only for decoration (a group's face), never for a warning or
+  // an error, so a gold or rose group never reads as something gone wrong.
+  sun: '#A87B1C', rose: '#A9547A',
   // Open to hit: the live green ring (and its pill) a player wears on the map for the day. A
   // fresher green than the brand, so it reads as "up for it now" on every court, New York's included.
   open: '#1A8147',
