@@ -13,10 +13,13 @@ import { Duration, Figure } from './Duration';
 
 /**
  * A photo post's session, straight under the picture (the picture stays
- * clean): the time with what it was under it, then average and max heart
- * rate when shared, parted by thin rules, and a chevron that says there is
- * more. Under that, who it was against and where the numbers came from.
- * `scale` draws it smaller, for the composer's preview. A tap opens the stats.
+ * clean), as one tidy row: the time ("2h 08m", units on the figures'
+ * baseline), a small chip saying what it was ("Practice", "Match · Won"),
+ * and on the right where the numbers came from ("Data by WHOOP", WHOOP's own
+ * attribution wording, never a logo) beside a chevron that says there is
+ * more. Heart rate, when shared, and who it was against sit on a quiet second
+ * line. `scale` draws it smaller, for the composer's preview. A tap anywhere
+ * on it opens the stats.
  */
 export function SessionStrip({ session, hidden = [], play = false, scale = 1, onPress }: {
   session: SessionDetail;
@@ -29,14 +32,15 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   const k = scale;
   const hr = session.maxHr != null;
   const result = resultWord(session);
-  const under = [kindWord(session), result].filter(Boolean).join(' · ').toUpperCase();
+  const what = [kindWord(session), result].filter(Boolean).join(' · ');
   const { opponents, partners } = sessionPeople(session, hidden);
   const all = [...opponents, ...partners];
   const lead = all[0];
   const vs = lead ? (opponents.length ? 'vs' : 'with') : '';
   const tracker = !!session.activityId;
-  const label = { ...font('600'), fontSize: 10.5 * k, letterSpacing: 0.8 * k, color: colors.textMuted, marginTop: 2 * k };
-  const spoken = [`${spokenDuration(session.minutes)}, ${under.toLowerCase()}`, hr && session.avgHr ? `average heart rate ${session.avgHr}` : null, hr ? `max ${session.maxHr}` : null, lead ? `${vs} @${lead.handle}` : null, tracker ? sourceLabel(session.source ?? 'apple-health') : null].filter(Boolean).join(', ');
+  const source = tracker ? sourceLabel(session.source ?? 'apple-health') : null;
+  const spoken = [`${spokenDuration(session.minutes)}, ${what.toLowerCase()}`, hr && session.avgHr ? `average heart rate ${session.avgHr}` : null, hr ? `max ${session.maxHr}` : null, lead ? `${vs} @${lead.handle}` : null, source].filter(Boolean).join(', ');
+  const small = { fontSize: 13 * k, lineHeight: Math.round(17 * k) };
   return (
     <Pressable
       accessibilityRole="button"
@@ -44,52 +48,41 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
       accessibilityHint="Opens the stats"
       disabled={!onPress}
       onPress={onPress}
-      style={({ pressed }) => [styles.wrap, { gap: 8 * k }, pressed && onPress ? styles.pressed : null]}
+      style={({ pressed }) => [{ gap: 6 * k }, pressed && onPress ? styles.pressed : null]}
     >
-      <View style={styles.figures}>
-        <View style={styles.cell}>
-          <Duration minutes={session.minutes} size={30 * k} color={colors.text} unitColor={colors.textMuted} play={play} delay={120} duration={600} />
-          <Text style={label} numberOfLines={1} maxFontSizeMultiplier={1.2}>{under}</Text>
+      <View style={[styles.row, { gap: 10 * k }]}>
+        <Duration minutes={session.minutes} size={22 * k} unitScale={0.64} color={colors.text} unitColor={colors.textMuted} play={play} delay={120} duration={600} />
+        <View style={[styles.chip, { paddingHorizontal: 8 * k, paddingVertical: 3 * k, borderRadius: 999 }]}>
+          <Text style={[styles.chipText, { fontSize: 12 * k }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{what}</Text>
         </View>
-        {hr && session.avgHr ? (
-          <>
-            <View style={[styles.rule, { marginHorizontal: 14 * k }]} />
-            <View style={styles.cell}>
-              <Figure value={session.avgHr} size={30 * k} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} duration={600} />
-              <Text style={label} maxFontSizeMultiplier={1.2}>AVG BPM</Text>
-            </View>
-          </>
-        ) : null}
-        {hr ? (
-          <>
-            <View style={[styles.rule, { marginHorizontal: 14 * k }]} />
-            <View style={styles.cell}>
-              <Figure value={session.maxHr!} size={30 * k} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} duration={600} />
-              <Text style={label} maxFontSizeMultiplier={1.2}>MAX BPM</Text>
-            </View>
-          </>
-        ) : null}
         <View style={styles.flex} />
-        {onPress ? <Ionicons name="chevron-up" size={16 * k} color={colors.textMuted} /> : null}
+        {source ? <Text style={[styles.source, { fontSize: 11 * k }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{source}</Text> : null}
+        {onPress ? <Ionicons name="chevron-up" size={15 * k} color={colors.textFaint} /> : null}
       </View>
-      {lead || tracker ? (
-        <View style={styles.people}>
+      {hr || lead ? (
+        <View style={[styles.row, { gap: 12 * k }]}>
+          {hr ? (
+            <View style={[styles.row, { gap: 10 * k }]}>
+              <Ionicons name="heart-outline" size={13 * k} color={colors.textMuted} />
+              {session.avgHr ? <Figure value={session.avgHr} unit="avg" baseline unitScale={0.8} size={15 * k} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} duration={600} /> : null}
+              <Figure value={session.maxHr!} unit="max bpm" baseline unitScale={0.8} size={15 * k} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} duration={600} />
+            </View>
+          ) : null}
           {lead ? (
-            <View style={styles.who}>
-              <Avatar name={lead.name} seed={lead.id} size={Math.round(20 * k)} />
-              <Text style={{ ...font('500'), fontSize: 14 * k, color: colors.textMuted, flexShrink: 1 }} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+            <View style={[styles.who, { gap: 6 * k }]}>
+              <Avatar name={lead.name} seed={lead.id} size={Math.round(18 * k)} />
+              <Text style={[styles.whoText, small]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
                 {vs}{' '}
                 <Text
                   accessibilityRole="link"
                   suppressHighlighting
                   onPress={(e) => { e?.stopPropagation?.(); router.push(`/user/${lead.id}`); }}
-                  style={{ ...font('600'), color: colors.text }}
+                  style={styles.handle}
                 >@{lead.handle}</Text>
                 {all.length > 1 ? ` +${all.length - 1}` : ''}
               </Text>
             </View>
-          ) : <View style={styles.flex} />}
-          {tracker ? <Text style={{ ...font('600'), fontSize: 11 * k, color: colors.textFaint }} maxFontSizeMultiplier={1.2}>{sourceLabel(session.source ?? 'apple-health')}</Text> : null}
+          ) : null}
         </View>
       ) : null}
     </Pressable>
@@ -97,12 +90,15 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
 }
 
 const styleDefinitions = StyleSheet.create({
-  wrap: { paddingHorizontal: 2 },
   pressed: { opacity: 0.7 },
-  figures: { flexDirection: 'row', alignItems: 'center' },
-  cell: { justifyContent: 'flex-end' },
-  rule: { width: 1, alignSelf: 'stretch', backgroundColor: colors.border },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  // What it was: a small quiet chip, the page's raised ground, never louder than the time.
+  chip: { backgroundColor: colors.bgElevated, flexShrink: 1, minWidth: 0 },
+  chipText: { ...font('600'), color: colors.textMuted },
+  // Where the numbers came from: always shown, in the faintest ink, and never cut short.
+  source: { ...font('600'), color: colors.textFaint, letterSpacing: 0.1, flexShrink: 0 },
   flex: { flex: 1 },
-  people: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  who: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7, minWidth: 0 },
+  who: { flex: 1, flexDirection: 'row', alignItems: 'center', minWidth: 0 },
+  whoText: { ...font('500'), color: colors.textMuted, flexShrink: 1 },
+  handle: { ...font('600'), color: colors.text },
 });
