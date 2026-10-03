@@ -236,6 +236,9 @@ export interface DetectedActivity {
   createdAt: string;
 }
 
+/** A health number a post can share: heart rate (average and max), heart-rate zones, Strain (WHOOP only), calories. */
+export type HealthShareKey = 'hr' | 'zones' | 'strain' | 'kcal';
+
 /** Where a post's session numbers came from, for its label. */
 export type StatsSource = 'whoop' | 'apple-watch' | 'apple-health' | 'health-connect' | TrackerId;
 
@@ -287,9 +290,20 @@ export interface SessionDetail {
   activityId?: ID;
   /** Where the numbers came from, for the label under them. */
   source?: StatsSource;
-  /** Only when the author chose to show heart rate, and only for adults. */
+  /** Only when the author chose to share heart rate (any age once migration 72 runs; adults only before). */
   maxHr?: number;
   avgHr?: number;
+  /** WHOOP's 0–21 Strain, only when the author chose to share it (migration 72). Written by the server. */
+  strain?: number;
+  /** Calories, only when the author chose to share them (migration 72). Written by the server. */
+  kcal?: number;
+  /**
+   * Which health numbers the author chose to share on this post ("Share
+   * health data"): sent by the phone, read and kept by the server (migration
+   * 72), which then adds only those numbers from the author's own tracker.
+   * Absent on a post from an older app (heart rate then follows maxHr).
+   */
+  share?: HealthShareKey[];
   /**
    * The session in your own log it came from, when one you logged by hand is
    * attached to a Post or a Clip (Oct 2). It marks that session as posted;
@@ -310,9 +324,9 @@ export interface SessionDetail {
   with?: SessionWith[];
   /**
    * Minutes in each heart-rate zone, easiest first (as DetectedActivity's).
-   * Only when the post shows heart rate (and so only for adults who switched
-   * it on), and only from a tracker that recorded them. Written by the server
-   * (migration 65); "Zones 4–5" is zones[3] + zones[4].
+   * Only when the author chose to share them (or, from an older app, beside
+   * heart rate), and only from a tracker that recorded them. Written by the
+   * server (migrations 65 and 72); "Zones 4–5" is zones[3] + zones[4].
    */
   zones?: number[];
   /** The day it was played, 'YYYY-MM-DD', date only: never the start time. */

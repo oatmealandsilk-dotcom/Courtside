@@ -17,8 +17,9 @@ import { Duration, Figure } from './Duration';
  * baseline), a small chip saying what it was ("Practice", "Match · Won"),
  * and on the right where the numbers came from ("Data by WHOOP", WHOOP's own
  * attribution wording, never a logo) beside a chevron that says there is
- * more. Heart rate, when shared, and who it was against sit on a quiet second
- * line. `scale` draws it smaller, for the composer's preview. A tap anywhere
+ * more. The health numbers the author shared (heart rate, Strain, calories;
+ * migration 72) and who it was against sit on a quiet second line, the
+ * player on a line of their own when two or more numbers are shared. `scale` draws it smaller, for the composer's preview. A tap anywhere
  * on it opens the stats.
  */
 export function SessionStrip({ session, hidden = [], play = false, scale = 1, onPress }: {
@@ -31,6 +32,9 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   const styles = useThemedStyles(styleDefinitions);
   const k = scale;
   const hr = session.maxHr != null;
+  const strain = session.strain != null ? session.strain : null;
+  const kcal = session.kcal ? session.kcal : null;
+  const shared = [hr, strain != null, kcal != null].filter(Boolean).length;
   const result = resultWord(session);
   const what = [kindWord(session), result].filter(Boolean).join(' · ');
   const { opponents, partners } = sessionPeople(session, hidden);
@@ -39,8 +43,24 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   const vs = lead ? (opponents.length ? 'vs' : 'with') : '';
   const tracker = !!session.activityId;
   const source = tracker ? sourceLabel(session.source ?? 'apple-health') : null;
-  const spoken = [`${spokenDuration(session.minutes)}, ${what.toLowerCase()}`, hr && session.avgHr ? `average heart rate ${session.avgHr}` : null, hr ? `max ${session.maxHr}` : null, lead ? `${vs} @${lead.handle}` : null, source].filter(Boolean).join(', ');
+  const spoken = [`${spokenDuration(session.minutes)}, ${what.toLowerCase()}`, hr && session.avgHr ? `average heart rate ${session.avgHr}` : null, hr ? `max ${session.maxHr}` : null, strain != null ? `Strain ${strain.toFixed(1)}` : null, kcal ? `${kcal} calories` : null, lead ? `${vs} @${lead.handle}` : null, source].filter(Boolean).join(', ');
   const small = { fontSize: 13 * k, lineHeight: Math.round(17 * k) };
+  // Who it was against: beside a single shared number, or on its own line.
+  const who = lead ? (
+    <View style={[styles.who, { gap: 6 * k }]}>
+      <Avatar name={lead.name} seed={lead.id} size={Math.round(18 * k)} />
+      <Text style={[styles.whoText, small]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+        {vs}{' '}
+        <Text
+          accessibilityRole="link"
+          suppressHighlighting
+          onPress={(e) => { e?.stopPropagation?.(); router.push(`/user/${lead.id}`); }}
+          style={styles.handle}
+        >@{lead.handle}</Text>
+        {all.length > 1 ? ` +${all.length - 1}` : ''}
+      </Text>
+    </View>
+  ) : null;
   return (
     <Pressable
       accessibilityRole="button"
@@ -59,8 +79,8 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
         {source ? <Text style={[styles.source, { fontSize: 11 * k }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{source}</Text> : null}
         {onPress ? <Ionicons name="chevron-up" size={15 * k} color={colors.textFaint} /> : null}
       </View>
-      {hr || lead ? (
-        <View style={[styles.row, { gap: 12 * k }]}>
+      {shared ? (
+        <View style={[styles.row, styles.wrap, { columnGap: 14 * k, rowGap: 6 * k }]}>
           {hr ? (
             <View style={[styles.row, { gap: 10 * k }]}>
               <Ionicons name="heart-outline" size={13 * k} color={colors.textMuted} />
@@ -68,23 +88,22 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
               <Figure value={session.maxHr!} unit="max bpm" baseline unitScale={0.8} size={15 * k} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} duration={600} />
             </View>
           ) : null}
-          {lead ? (
-            <View style={[styles.who, { gap: 6 * k }]}>
-              <Avatar name={lead.name} seed={lead.id} size={Math.round(18 * k)} />
-              <Text style={[styles.whoText, small]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
-                {vs}{' '}
-                <Text
-                  accessibilityRole="link"
-                  suppressHighlighting
-                  onPress={(e) => { e?.stopPropagation?.(); router.push(`/user/${lead.id}`); }}
-                  style={styles.handle}
-                >@{lead.handle}</Text>
-                {all.length > 1 ? ` +${all.length - 1}` : ''}
-              </Text>
+          {strain != null ? (
+            <View style={[styles.row, { gap: 6 * k }]}>
+              <Ionicons name="flash-outline" size={13 * k} color={colors.textMuted} />
+              <Figure value={strain} part="dec1" unit="Strain" baseline unitScale={0.8} size={15 * k} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} duration={600} />
             </View>
           ) : null}
+          {kcal != null ? (
+            <View style={[styles.row, { gap: 6 * k }]}>
+              <Ionicons name="flame-outline" size={13 * k} color={colors.textMuted} />
+              <Figure value={kcal} unit="cal" baseline unitScale={0.8} size={15 * k} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} duration={600} />
+            </View>
+          ) : null}
+          {shared === 1 ? who : null}
         </View>
       ) : null}
+      {shared !== 1 && who ? <View style={styles.row}>{who}</View> : null}
     </Pressable>
   );
 }
@@ -92,6 +111,7 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
 const styleDefinitions = StyleSheet.create({
   pressed: { opacity: 0.7 },
   row: { flexDirection: 'row', alignItems: 'center' },
+  wrap: { flexWrap: 'wrap' },
   // What it was: a small quiet chip, the page's raised ground, never louder than the time.
   chip: { backgroundColor: colors.bgElevated, flexShrink: 1, minWidth: 0 },
   chipText: { ...font('600'), color: colors.textMuted },

@@ -88,6 +88,10 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
   const small = (size: number, floor: number) => Math.max(floor, size * k);
   const hr = session.maxHr != null;
   const zones = postZones(session);
+  // Strain and calories, when the author shared them (migration 72).
+  const strain = session.strain != null ? session.strain : null;
+  const kcal = session.kcal ? session.kcal : null;
+  const health = hr || !!zones || strain != null || !!kcal;
   const result = resultWord(session);
   const list: CardPerson[] = people ?? (() => { const p = sessionPeople(session, hidden); return [...p.opponents, ...p.partners]; })();
   const lead = list[0];
@@ -98,6 +102,8 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
     `${spokenDuration(session.minutes)} ${onCourtWord(session)}`,
     result,
     hr ? `max heart rate ${session.maxHr}${session.avgHr ? `, average ${session.avgHr}` : ''}` : null,
+    strain != null ? `Strain ${strain.toFixed(1)}` : null,
+    kcal ? `${kcal} calories` : null,
     lead ? `${vs} @${lead.handle}${list.length > 1 ? ` and ${list.length - 1} more` : ''}` : null,
     tracker && showSource ? sourceLabel(session.source ?? 'apple-health') : null,
   ].filter(Boolean).join('. ');
@@ -116,16 +122,24 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
           </Pop>
         ) : null}
       </View>
-      <Reanimated.View layout={LinearTransition.duration(220)} style={[styles.middle, { justifyContent: hr ? 'flex-start' : 'center', paddingTop: hr ? 18 * k : 0 }]}>
+      <Reanimated.View layout={LinearTransition.duration(220)} style={[styles.middle, { justifyContent: health ? 'flex-start' : 'center', paddingTop: health ? 18 * k : 0 }]}>
         <Duration minutes={session.minutes} size={96 * k} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={700} />
         <Text style={{ ...font('500'), fontSize: small(14, 10), color: look.muted, marginTop: 2 * k }} maxFontSizeMultiplier={1.2}>{onCourtWord(session)}</Text>
-        {hr ? (
+        {health ? (
           <Reanimated.View entering={FadeIn.duration(220)} exiting={FadeOut.duration(160)} style={{ marginTop: 20 * k }}>
-            <View style={[styles.hrRow, { gap: 26 * k }]}>
-              <Figure value={session.maxHr!} unit="max bpm" size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={200} />
-              {session.avgHr ? <Figure value={session.avgHr} unit="avg" size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={200} /> : null}
-            </View>
-            {zones ? <ZoneBar zones={zones} colors={look.zones} height={10 * k} play={play} delay={200} duration={600} style={{ marginTop: 14 * k }} /> : null}
+            {hr ? (
+              <View style={[styles.hrRow, { gap: 26 * k }]}>
+                <Figure value={session.maxHr!} unit="max bpm" size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={200} />
+                {session.avgHr ? <Figure value={session.avgHr} unit="avg" size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={200} /> : null}
+              </View>
+            ) : null}
+            {zones ? <ZoneBar zones={zones} colors={look.zones} height={10 * k} play={play} delay={200} duration={600} style={{ marginTop: hr ? 14 * k : 0 }} /> : null}
+            {strain != null || kcal ? (
+              <View style={[styles.hrRow, { gap: 22 * k, marginTop: hr || zones ? 12 * k : 0 }]}>
+                {strain != null ? <Figure value={strain} part="dec1" unit="Strain" size={24 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={260} /> : null}
+                {kcal ? <Figure value={kcal} unit="cal" size={24 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={260} /> : null}
+              </View>
+            ) : null}
           </Reanimated.View>
         ) : null}
       </Reanimated.View>

@@ -1,6 +1,7 @@
-import type { DetectedActivity, ID, PracticeSession, SessionDetail, SessionWith, StatsSource } from '@/data/types';
+import type { DetectedActivity, HealthShareKey, ID, PracticeSession, SessionDetail, SessionWith, StatsSource } from '@/data/types';
 import { localDay } from '@/features/practice/stats';
 import { sessionPeople } from './sessionTags';
+import { withShare } from './healthShare';
 import { duration } from '@/lib/format';
 
 /*
@@ -103,13 +104,13 @@ export function privateLine(a: DetectedActivity): string {
 
 /**
  * The stats a post carries from a tracker session: time on court always,
- * heart rate only when the author switched it on and is a confirmed adult.
- * It is the same shape the server rebuilds from the private record
- * (fill_post_session_stats, migration 58), so the copy shown straight away
- * matches what is saved. Sending maxHr is how the post asks for heart rate.
+ * and only the health numbers the author chose to share ("Share health
+ * data", any age), with the list itself. It is the same shape the server
+ * rebuilds from the private record (post_session_stats, migration 72), so
+ * the copy shown straight away matches what is saved.
  */
-export function sessionFromActivity(a: DetectedActivity, showHr: boolean, adult: boolean): SessionDetail {
-  return {
+export function sessionFromActivity(a: DetectedActivity, share: HealthShareKey[]): SessionDetail {
+  return withShare({
     focus: 'Tennis',
     minutes: a.minutes,
     drills: [],
@@ -117,8 +118,7 @@ export function sessionFromActivity(a: DetectedActivity, showHr: boolean, adult:
     source: statsSourceOf(a),
     // The day it was played where it was played (never the time), as the server writes it (migration 65).
     ...(a.tzOffsetMin != null ? { day: activityDay(a) } : {}),
-    ...(showHr && adult && a.maxHr ? { maxHr: a.maxHr, ...(a.avgHr ? { avgHr: a.avgHr } : {}), ...(a.zones ? { zones: a.zones } : {}) } : {}),
-  };
+  }, a, share);
 }
 
 /** A piece of a stats line: words, a player's @handle (opens their profile), or "+2" for the rest of them (`more`). */
