@@ -9,19 +9,21 @@ import { duration } from '@/lib/format';
  * sees. Plain functions, so the store and the screens say it the same way.
  */
 
-/** The part of the day a session started in, on this phone's clock. */
-export function timeOfDay(iso: string): string {
-  const h = new Date(iso).getHours();
-  if (h < 8) return 'Early morning';
-  if (h < 12) return 'Morning';
-  if (h < 14) return 'Lunchtime';
-  if (h < 17) return 'Afternoon';
-  if (h < 21) return 'Evening';
-  return 'Night';
+/**
+ * What the tracker itself called the session: "Tennis" only because the
+ * tracker labelled it tennis (WHOOP's sport name, Apple's Tennis workout,
+ * Fitbit's, Oura's or Polar's own activity type; the server files nothing
+ * else, migrations 58 and 69), otherwise the tracker's own sport name as it
+ * gave it ("Functional fitness"). Never a time of day: "Lunchtime tennis"
+ * named something the tracker never said.
+ */
+export function sportName(sport: string | undefined | null): string {
+  const words = (sport ?? '').replace(/[_-]+/g, ' ').trim().toLowerCase();
+  return words ? words[0].toUpperCase() + words.slice(1) : 'Activity';
 }
 
-/** "Evening tennis". */
-export const activityTitle = (a: DetectedActivity) => `${timeOfDay(a.startedAt)} tennis`;
+/** "Tennis". */
+export const activityTitle = (a: Pick<DetectedActivity, 'sport'>) => sportName(a.sport);
 
 /** The calendar day it was played where it was played, when the tracker said where; otherwise on this phone's clock. */
 export function activityDay(a: DetectedActivity): string {

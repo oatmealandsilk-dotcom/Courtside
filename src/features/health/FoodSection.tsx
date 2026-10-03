@@ -6,7 +6,7 @@ import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from '
 
 import { Tappable } from '@/components/Tappable';
 import { BrandWash } from '@/components/ui/BrandWash';
-import { appleHealthAvailable, connectAppleFood, readAppleNutritionFrom, type FoodDayFrom } from '@/features/health/appleHealth';
+import { appleHealthAvailable, connectAppleFood, inExpoGo, readAppleNutritionFrom, type FoodDayFrom } from '@/features/health/appleHealth';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -106,9 +106,12 @@ export function FoodSection({ userId }: { userId: string | null }) {
 
   // The website, Android, and an iPhone build without HealthKit (Expo Go).
   if (!healthHere) {
-    const line = Platform.OS === 'ios'
-      ? 'Calories, protein, carbs and fat from Cronometer or MyFitnessPal show here in the App Store version of CourtSide.'
-      : 'Available in the iPhone app: it reads the daily food totals Cronometer and MyFitnessPal save to Apple Health.';
+    // Expo Go can never have HealthKit; an App Store build without it needs the next app update, not a different app.
+    const line = Platform.OS !== 'ios'
+      ? 'Available in the iPhone app: it reads the daily food totals Cronometer and MyFitnessPal save to Apple Health.'
+      : inExpoGo()
+        ? 'Calories, protein, carbs and fat from Cronometer or MyFitnessPal show here in the App Store version of CourtSide.'
+        : 'Calories, protein, carbs and fat from Cronometer or MyFitnessPal are coming in the next app update.';
     return (
       <View style={styles.section}>
         {header}

@@ -10,11 +10,12 @@ import { Tappable } from '@/components/Tappable';
 import { BrandWash } from '@/components/ui/BrandWash';
 import * as haptics from '@/lib/haptics';
 import { Screen } from '@/components/ui';
-import { appleHealthAvailable } from '@/features/health/appleHealth';
+import { appleHealthAvailable, inExpoGo } from '@/features/health/appleHealth';
 import { FoodSection } from '@/features/health/FoodSection';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { isTracker, useTrackerStatus } from '@/features/activity/trackers';
 import { confirm } from '@/lib/confirm';
+import { withCatalog } from '@/lib/integrations';
 import { relativeTime, hoursAndMinutes } from '@/lib/format';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -66,7 +67,10 @@ const foodCardCovers = (i: Integration) => (i.provider === 'cronometer' || i.pro
  */
 export default function Health() {
   const styles = useThemedStyles(styleDefinitions);
-  const { integrations, healthHistory, actions, currentUserId } = useApp();
+  const app = useApp();
+  const { healthHistory, actions, currentUserId } = app;
+  // Every source always has a row: the catalog, with this account's connections laid over it.
+  const integrations = withCatalog(app.integrations);
   // Food apps the Food card does not already cover (see foodCardCovers).
   const foodRows = integrations.filter((i) => !TRACKER_ROWS.includes(i.provider) && ABOUT[i.provider] && !foodCardCovers(i));
   const [busy, setBusy] = useState<string | null>(null);
@@ -156,7 +160,7 @@ export default function Health() {
           {/* A tracker that is coming soon says only what it will bring; the badge says the rest. */}
           {soon && !garmin && !i.connected ? null : (
             <Text style={styles.how}>
-              {i.connected && i.lastSyncedAt ? `Synced ${relativeTime(i.lastSyncedAt)}.` : blocked ? (wrongPhone ? 'iPhone only.' : 'Available in the App Store version of CourtSide.') : about.how}
+              {i.connected && i.lastSyncedAt ? `Synced ${relativeTime(i.lastSyncedAt)}.` : blocked ? (wrongPhone ? 'iPhone only.' : inExpoGo() ? 'Available in the App Store version of CourtSide.' : 'Coming in the next app update.') : about.how}
             </Text>
           )}
           {i.connected ? (

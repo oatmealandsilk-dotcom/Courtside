@@ -1,18 +1,20 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { DragSheet } from '@/components/DragSheet';
 import { Chips, Section, SheetTitle, Submit, Tiles, formBody } from '@/components/sheet/SheetForm';
 import { WhoYouPlayed } from '@/components/WhoYouPlayed';
-import { activityDay, activityWhen, dayWords, fromWho, loggedLabel, privateLine, sessionEyebrow } from '@/features/activity/format';
+import { activityDay, activityTitle, activityWhen, dayWords, fromWho, loggedLabel, privateLine, sessionEyebrow } from '@/features/activity/format';
 import { showLogged } from '@/features/activity/useTrackerSession';
 import { Duration } from '@/components/session/Duration';
-import { LENGTHS, lengthTile, lengthsFor, trackerName } from '@/features/activity/lengths';
+import { LENGTHS, lengthTile, trackerName } from '@/features/activity/lengths';
+import { TrackedLength } from '@/components/session/TrackedLength';
 import { computeStats } from '@/features/practice/stats';
 import { andList, canTagKind, firstName as firstOfName, isActive, tagsOnSession } from '@/features/activity/sessionTags';
-import { postOf, postedIndex } from '@/features/activity/recent';
+import { pickSource, postOf, postedIndex, sourceOn } from '@/features/activity/recent';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { hitPrefill, prefillFor } from '@/features/hits/followUp';
 import { localDay } from '@/features/practice/stats';
@@ -24,7 +26,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, radius, spacing, typography } from '@/theme';
+import { colors, font, lift, radius, spacing, typography } from '@/theme';
 
 const KINDS: { value: PracticeSession['kind']; label: string }[] = [
   { value: 'practice', label: 'Practice' },
@@ -157,6 +159,24 @@ function LogSession() {
 
   const firstOf = (id: ID) => users.find((u) => u.id === id)?.name.trim().split(/\s+/)[0] ?? 'They';
 
+  /*
+   * "Log a session" with nothing else asked (Your sessions' + Log, Profile,
+   * the + menu): first the sessions your tracker picked up that nobody has
+   * logged yet, newest first, each opening the composer for it ("Log it"),
+   * and "Log one yourself" under them for the by-hand log (owner, Oct 3).
+   * With none waiting, the by-hand log opens straight away, as before.
+   * Decided once, as the sheet opens, so it never swaps under your thumb.
+   */
+  const plain = !activity && !hit && !edit;
+  const unlogged = useMemo(
+    () => (plain ? detectedActivities.filter((x) => x.userId === currentUserId && x.status === 'new' && sourceOn(x, flags)).sort((x, y) => y.startedAt.localeCompare(x.startedAt)) : []),
+    [plain, detectedActivities, currentUserId, flags],
+  );
+  const [offered] = useState(() => unlogged.length > 0);
+  const [byHand, setByHand] = useState(false);
+  const choosing = offered && !byHand && unlogged.length > 0;
+  const logThis = (x: DetectedActivity) => { next.current = x.id; close(); };
+
   // Opened on a session already logged (?edit=): who you played, and nothing else.
   const editing = edit ? sessions.find((x) => x.id === edit && x.userId === currentUserId) : undefined;
   // Your log (and its tags) may still be on its way when the sheet opens from a link.
@@ -282,6 +302,8 @@ function LogSession() {
     <SheetTitle title={fromHit ? 'How was the hit?' : 'Log your tennis'} line={`${fromHit ? `${fromHit.place}. ` : ''}From ${fromWho(fresh)} · ${activityWhen(fresh)}. Only you see this.`} lines={2} onClose={close} />
   ) : done ? (
     <SheetTitle title="Log your tennis" line={done.status === 'logged' ? 'Logged. It counts toward your streak and hours.' : 'You already logged this session.'} lines={2} onClose={close} />
+  ) : choosing ? (
+    <SheetTitle title="Log a session" line="Your tracker picked these up. Pick one, or log one yourself." lines={2} onClose={close} />
   ) : fromHit ? (
     <SheetTitle title="How was the hit?" line={`${fromHit.place}${fromHit.who ? ` · with ${fromHit.who}` : ''}. Only you see this.`} lines={2} onClose={close} />
   ) : (
@@ -334,6 +356,35 @@ function LogSession() {
         </ScrollView>
       ) : waiting ? (
         <View style={styles.wait}><CourtSpinner size={34} /></View>
+      ) : choosing ? (
+        <ScrollView contentContainerStyle={formBody}>
+          <View style={styles.group}>
+            {unlogged.map((x, i) => (
+              <Pressable
+                key={x.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Log it: ${activityTitle(x)}, ${duration(x.minutes)}, ${pickSource({ type: 'tracker', activity: x })}, ${activityWhen(x)}`}
+                onPress={() => logThis(x)}
+                style={({ pressed }) => [styles.pickRow, i > 0 && styles.pickLine, pressed && styles.pressed]}
+              >
+                <View style={styles.pickIcon}><Ionicons name="stopwatch-outline" size={18} color={colors.court} /></View>
+                <View style={styles.pickWords}>
+                  <View style={styles.pickHeroLine}>
+                    <Text style={styles.pickHero}>{duration(x.minutes)}</Text>
+                    <View style={styles.pickTag}><Text style={styles.pickTagText} numberOfLines={1}>{pickSource({ type: 'tracker', activity: x })}</Text></View>
+                  </View>
+                  <Text style={styles.pickTitle} numberOfLines={1}>{activityTitle(x)}</Text>
+                  <Text style={styles.pickWhen}>{activityWhen(x, new Date(), ' · ')}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textFaint} style={styles.pickChevron} />
+              </Pressable>
+            ))}
+          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Log one yourself" onPress={() => setByHand(true)} style={({ pressed }) => [styles.second, styles.byHand, pressed && styles.pressed]}>
+            <Ionicons name="add" size={18} color={colors.text} />
+            <Text style={styles.secondText}>Log one yourself</Text>
+          </Pressable>
+        </ScrollView>
       ) : done ? (
         <ScrollView contentContainerStyle={formBody}>
           {done.status === 'logged' && postable(done) && !alreadyPosted ? (
@@ -369,20 +420,18 @@ function LogSession() {
             <Chips value={kind} onChange={(k) => { if (k) setKind(k); }} options={KINDS} />
           </Section>
           <Section title="How long">
-            {/* From a tracker the length is simply the tracker's (Oct 3): one line, with a small Edit for a break. */}
-            {fresh && !editLength ? (
-              <View style={styles.trackedRow}>
-                <Text style={styles.trackedTime}>{duration(minutes ?? fresh.minutes)}</Text>
-                <Text style={styles.trackedFrom}>{minutes === fresh.minutes ? `from ${trackerName(fresh)}` : 'edited'}</Text>
-                <Pressable accessibilityRole="button" accessibilityLabel="Edit how long" hitSlop={10} onPress={() => setEditLength(true)} style={({ pressed }) => [styles.trackedEdit, pressed && { opacity: 0.6 }]}>
-                  <Text style={styles.trackedEditText}>Edit</Text>
-                </Pressable>
-              </View>
+            {/* From a tracker the length is simply the tracker's (Oct 3): one line, with Edit for a break (hours and minutes, then Done). */}
+            {fresh ? (
+              <TrackedLength
+                minutes={minutes ?? fresh.minutes}
+                trackerMinutes={fresh.minutes}
+                tracker={trackerName(fresh)}
+                open={editLength}
+                onOpen={setEditLength}
+                onChange={(m) => setMinutes(m)}
+              />
             ) : (
-              <>
-                <Tiles value={minutes ?? 0} onChange={(m) => setMinutes(m)} options={fresh ? lengthsFor(fresh) : LENGTHS.map(lengthTile)} />
-                {fresh ? <Text style={styles.hint}>Change the length if you took a break.</Text> : null}
-              </>
+              <Tiles value={minutes ?? 0} onChange={(m) => setMinutes(m)} options={LENGTHS.map(lengthTile)} />
             )}
           </Section>
           {kind === 'match' ? (
@@ -449,11 +498,6 @@ const styleDefinitions = StyleSheet.create({
   notice: { ...typography.smallStrong, color: colors.text },
   numbers: { ...typography.caption, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   hint: { ...typography.small, color: colors.textFaint },
-  trackedRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
-  trackedTime: { ...typography.title, color: colors.text, fontVariant: ['tabular-nums'] },
-  trackedFrom: { ...typography.small, color: colors.textMuted, flex: 1 },
-  trackedEdit: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: colors.surfaceAlt },
-  trackedEditText: { ...typography.smallStrong, color: colors.text },
   hide: { alignSelf: 'center', paddingVertical: spacing.xs },
   hideText: { ...typography.smallStrong, color: colors.textMuted },
   // The quieter of the two buttons: Save's size and shape, outlined rather than filled.
@@ -461,4 +505,18 @@ const styleDefinitions = StyleSheet.create({
   secondOff: { opacity: 0.5 },
   secondText: { ...typography.bodyStrong, fontSize: 16, color: colors.text },
   pressed: { opacity: 0.7 },
+  // The tracker's sessions waiting to be logged, as Your sessions lists them: how long, big, with the tracker's tag; what; the day and times.
+  group: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden', paddingHorizontal: spacing.lg },
+  pickRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingVertical: 14 },
+  pickLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  pickIcon: { width: 22, height: 32, alignItems: 'center', justifyContent: 'center' },
+  pickWords: { flex: 1, minWidth: 0, gap: 3 },
+  pickHeroLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 32 },
+  pickHero: { fontSize: 21, lineHeight: 26, ...font('600'), letterSpacing: -0.5, color: colors.text, fontVariant: ['tabular-nums'] },
+  pickTag: { flexShrink: 1, paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt },
+  pickTagText: { fontSize: 11, lineHeight: 15, ...font('600'), letterSpacing: 0.2, color: colors.textMuted },
+  pickTitle: { fontSize: 15, lineHeight: 20, ...font('500'), color: colors.text },
+  pickWhen: { fontSize: 14, lineHeight: 19, color: colors.textMuted, fontVariant: ['tabular-nums'] },
+  pickChevron: { alignSelf: 'center' },
+  byHand: { marginTop: 0 },
 });
