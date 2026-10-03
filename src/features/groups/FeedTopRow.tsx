@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -42,9 +42,20 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   const ink = onPicture || theme === 'us-open' ? '#FFFFFF' : colors.text;
   const edge = onPicture ? GLYPH_EDGE : null;
   const words = [{ id: null as string | null, name: 'For you' }, ...groups];
+  // With three groups the row is wider than a phone: the one on show is slid
+  // into the middle (a group just started, say, lands in view, "+" beside it).
+  const scroller = useRef<ScrollView>(null);
+  const spots = useRef(new Map<string, { x: number; w: number }>());
+  const viewW = useRef(0);
+  const reveal = (animated: boolean) => {
+    const at = spots.current.get(selected ?? 'for-you');
+    if (!at || !viewW.current) return;
+    scroller.current?.scrollTo({ x: Math.max(0, at.x + at.w / 2 - viewW.current / 2), animated });
+  };
+  useEffect(() => { reveal(true); }, [selected]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <View pointerEvents={hidden ? 'none' : 'box-none'} style={[styles.layer, { top: insets.top + TOP_BAND_TOP, opacity: hidden ? 0 : 1 }]}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row} style={styles.scroller}>
+      <ScrollView ref={scroller} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row} style={styles.scroller} onLayout={(e) => { viewW.current = e.nativeEvent.layout.width; }}>
         {words.map((w, i) => {
           const on = w.id === selected;
           return (
@@ -56,6 +67,10 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
                 accessibilityLabel={w.id ? `${w.name}, group feed` : 'For you'}
                 hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
                 onPress={() => onSelect(w.id)}
+                onLayout={(e) => {
+                  spots.current.set(w.id ?? 'for-you', { x: e.nativeEvent.layout.x, w: e.nativeEvent.layout.width });
+                  if (on) reveal(false);
+                }}
               >
                 <Text numberOfLines={1} style={[styles.word, on && styles.wordOn, { color: ink, opacity: on ? 1 : 0.62 }, edge]}>{w.name}</Text>
               </Pressable>

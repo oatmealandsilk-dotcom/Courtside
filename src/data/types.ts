@@ -382,6 +382,20 @@ export interface Post {
 
 /* --------------------------------- Groups -------------------------------- */
 
+/**
+ * A group's face (migration 73): a colour by name (the theme turns it into
+ * its own shade, so it looks right on every theme), and on it an emoji or,
+ * with none, the group's initials; or a photo instead of both. Missing
+ * parts read as the default: initials on the theme's accent.
+ */
+export type GroupColor = 'accent' | 'clay' | 'hard' | 'grass' | 'gold' | 'red' | 'ink';
+export interface GroupLook {
+  color?: GroupColor;
+  emoji?: string;
+  /** A photo in the media bucket (or, while it is being made, one still on this phone). */
+  photoUrl?: string;
+}
+
 /** A member of a group, and whether they are its admin. */
 export interface FeedGroupMember {
   id: ID;
@@ -401,6 +415,8 @@ export interface FeedGroup {
   ask: boolean;
   /** Shows in Find groups (migration 70). Off: only its invite link finds it. Missing before 70 runs, which reads as on. */
   discoverable?: boolean;
+  /** Its colour and emoji, or its photo (migration 73). Missing: initials on the accent. */
+  look?: GroupLook;
   createdAt: string;
   /** Everyone in it you can see (someone you are blocked with is left out), oldest first. */
   members: FeedGroupMember[];
@@ -414,6 +430,7 @@ export interface FeedGroupCard {
   name: string;
   description?: string;
   ask: boolean;
+  look?: GroupLook;
   memberCount: number;
   member: boolean;
   requested: boolean;
@@ -789,7 +806,7 @@ export interface Tip {
  * group ("Mira added Dev"): only the server writes those (migration 54).
  * 'photo' is one to ten pictures from the camera roll (migration 61).
  */
-export type MessageKind = 'text' | 'post' | 'question' | 'profile' | 'court' | 'voice' | 'hit-request' | 'system' | 'photo';
+export type MessageKind = 'text' | 'post' | 'question' | 'profile' | 'court' | 'voice' | 'hit-request' | 'system' | 'photo' | 'group';
 
 /**
  * One picture in a chat. Chat photos sit on a private shelf only the chat's
@@ -832,7 +849,7 @@ export interface Message {
   body: string;
   createdAt: string;
   kind: MessageKind;
-  /** Set when kind is 'post', 'question', 'profile' or 'hit-request' — the shared item. */
+  /** Set when kind is 'post', 'question', 'profile', 'hit-request' or 'group' — the shared item. */
   sharedId?: ID;
   /** Set when kind is 'system': what happened in the group. */
   event?: ChatEvent;
@@ -882,7 +899,9 @@ export interface Conversation {
 export type ShareItem =
   | { kind: 'post' | 'question' | 'profile' | 'hit-request'; id: ID }
   | { kind: 'court'; place: { id?: string; name: string; lat: number; lng: number } }
-  | { kind: 'message'; id: ID };
+  | { kind: 'message'; id: ID }
+  /** An invite to a group (its page, /g/<id>): a card in the chat; its words name the group for an alert. */
+  | { kind: 'group'; id: ID; name: string };
 
 /* -------------------------------- Payments ------------------------------- */
 

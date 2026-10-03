@@ -1,10 +1,12 @@
 import { useCallback, useMemo } from 'react';
 
-import { remote } from '@/data/remote';
+import { isLocalMedia, remote, uploadMedia } from '@/data/remote';
 import { demoDiscoverGroups, demoGroups } from '@/data/mock/groups';
-import type { Comment, DiscoverGroup, FeedGroup, FeedGroupCard, ID, Post, User } from '@/data/types';
+import type { Comment, DiscoverGroup, FeedGroup, FeedGroupCard, GroupLook, ID, Post, User } from '@/data/types';
+import { plainLook, sameLook } from '@/features/groups/look';
 import { notKnownAdult } from '@/features/players/age';
 import * as haptics from '@/lib/haptics';
+import { show as showToast } from '@/lib/toast';
 
 /*
  * Groups with a feed of their own (migration 67), as one slice of the app's
@@ -29,11 +31,20 @@ export const groupsOpenTo = (u: Pick<User, 'ageGroup'> | null | undefined) => !!
 /** What someone who cannot use groups yet sees instead of Start or Join. */
 export const GROUPS_AGE_LINE = 'Groups open when you’re 18.';
 
+/** A new group's name: at least this many characters, at most NAME_MAX (the server keeps 40 for older ones). */
+export const NAME_MIN = 2;
+export const NAME_MAX = 30;
+/** The line about a group (the server keeps 140 for older ones). */
+export const ABOUT_MAX = 120;
+
+/** A group's name as it will be kept: one line, single spaces, no spaces at the ends. */
+export const tidyGroupName = (name: string) => name.replace(/\s+/g, ' ').trim();
+
 export interface FeedGroupsState {
   /** The groups you are in, oldest joined first: the Feed's top row in that order. */
   feedGroups: FeedGroup[];
   /** Groups you asked to join that have not said yes yet. */
-  feedGroupsAsked: { id: ID; name: string }[];
+  feedGroupsAsked: { id: ID; name: string; look?: GroupLook }[];
   /** Null until first read; false on a database without groups yet (before migration 67). */
   feedGroupsOn: boolean | null;
 }
@@ -45,8 +56,14 @@ interface Reads { currentUserId: ID | null; posts: Post[]; comments: Comment[]; 
 export interface FeedGroupsActions {
   /** Your groups, their members and (for an admin) their requests. */
   loadFeedGroups: () => Promise<void>;
-  /** Starts a group with you as admin; its id. Throws a plain sentence when it cannot. `discoverable` false keeps it out of Find groups. */
-  createFeedGroup: (input: { name: string; description: string; ask: boolean; discoverable?: boolean }) => Promise<ID>;
+  /**
+   * Starts a group with you as admin; its id. Throws a plain sentence when it
+   * cannot. `discoverable` false keeps it out of Find groups. `look` is its
+   * colour and emoji, or a photo (one still on this phone is uploaded first);
+   * if that part fails the group is still made, with its initials, and a
+   * toast says so.
+   */
+  createFeedGroup: (input: { name: string; description: string; ask: boolean; discoverable?: boolean; look?: GroupLook }) => Promise<ID>;
   /** Find groups (migration 70): groups shown there, near you first. Null when they could not be read. */
   discoverFeedGroups: (q: string) => Promise<DiscoverGroup[] | null>;
   /** What an invite link shows. Null when there is no such group. */
@@ -59,8 +76,8 @@ export interface FeedGroupsActions {
   answerFeedGroupRequest: (id: ID, who: ID, accept: boolean) => Promise<void>;
   /** An admin takes someone out. */
   removeFeedGroupMember: (id: ID, who: ID) => Promise<void>;
-  /** An admin changes the name, description, open / ask first, or whether it shows in Find groups. */
-  updateFeedGroup: (id: ID, patch: { name: string; description: string; ask: boolean; discoverable?: boolean }) => Promise<void>;
+  /** An admin changes the name, description, open / ask first, whether it shows in Find groups, or its look. */
+  updateFeedGroup: (id: ID, patch: { name: string; description: string; ask: boolean; discoverable?: boolean; look?: GroupLook }) => Promise<void>;
   /** A group's posts, newest first, into the app's posts; older ones with `before`. Whether there are more. */
   loadFeedGroupPosts: (id: ID, before?: string) => Promise<boolean>;
 }
@@ -77,6 +94,8 @@ export function groupSentence(word: string): string {
     case 'name_needed': return 'Give the group a name.';
     case 'slow_down': return 'That’s a lot of groups at once. Try again tomorrow.';
     case 'not_ready': return 'Groups aren’t switched on yet.';
+    case 'bad_photo': return 'That photo couldn’t be used. Try another one.';
+    case 'bad_look': return 'That look couldn’t be saved. Try another emoji.';
     default: return 'That didn’t go through. Check your connection and try again.';
   }
 }
@@ -121,8 +140,21 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
     feedGroups: prev.feedGroups.flatMap((g) => { if (g.id !== id) return [g]; const next = change(g); return next ? [next] : []; }),
   }));
 
-  const createFeedGroup = useCallback(async (input: { name: string; description: string; ask: boolean; discoverable?: boolean }) => {
-    const name = input.name.replace(/\s+/g, ' ').trim().slice(0, 40);
+  /** A look onto the server: a photo still on this phone goes up first. Before migration 73 it quietly does nothing. */
+  const saveLook = async (id: ID, you: ID, look: GroupLook) => {
+    let photoUrl = look.photoUrl;
+    if (photoUrl && isLocalMedia(photoUrl)) photoUrl = await uploadMedia(you, photoUrl, 'photo');
+    try {
+      await remote.setFeedGroupLook(id, plainLook({ ...look, photoUrl }));
+    } catch (e) {
+      if (e instanceof Error && e.message === 'not_ready') return;
+      throw e;
+    }
+  };
+
+  const createFeedGroup = useCallback(async (input: { name: string; description: string; ask: boolean; discoverable?: boolean; look?: GroupLook }) => {
+    const name = tidyGroupName(input.name).slice(0, 40);
+    const look = plainLook(input.look);
     if (!name) throw new Error(groupSentence('name_needed'));
     const you = me();
     if (!you) throw new Error('Sign in to start a group.');
@@ -132,13 +164,20 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
       if (stateRef.current.feedGroups.length >= MAX_GROUPS) throw new Error(groupSentence('group_limit'));
       const id = demoId();
       haptics.commit();
-      setState((prev) => ({ ...prev, feedGroups: [...prev.feedGroups, { id, name, description: input.description.trim().slice(0, 140) || undefined, ask: input.ask, discoverable: input.discoverable !== false, createdAt: new Date().toISOString(), members: [{ id: you, admin: true }], requests: [] }] }));
+      setState((prev) => ({ ...prev, feedGroups: [...prev.feedGroups, { id, name, description: input.description.trim().slice(0, 140) || undefined, ask: input.ask, discoverable: input.discoverable !== false, look: Object.keys(look).length ? look : undefined, createdAt: new Date().toISOString(), members: [{ id: you, admin: true }], requests: [] }] }));
       return id;
     }
     const id = await run(async () => {
       const made = await remote.createFeedGroup(name, input.description.trim().slice(0, 140), input.ask);
       // Hidden from Find groups straight away (create_feed_group keeps 67's shape). Before migration 70 there is no list to hide from.
       if (input.discoverable === false) await remote.setFeedGroupDiscoverable(made, false).catch(() => undefined);
+      // Its look the same way (migration 73). The group is made either way; a photo that didn't go up is said, not thrown.
+      if (Object.keys(look).length) {
+        await saveLook(made, you, look).catch((e: unknown) => {
+          showToast({ title: look.photoUrl ? 'The group’s photo didn’t upload' : 'The group’s look didn’t save', body: 'It has its initials for now. Change it from Edit on the group’s page.', icon: 'image-outline' });
+          console.warn('[groups] look not saved', e);
+        });
+      }
       return made;
     });
     haptics.commit();
@@ -152,7 +191,7 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
       const g = stateRef.current.feedGroups.find((x) => x.id === id) ?? demoGroup(id);
       if (!g) return null;
       const member = g.members.some((m) => m.id === you) && stateRef.current.feedGroups.some((x) => x.id === id);
-      return { id: g.id, name: g.name, description: g.description, ask: g.ask, memberCount: g.members.length, member, requested: stateRef.current.feedGroupsAsked.some((a) => a.id === id) };
+      return { id: g.id, name: g.name, description: g.description, ask: g.ask, look: g.look, memberCount: g.members.length, member, requested: stateRef.current.feedGroupsAsked.some((a) => a.id === id) };
     }
     return remote.feedGroupCard(id).catch(() => null);
   }, [stateRef, live]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -167,7 +206,7 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
       if (!g) throw new Error(groupSentence('not_found'));
       if (stateRef.current.feedGroups.some((x) => x.id === id)) return 'already';
       if (stateRef.current.feedGroups.length >= MAX_GROUPS) throw new Error(groupSentence('group_limit'));
-      if (g.ask) { setState((prev) => ({ ...prev, feedGroupsAsked: [...prev.feedGroupsAsked.filter((a) => a.id !== id), { id, name: g.name }] })); return 'requested'; }
+      if (g.ask) { setState((prev) => ({ ...prev, feedGroupsAsked: [...prev.feedGroupsAsked.filter((a) => a.id !== id), { id, name: g.name, look: g.look }] })); return 'requested'; }
       setState((prev) => ({ ...prev, feedGroups: [...prev.feedGroups, { ...g, members: [...g.members.filter((m) => m.id !== you), { id: you, admin: false }], requests: [] }] }));
       return 'joined';
     }
@@ -189,7 +228,7 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
         .sort((a, b) => Number(b.near) - Number(a.near) || b.members.length - a.members.length)
         .map((g) => {
           const mine = feedGroups.find((x) => x.id === g.id);
-          return { id: g.id, name: g.name, description: g.description, ask: g.ask, memberCount: mine?.members.length ?? g.members.length, member: !!mine, requested: feedGroupsAsked.some((a) => a.id === g.id), near: g.near };
+          return { id: g.id, name: g.name, description: g.description, ask: g.ask, look: g.look, memberCount: mine?.members.length ?? g.members.length, member: !!mine, requested: feedGroupsAsked.some((a) => a.id === g.id), near: g.near };
         });
     }
     return remote.discoverGroups(q).catch(() => null);
@@ -228,18 +267,22 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
     await run(() => remote.removeFeedGroupMember(id, who));
   }, [live, run]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const updateFeedGroup = useCallback(async (id: ID, patch: { name: string; description: string; ask: boolean; discoverable?: boolean }) => {
+  const updateFeedGroup = useCallback(async (id: ID, patch: { name: string; description: string; ask: boolean; discoverable?: boolean; look?: GroupLook }) => {
     const you = me();
     if (!you) return;
-    const name = patch.name.replace(/\s+/g, ' ').trim().slice(0, 40);
+    const name = tidyGroupName(patch.name).slice(0, 40);
     if (!name) throw new Error(groupSentence('name_needed'));
-    const wasListed = stateRef.current.feedGroups.find((g) => g.id === id)?.discoverable !== false;
+    const before = stateRef.current.feedGroups.find((g) => g.id === id);
+    const wasListed = before?.discoverable !== false;
     const listed = patch.discoverable ?? wasListed;
-    patchGroup(id, (g) => ({ ...g, name, description: patch.description.trim().slice(0, 140) || undefined, ask: patch.ask, discoverable: listed }));
+    const look = patch.look ? plainLook(patch.look) : before?.look;
+    const lookChanged = !!patch.look && !sameLook(look, before?.look);
+    patchGroup(id, (g) => ({ ...g, name, description: patch.description.trim().slice(0, 140) || undefined, ask: patch.ask, discoverable: listed, look: look && Object.keys(look).length ? look : undefined }));
     if (!live(you)) return;
     await run(async () => {
       await remote.updateFeedGroup(id, name, patch.description.trim(), patch.ask);
       if (listed !== wasListed) await remote.setFeedGroupDiscoverable(id, listed);
+      if (lookChanged) await saveLook(id, you, look ?? {});
     });
   }, [live, run]); // eslint-disable-line react-hooks/exhaustive-deps
 

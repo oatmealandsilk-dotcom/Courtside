@@ -67,7 +67,7 @@ export default function Groups() {
                     onPress={() => router.push({ pathname: '/g/[id]', params: { id: g.id } })}
                     style={({ pressed }) => [styles.row, i > 0 && styles.line, pressed && styles.pressed]}
                   >
-                    <GroupTile name={g.name} size={48} />
+                    <GroupTile name={g.name} look={g.look} size={48} />
                     <View style={styles.words}>
                       <View style={styles.nameRow}>
                         <Text style={styles.name} numberOfLines={1}>{g.name}</Text>
@@ -95,7 +95,7 @@ export default function Groups() {
           <View style={styles.card}>
             {feedGroupsAsked.map((a, i) => (
               <View key={a.id} style={[styles.row, i > 0 && styles.line]}>
-                <GroupTile name={a.name} size={40} />
+                <GroupTile name={a.name} look={a.look} size={40} />
                 <View style={styles.words}>
                   <Text style={styles.name} numberOfLines={1}>{a.name}</Text>
                   <Text style={styles.meta}>Asked to join</Text>

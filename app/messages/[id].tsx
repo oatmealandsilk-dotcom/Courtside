@@ -41,6 +41,7 @@ import { PHOTO_W, PhotoStack, PhotoTray, PhotoViewer, type TileRect, type TrayPh
 import { MAX_CHAT_PHOTOS, useChatPhotosReady, useSendProgress } from '@/features/messages/chatPhotos';
 import { pickPhotos } from '@/components/MediaPicker';
 import { Tappable, useDoubleTap } from '@/components/Tappable';
+import { GroupInviteCard } from '@/features/groups/GroupInviteCard';
 import { chatStamp, chatTime } from '@/lib/format';
 import { Slide, TimeAnchor, TimeSwipeArea } from '@/features/messages/MessageTimes';
 import { RichText } from '@/components/RichText';
@@ -657,6 +658,16 @@ export default function Thread() {
                       )}
                     </Tappable>
                   )}
+                </HoldArea>
+              </Row>
+            );
+          } else if (message.kind === 'group' && message.sharedId) {
+            // A group invite (Start a group's last step): the group's face and name; it opens the group's page.
+            const groupId = message.sharedId;
+            body = (
+              <Row mine={mine} inRun={inRun} arrive={arrive} leading={leading} styles={styles} time={sentAt}>
+                <HoldArea onHold={(rect) => openMenu({ message, mine, rect })} style={styles.sharedCardArea}>
+                  {(hold) => <GroupInviteCard groupId={groupId} words={message.body} sentAt={sentAt} onLongPress={hold} />}
                 </HoldArea>
               </Row>
             );

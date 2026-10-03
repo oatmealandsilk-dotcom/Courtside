@@ -4676,6 +4676,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ? { ...makeMessage(conversationId, me, original.body, original.kind, original.sharedId), place: original.place, audio: original.audio }
             : makeMessage(conversationId, me, '');
         }
+        // A group invite carries its words too: the phone's alert reads them, and so would an older app.
+        if (item.kind === 'group') return makeMessage(conversationId, me, `Invited you to ${item.name}`, 'group', item.id);
         return makeMessage(conversationId, me, '', item.kind, item.id);
       };
       const outgoing: Message[] = [];

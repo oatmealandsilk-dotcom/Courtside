@@ -61,6 +61,7 @@ export function messageSummary(m?: Message): string {
   if (m.kind === 'profile') return 'Shared a profile';
   if (m.kind === 'voice') return 'Sent a voice message';
   if (m.kind === 'hit-request') return 'Sent a hit';
+  if (m.kind === 'group') return m.body || 'Sent a group invite';
   return m.body || 'Say hello';
 }
 

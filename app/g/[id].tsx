@@ -11,8 +11,6 @@ import { openGroupFeed } from '@/features/groups/openGroupFeed';
 import { confirm } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
 import { publicRoute } from '@/features/share/publicRoute';
-import { shareLink } from '@/lib/shareLink';
-import { shareOutside } from '@/lib/shareOutside';
 import { useApp } from '@/store/AppContext';
 import { GROUPS_AGE_LINE, MAX_GROUPS, groupsOpenTo } from '@/store/feedGroups';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
@@ -22,8 +20,9 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
  * One group's page, and where its invite link (/g/<id>) lands, in the app or
  * a browser. Someone not in it sees its name and a Join (or Ask to join)
  * button. A member sees who is in it, can open its feed, share the link or
- * leave. Its admin also answers requests, removes people and edits it (in a
- * sheet, group-form, opened from Edit in the header).
+ * leave. Invite opens a sheet (group-invite): the link, and people you follow
+ * to send it to in a chat. Its admin also answers requests, removes people and
+ * edits it (in a sheet, group-form, opened from Edit in the header).
  */
 
 function GroupPage() {
@@ -56,10 +55,6 @@ function GroupPage() {
     const out = await actions.joinFeedGroup(id);
     if (out === 'requested') { setNote('Asked. The admin will say yes or no.'); await readCard(); }
   });
-  const invite = async () => {
-    const name = group?.name ?? card?.name ?? 'my group';
-    try { const said = await shareOutside(`Join ${name} on CourtSide`, shareLink('group', id)); if (said) setNote(said); } catch { setNote(`Share this link: ${shareLink('group', id)}`); }
-  };
   const leave = () => confirm({
     title: `Leave ${group?.name ?? 'this group'}?`,
     message: group?.ask ? 'You’ll need the admin’s yes to come back.' : 'You can join again with the link.',
@@ -94,7 +89,7 @@ function GroupPage() {
   return (
     <Screen title="Group" compactTitle onBack={() => goBack('/groups')} right={edit}>
       <View style={styles.head}>
-        <GroupTile name={title} size={88} />
+        <GroupTile name={title} look={group?.look ?? card?.look} size={88} />
         <Text style={styles.title} numberOfLines={2}>{title}</Text>
         {description ? <Text style={styles.about}>{description}</Text> : null}
         <Text style={styles.headMeta}>{members} · {ask ? 'Ask to join' : 'Anyone with the link can join'}</Text>
@@ -105,7 +100,7 @@ function GroupPage() {
           {([
             { icon: 'play-circle-outline', label: 'Feed', hint: `Open ${title}’s feed`, onPress: () => openGroupFeed(id) },
             { icon: 'add-circle-outline', label: 'Post', hint: `Post to ${title}`, onPress: () => router.push({ pathname: '/compose', params: { group: id } }) },
-            { icon: 'person-add-outline', label: 'Invite', hint: `Invite people to ${title}`, onPress: () => { void invite(); } },
+            { icon: 'person-add-outline', label: 'Invite', hint: `Invite people to ${title}`, onPress: () => router.push({ pathname: '/group-invite', params: { id } }) },
           ] as const).map((a) => (
             <Pressable key={a.label} accessibilityRole="button" accessibilityLabel={a.hint} onPress={a.onPress} style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
               <Ionicons name={a.icon} size={22} color={colors.brand} />
