@@ -28,6 +28,8 @@ interface Props {
   style?: StyleProp<ViewStyle>;
   /** Marks a coach with a small badge on the picture's corner. */
   ring?: boolean;
+  /** No initials: just the tint (the face behind another in a group's picture, where letters would be cut off). */
+  plain?: boolean;
 }
 
 /**
@@ -37,7 +39,7 @@ interface Props {
  */
 const COACH_GREEN = '#4C9A5A';
 
-export function Avatar({ uri, name, seed, size = 40, style, ring = false }: Props) {
+export function Avatar({ uri, name, seed, size = 40, style, ring = false, plain = false }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const { users } = useApp();
   const photo = uri ?? users.find(user => user.avatarSeed === seed || user.id === seed)?.avatarUrl;
@@ -56,7 +58,7 @@ export function Avatar({ uri, name, seed, size = 40, style, ring = false }: Prop
         style,
       ]}
     >
-      <Text style={[styles.label, { fontSize: size * 0.38 }]}>{initials(name)}</Text>
+      {plain ? null : <Text style={[styles.label, { fontSize: size * 0.38 }]}>{initials(name)}</Text>}
       {photo && <ExpoImage source={{uri:photo}} accessibilityLabel={`${name} profile photo`} contentFit="cover" recyclingKey={photo} style={{position:"absolute",width:size,height:size,borderRadius:size/2}}/>}
       {ring ? (
         <View

@@ -39,8 +39,11 @@ export {
 
 /**
  * A group's picture in the space one avatar takes: its own photo when it has
- * one; otherwise two of its faces, one over the other. With one other person
- * left it is just their face, and with nobody else a plain people mark.
+ * one; otherwise two smaller faces set corner to corner, the front one ringed
+ * in the page's colour (iMessage's and Instagram's group picture). The face
+ * behind shows no initials, which the front one would cut in half. With one
+ * other person left it is just their face, and with nobody else a plain
+ * people mark.
  */
 export function GroupAvatar({ people, size, photoUrl, name }: { people: User[]; size: number; photoUrl?: string; name?: string }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -54,17 +57,20 @@ export function GroupAvatar({ people, size, photoUrl, name }: { people: User[]; 
     );
   }
   if (!b) return <Avatar name={a.name} seed={a.avatarSeed} uri={a.avatarUrl} size={size} />;
-  const small = Math.round(size * 0.72);
+  const small = Math.round(size * 0.66);
+  const ring = Math.max(1.5, Math.round(size / 24));
   return (
     <View style={{ width: size, height: size }}>
-      <Avatar name={b.name} seed={b.avatarSeed} uri={b.avatarUrl} size={small} style={[styles.back, { left: 0, top: 0 }]} />
-      <Avatar name={a.name} seed={a.avatarSeed} uri={a.avatarUrl} size={small} style={[styles.front, { right: 0, bottom: 0, borderRadius: small / 2 + 2 }]} />
+      <Avatar name={b.name} seed={b.avatarSeed} uri={b.avatarUrl} size={small} plain style={[styles.back, { left: 0, top: 0 }]} />
+      <View style={[styles.front, { right: -ring, bottom: -ring, padding: ring, borderRadius: small / 2 + ring }]}>
+        <Avatar name={a.name} seed={a.avatarSeed} uri={a.avatarUrl} size={small} />
+      </View>
     </View>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
   back: { position: 'absolute' },
-  front: { position: 'absolute', borderWidth: 2, borderColor: colors.bg },
+  front: { position: 'absolute', backgroundColor: colors.bg },
   empty: { borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
 });
