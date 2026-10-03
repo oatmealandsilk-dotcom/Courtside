@@ -12,73 +12,43 @@
 --     group only, newest first, a page at a time. Someone who leaves, or is
 --     taken out, drops out of it with all their posts. A post shared to a
 --     different group never shows here.
---   * Being in a group together counts as letting each other see your posts,
---     the way a follow does for a private account, but for posts only (and
---     their comments and likes): not stories, not anything else on a
---     profile. So someone private who joins a group is seen by its members.
---     Never between two people blocked either way, and never anyone not
---     known to be an adult (groups are adults-only; this checks again in
---     case that ever changes). It lasts only while both are in the group.
---   * "Only <group>" (posts.group_id) still works exactly as in 67: only
---     that group's members and the author can read it.
---   * Commenting on a post follows the same rule, so a member can answer a
---     fellow member's post they see in the group's feed. (In 67 someone
---     private's group post could be read by the group but not commented on
---     by members who did not follow them; that is fixed here too.)
+--   * Who sees a member's ordinary post in the feed is exactly who could
+--     see it anyway: a public account's, every member; a private account's,
+--     only members who already follow them (an approved follow), or who are
+--     tagged in it. Open groups can be joined by anyone with the link, so
+--     joining one never opens up a private account to strangers. Never
+--     between two people blocked either way, never anyone not known to be an
+--     adult (groups are adults-only; checked again in case that changes).
+--   * "Only <group>" (posts.group_id) still works exactly as in 67: every
+--     member of that group (and the author) can read it.
+--   * Commenting: as before (migration 56), plus every member may comment on
+--     a post shared to their group only. (In 67 a private account's group
+--     post could be read by the whole group but only commented on by members
+--     who followed them.) Who may read a post is not changed here.
 --
 -- group_feed(g, before, lim): what the app calls. Only for someone in the
 -- group ('not_in_group' otherwise, 'adults_only' for anyone not known to be
 -- an adult); signed out it cannot be called at all. Returns the posts' ids
 -- and times, newest first, older than `before` when given; the app then reads
--- the posts themselves through the usual rules, which now agree.
+-- the posts themselves through the usual rules, which agree.
 --
--- Needs 21 (blocking), 56 (comment rules), 60 (known_adult), 62 and 67.
+-- Needs 02 (can_view), 21 (blocking), 56 (comment rules), 60 (known_adult), 62 and 67.
 -- Works with or without 64. Safe to run more than once. Changes nobody's
 -- posts or memberships.
 
--- ============================================================ 1. group-mates
+-- ============================================================ 1. commenting
 
--- Whether the person signed in and `author` are in a group together now,
--- both known adults and not blocked either way. Named in the rules below, so
--- anon may call it too (signed out it always answers false).
-create or replace function public.feed_group_mate(author uuid)
-returns boolean language sql stable security definer set search_path = public as $$
-  select auth.uid() is not null and author is not null and author <> auth.uid()
-    and exists (
-      select 1 from public.feed_group_members a
-      join public.feed_group_members b on b.group_id = a.group_id
-      where a.user_id = auth.uid() and b.user_id = author)
-    and not public.is_blocked_between(auth.uid(), author)
-    and public.known_adult(auth.uid()) and public.known_adult(author);
-$$;
-revoke all on function public.feed_group_mate(uuid) from public;
-grant execute on function public.feed_group_mate(uuid) to anon, authenticated;
-
--- ============================================================ 2. who reads a post
-
--- Migration 67's rule, word for word, plus "or you are in a group with its
--- author" for a post shared with everyone.
-drop policy if exists "read live posts" on public.posts;
-create policy "read live posts" on public.posts for select
-  using ((not archived or auth.uid() = author_id)
-    and (case when group_id is null
-           then (public.can_view(author_id) or auth.uid() = any(tagged_user_ids)
-                 or (session->'with') @> jsonb_build_array(jsonb_build_object('id', auth.uid()))
-                 or public.feed_group_mate(author_id))
-           else (auth.uid() = author_id or public.in_feed_group(group_id) or public.is_admin())
-         end)
-    and not public.blocked_with(author_id)
-    and (removed_at is null or public.is_admin()));
-
--- Migration 56's rule, with "you may see the owner" counting group-mates.
+-- Migration 56's rule, plus: on a post shared to a group only, every member
+-- of that group may comment (they can all read it).
 drop policy if exists "comment as yourself" on public.comments;
 create policy "comment as yourself" on public.comments for insert
   with check (auth.uid() = author_id
-    and (public.can_view(public.author_of_post(post_id)) or public.feed_group_mate(public.author_of_post(post_id)))
+    and (public.can_view(public.author_of_post(post_id))
+         or exists (select 1 from public.posts p where p.id = comments.post_id and p.group_id is not null and public.in_feed_group(p.group_id)))
     and not public.blocked_with(public.author_of_post(post_id))
     and exists (select 1 from public.posts p where p.id = comments.post_id));
 
--- ============================================================ 3. the feed
+-- ============================================================ 2. the feed
 
 create or replace function public.group_feed(g uuid, before timestamptz default null, lim int default 20)
 returns table (id uuid, created_at timestamptz)
@@ -102,7 +72,11 @@ begin
       and p.removed_at is null
       and (before is null or p.created_at < before)
       and (p.author_id = me
-           or (public.known_adult(p.author_id) and not public.is_blocked_between(me, p.author_id)))
+           or (public.known_adult(p.author_id) and not public.is_blocked_between(me, p.author_id)
+               -- An ordinary post: only if you could see it anyway (a public
+               -- account, one you follow, or one you are tagged in).
+               and (p.group_id = g or public.can_view(p.author_id) or me = any(p.tagged_user_ids)
+                    or (p.session->'with') @> jsonb_build_array(jsonb_build_object('id', me)))))
     order by p.created_at desc, p.id desc
     limit n;
 end $$;

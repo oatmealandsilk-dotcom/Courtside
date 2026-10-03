@@ -750,7 +750,7 @@ function Home({ scope, topRow, paused, onChrome }: {
     const hidden = new Set([...blockedIds, ...mutedIds]);
     const following = new Set(followingIds);
     // A private account is only in your feed once they have let you follow.
-    // In a group's feed the server has already decided: being in a group together lets members see each other's posts (migration 74).
+    // In a group's feed the server has already decided (migration 74): a private member's posts come only to members who follow them, or shared to the group only.
     if (!scope?.groupId) for (const u of users) if (u.isPrivate && u.id !== currentUserId && !following.has(u.id)) hidden.add(u.id);
     // Found by id in one step each, not by scanning every post for every page.
     const postById = new Map(posts.map((p) => [p.id, p]));
