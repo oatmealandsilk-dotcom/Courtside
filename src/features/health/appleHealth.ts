@@ -177,7 +177,7 @@ export async function connectAppleFood(): Promise<void> {
  * with Apple Health" switch is on. Summed per day, newest first.
  *
  * Someone with both apps sharing would otherwise be counted twice, so each
- * number on each day comes from the one app that logged the most of it.
+ * day's numbers all come from the one app that logged the most calories that day.
  */
 export async function readAppleNutritionFrom(days = 14): Promise<FoodDayFrom[]> {
   const h = load();
@@ -203,12 +203,15 @@ export async function readAppleNutritionFrom(days = 14): Promise<FoodDayFrom[]> 
   add(await settle(call<SourcedSample[]>((cb) => h.getTotalFatSamples(range, cb))), 'fatGrams');
   const out: FoodDayFrom[] = [];
   for (const [date, byKey] of sums) {
+    // One app per day (the one that logged the most calories), and all four
+    // numbers from it, so a day never mixes one app's calories with another's protein.
     const d: FoodDayFrom = { date };
+    const top = [...(byKey.get('calories') ?? new Map<string, number>()).entries()].sort((a, b) => b[1] - a[1])[0];
+    if (!top) continue;
+    d.source = top[0];
     for (const key of FOOD_KEYS) {
-      const top = [...(byKey.get(key) ?? new Map<string, number>()).entries()].sort((a, b) => b[1] - a[1])[0];
-      if (!top) continue;
-      d[key] = Math.round(top[1]);
-      if (key === 'calories') d.source = top[0];
+      const v = byKey.get(key)?.get(top[0]);
+      if (v !== undefined) d[key] = Math.round(v);
     }
     out.push(d);
   }
