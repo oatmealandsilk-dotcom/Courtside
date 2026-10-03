@@ -1,4 +1,6 @@
 import type { Conversation, HitRequest, ID, Message, User } from '@/data/types';
+import { isOnlyLink } from '@/lib/links';
+import { knownLinkTitle } from './linkPreview';
 
 /**
  * The rules of group chats, as plain functions with no drawing in them, so
@@ -61,6 +63,9 @@ export function messageSummary(m?: Message): string {
   if (m.kind === 'profile') return 'Shared a profile';
   if (m.kind === 'voice') return 'Sent a voice message';
   if (m.kind === 'hit-request') return 'Sent a hit';
+  // A message that is only a link reads as what it links to ("Sliding on clay…"), never as its address.
+  const link = m.kind === 'text' ? isOnlyLink(m.body) : null;
+  if (link) return knownLinkTitle(link.url) ?? 'Sent a link';
   return m.body || 'Say hello';
 }
 

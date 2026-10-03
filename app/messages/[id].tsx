@@ -73,8 +73,8 @@ const INPUT_MAX_H = INPUT_LINE * 5;
  */
 type Gap = 'run' | 'turn' | 'plain';
 
-/** Quiet for this long between two messages and the next one gets a time line. */
-const STAMP_GAP_MS = 20 * 60_000;
+/** Quiet for this long between two messages and the next one gets a time line (an hour, as iMessage and Instagram do). */
+const STAMP_GAP_MS = 60 * 60_000;
 
 /**
  * In a group, others' messages sit beside a small face (Instagram and
@@ -1736,8 +1736,8 @@ const styleDefinitions = StyleSheet.create({
   // "Seen" / "Sent" under your newest message, small, at its right edge.
   readLine: { ...font('500'), fontSize: 11.5, lineHeight: 15, letterSpacing: 0.1, color: colors.textFaint, textAlign: 'right', marginTop: -3, paddingRight: 4 },
   // A day line: the day a little stronger than the time, with room above it.
-  stamp: { ...font('400'), fontSize: 12, lineHeight: 16, color: colors.textFaint, textAlign: 'center', paddingTop: spacing.lg + 2, paddingBottom: spacing.sm },
-  stampDay: { ...font('600'), color: colors.textMuted },
+  stamp: { ...font('400'), fontSize: 11, lineHeight: 14, color: colors.textFaint, opacity: 0.85, textAlign: 'center', paddingTop: spacing.lg, paddingBottom: spacing.sm },
+  stampDay: { ...font('600'), color: colors.textFaint },
   mentionTray: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm, maxWidth: 700, width: '100%', alignSelf: 'center' },
   // A new chat with nobody's words in it yet.
   hello: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.xxl, paddingHorizontal: spacing.lg, gap: 6 },

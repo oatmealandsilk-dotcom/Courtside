@@ -214,6 +214,17 @@ export async function forgetLinkPreviews() {
   } catch { /* Nothing more to do. */ }
 }
 
+/**
+ * A link's title when one is known already (read this session, or one of the
+ * demo's own), for a line that names a link instead of spelling out its
+ * address: the inbox's last-message line and the message banner.
+ */
+export function knownLinkTitle(url: string): string | undefined {
+  const now = memory.get(url);
+  if (fresh(now) && now.preview?.title) return now.preview.title;
+  return supabase ? undefined : DEMO_LINK_PREVIEWS[url]?.title;
+}
+
 /** A preview already in memory (drawn at once, with no fade), else undefined. */
 export function knownPreview(url: string): LinkPreview | null | undefined {
   const now = memory.get(url);

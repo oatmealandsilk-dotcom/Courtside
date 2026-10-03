@@ -15,6 +15,8 @@ import { useApp } from '@/store/AppContext';
 
 /** Pages where someone is writing or posting: the question waits until they are done. */
 const BUSY = new Set(['/compose', '/edit-post', '/ask', '/ask-coach', '/log-session', '/pick-session', '/session-tag', '/pick-location', '/court-report', '/court-now', '/map-visibility', '/hit-request/new', '/hit', '/comments', '/session-stats', '/who-played', '/health-share']);
+/** The inbox and every chat: the note would sit over a chat's header and the inbox's title, mid-conversation. */
+const isBusy = (path: string) => BUSY.has(path) || path === '/messages' || path.startsWith('/messages/');
 /** A moment after the way is clear, so it never lands on the app's own opening notes. */
 const SETTLE_MS = 2500;
 /** It stays up this long (a flick or a tap puts it away sooner): long enough to be noticed on a page you are looking at. */
@@ -94,7 +96,7 @@ export function HitFollowUp({ enabled }: { enabled: boolean }) {
   }, [known, enabled, currentUserId, now]);
 
   const due = enabled && currentUserId && asked && flags ? dueHits(recent, { me: currentUserId, sessions, activities: detectedActivities, flags, asked, now }) : [];
-  const clear = enabled && curtainDown && !touring && !uploading && !BUSY.has(pathname);
+  const clear = enabled && curtainDown && !touring && !uploading && !isBusy(pathname);
   const first = due[0];
 
   // A page to write or post opened (or the tutorial) while it is up: it steps aside, never sitting over the Create box.
