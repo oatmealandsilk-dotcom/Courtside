@@ -281,6 +281,8 @@ export default function Thread() {
   // Scrolled up to read: the "back down" button, and how many came meanwhile.
   const [away, setAway] = useState(false);
   const awayRef = useRef(false);
+  // Resting on the newest message (within a few points of it): a new one is followed in, with a faint tick.
+  const atBottom = useRef(true);
   const [unseen, setUnseen] = useState(0);
   const toNewest = useCallback((animated = true) => {
     listRef.current?.scrollToOffset({ offset: 0, animated });
@@ -314,21 +316,22 @@ export default function Thread() {
     const theirs = came.filter((m) => m.senderId !== currentUserId && m.kind !== 'system');
     if (theirs.length) {
       // Reading further up: counted on the "back down" button. At the bottom: the faintest tick as it lands.
-      if (awayRef.current) setUnseen((n) => n + theirs.length);
-      else haptics.untap();
+      if (atBottom.current) haptics.untap();
+      else setUnseen((n) => n + theirs.length);
     }
     // A browser has no "keep my place" for the list: at the bottom, it stays at the very bottom as one lands.
-    if (Platform.OS === 'web' && !awayRef.current) requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: false }));
+    if (Platform.OS === 'web' && atBottom.current) requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: false }));
   }, [thread, currentUserId]);
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const y = e.nativeEvent.contentOffset.y;
+    atBottom.current = y < 48;
     const isAway = y > AWAY_PX;
     if (isAway !== awayRef.current) {
       awayRef.current = isAway;
       setAway(isAway);
-      if (!isAway) setUnseen(0);
     }
+    if (atBottom.current) setUnseen((n) => (n ? 0 : n));
     dragDown.onScrollY(y);
   };
 
@@ -1817,22 +1820,23 @@ function SendOrMic({ showSend, ready, editing, recording, holding, slide, onSend
     }), [micOn, slide]);
   return (
     <View style={styles.endSlot}>
-      <Reanimated.View pointerEvents="none" style={[styles.holdDisc, holdDisc]}><BrandWash /></Reanimated.View>
+      <Reanimated.View style={[styles.holdDisc, { pointerEvents: 'none' }, holdDisc]}><BrandWash /></Reanimated.View>
       <GestureDetector gesture={press}>
         <Reanimated.View
-          pointerEvents={showSend ? 'none' : 'auto'}
           aria-hidden={showSend}
           accessible
           accessibilityRole="button"
           accessibilityLabel={recording ? 'Recording. Let go to send' : 'Record a voice note'}
           accessibilityHint="Tap to record; hold to record and let go to send"
           onAccessibilityTap={() => { latest.current.onMicDown(); latest.current.onMicUp(0); }}
-          style={[styles.endLayer, micLook]}
+          // Only the layer in front takes touches, and it is drawn in front: in a browser the hidden layer's
+          // own insides still caught them through "none" on the layer.
+          style={[styles.endLayer, { pointerEvents: showSend ? 'none' : 'auto', zIndex: showSend ? 1 : 2 }, micLook]}
         >
           <Ionicons name={holding ? 'mic' : 'mic-outline'} size={22} color={holding ? colors.brandInk : colors.textMuted} />
         </Reanimated.View>
       </GestureDetector>
-      <Reanimated.View pointerEvents={showSend ? 'auto' : 'none'} aria-hidden={!showSend} style={[styles.endLayer, sendLook]}>
+      <Reanimated.View aria-hidden={!showSend} style={[styles.endLayer, { pointerEvents: showSend ? 'auto' : 'none', zIndex: showSend ? 2 : 1 }, sendLook]}>
         <Tappable immediate onPress={onSend} disabled={!ready} accessibilityLabel={recording ? 'Send voice note' : editing ? 'Save edit' : 'Send message'} style={[styles.sendCircle, pageIsDark() && styles.sendCircleDark]}>
           <BrandWash />
           <Ionicons name={editing ? 'checkmark' : 'arrow-up'} size={18} color={colors.brandInk} />

@@ -52,7 +52,7 @@ interface Thread {
  */
 export default function Inbox() {
   const styles = useThemedStyles(styleDefinitions);
-  const { conversations, messages, users, currentUserId, currentUser, blockedIds, hitRequests, actions } = useApp();
+  const { conversations, messages, users, currentUserId, currentUser, blockedIds, hitRequests, actions, lastSeen } = useApp();
   const [search, setSearch] = useState('');
   const [section, setSection] = useState<Section>('all');
   // The row being held, and which of its two lists is showing.
@@ -108,12 +108,15 @@ export default function Inbox() {
   const upToday = useMemo(() => {
     if (!currentUserId) return [];
     const talking = new Set(all.filter((t) => !t.group && t.other).map((t) => t.other!.id));
+    const now = Date.now();
+    // Up for it by their own word today, or by the map's ring (the same "open" a player wears there).
+    const open = (u: User) => isOpenToHit(u) || (!!lastSeen[u.id]?.openUntil && Date.parse(lastSeen[u.id].openUntil!) > now);
     return users
-      .filter((u) => u.id !== currentUserId && isOpenToHit(u) && !blockedIds.includes(u.id) && (talking.has(u.id) || actions.canMessage(u.id)))
+      .filter((u) => u.id !== currentUserId && open(u) && !blockedIds.includes(u.id) && (talking.has(u.id) || actions.canMessage(u.id)))
       // The people you already talk to first.
       .sort((a, b) => Number(talking.has(b.id)) - Number(talking.has(a.id)))
       .slice(0, 12);
-  }, [users, all, currentUserId, blockedIds, actions]);
+  }, [users, all, currentUserId, blockedIds, actions, lastSeen]);
   const openWith = (u: User) => {
     const chat = currentUserId ? findDirectChat(conversations, currentUserId, u.id) : undefined;
     router.push(`/messages/${chat ? chat.id : actions.openConversationWith(u.id)}`);

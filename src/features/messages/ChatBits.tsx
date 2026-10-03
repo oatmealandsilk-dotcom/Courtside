@@ -320,7 +320,7 @@ export function MessageInfoSheet({ message, readers, sender, mine, onClose }: {
               <Text style={styles.personNote}>{at ? chatStamp(at) : ''}</Text>
             </View>
           ))}
-          {unseen.length ? <Text style={styles.infoHead}>{seen.length ? 'Not seen yet' : 'Not seen yet'}</Text> : null}
+          {unseen.length ? <Text style={styles.infoHead}>Not seen yet</Text> : null}
           {unseen.map(({ user }) => (
             <View key={user.id} style={[styles.person, styles.personQuiet]}>
               <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={34} />
