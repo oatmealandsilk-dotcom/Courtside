@@ -4,6 +4,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GLYPH_EDGE } from '@/components/ReelCaption';
+import { TOP_BAND_HEIGHT, TOP_BAND_TOP } from '@/features/feed/topBand';
 import { colors, font } from '@/theme';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 
@@ -12,7 +13,10 @@ import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
  * then each group you are in, then a "+" for the Groups page. Plain words, no
  * pills: the one you are on is bold and full strength, the rest are dimmer.
  * Over a clip they are white with the rail's dark edge, so they read on any
- * picture; on a written post they take the theme's own ink.
+ * picture; on a written post they take the theme's own ink. They sit in a
+ * band of their own just under the clock (features/feed/topBand): a page's
+ * words start below it, an empty feed centres under it, and a clip's sound
+ * disc steps down out of it.
  */
 
 interface Props {
@@ -38,7 +42,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   const edge = onPicture ? GLYPH_EDGE : null;
   const words = [{ id: null as string | null, name: 'For you' }, ...groups];
   return (
-    <View pointerEvents={hidden ? 'none' : 'box-none'} style={[styles.layer, { top: insets.top + 12, opacity: hidden ? 0 : 1 }]}>
+    <View pointerEvents={hidden ? 'none' : 'box-none'} style={[styles.layer, { top: insets.top + TOP_BAND_TOP, opacity: hidden ? 0 : 1 }]}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row} style={styles.scroller}>
         {words.map((w, i) => {
           const on = w.id === selected;
@@ -67,10 +71,10 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
 }
 
 const styleDefinitions = StyleSheet.create({
-  layer: { position: 'absolute', left: 0, right: 0, zIndex: 8, alignItems: 'center' },
+  layer: { position: 'absolute', left: 0, right: 0, height: TOP_BAND_HEIGHT, zIndex: 8, alignItems: 'center', justifyContent: 'center' },
   scroller: { flexGrow: 0, maxWidth: '100%' },
-  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 8 },
-  word: { fontSize: 16, lineHeight: 22, ...font('500'), letterSpacing: -0.2, maxWidth: 150 },
+  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 8, height: TOP_BAND_HEIGHT },
+  word: { fontSize: 16, lineHeight: 22, ...font('500'), letterSpacing: -0.2, maxWidth: 150, paddingVertical: 2 },
   wordOn: { ...font('700') },
   dot: { fontSize: 16, lineHeight: 22, opacity: 0.5 },
   plus: { marginLeft: 6, width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },

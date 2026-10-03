@@ -17,6 +17,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { onSpaceBar } from '@/features/feed/keyboard';
 import { STAGE_ON_ANDROID } from '@/features/feed/commentStage';
 import { StageChromeContext } from '@/features/feed/useStageMotion';
+import { TopBandContext } from '@/features/feed/topBand';
 
 /**
  * A clip in the feed on a phone: plays itself when it is the page on screen,
@@ -59,6 +60,8 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   onStage?: boolean;
 }) {
   const insets = useSafeAreaInsets();
+  // Under the Feed's top row the disc steps down out of its band (features/feed/topBand).
+  const drop = useContext(TopBandContext);
   const styles = useThemedStyles(styleDefinitions);
   const [paused, setPaused] = useState(false);
   // Hold the right side of a clip and it plays at double speed until you let
@@ -152,7 +155,7 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
       {discInk && !bare ? <LinearGradient pointerEvents="none" colors={TOP_SHADE.colors} locations={TOP_SHADE.locations} style={[styles.topShade, { height: insets.top + TOP_SHADE.below }]} /> : null}
       {!ready && active ? <View pointerEvents="none" style={styles.centre}><CourtSpinner ink={discInk ?? 'white'} /></View> : null}
       {fast ? (
-        <View pointerEvents="none" style={[styles.fastWrap, { top: insets.top + 24 }]}>
+        <View pointerEvents="none" style={[styles.fastWrap, { top: insets.top + drop + 24 }]}>
           <View style={styles.fastPill}><Ionicons name="play-forward" size={13} color="white" /><Text style={styles.fastText}>2×</Text></View>
         </View>
       ) : null}
@@ -175,7 +178,7 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
         ) : null}
       </Pressable>
       {silent || bare ? null : (
-        <Pressable accessibilityRole="button" accessibilityLabel={muted ? 'Unmute clip' : 'Mute clip'} hitSlop={12} onPress={() => { setMuted((v) => !v); if (!discPinned) showDisc(); }} style={[styles.soundHit, { top: insets.top + (discInk ? 25 : 22) }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={muted ? 'Unmute clip' : 'Mute clip'} hitSlop={12} onPress={() => { setMuted((v) => !v); if (!discPinned) showDisc(); }} style={[styles.soundHit, { top: insets.top + drop + (discInk ? 25 : 22) }]}>
           <Animated.View style={[styles.sound, discInk ? styles.soundThemed : null, discStyle]}>
             <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={19} color={discInk ?? 'white'} />
           </Animated.View>
