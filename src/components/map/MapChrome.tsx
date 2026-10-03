@@ -602,10 +602,11 @@ export function YouSheet({ me, open, onToggle, onProfile, onClose, seenBy, onSee
   const lit = useSharedValue(open ? 1 : 0);
   useEffect(() => { lit.value = withTiming(open ? 1 : 0, { duration: reduce ? 200 : 420, easing: Easing.bezier(0.4, 0, 0.2, 1) }); }, [open, reduce]); // eslint-disable-line react-hooks/exhaustive-deps
   // Off, the box is the card's own quiet grey; on, it takes a wash of the open green and a fine green edge.
-  const quiet = colors.surfaceAlt;
-  const warm = mix(colors.surfaceAlt, colors.open, 0.13);
-  const edgeOff = withAlpha(colors.open, 0);
-  const edgeOn = withAlpha(colors.open, 0.4);
+  // White when off, washing into the theme's own colour when on (Oct 3), not the ring's green.
+  const quiet = colors.surface;
+  const warm = mix(colors.surface, colors.brand, 0.14);
+  const edgeOff = colors.border;
+  const edgeOn = withAlpha(colors.brand, 0.35);
   const box = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(lit.value, [0, 1], [quiet, warm]),
     borderColor: interpolateColor(lit.value, [0, 1], [edgeOff, edgeOn]),
