@@ -69,7 +69,7 @@ export function NearbyMap(props: NearbyMapProps) {
   // Anything else picked (a search result, a pin) takes the place of your own card.
   useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit]);
   const { home, start } = model;
-  // The full map opens where you are; the still card always on your profile's city.
+  // The full map opens where you are; the still card on your town (location on) or your profile's city.
   const view = expanded ? { center: start.center, zoom: start.zoom ?? START_ZOOM } : { center: model.city ?? start.center, zoom: START_ZOOM };
   const weather = useWeather(home);
   const cityName = model.cityName;
