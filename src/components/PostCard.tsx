@@ -316,7 +316,7 @@ const styleDefinitions = StyleSheet.create({
   // In the feed the card sits in a page of fixed height. It shrinks rather
   // than overflowing, and the words below are what gives, so the row of
   // buttons is never sliced through the middle.
-  card: { gap: spacing.md, borderRadius: 0, borderWidth: 0, borderBottomWidth: 1, paddingHorizontal: 0, paddingBottom: spacing.xl, backgroundColor: colors.bg, flexShrink: 1, minHeight: 0 },
+  card: { gap: spacing.md, borderRadius: 0, borderWidth: 0, borderBottomWidth: 1, paddingHorizontal: 0, paddingBottom: spacing.xl, backgroundColor: 'transparent', flexShrink: 1, minHeight: 0 },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   more: { padding: 4 },
   backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
