@@ -100,11 +100,9 @@ export default function FindGroups() {
     onConfirm: () => { void actions.leaveFeedGroup(g.id).catch(() => undefined); },
   });
 
-  const create = () => {
-    if (full) { showToast({ title: FULL_START_LINE, icon: 'people-outline' }); return; }
-    // The Start a group sheet takes this one's place; a new group's page opens from there.
-    router.replace('/group-form');
-  };
+  // The Start a group sheet takes this one's place. Already in 3, it says so there,
+  // with a way to your groups, before anything is filled in.
+  const create = () => router.replace('/group-form');
 
   const renderRow = (g: DiscoverGroup & { member: boolean; requested: boolean }, i: number) => {
     const members = `${g.memberCount} ${g.memberCount === 1 ? 'member' : 'members'}`;
@@ -120,10 +118,10 @@ export default function FindGroups() {
       : state === 'request' ? `Ask to join ${g.name}` : `Join ${g.name}`;
     return (
       <View key={g.id} style={[styles.row, i > 0 && styles.line]}>
-        <GroupTile name={g.name} size={44} />
+        <GroupTile name={g.name} look={g.look} size={44} />
         <View style={styles.words}>
           <Text style={styles.name} numberOfLines={1}>{g.name}</Text>
-          <Text style={styles.meta} numberOfLines={1}>{members}{g.ask ? ' · Asks first' : ' · Open'}</Text>
+          <Text style={styles.meta} numberOfLines={1}>{members}{g.ask ? ' · Ask to join' : ' · Open'}</Text>
           {g.description ? <Text style={styles.about} numberOfLines={2}>{g.description}</Text> : null}
         </View>
         <Pressable
@@ -207,7 +205,7 @@ export default function FindGroups() {
                       onPress={() => go(`/g/${g.id}`)}
                       style={({ pressed }) => [styles.mineChip, pressed && styles.pressed]}
                     >
-                      <GroupTile name={g.name} size={28} />
+                      <GroupTile name={g.name} look={g.look} size={28} />
                       <Text style={styles.mineName} numberOfLines={1}>{g.name}</Text>
                       {asking(g.id) ? <View style={styles.dot} /> : null}
                     </Pressable>

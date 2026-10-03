@@ -69,6 +69,13 @@ export function DragSheet(props: {
   stageOverlay?: React.ReactNode;
   /** Whether the sheet's page is the one in front (a browser's Escape listens only then; a phone's Back is the page's own). */
   active?: boolean;
+  /**
+   * Asked before a drag down, a tap outside or (in a browser) Escape closes
+   * the sheet: false keeps it open (the page then asks its own question,
+   * "Discard this group?", and bumps closeSignal if the answer is yes). A
+   * close from closeSignal is never asked. The comments stage ignores it.
+   */
+  beforeClose?: () => boolean;
 }) {
   return props.stage ? <StageSheet {...props} geo={props.stage} /> : <PlainSheet {...props} />;
 }
@@ -81,6 +88,7 @@ function PlainSheet({
   closeSignal = 0,
   onSettled,
   contentHeight,
+  beforeClose,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -89,6 +97,7 @@ function PlainSheet({
   closeSignal?: number;
   onSettled?: () => void;
   contentHeight?: number;
+  beforeClose?: () => boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { height: windowHeight } = useWindowDimensions();
@@ -156,6 +165,16 @@ function PlainSheet({
     translateY.value = withSpring(origin, SPRING);
     backdropOpacity.value = withTiming(1 - origin / fullHeight, { duration: 220, easing: EASE });
   };
+  // A close the person started (a drag down, a tap outside): the page may say not yet.
+  const latestBefore = useRef(beforeClose);
+  latestBefore.current = beforeClose;
+  const userDismiss = (origin?: number) => {
+    if (latestBefore.current && !latestBefore.current()) {
+      if (origin !== undefined) returnTo(origin);
+      return;
+    }
+    dismiss();
+  };
   // The keyboard: the sheet opens all the way, and its bottom rides up with
   // the keyboard frame by frame (the phone reports its height as it moves),
   // so a box at the bottom stays right on top of it, never jumping after it.
@@ -194,7 +213,7 @@ function PlainSheet({
       const origin = startY.value;
       const travelled = translateY.value - origin;
       if (e.velocityY > FLICK_PX_PER_S || (travelled > 0 && travelled > (fullHeight - origin) * 0.32)) {
-        runOnJS(dismiss)();
+        runOnJS(userDismiss)(origin);
       } else if (e.velocityY < -FLICK_PX_PER_S || (travelled < 0 && Math.abs(travelled) > origin * 0.32)) {
         runOnJS(openFull)();
       } else {
@@ -210,7 +229,7 @@ function PlainSheet({
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }, backdropStyle]} />
-      <Pressable accessibilityRole="button" accessibilityLabel="Close" style={StyleSheet.absoluteFill} onPress={dismiss} />
+      <Pressable accessibilityRole="button" accessibilityLabel="Close" style={StyleSheet.absoluteFill} onPress={() => userDismiss()} />
       <Animated.View style={[styles.sheet, sheetStyle]}>
         {/* The same warm glow the pages open with, so a sheet reads as part of the app. */}
         <Wash height={300} strength={0.85} />

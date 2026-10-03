@@ -22,7 +22,11 @@ const SPRING = { damping: 26, stiffness: 260, mass: 0.9 };
  * springs back, so the circle never shows anything but photo. Choose cuts
  * exactly what the circle shows.
  */
-export function CircleCrop({ uri, onDone, onCancel }: { uri: string; onDone: (croppedUri: string) => void; onCancel: () => void }) {
+export function CircleCrop({ uri, onDone, onCancel, corner = 0.5 }: {
+  uri: string; onDone: (croppedUri: string) => void; onCancel: () => void;
+  /** The window's corners as a share of its side: 0.5 is the profile's circle; a group's rounded square passes its tile's (0.3). The cut is the same square either way. */
+  corner?: number;
+}) {
   const { width: screenW, height: screenH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const D = Math.min(screenW, screenH) - 32;
@@ -191,8 +195,8 @@ export function CircleCrop({ uri, onDone, onCancel }: { uri: string; onDone: (cr
                 <Image accessibilityIgnoresInvertColors source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
               </Animated.View>
             ) : null}
-            <View pointerEvents="none" style={[styles.surround, { width: D + ring * 2, height: D + ring * 2, borderRadius: D / 2 + ring, borderWidth: ring }]} />
-            <View pointerEvents="none" style={[styles.edge, { width: D, height: D, borderRadius: D / 2 }]} />
+            <View pointerEvents="none" style={[styles.surround, { width: D + ring * 2, height: D + ring * 2, borderRadius: D * corner + ring, borderWidth: ring }]} />
+            <View pointerEvents="none" style={[styles.edge, { width: D, height: D, borderRadius: D * corner }]} />
           </View>
         </GestureDetector>
         {/* The iPhone's layout: the title across the top, Cancel and Choose along the bottom. */}

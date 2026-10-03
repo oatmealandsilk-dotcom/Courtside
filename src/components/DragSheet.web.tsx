@@ -68,6 +68,7 @@ export function DragSheet({
   stage,
   stageOverlay,
   active = true,
+  beforeClose,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -89,14 +90,23 @@ export function DragSheet({
   stage?: StageGeo | null;
   /** Drawn on the stage above the sheet, over its tap-to-close area (the small rail). */
   stageOverlay?: React.ReactNode;
+  /** Asked before a drag down, a click outside or Escape closes it: false keeps it open (see the native twin). Never for closeSignal. */
+  beforeClose?: () => boolean;
 }) {
   // On a computer a bottom sheet stretched across a wide window looks lost;
   // there it is a centred box instead, the way Instagram's dialogs are.
   const dialog = typeof window !== 'undefined' && isDesktopBrowser() && window.innerWidth >= 700;
-  if (dialog && side && window.innerWidth >= SIDE_MIN_WINDOW) return <SidePanel header={header} onDismissed={onDismissed} closeSignal={closeSignal} onSettled={onSettled} active={active}>{children}</SidePanel>;
-  if (dialog) return <DialogBox header={header} onDismissed={onDismissed} closeSignal={closeSignal} fitContent={fitContent} onSettled={onSettled} active={active}>{children}</DialogBox>;
+  if (dialog && side && window.innerWidth >= SIDE_MIN_WINDOW) return <SidePanel header={header} onDismissed={onDismissed} closeSignal={closeSignal} onSettled={onSettled} active={active} beforeClose={beforeClose}>{children}</SidePanel>;
+  if (dialog) return <DialogBox header={header} onDismissed={onDismissed} closeSignal={closeSignal} fitContent={fitContent} onSettled={onSettled} active={active} beforeClose={beforeClose}>{children}</DialogBox>;
   if (stage) return <StageSheet header={header} onDismissed={onDismissed} closeSignal={closeSignal} onSettled={onSettled} geo={stage} stageOverlay={stageOverlay} active={active}>{children}</StageSheet>;
-  return <Sheet header={header} onDismissed={onDismissed} peekFraction={peekFraction} closeSignal={closeSignal} onSettled={onSettled} active={active} contentHeight={contentHeight}>{children}</Sheet>;
+  return <Sheet header={header} onDismissed={onDismissed} peekFraction={peekFraction} closeSignal={closeSignal} onSettled={onSettled} active={active} contentHeight={contentHeight} beforeClose={beforeClose}>{children}</Sheet>;
+}
+
+/** The latest beforeClose, and whether a close the person started may go ahead now. */
+function useMayClose(beforeClose?: () => boolean) {
+  const latest = useRef(beforeClose);
+  latest.current = beforeClose;
+  return () => !latest.current || latest.current();
 }
 
 const SIDE_WIDTH = 420;
@@ -108,8 +118,9 @@ const SIDE_GAP = 12;
  * keeps playing. Home hears the panel's width and slides the clip left to
  * sit beside it. A click anywhere outside the panel, or Escape, closes it.
  */
-function SidePanel({ header, children, onDismissed, closeSignal, onSettled, active }: { header: React.ReactNode; children: React.ReactNode; onDismissed: () => void; closeSignal: number; onSettled?: () => void; active: boolean }) {
+function SidePanel({ header, children, onDismissed, closeSignal, onSettled, active, beforeClose }: { header: React.ReactNode; children: React.ReactNode; onDismissed: () => void; closeSignal: number; onSettled?: () => void; active: boolean; beforeClose?: () => boolean }) {
   useTheme();
+  const mayClose = useMayClose(beforeClose);
   const panel = useRef<HTMLDivElement>(null);
   const done = useRef(false);
   useEffect(() => {
@@ -119,7 +130,7 @@ function SidePanel({ header, children, onDismissed, closeSignal, onSettled, acti
     return () => { clearTimeout(settled); setSidePanel(0); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEscape(() => close(), { enabled: active });
+  useEscape(() => { if (mayClose()) close(); }, { enabled: active });
   const close = () => {
     if (done.current) return;
     done.current = true;
@@ -136,7 +147,7 @@ function SidePanel({ header, children, onDismissed, closeSignal, onSettled, acti
   }, [closeSignal]);
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
-      <div onClick={close} role="button" aria-label="Close comments" tabIndex={-1} style={{ position: 'absolute', inset: 0 }} />
+      <div onClick={() => { if (mayClose()) close(); }} role="button" aria-label="Close comments" tabIndex={-1} style={{ position: 'absolute', inset: 0 }} />
       <div
         ref={panel}
         role="dialog"
@@ -161,8 +172,9 @@ function SidePanel({ header, children, onDismissed, closeSignal, onSettled, acti
 }
 
 /** The centred box a sheet becomes on a computer: fades and settles in, dims and blurs what is behind. */
-function DialogBox({ header, children, onDismissed, closeSignal, fitContent, onSettled, active }: { header: React.ReactNode; children: React.ReactNode; onDismissed: () => void; closeSignal: number; fitContent: boolean; onSettled?: () => void; active: boolean }) {
+function DialogBox({ header, children, onDismissed, closeSignal, fitContent, onSettled, active, beforeClose }: { header: React.ReactNode; children: React.ReactNode; onDismissed: () => void; closeSignal: number; fitContent: boolean; onSettled?: () => void; active: boolean; beforeClose?: () => boolean }) {
   useTheme();
+  const mayClose = useMayClose(beforeClose);
   const box = useRef<HTMLDivElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
   const done = useRef(false);
@@ -173,7 +185,7 @@ function DialogBox({ header, children, onDismissed, closeSignal, fitContent, onS
     return () => clearTimeout(settled);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEscape(() => close(), { enabled: active });
+  useEscape(() => { if (mayClose()) close(); }, { enabled: active });
   const close = () => {
     if (done.current) return;
     done.current = true;
@@ -190,7 +202,7 @@ function DialogBox({ header, children, onDismissed, closeSignal, fitContent, onS
   }, [closeSignal]);
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
-      <div ref={backdrop} onClick={close} role="button" aria-label="Close" tabIndex={-1}
+      <div ref={backdrop} onClick={() => { if (mayClose()) close(); }} role="button" aria-label="Close" tabIndex={-1}
         style={{ position: 'absolute', inset: 0, backgroundColor: colors.overlay, backdropFilter: 'blur(10px) saturate(0.8)', WebkitBackdropFilter: 'blur(10px) saturate(0.8)' } as React.CSSProperties} />
       <div
         ref={box}
@@ -225,6 +237,7 @@ function Sheet({
   onSettled,
   active,
   contentHeight,
+  beforeClose,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -234,9 +247,11 @@ function Sheet({
   onSettled?: () => void;
   active: boolean;
   contentHeight?: number;
+  beforeClose?: () => boolean;
 }) {
   // Hears a theme change, so its own colours never lag the page's.
   useTheme();
+  const mayClose = useMayClose(beforeClose);
   const insets = useSafeAreaInsets();
   const area = useRef<HTMLDivElement>(null);
   const head = useRef<HTMLDivElement>(null);
@@ -326,7 +341,7 @@ function Sheet({
     close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [closeSignal]);
-  useEscape(() => { if (!dismissed.current) close(); }, { notWhileTyping: true, enabled: active });
+  useEscape(() => { if (!dismissed.current && mayClose()) close(); }, { notWhileTyping: true, enabled: active });
 
   const onPointerDown = (event: React.PointerEvent) => {
     if (!event.isPrimary || event.button !== 0) return;
@@ -360,7 +375,7 @@ function Sheet({
     const travelled = current.current - d.originY;
     // Velocity only counts if the finger was still moving when it lifted.
     const velocity = performance.now() - d.lastT < 120 ? d.velocity : 0;
-    if (velocity > FLICK || (travelled > 0 && travelled > (fullHeight - d.originY) * 0.32)) close();
+    if (velocity > FLICK || (travelled > 0 && travelled > (fullHeight - d.originY) * 0.32)) { if (mayClose()) close(); else returnTo(d.originY); }
     else if (velocity < -FLICK || (travelled < 0 && Math.abs(travelled) > d.originY * 0.32)) openFull();
     else returnTo(d.originY);
   };
@@ -368,7 +383,7 @@ function Sheet({
   return (
     <div ref={area} style={{ position: 'absolute', inset: 0 }}>
       <div ref={backdrop} style={{ position: 'absolute', inset: 0, backgroundColor: colors.overlay, opacity: 0 }} />
-      <div role="button" aria-label="Close" tabIndex={-1} onClick={close} style={{ position: 'absolute', inset: 0 }} />
+      <div role="button" aria-label="Close" tabIndex={-1} onClick={() => { if (mayClose()) close(); }} style={{ position: 'absolute', inset: 0 }} />
       <div
         ref={sheet}
         style={{

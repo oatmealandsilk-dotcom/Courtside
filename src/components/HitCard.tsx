@@ -6,6 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Avatar } from '@/components/ui';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import type { HitRequest } from '@/data/types';
+import { audienceLine, isHitOpen } from '@/features/hits/audience';
 import { FORMAT_LABEL, hitWhen, levelText } from '@/features/hits/format';
 import { openCourt } from '@/features/players/courtLink';
 import { formatMiles } from '@/features/players/geo';
@@ -22,6 +23,13 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
  * The paper plane sends the hit into any of your chats or groups, for the
  * friends who might want the spot. The place opens its court's page; with
  * `miles` (Find Players near you, the map) it says how far that is.
+ *
+ * A hit that is not out for everyone yet (Invite first or Only people I
+ * invite, migration 76) says so in a box under its details: to its poster,
+ * when it opens ("Opens to everyone at 5:30 PM"), who was invited, and
+ * "Open to everyone now"; to an invited player, that they were. It has no
+ * paper plane until it opens: sending it on would reach people it is not
+ * for (they could not open it).
  */
 export function HitCard({ hit, miles }: { hit: HitRequest; miles?: number }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -32,6 +40,11 @@ export function HitCard({ hit, miles }: { hit: HitRequest; miles?: number }) {
   const mine = hit.authorId === currentUserId;
   const inIt = !!currentUserId && hit.joinedIds.includes(currentUserId);
   const left = Math.max(0, hit.spots - hit.joinedIds.length);
+  const open = isHitOpen(hit);
+  const line = audienceLine(hit, currentUserId);
+  const invited = mine ? (hit.invitedIds ?? []).map((id) => users.find((u) => u.id === id)).filter((u): u is NonNullable<typeof u> => !!u) : [];
+  const invitedText = invited.length === 0 ? (hit.includeGroups ? 'Your groups are invited' : null)
+    : `${invited.length === 1 ? invited[0].name.split(' ')[0] : invited.length === 2 ? `${invited[0].name.split(' ')[0]} and ${invited[1].name.split(' ')[0]}` : `${invited[0].name.split(' ')[0]} and ${invited.length - 1} more`} invited${hit.includeGroups ? ', and your groups' : ''}`;
   const openChat = () => { if (hit.conversationId) router.push(`/messages/${hit.conversationId}`); };
   const join = async () => {
     if (busy) return;
@@ -50,9 +63,9 @@ export function HitCard({ hit, miles }: { hit: HitRequest; miles?: number }) {
           <Text style={styles.who} numberOfLines={1}>{mine ? 'Your hit' : author?.name ?? 'A player'}{mine ? null : <Text style={styles.wants}> is looking for a hit</Text>}</Text>
           <Text style={styles.when}>{hitWhen(hit.startsAt)}</Text>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Send this hit to a chat" hitSlop={8} onPress={(e) => { e.stopPropagation?.(); router.push({ pathname: '/share', params: { kind: 'hit-request', id: hit.id } }); }} style={({ pressed }) => [styles.send, pressed && { opacity: 0.6 }]}>
+        {open ? <Pressable accessibilityRole="button" accessibilityLabel="Send this hit to a chat" hitSlop={8} onPress={(e) => { e.stopPropagation?.(); router.push({ pathname: '/share', params: { kind: 'hit-request', id: hit.id } }); }} style={({ pressed }) => [styles.send, pressed && { opacity: 0.6 }]}>
           <Ionicons name="paper-plane-outline" size={18} color={colors.textMuted} />
-        </Pressable>
+        </Pressable> : null}
       </View>
       <Pressable accessibilityRole="link" accessibilityLabel={`${hit.place.name}${miles !== undefined ? `, ${formatMiles(miles)}` : ''}. See the court`} disabled={hit.place.lat === undefined} onPress={(e) => { e.stopPropagation?.(); if (hit.place.lat !== undefined && hit.place.lng !== undefined) openCourt({ id: hit.place.id, name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={styles.place}>
         <CourtGlyph size={13} color={colors.brand} />
@@ -63,6 +76,26 @@ export function HitCard({ hit, miles }: { hit: HitRequest; miles?: number }) {
         {FORMAT_LABEL[hit.format]} · {levelText(hit)} · <Text style={left ? styles.detailsLeft : undefined}>{left ? `${left} ${left === 1 ? 'spot' : 'spots'} left` : 'Full'}</Text>
       </Text>
       {hit.note ? <Text style={styles.note} numberOfLines={3}>{hit.note}</Text> : null}
+      {line ? (
+        <View style={styles.audience}>
+          <View style={styles.audienceRow}>
+            <Ionicons name={hit.audience === 'invite_only' ? 'lock-closed-outline' : 'time-outline'} size={15} color={colors.brand} />
+            <Text style={styles.audienceText}>{line}</Text>
+          </View>
+          {invitedText ? (
+            <View style={styles.audienceRow}>
+              {invited.slice(0, 4).map((u, i) => <Avatar key={u.id} name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={20} style={[styles.faceSmall, { marginLeft: i ? -6 : 0 }]} />)}
+              <Text style={styles.invitedText} numberOfLines={1}>{invitedText}</Text>
+            </View>
+          ) : null}
+          {mine && hit.audience === 'invite_first' && left > 0 ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Open to everyone now" onPress={(e) => { e.stopPropagation?.(); confirm({ title: 'Open to everyone now?', message: 'It goes on Find Players and the map for players nearby, not just the people you invited.', confirmLabel: 'Open it', onConfirm: () => { void actions.openHitNow(hit.id); } }); }} style={({ pressed }) => [styles.openNow, pressed && { opacity: 0.7 }]}>
+              <Ionicons name="earth-outline" size={15} color={colors.text} />
+              <Text style={styles.secondaryText}>Open to everyone now</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
       <View style={styles.foot}>
         <View style={styles.joined}>
           {joined.slice(0, 4).map((u, i) => <Avatar key={u.id} name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={24} style={[styles.face, { marginLeft: i ? -8 : 0 }]} />)}
@@ -96,6 +129,12 @@ const styleDefinitions = StyleSheet.create({
   details: { ...typography.small, ...font('600'), color: colors.textMuted },
   detailsLeft: { color: colors.brand },
   note: { ...typography.body, color: colors.text, lineHeight: 21 },
+  audience: { gap: spacing.sm, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.bgElevated },
+  audienceRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  audienceText: { ...typography.smallStrong, color: colors.brand, flex: 1 },
+  invitedText: { ...typography.small, color: colors.textMuted, flex: 1 },
+  faceSmall: { borderWidth: 1.5, borderColor: colors.bgElevated, borderRadius: 11 },
+  openNow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 36, borderRadius: 18, backgroundColor: colors.surface, ...lift },
   foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   joined: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
   face: { borderWidth: 2, borderColor: colors.surface, borderRadius: 14 },

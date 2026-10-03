@@ -20,11 +20,12 @@ import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Story, Tip, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup } from './types';
+import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Story, Tip, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
 import { isMapCourtId } from '@/features/places/courtName';
 import type { Openness } from '@/features/players/age';
+import { lookFrom } from '@/features/groups/look';
 
 /** What a new player did first, after setup. */
 /** What the live handle check says about a handle. */
@@ -378,14 +379,26 @@ const toActivity = (r: ActivityRow): DetectedActivity => ({
 const activitiesQuery = (me: ID) => need().from('detected_activities').select('*').eq('user_id', me)
   .gte('ended_at', new Date(Date.now() - 14 * 86_400_000).toISOString()).order('started_at', { ascending: false }).limit(60);
 
-interface HitRow { id: string; author_id: string; starts_at: string; place: { id?: string; name?: string; lat?: number; lng?: number } | null; level_min: number | null; level_max: number | null; format: HitRequest['format']; spots: number; note: string | null; conversation_id: string | null; cancelled: boolean; created_at: string; hit_joins?: { user_id: string }[] }
+interface HitRow { id: string; author_id: string; starts_at: string; place: { id?: string; name?: string; lat?: number; lng?: number } | null; level_min: number | null; level_max: number | null; format: HitRequest['format']; spots: number; note: string | null; conversation_id: string | null; cancelled: boolean; created_at: string; hit_joins?: { user_id: string }[]; audience?: string | null; opens_at?: string | null; include_groups?: boolean | null }
 const toHit = (r: HitRow): HitRequest => ({
   id: r.id, authorId: r.author_id, startsAt: r.starts_at,
   // The court's map id when it was picked from the courts list (kept only if it is one), so the hit lands on that court's page.
   place: { id: isMapCourtId(r.place?.id) ? r.place.id : undefined, name: String(r.place?.name ?? 'A court').slice(0, 120), lat: typeof r.place?.lat === 'number' ? r.place.lat : undefined, lng: typeof r.place?.lng === 'number' ? r.place.lng : undefined },
   levelMin: r.level_min ?? undefined, levelMax: r.level_max ?? undefined, format: r.format, spots: r.spots, note: r.note ?? undefined,
   conversationId: r.conversation_id ?? undefined, cancelled: r.cancelled, createdAt: r.created_at, joinedIds: (r.hit_joins ?? []).map((j) => j.user_id),
+  // Who sees it first (migration 76). A database without it sends none of these: every hit is for everyone.
+  ...(r.audience === 'invite_first' || r.audience === 'invite_only'
+    ? { audience: r.audience, opensAt: r.opens_at ?? undefined, includeGroups: !!r.include_groups, invitedIds: [] as ID[] }
+    : {}),
 });
+/** Who was invited to which hit: the poster reads every invite to their own hit, an invited player only their own (migration 76). Nothing without it. */
+const hitInvitesQuery = () => need().from('hit_invites').select('hit_id, user_id').order('created_at', { ascending: true }).limit(1000);
+const withInvites = (hits: HitRequest[], rows: { hit_id: string; user_id: string }[] | null | undefined): HitRequest[] => {
+  if (!rows?.length) return hits;
+  const by = new Map<string, ID[]>();
+  for (const r of rows) by.set(r.hit_id, [...(by.get(r.hit_id) ?? []), r.user_id]);
+  return hits.map((h) => (h.audience && by.has(h.id) ? { ...h, invitedIds: by.get(h.id) } : h));
+};
 
 interface TipRow { id: string; user_id: string; body: string; created_at: string; votes: number | null; voted_by: Record<string, 1 | -1> | null }
 const toTip = (r: TipRow): Tip => ({ id: r.id, authorId: r.user_id, body: r.body, createdAt: r.created_at, votes: r.votes ?? 0, votedBy: r.voted_by ?? {} });
@@ -754,7 +767,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // everything else so it is known before any post is read: until it is, the
   // names on posts' session stats are not shown (see trustedSession).
   const tagsProbe = db.from('session_tags').select('id').limit(0).then(({ error }) => readinessOf(error), () => null);
-  const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows, sessionRows, pollRows, myPollVotes, hitRows, prefRows, activityRows] = await Promise.all([
+  const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows, sessionRows, pollRows, myPollVotes, hitRows, prefRows, activityRows, hitInviteRows] = await Promise.all([
     // Every profile, in chunks, so nobody is left out past the first 1,000.
     allRows<ProfileRow>((from, to) => db.from('profiles').select('*').order('created_at', { ascending: true }).range(from, to)),
     db.from('posts').select(POST_SELECT).order('created_at', { ascending: false }).limit(POST_PAGE),
@@ -792,6 +805,8 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     db.from('conversation_prefs').select('*'),
     // Tennis sessions your tracker picked up (migration 58; none without it).
     activitiesQuery(me),
+    // Who was invited to the invite-first hits you can see (migration 76; none without it).
+    hitInvitesQuery(),
   ]);
   const coaching = await coachingLoad;
   const tagsReady = await tagsProbe;
@@ -861,7 +876,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     tips: ((tipRows.data ?? []) as TipRow[]).map(toTip),
     coachApplications: ((applicationRows.data ?? []) as CoachApplicationRow[]).map(toCoachApplication),
     sessions: ((sessionRows.data ?? []) as SessionRow[]).map(toSession),
-    hitRequests: ((hitRows.data ?? []) as HitRow[]).map(toHit),
+    hitRequests: withInvites(((hitRows.data ?? []) as HitRow[]).map(toHit), hitInviteRows.error ? null : (hitInviteRows.data as { hit_id: string; user_id: string }[])),
     activities: activityRows.error ? [] : ((activityRows.data ?? []) as ActivityRow[]).map(toActivity),
     ...(tagsReady === null ? {} : { sessionTagsReady: tagsReady }),
     ...coaching,
@@ -959,15 +974,18 @@ const MIGRATION_FOR: Record<string, string> = {
 const missingColumnsNote = (cols: string[]) =>
   `[remote] The posts table has no "${cols.join('", "')}" column yet, so this post was saved without that edit (it still went up). To keep it next time, open Supabase → SQL Editor → New query, paste the file supabase/migrations/${MIGRATION_FOR[cols[0]] ?? '…'} and press Run. It is safe to run more than once.`;
 
-interface GroupRow { id: ID; name: string; description: string | null; ask: boolean; discoverable?: boolean; createdAt: string; members?: { id: ID; admin: boolean }[]; requests?: ID[] }
+/** A group's look as the server sends it (migration 73); all missing before it runs. */
+interface LookRow { color?: string | null; emoji?: string | null; photo?: string | null }
+interface GroupRow extends LookRow { id: ID; name: string; description: string | null; ask: boolean; discoverable?: boolean; createdAt: string; members?: { id: ID; admin: boolean }[]; requests?: ID[] }
 const toGroup = (row: GroupRow): FeedGroup => ({
-  id: row.id, name: row.name, description: row.description ?? undefined, ask: !!row.ask, discoverable: row.discoverable !== false, createdAt: row.createdAt,
+  id: row.id, name: row.name, description: row.description ?? undefined, ask: !!row.ask, discoverable: row.discoverable !== false,
+  look: lookFrom(row), createdAt: row.createdAt,
   members: row.members ?? [], requests: row.requests ?? [],
 });
 /** The server's word for why a group action said no (migration 67), or 'failed'. */
 const groupWord = (error: { code?: string; message: string }) =>
   missingFunction(error) ? 'not_ready'
-    : /adults_only|their_age|group_limit|their_limit|not_admin|not_found|name_needed|slow_down/.exec(error.message)?.[0] ?? 'failed';
+    : /adults_only|their_age|group_limit|their_limit|not_admin|not_found|name_needed|slow_down|bad_photo|bad_look/.exec(error.message)?.[0] ?? 'failed';
 
 export const remote = {
   /* ------------------------ discussions and coaching ------------------------ */
@@ -2046,7 +2064,10 @@ export const remote = {
     const { data, error } = await need().from('hit_requests').select('*, hit_joins(user_id)').eq('cancelled', false)
       .gte('starts_at', new Date(Date.now() - 3_600_000).toISOString()).order('starts_at', { ascending: true }).limit(100);
     if (error) { fail('hits')(error); return null; }
-    return (data as HitRow[]).map(toHit);
+    const hits = (data as HitRow[]).map(toHit);
+    if (!hits.some((h) => h.audience)) return hits;
+    const invites = await hitInvitesQuery();
+    return withInvites(hits, invites.error ? null : (invites.data as { hit_id: string; user_id: string }[]));
   },
   /**
    * Your own hits, posted or joined, that started in the last two days,
@@ -2134,12 +2155,46 @@ export const remote = {
     return ready;
   },
   /* ---------------------------------------------------------- groups (67) */
-  /** Your groups and the groups you asked to join. Null on a database without groups (before migration 67). */
-  async myFeedGroups(): Promise<{ groups: FeedGroup[]; asked: { id: ID; name: string }[] } | null> {
+  /**
+   * Your groups and the groups you asked to join, and whether a group's look
+   * can be saved here (`looks`: migration 73 has run). Null on a database
+   * without groups (before migration 67).
+   */
+  async myFeedGroups(): Promise<{ groups: FeedGroup[]; asked: { id: ID; name: string; look?: GroupLook }[]; looks: boolean } | null> {
     const { data, error } = await need().rpc('my_feed_groups');
     if (error) { if (!missingFunction(error)) fail('groups')(error); return null; }
-    const raw = (data ?? {}) as { groups?: GroupRow[]; asked?: { id: ID; name: string }[] };
-    return { groups: (raw.groups ?? []).map(toGroup), asked: raw.asked ?? [] };
+    const raw = (data ?? {}) as { groups?: GroupRow[]; asked?: ({ id: ID; name: string } & LookRow)[]; looks?: boolean };
+    return { groups: (raw.groups ?? []).map(toGroup), asked: (raw.asked ?? []).map((a) => ({ id: a.id, name: a.name, look: lookFrom(a) })), looks: raw.looks === true };
+  },
+  /**
+   * Starts a group with everything the form asks in one go (migration 73,
+   * start_feed_group): whether it shows in Find groups, and its colour and
+   * emoji. Its id. Throws with the server's word ('group_limit',
+   * 'name_needed', 'slow_down', 'bad_look', or 'not_ready' before 73).
+   */
+  async startFeedGroup(input: { name: string; description: string; ask: boolean; discoverable: boolean; look: GroupLook }): Promise<ID> {
+    const { data, error } = await need().rpc('start_feed_group', {
+      p_name: input.name, p_description: input.description || null, p_ask: input.ask,
+      p_discoverable: input.discoverable, p_color: input.look.color ?? null, p_emoji: input.look.emoji ?? null,
+    });
+    if (error) throw new Error(groupWord(error));
+    return data as string;
+  },
+  /**
+   * Of these people, which can join a group (migration 73, can_join_groups:
+   * known to be an adult), never their age. Someone left out of the answer
+   * (blocked, gone, past the day's limit) is not in the map. Null when the
+   * database cannot say (before 73, or the question didn't go through).
+   */
+  async canJoinGroups(userIds: ID[]): Promise<Record<ID, boolean> | null> {
+    const ids = Array.from(new Set(userIds.filter((id) => UUID_RE.test(id))));
+    const out: Record<ID, boolean> = {};
+    for (let at = 0; at < ids.length; at += 100) {
+      const { data, error } = await need().rpc('can_join_groups', { ids: ids.slice(at, at + 100) });
+      if (error) { if (!missingFunction(error)) fail('can join groups')(error); return null; }
+      for (const r of (data ?? []) as { user_id: string; ok: boolean | null }[]) out[r.user_id] = r.ok === true;
+    }
+    return out;
   },
   /** Starts a group; its id. Throws with the server's word ('group_limit', 'name_needed', 'slow_down'). */
   async createFeedGroup(name: string, description: string, ask: boolean): Promise<ID> {
@@ -2147,13 +2202,18 @@ export const remote = {
     if (error) throw new Error(groupWord(error));
     return data as string;
   },
-  /** What an invite link shows. Null when there is no such group (or no groups yet). */
+  /**
+   * What an invite link shows. Null when there is no such group (or no
+   * groups yet); throws when it could not be asked (no connection), so a
+   * group is never taken as gone for want of an answer.
+   */
   async feedGroupCard(id: ID): Promise<FeedGroupCard | null> {
     if (!UUID_RE.test(id)) return null;
     const { data, error } = await need().rpc('feed_group_card', { g: id });
-    if (error || !data) return null;
-    const c = data as { id: ID; name: string; description: string | null; ask: boolean; members: number; member: boolean; requested: boolean };
-    return { id: c.id, name: c.name, description: c.description ?? undefined, ask: c.ask, memberCount: Number(c.members) || 0, member: c.member, requested: c.requested };
+    if (error) { if (missingFunction(error)) return null; throw new Error(groupWord(error)); }
+    if (!data) return null;
+    const c = data as { id: ID; name: string; description: string | null; ask: boolean; members: number; member: boolean; requested: boolean } & LookRow;
+    return { id: c.id, name: c.name, description: c.description ?? undefined, ask: c.ask, look: lookFrom(c), memberCount: Number(c.members) || 0, member: c.member, requested: c.requested };
   },
   /** Joins, or asks to. Throws with the server's word ('group_limit', 'not_found', 'slow_down'). */
   async joinFeedGroup(id: ID): Promise<'joined' | 'requested' | 'already'> {
@@ -2184,12 +2244,23 @@ export const remote = {
   async discoverGroups(q: string, limit = 30): Promise<DiscoverGroup[] | null> {
     const { data, error } = await need().rpc('discover_groups', { q: q.trim() || null, lim: limit });
     if (error) { if (!missingFunction(error)) fail('find groups')(error); return null; }
-    const rows = (Array.isArray(data) ? data : []) as { id: ID; name: string; description: string | null; ask: boolean; members: number; member: boolean; requested: boolean; near: boolean }[];
-    return rows.map((c) => ({ id: c.id, name: c.name, description: c.description ?? undefined, ask: !!c.ask, memberCount: Number(c.members) || 0, member: !!c.member, requested: !!c.requested, near: !!c.near }));
+    const rows = (Array.isArray(data) ? data : []) as ({ id: ID; name: string; description: string | null; ask: boolean; members: number; member: boolean; requested: boolean; near: boolean } & LookRow)[];
+    return rows.map((c) => ({ id: c.id, name: c.name, description: c.description ?? undefined, ask: !!c.ask, look: lookFrom(c), memberCount: Number(c.members) || 0, member: !!c.member, requested: !!c.requested, near: !!c.near }));
   },
   /** An admin shows or hides a group in Find groups. Throws with the server's word ('not_admin', or 'not_ready' before migration 70). */
   async setFeedGroupDiscoverable(id: ID, on: boolean) {
     const { error } = await need().rpc('set_feed_group_discoverable', { g: id, p_on: on });
+    if (error) throw new Error(groupWord(error));
+  },
+  /**
+   * An admin sets a group's look (migration 73): its colour, emoji and photo
+   * (already uploaded to the media bucket, in the GROUP's folder, never
+   * yours: see uploadMedia's first argument), all at once. Throws with the
+   * server's word ('not_admin', 'bad_photo', 'bad_look', or 'not_ready'
+   * before migration 73).
+   */
+  async setFeedGroupLook(id: ID, look: GroupLook) {
+    const { error } = await need().rpc('set_feed_group_look', { g: id, p_color: look.color ?? null, p_emoji: look.emoji ?? null, p_photo: look.photoUrl ?? null });
     if (error) throw new Error(groupWord(error));
   },
   /**
@@ -2483,8 +2554,27 @@ export const remote = {
     const { error } = await need().from('hit_requests').insert({
       id: h.id, author_id: h.authorId, starts_at: h.startsAt, place: h.place, level_min: h.levelMin ?? null, level_max: h.levelMax ?? null,
       format: h.format, spots: h.spots, note: h.note ?? null,
+      // Only an invite-first or invite-only hit names who sees it (migration 76), so a hit for everyone still posts on a database without it.
+      // When it opens is the server's to work out.
+      ...(h.audience ? { audience: h.audience, include_groups: !!h.includeGroups } : {}),
     });
-    if (error) { fail('hit request')(error); throw new Error('That didn’t post. Try again.'); }
+    if (error) {
+      fail('hit request')(error);
+      // Never posted for everyone instead: a database without migration 76 says no, and so does the app.
+      if (h.audience && /audience|include_groups/.test(error.message)) throw new Error('Invite-first hits aren’t ready yet. Post it for everyone, or try again later.');
+      throw new Error('That didn’t post. Try again.');
+    }
+  },
+  /** The players invited to your invite-first or invite-only hit (migration 76): who the server took (never someone blocked, or a teen you don't follow both ways). */
+  async inviteToHit(hitId: ID, userIds: ID[]): Promise<ID[]> {
+    const { data, error } = await need().rpc('invite_to_hit', { hit: hitId, people: userIds.filter((x) => UUID_RE.test(x)) });
+    if (error) { fail('invite to hit')(error); throw new Error('The invites didn’t go. Try again.'); }
+    return (data as string[] | null) ?? [];
+  },
+  /** "Open to everyone now", on your own invite-first hit (migration 76). */
+  async openHitNow(hitId: ID) {
+    const { error } = await need().rpc('open_hit_now', { hit: hitId });
+    if (error) { fail('open hit')(error); throw new Error('That didn’t go through. Try again.'); }
   },
   /** "I'm in": the hit's group chat comes back, or a plain sentence saying why not. */
   async joinHit(hitId: ID): Promise<{ conversationId?: ID; error?: string }> {
@@ -2993,6 +3083,8 @@ async function roomForSmallCover(me: ID): Promise<boolean> {
  * with a plain-words message if it cannot — a post must never be saved
  * pointing at a file that only exists on one phone. With `smallCover`, a
  * photo that will be a post's cover also gets its small copy for grid tiles.
+ * `me` is the folder it goes in: your own id, or a group's id for a group's
+ * photo (migration 73 lets only that group's admins put files there).
  */
 export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'video' | 'audio', onProgress?: (fraction: number) => void, options?: { smallCover?: boolean }): Promise<string> {
   try {

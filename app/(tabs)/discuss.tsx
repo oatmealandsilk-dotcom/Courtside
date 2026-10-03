@@ -555,6 +555,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         depth={1}
         delegateLeft
         delegateRight
+        // Out to the screen's edges, so a pane slides off the edge of the screen.
+        bleed={spacing.lg}
         // The tutorial's slide from the map to the threads plays here, as this pager's own swipe.
         slideChannel={previewSection ? undefined : '/discuss'}
         onIndex={(i) => setSection(i === 0 ? 'players' : 'discussions')}

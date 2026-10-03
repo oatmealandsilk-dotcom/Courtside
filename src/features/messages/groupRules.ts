@@ -1,4 +1,5 @@
 import type { Conversation, HitRequest, ID, Message, User } from '@/data/types';
+import { readGroupInvite } from '@/features/groups/inviteMessage';
 import { isOnlyLink } from '@/lib/links';
 import { knownLinkTitle } from './linkPreview';
 
@@ -66,6 +67,9 @@ export function messageSummary(m?: Message): string {
   if (m.kind === 'profile') return 'Shared a profile';
   if (m.kind === 'voice') return 'Sent a voice message';
   if (m.kind === 'hit-request') return 'Sent a hit';
+  // A group invite's words carry its link: the inbox says what it is instead.
+  const invite = m.kind === 'text' ? readGroupInvite(m.body) : null;
+  if (invite) return `Group invite: ${invite.name}`;
   // A message that is only a link reads as what it links to ("Sliding on clay…"), never as its address.
   const link = m.kind === 'text' ? isOnlyLink(m.body) : null;
   if (link) return knownLinkTitle(link.url) ?? 'Sent a link';

@@ -12,9 +12,6 @@ import { onOpenGroupFeed, tookGroupFeed } from '@/features/groups/openGroupFeed'
 import { GroupTile } from '@/features/groups/GroupTile';
 import { inGroupFeed } from '@/features/groups/groupFeed';
 import { TOP_BAND_DROP, TOP_BAND_HEIGHT, TOP_BAND_TOP, TopBandContext } from '@/features/feed/topBand';
-import { shareLink } from '@/lib/shareLink';
-import { shareOutside } from '@/lib/shareOutside';
-import { show as showToast } from '@/lib/toast';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { goBack } from '@/lib/goBack';
@@ -1190,10 +1187,6 @@ function Home({ scope, topRow, paused, onChrome }: {
 
   // A feed with the For you / groups row keeps its band clear; the empty page centres in what is left, above the floating bar.
   const banded = !!topRow || !!scope?.groupId;
-  const inviteToGroup = async (groupId: string, name: string) => {
-    const link = shareLink('group', groupId);
-    try { const said = await shareOutside(`Join ${name} on CourtSide`, link); if (said) showToast({ title: said, icon: 'link-outline' }); } catch { showToast({ title: `Share this link: ${link}`, icon: 'link-outline' }); }
-  };
 
   return (
     <TopBandContext.Provider value={banded ? TOP_BAND_DROP : 0}>
@@ -1204,11 +1197,11 @@ function Home({ scope, topRow, paused, onChrome }: {
             // An empty group: its face, one line, and the two things to do about it.
             // Its feed is everything its members post, so more people is the way to fill it.
             <View style={styles.groupEmpty}>
-              <GroupTile name={groupName ?? 'Group'} size={72} />
+              <GroupTile name={groupName ?? 'Group'} look={app.feedGroups.find((g) => g.id === scope.groupId)?.look} size={72} />
               <Text style={styles.groupEmptyTitle}>When members post, it shows up here</Text>
               <Text style={styles.groupEmptyBody}>{`${groupName ?? 'A group'}’s feed shows everything its members post.`}</Text>
               <View style={styles.groupEmptyActions}>
-                <Button label="Invite people" onPress={() => { void inviteToGroup(scope.groupId, groupName ?? 'my group'); }} full />
+                <Button label="Invite people" onPress={() => router.push({ pathname: '/group-invite', params: { id: scope.groupId } })} full />
                 <Button label="Post something" variant="secondary" onPress={() => router.push('/compose')} full />
               </View>
             </View>

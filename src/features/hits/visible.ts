@@ -1,6 +1,7 @@
 import type { HitRequest, User } from '@/data/types';
 import { sameCourt } from '@/features/places/court';
 import { isMapCourtId } from '@/features/places/courtName';
+import { hitReaches } from './audience';
 
 /**
  * Open hits this close to you (25 km, the reach of hit matches) count as
@@ -30,12 +31,16 @@ export function openHits(hits: HitRequest[], { blockedIds, mutedIds, now = Date.
  * Open hits list. Since migration 64 the database applies this rule itself
  * (a stranger is never sent a minor's hit, live updates included), so
  * `seeing` (useApp().seeing) passes every hit it sent; before 64 it reads
- * the author's age.
+ * the author's age. An invite-first or invite-only hit shows only to the
+ * people it reaches (hitReaches) until it opens; the database applies that
+ * too since migration 76.
  */
 export function canSeeHitAt(hit: HitRequest, { usersById, followingIds, currentUserId, seeing }: { usersById: Map<string, User>; followingIds: string[] | Set<string>; currentUserId: string | null; seeing: (u: User) => boolean }): boolean {
   const author = usersById.get(hit.authorId);
   if (!author) return false;
   if (author.id === currentUserId) return true;
+  // Invite first or invite only (migration 76): until it opens, only the people it was for.
+  if (!hitReaches(hit, currentUserId)) return false;
   const following = followingIds instanceof Set ? followingIds : new Set(followingIds);
   return following.has(author.id) || seeing(author);
 }

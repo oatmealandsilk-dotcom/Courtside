@@ -51,6 +51,8 @@ import { firstLink, isOnlyLink } from '@/lib/links';
 import { LINK_CARD_W, LinkCard, linkCardShows } from '@/features/messages/LinkCard';
 import { useLinkPreview } from '@/features/messages/linkPreview';
 import { useDragDownDismiss, useKeyboardLift } from '@/features/messages/keyboardLift';
+import { GroupInviteCard } from '@/features/groups/GroupInviteCard';
+import { readGroupInvite } from '@/features/groups/inviteMessage';
 import { Slide, TimeAnchor, TimeSwipeArea } from '@/features/messages/MessageTimes';
 import { SwipeReply } from '@/features/messages/SwipeReply';
 import { buildRows, keepRows, type Gap, type ThreadRow } from '@/features/messages/threadRows';
@@ -1373,6 +1375,9 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
     </Pressable>
   ) : null;
 
+  // A group invite is a plain message (its words and the group's link), drawn as the group's card.
+  const invite = message.kind === 'text' ? readGroupInvite(message.body) : null;
+
   let body: React.ReactNode;
   if (message.kind === 'voice' && message.audio) {
     const audio = message.audio;
@@ -1475,6 +1480,21 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
         </HoldArea>
         <Reactions message={message} me={me} mine={mine} styles={styles} onOpen={call.openReactions} inline />
       </Row>
+    );
+  } else if (invite) {
+    // A group invite (Start a group's last step, or Invite on its page): a plain message (its words and the
+    // group's link) drawn as the group's card, with the group's face and name; it opens the group's page.
+    body = (
+      <>
+        {quoteAbove}
+        <Row {...rowProps}>
+          <HoldArea hover={hover} onHold={(rect) => openMenu({ message, mine, rect })} style={styles.sharedCardArea}>
+            {(hold) => <GroupInviteCard groupId={invite.id} name={invite.name} sentAt={sentAt} onLongPress={hold} />}
+          </HoldArea>
+          {notSent}
+          <Reactions message={message} me={me} mine={mine} styles={styles} onOpen={call.openReactions} inline />
+        </Row>
+      </>
     );
   } else if (message.kind !== 'text' && message.sharedId) {
     body = (
