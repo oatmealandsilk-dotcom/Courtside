@@ -1,0 +1,211 @@
+import React, { useCallback, useEffect, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import Ionicons from '@expo/vector-icons/Ionicons';
+
+import { CourtSpinner } from '@/components/CourtSpinner';
+import { Avatar, EmptyState, Screen } from '@/components/ui';
+import { remote, type InviteSummaryRow, type InviteeRow } from '@/data/remote';
+import { inviteLink } from '@/features/invite/referral';
+import { confirm } from '@/lib/confirm';
+import { goBack } from '@/lib/goBack';
+import * as haptics from '@/lib/haptics';
+import { show as showToast } from '@/lib/toast';
+import { useApp } from '@/store/AppContext';
+import { useThemedStyles } from '@/theme/ThemeProvider';
+import { colors, radius, spacing, typography } from '@/theme';
+
+const dollars = (cents: number) => `$${cents % 100 ? (cents / 100).toFixed(2) : cents / 100}`;
+const shortDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+
+/**
+ * Admin: paying people for the players they bring ($1 each). One row per
+ * person who has invited anyone: their link, how many qualified, how many
+ * were paid for, and what is owed, with "Mark paid" for after the money has
+ * gone. Qualified (worked out by the server, migration 71): joined through
+ * their link, finished setting up, and was seen again on a later day.
+ * Deleted and suspended accounts never count. Tap a row for their people.
+ */
+export default function AdminInvites() {
+  const styles = useThemedStyles(styleDefinitions);
+  const { currentUser } = useApp();
+  const [rows, setRows] = useState<InviteSummaryRow[] | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [open, setOpen] = useState<InviteSummaryRow | null>(null);
+  const [people, setPeople] = useState<InviteeRow[] | null>(null);
+
+  const load = useCallback(async () => {
+    setError('');
+    try { setRows(await remote.fetchInviteSummary()); } catch (e) { setRows([]); setError(e instanceof Error ? e.message : 'Could not load invites.'); }
+  }, []);
+  useEffect(() => { if (currentUser?.isAdmin) void load(); }, [currentUser?.isAdmin, load]);
+
+  const openRow = useCallback(async (row: InviteSummaryRow) => {
+    setOpen(row);
+    setPeople(null);
+    try { setPeople(await remote.fetchInvitees(row.id)); } catch (e) { setPeople([]); setError(e instanceof Error ? e.message : 'Could not load their people.'); }
+  }, []);
+
+  if (!currentUser?.isAdmin) {
+    return <Screen title="Invites" compactTitle onBack={() => goBack()}><EmptyState icon="lock-closed-outline" title="Admins only" /></Screen>;
+  }
+
+  const copyLink = async (row: InviteSummaryRow) => {
+    await Clipboard.setStringAsync(inviteLink(row.handle));
+    haptics.tap();
+    showToast({ title: `Copied @${row.handle}'s link`, icon: 'link-outline' });
+  };
+
+  const markPaid = (row: InviteSummaryRow) => confirm({
+    title: `Mark ${dollars(row.owedCents)} paid?`,
+    message: `Records ${row.owed} ${row.owed === 1 ? 'player' : 'players'} as paid to @${row.handle}. Do this after the money has been sent.`,
+    confirmLabel: 'Mark paid',
+    onConfirm: async () => {
+      setBusy(row.id);
+      setError('');
+      try {
+        await remote.markInvitesPaid(row.id, row.owed);
+        haptics.commit();
+        showToast({ title: `${dollars(row.owedCents)} to @${row.handle} recorded`, icon: 'checkmark-circle-outline' });
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'That did not save.');
+      } finally {
+        setBusy(null);
+        await load();
+      }
+    },
+  });
+
+  // One person's people.
+  if (open) {
+    const fresh = rows?.find((r) => r.id === open.id) ?? open;
+    return (
+      <Screen title={`@${fresh.handle}`} compactTitle onBack={() => { setOpen(null); setPeople(null); }} onRefresh={() => openRow(fresh)}>
+        <Text style={styles.lead}>
+          {fresh.invited} signed up · {fresh.setUp} set up · {fresh.qualified} qualified · {fresh.paid} paid
+        </Text>
+        {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
+        {people === null ? (
+          <View style={styles.loading}><CourtSpinner size={28} /></View>
+        ) : !people.length ? (
+          <EmptyState icon="people-outline" title="Nobody here" body="Deleted and suspended accounts are not listed." />
+        ) : (
+          <View style={styles.list}>
+            {people.map((p, index) => {
+              const status = p.qualifiedAt ? `Qualified ${shortDate(p.qualifiedAt)}` : p.setUp ? 'Set up profile' : 'Signed up';
+              return (
+                <View key={p.id} style={[styles.row, index > 0 && styles.rowLine]}>
+                  <Avatar uri={p.avatarUrl} name={p.name} seed={p.id} size={36} />
+                  <View style={styles.words}>
+                    <Text style={styles.name} numberOfLines={1}>{p.name}</Text>
+                    <Text style={styles.meta} numberOfLines={1}>@{p.handle} · joined {shortDate(p.joinedAt)}</Text>
+                  </View>
+                  <View style={[styles.status, p.qualifiedAt ? styles.statusOn : null]}>
+                    {p.qualifiedAt ? <Ionicons name="checkmark" size={12} color={colors.brandInk} /> : null}
+                    <Text style={[styles.statusText, p.qualifiedAt ? styles.statusTextOn : null]}>{status}</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+        <Text style={styles.foot}>
+          Qualified: joined through the link, finished setting up, and opened CourtSide again on a later day.
+        </Text>
+      </Screen>
+    );
+  }
+
+  const owedTotal = rows?.reduce((sum, r) => sum + r.owedCents, 0) ?? 0;
+
+  return (
+    <Screen title="Invites" compactTitle onBack={() => goBack()} onRefresh={load}>
+      <Text style={styles.lead}>
+        $1 for each player someone brings who joins through their link, sets up, and comes back on a later day. {rows?.length ? (owedTotal ? `${dollars(owedTotal)} owed in all.` : 'Nothing owed right now.') : ''}
+      </Text>
+      {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
+      {rows === null ? (
+        <View style={styles.loading}><CourtSpinner size={28} /></View>
+      ) : !rows.length ? (
+        error ? null : <EmptyState icon="people-outline" title="No invites yet" body="When someone joins through a person's link, that person shows up here." />
+      ) : (
+        <View style={styles.list}>
+          {rows.map((row, index) => (
+            <Pressable
+              key={row.id}
+              accessibilityRole="button"
+              accessibilityLabel={`${row.name}: ${row.qualified} qualified, ${row.paid} paid, ${dollars(row.owedCents)} owed. Shows their people.`}
+              onPress={() => void openRow(row)}
+              style={({ pressed }) => [styles.block, index > 0 && styles.rowLine, pressed && { backgroundColor: colors.surfaceAlt }]}
+            >
+              <View style={styles.rowTop}>
+                <Avatar uri={row.avatarUrl} name={row.name} seed={row.id} size={40} />
+                <View style={styles.words}>
+                  <Text style={styles.name} numberOfLines={1}>{row.name}</Text>
+                  <Text style={styles.meta} numberOfLines={1}>@{row.handle}{row.suspended ? ' · suspended' : ''}</Text>
+                </View>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Copy @${row.handle}'s invite link`} hitSlop={8} onPress={() => void copyLink(row)} style={styles.copy}>
+                  <Ionicons name="link-outline" size={14} color={colors.text} />
+                  <Text style={styles.copyText}>Copy link</Text>
+                </Pressable>
+              </View>
+              <View style={styles.numbers}>
+                <Num label="Qualified" value={String(row.qualified)} />
+                <Num label="Paid" value={String(row.paid)} />
+                <Num label="Owed" value={dollars(row.owedCents)} strong={row.owed > 0} />
+                {row.owed > 0 ? (
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Mark ${dollars(row.owedCents)} paid to @${row.handle}`} disabled={busy === row.id} onPress={() => markPaid(row)} style={[styles.pay, busy === row.id && styles.payBusy]}>
+                    <Text style={styles.payText}>{busy === row.id ? 'Saving…' : 'Mark paid'}</Text>
+                  </Pressable>
+                ) : (
+                  <Text style={styles.settled}>{row.lastPaidAt ? `Paid ${shortDate(row.lastPaidAt)}` : row.invited ? `${row.invited} signed up` : ''}</Text>
+                )}
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      )}
+    </Screen>
+  );
+}
+
+function Num({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={styles.num}>
+      <Text style={[styles.numValue, strong && styles.numStrong]}>{value}</Text>
+      <Text style={styles.numLabel}>{label}</Text>
+    </View>
+  );
+}
+
+const styleDefinitions = StyleSheet.create({
+  lead: { ...typography.small, color: colors.textMuted, lineHeight: 20, paddingBottom: spacing.lg },
+  error: { ...typography.small, color: colors.danger, paddingBottom: spacing.md },
+  loading: { paddingVertical: spacing.xxl, alignItems: 'center' },
+  list: { borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
+  block: { gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
+  rowTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  words: { flex: 1, gap: 1, minWidth: 0 },
+  name: { ...typography.bodyStrong, color: colors.text },
+  meta: { ...typography.small, color: colors.textMuted },
+  copy: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 30, paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.surfaceAlt },
+  copyText: { ...typography.smallStrong, color: colors.text },
+  numbers: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingLeft: 40 + spacing.md },
+  num: { gap: 0 },
+  numValue: { ...typography.bodyStrong, color: colors.text, fontVariant: ['tabular-nums'] },
+  numStrong: { color: colors.brand },
+  numLabel: { ...typography.caption, letterSpacing: 0, color: colors.textFaint },
+  pay: { marginLeft: 'auto', height: 32, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  payBusy: { opacity: 0.6 },
+  payText: { ...typography.smallStrong, color: colors.brandInk },
+  settled: { marginLeft: 'auto', ...typography.small, color: colors.textFaint },
+  status: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 10, height: 26, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt },
+  statusOn: { backgroundColor: colors.brand },
+  statusText: { ...typography.smallStrong, color: colors.textMuted },
+  statusTextOn: { color: colors.brandInk },
+  foot: { ...typography.small, color: colors.textFaint, lineHeight: 18, paddingTop: spacing.md },
+});
