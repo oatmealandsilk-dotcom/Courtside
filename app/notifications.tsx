@@ -61,6 +61,7 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap | 'h
   joined: { name: 'hand-right', tint: 'court' },
   'hit-join': { name: 'hit', tint: 'brand' },
   'hit-match': { name: 'hit', tint: 'brand' },
+  'hit-invite': { name: 'hit', tint: 'brand' },
   // The outline: filled, the dial closes up at badge size.
   activity: { name: 'stopwatch-outline', tint: 'court' },
   'map-friend-hit': { name: 'hit', tint: 'brand' },
@@ -100,6 +101,7 @@ const VERB: Record<NotificationKind, string> = {
   joined: 'just joined CourtSide near you',
   'hit-join': 'is in for your hit',
   'hit-match': 'is also looking for a hit',
+  'hit-invite': 'invited you to hit',
   activity: 'Tap to log it.',
   'map-friend-hit': 'is up for a hit today',
   'map-new-hit': 'posted an open hit near you',

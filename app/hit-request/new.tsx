@@ -8,7 +8,9 @@ import { DragSheet } from '@/components/DragSheet';
 import { CourtSearch } from '@/components/CourtSearch';
 import { Field } from '@/components/ui';
 import { ChipStrip, Chips, Fine, Section, SheetTitle, Submit, Tiles, formBody } from '@/components/sheet/SheetForm';
-import type { HitRequest } from '@/data/types';
+import type { HitAudience, HitRequest, ID } from '@/data/types';
+import { opensAtFor } from '@/features/hits/audience';
+import { AudienceCards, GroupsCard, InviteRow } from '@/features/hits/WhoSeesFirst';
 import { isMapCourtId } from '@/features/places/courtName';
 import { fetchCourts, isClosedCourt, type Court } from '@/features/players/courts';
 import { homeFor } from '@/features/players/positions';
@@ -32,11 +34,16 @@ const FORMAT_LABEL: Record<HitRequest['format'], string> = { singles: 'Singles',
  * here"), that court is already where. Opened from "Ask to hit" (?ask=…),
  * the hit also goes straight into your chat with each of those players; it
  * is still an open hit, so the sheet says so: anyone nearby may take the
- * spot first.
+ * spot first, unless "Who sees it first" says otherwise (migration 76):
+ * Invite first gives the players you tick (and, with My groups, the people
+ * in your groups) the first go, and it opens to everyone an hour after
+ * posting or three hours before it starts, whichever is sooner; Only people
+ * I invite never opens. Either way each one ticked gets it in your chat and
+ * is told.
  */
 export default function NewHit() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, detectedCoords, users, openness, actions } = useApp();
+  const { currentUser, detectedCoords, users, openness, feedGroups, actions } = useApp();
   const [closeSignal, setCloseSignal] = useState(0);
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + i); return d; }), []);
   // Late in the evening there is no hour left today: start on tomorrow.
@@ -53,7 +60,23 @@ export default function NewHit() {
   // Worked out again once the server has said who may be messaged (openness, migration 64).
   const asked = useMemo(() => (params.ask ?? '').split(',').filter((id, i, all) => !!id && all.indexOf(id) === i && id !== currentUser?.id && actions.canMessage(id))
     .flatMap((id) => { const u = users.find((x) => x.id === id); return u ? [u] : []; }).slice(0, 5), [params.ask, users, currentUser?.id, actions, openness]);
-  const askedNames = asked.length === 1 ? asked[0].name.split(' ')[0] : asked.length === 2 ? `${asked[0].name.split(' ')[0]} and ${asked[1].name.split(' ')[0]}` : `${asked.length} players`;
+  const namesOf = (list: { name: string }[]) => (list.length === 1 ? list[0].name.split(' ')[0] : list.length === 2 ? `${list[0].name.split(' ')[0]} and ${list[1].name.split(' ')[0]}` : `${list.length} players`);
+  const askedNames = namesOf(asked);
+  // Who sees it first: everyone (as before), or the people you invite first, or only them.
+  const [audience, setAudience] = useState<HitAudience>('everyone');
+  const inviting = audience !== 'everyone';
+  const askedIds = useMemo(() => asked.map((u) => u.id), [asked]);
+  const [picked, setPicked] = useState<ID[]>([]);
+  // The players from "Ask to hit" start ticked, once they are known.
+  const seeded = useRef(false);
+  useEffect(() => { if (!seeded.current && askedIds.length) { seeded.current = true; setPicked(askedIds); } }, [askedIds]);
+  const pickedUsers = picked.flatMap((id) => { const u = users.find((x) => x.id === id); return u ? [u] : []; });
+  const [withGroups, setWithGroups] = useState(false);
+  const groupCount = feedGroups.length;
+  const groupsOn = inviting && withGroups && groupCount > 0;
+  // Who gets the hit's card in your chat: the ticked when inviting, the asked otherwise.
+  const recipients = inviting ? pickedUsers : asked;
+  const recipientNames = namesOf(recipients);
   const [place, setPlace] = useState<HitRequest['place'] | null>(() => {
     const name = params.courtName?.trim();
     const lat = Number(params.lat); const lng = Number(params.lng);
@@ -80,12 +103,18 @@ export default function NewHit() {
   const [saving, setSaving] = useState(false);
   // The hit just posted, so the note after the sheet has gone can offer to send it.
   const posted = useRef<string | null>(null);
+  const sentTo = useRef<typeof asked>([]);
 
   const start = new Date(days[day]); start.setHours(hour, half ? 30 : 0, 0, 0);
   const past = start.getTime() < Date.now() - 30 * 60_000;
   // Only a chosen court, or a place you chose to use as typed: half a word in the box is not a place yet.
   const where = place;
-  const ready = !!where && !past && !saving;
+  const needsInvite = inviting && !pickedUsers.length && !groupsOn;
+  const ready = !!where && !past && !saving && !needsInvite;
+  // When an invite-first hit goes out to everyone, said as it will be.
+  const opensAt = audience === 'invite_first' ? new Date(opensAtFor(start.toISOString())) : null;
+  // "at 5:30 PM" today, "Sat at 5:30 PM" another day.
+  const opensText = opensAt ? `${opensAt.toDateString() === new Date().toDateString() ? '' : `${opensAt.toLocaleDateString([], { weekday: 'short' })} `}at ${opensAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '';
   // The invite as it will read, updated as you choose.
   const dayWord = day === 0 ? 'Today' : day === 1 ? 'Tomorrow' : days[day].toLocaleDateString([], { weekday: 'long' });
   const summary = [FORMAT_LABEL[format], `${dayWord} at ${half ? timeLabel(hour, true) : hourLabel(hour)}`, where?.name].filter(Boolean).join(' · ');
@@ -100,9 +129,11 @@ export default function NewHit() {
         startsAt: start.toISOString(), place: where, format, spots, note: note.trim() || undefined,
         levelMin: level === 'mine' && rating ? Math.max(1, rating - step) : undefined,
         levelMax: level === 'mine' && rating ? rating + step : undefined,
+        ...(inviting ? { audience, includeGroups: groupsOn, invitedIds: pickedUsers.map((u) => u.id) } : {}),
       });
-      // Asked: it lands in your chat with each of them, as the hit's own card.
-      if (asked.length) actions.shareToChats({ userIds: asked.map((u) => u.id) }, { kind: 'hit-request', id: posted.current });
+      sentTo.current = recipients;
+      // Asked or invited: it lands in your chat with each of them, as the hit's own card.
+      if (recipients.length) actions.shareToChats({ userIds: recipients.map((u) => u.id) }, { kind: 'hit-request', id: posted.current });
       setCloseSignal((n) => n + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'That didn’t post. Try again.');
@@ -115,11 +146,14 @@ export default function NewHit() {
     router.back();
     const id = posted.current;
     if (!id) return;
-    if (asked.length) {
-      const one = asked.length === 1 ? asked[0] : null;
+    const to = sentTo.current;
+    if (to.length || inviting) {
+      const one = to.length === 1 ? to[0] : null;
       showToast({
-        title: `Sent to ${askedNames}`,
-        body: 'It’s on Find Players too',
+        title: to.length ? `Sent to ${namesOf(to)}` : 'Your hit is up',
+        body: audience === 'invite_only' ? 'Only the people you invited can see it'
+          : audience === 'invite_first' ? `It opens to everyone ${opensText}`
+          : 'It’s on Find Players too',
         icon: 'paper-plane-outline',
         ...(one ? { action: { label: 'Open chat', onPress: () => router.push(`/messages/${actions.openConversationWith(one.id)}`) } } : {}),
       });
@@ -138,7 +172,7 @@ export default function NewHit() {
       header={<SheetTitle title={asked.length ? `Ask ${askedNames} to hit` : 'Looking for a hit'} line={summary} lineTone="brand" onClose={() => setCloseSignal((n) => n + 1)} />}>
       <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled">
         {/* Asked: said first, before anything is picked, so "Ask Sam" never reads as a private invite. */}
-        {asked.length ? (
+        {asked.length && !inviting ? (
           <View style={styles.openNote}>
             <Ionicons name="people-outline" size={16} color={colors.textMuted} />
             <Text style={styles.openNoteText}>It’s an open hit: {askedNames} {asked.length === 1 ? 'gets' : 'get'} it in your chat, and anyone nearby can take the spot.</Text>
@@ -181,13 +215,33 @@ export default function NewHit() {
           </Section>
         </View>
 
+        <Section title="Who sees it first">
+          <AudienceCards value={audience} onChange={setAudience} />
+        </Section>
+        {inviting ? (
+          <Section title="Invite" hint={pickedUsers.length ? `${pickedUsers.length} picked · each gets it in your chat` : 'Tick who gets it in your chat'}>
+            <InviteRow picked={picked} onPicked={setPicked} first={askedIds} />
+            {groupCount ? <GroupsCard on={withGroups} onChange={setWithGroups} count={groupCount} /> : null}
+            {audience === 'invite_first' ? (
+              <View style={styles.openNote}>
+                <Ionicons name="time-outline" size={16} color={colors.brand} />
+                <Text style={styles.openNoteText}>Opens to everyone {opensText}, unless it’s full by then.</Text>
+              </View>
+            ) : null}
+          </Section>
+        ) : null}
+
         <Field soft value={note} onChangeText={(v) => setNote(v.slice(0, 280))} placeholder="Anything else? (optional)" multiline minHeight={56} />
         {past ? <Text style={styles.error}>That time has passed. Pick a later one.</Text> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Submit label="Post" onPress={post} disabled={!ready} busy={saving} waiting={past ? 'Pick a later time' : 'Choose where to play'} />
-        <Fine>{asked.length
-          ? `It goes to ${askedNames} in your chat. It’s an open hit, so it shows on Find Players too, and someone nearby may take the spot first.`
-          : 'Players nearby see it on Find Players. Whoever joins gets a chat with you.'}</Fine>
+        <Submit label="Post" onPress={post} disabled={!ready} busy={saving} waiting={past ? 'Pick a later time' : !where ? 'Choose where to play' : 'Pick who to invite'} />
+        <Fine>{audience === 'invite_only'
+          ? `Only ${recipients.length ? recipientNames : 'the people you invite'}${groupsOn ? ' and your groups' : ''} can see it. It never shows on Find Players.`
+          : audience === 'invite_first'
+            ? `${recipients.length ? recipientNames : 'Your groups'} ${recipients.length === 1 && !groupsOn ? 'gets' : 'get'} the first go${groupsOn && recipients.length ? ', with your groups' : ''}. If there’s still a spot ${opensText}, it goes on Find Players.`
+            : asked.length
+              ? `It goes to ${askedNames} in your chat. It’s an open hit, so it shows on Find Players too, and someone nearby may take the spot first.`
+              : 'Players nearby see it on Find Players. Whoever joins gets a chat with you.'}</Fine>
       </ScrollView>
     </DragSheet>
   );

@@ -379,14 +379,26 @@ const toActivity = (r: ActivityRow): DetectedActivity => ({
 const activitiesQuery = (me: ID) => need().from('detected_activities').select('*').eq('user_id', me)
   .gte('ended_at', new Date(Date.now() - 14 * 86_400_000).toISOString()).order('started_at', { ascending: false }).limit(60);
 
-interface HitRow { id: string; author_id: string; starts_at: string; place: { id?: string; name?: string; lat?: number; lng?: number } | null; level_min: number | null; level_max: number | null; format: HitRequest['format']; spots: number; note: string | null; conversation_id: string | null; cancelled: boolean; created_at: string; hit_joins?: { user_id: string }[] }
+interface HitRow { id: string; author_id: string; starts_at: string; place: { id?: string; name?: string; lat?: number; lng?: number } | null; level_min: number | null; level_max: number | null; format: HitRequest['format']; spots: number; note: string | null; conversation_id: string | null; cancelled: boolean; created_at: string; hit_joins?: { user_id: string }[]; audience?: string | null; opens_at?: string | null; include_groups?: boolean | null }
 const toHit = (r: HitRow): HitRequest => ({
   id: r.id, authorId: r.author_id, startsAt: r.starts_at,
   // The court's map id when it was picked from the courts list (kept only if it is one), so the hit lands on that court's page.
   place: { id: isMapCourtId(r.place?.id) ? r.place.id : undefined, name: String(r.place?.name ?? 'A court').slice(0, 120), lat: typeof r.place?.lat === 'number' ? r.place.lat : undefined, lng: typeof r.place?.lng === 'number' ? r.place.lng : undefined },
   levelMin: r.level_min ?? undefined, levelMax: r.level_max ?? undefined, format: r.format, spots: r.spots, note: r.note ?? undefined,
   conversationId: r.conversation_id ?? undefined, cancelled: r.cancelled, createdAt: r.created_at, joinedIds: (r.hit_joins ?? []).map((j) => j.user_id),
+  // Who sees it first (migration 76). A database without it sends none of these: every hit is for everyone.
+  ...(r.audience === 'invite_first' || r.audience === 'invite_only'
+    ? { audience: r.audience, opensAt: r.opens_at ?? undefined, includeGroups: !!r.include_groups, invitedIds: [] as ID[] }
+    : {}),
 });
+/** Who was invited to which hit: the poster reads every invite to their own hit, an invited player only their own (migration 76). Nothing without it. */
+const hitInvitesQuery = () => need().from('hit_invites').select('hit_id, user_id').order('created_at', { ascending: true }).limit(1000);
+const withInvites = (hits: HitRequest[], rows: { hit_id: string; user_id: string }[] | null | undefined): HitRequest[] => {
+  if (!rows?.length) return hits;
+  const by = new Map<string, ID[]>();
+  for (const r of rows) by.set(r.hit_id, [...(by.get(r.hit_id) ?? []), r.user_id]);
+  return hits.map((h) => (h.audience && by.has(h.id) ? { ...h, invitedIds: by.get(h.id) } : h));
+};
 
 interface TipRow { id: string; user_id: string; body: string; created_at: string; votes: number | null; voted_by: Record<string, 1 | -1> | null }
 const toTip = (r: TipRow): Tip => ({ id: r.id, authorId: r.user_id, body: r.body, createdAt: r.created_at, votes: r.votes ?? 0, votedBy: r.voted_by ?? {} });
@@ -740,7 +752,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // everything else so it is known before any post is read: until it is, the
   // names on posts' session stats are not shown (see trustedSession).
   const tagsProbe = db.from('session_tags').select('id').limit(0).then(({ error }) => readinessOf(error), () => null);
-  const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows, sessionRows, pollRows, myPollVotes, hitRows, prefRows, activityRows] = await Promise.all([
+  const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows, sessionRows, pollRows, myPollVotes, hitRows, prefRows, activityRows, hitInviteRows] = await Promise.all([
     // Every profile, in chunks, so nobody is left out past the first 1,000.
     allRows<ProfileRow>((from, to) => db.from('profiles').select('*').order('created_at', { ascending: true }).range(from, to)),
     db.from('posts').select(POST_SELECT).order('created_at', { ascending: false }).limit(POST_PAGE),
@@ -778,6 +790,8 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     db.from('conversation_prefs').select('conversation_id, muted_until'),
     // Tennis sessions your tracker picked up (migration 58; none without it).
     activitiesQuery(me),
+    // Who was invited to the invite-first hits you can see (migration 76; none without it).
+    hitInvitesQuery(),
   ]);
   const coaching = await coachingLoad;
   const tagsReady = await tagsProbe;
@@ -847,7 +861,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     tips: ((tipRows.data ?? []) as TipRow[]).map(toTip),
     coachApplications: ((applicationRows.data ?? []) as CoachApplicationRow[]).map(toCoachApplication),
     sessions: ((sessionRows.data ?? []) as SessionRow[]).map(toSession),
-    hitRequests: ((hitRows.data ?? []) as HitRow[]).map(toHit),
+    hitRequests: withInvites(((hitRows.data ?? []) as HitRow[]).map(toHit), hitInviteRows.error ? null : (hitInviteRows.data as { hit_id: string; user_id: string }[])),
     activities: activityRows.error ? [] : ((activityRows.data ?? []) as ActivityRow[]).map(toActivity),
     ...(tagsReady === null ? {} : { sessionTagsReady: tagsReady }),
     ...coaching,
@@ -1991,7 +2005,10 @@ export const remote = {
     const { data, error } = await need().from('hit_requests').select('*, hit_joins(user_id)').eq('cancelled', false)
       .gte('starts_at', new Date(Date.now() - 3_600_000).toISOString()).order('starts_at', { ascending: true }).limit(100);
     if (error) { fail('hits')(error); return null; }
-    return (data as HitRow[]).map(toHit);
+    const hits = (data as HitRow[]).map(toHit);
+    if (!hits.some((h) => h.audience)) return hits;
+    const invites = await hitInvitesQuery();
+    return withInvites(hits, invites.error ? null : (invites.data as { hit_id: string; user_id: string }[]));
   },
   /**
    * Your own hits, posted or joined, that started in the last two days,
@@ -2478,8 +2495,27 @@ export const remote = {
     const { error } = await need().from('hit_requests').insert({
       id: h.id, author_id: h.authorId, starts_at: h.startsAt, place: h.place, level_min: h.levelMin ?? null, level_max: h.levelMax ?? null,
       format: h.format, spots: h.spots, note: h.note ?? null,
+      // Only an invite-first or invite-only hit names who sees it (migration 76), so a hit for everyone still posts on a database without it.
+      // When it opens is the server's to work out.
+      ...(h.audience ? { audience: h.audience, include_groups: !!h.includeGroups } : {}),
     });
-    if (error) { fail('hit request')(error); throw new Error('That didn’t post. Try again.'); }
+    if (error) {
+      fail('hit request')(error);
+      // Never posted for everyone instead: a database without migration 76 says no, and so does the app.
+      if (h.audience && /audience|include_groups/.test(error.message)) throw new Error('Invite-first hits aren’t ready yet. Post it for everyone, or try again later.');
+      throw new Error('That didn’t post. Try again.');
+    }
+  },
+  /** The players invited to your invite-first or invite-only hit (migration 76): who the server took (never someone blocked, or a teen you don't follow both ways). */
+  async inviteToHit(hitId: ID, userIds: ID[]): Promise<ID[]> {
+    const { data, error } = await need().rpc('invite_to_hit', { hit: hitId, people: userIds.filter((x) => UUID_RE.test(x)) });
+    if (error) { fail('invite to hit')(error); throw new Error('The invites didn’t go. Try again.'); }
+    return (data as string[] | null) ?? [];
+  },
+  /** "Open to everyone now", on your own invite-first hit (migration 76). */
+  async openHitNow(hitId: ID) {
+    const { error } = await need().rpc('open_hit_now', { hit: hitId });
+    if (error) { fail('open hit')(error); throw new Error('That didn’t go through. Try again.'); }
   },
   /** "I'm in": the hit's group chat comes back, or a plain sentence saying why not. */
   async joinHit(hitId: ID): Promise<{ conversationId?: ID; error?: string }> {

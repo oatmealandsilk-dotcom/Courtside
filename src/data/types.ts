@@ -978,6 +978,8 @@ export type NotificationKind =
   | 'joined'
   /** Someone said "I'm in" to your Looking-for-a-hit post. */
   | 'hit-join'
+  /** The poster invited you to their invite-first or invite-only hit (migration 76). Actor is them; the target is the hit ('hit-request'). */
+  | 'hit-invite'
   /** Someone nearby posted a hit much like yours (or like what your open-to-hit ring says). Actor is them; the target is their hit (migration 53). */
   | 'hit-match'
   /** A tracker picked up a tennis session. Actor is you; the target is the detected activity (migration 58). */
@@ -1202,7 +1204,23 @@ export interface HitRequest {
   cancelled?: boolean;
   createdAt: string;
   joinedIds: ID[];
+  /**
+   * Who sees it first (migration 76). Left out: everyone, as every hit was
+   * before. 'invite_first': only the players invited (and, with
+   * includeGroups, the people in the poster's groups) until opensAt, then
+   * everyone, unless it is full by then. 'invite_only': never anyone else.
+   */
+  audience?: HitAudience;
+  /** When an invite-first hit opens to everyone: the earlier of an hour after posting and three hours before it starts. The server's. */
+  opensAt?: string;
+  /** The people in the poster's groups (Groups, migration 67) see it too. */
+  includeGroups?: boolean;
+  /** Who was invited. The poster has the whole list; an invited player only themselves. */
+  invitedIds?: ID[];
 }
+
+/** Who sees a hit first: 'everyone' is the same as leaving it out. */
+export type HitAudience = 'everyone' | 'invite_first' | 'invite_only';
 
 /* ------------------------------ Shared links ----------------------------- */
 

@@ -49,6 +49,7 @@ import { requestFeedRefresh } from '@/features/feed/feedBus';
 import { blockDevice, groupFor, rememberAnswered, yearsOld, type AgeGroup } from '@/features/age/ageCheck';
 import { knownOpen, notKnownAdult, type AgeSource, type Openness, type OpennessMap } from '@/features/players/age';
 import { show as showToast } from '@/lib/toast';
+import { opensAtFor } from '@/features/hits/audience';
 import { forgetPushToken } from '@/features/push/push';
 import { framesAt } from '@/features/compose/frames';
 import { noteStep, reportError } from '@/lib/crashReporting';
@@ -499,7 +500,14 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   logSession: (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; opponent?: string; note?: string; day?: string; activityId?: ID }) => Promise<ID>;
   deleteSession: (id: ID) => void;
   /** Post a "Looking for a hit". Throws a plain sentence if it cannot be posted. */
-  postHit: (input: Omit<HitRequest, 'id' | 'authorId' | 'createdAt' | 'joinedIds' | 'conversationId' | 'cancelled'>) => Promise<ID>;
+  /**
+   * Post a "Looking for a hit". Throws a plain sentence if it cannot be posted.
+   * Invite first or invite only (migration 76): `invitedIds` are invited once
+   * it is up (and told); the card in each chat is the caller's to send.
+   */
+  postHit: (input: Omit<HitRequest, 'id' | 'authorId' | 'createdAt' | 'joinedIds' | 'conversationId' | 'cancelled' | 'opensAt'>) => Promise<ID>;
+  /** "Open to everyone now" on your own invite-first hit. */
+  openHitNow: (hitId: ID) => Promise<void>;
   /** "I'm in": joins, and resolves the group chat to open (or a sentence saying why not). */
   joinHit: (hitId: ID) => Promise<{ conversationId?: ID; error?: string }>;
   leaveHit: (hitId: ID) => void;
@@ -2422,9 +2430,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, newOnCourtside: rows, mapLive: true }));
   }, []);
 
-  const postHit = useCallback(async (input: Omit<HitRequest, 'id' | 'authorId' | 'createdAt' | 'joinedIds' | 'conversationId' | 'cancelled'>): Promise<ID> => {
+  const postHit = useCallback(async (input: Omit<HitRequest, 'id' | 'authorId' | 'createdAt' | 'joinedIds' | 'conversationId' | 'cancelled' | 'opensAt'>): Promise<ID> => {
     const me = requireUser();
-    const hit: HitRequest = { ...input, id: nextId('hitreq'), authorId: me, createdAt: new Date().toISOString(), joinedIds: [] };
+    const { audience: chosen, includeGroups, invitedIds, ...rest } = input;
+    // "Everyone" is the same as saying nothing, so a hit for everyone posts on a database without migration 76.
+    const audience = chosen && chosen !== 'everyone' ? chosen : undefined;
+    const invite = audience ? Array.from(new Set((invitedIds ?? []).filter((x) => x !== me))).slice(0, 20) : [];
+    const now = new Date();
+    const hit: HitRequest = {
+      ...rest, id: nextId('hitreq'), authorId: me, createdAt: now.toISOString(), joinedIds: [],
+      // When it opens is the server's; the same rule here, so the card can say so straight away.
+      ...(audience ? { audience, includeGroups: !!includeGroups, invitedIds: invite, ...(audience === 'invite_first' ? { opensAt: opensAtFor(rest.startsAt, now.getTime()) } : {}) } : {}),
+    };
     haptics.commit();
     setState((prev) => ({ ...prev, hitRequests: [...prev.hitRequests, hit].sort((a, b) => a.startsAt.localeCompare(b.startsAt)) }));
     if (live(me)) {
@@ -2432,8 +2449,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.filter((h) => h.id !== hit.id) }));
         throw e;
       }
+      if (invite.length) {
+        // Who the server took (never someone blocked, or a teen you don't follow both ways).
+        const took = await remote.inviteToHit(hit.id, invite).catch(() => null);
+        if (took) setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.map((h) => (h.id === hit.id ? { ...h, invitedIds: took } : h)) }));
+        else showToast({ title: 'Your hit is up, but the invites didn’t go', body: 'Only you can see it for now. Call it off and post it again.', icon: 'alert-circle-outline' });
+      }
     }
     return hit.id;
+  }, [requireUser]);
+
+  const openHitNow = useCallback(async (hitId: ID) => {
+    const me = requireUser();
+    const had = stateRef.current.hitRequests.find((h) => h.id === hitId);
+    if (!had || had.authorId !== me || had.audience !== 'invite_first') return;
+    haptics.commit();
+    const opened = { audience: undefined, opensAt: undefined };
+    setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.map((h) => (h.id === hitId ? { ...h, ...opened } : h)) }));
+    if (!live(me, hitId)) return;
+    try { await remote.openHitNow(hitId); } catch (e) {
+      setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.map((h) => (h.id === hitId ? { ...h, audience: had.audience, opensAt: had.opensAt } : h)) }));
+      showToast({ title: e instanceof Error ? e.message : 'That didn’t go through. Try again.', icon: 'alert-circle-outline' });
+    }
   }, [requireUser]);
 
   const joinHit = useCallback(async (hitId: ID) => {
@@ -5725,6 +5762,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       deleteSession,
       loadLastSeen,
       postHit,
+      openHitNow,
       joinHit,
       leaveHit,
       cancelHit,
@@ -5898,6 +5936,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       deleteSession,
       loadLastSeen,
       postHit,
+      openHitNow,
       joinHit,
       leaveHit,
       cancelHit,
