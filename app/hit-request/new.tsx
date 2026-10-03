@@ -168,7 +168,7 @@ export default function NewHit() {
               <Chips value={level} onChange={(v) => { if (v) setLevel(v); }} options={[{ value: 'mine', label: rating ? `Around ${rating.toFixed(1)}` : 'My level' }, { value: 'any', label: 'Any' }]} />
             </Section>
           </View>
-          <Section title="Players">
+          <Section title="Players needed" hint="Not counting you">
             <View style={styles.stepper}>
               <Pressable accessibilityRole="button" accessibilityLabel="One fewer" disabled={spots <= 1} onPress={() => setSpots((n) => Math.max(1, n - 1))} style={[styles.step, spots <= 1 && { opacity: 0.35 }]}>
                 <Ionicons name="remove" size={16} color={colors.text} />
