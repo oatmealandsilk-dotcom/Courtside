@@ -18,6 +18,10 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
 
 const FACE = 52;
+/** Every face gets the same slot, yours included, so the gaps between them are all equal. */
+const ITEM = 88;
+/** The ring's box round a face (OpenRing): face, gap, ring and a pixel of room. */
+const RINGED = FACE + 13;
 
 /** Someone up for a hit today, near you: who, how far (if we know where you are), and when they were last there. */
 interface Up { user: User; miles?: number; rough: boolean; seenAt?: string }
@@ -81,7 +85,7 @@ export function UpToday({ me, people, teen = false, locationOn, onLocation, onTo
         {people.length ? <Text style={styles.count}>{people.length} near you</Text> : null}
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row} style={styles.scroll}>
-        <Pressable accessibilityRole="switch" accessibilityState={{ checked: up }} accessibilityLabel={up ? 'You’re up today. Turn off' : 'I’m up today'} onPress={flip} style={({ pressed }) => [styles.item, styles.mine, pressed && styles.pressed]}>
+        <Pressable accessibilityRole="switch" accessibilityState={{ checked: up }} accessibilityLabel={up ? 'You’re up today. Turn off' : 'I’m up today'} onPress={flip} style={({ pressed }) => [styles.item, pressed && styles.pressed]}>
           <View>
             <OpenRing open={up} size={FACE} hairline><Avatar name={me.name} seed={me.avatarSeed} uri={me.avatarUrl} size={FACE} /></OpenRing>
             {up ? null : <Animated.View entering={FadeIn.duration(160)} style={styles.plus}><Ionicons name="add" size={14} color={colors.bg} /></Animated.View>}
@@ -121,10 +125,10 @@ const styleDefinitions = StyleSheet.create({
   count: { ...typography.small, color: colors.textMuted },
   // Runs to the screen's edges, the way the stories rail does.
   scroll: { marginHorizontal: -spacing.lg },
-  row: { paddingHorizontal: spacing.lg - 6, gap: 2, alignItems: 'flex-start' },
-  item: { width: 78, alignItems: 'center', gap: 3, paddingVertical: 2 },
-  // Yours says the most ("I’m up today"), so it has a little more room.
-  mine: { width: 96 },
+  // The first ring lines up with the title above it.
+  row: { paddingHorizontal: spacing.lg - (ITEM - RINGED) / 2, gap: 0, alignItems: 'flex-start' },
+  // One width for every face (yours says the most, "I’m up today", and fits), so they sit evenly spaced.
+  item: { width: ITEM, alignItems: 'center', gap: 3, paddingVertical: 2 },
   pressed: { opacity: 0.7 },
   plus: { position: 'absolute', right: 2, bottom: 2, width: 22, height: 22, borderRadius: 11, backgroundColor: colors.text, borderWidth: 2, borderColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
   name: { ...typography.smallStrong, color: colors.text, marginTop: 2 },

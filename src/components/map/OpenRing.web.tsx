@@ -20,9 +20,9 @@ const CSS = `
 .cs-or{position:relative;display:flex;align-items:center;justify-content:center;flex:none}
 .cs-or-halo-wrap{position:absolute;inset:0;opacity:0;transition:opacity .42s ease;pointer-events:none}
 .cs-or-on .cs-or-halo-wrap{opacity:1}
-.cs-or-halo{position:absolute;border-radius:999px;opacity:0;animation:cs-or-pulse 2.8s cubic-bezier(.22,.61,.36,1) infinite;animation-play-state:paused}
+.cs-or-halo{position:absolute;border-radius:999px;opacity:0;animation:cs-or-pulse 5s linear infinite;animation-play-state:paused}
 .cs-or-on .cs-or-halo{animation-play-state:running}
-@keyframes cs-or-pulse{0%{transform:scale(1);opacity:.45}70%{opacity:0}100%{transform:scale(1.85);opacity:0}}
+@keyframes cs-or-pulse{0%{transform:scale(1);opacity:.3;animation-timing-function:cubic-bezier(.22,.61,.36,1)}44%{transform:scale(1.35);opacity:0}100%{transform:scale(1.35);opacity:0}}
 .cs-or-line{position:absolute;box-sizing:border-box;border-radius:999px;pointer-events:none;transition:opacity .42s ease}
 .cs-or-on .cs-or-line{opacity:0}
 .cs-or-ring{position:absolute;left:0;top:0;transform:rotate(-90deg);overflow:visible;pointer-events:none}

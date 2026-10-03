@@ -11,8 +11,13 @@ const ACircle = Animated.createAnimatedComponent(Circle);
 /** The same measurements as a pin's on the map (markers.ts): a gap, then the green ring. */
 const GAP = 3;
 const RING = 2.5;
-/** One slow breath out from the face, the map pins' beat. */
-const BEAT = 2800;
+/** One full cycle: a short, soft breath out from the face, then a rest before the next. */
+const BEAT = 5000;
+/** The share of the cycle the breath takes; the rest of it is still. */
+const BREATH = 0.44;
+/** How far the halo grows past the face, and how strong it starts. Kept small so it reads as alive, not busy. */
+const REACH = 0.35;
+const GLOW = 0.3;
 
 /**
  * A face wearing the Open to hit look, the same one the map's pins wear:
@@ -51,7 +56,7 @@ export function OpenRing({ open, size, hairline = false, children }: { open: boo
         : withTiming(0, { duration: 420, easing: Easing.bezier(0.4, 0, 0.2, 1) });
       if (open) pop.value = withSequence(withTiming(1.08, { duration: 170, easing: Easing.out(Easing.quad) }), withSpring(1, { damping: 12, stiffness: 220 }));
     }
-    if (open && !reduce) beat.value = withRepeat(withTiming(1, { duration: BEAT, easing: Easing.bezier(0.22, 0.61, 0.36, 1) }), -1, false);
+    if (open && !reduce) beat.value = withRepeat(withTiming(1, { duration: BEAT, easing: Easing.linear }), -1, false);
     else cancelAnimation(beat);
   }, [open, reduce]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -66,8 +71,10 @@ export function OpenRing({ open, size, hairline = false, children }: { open: boo
   const line = useAnimatedStyle(() => ({ opacity: 1 - on.value }));
   const halo = useAnimatedStyle(() => {
     if (reduce) return { opacity: 0.2 * on.value, transform: [{ scale: 1.3 }] };
-    const t = beat.value;
-    return { opacity: on.value * 0.45 * Math.max(0, 1 - t / 0.7), transform: [{ scale: 1 + 0.85 * t }] };
+    // The breath runs over the first part of the cycle, easing out; then the halo rests unseen.
+    const p = Math.min(1, beat.value / BREATH);
+    const t = 1 - (1 - p) * (1 - p) * (1 - p);
+    return { opacity: on.value * GLOW * (1 - p), transform: [{ scale: 1 + REACH * t }] };
   });
   const face = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   const inner = size + GAP * 2;
