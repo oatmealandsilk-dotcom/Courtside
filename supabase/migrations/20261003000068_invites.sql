@@ -14,15 +14,19 @@
 --    alert and its push).
 --
 -- 3. A teen (or anyone whose age is not on file yet) who joins through a
---    link is not made to follow the sharer: under migration 64 a teen who
---    follows an adult is open to them. The invite is still counted
+--    link is not made to follow the sharer: under the teen rules (migration
+--    54 onward) a teen who follows an adult is open to them. The invite is still counted
 --    (referred_by); the follow waits until the age says adult
 --    (follow_my_inviter, called by the app once the birthday is in).
 -- 4. Group posts (migration 67, posts.group_id) never show, are never
 --    counted, and someone blocked by the author is never shown anything.
 --    group_id is read through to_jsonb so this still runs before 67.
 --
--- Needs migrations 18, 36 and 64. Safe to run more than once.
+-- Needs migrations 18, 36 and 60 (known_adult, the one place an age is
+-- read). Does not need 64: 64 only changes where known_adult looks, and
+-- these functions call it by name, so they follow it whenever 64 runs; 64
+-- checks none of what this replaces, so either can run first.
+-- Safe to run more than once.
 
 -- ============================================================ 1. helpers (server only)
 
@@ -213,7 +217,7 @@ begin
   perform set_config('courtside.referral', 'off', true);
   -- The invite counts either way. The follow only when this person is known
   -- to be an adult: a teen following an adult opens the teen to them
-  -- (migration 64). Answers null when no follow was made, so the app says
+  -- (the teen rules, migration 54 onward). Answers null when no follow was made, so the app says
   -- nothing; follow_my_inviter makes it once the birthday says adult.
   if not public.known_adult(me) then return null; end if;
   perform public.follow_inviter_now(me, who);

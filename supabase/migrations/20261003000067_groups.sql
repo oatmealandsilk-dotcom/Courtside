@@ -24,15 +24,23 @@
 --     followers or counts on the map), and only tags of members alert.
 --   * Group posts are not in the "For you" feed (the app leaves them out);
 --     the ranking itself is untouched.
---   * Teens can join groups like anyone. Nothing about chats changes: groups
+--   * Groups are for adults in this version (the owner's rule "teens: 1:1
+--     only"): someone not known to be an adult (a teen, or an account with
+--     no birthday yet) cannot start, join or ask to join a group, and an
+--     admin's yes cannot let them in. Asked through known_adult (migration
+--     60), never by reading the age itself, so this works the same before
+--     and after migration 64 moves where the age is kept. Teens still see
+--     the "For you" feed as before. Nothing about chats changes: groups
 --     have no chat of their own in this version.
 --
 -- Errors the app relies on, word for word: 'group_limit' (you are in 3),
 -- 'their_limit' (the person asking is now in 3), 'not_admin', 'not_found',
--- 'name_needed', 'slow_down', 'not_in_group', 'group_fixed'.
+-- 'name_needed', 'slow_down', 'not_in_group', 'group_fixed', 'adults_only'
+-- (you are not known to be an adult), 'their_age' (nor is the person asking).
 --
--- Needs migrations 02, 21, 23, 56 and 62. Safe to run more than once. Nothing
--- here deletes anyone's posts.
+-- Needs migrations 02, 21, 23, 56, 60 (known_adult) and 62. Does not need
+-- 64, and 64 checks none of what this replaces, so either can run first.
+-- Safe to run more than once. Nothing here deletes anyone's posts.
 
 -- ============================================================ 1. tables
 
@@ -291,6 +299,7 @@ declare
   v_id uuid;
 begin
   if me is null then raise exception 'not signed in'; end if;
+  if not public.known_adult(me) then raise exception 'adults_only'; end if;
   if v_name is null then raise exception 'name_needed'; end if;
   perform public.lock_feed_groups_of(me);
   if public.feed_group_count(me) >= public.feed_group_cap() then raise exception 'group_limit'; end if;
@@ -336,6 +345,7 @@ declare
   grp public.feed_groups;
 begin
   if me is null then raise exception 'not signed in'; end if;
+  if not public.known_adult(me) then raise exception 'adults_only'; end if;
   select * into grp from public.feed_groups where id = g;
   if grp.id is null then raise exception 'not_found'; end if;
   perform public.lock_feed_groups_of(me);
@@ -378,6 +388,9 @@ begin
     delete from public.feed_group_requests where group_id = g and user_id = who;
     return;
   end if;
+  -- Only someone known to be an adult can be let in (a request can only
+  -- be made by one, but this holds whatever is in the table).
+  if not public.known_adult(who) then raise exception 'their_age'; end if;
   perform public.lock_feed_groups_of(who);
   if public.feed_group_count(who) >= public.feed_group_cap() then raise exception 'their_limit'; end if;
   insert into public.feed_group_members (group_id, user_id) values (g, who) on conflict do nothing;

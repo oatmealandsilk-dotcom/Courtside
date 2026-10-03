@@ -13,7 +13,7 @@ import { publicRoute } from '@/features/share/publicRoute';
 import { shareLink } from '@/lib/shareLink';
 import { shareOutside } from '@/lib/shareOutside';
 import { useApp } from '@/store/AppContext';
-import { MAX_GROUPS } from '@/store/feedGroups';
+import { GROUPS_AGE_LINE, MAX_GROUPS, groupsOpenTo } from '@/store/feedGroups';
 import { colors, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
@@ -29,7 +29,10 @@ type JoinMode = 'open' | 'ask';
 function GroupPage() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { feedGroups, feedGroupsAsked, users, currentUserId, actions } = useApp();
+  const { feedGroups, feedGroupsAsked, users, currentUserId, currentUser, actions } = useApp();
+  // Groups are adults-only for now: someone not known to be an adult sees
+  // one calm line where Join would be (the server says no to them anyway).
+  const open = groupsOpenTo(currentUser);
   const group = feedGroups.find((g) => g.id === id);
   const [card, setCard] = useState<FeedGroupCard | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
@@ -105,10 +108,12 @@ function GroupPage() {
         </View>
       ) : (
         <View style={styles.actions}>
-          {asked
+          {!open
+            ? <Text style={styles.ageLine}>{GROUPS_AGE_LINE}</Text>
+            : asked
             ? <Button label="Asked to join · Cancel" variant="secondary" onPress={() => act(async () => { await actions.leaveFeedGroup(id); await readCard(); })} disabled={busy} full />
             : <Button label={ask ? 'Ask to join' : 'Join group'} onPress={join} loading={busy} disabled={busy} full />}
-          <Text style={styles.meta}>Only people in the group see what’s shared to it. You can be in up to {MAX_GROUPS} groups.</Text>
+          {open ? <Text style={styles.meta}>Only people in the group see what’s shared to it. You can be in up to {MAX_GROUPS} groups.</Text> : null}
         </View>
       )}
       {note ? <Text style={styles.note}>{note}</Text> : null}
@@ -210,6 +215,7 @@ const styleDefinitions = StyleSheet.create({
   actions: { gap: spacing.sm },
   pair: { flexDirection: 'row', gap: spacing.sm },
   note: { ...typography.small, color: colors.textMuted, marginTop: spacing.sm },
+  ageLine: { ...typography.body, color: colors.text, textAlign: 'center' },
   section: { ...typography.smallStrong, color: colors.textMuted, marginTop: spacing.lg, marginBottom: spacing.sm },
   list: { borderRadius: radius.lg, backgroundColor: colors.surface, overflow: 'hidden' },
   request: { gap: spacing.sm, paddingVertical: spacing.md, paddingHorizontal: spacing.md },

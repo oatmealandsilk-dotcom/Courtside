@@ -2,7 +2,8 @@ import { useCallback, useMemo } from 'react';
 
 import { remote } from '@/data/remote';
 import { demoGroups } from '@/data/mock/groups';
-import type { Comment, FeedGroup, FeedGroupCard, ID, Post } from '@/data/types';
+import type { Comment, FeedGroup, FeedGroupCard, ID, Post, User } from '@/data/types';
+import { notKnownAdult } from '@/features/players/age';
 import * as haptics from '@/lib/haptics';
 
 /*
@@ -17,6 +18,17 @@ import * as haptics from '@/lib/haptics';
 /** The most groups one person can be in. The server keeps the same number (feed_group_cap). */
 export const MAX_GROUPS = 3;
 
+/**
+ * Groups are for adults in this version (the owner's rule: teens get 1:1
+ * only). Someone not known to be an adult, a teen or an account with no
+ * birthday yet, cannot start, join or ask to join one; the server says the
+ * same (migration 67, 'adults_only'). Teens keep the For you feed as it is.
+ */
+export const groupsOpenTo = (u: Pick<User, 'ageGroup'> | null | undefined) => !!u && !notKnownAdult(u);
+
+/** What someone who cannot use groups yet sees instead of Start or Join. */
+export const GROUPS_AGE_LINE = 'Groups open when you’re 18.';
+
 export interface FeedGroupsState {
   /** The groups you are in, oldest joined first: the Feed's top row in that order. */
   feedGroups: FeedGroup[];
@@ -28,7 +40,7 @@ export interface FeedGroupsState {
 
 export const emptyFeedGroups: FeedGroupsState = { feedGroups: [], feedGroupsAsked: [], feedGroupsOn: null };
 
-interface Reads { currentUserId: ID | null; posts: Post[]; comments: Comment[]; users: { id: ID; name: string }[] }
+interface Reads { currentUserId: ID | null; posts: Post[]; comments: Comment[]; users: Pick<User, 'id' | 'name' | 'ageGroup'>[] }
 
 export interface FeedGroupsActions {
   /** Your groups, their members and (for an admin) their requests. */
@@ -54,6 +66,8 @@ export interface FeedGroupsActions {
 /** The server's word, as a sentence for the person who tapped. */
 export function groupSentence(word: string): string {
   switch (word) {
+    case 'adults_only': return GROUPS_AGE_LINE;
+    case 'their_age': return 'They can’t join groups yet.';
     case 'group_limit': return `You're in ${MAX_GROUPS} groups already. Leave one to join another.`;
     case 'their_limit': return `They're in ${MAX_GROUPS} groups already, the most anyone can be in.`;
     case 'not_admin': return 'Only the group’s admin can do that.';
@@ -109,6 +123,8 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
     const you = me();
     if (!you) throw new Error('Sign in to start a group.');
     if (!live(you)) {
+      // The demo says what the server says (migration 67, 'adults_only').
+      if (!groupsOpenTo(stateRef.current.users.find((u) => u.id === you))) throw new Error(GROUPS_AGE_LINE);
       if (stateRef.current.feedGroups.length >= MAX_GROUPS) throw new Error(groupSentence('group_limit'));
       const id = demoId();
       haptics.commit();
@@ -136,6 +152,8 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
     const you = me();
     if (!you) throw new Error('Sign in to join a group.');
     if (!live(you)) {
+      // The demo says what the server says (migration 67, 'adults_only').
+      if (!groupsOpenTo(stateRef.current.users.find((u) => u.id === you))) throw new Error(GROUPS_AGE_LINE);
       const g = demoGroups.find((x) => x.id === id);
       if (!g) throw new Error(groupSentence('not_found'));
       if (stateRef.current.feedGroups.some((x) => x.id === id)) return 'already';

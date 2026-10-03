@@ -6,21 +6,24 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button, Field, Screen, SegmentedControl } from '@/components/ui';
 import { goBack } from '@/lib/goBack';
 import { useApp } from '@/store/AppContext';
-import { MAX_GROUPS } from '@/store/feedGroups';
+import { GROUPS_AGE_LINE, MAX_GROUPS, groupsOpenTo } from '@/store/feedGroups';
 import { colors, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
 /*
  * Groups (migration 67): the ones you are in, the ones you asked to join,
  * and a short form to start one. Reached from the "+" at the end of the
- * Feed's top row, and from Profile.
+ * Feed's top row, and from Profile. Someone not known to be an adult sees
+ * one calm line instead of Start (groups are adults-only for now; the
+ * server holds the same rule).
  */
 
 type JoinMode = 'open' | 'ask';
 
 export default function Groups() {
   const styles = useThemedStyles(styleDefinitions);
-  const { feedGroups, feedGroupsAsked, feedGroupsOn, currentUserId, actions } = useApp();
+  const { feedGroups, feedGroupsAsked, feedGroupsOn, currentUserId, currentUser, actions } = useApp();
+  const open = groupsOpenTo(currentUser);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [mode, setMode] = useState<JoinMode>('open');
@@ -53,8 +56,10 @@ export default function Groups() {
         <Text style={styles.note}>Groups aren’t switched on yet. Check back soon.</Text>
       ) : null}
 
-      <Text style={styles.section}>Your groups</Text>
-      {feedGroups.length === 0 ? (
+      {!open ? <Text style={styles.ageLine}>{GROUPS_AGE_LINE}</Text> : null}
+
+      {open || feedGroups.length ? <Text style={styles.section}>Your groups</Text> : null}
+      {!open && feedGroups.length === 0 ? null : feedGroups.length === 0 ? (
         <Text style={styles.empty}>You’re not in a group yet. Start one below, or open a group’s invite link.</Text>
       ) : (
         <View style={styles.list}>
@@ -96,8 +101,8 @@ export default function Groups() {
         </>
       ) : null}
 
-      <Text style={styles.section}>Start a group</Text>
-      {full ? (
+      {!open ? null : <Text style={styles.section}>Start a group</Text>}
+      {!open ? null : full ? (
         <Text style={styles.empty}>You’re in {MAX_GROUPS} groups, the most anyone can be in. Leave one to start another.</Text>
       ) : (
         <View style={styles.form}>
@@ -118,6 +123,7 @@ export default function Groups() {
 
 const styleDefinitions = StyleSheet.create({
   note: { ...typography.small, color: colors.textMuted, lineHeight: 20, paddingBottom: spacing.md },
+  ageLine: { ...typography.body, color: colors.text, paddingVertical: spacing.sm },
   section: { ...typography.smallStrong, color: colors.textMuted, marginTop: spacing.lg, marginBottom: spacing.sm },
   empty: { ...typography.small, color: colors.textMuted, lineHeight: 20 },
   list: { borderRadius: radius.lg, backgroundColor: colors.surface, overflow: 'hidden' },

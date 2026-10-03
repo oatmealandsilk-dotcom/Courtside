@@ -933,7 +933,7 @@ const toGroup = (row: GroupRow): FeedGroup => ({
 /** The server's word for why a group action said no (migration 67), or 'failed'. */
 const groupWord = (error: { code?: string; message: string }) =>
   missingFunction(error) ? 'not_ready'
-    : /group_limit|their_limit|not_admin|not_found|name_needed|slow_down/.exec(error.message)?.[0] ?? 'failed';
+    : /adults_only|their_age|group_limit|their_limit|not_admin|not_found|name_needed|slow_down/.exec(error.message)?.[0] ?? 'failed';
 
 export const remote = {
   /* ------------------------ discussions and coaching ------------------------ */
