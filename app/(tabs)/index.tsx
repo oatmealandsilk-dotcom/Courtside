@@ -1336,7 +1336,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                   <View key={item.question.id} style={[styles.article, styles.threadArticle, scope && styles.articleScoped]}>
                     <Wash height={300} strength={0.6} />
                     <View style={styles.eyebrowRow}>
-                      <Text style={styles.eyebrow}>From the community</Text>
+                      <View style={{ flex: 1 }} />
                       {hiddenMarks.has(item.question.id) ? <View style={{ width: 34, height: 34 }} /> : <TapAway label="Hide the CourtSide logo" onHidden={() => hideMark(item.question.id)} style={styles.threadMark}><BrandMark size={34} /></TapAway>}
                     </View>
                     {strip}
