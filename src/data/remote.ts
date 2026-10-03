@@ -554,7 +554,7 @@ const toCoachApplication = (r: CoachApplicationRow): CoachApplication => ({
 /** A chat member's row. `role` came with migration 54 (admin or member); a database without it leaves it out. */
 interface MemberRow { user_id: string; last_read_at: string | null; role?: string | null }
 interface ConversationRow { id: string; updated_at: string; title?: string | null; is_group?: boolean | null; created_by?: string | null; photo_url?: string | null; conversation_members?: MemberRow[]; messages?: MessageRow[] }
-interface MessageRow { id: string; conversation_id: string; sender_id: string; body: string; kind: string; shared_id: string | null; reactions: Record<string, string> | null; created_at: string; edited_at?: string | null; place?: { id?: string; name: string; lat: number; lng: number; count?: unknown } | null; audio_url?: string | null; audio_ms?: number | null; event?: { type?: string; targets?: unknown; title?: string | null; on?: boolean | null } | null; photos?: unknown }
+interface MessageRow { id: string; conversation_id: string; sender_id: string; body: string; kind: string; shared_id: string | null; reactions: Record<string, string> | null; created_at: string; edited_at?: string | null; place?: { id?: string; name: string; lat: number; lng: number; count?: unknown } | null; audio_url?: string | null; audio_ms?: number | null; event?: { type?: string; targets?: unknown; title?: string | null; on?: boolean | null } | null; photos?: unknown; reply_to_id?: string | null }
 
 /**
  * A photo message's photos as the server keeps them ([{path, w, h}], migration
@@ -591,7 +591,7 @@ function toChatEvent(raw: MessageRow['event']): ChatEvent | undefined {
  * by chat id) says which chats you muted. Event lines ("Mira added Dev") are
  * never unread and never "read by" anyone.
  */
-export function toConversations(me: ID, convRows: ConversationRow[], messageRows: MessageRow[], mutedUntil?: Map<ID, string>): { conversations: Conversation[]; messages: Message[] } {
+export function toConversations(me: ID, convRows: ConversationRow[], messageRows: MessageRow[], prefs?: Map<ID, ChatPrefs>): { conversations: Conversation[]; messages: Message[] } {
   const readAt = new Map<string, Map<string, string>>();
   for (const c of convRows) readAt.set(c.id, new Map((c.conversation_members ?? []).filter((m) => m.last_read_at).map((m) => [m.user_id, m.last_read_at as string])));
   const messages: Message[] = messageRows.map((row) => {
@@ -612,6 +612,7 @@ export function toConversations(me: ID, convRows: ConversationRow[], messageRows
         count: typeof row.place.count === 'number' && row.place.count >= 1 && row.place.count < 100 ? Math.round(row.place.count) : undefined,
       } : undefined,
       photos: row.kind === 'photo' ? toChatPhotos(row.photos) : undefined,
+      replyToId: row.reply_to_id ?? undefined,
       readAtBy: Object.keys(readAtBy).length ? readAtBy : undefined,
       openedAtBy: Object.keys(readAtBy).length ? readAtBy : undefined,
     };
@@ -624,7 +625,8 @@ export function toConversations(me: ID, convRows: ConversationRow[], messageRows
     // A database with roles (migration 54) always has an admin in a group;
     // without roles the list stays unknown rather than empty.
     const hasRoles = members.some((m) => typeof m.role === 'string');
-    const muted = mutedUntil?.get(c.id);
+    const pref = prefs?.get(c.id);
+    const muted = pref?.mutedUntil;
     return {
       id: c.id,
       participantIds: members.map((m) => m.user_id),
@@ -634,6 +636,9 @@ export function toConversations(me: ID, convRows: ConversationRow[], messageRows
       adminIds: hasRoles && c.is_group ? admins : undefined,
       photoUrl: c.photo_url ?? undefined,
       mutedUntil: muted && Date.parse(muted) > Date.now() ? muted : undefined,
+      pinnedAt: pref?.pinnedAt,
+      markedUnread: pref?.markedUnread || undefined,
+      hiddenAt: pref?.hiddenAt,
       messageIds: mine.map((m) => m.id),
       updatedAt: c.updated_at,
       unreadCount: mine.filter((m) => m.senderId !== me && m.kind !== 'system' && m.createdAt > myRead).length,
@@ -650,11 +655,21 @@ export function toConversations(me: ID, convRows: ConversationRow[], messageRows
 const MEMBERS_NOW = 'conversation_members(user_id, last_read_at, role)';
 const MEMBERS_BEFORE_54 = 'conversation_members(user_id, last_read_at)';
 
-/** Your own chat settings (mute), by chat id. A database without them yet (migration 54) just gives none. */
-function toMutes(rows: unknown): Map<ID, string> {
-  const out = new Map<ID, string>();
-  for (const r of (Array.isArray(rows) ? rows : []) as { conversation_id?: string; muted_until?: string | null }[]) {
-    if (r.conversation_id && r.muted_until) out.set(r.conversation_id, r.muted_until);
+/** Your own settings for one chat: mute (migration 54), and pin, mark unread and delete from the inbox (migration 75). */
+export interface ChatPrefs { mutedUntil?: string; pinnedAt?: string; markedUnread?: boolean; hiddenAt?: string }
+
+/**
+ * Your own chat settings, by chat id. The rows are asked for whole (`*`),
+ * so a database without migration 75 simply has no pins, marks or deletes;
+ * one without 54 gives no rows at all.
+ */
+function toMutes(rows: unknown): Map<ID, ChatPrefs> {
+  const out = new Map<ID, ChatPrefs>();
+  const at = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
+  for (const r of (Array.isArray(rows) ? rows : []) as { conversation_id?: string; muted_until?: string | null; pinned_at?: string | null; marked_unread?: boolean | null; hidden_at?: string | null }[]) {
+    if (!r.conversation_id) continue;
+    const pref: ChatPrefs = { mutedUntil: at(r.muted_until), pinnedAt: at(r.pinned_at), markedUnread: r.marked_unread === true || undefined, hiddenAt: at(r.hidden_at) };
+    if (pref.mutedUntil || pref.pinnedAt || pref.markedUnread || pref.hiddenAt) out.set(r.conversation_id, pref);
   }
   return out;
 }
@@ -774,7 +789,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     // Hits still ahead (or just started), with who is in.
     db.from('hit_requests').select('*, hit_joins(user_id)').eq('cancelled', false).gte('starts_at', new Date(Date.now() - 3_600_000).toISOString()).order('starts_at', { ascending: true }).limit(100),
     // Which chats you muted: only your own rows come back (migration 54; none without it).
-    db.from('conversation_prefs').select('conversation_id, muted_until'),
+    db.from('conversation_prefs').select('*'),
     // Tennis sessions your tracker picked up (migration 58; none without it).
     activitiesQuery(me),
   ]);
@@ -929,6 +944,7 @@ let userStateLacksPushActivity = false;
 let userStateLacksMapAlerts = false;
 
 /** A note for whoever reads the logs: this needs the group chat update in Supabase first. */
+const needs75 = (what: string) => console.warn(`[remote] ${what} needs the messaging update. Open Supabase → SQL Editor → New query, paste the file supabase/migrations/20261003000075_messaging.sql and press Run. It is safe to run more than once.`);
 const needs54 = (what: string) => console.warn(`[remote] ${what} needs the group chat update. Open Supabase → SQL Editor → New query, paste the file supabase/migrations/20261001000054_group_chats.sql and press Run. It is safe to run more than once.`);
 
 /** The edits a post can carry, and the migration file that adds each one's column. */
@@ -1150,6 +1166,43 @@ export const remote = {
    * Mutes a chat you are in (a group or a one-to-one) until a moment, or
    * unmutes it with null. Only you can see it. True when it took.
    */
+  /**
+   * Your inbox settings for one chat (migration 75): pin it to the top (at
+   * most three: 'limit' past that), mark it unread, or delete it from your
+   * inbox. 'missing' on a database without them yet: the phone keeps the
+   * change for now, and it is simply not saved.
+   */
+  async setChatPin(conversationId: ID, pinned: boolean): Promise<'ok' | 'limit' | 'missing' | 'failed'> {
+    const { error } = await need().rpc('set_chat_pin', { conv: conversationId, pinned });
+    if (!error) return 'ok';
+    if (/pin_limit/.test(error.message)) return 'limit';
+    if (missingFunction(error)) { needs75('Pinning a chat'); return 'missing'; }
+    fail('pin chat')(error);
+    return 'failed';
+  },
+  async setChatUnread(conversationId: ID, unread: boolean): Promise<'ok' | 'missing' | 'failed'> {
+    const { error } = await need().rpc('set_chat_unread', { conv: conversationId, unread });
+    if (!error) return 'ok';
+    if (missingFunction(error)) { needs75('Marking a chat unread'); return 'missing'; }
+    fail('mark chat unread')(error);
+    return 'failed';
+  },
+  async hideChat(conversationId: ID): Promise<'ok' | 'missing' | 'failed'> {
+    const { error } = await need().rpc('hide_chat', { conv: conversationId });
+    if (!error) return 'ok';
+    if (missingFunction(error)) { needs75('Deleting a chat from the inbox'); return 'missing'; }
+    fail('delete chat')(error);
+    return 'failed';
+  },
+
+  /** One message by its id (a reply's original, from further back than the chat has loaded); null when it is gone or not yours to read. */
+  async fetchMessage(me: ID, messageId: ID): Promise<Message | null> {
+    const { data, error } = await need().from('messages').select('*').eq('id', messageId).maybeSingle();
+    if (error || !data) return null;
+    const row = data as MessageRow;
+    return toConversations(me, [{ id: row.conversation_id, updated_at: row.created_at }], [row]).messages[0] ?? null;
+  },
+
   async setChatMute(conversationId: ID, until: string | null): Promise<boolean> {
     const { error } = await need().rpc('set_chat_mute', { conv: conversationId, until });
     if (!error) return true;
@@ -1183,14 +1236,20 @@ export const remote = {
    */
   async insertMessage(message: Message): Promise<'refused' | 'failed' | void> {
     if (message.kind === 'system') return 'refused';
-    const { error } = await need().from('messages').insert({
+    const row: Record<string, unknown> = {
       id: message.id, conversation_id: message.conversationId, sender_id: message.senderId, body: message.body,
       kind: message.kind, shared_id: message.sharedId ?? null, created_at: message.createdAt,
       ...(message.place ? { place: message.place } : {}),
       ...(message.audio ? { audio_url: message.audio.url, audio_ms: Math.round(message.audio.ms) } : {}),
       // Only the shelf addresses and sizes go: never a file still on this phone.
       ...(message.photos ? { photos: message.photos.map((p) => ({ path: p.path, w: Math.round(p.w), h: Math.round(p.h) })) } : {}),
-    });
+    };
+    const db = need();
+    let { error } = await db.from('messages').insert(message.replyToId ? { ...row, reply_to_id: message.replyToId } : row);
+    // A database without replies yet (migration 75): the answer still goes, as a plain message.
+    if (error && message.replyToId && (error.code === 'PGRST204' || error.code === '42703') && /reply_to_id/.test(error.message)) {
+      ({ error } = await db.from('messages').insert(row));
+    }
     if (error && error.code === '42501') return 'refused';
     // Sent twice (a retry after a slow first try that did land): it is there.
     if (error && error.code === '23505') return;
@@ -1323,7 +1382,7 @@ export const remote = {
     const [first, msgs, pref] = await Promise.all([
       chat(MEMBERS_NOW),
       db.from('messages').select('*').eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(MESSAGE_PAGE),
-      db.from('conversation_prefs').select('conversation_id, muted_until').eq('conversation_id', conversationId),
+      db.from('conversation_prefs').select('*').eq('conversation_id', conversationId),
     ]);
     // A database without member roles (migration 54) is asked again without them.
     const conv = first.error ? await chat(MEMBERS_BEFORE_54) : first;

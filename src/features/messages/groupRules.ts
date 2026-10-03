@@ -16,6 +16,9 @@ import { knownLinkTitle } from './linkPreview';
  */
 export const GROUP_CAP = 16;
 
+/** How many chats can be pinned to the top of the inbox at once (iMessage keeps a handful; the owner's brief: 3). The server agrees (migration 75). */
+export const MAX_PINNED_CHATS = 3;
+
 /** What "mute until I turn it back on" is saved as: a moment that never comes. */
 export const MUTED_FOREVER = '9999-12-31T00:00:00.000Z';
 
@@ -77,7 +80,7 @@ export const photoWords = (count: number) => (count > 1 ? `Sent ${count} photos`
  * them (Instagram counts chats, not messages), never counting a muted one.
  */
 export const unreadChatCount = (conversations: Conversation[]) =>
-  conversations.filter((c) => c.unreadCount > 0 && !isMuted(c)).length;
+  conversations.filter((c) => (c.unreadCount > 0 || c.markedUnread) && !isMuted(c)).length;
 
 /**
  * Whether someone runs a group: can remove people and make others admins.

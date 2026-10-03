@@ -22,7 +22,7 @@ import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, s
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { markMessagesOpened } from '@/features/messaging/readReceipts';
-import { GROUP_CAP, chatLockNote, eventText, findDirectChat, groupName, isDirectChat, isGroupAdmin, isGroupChat, named } from '@/features/messages/groupRules';
+import { GROUP_CAP, MAX_PINNED_CHATS, chatLockNote, eventText, findDirectChat, groupName, isDirectChat, isGroupAdmin, isGroupChat, named } from '@/features/messages/groupRules';
 import { heardMessage, heardUnsent } from '@/features/messages/incoming';
 import { MAX_CHAT_PHOTOS, clearSendProgress, keepLocalCopy, setSendProgress } from '@/features/messages/chatPhotos';
 import { readReceiptPreference, saveReceiptPreference } from '@/features/messaging/preferences';
@@ -713,7 +713,18 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
 
   /* Messaging */
   openConversationWith: (userId: ID) => ID;
-  sendMessage: (conversationId: ID, body: string) => void;
+  /** Sends words in a chat; `replyToId` answers one of its messages (quoted above the new one). */
+  sendMessage: (conversationId: ID, body: string, replyToId?: ID) => void;
+  /**
+   * Your inbox settings for a chat, only ever seen by you: pin it to the top
+   * (up to 3; false if that would be a fourth), mark it unread or read, or
+   * delete it from your inbox until someone writes in it again.
+   */
+  pinChat: (conversationId: ID, pinned: boolean) => boolean;
+  markChatUnread: (conversationId: ID, unread: boolean) => void;
+  hideChat: (conversationId: ID) => void;
+  /** A message from further back than a chat has loaded (a reply's original), fetched into the store; resolves whether it came. */
+  loadMessage: (messageId: ID) => Promise<boolean>;
   /**
    * A group chat with the people picked (two or more others, GROUP_CAP people
    * in all) and an optional name; you are its admin. A real one shows once
@@ -753,14 +764,14 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /** Send a court in a chat: where to meet (with how many courts stand there, when known). */
   sendCourt: (conversationId: ID, place: { id?: string; name: string; lat: number; lng: number; count?: number }) => void;
   /** Send a voice note recorded on this device (uploaded first). */
-  sendVoice: (conversationId: ID, recording: { uri: string; ms: number }) => void;
+  sendVoice: (conversationId: ID, recording: { uri: string; ms: number }, replyToId?: ID) => void;
   /**
    * Send photos from the camera roll in a chat (up to 10), with an optional
    * caption. They show at once; each is shrunk on the phone and put on the
    * chat's private shelf, then the message is saved. One that fails offers a
    * retry, which sends only what has not gone up yet.
    */
-  sendPhotos: (conversationId: ID, photos: { uri: string; width: number; height: number }[], caption?: string) => void;
+  sendPhotos: (conversationId: ID, photos: { uri: string; width: number; height: number }[], caption?: string, replyToId?: ID) => void;
   /**
    * The age check: records a date of birth ("2009-04-17") once. Under 13 the
    * account is removed and this phone will not ask again; 13 to 17 becomes a
@@ -4038,18 +4049,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [makeMessage, appendMessage]);
 
   const sendMessage = useCallback(
-    (conversationId: ID, body: string) => {
+    (conversationId: ID, body: string, replyToId?: ID) => {
       haptics.commit();
       const me = requireUser();
       const trimmed = body.trim();
       if (!trimmed) return;
-      const message = makeMessage(conversationId, me, trimmed);
+      const sending = live(me, conversationId);
+      // "Sending…" under it until the server has it.
+      const message: Message = { ...makeMessage(conversationId, me, trimmed), ...(replyToId ? { replyToId } : null), ...(sending ? { sending: true } : null) };
       setState((prev) => appendMessage(prev, message));
-      if (live(me, conversationId)) void remote.insertMessage(message).catch(() => 'failed' as const).then((result) => {
-        if (result === 'failed') {
-          setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, failed: true } : m)) }));
-          return;
-        }
+      if (sending) void remote.insertMessage(message).catch(() => 'failed' as const).then((result) => {
+        setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, sending: undefined, ...(result === 'failed' ? { failed: true } : null) } : m)) }));
+        if (result === 'failed') return;
         if (result !== 'refused') return;
         setState((prev) => ({
           ...prev,
@@ -4082,10 +4093,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, [requireUser, appendMessage, makeMessage, refreshChat]);
 
-  const sendVoice = useCallback((conversationId: ID, recording: { uri: string; ms: number }) => {
+  const sendVoice = useCallback((conversationId: ID, recording: { uri: string; ms: number }, replyToId?: ID) => {
     haptics.commit();
     const me = requireUser();
-    const message: Message = { ...makeMessage(conversationId, me, 'Voice note'), kind: 'voice', audio: { url: recording.uri, ms: recording.ms } };
+    const message: Message = { ...makeMessage(conversationId, me, 'Voice note'), kind: 'voice', audio: { url: recording.uri, ms: recording.ms }, ...(replyToId ? { replyToId } : null) };
     setState((prev) => appendMessage(prev, message));
     if (!live(me, conversationId)) return;
     void (async () => {
@@ -4150,12 +4161,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (result === 'refused') void refreshChat(message.conversationId);
   }, [refreshChat]);
 
-  const sendPhotos = useCallback((conversationId: ID, picked: { uri: string; width: number; height: number }[], caption = '') => {
+  const sendPhotos = useCallback((conversationId: ID, picked: { uri: string; width: number; height: number }[], caption = '', replyToId?: ID) => {
     const photos: ChatPhoto[] = picked.slice(0, MAX_CHAT_PHOTOS).map((p) => ({ path: p.uri, w: Math.max(1, p.width), h: Math.max(1, p.height) }));
     if (!photos.length) return;
     haptics.commit();
     const me = requireUser();
-    const message: Message = { ...makeMessage(conversationId, me, caption.trim(), 'photo'), photos };
+    const message: Message = { ...makeMessage(conversationId, me, caption.trim(), 'photo'), photos, ...(replyToId ? { replyToId } : null) };
     setState((prev) => appendMessage(prev, message));
     // The demo has nowhere to put them: they stay as they are, on this device.
     if (live(me, conversationId)) void deliverPhotos(message);
@@ -4496,11 +4507,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const message = stateRef.current.messages.find((m) => m.id === messageId);
     if (!message?.failed || message.senderId !== me) return;
     haptics.tap();
-    setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, failed: false } : m)) }));
+    const text = message.kind !== 'photo';
+    setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, failed: false, ...(text ? { sending: true } : null) } : m)) }));
     // Photos go up again first (only the ones that had not yet), then the message.
     if (message.kind === 'photo') { void deliverPhotos({ ...message, failed: undefined }); return; }
-    void remote.insertMessage({ ...message, failed: undefined }).catch(() => 'failed' as const).then((result) => {
-      if (result === 'failed') setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, failed: true } : m)) }));
+    void remote.insertMessage({ ...message, failed: undefined, sending: undefined }).catch(() => 'failed' as const).then((result) => {
+      setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, sending: undefined, ...(result === 'failed' ? { failed: true } : null) } : m)) }));
     });
   }, [requireUser, deliverPhotos]);
 
@@ -4754,6 +4766,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = stateRef.current.currentUserId;
     const hadUnread = !!before && before.unreadCount > 0 && !!me && before.participantIds.includes(me);
     if (hadUnread && live(me, conversationId)) void remote.markConversationRead(conversationId, me as ID);
+    // Opening a chat you marked unread takes the mark off.
+    if (before?.markedUnread) {
+      setState((prev) => ({ ...prev, conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, markedUnread: undefined } : c)) }));
+      if (live(me, conversationId)) void remote.setChatUnread(conversationId, false).catch(() => null);
+    }
     setState(prev => {
       const conversation = prev.conversations.find(c => c.id === conversationId);
       const me = prev.currentUserId;
@@ -4763,6 +4780,85 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (messages === prev.messages && conversation.unreadCount === 0) return prev;
       return {...prev, messages, conversations: prev.conversations.map(c => c.id === conversationId ? {...c, unreadCount: 0} : c)};
     });
+  }, []);
+
+  /**
+   * Pins a chat to the top of your inbox, or unpins it: at most three, like
+   * iMessage. Shows at once; when the server says no (a fourth from another
+   * phone), it goes back with a note. False when it would be a fourth here.
+   */
+  const pinChat = useCallback((conversationId: ID, pinned: boolean): boolean => {
+    const me = requireUser();
+    const chats = stateRef.current.conversations;
+    const chat = chats.find((c) => c.id === conversationId);
+    if (!chat || !!chat.pinnedAt === pinned) return true;
+    if (pinned && chats.filter((c) => c.pinnedAt).length >= MAX_PINNED_CHATS) {
+      haptics.reject();
+      showToast({ title: `You can pin up to ${MAX_PINNED_CHATS} chats`, body: 'Unpin one to make room.', icon: 'pin-outline' });
+      return false;
+    }
+    haptics.tap();
+    const put = (value: string | undefined) =>
+      setState((prev) => ({ ...prev, conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, pinnedAt: value } : c)) }));
+    const before = chat.pinnedAt;
+    put(pinned ? new Date().toISOString() : undefined);
+    if (live(me, conversationId)) void remote.setChatPin(conversationId, pinned).catch(() => 'failed' as const).then((result) => {
+      if (result === 'ok' || result === 'missing') return;
+      put(before);
+      showToast(result === 'limit'
+        ? { title: `You can pin up to ${MAX_PINNED_CHATS} chats`, body: 'Unpin one to make room.', icon: 'pin-outline' }
+        : { title: pinned ? 'This chat wasn’t pinned' : 'This chat wasn’t unpinned', body: 'Try again in a moment.', icon: 'alert-circle-outline' });
+    });
+    return true;
+  }, [requireUser]);
+
+  /** Marks a chat unread (it shows as new until opened), or read again (which reads its messages too). */
+  const markChatUnread = useCallback((conversationId: ID, unread: boolean) => {
+    const me = requireUser();
+    const chat = stateRef.current.conversations.find((c) => c.id === conversationId);
+    if (!chat) return;
+    haptics.tap();
+    if (!unread) {
+      // Read: the same as opening it (its messages read, the mark off).
+      markConversationRead(conversationId);
+      return;
+    }
+    setState((prev) => ({ ...prev, conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, markedUnread: true } : c)) }));
+    if (live(me, conversationId)) void remote.setChatUnread(conversationId, true).catch(() => null);
+  }, [requireUser, markConversationRead]);
+
+  /**
+   * Deletes a chat from your inbox (Instagram's Delete): it goes, read, and
+   * what was said so far stays out of view, until someone writes in it again.
+   * Nobody else's copy changes. The screen asks first.
+   */
+  const hideChat = useCallback((conversationId: ID) => {
+    const me = requireUser();
+    const chat = stateRef.current.conversations.find((c) => c.id === conversationId);
+    if (!chat) return;
+    haptics.commit();
+    const now = new Date().toISOString();
+    setState((prev) => ({
+      ...prev,
+      conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, hiddenAt: now, pinnedAt: undefined, markedUnread: undefined, unreadCount: 0 } : c)),
+    }));
+    if (live(me, conversationId)) void remote.hideChat(conversationId).catch(() => 'failed' as const).then((result) => {
+      if (result !== 'failed') return;
+      setState((prev) => ({ ...prev, conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, hiddenAt: chat.hiddenAt } : c)) }));
+      showToast({ title: 'This chat wasn’t deleted', body: 'Try again in a moment.', icon: 'alert-circle-outline' });
+    });
+  }, [requireUser]);
+
+  /** Fetches one message from further back than its chat has loaded (a reply's original) into the store. */
+  const loadMessage = useCallback(async (messageId: ID): Promise<boolean> => {
+    const s = stateRef.current;
+    if (s.messages.some((m) => m.id === messageId)) return true;
+    const me = s.currentUserId;
+    if (!me || !isSupabaseConfigured || !UUID.test(messageId)) return false;
+    const got = await remote.fetchMessage(me, messageId).catch(() => null);
+    if (!got) return false;
+    setState((prev) => (prev.messages.some((m) => m.id === got.id) ? prev : { ...prev, messages: [...prev.messages, got] }));
+    return true;
   }, []);
 
   /* ---------------------------- A coach's page ---------------------------- */
@@ -5823,6 +5919,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       leaveGroup,
       removedChat,
       muteChat,
+      pinChat,
+      markChatUnread,
+      hideChat,
+      loadMessage,
       reportChat,
       confirmBirthDate,
       canMessage,
@@ -5996,6 +6096,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       leaveGroup,
       removedChat,
       muteChat,
+      pinChat,
+      markChatUnread,
+      hideChat,
+      loadMessage,
       reportChat,
       confirmBirthDate,
       canMessage,

@@ -867,6 +867,14 @@ export interface Message {
   audio?: { url: string; ms: number };
   /** Set when kind is 'photo': the pictures, in the order they were picked. The words (`body`) are the caption, if any. */
   photos?: ChatPhoto[];
+  /**
+   * The message this one answers (a swipe to the right on a bubble, or Reply
+   * in its menu): the chat draws its words as a small quote above this one.
+   * Migration 75; cleared by the server when the original is unsent.
+   */
+  replyToId?: ID;
+  /** Yours, on its way to the server: "Sending…" under it until it lands. Never stored. */
+  sending?: boolean;
 }
 
 export interface Conversation {
@@ -884,6 +892,16 @@ export interface Conversation {
   photoUrl?: string;
   /** You muted this chat until then: no alerts, and it stays off the unread badge. Only you can see it. */
   mutedUntil?: string;
+  /** You pinned it to the top of your inbox (up to 3), then. Only you can see it (migration 75). */
+  pinnedAt?: string;
+  /** You marked it unread from the inbox: it shows as new until you open it. Only you can see it. */
+  markedUnread?: boolean;
+  /**
+   * You deleted it from your inbox then: it stays out of the inbox, and what
+   * was said before stays out of view, until someone writes in it again.
+   * Nothing changes for anyone else. Only you can see it.
+   */
+  hiddenAt?: string;
   messageIds: ID[];
   updatedAt: string;
   /** Messages from other people the current user has not opened (event lines never count). */

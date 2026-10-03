@@ -12,6 +12,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 // importing everything from here.
 export {
   GROUP_CAP,
+  MAX_PINNED_CHATS,
   MUTED_FOREVER,
   eventText,
   findDirectChat,
