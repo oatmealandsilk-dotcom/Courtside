@@ -378,11 +378,15 @@ Deno.serve(async (req) => {
 
   if (path === '/finish') {
     const n = typeof posted.n === 'string' && /^[0-9a-f-]{36}$/i.test(posted.n) ? posted.n : null;
-    // Collected once, whoever asks. Refusals answer 200 with the sentence the app shows.
-    const { data: taken } = n ? await admin.from('tracker_pending').delete().eq('n', n).select() : { data: null };
+    // Collected once, and only by the account that started it (someone else
+    // holding the code cannot use it up). Refusals answer 200 with the sentence the app shows.
+    const { data: taken } = n ? await admin.from('tracker_pending').delete().eq('n', n).eq('user_id', uid).select() : { data: null };
     const got = ((taken ?? []) as { user_id: string; provider: ProviderId; answer: Answer; expires_at: string }[])[0];
+    if (!got && n) {
+      const { data: theirs } = await admin.from('tracker_pending').select('n').eq('n', n).gt('expires_at', new Date().toISOString()).limit(1);
+      if ((theirs ?? []).length) return json({ error: 'That sign-in was started on another account.' });
+    }
     if (!got || Date.parse(got.expires_at) < Date.now()) return json({ error: 'That sign-in has expired. Try again.' });
-    if (got.user_id !== uid) return json({ error: 'That sign-in was started on another account.' });
     const r = await link(uid, got.provider, got.answer);
     if (r.error) { console.error('[trackers] link', r.error); return json({ error: `Could not connect ${NAME[got.provider]} right now. Try again.` }); }
     return json({ ok: true, provider: got.provider, fresh: r.fresh });
