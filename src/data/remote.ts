@@ -2948,7 +2948,8 @@ export const auth = {
       const base = (process.env.EXPO_BASE_URL ?? '').replace(/\/$/, '');
       const { error } = await client.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: `${window.location.origin}${base}/` },
+        // Always Google's account chooser, so someone with two Google accounts can pick.
+        options: { redirectTo: `${window.location.origin}${base}/`, queryParams: { prompt: 'select_account' } },
       });
       if (error) throw new Error(error.message);
       return null;
@@ -2956,7 +2957,7 @@ export const auth = {
     const redirectTo = nativeReturnAddress();
     const { data, error } = await client.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo, skipBrowserRedirect: true },
+      options: { redirectTo, skipBrowserRedirect: true, queryParams: { prompt: 'select_account' } },
     });
     if (error) throw new Error(error.message);
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
