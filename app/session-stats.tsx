@@ -108,6 +108,7 @@ export default function SessionStatsSheet() {
               activities={detectedActivities}
               hidden={blockedIds}
               onEdit={edit}
+              onShare={() => router.push({ pathname: '/share-session', params: { post: post.id } })}
             />
           ) : !looked ? (
             <View style={styles.wait}><CourtSpinner size={30} /></View>

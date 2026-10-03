@@ -55,7 +55,7 @@ export function SessionSheetHeader({ post, onClose }: { post: Post; onClose: () 
  * post: the start time, and any of those numbers they did not share, read
  * from their own tracker's record while it is still kept.
  */
-export function SessionSheet({ post, me, users, sessions, sessionTags, activities, hidden, play = true, onEdit }: {
+export function SessionSheet({ post, me, users, sessions, sessionTags, activities, hidden, play = true, onEdit, onShare }: {
   post: Post;
   me: ID | null;
   users: User[];
@@ -65,6 +65,8 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
   hidden: ID[];
   play?: boolean;
   onEdit?: (sessionId: ID) => void;
+  /** The author's own: the session as a picture for Instagram (share-session). */
+  onShare?: () => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const s = post.session;
@@ -203,6 +205,9 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
           ) : null}
           {ownZones ? <ZoneRows zones={ownZones} play={play} delay={460} /> : null}
         </Pop>
+      ) : null}
+      {mine && onShare ? (
+        <FormRow icon="logo-instagram" label="Share to Instagram" chevron onPress={onShare} />
       ) : null}
       {mine && log && onEdit ? (
         <FormRow icon="create-outline" label="Edit session" chevron onPress={() => onEdit(log.id)} />

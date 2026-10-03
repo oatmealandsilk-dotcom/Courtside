@@ -192,6 +192,7 @@ export default function YourSessions() {
                     postId={postId}
                     postable={checked && !postId && s.day >= firstPostable}
                     onPost={() => router.push({ pathname: '/compose', params: pick.type === 'tracker' ? { activity: pick.activity.id } : { session: s.id } })}
+                    onShare={() => router.push({ pathname: '/share-session', params: postId ? { post: postId, session: s.id } : { session: s.id } })}
                     line={i > 0}
                   />
                 );
@@ -305,15 +306,19 @@ function TaggedYou({ tag, tagger, line }: { tag: SessionTag; tagger: User; line:
   );
 }
 
-/** One session you logged, with Post it, or Posted (which opens the post). A tap on the rest opens who you played (or, for a copy from a tag, that tag). */
-function Logged({ session: s, people, onOpen, hideNote = false, source, postId, postable, onPost, line }: {
+/**
+ * One session you logged, with Post it, or Posted (which opens the post), and
+ * a share button beside it (the session as a picture for Instagram). A tap on
+ * the rest opens who you played (or, for a copy from a tag, that tag).
+ */
+function Logged({ session: s, people, onOpen, hideNote = false, source, postId, postable, onPost, onShare, line }: {
   session: PracticeSession;
   /** "vs Mira" (accepted), "vs June · Waiting", "with Dev", a name you typed. */
   people: PeopleLine | null;
   onOpen?: () => void;
   /** The note says nothing the title doesn't (a copy from a tag). */
   hideNote?: boolean;
-  source: string; postId?: string; postable: boolean; onPost: () => void; line: boolean;
+  source: string; postId?: string; postable: boolean; onPost: () => void; onShare: () => void; line: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const title = `${loggedLabel(s)}${people ? ` ${peopleText(people)}` : ''}`;
@@ -339,7 +344,7 @@ function Logged({ session: s, people, onOpen, hideNote = false, source, postId, 
         </View>
         <View style={styles.words}>
           {/* How long, big: the number you scan a week of sessions for. Where it came from, small beside it. */}
-          <View style={styles.heroLine}>
+          <View style={[styles.heroLine, styles.heroLineShare]}>
             <Text style={styles.hero}>{duration(s.minutes)}</Text>
             <SourceTag label={source} />
           </View>
@@ -360,20 +365,21 @@ function Logged({ session: s, people, onOpen, hideNote = false, source, postId, 
         </View>
       </Pressable>
       {/* Beside the big number, outside the row's own button: a button inside a button is not allowed in a browser. */}
-      {postId || postable ? (
-        <View style={styles.actionSpot}>
-          {postId ? (
-            <Pressable accessibilityRole="link" accessibilityLabel={`Posted. Open the post: ${title}`} hitSlop={8} onPress={() => router.push(`/post/${postId}`)} style={({ pressed }) => [styles.posted, pressed && styles.pressed]}>
-              <Ionicons name="checkmark" size={14} color={colors.textMuted} />
-              <Text style={styles.postedText}>Posted</Text>
-            </Pressable>
-          ) : (
-            <Pressable accessibilityRole="button" accessibilityLabel={`Post it: ${title}`} hitSlop={8} onPress={onPost} style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
-              <Text style={styles.actionText}>Post it</Text>
-            </Pressable>
-          )}
-        </View>
-      ) : null}
+      <View style={[styles.actionSpot, styles.actionRow]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Share to Instagram: ${title}`} hitSlop={6} onPress={onShare} style={({ pressed }) => [styles.share, pressed && styles.pressed]}>
+          <Ionicons name="share-outline" size={18} color={colors.textMuted} />
+        </Pressable>
+        {postId ? (
+          <Pressable accessibilityRole="link" accessibilityLabel={`Posted. Open the post: ${title}`} hitSlop={8} onPress={() => router.push(`/post/${postId}`)} style={({ pressed }) => [styles.posted, pressed && styles.pressed]}>
+            <Ionicons name="checkmark" size={14} color={colors.textMuted} />
+            <Text style={styles.postedText}>Posted</Text>
+          </Pressable>
+        ) : postable ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={`Post it: ${title}`} hitSlop={8} onPress={onPost} style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
+            <Text style={styles.actionText}>Post it</Text>
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -409,6 +415,10 @@ const styleDefinitions = StyleSheet.create({
   placeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   note: { fontSize: 14, lineHeight: 19, color: colors.textFaint, flexShrink: 1 },
   actionSpot: { position: 'absolute', right: 0, top: ROW_PAD, height: HERO_LINE, justifyContent: 'center' },
+  // A logged session's share button sits before Post it / Posted; its big line keeps clear of both.
+  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  heroLineShare: { paddingRight: 112 },
+  share: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   // Post it: a small outlined pill, quieter than Log it (the one thing waiting on you).
   action: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong },
   actionOn: { backgroundColor: colors.brand, borderColor: colors.brand },

@@ -4,6 +4,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import Reanimated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import Svg, { Line } from 'react-native-svg';
 
+import { BrandMark } from '@/components/BrandMark';
 import { Avatar, BrandWash } from '@/components/ui';
 import type { ID, SessionDetail } from '@/data/types';
 import { onCourtWord, resultWord, sessionEyebrow, sourceLabel, spokenDuration } from '@/features/activity/format';
@@ -66,9 +67,30 @@ export function cardLook() {
  * from. `width` sets the scale: 358 is the feed's size, the composer's is
  * about two thirds of it.
  */
-export function SessionCard({ session, width, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint }: {
+export function SessionCard({ session, width, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false }: {
   session: SessionDetail;
   width: number;
+  /**
+   * The rest are for the pictures made to share (Share → Instagram): the
+   * card's shape (9:16 for a whole story), its rounding (0 edge to edge),
+   * the line on top with the date rather than "Today", where it was played
+   * (left out for anyone not known to be an adult), the CourtSide lockup and
+   * courtsidebase.com along the bottom, everything a little larger, and room
+   * kept clear top and bottom for Instagram's own buttons.
+   */
+  aspect?: number;
+  radius?: number;
+  eyebrow?: string;
+  place?: string;
+  brand?: boolean;
+  scale?: number;
+  inset?: { top: number; bottom: number };
+  /**
+   * Drawn as a picture, not read on screen: the small words scale with the
+   * rest, with no floor (a floor only crowds them), and nothing fades in (a
+   * browser's copy for the picture would catch it part way).
+   */
+  picture?: boolean;
   /** Count the numbers up (once, when the card comes into view). */
   play?: boolean;
   /** The author's own preview: the players picked, waiting ones faded. Otherwise only those who accepted (session.with). */
@@ -81,11 +103,15 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
 }) {
   useTheme();
   const look = cardLook();
-  const k = width / 358;
+  const k = (width / 358) * scale;
   const pad = Math.round(22 * k);
+  const round = radius ?? Math.round(20 * k);
+  // Taller than the feed's 4:5 (a whole story): the numbers sit in the middle.
+  const tall = aspect < 4 / 5 - 0.01;
+  const shownTop = eyebrow ?? sessionEyebrow(session);
   // The small words keep a size you can read when the card is drawn small
   // (the composer's is about two thirds); the big figures scale freely.
-  const small = (size: number, floor: number) => Math.max(floor, size * k);
+  const small = (size: number, floor: number) => (picture ? size * k : Math.max(floor, size * k));
   const hr = session.maxHr != null;
   const zones = postZones(session);
   // Strain and calories, when the author shared them (migration 72).
@@ -98,7 +124,7 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
   const vs = lead ? (lead.role === 'opponent' && session.kind !== 'practice' ? 'vs' : 'with') : '';
   const tracker = !!session.activityId;
   const spoken = [
-    sessionEyebrow(session).toLowerCase(),
+    shownTop.toLowerCase(),
     `${spokenDuration(session.minutes)} ${onCourtWord(session)}`,
     result,
     hr ? `max heart rate ${session.maxHr}${session.avgHr ? `, average ${session.avgHr}` : ''}` : null,
@@ -109,12 +135,12 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
   ].filter(Boolean).join('. ');
 
   const body = (
-    <View style={[styles.card, { width, borderRadius: Math.round(20 * k), padding: pad, backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark ? 1 : 0 }]}>
-      {look.dark ? null : <BrandWash radius={Math.round(20 * k)} />}
+    <View collapsable={false} style={[styles.card, { width, aspectRatio: aspect, borderRadius: round, padding: pad, paddingTop: inset ? inset.top : pad, paddingBottom: inset ? inset.bottom : pad, backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark && round > 0 ? 1 : 0 }]}>
+      {look.dark ? null : <BrandWash radius={round} />}
       <CourtLines color={look.lines} />
       <View style={styles.top}>
-        <Reanimated.Text key={sessionEyebrow(session)} entering={FadeIn.duration(160)} style={{ ...font('600'), fontSize: small(11.5, 9), letterSpacing: Math.max(0.8, 1.1 * k), color: look.eyebrow, flex: 1 }} numberOfLines={1} maxFontSizeMultiplier={1.2}>
-          {sessionEyebrow(session)}
+        <Reanimated.Text key={shownTop} entering={picture ? undefined : FadeIn.duration(160)} style={{ ...font('600'), fontSize: small(11.5, 9), letterSpacing: Math.max(0.8, 1.1 * k), color: look.eyebrow, flex: 1 }} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+          {shownTop}
         </Reanimated.Text>
         {result ? (
           <Pop token={result} style={[styles.pill, { height: small(26, 20), borderRadius: small(13, 10), paddingHorizontal: small(11, 8), backgroundColor: look.pillFill }]}>
@@ -122,11 +148,17 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
           </Pop>
         ) : null}
       </View>
-      <Reanimated.View layout={LinearTransition.duration(220)} style={[styles.middle, { justifyContent: health ? 'flex-start' : 'center', paddingTop: health ? 18 * k : 0 }]}>
+      <Reanimated.View layout={picture ? undefined : LinearTransition.duration(220)} style={[styles.middle, { justifyContent: health && !tall ? 'flex-start' : 'center', paddingTop: health && !tall ? 18 * k : 0 }]}>
         <Duration minutes={session.minutes} size={96 * k} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={700} />
         <Text style={{ ...font('500'), fontSize: small(14, 10), color: look.muted, marginTop: 2 * k }} maxFontSizeMultiplier={1.2}>{onCourtWord(session)}</Text>
+        {place ? (
+          <View style={[styles.place, { gap: 4 * k, marginTop: 8 * k }]}>
+            <Ionicons name="location-outline" size={small(13, 10)} color={look.muted} />
+            <Text style={{ ...font('500'), fontSize: small(13, 10), color: look.muted, flexShrink: 1 }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{place}</Text>
+          </View>
+        ) : null}
         {health ? (
-          <Reanimated.View entering={FadeIn.duration(220)} exiting={FadeOut.duration(160)} style={{ marginTop: 20 * k }}>
+          <Reanimated.View entering={picture ? undefined : FadeIn.duration(220)} exiting={picture ? undefined : FadeOut.duration(160)} style={{ marginTop: 20 * k }}>
             {hr ? (
               <View style={[styles.hrRow, { gap: 26 * k }]}>
                 <Figure value={session.maxHr!} unit="max bpm" size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={200} />
@@ -155,6 +187,14 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
         ) : <View style={{ flex: 1 }} />}
         {tracker && showSource ? <Text style={{ ...font('600'), fontSize: small(11, 9), color: look.faint }} maxFontSizeMultiplier={1.2}>{sourceLabel(session.source ?? 'apple-health')}</Text> : null}
       </View>
+      {brand ? (
+        <View style={[styles.brand, { gap: 6 * k, marginTop: 14 * k, paddingTop: 12 * k, borderTopColor: look.lines }]}>
+          <BrandMark size={Math.round(small(17, 12))} color={look.figure} />
+          <Text style={{ ...font('600'), fontSize: small(14, 10), letterSpacing: -0.35 * k, color: look.ink }} maxFontSizeMultiplier={1}>CourtSide</Text>
+          <View style={{ flex: 1 }} />
+          <Text style={{ ...font('500'), fontSize: small(11, 9), color: look.faint }} maxFontSizeMultiplier={1}>courtsidebase.com</Text>
+        </View>
+      ) : null}
     </View>
   );
   if (!onPress) return <View accessible accessibilityRole="summary" accessibilityLabel={spoken}>{body}</View>;
@@ -179,7 +219,7 @@ function CourtLines({ color }: { color: string }) {
 }
 
 const styles = StyleSheet.create({
-  card: { aspectRatio: 4 / 5, overflow: 'hidden' },
+  card: { overflow: 'hidden' },
   top: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   pill: { alignItems: 'center', justifyContent: 'center' },
   middle: { flex: 1 },
@@ -188,4 +228,6 @@ const styles = StyleSheet.create({
   who: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 },
   pending: { opacity: 0.6 },
   lines: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '24%' },
+  place: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch' },
+  brand: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1 },
 });

@@ -37,7 +37,7 @@ import { useHealthChoice } from '@/features/activity/useHealthChoice';
 import type { CardPerson } from '@/components/session/SessionCard';
 import { KIND_LABEL, activityDay, loggedLabel } from '@/features/activity/format';
 import { canTagKind } from '@/features/activity/sessionTags';
-import { showLogged, useTrackerSession } from '@/features/activity/useTrackerSession';
+import { shareAction, showLogged, useTrackerSession } from '@/features/activity/useTrackerSession';
 import { openWhoPlayed } from '@/features/activity/whoPlayedPicker';
 import { hitPrefill, prefillFor } from '@/features/hits/followUp';
 import { confirm } from '@/lib/confirm';
@@ -427,8 +427,9 @@ export default function Compose() {
     setBusy('log');
     setLogError('');
     const input = logInput();
+    let logId: string | undefined;
     try {
-      try { await tracker.save(input); } catch (e) {
+      try { logId = await tracker.save(input); } catch (e) {
         // Logged already (on another phone, say): that is what was asked for.
         if (!(e instanceof Error && e.message === 'Already logged.')) throw e;
       }
@@ -438,7 +439,8 @@ export default function Compose() {
       setTimeout(() => {
         haptics.reward();
         closeMenu();
-        showLogged(input.minutes ?? activity.minutes, { kind: input.kind, won: input.won }, streak);
+        // With an Instagram button on it: the session as a story picture.
+        showLogged(input.minutes ?? activity.minutes, { kind: input.kind, won: input.won }, streak, logId);
       }, 300);
     } catch {
       acting.current = false;
@@ -572,8 +574,9 @@ export default function Compose() {
       }
     }
     const firstPost = !posts.some((p) => p.authorId === currentUserId);
+    let postId: string | undefined;
     try {
-      actions.addPost({
+      postId = actions.addPost({
         kind: openedClip ? 'clip' : 'note',
         orientation,
         trimStart: edit.trimStart, trimEnd: edit.trimEnd, muted: edit.muted, volume: edit.volume, speed: edit.speed, crop: edit.crop,
@@ -597,6 +600,9 @@ export default function Compose() {
     }
     landOnFeed();
     if (firstPost) setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800);
+    // Otherwise "Posted" with an Instagram button: the session as a story
+    // picture, from the post once it has landed, from your log until then.
+    else setTimeout(() => showToast({ title: 'Posted', body: 'Share it to your Instagram story too.', icon: 'checkmark', action: shareAction({ post: postId, session: logId }) }), 600);
   };
 
   const pick = (next: PickedMedia | null) => {

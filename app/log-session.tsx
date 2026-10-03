@@ -270,7 +270,7 @@ function LogSession() {
       else {
         // "Logged · 1h 30m · Match · Won", and the streak once it is two days or more.
         const streak = currentUserId ? computeStats(currentUserId, [{ id: id, userId: currentUserId, day, minutes, kind, createdAt: new Date().toISOString() }, ...sessions], posts, stories).currentStreakDays : 0;
-        showLogged(minutes, { kind, won: kind === 'match' && won ? won === 'won' : undefined }, streak);
+        showLogged(minutes, { kind, won: kind === 'match' && won ? won === 'won' : undefined }, streak, id);
       }
       close();
     } catch (e) {

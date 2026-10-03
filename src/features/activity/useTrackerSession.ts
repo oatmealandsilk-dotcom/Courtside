@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 
 import type { DetectedActivity, ID, PracticeSession, SessionPlayer } from '@/data/types';
@@ -111,13 +112,22 @@ export function useTrackerSession(activityId: ID | undefined) {
 
 /**
  * "Logged · 1h 24m · Match · Won", with the streak beside it from two days
- * on: the note after a session goes into your log without a post.
+ * on: the note after a session goes into your log without a post. Given the
+ * session's id, it carries an "Instagram" button: the session as a story
+ * picture (share-session), the way Strava offers it once you save.
  */
-export function showLogged(minutes: number, s: Pick<PracticeSession, 'kind' | 'won'>, streak: number) {
+export function showLogged(minutes: number, s: Pick<PracticeSession, 'kind' | 'won'>, streak: number, sessionId?: string) {
   showToast({
     title: 'Logged',
     body: `${duration(minutes)} · ${loggedLabel(s)}`,
     glyph: 'logged',
     ...(streak >= 2 ? { stat: { value: streak, label: 'day streak' } } : {}),
+    ...(sessionId ? { action: shareAction({ session: sessionId }) } : {}),
   });
+}
+
+/** The toast button that opens a session's Instagram picture: by its log entry, its post, or both. */
+export function shareAction(params: { session?: string; post?: string }): { label: string; onPress: () => void } {
+  const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => !!v)) as Record<string, string>;
+  return { label: 'Instagram', onPress: () => router.push({ pathname: '/share-session', params: clean }) };
 }

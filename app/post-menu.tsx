@@ -76,7 +76,10 @@ export default function PostMenu() {
   const rows: Row[] = post ? [
     { key: 'save', icon: isSaved ? 'bookmark' : 'bookmark-outline', label: isSaved ? 'Remove from saved' : 'Save', onPress: () => { actions.toggleSavePost(post.id); close(); } },
     { key: 'send', icon: 'paper-plane-outline', label: 'Send to…', onPress: () => router.replace({ pathname: '/share', params: { kind: 'post', id: post.id } }) },
-    { key: 'card', icon: 'image-outline', label: 'Share as image', onPress: () => router.replace({ pathname: '/share-card', params: { id: post.id } }) },
+    // Your own post with a session on it shares as the session's story picture (share-session), the way Strava does; any other post as its own card.
+    mine && post.session
+      ? { key: 'story', icon: 'logo-instagram', label: 'Share to Instagram', note: 'Your session as a story picture.', onPress: () => router.replace({ pathname: '/share-session', params: { post: post.id } }) }
+      : { key: 'card', icon: 'image-outline', label: 'Share as image', onPress: () => router.replace({ pathname: '/share-card', params: { id: post.id } }) },
     { key: 'link', icon: 'link-outline', label: 'Share link', onPress: async () => { try { const note = await shareOutside(postShareText(post, users.find((u) => u.id === post.authorId), currentUserId), url); if (note) setDone(note); else close(); } catch { setDone(`Share this link: ${url}`); } } },
   ] : [];
   if (mine && story) {
