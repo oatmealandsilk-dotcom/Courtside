@@ -57,7 +57,8 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
   }
 
   if (design === 'sticker') {
-    const cardW = Math.round(width * 0.8);
+    // Small, so it sits on someone's own story without taking it over (Oct 3).
+    const cardW = Math.round(width * 0.52);
     return (
       <View collapsable={false} style={[styles.centre, { width, height }]}>
         <SessionCard {...common} width={cardW} />
@@ -65,7 +66,8 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
     );
   }
 
-  const cardW = Math.round(width * 0.72);
+  // Small in the corner: the photo is the story, the card is the signature (Oct 3, owner).
+  const cardW = Math.round(width * 0.46);
   return (
     <View collapsable={false} style={{ width, height, overflow: 'hidden', backgroundColor: colors.court }}>
       {source ? (
@@ -74,7 +76,7 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
         <LinearGradient colors={[colors.court, colors.brand]} start={{ x: 0, y: 0 }} end={{ x: 0.4, y: 1 }} style={StyleSheet.absoluteFill} />
       )}
       {/* A soft shade low down, so the card reads on a bright photo too. */}
-      <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.38)']} style={[styles.shade, { height: height * 0.55 }]} />
+      <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.22)']} style={[styles.shade, { height: height * 0.35 }]} />
       <View style={[styles.sticker, { left: Math.round(width * 0.06), bottom: Math.round(height * 0.15), borderRadius: Math.round(20 * (cardW / 358)) }]}>
         <SessionCard {...common} width={cardW} />
       </View>
