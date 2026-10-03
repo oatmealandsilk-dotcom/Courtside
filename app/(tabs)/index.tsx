@@ -11,7 +11,6 @@ import { useIsFocused } from '@/lib/useIsFocused';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { InboxButton } from '@/components/InboxButton';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { PinchZone } from '@/components/PinchZone';
@@ -32,7 +31,6 @@ import { Tappable } from '@/components/Tappable';
 import { VerticalPager, type VerticalPagerHandle } from '@/components/VerticalPager';
 import { subscribeReveal, subscribeScrollToTop } from '@/features/navigation/scrollToTop';
 import { LikeButton } from '@/components/LikeButton';
-import { isNewHere } from '@/features/feed/newHere';
 import { wantsOn } from '@/lib/useOptimisticToggle';
 import { setFeedWarm, useCurtainDown } from '@/features/feed/warmup';
 import { connectionIsQuick } from '@/lib/netSpeed';
@@ -44,7 +42,7 @@ import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { TipPage } from '@/components/TipPage';
 import { isLive } from '@/features/stories/stories';
 import { ClipPlayback } from '@/components/ClipPlayback';
-import { NEWEST_FIRST, rankFeed, shuffleFeed, type FeedItem } from '@/features/feed/rankFeed';
+import { NEWEST_FIRST, rankFeed, type FeedItem, type RankContext } from '@/features/feed/rankFeed';
 import { challengeFor, entriesFor } from '@/features/challenge/weekly';
 import { ChallengePage } from '@/components/ChallengePage';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
@@ -73,6 +71,11 @@ import { isTaggedIn } from '@/features/activity/sessionTags';
 const reachable = (p: { imageUrl?: string; videoUrl?: string }) => [p.imageUrl, p.videoUrl].every((u) => !u || /^(https?:|data:|blob:)/.test(u));
 
 /** When each page's post, thread or Instant was made, for putting new ones newest first. */
+/** What the ranking may know about you: who you follow, who follows you, profiles, and what you have seen this visit. */
+function rankContext(data: Pick<RankContext, 'users'> & { followingIds: string[]; followEdges: { followerId: string; followingId: string }[] }, seen: Set<string>): RankContext {
+  return { followingIds: data.followingIds, followEdges: data.followEdges, users: data.users, seen };
+}
+
 function madeAt(data: { posts: { id: string; createdAt: string }[]; questions: { id: string; createdAt: string }[]; stories: { id: string; createdAt: string }[] }) {
   const at = new Map<string, number>();
   for (const p of data.posts) at.set(`p:${p.id}`, Date.parse(p.createdAt));
@@ -337,7 +340,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const myStage = useMemo(() => (stageLine ? getStage() : null), [stageLine]);
   // A scoped feed's back tile fades with the words when this feed's page goes onto the stage.
   const scopeBackFade = useStageMotion('chrome', { owner });
-  const inboxFade = useStageMotion('chrome', { owner });
   // Whether this Home is the page on show, for a stage's checks that run later (a timer).
   const focusedNow = useRef(focused);
   focusedNow.current = focused;
@@ -417,7 +419,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       }
       // A post whose picture or video is a link only its author's phone could
       // open (an upload that never finished) is left out of the deal.
-      const ranked = rankFeed(data.posts.filter(reachable), data.questions.filter((q) => !q.source), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st))).flatMap((i) =>
+      const ranked = rankFeed(data.posts.filter(reachable), data.questions.filter((q) => !q.source), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st)), rankContext(data, seen.current)).flatMap((i) =>
         i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : [],
       );
       // Something of yours from the last few minutes goes first, so a fresh post
@@ -429,25 +431,10 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         .filter((p) => p.authorId === data.currentUserId && !p.archived && Date.now() - Date.parse(p.createdAt) < 5 * 60_000)
         .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
         .map((p) => `p:${p.id}`);
-      // The feed is dealt, not listed: what you have already watched this
-      // session drops behind everything you have not, and both halves come
-      // out shuffled, so no two opens (or refreshes) read the same way.
-      const others = ranked.filter((k) => !justMine.includes(k));
-      const unseen = others.filter((k) => !seen.current.has(k));
-      const watched = others.filter((k) => seen.current.has(k));
-      // Newest first means just that: nothing already seen is moved to the back.
-      const rest = NEWEST_FIRST ? others : [...shuffleFeed(unseen), ...shuffleFeed(watched)];
-      const final = [...justMine, ...rest];
-      // New players' first posts, nearby first, are dealt near the top so
-      // they meet people (and likes) on their first day.
-      const me = data.users.find((u) => u.id === data.currentUserId);
-      const cityOf = (location?: string) => (location ?? '').split(',')[0].trim().toLowerCase();
-      const near = (p: { authorId: string }) => (me && cityOf(data.users.find((u) => u.id === p.authorId)?.location) === cityOf(me.location) ? 0 : 1);
-      const welcome = data.posts
-        .filter((p) => p.authorId !== data.currentUserId && !p.archived && isNewHere(p) && reachable(p) && !seen.current.has(`p:${p.id}`))
-        .sort((a, b) => near(a) - near(b) || Date.parse(b.createdAt) - Date.parse(a.createdAt))
-        .slice(0, 2)
-        .map((p) => `p:${p.id}`);
+      // The ranking already puts what you have watched this visit lower down
+      // and new players' first posts higher up, and it deals the same order
+      // from the same data, so a pull never reshuffles at random.
+      const final = [...justMine, ...ranked.filter((k) => !justMine.includes(k))];
       // The feed always opens on a clip (unless something of yours just
       // landed): the first clip in the order is brought to the front.
       // Newest first, the newest post leads whatever it is.
@@ -464,11 +451,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         if (first < 0) first = final.findIndex(isClip);
         if (first > 0) final.unshift(...final.splice(first, 1));
       }
-      if (!NEWEST_FIRST) welcome.forEach((key, i) => {
-        const at = final.indexOf(key);
-        if (at >= 0) final.splice(at, 1);
-        final.splice(Math.min(final.length, justMine.length + 1 + i * 2), 0, key);
-      });
       // After a pull, everything made since the feed was last dealt leads,
       // newest first — a new thread or Instant too, not left in its usual slot
       // a few pages down. Something older that has only just reached this
@@ -529,9 +511,11 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     void latest.current.actions.loadMorePosts().then((fresh) => {
       if (dropped || !fresh.length) return;
       const hidden = new Set([...latest.current.blockedIds, ...latest.current.mutedIds]);
-      // Shuffled out here, not inside the update: an update has to be able to
-      // run twice and come out the same, and a shuffle never would.
-      const dealt = shuffleFeed(fresh.filter((p) => !p.archived && !hidden.has(p.authorId) && reachable(p)).map((p) => `p:${p.id}`));
+      // The new page is ranked on its own and added to the end; nothing
+      // already in the feed moves.
+      const data = latest.current;
+      const dealt = rankFeed(fresh.filter((p) => !p.archived && !hidden.has(p.authorId) && reachable(p)), [], data.comments, data.currentUserId, [], rankContext(data, seenNow.current))
+        .flatMap((i) => (i.type === 'post' ? [`p:${i.post.id}`] : []));
       setOrder((prev) => {
         const have = new Set(prev);
         const keys = dealt.filter((k) => !have.has(k));
@@ -557,7 +541,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     const data = latest.current;
     const hidden = new Set([...data.blockedIds, ...data.mutedIds]);
     const have = new Set(orderRef.current);
-    const fresh = rankFeed(data.posts.filter((p) => reachable(p) && !p.archived && !hidden.has(p.authorId)), data.questions, data.comments, data.currentUserId, data.stories.filter((st) => isLive(st)))
+    const fresh = rankFeed(data.posts.filter((p) => reachable(p) && !p.archived && !hidden.has(p.authorId)), data.questions, data.comments, data.currentUserId, data.stories.filter((st) => isLive(st)), rankContext(data, seenNow.current))
       .flatMap((i) => (i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : []))
       .filter((k) => !have.has(k));
     if (!fresh.length) return;
@@ -568,7 +552,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     // Otherwise the new pages go in right after the one on screen, newest first.
     if (NEWEST_FIRST && activeRef.current === 0 && (!playable || !shownOnce.current)) { rerank(); return; }
     const made = madeAt(data);
-    const dealt = NEWEST_FIRST ? [...fresh].sort((a, b) => made(b) - made(a)) : shuffleFeed(fresh);
+    const dealt = NEWEST_FIRST ? [...fresh].sort((a, b) => made(b) - made(a)) : fresh;
     setOrder((prev) => {
       const at = Math.min(prev.length, activeRef.current + (NEWEST_FIRST ? 1 : 2));
       return [...prev.slice(0, at), ...dealt.filter((k) => !prev.includes(k)), ...prev.slice(at)];
@@ -1182,7 +1166,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     <View accessibilityLabel={`${author.name}'s instant`} style={styles.clipFrame}>
                       <View style={phone ? StyleSheet.absoluteFill : styles.clipPortrait}>
                         {story.videoUrl ? (
-                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} besideInbox={!scope && phone} onReady={(ok) => markReady(story.id, ok)} />
+                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
                         ) : (
                           // Two quick taps like a hit, the way they like a clip.
                           <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s instant`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
@@ -1354,7 +1338,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                           silent={post.muted}
                           bare={immersive}
                           discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand}
-                          discPinned={index === 0 && !scope} besideInbox={!scope && phone}
+                          discPinned={index === 0 && !scope}
                           onReady={(ok) => markReady(post.id, ok)}
                           held={held && myStage?.key === `p:${post.id}`}
                           onStage={myStage?.key === `p:${post.id}`}
@@ -1511,14 +1495,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               </Pressable>
             </Reanimated.View>
           ) : null}
-          {!scope && phone && currentUser ? (
-            // Your chats, top right as on Instagram's home: the paper plane and the number of chats with
-            // something new. It wears the sound button's pale tile so it reads over a clip, a bright sky or a
-            // written post, and fades with the words when a clip goes onto the comments or is pinched full.
-            <Reanimated.View ref={inboxFade.ref as never} pointerEvents="box-none" style={[styles.scopeBackLayer, inboxFade.style]}>
-              {immersive ? null : <InboxButton variant="tile" ink={theme === 'us-open' ? colors.text : colors.brand} style={[styles.inbox, { top: insets.top + 27 }]} />}
-            </Reanimated.View>
-          ) : null}
           {/* Over a clip or an Instant the phone's clock and battery turn white, as on TikTok, Reels and Shorts:
               the theme's dark clock sank into a dark court, and the top shade keeps a white one clear of a bright sky.
               Only once the picture is in (the cover before it is the page's own ground), and only while this page is in front. */}
@@ -1533,8 +1509,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
 const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, alignItems: 'center' },
   scopeBack: { position: 'absolute', left: 12, padding: 6, zIndex: 6 },
-  // The inbox tile, level with the mark's tile at the other corner; clips move their sound button in beside it.
-  inbox: { position: 'absolute', right: 18 },
   // Its own layer over the feed, so it can fade as a clip goes onto the comments stage.
   scopeBackLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 6 },
   // Over a picture: the mark's tile, 40 square (the sound disc's size), the chevron nudged right of centre to sit centred by eye.

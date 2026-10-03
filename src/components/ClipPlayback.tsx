@@ -23,7 +23,7 @@ import { StageChromeContext } from '@/features/feed/useStageMotion';
  * one tap pauses, two likes, a small disc top-right toggles the sound, and a
  * hairline along the bottom shows how far through it is.
  */
-function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, besideInbox = false, letterbox = false, onReady, crop, held = false, onStage = false }: {
+function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop, held = false, onStage = false }: {
   uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void; fit?: 'cover' | 'contain';
   trimStart?: number; trimEnd?: number;
   /** The browser's Feed warming up out of sight (ClipPlayback.web). A phone builds its feed from the start, so it never is. */
@@ -43,8 +43,6 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   discInk?: string;
   /** Keep the sound disc showing instead of fading it — the very first reel, so it is found. */
   discPinned?: boolean;
-  /** The Feed's inbox tile holds the top right corner: the sound button sits one place in, beside it. */
-  besideInbox?: boolean;
   /** A landscape clip: the picture sits in a wide box mid-screen with black around; the disc and line keep to the screen's edges. */
   letterbox?: boolean;
   /**
@@ -177,7 +175,7 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
         ) : null}
       </Pressable>
       {silent || bare ? null : (
-        <Pressable accessibilityRole="button" accessibilityLabel={muted ? 'Unmute clip' : 'Mute clip'} hitSlop={12} onPress={() => { setMuted((v) => !v); if (!discPinned) showDisc(); }} style={[styles.soundHit, { top: insets.top + (discInk ? 25 : 22) }, besideInbox && styles.soundBesideInbox]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={muted ? 'Unmute clip' : 'Mute clip'} hitSlop={12} onPress={() => { setMuted((v) => !v); if (!discPinned) showDisc(); }} style={[styles.soundHit, { top: insets.top + (discInk ? 25 : 22) }]}>
           <Animated.View style={[styles.sound, discInk ? styles.soundThemed : null, discStyle]}>
             <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={19} color={discInk ?? 'white'} />
           </Animated.View>
@@ -200,8 +198,6 @@ const styleDefinitions = StyleSheet.create({
   // Top right, level with the wordmark: out of the caption's way and never
   // behind the bottom bar. A quiet disc, not a button that shouts.
   soundHit: { position: 'absolute', right: 16, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  // One tile in from the corner (40 wide plus a 10 gap), so the Feed's inbox keeps the corner.
-  soundBesideInbox: { right: 66 },
   sound: { width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
   // Level with the mark and in the same tile: the page colour, the theme's ink.
   // The same rounded square as the mark's tile at the other corner, nearly

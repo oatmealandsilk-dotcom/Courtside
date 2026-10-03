@@ -521,8 +521,6 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   return (
     <Screen memoryKey="discuss" wash onRefresh={previewSection === undefined && !isDesktopBrowser() ? actions.refresh : undefined}
       title="Community"
-      subtitle="Find your people. Talk about your game."
-      subtitleBelow
       right={
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
           <Pressable
