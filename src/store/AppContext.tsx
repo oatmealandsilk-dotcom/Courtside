@@ -4532,6 +4532,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       users: prev.users.map((u) => (u.id === me ? { ...u, ageGroup: label, isPrivate: label === 'teen' && !u.ageGroup ? true : u.isPrivate } : u)),
     }));
     await rememberAnswered(me, label);
+    // An invite claimed before the age was on file made no follow; now it can.
+    if (label === 'adult') void followInviter();
     return label;
   }, [requireUser]);
 
@@ -5353,19 +5355,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!live(me)) return;
     const handle = await takeReferrer();
     if (!handle) return;
+    // Null when no follow was made: a teen, or someone whose age is not on
+    // file yet, is never made to follow the sharer (followInviter makes it
+    // once the birthday says adult).
     const who = await remote.claimReferral(handle);
     if (!who) return;
-    // You follow whoever invited you (or, if their account is private, ask
-    // to); they are never made to follow you back without saying so.
+    showInviterFollow(who, handle);
+  }, []);
+  // You follow whoever invited you (or, if their account is private, ask
+  // to); they are never made to follow you back without saying so.
+  const showInviterFollow = (who: ID, handle?: string) => {
+    const me = stateRef.current.currentUserId;
     const them = stateRef.current.users.find((u) => u.id === who);
     if (them?.isPrivate) {
       setState((prev) => ({ ...prev, followRequests: prev.followRequests.some((r) => r.fromId === me && r.toId === who) ? prev.followRequests : [...prev.followRequests, { fromId: me!, toId: who, createdAt: new Date().toISOString() }] }));
       showToast({ title: `Asked to follow @${them.handle}`, body: 'They invited you. Once they say yes, you will see their posts.', icon: 'people-outline' });
     } else {
       setState((prev) => ({ ...prev, followingIds: prev.followingIds.includes(who) ? prev.followingIds : [...prev.followingIds, who] }));
-      showToast({ title: `You're following @${them?.handle ?? handle}`, body: 'They invited you to CourtSide.', icon: 'people-outline' });
+      showToast({ title: them?.handle ?? handle ? `You're following @${them?.handle ?? handle}` : "You're following who invited you", body: 'They invited you to CourtSide.', icon: 'people-outline' });
     }
-  }, []);
+  };
+  const followInviter = async () => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me)) return;
+    const who = await remote.followMyInviter().catch(() => null);
+    if (who) showInviterFollow(who);
+  };
   useEffect(() => { if (live(state.currentUserId)) void claimPendingReferral(); }, [state.currentUserId, claimPendingReferral]);
   const countReferrals = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.countReferrals(me!) : 0; }, []);
 

@@ -9,6 +9,7 @@ import type { FeedGroupCard } from '@/data/types';
 import { openGroupFeed } from '@/features/groups/openGroupFeed';
 import { confirm } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
+import { publicRoute } from '@/features/share/publicRoute';
 import { shareLink } from '@/lib/shareLink';
 import { shareOutside } from '@/lib/shareOutside';
 import { useApp } from '@/store/AppContext';
@@ -25,7 +26,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 
 type JoinMode = 'open' | 'ask';
 
-export default function GroupPage() {
+function GroupPage() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { feedGroups, feedGroupsAsked, users, currentUserId, actions } = useApp();
@@ -195,6 +196,10 @@ export default function GroupPage() {
     </Screen>
   );
 }
+
+// An invite link opens here for anyone; signed out, a "Join CourtSide to join
+// this group" card that names nothing, and the group opens after sign-up.
+export default publicRoute('group', GroupPage);
 
 const styleDefinitions = StyleSheet.create({
   loading: { paddingVertical: 60, alignItems: 'center' },

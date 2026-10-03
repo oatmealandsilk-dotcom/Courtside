@@ -18,6 +18,7 @@ import { healthHistory, integrations } from './mock/health';
 import { activityNotifications, detectedActivities } from './mock/activities';
 import { CURRENT_USER_ID, users } from './mock/users';
 import { demoHits } from './mock/hits';
+import { isMapCourtId } from '@/features/places/courtName';
 import { demoLastSeen } from './mock/presence';
 import { DEMO_FOLLOWING, DEMO_MAP_ALERTS } from './mock/courtLife';
 import { demoSessionTagNotifications, demoSessionTags, demoSessions } from './mock/sessions';
@@ -45,6 +46,10 @@ import type {
   SessionTag,
   SessionTagRefusal,
   SessionTagRole,
+  ShareKind,
+  SharePerson,
+  SharePreview,
+  ShareTile,
   Question,
   Story,
   HitRequest,
@@ -232,6 +237,100 @@ export async function respondSessionTag({ me, tag, accept, addToMine, sessions, 
  */
 export async function searchPosts(_term: string): Promise<{ posts: Post[]; comments: Comment[] } | null> {
   return null;
+}
+
+/* ------------------------------ Shared links ------------------------------ */
+
+/**
+ * The read-only look a link shared outside the app gives someone with no
+ * account (share_preview, migration 68). Null when it could not be asked
+ * (offline, or the server is a version behind): the page then shows its
+ * "Join CourtSide" card, which is never wrong. The demo answers from its
+ * fixtures with the server's rules: only a public account known to be an
+ * adult shows to a stranger.
+ */
+export async function fetchSharePreview(kind: ShareKind, id: string): Promise<SharePreview | null> {
+  // A group never shows anything to someone signed out (feed_group_card is for signed-in players only).
+  if (kind === 'group') return { kind, open: false };
+  if (supabase) {
+    const { data, error } = await supabase.rpc('share_preview', { p_kind: kind, p_id: id });
+    if (error || !data || typeof data !== 'object') return null;
+    return data as SharePreview;
+  }
+  const locked: SharePreview = { kind, open: false };
+  const shareable = (userId: ID) => { const u = users.find((x) => x.id === userId); return !!u && !u.isPrivate && !u.suspended && u.ageGroup === 'adult'; };
+  const person = (userId: ID): SharePerson => {
+    const u = users.find((x) => x.id === userId)!;
+    return { id: u.id, name: u.name, handle: u.handle, avatarUrl: u.avatarUrl, location: u.location || undefined, isCoach: u.isCoach || undefined };
+  };
+  const live = (p: Post) => !p.archived;
+  const tile = (p: Post): ShareTile => ({ id: p.id, kind: p.kind, body: p.body.slice(0, 80), imageUrl: p.imageUrl, thumbnailUrl: p.thumbnailUrl });
+  const answer = (value: SharePreview) => delay(clone(value));
+  if (kind === 'post') {
+    const p = posts.find((x) => x.id === id);
+    if (!p || !live(p) || !shareable(p.authorId)) return answer(locked);
+    return answer({ kind, open: true, author: person(p.authorId), post: {
+      id: p.id, kind: p.kind, body: p.body.slice(0, 500), createdAt: p.createdAt, imageUrl: p.imageUrl, videoUrl: p.videoUrl,
+      thumbnailUrl: p.thumbnailUrl, orientation: p.orientation, mediaLabel: p.mediaLabel, likes: p.likedBy.length, comments: p.commentIds.length,
+      courtName: p.court?.name, courtId: p.court?.id, location: p.location,
+      session: p.session ? { minutes: p.session.minutes, focus: p.session.focus, kind: p.session.kind } : undefined,
+    } });
+  }
+  if (kind === 'profile') {
+    const u = users.find((x) => x.id === id);
+    if (!u || !shareable(u.id)) return answer(locked);
+    const theirs = posts.filter((p) => p.authorId === u.id && live(p));
+    return answer({ kind, open: true, author: person(u.id), profile: {
+      bio: u.bio || undefined, followers: u.followers, posts: theirs.length,
+      skillSystem: u.profile?.skillSystem, rating: u.profile?.rating || undefined,
+      openHits: demoHits.filter((h) => h.authorId === u.id && !h.cancelled && Date.parse(h.startsAt) > Date.now()).length,
+      recent: theirs.slice(0, 6).map(tile),
+    } });
+  }
+  if (kind === 'hit-request') {
+    const h = demoHits.find((x) => x.id === id);
+    if (!h || !shareable(h.authorId)) return answer(locked);
+    return answer({ kind, open: true, gone: !!h.cancelled || Date.parse(h.startsAt) < Date.now() - 3_600_000, author: person(h.authorId), hit: {
+      id: h.id, startsAt: h.startsAt, format: h.format, spots: h.spots, spotsLeft: Math.max(0, h.spots - h.joinedIds.length),
+      levelMin: h.levelMin, levelMax: h.levelMax, note: h.note, place: h.place,
+    } });
+  }
+  if (kind === 'question') {
+    const q = questions.find((x) => x.id === id);
+    if (!q || !shareable(q.authorId)) return answer(locked);
+    return answer({ kind, open: true, author: person(q.authorId), question: {
+      id: q.id, title: q.title, body: q.body.slice(0, 400), createdAt: q.createdAt, answers: answers.filter((a) => a.questionId === q.id).length,
+    } });
+  }
+  if (kind === 'court') {
+    if (!isMapCourtId(id)) return answer(locked);
+    const here = posts.filter((p) => p.court?.id === id && live(p) && shareable(p.authorId));
+    return answer({ kind, open: true, court: {
+      name: here[0]?.court?.name,
+      openHits: demoHits.filter((h) => h.place.id === id && !h.cancelled && Date.parse(h.startsAt) > Date.now() && shareable(h.authorId)).length,
+      posts: here.length, players: new Set(here.map((p) => p.authorId)).size, recent: here.slice(0, 6).map(tile),
+    } });
+  }
+  return answer(locked);
+}
+
+/**
+ * The person a link's ?ref= names, only when they are someone a stranger may
+ * see (a public adult account). Null otherwise, so a made-up link cannot say
+ * it came from anyone.
+ */
+export async function fetchShareReferrer(handle: string): Promise<SharePerson | null> {
+  const clean = handle.trim().toLowerCase();
+  if (!/^[a-z0-9_]{2,24}$/.test(clean)) return null;
+  if (supabase) {
+    const { data, error } = await supabase.rpc('share_preview', { p_kind: 'referrer', p_id: clean });
+    if (error || !data || typeof data !== 'object') return null;
+    const got = data as { open?: boolean; author?: SharePerson };
+    return got.open && got.author ? got.author : null;
+  }
+  const u = users.find((x) => x.handle.toLowerCase() === clean);
+  if (!u || u.isPrivate || u.suspended || u.ageGroup !== 'adult') return null;
+  return delay(clone({ id: u.id, name: u.name, handle: u.handle, avatarUrl: u.avatarUrl, location: u.location || undefined, isCoach: u.isCoach || undefined }));
 }
 
 /* ------------------------------- Coach memory ------------------------------ */
