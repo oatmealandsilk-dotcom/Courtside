@@ -30,6 +30,8 @@ export const demoSessions: PracticeSession[] = [
   // Mira's practice, from her tag: accepted with "Add to my sessions".
   { id: 'ses-demo-11', userId: CURRENT_USER_ID, day: dayAgo(5), minutes: 60, kind: 'practice', opponent: 'Mira', fromSessionId: 'ses-mira-1', createdAt: isoDaysAgo(4, 2) },
   { id: 'ses-demo-4', userId: CURRENT_USER_ID, day: dayAgo(6), minutes: 75, kind: 'practice', note: 'At Cypress Hollow Park · with Dev', createdAt: loggedAt(6, 18) },
+  // A week ago from WHOOP (act-demo-3), a match won against Mira: on your post p-demo-whoop.
+  { id: 'ses-demo-13', userId: CURRENT_USER_ID, day: dayAgo(7), minutes: 96, kind: 'match', won: true, activityId: 'act-demo-3', createdAt: loggedAt(7, 20) },
   { id: 'ses-demo-5', userId: CURRENT_USER_ID, day: dayAgo(8), minutes: 50, kind: 'fitness', createdAt: loggedAt(8, 7) },
   { id: 'ses-demo-6', userId: CURRENT_USER_ID, day: dayAgo(9), minutes: 120, kind: 'match', won: false, createdAt: loggedAt(9, 12) },
   { id: 'ses-demo-7', userId: CURRENT_USER_ID, day: dayAgo(12), minutes: 60, kind: 'practice', createdAt: loggedAt(12, 18) },
@@ -44,6 +46,7 @@ export const demoSessions: PracticeSession[] = [
 export const demoSessionTags: SessionTag[] = [
   { id: 'stag-demo-1', sessionId: 'ses-demo-1', taggerId: CURRENT_USER_ID, taggedId: 'u-mira', role: 'opponent', status: 'accepted', createdAt: loggedAt(1, 20), respondedAt: isoDaysAgo(0, 11), kind: 'match', day: dayAgo(1), minutes: 90, won: true },
   { id: 'stag-demo-10', sessionId: 'ses-demo-10', taggerId: CURRENT_USER_ID, taggedId: 'u-mira', role: 'opponent', status: 'accepted', createdAt: loggedAt(3, 19), respondedAt: isoDaysAgo(2, 4), kind: 'match', day: dayAgo(3), minutes: 75, won: true },
+  { id: 'stag-demo-13', sessionId: 'ses-demo-13', taggerId: CURRENT_USER_ID, taggedId: 'u-mira', role: 'opponent', status: 'accepted', createdAt: loggedAt(7, 20), respondedAt: isoDaysAgo(6, 4), kind: 'match', day: dayAgo(7), minutes: 96, won: true },
   { id: 'stag-demo-6', sessionId: 'ses-demo-6', taggerId: CURRENT_USER_ID, taggedId: 'u-june', role: 'opponent', status: 'pending', createdAt: loggedAt(9, 12), kind: 'match', day: dayAgo(9), minutes: 120, won: false },
   // Sam lost to you two days ago: Sam's session, so the result is from your side.
   { id: 'stag-demo-sam', sessionId: 'ses-sam-1', taggerId: 'u-sam', taggedId: CURRENT_USER_ID, role: 'opponent', status: 'pending', createdAt: isoDaysAgo(0, 2), kind: 'match', day: dayAgo(2), minutes: 75, won: true },

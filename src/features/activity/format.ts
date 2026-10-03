@@ -1,6 +1,7 @@
-import type { DetectedActivity, ID, PracticeSession, SessionDetail, SessionWith, StatsSource } from '@/data/types';
+import type { DetectedActivity, HealthShareKey, ID, PracticeSession, SessionDetail, SessionWith, StatsSource } from '@/data/types';
 import { localDay } from '@/features/practice/stats';
 import { sessionPeople } from './sessionTags';
+import { withShare } from './healthShare';
 import { duration } from '@/lib/format';
 
 /*
@@ -9,19 +10,21 @@ import { duration } from '@/lib/format';
  * sees. Plain functions, so the store and the screens say it the same way.
  */
 
-/** The part of the day a session started in, on this phone's clock. */
-export function timeOfDay(iso: string): string {
-  const h = new Date(iso).getHours();
-  if (h < 8) return 'Early morning';
-  if (h < 12) return 'Morning';
-  if (h < 14) return 'Lunchtime';
-  if (h < 17) return 'Afternoon';
-  if (h < 21) return 'Evening';
-  return 'Night';
+/**
+ * What the tracker itself called the session: "Tennis" only because the
+ * tracker labelled it tennis (WHOOP's sport name, Apple's Tennis workout,
+ * Fitbit's, Oura's or Polar's own activity type; the server files nothing
+ * else, migrations 58 and 69), otherwise the tracker's own sport name as it
+ * gave it ("Functional fitness"). Never a time of day: "Lunchtime tennis"
+ * named something the tracker never said.
+ */
+export function sportName(sport: string | undefined | null): string {
+  const words = (sport ?? '').replace(/[_-]+/g, ' ').trim().toLowerCase();
+  return words ? words[0].toUpperCase() + words.slice(1) : 'Activity';
 }
 
-/** "Evening tennis". */
-export const activityTitle = (a: DetectedActivity) => `${timeOfDay(a.startedAt)} tennis`;
+/** "Tennis". */
+export const activityTitle = (a: Pick<DetectedActivity, 'sport'>) => sportName(a.sport);
 
 /** The calendar day it was played where it was played, when the tracker said where; otherwise on this phone's clock. */
 export function activityDay(a: DetectedActivity): string {
@@ -36,8 +39,8 @@ function clock(at: Date): { time: string; mark: string } {
   return m ? { time: m[1], mark: m[2].replace(/[.]/g, '').toLowerCase() } : { time: s, mark: '' };
 }
 
-/** "Today, 6:12–7:36 pm", "Yesterday, …" or "Mon Sep 29, …". */
-export function activityWhen(a: DetectedActivity, now = new Date()): string {
+/** "Today, 6:12–7:36 pm", "Yesterday, …" or "Mon Sep 29, …". `sep` goes between the day and the times. */
+export function activityWhen(a: DetectedActivity, now = new Date(), sep = ', '): string {
   const start = new Date(a.startedAt);
   const from = clock(start);
   const to = clock(new Date(a.endedAt));
@@ -49,12 +52,12 @@ export function activityWhen(a: DetectedActivity, now = new Date()): string {
     : day === localDay(now.getTime() - 86_400_000) ? 'Yesterday'
     // The locale's own order, without its commas, so the one comma left is the one before the times.
     : start.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }).replace(/,/g, '');
-  return `${label}, ${range}`;
+  return `${label}${sep}${range}`;
 }
 
 /** Which label a session's numbers carry: an Apple Watch only when the workout says it was saved by one. */
 export function statsSourceOf(a: DetectedActivity): StatsSource {
-  if (a.source === 'whoop') return 'whoop';
+  if (a.source === 'whoop' || a.source === 'fitbit' || a.source === 'oura' || a.source === 'polar') return a.source;
   if (a.source === 'apple-health') return /^Watch[0-9]+,[0-9]+$/.test(a.device ?? '') ? 'apple-watch' : 'apple-health';
   return 'health-connect';
 }
@@ -69,6 +72,9 @@ export function sourceLabel(s: StatsSource): string {
     case 'whoop': return 'Data by WHOOP';
     case 'apple-watch': return 'From Apple Watch';
     case 'apple-health': return 'From Apple Health';
+    case 'fitbit': return 'From Fitbit';
+    case 'oura': return 'From Oura';
+    case 'polar': return 'From Polar';
     default: return 'From Health Connect';
   }
 }
@@ -79,6 +85,9 @@ export function fromWho(a: DetectedActivity): string {
     case 'whoop': return 'your WHOOP';
     case 'apple-watch': return 'your Apple Watch';
     case 'apple-health': return 'Apple Health';
+    case 'fitbit': return 'your Fitbit';
+    case 'oura': return 'your Oura Ring';
+    case 'polar': return 'your Polar';
     default: return 'your tracker';
   }
 }
@@ -95,20 +104,21 @@ export function privateLine(a: DetectedActivity): string {
 
 /**
  * The stats a post carries from a tracker session: time on court always,
- * heart rate only when the author switched it on and is a confirmed adult.
- * It is the same shape the server rebuilds from the private record
- * (fill_post_session_stats, migration 58), so the copy shown straight away
- * matches what is saved. Sending maxHr is how the post asks for heart rate.
+ * and only the health numbers the author chose to share ("Share health
+ * data", any age), with the list itself. It is the same shape the server
+ * rebuilds from the private record (post_session_stats, migration 72), so
+ * the copy shown straight away matches what is saved.
  */
-export function sessionFromActivity(a: DetectedActivity, showHr: boolean, adult: boolean): SessionDetail {
-  return {
+export function sessionFromActivity(a: DetectedActivity, share: HealthShareKey[]): SessionDetail {
+  return withShare({
     focus: 'Tennis',
     minutes: a.minutes,
     drills: [],
     activityId: a.id,
     source: statsSourceOf(a),
-    ...(showHr && adult && a.maxHr ? { maxHr: a.maxHr, ...(a.avgHr ? { avgHr: a.avgHr } : {}) } : {}),
-  };
+    // The day it was played where it was played (never the time), as the server writes it (migration 65).
+    ...(a.tzOffsetMin != null ? { day: activityDay(a) } : {}),
+  }, a, share);
 }
 
 /** A piece of a stats line: words, a player's @handle (opens their profile), or "+2" for the rest of them (`more`). */
@@ -249,6 +259,60 @@ export function sessionFromLogged(s: PracticeSession): SessionDetail {
     drills: [],
     sessionId: s.id,
     kind: s.kind,
+    day: s.day,
     ...(s.kind === 'match' && s.won !== undefined ? { won: s.won } : {}),
+  };
+}
+
+/* ------------------------------------------- the session's own look (Oct 2) */
+
+/** A duration as figures and units, for big numbers with small units: 42 → 42 m; 84 → 1 h 24 m; 65 → 1 h 05 m. */
+export function durationParts(min: number): { n: string; u: string }[] {
+  const m = Math.max(0, Math.round(min));
+  if (m < 60) return [{ n: String(m), u: 'm' }];
+  return [{ n: String(Math.floor(m / 60)), u: 'h' }, { n: String(m % 60).padStart(2, '0'), u: 'm' }];
+}
+
+/** "1 hour 24 minutes", for a screen reader. */
+export function spokenDuration(min: number): string {
+  const m = Math.max(0, Math.round(min));
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  const hours = h ? `${h} ${h === 1 ? 'hour' : 'hours'}` : '';
+  const mins = r || !h ? `${r} ${r === 1 ? 'minute' : 'minutes'}` : '';
+  return [hours, mins].filter(Boolean).join(' ');
+}
+
+/** What it was in a word: "Match", "Practice", or "Tennis" when the post does not say (a tracker's session not logged, a post from before migration 65). */
+export const kindWord = (s: Pick<SessionDetail, 'kind'>) => (s.kind ? KIND_LABEL[s.kind] : 'Tennis');
+
+/** "Won", "Lost", or null when it was not a match with a result. */
+export const resultWord = (s: Pick<SessionDetail, 'kind' | 'won'>) => (s.kind === 'match' && s.won !== undefined ? (s.won ? 'Won' : 'Lost') : null);
+
+/**
+ * The small line over a session's numbers: "MATCH · FRI OCT 2", "PRACTICE ·
+ * TODAY". Just "TENNIS" when the post says neither what it was nor which day.
+ */
+export function sessionEyebrow(s: Pick<SessionDetail, 'kind' | 'day'>, now = new Date()): string {
+  const kind = kindWord(s);
+  return (s.day ? `${kind} · ${dayWords(s.day, now)}` : kind).toUpperCase();
+}
+
+/** "on court", or "active" for a gym session. */
+export const onCourtWord = (s: Pick<SessionDetail, 'kind'>) => (s.kind === 'fitness' ? 'active' : 'on court');
+
+/**
+ * What the pill over a clip says, in the order it gives way: the time never,
+ * then the third piece (heart rate, or the first player when there is no
+ * heart rate), then the result (or what it was).
+ */
+export function pillPieces(s: SessionDetail, hidden: ID[] = []): { time: string; result: string; third: string | null } {
+  const { opponents, partners } = sessionPeople(s, hidden);
+  const lead = opponents[0] ?? partners[0];
+  const first = lead ? (lead.name?.trim().split(/\s+/)[0] || `@${lead.handle}`) : '';
+  return {
+    time: duration(s.minutes),
+    result: resultWord(s) ?? kindWord(s),
+    third: s.maxHr ? `${s.maxHr} bpm` : lead ? `${opponents.length ? 'vs' : 'with'} ${first}` : null,
   };
 }

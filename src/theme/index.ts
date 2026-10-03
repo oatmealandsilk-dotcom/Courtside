@@ -45,7 +45,8 @@ export const lift = {
   // The CSS-style shadow, not shadowColor/shadowOpacity: on iPhone the old
   // props are cut off by overflow: 'hidden', which every grouped list needs
   // for its rounded corners, so the lift silently vanished there.
-  boxShadow: '0px 4px 16px rgba(42, 36, 24, 0.07)',
+  // Softened Oct 2: on the cream and city themes the cards stood out too much.
+  boxShadow: '0px 2px 10px rgba(42, 36, 24, 0.045)',
 } as const;
 
 export const spacing = {

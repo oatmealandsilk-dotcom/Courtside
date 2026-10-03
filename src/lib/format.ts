@@ -15,6 +15,25 @@ export function relativeTime(iso: string, now: Date = new Date()): string {
 }
 
 /**
+ * When something was posted, in words, the way Reels and TikTok say it under
+ * an opened caption: "Just now", "24 minutes ago", "2 hours ago", "3 days
+ * ago", and past a week the date ("Sep 21"; the year only when it differs).
+ */
+export function agoInWords(iso: string, now: Date = new Date()): string {
+  const diff = Math.max(0, now.getTime() - new Date(iso).getTime());
+  const minutes = Math.floor(diff / 60_000);
+  const hours = Math.floor(diff / 3_600_000);
+  const days = Math.floor(diff / 86_400_000);
+  if (minutes < 1) return 'Just now';
+  if (hours < 1) return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`;
+  if (days < 1) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+  if (days < 7) return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+  const when = new Date(iso);
+  const sameYear = when.getFullYear() === now.getFullYear();
+  return when.toLocaleDateString(undefined, sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/**
  * Just the clock time a message was sent, "9:41 AM", in the phone's own 12-
  * or 24-hour style. A chat asks this for every message each time it draws,
  * so the formatter is made once and kept, until the phone's clock moves to
@@ -120,4 +139,13 @@ export function experienceLabel(years: number): string {
   if (years === 6) return '4–9 years';
   if (years === 12) return '10+ years';
   return years === 1 ? '1 year' : `${years} years`;
+}
+
+/** Hours as hours and minutes, never a decimal: 5.6 → "5h 36m", 0.75 → "45m", 8 → "8h". */
+export function hoursAndMinutes(hours: number): string {
+  const total = Math.round(hours * 60);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (!h) return `${m}m`;
+  return m ? `${h}h ${m}m` : `${h}h`;
 }

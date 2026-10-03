@@ -13,6 +13,7 @@ import { money, relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useAiCoachOn } from '@/features/aiCoach/switch';
 import { statusLabel } from '@/features/coaching/bookings';
+import { studioLine } from '@/features/coaching/studioSummary';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { useTourTarget } from '@/features/tour/tourStore';
@@ -39,14 +40,38 @@ function Coaching() {
   // Your bookings; one still at Stripe's pay page is not a booking yet.
   const myRequests = coachingRequests.filter((r) => r.userId === currentUserId && r.status !== 'awaiting-payment').sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   const myCoach = coaches.find((c) => c.userId === currentUserId);
-  const openBookings = myCoach ? coachingRequests.filter((r) => (r.coachId === myCoach.id || r.coachUserId === currentUserId) && (r.status === 'submitted' || r.status === 'in-review')).length : 0;
+  // A coach's own way into their studio, with where it stands: what is waiting, or how far setup has got.
+  const studio = myCoach ? studioLine(myCoach, coachingRequests, coachQuestions, currentUserId) : null;
   // Everyone sees listed coaches; a coach also sees their own listing before it is listed.
   const shown = coaches.filter((c) => c.listed !== false);
 
   return (
     <Screen memoryKey="coaches" title="Coaching" wash onRefresh={isDesktopBrowser() ? undefined : actions.refresh}>
+      {/* ------------------------------ Coach studio ---------------------------- */}
+      {/* Coaches only: their studio comes first, not tucked under everything else. */}
+      {myCoach && studio ? (
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={`Coach studio. ${studio.line}`}
+          onPress={() => router.push('/coach-studio')}
+          style={({ pressed }) => [styles.studio, pressed && styles.pressed]}
+        >
+          <View style={styles.studioMark}><Ionicons name="ribbon-outline" size={20} color={colors.brand} /></View>
+          <View style={styles.rowWords}>
+            <Text style={styles.footTitle}>Coach studio</Text>
+            <Text style={styles.meta} numberOfLines={1}>{studio.line}</Text>
+            {studio.doneCount < 4 ? (
+              <View style={styles.studioProgress}>
+                {[0, 1, 2, 3].map((i) => <View key={i} style={[styles.studioBit, i < studio.doneCount && styles.studioBitOn]} />)}
+              </View>
+            ) : null}
+          </View>
+          {studio.waiting ? <View style={styles.studioCount}><Text style={styles.studioCountText}>{studio.waiting}</Text></View> : null}
+          <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+        </Pressable>
+      ) : null}
       {/* ------------------------------ Ask a coach ----------------------------- */}
-      <View style={[styles.section, styles.sectionFirst]}>
+      <View style={[styles.section, myCoach ? null : styles.sectionFirst]}>
         <View style={styles.sectionRow}>
           <Text style={styles.sectionTitle}>Ask a coach</Text>
           <Text style={styles.sectionCount}>free</Text>
@@ -202,16 +227,8 @@ function Coaching() {
       ) : null}
 
       {/* --------------------------- Coach on CourtSide -------------------------- */}
-      {myCoach ? (
-        <Pressable accessibilityRole="link" onPress={() => router.push(openBookings ? '/coach-bookings' : '/coach-studio')} style={({ pressed }) => [styles.foot, pressed && styles.pressed]}>
-          <View style={styles.rowWords}>
-            <Text style={styles.footTitle}>{openBookings ? `${openBookings} ${openBookings === 1 ? 'booking needs' : 'bookings need'} an answer` : 'Your coach studio'}</Text>
-            <Text style={styles.meta}>{myCoach.listed ? 'You’re listed.' : 'Finish setting up to get listed.'}</Text>
-          </View>
-          <Ionicons name="arrow-forward" size={18} color={colors.text} />
-        </Pressable>
-      ) : null}
-      {currentUser?.isCoach ? (
+      {/* A coach with a studio has the card at the top (it counts the questions too). */}
+      {myCoach ? null : currentUser?.isCoach ? (
         <Pressable accessibilityRole="link" onPress={() => router.push('/coach-inbox')} style={({ pressed }) => [styles.foot, pressed && styles.pressed]}>
           <View style={styles.rowWords}>
             <Text style={styles.footTitle}>{unanswered} {unanswered === 1 ? 'question needs' : 'questions need'} an answer</Text>
@@ -276,6 +293,13 @@ const styleDefinitions = StyleSheet.create({
   price: { ...typography.bodyStrong, color: colors.text, fontVariant: ['tabular-nums'] },
   foot: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, marginTop: spacing.xl, ...lift, borderRadius: 20, backgroundColor: colors.surface },
   footTitle: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text },
+  studio: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
+  studioMark: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  studioProgress: { flexDirection: 'row', gap: 3, marginTop: 4, maxWidth: 140 },
+  studioBit: { flex: 1, height: 3, borderRadius: 2, backgroundColor: colors.surfaceAlt },
+  studioBitOn: { backgroundColor: colors.brand },
+  studioCount: { minWidth: 24, height: 24, paddingHorizontal: 7, borderRadius: 12, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  studioCountText: { ...typography.caption, letterSpacing: 0, color: colors.brandInk, fontVariant: ['tabular-nums'] },
   ai: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.lg, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
   aiMark: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
 });

@@ -8,24 +8,40 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Chip, EmptyState, Screen, SegmentedControl, Toggle } from '@/components/ui';
 import { TipComposer } from '@/components/TipComposer';
+import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { askAiCoach, fetchAiPlan, type AiCoachReply, type CoachOption } from '@/data/api';
 import { generatePlan } from '@/features/aiCoach/planGenerator';
 import { useAiCoachLive, useAiCoachOn } from '@/features/aiCoach/switch';
 import { planRemindersSupported, readPlanReminders, schedulePlanReminders, setPlanReminders } from '@/features/aiCoach/planReminder';
 import { show as showToast } from '@/lib/toast';
-import { duration, formatDate, experienceLabel } from '@/lib/format';
+import { duration, formatDate, experienceLabel, hoursAndMinutes } from '@/lib/format';
 import { healthSignal, withoutSource } from '@/lib/integrations';
 import { useApp } from '@/store/AppContext';
 import type { AiMessage, PlayerProfile, TrainingBlockKind, TrainingPlan } from '@/data/types';
 import { colors, lift, spacing, typography } from '@/theme';
 
-const BLOCK_META: Record<TrainingBlockKind, { icon: keyof typeof Ionicons.glyphMap; tint: string }> = {
-  'on-court': { icon: 'tennisball-outline', tint: colors.brand },
-  fitness: { icon: 'barbell-outline', tint: colors.court },
-  recovery: { icon: 'moon-outline', tint: colors.hard },
-  'match-play': { icon: 'trophy-outline', tint: colors.warning },
-  mental: { icon: 'bulb-outline', tint: colors.textMuted },
+type BlockIconName = keyof typeof Ionicons.glyphMap | 'court';
+// The tint is a palette slot, looked up when the week draws: read once at load,
+// a colour would stay the light theme's (dark green on New York's navy).
+const BLOCK_META: Record<TrainingBlockKind, { icon: BlockIconName; tint: keyof typeof colors }> = {
+  'on-court': { icon: 'court', tint: 'brand' },
+  fitness: { icon: 'barbell-outline', tint: 'court' },
+  recovery: { icon: 'moon-outline', tint: 'hard' },
+  'match-play': { icon: 'trophy-outline', tint: 'warning' },
+  mental: { icon: 'bulb-outline', tint: 'textMuted' },
 };
+/**
+ * A block's icon: time on court is the court, drawn the app's way; the rest are Ionicons.
+ * Each sits in the same icon-sized square, so the titles beside them and the days under them line up.
+ */
+function BlockIcon({ icon, size, color }: { icon: BlockIconName; size: number; color: string }) {
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      {icon === 'court' ? <CourtGlyph size={Math.round(size * 0.88)} color={color} /> : <Ionicons name={icon} size={size} color={color} />}
+    </View>
+  );
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A short fingerprint of the profile, so the coach writes a new week only when something about you changed. */
@@ -37,7 +53,7 @@ function fingerprint(text: string) {
 
 /** The health line the coach is told: recovery, sleep and HRV, whichever another source than WHOOP gave. */
 function healthLine(signal: ReturnType<typeof healthSignal>, whoop: boolean) {
-  const sleep = signal.sleepHours !== undefined ? `sleep ${signal.sleepHours}h` : null;
+  const sleep = signal.sleepHours !== undefined ? `sleep ${hoursAndMinutes(signal.sleepHours)}` : null;
   const hrv = signal.hrvMs !== undefined ? `HRV ${signal.hrvMs}ms` : null;
   if (signal.recovery !== undefined) return `Recovery ${signal.recovery}% (3-day avg)${sleep ? `, ${sleep}` : ''}${hrv ? `, ${hrv}` : ''}.`;
   if (sleep || hrv) { const s = [sleep, hrv].filter(Boolean).join(', '); return `${s[0].toUpperCase()}${s.slice(1)} (3-day avg).`; }
@@ -296,7 +312,7 @@ function Train() {
                     style={[styles.dayCol, open && styles.dayColOpen, day.restDay && styles.dayColRest]}
                   >
                     <Text style={[styles.dayColLabel, open && { color: colors.brand }]}>{day.label.slice(0, 3)}</Text>
-                    <Ionicons name={meta ? meta.icon : 'moon-outline'} size={18} color={meta ? meta.tint : colors.textFaint} />
+                    <BlockIcon icon={meta ? meta.icon : 'moon-outline'} size={18} color={meta ? colors[meta.tint] : colors.textFaint} />
                     <Text numberOfLines={2} style={styles.dayColTitle}>{day.restDay ? 'Rest' : main?.title}</Text>
                     <Text style={styles.dayColMinutes}>{day.restDay ? '—' : duration(dayMinutes)}</Text>
                   </Pressable>
@@ -314,7 +330,7 @@ function Train() {
                   return (
                     <View key={block.id} style={styles.block}>
                       <View style={styles.blockHead}>
-                        <Ionicons name={meta.icon} size={15} color={meta.tint} />
+                        <BlockIcon icon={meta.icon} size={15} color={colors[meta.tint]} />
                         <Text style={styles.blockTitle}>{block.title}</Text>
                         <Text style={styles.blockMinutes}>{duration(block.minutes)}</Text>
                       </View>

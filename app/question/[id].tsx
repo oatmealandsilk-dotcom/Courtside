@@ -26,8 +26,9 @@ import { useApp } from '@/store/AppContext';
 import type { Answer } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
+import { publicRoute } from '@/features/share/publicRoute';
 
-export default function QuestionDetail() {
+function QuestionDetail() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { questions, answers, users, currentUserId, actions } = useApp();
@@ -218,3 +219,6 @@ const styleDefinitions = StyleSheet.create({
   coachTagText: { ...typography.caption, fontSize: 9, color: colors.brandInk },
   answerBody: { ...typography.body, color: colors.text, lineHeight: 24, marginLeft: 16, paddingLeft: 29, borderLeftWidth: 1, borderLeftColor: colors.border },
 });
+
+// A link shared outside the app opens here for anyone; signed out, it shows the public look (see SharedPage).
+export default publicRoute('question', QuestionDetail);

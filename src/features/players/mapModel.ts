@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { searchPlaces, type Place } from '@/data/locations';
+import { nearestPlace, searchPlaces, type Place } from '@/data/locations';
 import type { CourtRing, HitRequest, TaggedCourt, User } from '@/data/types';
 import { NEAR_HIT_MILES, canSeeHitAt, hitSpot, openHits } from '@/features/hits/visible';
 import { sameCourt } from '@/features/places/court';
 import { looksPublic } from '@/features/places/courtName';
+import { townNameAt } from '@/features/places/search';
 import { useCourtSearch } from '@/features/places/useCourtSearch';
 import { courtRows, fetchCourts, isClosedCourt, peekCourts, type Court, type CourtRow } from '@/features/players/courts';
 import { milesBetween } from '@/features/players/geo';
@@ -58,13 +59,42 @@ const ringCourt = (r: CourtRing): Court => ({ id: r.courtId, name: r.name ?? 'Te
  * quiet dots and the soonest hits near you, and never loads the full court pins.
  * `focusHit` opens the map with that hit's card up.
  */
-export function useMapModel(me: User, players: User[], fix?: LatLng | null, focus?: TaggedCourt | null, card = false, focusHit?: string | null, focusUser?: string | null, focusSpot?: LatLng | null) {
-  const { lastSeen, actions, hitRequests, users, followingIds, currentUserId, blockedIds, mutedIds, courtRings } = useApp();
+export function useMapModel(me: User, players: User[], fix?: LatLng | null, focus?: TaggedCourt | null, card = false, focusHit?: string | null, focusUser?: string | null, focusSpot?: LatLng | null, locationOn = false) {
+  const { lastSeen, actions, hitRequests, users, followingIds, currentUserId, blockedIds, mutedIds, courtRings, seeing } = useApp();
   // One stable function (it never changes), so asking for rings never repeats because something else did.
   const { loadCourtRings } = actions;
   // Your profile's city (and a typed town looked up by name, so nobody from a
   // smaller town lands in the wrong city, or off the map).
-  const { city, pending: cityPending, town } = useMyCity(me);
+  const { city: profileCity, pending: profilePending, town } = useMyCity(me);
+  // Where you really are comes first (Oct 2): with location on and a fix,
+  // the still card is the town you are standing in, named after the nearest
+  // place we know, or "you" when none is close. Location off: the city you
+  // picked on your profile, as before.
+  const fixLat = locationOn ? fix?.lat : undefined;
+  const fixLng = locationOn ? fix?.lng : undefined;
+  // The town's real name from the map search ("Wake Forest", Oct 3), not
+  // the nearest big city the app happens to know; until it answers (or
+  // offline), the nearest known city when one is close.
+  const [townName, setTownName] = useState<{ key: string; name: string | null } | null>(null);
+  const townKey = fixLat === undefined || fixLng === undefined ? '' : `${fixLat.toFixed(2)},${fixLng.toFixed(2)}`;
+  useEffect(() => {
+    if (!townKey || fixLat === undefined || fixLng === undefined) return undefined;
+    let on = true;
+    void townNameAt({ lat: fixLat, lng: fixLng }).then((name) => { if (on) setTownName({ key: townKey, name }); });
+    return () => { on = false; };
+  }, [townKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const looked = townName && townName.key === townKey ? townName.name : null;
+  const live = useMemo<{ at: LatLng; name: string } | null>(() => {
+    if (fixLat === undefined || fixLng === undefined) return null;
+    const at = { lat: fixLat, lng: fixLng };
+    if (looked) return { at, name: looked };
+    const place = nearestPlace(fixLat, fixLng);
+    const near = milesBetween(at, place) <= IN_TOWN_MILES;
+    return near ? { at, name: place.name.split(',')[0] } : { at, name: 'you' };
+  }, [fixLat, fixLng, looked]);
+  const city = live ? live.at : profileCity;
+  const cityPending = live ? false : profilePending;
+  const cityName = live ? live.name : me.location.trim() ? me.location.split(',')[0] : 'you';
   // Without a fix here (a computer that was never asked), your own last spot
   // from the phone is the next best thing to where you are.
   const mine = lastSeen[me.id];
@@ -78,9 +108,9 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   const hits = useMemo<PlacedHit[]>(() => {
     const usersById = new Map(users.map((u) => [u.id, u]));
     return openHits(hitRequests, { blockedIds, mutedIds })
-      .filter((h) => canSeeHitAt(h, { usersById, followingIds, currentUserId }))
+      .filter((h) => canSeeHitAt(h, { usersById, followingIds, currentUserId, seeing }))
       .flatMap((hit) => { const at = hitSpot(hit); return at ? [{ hit, at }] : []; });
-  }, [hitRequests, users, blockedIds, mutedIds, followingIds, currentUserId]);
+  }, [hitRequests, users, blockedIds, mutedIds, followingIds, currentUserId, seeing]);
   // Opened on a hit (?hit=…): where it is, once the hits are in. Only a hit
   // you may see: one you may not (a minor's, a blocked player's, one called
   // off) opens the map on your town, the same as an id that does not exist.
@@ -211,7 +241,7 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
       }
       setCourts(list);
     } catch {
-      showToast({ title: 'Could not load courts', body: 'Check your connection and try again.', icon: 'tennisball-outline' });
+      showToast({ title: 'Could not load courts', body: 'Check your connection and try again.', icon: 'cloud-offline-outline' });
     } finally {
       setCourtsLoading(false);
       setCourtsLoads((n) => n + 1);
@@ -280,8 +310,8 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   // Your pin: only where you last shared your location (or where the phone says you are now).
   const mePos = where;
 
-  // The still card in Find Players shows the city on your profile, the one you
-  // picked at sign-up: never your live spot, and never a guess. No city, no map.
+  // The still card in Find Players shows the town you are in when location is
+  // on (see `live`), else the city on your profile. Never a guess. No city, no map.
   const inCity = useMemo(() => (city ? ranked.filter((p) => milesBetween(city, p.at) <= IN_TOWN_MILES) : []), [city, ranked]);
   // Its courts, as dots: the same area (and the same cached answer) as Courts
   // near you under it, so the two agree and load once.
@@ -323,7 +353,7 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   const cardHits = useMemo(() => (city ? hits.filter((h) => milesBetween(city, h.at) <= NEAR_HIT_MILES) : []), [city, hits]);
   const cardFlags = useMemo(() => cardHits.slice(0, CARD_FLAGS), [cardHits]);
   return {
-    home, homeKnown, homeView, mePos, city, cityPending, inCity, start, ranked, inTown, filter, setFilter, query, setQuery, place, shown, tray, selected, select, loadPlayersIn,
+    home, homeKnown, homeView, mePos, city, cityName, cityPending, inCity, start, ranked, inTown, filter, setFilter, query, setQuery, place, shown, tray, selected, select, loadPlayersIn,
     courtsOn, toggleCourts, courts: card ? [] : pins, ringed, courtsLoading, loadCourts, loadRings, selectedCourt, selectCourt,
     cardCourts, cardRinged, cardHits, cardFlags, courtResults, pickCourt, hits, selectedHit, selectHit, nearestCourts,
   };

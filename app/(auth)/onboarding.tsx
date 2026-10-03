@@ -9,6 +9,7 @@ import { PermissionRows } from '@/components/PermissionRows';
 import { Button, Collapse, Field, SegmentedControl, Toggle } from '@/components/ui';
 import { writeSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
 import { replaceWithStart } from '@/features/navigation/startTab';
+import { peekShareTarget } from '@/features/invite/referral';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { useGateSpace } from '@/lib/useGateSpace';
@@ -259,8 +260,9 @@ export default function Onboarding() {
     // A new player with nothing posted yet goes on to their first move; anyone
     // else into the app on its start page (Community, on the map: see startTab).
     const hasPosted = !!currentUserId && (posts.some((p) => p.authorId === currentUserId) || questions.some((q) => q.authorId === currentUserId) || answers.some((a) => a.authorId === currentUserId));
+    // Joined from a shared link: straight on to what they opened (see useShareLanding), not the first-move page.
     if (params.from === 'profile') router.replace('/(tabs)/profile');
-    else if (hasPosted) replaceWithStart();
+    else if (hasPosted || peekShareTarget()) replaceWithStart();
     else router.replace('/first-move');
   };
 

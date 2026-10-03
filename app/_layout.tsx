@@ -79,6 +79,12 @@ export default function RootLayout() {
           <Stack.Screen name="compose" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="ask" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="comments" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+          {/* A session's stats: the comments' stage from a clip's pill, the plain sheet from a post (session-stats.tsx). */}
+          <Stack.Screen name="session-stats" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+          {/* "Who you played", from the composer of a session's post: a sheet over it. */}
+          <Stack.Screen name="who-played" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+          {/* "Share health data" → Choose, from the composer of a session's post: a sheet over it. */}
+          <Stack.Screen name="health-share" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="post-menu" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="invite" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="log-session" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
@@ -98,6 +104,10 @@ export default function RootLayout() {
           />
           {/* "Add to a group" from a profile or the map: a sheet that brings its own rise (DragSheet). */}
           <Stack.Screen name="pick-group" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+          {/* The Feed's "+": find a group to join, or start one; a sheet over the feed (DragSheet). */}
+          <Stack.Screen name="find-groups" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+          {/* "Start a group" and a group's "Edit": a sheet over the Groups list or the group's page (DragSheet). */}
+          <Stack.Screen name="group-form" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           {/* "Send a court" from a chat: a sheet over the chat, so the chat (and its message bar) never moves under it. */}
           <Stack.Screen name="pick-court" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           {/* "Add session stats" from a new Post or Clip: a sheet over the post, with its own rise (DragSheet). */}

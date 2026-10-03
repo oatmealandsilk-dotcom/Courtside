@@ -34,6 +34,8 @@ interface Props {
   onMapTap?: () => void;
   /** Where the map came to rest, how close in, and the part of the world in view. */
   onMove?: (center: LatLng, zoom: number, bounds: ViewBounds) => void;
+  /** Once, the first time everything in view has drawn (streets, names, pins). */
+  onPainted?: () => void;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -43,11 +45,11 @@ interface Props {
  * Apple's stock map with its shields and yellow motorways. Nothing native
  * to build — Expo Go has the web view — and one look everywhere.
  */
-export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, holdPins = false, pad, onTap, onMapTap, onMove, style }, ref) {
+export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, holdPins = false, pad, onTap, onMapTap, onMove, onPainted, style }, ref) {
   const web = useRef<WebView | null>(null);
   const ready = useRef(false);
-  const latest = useRef({ onTap, onMapTap, onMove });
-  latest.current = { onTap, onMapTap, onMove };
+  const latest = useRef({ onTap, onMapTap, onMove, onPainted });
+  latest.current = { onTap, onMapTap, onMove, onPainted };
   const send = (js: string) => { if (ready.current) web.current?.injectJavaScript(`${js};true;`); };
   // The page takes a moment to start. A move asked for before then (your
   // location arriving) is kept and made the instant it is ready; dropping
@@ -99,6 +101,7 @@ map.on('style.load',function(){look(LOOK)});
 // left, say, Night's dark map under the light Paris page; Oct 2).
 map.on('idle',function(){if(LOOK!==APPLIED){APPLIED=LOOK;look(LOOK)}});
 map.on('load',function(){look(LOOK);post({type:'ready'})});
+map.once('idle',function(){post({type:'painted'})});
 var box=document.getElementById('m');${interactive ? '' : "box.classList.add('cs-quiet');"}function zoomClass(){var z=map.getZoom();box.classList.toggle('cs-close',z>=${CLOSE_ZOOM_NAMES});box.classList.toggle('cs-far',z<${FAR_ZOOM});box.classList.toggle('cs-short',z<${SHORT_ZOOM})}zoomClass();map.on('zoom',zoomClass);
 map.on('click',function(){post({type:'maptap'})});
 map.on('moveend',function(){var c=map.getCenter(),b=map.getBounds();post({type:'move',lat:c.lat,lng:c.lng,zoom:map.getZoom(),s:b.getSouth(),w:b.getWest(),n:b.getNorth(),e:b.getEast()})});
@@ -139,6 +142,8 @@ window.__cs={
             pendingMove.current = null;
             if (move) send(`window.__cs.fly(${move.to.lat},${move.to.lng},${move.zoom ?? 'null'},0)`);
           }
+          // A frame later, so what the page drew is on the phone's screen too.
+          else if (msg.type === 'painted') requestAnimationFrame(() => latest.current.onPainted?.());
           else if (msg.type === 'tap' && msg.id) latest.current.onTap?.(msg.id);
           else if (msg.type === 'gathered') haptics.tap();
           else if (msg.type === 'maptap') latest.current.onMapTap?.();

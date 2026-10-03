@@ -746,15 +746,21 @@ export default function Thread() {
                       style={[styles.sharedCard, styles.courtCard]}
                     >
                       <View style={styles.sharedHead}>
-                        <HitGlyph size={16} color={colors.brand} />
-                        <Text style={styles.sharedKind}>Looking for a hit</Text>
+                        <HitGlyph size={16} color={hit ? colors.brand : colors.textFaint} />
+                        <Text style={[styles.sharedKind, !hit && styles.sharedKindOver]}>{hit ? 'Looking for a hit' : 'Hit'}</Text>
                       </View>
                       {hit ? (
                         <>
                           <Text numberOfLines={1} style={styles.courtName}>{hitWhen(hit.startsAt)}</Text>
                           <Text numberOfLines={2} style={styles.sharedBody}>{hit.place.name} · {left ? `${left} ${left === 1 ? 'spot' : 'spots'} left` : 'Full'}</Text>
                         </>
-                      ) : <Text style={styles.sharedBody}>This hit is over</Text>}
+                      ) : (
+                        // Gone (played or called off): a quiet card that says so, not a live-looking one.
+                        <>
+                          <Text numberOfLines={1} style={[styles.courtName, styles.overTitle]}>This hit is over</Text>
+                          <Text style={styles.overBody}>It was played or called off.</Text>
+                        </>
+                      )}
                     </Tappable>
                   )}
                 </HoldArea>
@@ -1708,6 +1714,9 @@ const styleDefinitions = StyleSheet.create({
   },
   sharedHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   sharedKind: { ...typography.caption, color: colors.brand },
+  sharedKindOver: { color: colors.textFaint },
+  overTitle: { color: colors.textMuted },
+  overBody: { ...typography.small, color: colors.textFaint, lineHeight: 19 },
   sharedBody: { ...typography.small, color: colors.text, lineHeight: 19 },
   courtCard: { minWidth: 220 },
   courtName: { ...typography.bodyStrong, color: colors.text },

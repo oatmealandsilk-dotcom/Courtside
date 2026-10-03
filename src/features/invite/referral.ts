@@ -60,3 +60,54 @@ export async function takeInviteCourt(): Promise<InviteCourt | null> {
     return isMapCourtId(c.id) && typeof c.name === 'string' && Number.isFinite(c.lat) && Number.isFinite(c.lng) ? c : null;
   } catch { return null; }
 }
+
+/*
+ * The shared thing someone opened before they had an account: the page it
+ * lives on, and for an open hit whether they already tapped "I'm in". Kept
+ * through sign-up and the setup questions, then the app opens on it (and
+ * joins the hit) the first time it reaches its start page (see AppShell).
+ * Kept a week at most: a link opened long ago does not hijack a later visit.
+ */
+export interface ShareTarget { href: string; joinHit?: string; at: number }
+
+const TARGET_KEY = 'courtside-share-target';
+const WEEK = 7 * 86_400_000;
+let pendingTarget: ShareTarget | null | undefined;
+
+const fresh = (raw: string | null): ShareTarget | null => {
+  if (!raw) return null;
+  try {
+    const t = JSON.parse(raw) as ShareTarget;
+    // Only a page inside the app, never somewhere else.
+    if (typeof t.href !== 'string' || !/^\/[a-z]/.test(t.href) || t.href.startsWith('//')) return null;
+    if (typeof t.at !== 'number' || Date.now() - t.at > WEEK) return null;
+    return { href: t.href, joinHit: typeof t.joinHit === 'string' ? t.joinHit : undefined, at: t.at };
+  } catch { return null; }
+};
+
+// The phone's storage only answers later, so it is read once as the app starts.
+if (Platform.OS !== 'web') {
+  AsyncStorage.getItem(TARGET_KEY).then((raw) => { if (pendingTarget === undefined) pendingTarget = fresh(raw); }).catch(() => { pendingTarget = null; });
+}
+
+export async function rememberShareTarget(href: string, joinHit?: string) {
+  const target: ShareTarget = { href, joinHit, at: Date.now() };
+  pendingTarget = target;
+  await put(TARGET_KEY, JSON.stringify(target));
+}
+
+/** Whether a shared thing is waiting, without using it up. */
+export function peekShareTarget(): ShareTarget | null {
+  if (pendingTarget === undefined && Platform.OS === 'web') {
+    try { pendingTarget = fresh(localStorage.getItem(TARGET_KEY)); } catch { pendingTarget = null; }
+  }
+  return pendingTarget ?? null;
+}
+
+/** The shared thing to open now, once. */
+export async function takeShareTarget(): Promise<ShareTarget | null> {
+  const had = peekShareTarget();
+  pendingTarget = null;
+  const stored = fresh(await take(TARGET_KEY));
+  return stored ?? had;
+}

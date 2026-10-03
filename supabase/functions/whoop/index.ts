@@ -23,6 +23,9 @@
 //           (WHOOP's redirect and webhook carry no app token; /start, /finish,
 //            /sync and /disconnect check the person's token themselves).
 //           Run migration 58 first (/finish needs its whoop_pending table).
+//           Tennis sessions carry WHOOP's heart-rate zone times (workout.ts);
+//           migration 65 stores them. Either can go first: before 65 the
+//           database ignores them.
 // Secrets:  supabase secrets set WHOOP_CLIENT_ID=... WHOOP_CLIENT_SECRET=...
 // WHOOP app: redirect URL = https://<project>.supabase.co/functions/v1/whoop/callback
 //            scopes = read:recovery read:sleep read:cycles read:profile read:workout offline

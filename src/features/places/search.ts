@@ -151,3 +151,26 @@ export function areaOf(at: LatLng): Promise<string | null> {
   void ask.then((v) => { if (v === null) areas.delete(key); });
   return ask;
 }
+
+/** Towns already named, by spot rounded to about a kilometre. */
+const townNameCache = new Map<string, string | null>();
+
+/**
+ * The town a spot is in ("Wake Forest"), from the same open map search as
+ * the city search above. Null when there is no answer (offline, out at sea).
+ */
+export async function townNameAt(at: LatLng): Promise<string | null> {
+  const key = `${at.lat.toFixed(2)},${at.lng.toFixed(2)}`;
+  if (townNameCache.has(key)) return townNameCache.get(key) ?? null;
+  try {
+    const res = await fetch(`https://photon.komoot.io/reverse?lat=${at.lat.toFixed(4)}&lon=${at.lng.toFixed(4)}&lang=en&limit=1`);
+    if (!res.ok) return null;
+    const json = (await res.json()) as { features?: { properties: PhotonProps & { town?: string; village?: string } }[] };
+    const p = json.features?.[0]?.properties;
+    const name = p ? (p.city ?? p.town ?? p.village ?? (p.type === 'city' || p.type === 'town' ? p.name : undefined) ?? null) : null;
+    townNameCache.set(key, name ?? null);
+    return name ?? null;
+  } catch {
+    return null;
+  }
+}

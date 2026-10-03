@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
@@ -14,9 +14,9 @@ import { isNewHere } from '@/features/feed/newHere';
 import { RichText } from '@/components/RichText';
 import type { Post, User } from '@/data/types';
 import { openCourt } from '@/features/players/courtLink';
-import { hasSessionStats, reelStatsChunks } from '@/features/activity/format';
-import { StatsWords } from '@/components/SessionStats';
-import { compactNumber, relativeTime, timeLeft } from '@/lib/format';
+import { hasSessionStats } from '@/features/activity/format';
+import { StatsPill } from '@/components/session/StatsPill';
+import { agoInWords, compactNumber, timeLeft } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useTourBusy } from '@/features/tour/tourStore';
 import { font } from '@/theme';
@@ -57,140 +57,145 @@ export const MAX_GROW = 1.2;
  */
 const META_INK = 'rgba(255, 255, 255, 0.94)';
 /**
- * The place and "with" are 16pt tall, so their tap area reaches past them:
+ * "With" and an Instant's time are 16pt tall, so their tap area reaches past them:
  * further down, where only the tab bar's 16pt of air is, and a little less
  * up, so a tap on the caption's last line still opens the caption.
  */
 const LINK_SLOP = { top: 8, bottom: 12, left: 6, right: 6 } as const;
+/** The handle's tap area: a little above it, and only a little below, where the place starts. */
+const NAME_SLOP = { top: 8, bottom: 2, left: 4, right: 4 } as const;
+/** The place line under the handle: a little more room, never so much it reaches the handle or the caption's first line. */
+const PLACE_SLOP = { top: 2, bottom: 4, left: 6, right: 10 } as const;
 /** The words' own tap area: a little above them, nothing below (the small line has its own buttons there). */
 const WORDS_SLOP = { top: 6, bottom: 0, left: 0, right: 0 } as const;
-
-/** "Posted 2 hours ago", for a screen reader: the small line's "2h" said in full. */
-function spokenAgo(iso: string): string {
-  const diff = Math.max(0, Date.now() - Date.parse(iso));
-  const minutes = Math.floor(diff / 60_000);
-  const hours = Math.floor(diff / 3_600_000);
-  if (minutes < 1) return 'Posted just now';
-  if (hours < 1) return `Posted ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`;
-  if (hours < 24) return `Posted ${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
-  return `Posted on ${new Date(iso).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}`;
-}
 
 /** A count on the rail: "1.2k" past a thousand, and nothing at all for none, so a new post is not a column of zeros. The space keeps the line, so the icons never jump when the first like lands. */
 export const railCount = (n: number) => (n > 0 ? compactNumber(n) : ' ');
 
 /**
- * The words over a clip, set the way TikTok and Reels set them, so they
+ * The words over a clip, set the way Instagram and TikTok set them, so they
  * stay out of the picture's way and read at a glance:
- *   1. who: the face, the @handle and their level;
+ *   1. who: the face, the @handle and their level, and under the handle,
+ *      where it was (Instagram's location line: the whole name on its own
+ *      line, a tap opens the court's page);
  *   2. the caption, two lines at most, with its #tags in it and "… more"
  *      at the end of the second line, never on a line of its own;
- *   3. one quiet line: when, where (opens the map), who with.
- * Nothing else stacks up over the video.
- *
- * The caption and the time open the comments, the whole caption at their
- * top and the clip still playing above them, as Instagram does since Dec
- * 2025. The name, the place, "with" and each #tag keep their own taps.
+ *   3. who with, when someone is tagged ("Mira", a tap opens them).
+ * Nothing else stacks up over the video. No posted-at time until the caption
+ * is opened, as on Reels and TikTok: a tap on the words opens them in place,
+ * the whole caption with "24 minutes ago" under it, and a second tap folds
+ * them again. The name, the place, "with" and each #tag keep their own taps.
  */
-export function ReelCaption({ post, author, onAuthor, onOpenComments }: { post: Post; author: User; onAuthor: () => void; onOpenComments?: (from?: unknown) => void }) {
+export function ReelCaption({ post, author, onAuthor, onOpenStats, active = false }: { post: Post; author: User; onAuthor: () => void; /** Kept for the feed's call; the comments open from the rail. */ onOpenComments?: (from?: unknown) => void; onOpenStats?: () => void; active?: boolean }) {
   const { users, blockedIds } = useApp();
   const touring = useTourBusy();
-  const timeButton = useRef<View>(null);
+  const { height: screenH } = useWindowDimensions();
+  const [open, setOpen] = useState(false);
+  // A clip scrolled away folds its words again, so the next time it comes round it is as it was.
+  useEffect(() => { if (!active) setOpen(false); }, [active]);
   // Only the tags the caption does not already say (a challenge entry has its #tag in both).
   const tags = tagsNotInCaption(post.body, post.tags).map((t) => `#${t}`).join(' ');
   const text = [post.body?.trim(), tags].filter(Boolean).join(' ');
   const tagged = (post.taggedUserIds ?? []).filter((id) => !blockedIds.includes(id)).map((id) => users.find((u) => u.id === id)).filter((u): u is User => !!u);
   const first = (name: string) => name.split(' ')[0];
-  // Three or more is "Mira +2", not "Mira and 2 others": the court's name keeps the room. The full names are in the label.
+  // Three or more is "Mira +2", not "Mira and 2 others". The full names are in the label.
   const withWho = tagged.length === 1 ? first(tagged[0].name) : tagged.length === 2 ? `${first(tagged[0].name)} and ${first(tagged[1].name)}` : tagged.length ? `${first(tagged[0].name)} +${tagged.length - 1}` : '';
   const place = post.court?.name ?? post.location ?? '';
   return (
     <View style={styles.wrap}>
-      <Who author={author} onAuthor={onAuthor} newHere={isNewHere(post)} />
-      {text ? <FoldedWords text={text} onPress={onOpenComments} /> : null}
-      <View style={styles.meta}>
-        {/* The time never gives up room: a long court name is what shortens, never "8h" breaking onto two lines.
-            No "Edited" over the video (TikTok, Reels and Shorts leave it off too); the clip's own page still says so.
-            It opens the comments too, a second way in for a clip with no words. */}
+      {/* An opened caption gets a deeper shade behind it, reaching up past its top line, so long words read on any frame. */}
+      {open ? <LinearGradient pointerEvents="none" colors={['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0.42)', 'rgba(0, 0, 0, 0.42)']} locations={[0, 0.2, 1]} style={styles.openShade} /> : null}
+      <Who author={author} onAuthor={onAuthor} newHere={isNewHere(post)} place={place} court={post.court} />
+      {text ? (
+        open ? (
+          <ScrollView style={{ maxHeight: Math.round(screenH * 0.4) }} nestedScrollEnabled showsVerticalScrollIndicator={false} bounces={false}>
+            <Pressable
+              disabled={touring}
+              onPress={(e) => { e?.stopPropagation?.(); setOpen(false); }}
+              accessibilityRole="button"
+              accessibilityLabel={`${text}. ${spokenWhen(post.createdAt)}`}
+              accessibilityHint="Folds the caption again"
+              style={({ pressed }) => [styles.wordsButton, pressed && styles.pressed]}
+            >
+              <RichText style={styles.caption} hashtagStyle={styles.tag} mentionStyle={styles.tag} maxFontSizeMultiplier={MAX_GROW}>{text}</RichText>
+              <Text style={[styles.metaText, styles.when]} maxFontSizeMultiplier={MAX_GROW}>{agoInWords(post.createdAt)}</Text>
+            </Pressable>
+          </ScrollView>
+        ) : (
+          <FoldedWords text={text} onPress={() => setOpen(true)} hint="Shows the whole caption and when it was posted" />
+        )
+      ) : null}
+      {withWho ? (
         <Pressable
-          ref={timeButton}
-          accessibilityRole="button"
-          accessibilityLabel={`${spokenAgo(post.createdAt)}. Opens the comments`}
-          disabled={!onOpenComments || touring}
+          accessibilityRole="link"
+          accessibilityLabel={`With ${tagged.map((u) => u.name).join(', ')}`}
           hitSlop={LINK_SLOP}
-          onPress={(e) => { e?.stopPropagation?.(); onOpenComments?.(timeButton.current); }}
-          style={({ pressed }) => [styles.metaItem, styles.metaKeep, pressed && styles.pressed]}
+          onPress={(e) => { e?.stopPropagation?.(); if (tagged.length === 1) router.push(`/user/${tagged[0].id}`); else router.push({ pathname: '/likes', params: { id: post.id, set: 'tagged' } }); }}
+          style={({ pressed }) => [styles.metaItem, styles.withLine, pressed && styles.pressed]}
         >
-          <Text style={styles.metaText} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{relativeTime(post.createdAt)}</Text>
+          <Ionicons name="person-sharp" size={11} color={META_INK} style={EDGE_SMALL} />
+          <Text style={styles.metaText} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{withWho}</Text>
         </Pressable>
-        {/* The icons part the items, so no dots between them: one quiet line, not a row of punctuation. */}
-        {place ? (
-          <Pressable
-            accessibilityRole={post.court ? 'link' : undefined}
-            accessibilityLabel={post.court ? `${place}, see posts from here` : place}
-            disabled={!post.court}
-            hitSlop={LINK_SLOP}
-            onPress={(e) => { e?.stopPropagation?.(); if (post.court) openCourt(post.court); }}
-            style={styles.metaItem}
-          >
-            <Ionicons name="location-sharp" size={12} color={META_INK} style={EDGE_SMALL} />
-            <Text style={styles.metaText} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{place}</Text>
-          </Pressable>
-        ) : null}
-        {withWho ? (
-          <Pressable
-            accessibilityRole="link"
-            accessibilityLabel={`With ${tagged.map((u) => u.name).join(', ')}`}
-            hitSlop={LINK_SLOP}
-            onPress={(e) => { e?.stopPropagation?.(); if (tagged.length === 1) router.push(`/user/${tagged[0].id}`); else router.push({ pathname: '/likes', params: { id: post.id, set: 'tagged' } }); }}
-            style={[styles.metaItem, styles.metaKeep]}
-          >
-            <Ionicons name="person-sharp" size={11} color={META_INK} style={EDGE_SMALL} />
-            <Text style={styles.metaText} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{withWho}</Text>
-          </Pressable>
-        ) : null}
-      </View>
-      {/* A clip with a session attached: its stats on one more quiet line ("1h 24m · Data by WHOOP",
-          "Match · Won · 1h 15m · vs @miraplays +2"). What it was, the result and the time lead, so a
-          doubles match never cuts them off; the first player's handle opens them, "+2" everyone who played. */}
+      ) : null}
+      {/* A clip with a session attached: one glass pill under the words, "1h 24m · Won · 171 bpm | See stats".
+          A tap raises the stats with the clip still playing above them (session-stats); the names are in there, not here. */}
       {post.session && hasSessionStats(post.session) ? (
-        <View style={styles.metaItem}>
-          <Ionicons name="tennisball-outline" size={12} color={META_INK} style={EDGE_SMALL} />
-          <StatsWords
-            chunks={reelStatsChunks(post.session, blockedIds)}
-            style={styles.metaText}
-            handleStyle={styles.metaHandle}
-            numberOfLines={1}
-            maxFontSizeMultiplier={MAX_GROW}
-            onMore={() => router.push({ pathname: '/likes', params: { id: post.id, set: 'played' } })}
-            moreLabel="Everyone who played"
-          />
+        <View style={styles.pill}>
+          <StatsPill session={post.session} hidden={blockedIds} onPress={onOpenStats} active={active} />
         </View>
       ) : null}
     </View>
   );
 }
 
+/** "Posted 2 hours ago", for a screen reader: the opened caption's time said as a sentence. */
+function spokenWhen(iso: string): string {
+  const words = agoInWords(iso);
+  return /ago$|^Just now$/.test(words) ? `Posted ${words.toLowerCase()}` : `Posted on ${words}`;
+}
+
 /**
  * The who-line: the face, the @handle, the level and, on a first post, a
- * short "New". It is always one line, so the words over a clip are never
- * more than three rows and the name sits in the same place on every clip.
+ * short "New", with where it was on a small line under the handle, the way
+ * Instagram sets a post's location under the username. The handle's line is
+ * always one line, so the name sits in the same place on every clip.
  * The name is never what gives way to a badge: a hidden copy of the row,
  * allowed to wrap, tells whether "New" fits beside the level, and when it
- * does not, the clip leaves it off (the profile still shows it).
+ * does not, the clip leaves it off (the profile still shows it). The place
+ * has the whole width under the handle and only shortens at its very end.
  */
-function Who({ author, onAuthor, newHere = false }: { author: User; onAuthor: () => void; newHere?: boolean }) {
+function Who({ author, onAuthor, newHere = false, place = '', court }: { author: User; onAuthor: () => void; newHere?: boolean; place?: string; court?: Post['court'] }) {
   // Unknown until measured, and the tag stays out of sight until then, so it never flashes in the wrong place.
   // The copy lays itself out again whenever the handle or the width changes, so the answer stays current.
   const [tagFits, setTagFits] = useState<boolean | null>(null);
   return (
     <>
-      <Pressable accessibilityRole="link" accessibilityLabel={`${author.name}${newHere ? ', new to CourtSide' : ''}, open profile`} onPress={onAuthor} style={styles.who} hitSlop={4}>
-        <View style={styles.avatarRing}><Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={32} /></View>
-        <Text style={styles.handle} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{author.handle}</Text>
-        <LevelPill profile={author.profile} small onMedia style={styles.badge} />
-        {newHere && tagFits ? <View style={styles.badge}><NewHereTag onMedia short /></View> : null}
-      </Pressable>
+      <View style={styles.who}>
+        {/* The face opens the profile too; the handle beside it is the one a screen reader hears. */}
+        <Pressable accessible={false} importantForAccessibility="no" onPress={onAuthor} hitSlop={4} style={styles.avatarRing}>
+          <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={32} />
+        </Pressable>
+        <View style={styles.whoWords}>
+          <Pressable accessibilityRole="link" accessibilityLabel={`${author.name}${newHere ? ', new to CourtSide' : ''}, open profile`} onPress={onAuthor} style={styles.nameRow} hitSlop={NAME_SLOP}>
+            <Text style={styles.handle} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{author.handle}</Text>
+            <LevelPill profile={author.profile} small onMedia style={styles.badge} />
+            {newHere && tagFits ? <View style={styles.badge}><NewHereTag onMedia short /></View> : null}
+          </Pressable>
+          {place ? (
+            <Pressable
+              accessibilityRole={court ? 'link' : 'text'}
+              accessibilityLabel={court ? `${place}, see posts from here` : place}
+              disabled={!court}
+              hitSlop={PLACE_SLOP}
+              onPress={(e) => { e?.stopPropagation?.(); if (court) openCourt(court); }}
+              style={({ pressed }) => [styles.placeRow, pressed && styles.pressed]}
+            >
+              <Ionicons name="location-sharp" size={11} color={META_INK} style={EDGE_SMALL} />
+              <Text style={styles.placeText} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{place}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
       {newHere ? (
         <View
           pointerEvents="none"
@@ -221,7 +226,7 @@ const MORE_TAIL = <><Text style={{ ...font('400') }}>…</Text>{' more'}</>;
  * unfolds over the picture). "… more" stays as the visible cue and does the same.
  * It sits only as wide as its words, so the air beside a short line does nothing.
  */
-export function FoldedWords({ text, onPress }: { text: string; onPress?: (from?: unknown) => void }) {
+export function FoldedWords({ text, onPress, hint = 'Opens the comments, with the whole caption' }: { text: string; onPress?: (from?: unknown) => void; /** What a tap does, for a screen reader. */ hint?: string }) {
   // The tutorial is teaching the swipes: the words stay still under it.
   const touring = useTourBusy();
   const button = useRef<View>(null);
@@ -250,7 +255,7 @@ export function FoldedWords({ text, onPress }: { text: string; onPress?: (from?:
         hitSlop={WORDS_SLOP}
         accessibilityRole={onPress ? 'button' : undefined}
         accessibilityLabel={text}
-        accessibilityHint={onPress ? 'Opens the comments, with the whole caption' : undefined}
+        accessibilityHint={onPress ? hint : undefined}
         // Feedback at once and nothing more: no shrink, no buzz, no wait.
         style={({ pressed }) => [styles.wordsButton, pressed && styles.pressed]}
       >
@@ -434,7 +439,19 @@ export function SwipeHint() {
 const styles = StyleSheet.create({
   // The caption sits close under the name (one post's words); the small line keeps a little more air.
   wrap: { gap: 6 },
-  who: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', maxWidth: '100%' },
+  // The face, then the handle's line with the place under it, both lines centred on the face.
+  who: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'stretch' },
+  whoWords: { flex: 1, minWidth: 0, gap: 1 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', maxWidth: '100%' },
+  // Instagram's location line: small, the whole width under the handle, shortening only at its end.
+  placeRow: { flexDirection: 'row', alignItems: 'center', gap: 3, alignSelf: 'flex-start', maxWidth: '100%' },
+  placeText: { color: META_INK, fontSize: 13, lineHeight: 16, ...font('500'), letterSpacing: 0.1, flexShrink: 1, ...EDGE_SMALL },
+  // The time under an opened caption, 4 below its last line.
+  when: { marginTop: 4 },
+  // Who with: its own small line under the caption, only as wide as its words.
+  withLine: { alignSelf: 'flex-start', maxWidth: '100%', marginTop: 2 },
+  // Behind an opened caption: from 48 above it down past the tab bar to the screen's foot, edge to edge (the column stands 16 in, 72 from the right).
+  openShade: { position: 'absolute', left: -16, right: -72, top: -48, bottom: -200 },
   // No ring: the photo sits on the clip as it is (the owner's call, Oct 1).
   avatarRing: { borderRadius: 16 },
   avatarSpace: { width: 34, height: 34 },
@@ -455,6 +472,8 @@ const styles = StyleSheet.create({
   metaText: { color: META_INK, fontSize: 13, lineHeight: 16, ...font('500'), letterSpacing: 0.1, fontVariant: ['tabular-nums'], flexShrink: 1, ...EDGE_SMALL },
   // A player's handle in the stats line: the line's own ink, a step bolder, so it reads as a name to tap.
   metaHandle: { color: META_INK, ...font('600') },
+  // The session's pill: 10 under the small line.
+  pill: { marginTop: 10 },
   // Out of the words' layout, 10 above the name, in the words' column (16 in from the left, clear of the rail).
   hint: { position: 'absolute', left: 16, right: 72, bottom: '100%', marginBottom: 10, color: 'rgba(255,255,255,0.8)', fontSize: 12, lineHeight: 15, ...font('500'), letterSpacing: 0.1, ...EDGE_SMALL },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0 },

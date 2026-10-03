@@ -225,9 +225,14 @@ export function courtDotHtml(court?: Court, ring = false): string {
   return `<div style="width:18px;height:18px;border-radius:999px;background:${fill};border:2px solid ${colors.bg};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${halo}0 2px 5px rgba(0,0,0,.22);pointer-events:none${closed ? ';opacity:.75' : ''}">${courtGlyph(closed ? colors.bg : colors.brandInk, 10)}</div>`;
 }
 
-/** A tennis ball, drawn small enough for a flag: a filled ball with its two seams. */
-const ball = (fill: string, seam: string) =>
-  `<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="5.2" fill="${fill}"/><path d="M2.3 2.9c1.9 1.5 1.9 4.7 0 6.2M9.7 2.9c-1.9 1.5-1.9 4.7 0 6.2" fill="none" stroke="${seam}" stroke-width="1.1" stroke-linecap="round"/></svg>`;
+/**
+ * The mark on a hit's flag: HitGlyph's drawing at flag size, a court from
+ * above with a player on each side (it was a cartoon ball, Oct 2). `ink`
+ * draws it; each player is cut out of the court's line by a rim of `flag`,
+ * the flag's own colour, so the two never blur together this small.
+ */
+const ball = (ink: string, flag: string) =>
+  `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5.2" y="2.2" width="13.6" height="19.6" rx="1.8" stroke="${ink}" stroke-width="2.2"/><line x1="3" y1="12" x2="21" y2="12" stroke="${ink}" stroke-width="2.2" stroke-linecap="round"/><circle cx="9.4" cy="5.2" r="2.6" fill="${ink}" stroke="${flag}" stroke-width="1.4"/><circle cx="14.6" cy="18.8" r="2.6" fill="${ink}" stroke="${flag}" stroke-width="1.4"/></svg>`;
 
 /**
  * An open hit: a small brand-green flag with a ball and when ("Sat 9am"),

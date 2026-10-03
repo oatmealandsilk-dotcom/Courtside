@@ -65,7 +65,7 @@ export function useNearCourts(center: LatLng | null): { rows: CourtRow[]; neares
 export function CourtsNear({ center }: { center: LatLng | null }) {
   const styles = useThemedStyles(styleDefinitions);
   const near = useNearCourts(center);
-  const { hitRequests, posts, users, followingIds, currentUserId, blockedIds, mutedIds, followedCourts } = useApp();
+  const { hitRequests, posts, users, followingIds, currentUserId, blockedIds, mutedIds, followedCourts, seeing, shownAtCourt } = useApp();
   const rows = useMemo(() => {
     const mine = new Set((followedCourts ?? []).map((c) => c.courtId));
     return mine.size ? near.rows.filter((r) => !mine.has(r.c.id)) : near.rows;
@@ -73,15 +73,16 @@ export function CourtsNear({ center }: { center: LatLng | null }) {
   // What each card says about its court: the soonest open hit you may see there, and the posts its page would show.
   const badges = useMemo(() => {
     const usersById = new Map(users.map((u) => [u.id, u]));
-    const hits = openHits(hitRequests, { blockedIds, mutedIds }).filter((h) => canSeeHitAt(h, { usersById, followingIds, currentUserId }));
-    const ctx = courtSeeing({ users, blockedIds, mutedIds, followingIds, currentUserId });
-    const tagged = posts.filter((p) => !!p.court && !p.archived && canSeeAtCourt(ctx.byId.get(p.authorId), ctx));
+    const hits = openHits(hitRequests, { blockedIds, mutedIds }).filter((h) => canSeeHitAt(h, { usersById, followingIds, currentUserId, seeing }));
+    const ctx = courtSeeing({ users, blockedIds, mutedIds, followingIds, currentUserId, shownAtCourt });
+    // Only posts at the courts on these cards are asked about (since migration 64 the server says, post by post).
+    const tagged = posts.filter((p) => !!p.court && !p.archived && rows.some(({ c }) => sameCourt(p.court!, c)) && canSeeAtCourt(p, ctx));
     return new Map(rows.map(({ c }) => {
       const next = hitsAtCourt(hits, c)[0];
       const here = tagged.filter((p) => sameCourt(p.court!, c));
       return [c.id, { hit: next ? hitShort(next.startsAt).replace(/^Tomorrow/, 'Tmrw') : null, posts: here.length ? countLabel(here, false) : null }];
     }));
-  }, [rows, hitRequests, posts, users, followingIds, currentUserId, blockedIds, mutedIds]);
+  }, [rows, hitRequests, posts, users, followingIds, currentUserId, blockedIds, mutedIds, seeing, shownAtCourt]);
 
   if (!center || !rows.length) return null;
   return (

@@ -6,7 +6,7 @@ export const achievements: Achievement[] = [
     name: 'First Serve',
     description: 'Logged your first session on CourtSide.',
     tier: 'bronze',
-    icon: 'tennisball',
+    icon: 'stopwatch',
     rule: 'sessionsLogged >= 1',
   },
   {

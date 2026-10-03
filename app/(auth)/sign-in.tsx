@@ -35,10 +35,12 @@ type Mode = 'sign-in' | 'sign-up';
 export default function SignIn() {
   const styles = useThemedStyles(styleDefinitions);
   const { actions, currentUserId, savedAccounts } = useApp();
-  const [mode, setMode] = useState<Mode>('sign-in');
   // Logins remembered on this device come first, like Instagram's picker;
   // "Add account" from the accounts page arrives with ?add=1 to skip it.
-  const { add } = useLocalSearchParams<{ add?: string }>();
+  // A shared link or an invite arrives with ?mode=create (or ?mode=sign-in):
+  // they have already seen what CourtSide is, so the form opens straight away.
+  const { add, mode: asked } = useLocalSearchParams<{ add?: string; mode?: string }>();
+  const [mode, setMode] = useState<Mode>(asked === 'create' ? 'sign-up' : 'sign-in');
   const { height: screenHeight } = useWindowDimensions();
   // Clear of the status bar at the top and the home bar at the bottom, the same as every page before the app.
   const space = useGateSpace();
@@ -59,7 +61,7 @@ export default function SignIn() {
   // Continue with Apple or Google: the whole page answers, not the form's button.
   const [via, setVia] = useState<'apple' | 'google' | null>(null);
   // A first visit (no accounts on this device) opens on the welcome, not on a form.
-  const [started, setStarted] = useState(false);
+  const [started, setStarted] = useState(asked === 'create' || asked === 'sign-in');
   // A link sent by email: the form gives way to a panel saying where it went.
   const [sent, setSent] = useState<{ kind: 'reset' | 'confirm'; to: string } | null>(null);
   const { leave, curtain } = useLeave();

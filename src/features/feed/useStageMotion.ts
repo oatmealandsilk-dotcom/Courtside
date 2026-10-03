@@ -34,7 +34,8 @@ export function useStageMotion(role: StageRole, { owner, stageKey, enabled = tru
     const mine = enabled && G !== null && (owner === undefined || G.owner === owner) && (stageKey === undefined || G.key === stageKey);
     const f = stageFrame(stageTop.value, mine ? G : null);
     if (role === 'page') {
-      return { opacity: mine ? f.video * stageDip.value : 1, transform: [{ translateX: f.tx }, { translateY: f.ty }, { scale: f.s }] };
+      // Rounded as it shrinks above a sheet (18pt on screen at rest, Oct 3): the radius is divided by the scale so it reads the same size.
+      return { opacity: mine ? f.video * stageDip.value : 1, borderRadius: mine ? (18 * f.p) / Math.max(f.s, 0.01) : 0, overflow: 'hidden', transform: [{ translateX: f.tx }, { translateY: f.ty }, { scale: f.s }] };
     }
     if (role === 'black') return { opacity: mine ? 1 : 0 };
     if (role === 'rail') {

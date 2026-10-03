@@ -10,13 +10,15 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
 import { SectionPager } from '@/components/SectionPager';
 import { TileCover } from '@/components/TileCover';
+import { SessionTile } from '@/components/session/SessionTile';
+import { hasSessionStats } from '@/features/activity/format';
 import Reanimated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { Tappable } from '@/components/Tappable';
 import { reportSection, requestSection, subscribeSectionRequest, swipeDestination } from '@/features/navigation/swipeOrder';
 import { LevelPill } from '@/components/LevelPill';
 import { useApp } from '@/store/AppContext';
-import { unreadChatCount } from '@/features/messages/groupRules';
+import { InboxButton, UnreadBadge } from '@/components/InboxButton';
 import { playStyleLabel, surfaceLabel } from '@/lib/badges';
 import { compactNumber } from '@/lib/format';
 import { TileViews } from '@/components/TileViews';
@@ -25,12 +27,16 @@ import { colors, spacing, typography, font, lift } from '@/theme';
 import { wrappedYear } from '@/features/wrapped/yearInTennis';
 import { useTourTarget } from '@/features/tour/tourStore';
 import { isTaggedIn } from '@/features/activity/sessionTags';
+import { studioLine } from '@/features/coaching/studioSummary';
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
  // December to mid-January: the year's recap sits at the top of your links.
  const wrapped = wrappedYear();
   const styles = useThemedStyles(styleDefinitions);
- const { currentUser: user, posts, questions, answers, saved, conversations, notifications, currentUserId, savedAccounts, actions } = useApp();
+ const { currentUser: user, posts, questions, answers, saved, notifications, currentUserId, savedAccounts, coaches, coachingRequests, coachQuestions, actions, feedGroups } = useApp();
+ // A coach's studio, first of your links: what is waiting there, or how far setup has got.
+ const myCoach = coaches.find((c) => c.userId === currentUserId);
+ const studio = myCoach ? studioLine(myCoach, coachingRequests, coachQuestions, currentUserId) : null;
  // Nothing posted, asked or answered yet: the profile offers the first move.
  const hasMoved = !currentUserId || posts.some((p) => p.authorId === currentUserId) || questions.some((q) => q.authorId === currentUserId) || answers.some((a) => a.authorId === currentUserId);
  // Your own posts, however far back they go: the grid and the counts are
@@ -59,16 +65,17 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const tabIndex = TABS.indexOf(tab);
  const [tabWidth, setTabWidth] = useState(0);
  const underline = useTabUnderline(tabIndex, TABS.length, tabWidth);
- const own = posts.filter(p => p.authorId === user?.id && !p.archived);
- const shown = (tab === 'Tagged' ? posts.filter(p => !!user && isTaggedIn(p, user.id) && !p.archived) : own.filter(p => tab !== 'Clips' || p.kind === 'clip')).sort((a,b) => Date.parse(b.createdAt)-Date.parse(a.createdAt));
+ // A post shared to a group lives in that group's feed only (migration 67).
+ const own = posts.filter(p => p.authorId === user?.id && !p.archived && !p.groupId);
+ const shown = (tab === 'Tagged' ? posts.filter(p => !!user && isTaggedIn(p, user.id) && !p.archived && !p.groupId) : own.filter(p => tab !== 'Clips' || p.kind === 'clip')).sort((a,b) => Date.parse(b.createdAt)-Date.parse(a.createdAt));
  // How many of each, shown beside the section names.
  const counts: Record<typeof TABS[number], number> = {
    Posts: own.length,
    Clips: own.filter(p => p.kind === 'clip').length,
-   Tagged: user ? posts.filter(p => isTaggedIn(p, user.id) && !p.archived).length : 0,
+   Tagged: user ? posts.filter(p => isTaggedIn(p, user.id) && !p.archived && !p.groupId).length : 0,
  };
- // Chats with something new, not messages (Instagram's count); a muted chat never counts.
- const unread = unreadChatCount(conversations);
+ // People asking to join the groups you run.
+ const groupsAsking = feedGroups.reduce((n, g) => n + (g.members.some((m) => m.id === currentUserId && m.admin) ? g.requests.length : 0), 0);
  const unseen = notifications.filter(n => n.userId === currentUserId && !n.read).length;
  const savedCount = saved.postIds.length + saved.questionIds.length;
  const swipe = (direction: 1 | -1) => {
@@ -88,11 +95,11 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const content = (selected: string) => {
    if (!user) return null;
    // Pinned first, then newest.
-   const items = (selected === 'Tagged' ? posts.filter(p => isTaggedIn(p, user.id) && !p.archived) : own.filter(p => selected !== 'Clips' || p.kind === 'clip')).sort((a,b) => Number(!!b.pinned) - Number(!!a.pinned) || Date.parse(b.createdAt)-Date.parse(a.createdAt));
+   const items = (selected === 'Tagged' ? posts.filter(p => isTaggedIn(p, user.id) && !p.archived && !p.groupId) : own.filter(p => selected !== 'Clips' || p.kind === 'clip')).sort((a,b) => Number(!!b.pinned) - Number(!!a.pinned) || Date.parse(b.createdAt)-Date.parse(a.createdAt));
    return <View style={{ minHeight: 320, backgroundColor: colors.bg }}>
      <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>{items.map(p => <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.pinned && selected !== 'Tagged' ? 'pinned ' : ''}${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: selected === 'Clips' ? 'clips' : selected === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
        <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
-       {p.thumbnailUrl ? <TileCover accessibilityIgnoresInvertColors uri={p.thumbnailUrl} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120}/> : null}
+       {p.thumbnailUrl ? <TileCover accessibilityIgnoresInvertColors uri={p.thumbnailUrl} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120}/> : p.session && hasSessionStats(p.session) && !p.imageUrl && !p.videoUrl ? <SessionTile session={p.session} width={tileW}/> : null}
        {p.kind==='clip' && <Ionicons name="play" size={14} color="#FFFFFF" style={styles.tilePlay}/>}
        {/* Views, bottom left, the way Reels and TikTok grids show them. */}
        {(p.videoUrl || p.kind === 'clip') && (p.views ?? 0) > 0 ? <TileViews views={p.views ?? 0} /> : null}
@@ -155,10 +162,13 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    </Pressable>
    {/* One grouped list, the way Settings reads, instead of three boxes. */}
    <View style={styles.links}>
-     <Pressable accessibilityRole="link" accessibilityLabel="Saved videos and discussions" onPress={() => router.push('/saved')} style={({ pressed }) => [styles.linkRow, pressed && styles.linkPressed]}><Ionicons name="bookmark-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Saved</Text>{savedCount ? <Text style={styles.linkValue}>{savedCount}</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
+     {studio ? <Pressable accessibilityRole="link" accessibilityLabel={`Coach studio. ${studio.line}`} onPress={() => router.push('/coach-studio')} style={({ pressed }) => [styles.linkRow, pressed && styles.linkPressed]}><Ionicons name="ribbon-outline" size={20} color={colors.brand}/><Text style={styles.linkText}>Coach studio</Text>{studio.waiting ? <Text style={styles.linkValue}>{studio.waiting} waiting</Text> : studio.doneCount < 4 ? <Text style={styles.linkValue}>{studio.doneCount} of 4</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable> : null}
+     <Pressable accessibilityRole="link" accessibilityLabel="Saved videos and discussions" onPress={() => router.push('/saved')} style={({ pressed }) => [styles.linkRow, studio && styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="bookmark-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Saved</Text>{savedCount ? <Text style={styles.linkValue}>{savedCount}</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
+     {/* Your groups (migration 67): start one, see who is asking to join. */}
+     <Pressable accessibilityRole="link" accessibilityLabel={groupsAsking ? `Groups, ${groupsAsking} asking to join` : 'Groups'} onPress={() => router.push('/groups')} style={({ pressed }) => [styles.linkRow, styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="people-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Groups</Text>{groupsAsking ? <Text style={styles.linkValue}>{groupsAsking} asking</Text> : feedGroups.length ? <Text style={styles.linkValue}>{feedGroups.length}</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
      {wrapped ? <Pressable accessibilityRole="link" accessibilityLabel={`Your ${wrapped} in tennis`} onPress={() => router.push('/wrapped')} style={({ pressed }) => [styles.linkRow, styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="sparkles-outline" size={20} color={colors.brand}/><Text style={styles.linkText}>Your {wrapped} in tennis</Text><Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable> : null}
      {/* Always here, streak or not: the way to every session you logged, and to post one. Only you see it. */}
-     <Pressable accessibilityRole="link" accessibilityLabel="Your sessions. Only you see them" onPress={() => router.push('/your-sessions')} style={({ pressed }) => [styles.linkRow, styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="tennisball-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Your sessions</Text><Ionicons name="lock-closed-outline" size={13} color={colors.textFaint}/><Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
+     <Pressable accessibilityRole="link" accessibilityLabel="Your sessions. Only you see them" onPress={() => router.push('/your-sessions')} style={({ pressed }) => [styles.linkRow, styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="stopwatch-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Your sessions</Text><Ionicons name="lock-closed-outline" size={13} color={colors.textFaint}/><Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
      <Pressable accessibilityRole="link" accessibilityLabel="Invite your hitting partners" onPress={() => router.push('/invite')} style={({ pressed }) => [styles.linkRow, styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="person-add-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Invite your hitting partners</Text><Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
      <Pressable accessibilityRole="link" accessibilityLabel="Health and nutrition" onPress={() => router.push('/health')} style={({ pressed }) => [styles.linkRow, styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="pulse-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Health and nutrition</Text><Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
    </View>
@@ -182,12 +192,9 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    <View ref={tourInbox} collapsable={false} style={styles.headerActions}>
      <Tappable accessibilityRole="link" accessibilityLabel={unseen ? `Notifications, ${unseen} new` : 'Notifications'} onPress={() => router.push('/notifications')} hitSlop={10} style={styles.headerButton}>
        <Ionicons name={unseen ? 'notifications' : 'notifications-outline'} size={27} color={colors.text}/>
-       {unseen > 0 && <View style={styles.headerBadge}><Text style={styles.headerBadgeText}>{unseen > 9 ? '9+' : unseen}</Text></View>}
+       <UnreadBadge count={unseen} />
      </Tappable>
-     <Tappable accessibilityRole="link" accessibilityLabel={unread ? `Messages, ${unread} unread` : 'Messages'} onPress={() => router.push('/messages')} hitSlop={10} style={styles.headerButton}>
-       <Ionicons name={unread ? 'paper-plane' : 'paper-plane-outline'} size={27} color={colors.text}/>
-       {unread > 0 && <View style={styles.headerBadge}><Text style={styles.headerBadgeText}>{unread > 9 ? '9+' : unread}</Text></View>}
-     </Tappable>
+     <InboxButton size={27} />
    </View>
    <Tappable accessibilityRole="link" accessibilityLabel="Settings" onPress={() => router.push('/settings')} hitSlop={10} style={styles.headerButton}>
      <Ionicons name="menu-outline" size={30} color={colors.text}/>
@@ -223,7 +230,7 @@ function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?:
    </View>
    <View style={styles.links}>
      <View style={styles.linkRow}><Ionicons name="bookmark-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Saved</Text></View>
-     <View style={[styles.linkRow, styles.linkLine]}><Ionicons name="tennisball-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Your sessions</Text></View>
+     <View style={[styles.linkRow, styles.linkLine]}><Ionicons name="stopwatch-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Your sessions</Text></View>
      <View style={[styles.linkRow, styles.linkLine]}><Ionicons name="person-add-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Invite your hitting partners</Text></View>
      <View style={[styles.linkRow, styles.linkLine]}><Ionicons name="pulse-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Health and nutrition</Text></View>
    </View>
@@ -236,7 +243,7 @@ const styleDefinitions = StyleSheet.create({
  setup:{marginTop:16,marginHorizontal:0,padding:14,borderRadius:16,backgroundColor:colors.brandDim,flexDirection:'row',alignItems:'center',gap:12},setupTitle:{...typography.smallStrong,fontSize:14,color:colors.text},identity:{gap:12,paddingTop:16,paddingBottom:20,alignItems:'stretch'},identityRow:{flexDirection:'row',alignItems:'center',gap:16},identityWords:{flex:1,gap:6,minWidth:0},meta:{fontSize:12,color:colors.textMuted,lineHeight:19},nameRow:{flexDirection:'row',gap:10,alignItems:'center',flexWrap:'wrap'},name:{...typography.title,fontSize:22,color:colors.text},bio:{...typography.body,lineHeight:22,color:colors.text},followRow:{flexDirection:'row',alignItems:'center',gap:10},follow:{flexDirection:'row',alignItems:'baseline'},followCount:{...typography.bodyStrong,color:colors.text},followDot:{color:colors.textFaint,fontSize:14},tabCount:{...typography.smallStrong,fontSize:12,color:colors.textFaint},injury:{...typography.small,color:colors.danger},buttons:{flexDirection:'row',gap:8,alignSelf:'stretch',marginTop:6},settings:{borderWidth:1,borderColor:colors.border,borderRadius:10,padding:10,justifyContent:'center'},streak:{flexDirection:'row',alignItems:'center',gap:3,paddingHorizontal:8,paddingVertical:2,borderRadius:999,backgroundColor:colors.bgElevated},streakText:{...typography.caption,letterSpacing:0,fontWeight:'600',color:colors.clay},
  // "Log" beside the streak: the streak pill's size, in plain ink, so the streak stays the louder of the two.
  logPill:{flexDirection:'row',alignItems:'center',gap:2,paddingLeft:6,paddingRight:9,paddingVertical:2,borderRadius:999,borderWidth:StyleSheet.hairlineWidth,borderColor:colors.borderStrong},logPillText:{...typography.caption,letterSpacing:0,fontWeight:'600',color:colors.textMuted},pillPressed:{opacity:0.6},
- tennis:{...lift,padding:16,borderRadius:20,backgroundColor:colors.surface,gap:10},eyebrowRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},eyebrow:{...typography.smallStrong,color:colors.textMuted},links:{...lift,marginTop:12,borderRadius:20,backgroundColor:colors.surface,overflow:'hidden'},linkRow:{flexDirection:'row',alignItems:'center',gap:12,minHeight:52,paddingVertical:11,paddingHorizontal:16},linkLine:{borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:colors.border},linkPressed:{backgroundColor:colors.surfaceAlt},linkText:{...typography.body,color:colors.text,flex:1},linkValue:{...typography.body,color:colors.textMuted},details:{flexDirection:'row',flexWrap:'wrap',gap:8},detail:{width:'46%',gap:2},value:{fontSize:13,color:colors.text,lineHeight:19},health:{padding:15,marginTop:12,borderWidth:1,borderColor:colors.border,borderRadius:12,flexDirection:'row',alignItems:'center',gap:10},headerActions:{flexDirection:'row',alignItems:'center',gap:14},headerButton:{padding:4},headerBadge:{position:'absolute',top:-1,right:-2,minWidth:18,height:18,borderRadius:9,paddingHorizontal:5,backgroundColor:colors.danger,alignItems:'center',justifyContent:'center',borderWidth:2,borderColor:colors.bg},headerBadgeText:{...typography.caption,fontSize:10,color:'white'},tabs:{flexDirection:'row',marginTop:16,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},tab:{flex:1,alignItems:'center',paddingVertical:18},tabIndicator:{position:'absolute',left:0,bottom:-2,height:2,backgroundColor:colors.brand,borderRadius:1},grid:{flexDirection:'row',flexWrap:'wrap',marginHorizontal:0},
+ tennis:{...lift,padding:16,borderRadius:20,backgroundColor:colors.surface,gap:10},eyebrowRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},eyebrow:{...typography.smallStrong,color:colors.textMuted},links:{...lift,marginTop:12,borderRadius:20,backgroundColor:colors.surface,overflow:'hidden'},linkRow:{flexDirection:'row',alignItems:'center',gap:12,minHeight:52,paddingVertical:11,paddingHorizontal:16},linkLine:{borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:colors.border},linkPressed:{backgroundColor:colors.surfaceAlt},linkText:{...typography.body,color:colors.text,flex:1},linkValue:{...typography.body,color:colors.textMuted},details:{flexDirection:'row',flexWrap:'wrap',gap:8},detail:{width:'46%',gap:2},value:{fontSize:13,color:colors.text,lineHeight:19},health:{padding:15,marginTop:12,borderWidth:1,borderColor:colors.border,borderRadius:12,flexDirection:'row',alignItems:'center',gap:10},headerActions:{flexDirection:'row',alignItems:'center',gap:14},headerButton:{padding:4},tabs:{flexDirection:'row',marginTop:16,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},tab:{flex:1,alignItems:'center',paddingVertical:18},tabIndicator:{position:'absolute',left:0,bottom:-2,height:2,backgroundColor:colors.brand,borderRadius:1},grid:{flexDirection:'row',flexWrap:'wrap',marginHorizontal:0},
  // Instagram's grid: tall tiles, the thumbnail and nothing else on it.
  tile:{borderWidth:1,borderColor:colors.bg,backgroundColor:colors.surfaceAlt,overflow:'hidden'},
  tileBlank:{padding:10,justifyContent:'center'},

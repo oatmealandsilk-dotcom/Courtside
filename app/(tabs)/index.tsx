@@ -7,6 +7,14 @@ import React, { useCallback, useContext, useEffect, useLayoutEffect, useMemo, us
 import { AccessibilityInfo, Animated, AppState, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { router, useFocusEffect, useIsFocused as useRouteFocused, useNavigation } from 'expo-router';
+import { FeedTopRow } from '@/features/groups/FeedTopRow';
+import { onOpenGroupFeed, tookGroupFeed } from '@/features/groups/openGroupFeed';
+import { GroupTile } from '@/features/groups/GroupTile';
+import { inGroupFeed } from '@/features/groups/groupFeed';
+import { TOP_BAND_DROP, TOP_BAND_HEIGHT, TOP_BAND_TOP, TopBandContext } from '@/features/feed/topBand';
+import { shareLink } from '@/lib/shareLink';
+import { shareOutside } from '@/lib/shareOutside';
+import { show as showToast } from '@/lib/toast';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { goBack } from '@/lib/goBack';
@@ -31,7 +39,6 @@ import { Tappable } from '@/components/Tappable';
 import { VerticalPager, type VerticalPagerHandle } from '@/components/VerticalPager';
 import { subscribeReveal, subscribeScrollToTop } from '@/features/navigation/scrollToTop';
 import { LikeButton } from '@/components/LikeButton';
-import { isNewHere } from '@/features/feed/newHere';
 import { wantsOn } from '@/lib/useOptimisticToggle';
 import { setFeedWarm, useCurtainDown } from '@/features/feed/warmup';
 import { connectionIsQuick } from '@/lib/netSpeed';
@@ -39,11 +46,12 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { subscribeFeedRefresh } from '@/features/feed/feedBus';
 import { BAR_TUCK, barCompact, setBarCompact } from '@/features/navigation/barShrink';
 import { BAR_OVERLAY_PX, useBarInset } from '@/features/navigation/barInset';
+import { hasSessionStats } from '@/features/activity/format';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { TipPage } from '@/components/TipPage';
 import { isLive } from '@/features/stories/stories';
 import { ClipPlayback } from '@/components/ClipPlayback';
-import { NEWEST_FIRST, rankFeed, shuffleFeed, type FeedItem } from '@/features/feed/rankFeed';
+import { NEWEST_FIRST, rankFeed, type FeedItem, type RankContext } from '@/features/feed/rankFeed';
 import { challengeFor, entriesFor } from '@/features/challenge/weekly';
 import { ChallengePage } from '@/components/ChallengePage';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
@@ -72,6 +80,11 @@ import { isTaggedIn } from '@/features/activity/sessionTags';
 const reachable = (p: { imageUrl?: string; videoUrl?: string }) => [p.imageUrl, p.videoUrl].every((u) => !u || /^(https?:|data:|blob:)/.test(u));
 
 /** When each page's post, thread or Instant was made, for putting new ones newest first. */
+/** What the ranking may know about you: who you follow, who follows you, profiles, and what you have seen this visit. */
+function rankContext(data: Pick<RankContext, 'users'> & { followingIds: string[]; followEdges: { followerId: string; followingId: string }[] }, seen: Set<string>): RankContext {
+  return { followingIds: data.followingIds, followEdges: data.followEdges, users: data.users, seen };
+}
+
 function madeAt(data: { posts: { id: string; createdAt: string }[]; questions: { id: string; createdAt: string }[]; stories: { id: string; createdAt: string }[] }) {
   const at = new Map<string, number>();
   for (const p of data.posts) at.set(`p:${p.id}`, Date.parse(p.createdAt));
@@ -148,8 +161,16 @@ function LikeBurst({ token }: { token: number }) {
  * in that order (a court's).
  */
 export type FeedScope =
-  | { userId: string; set: 'own' | 'clips' | 'tagged' | 'archived'; start?: string; ids?: undefined }
-  | { ids: string[]; start?: string; userId?: undefined; set?: undefined };
+  | { userId: string; set: 'own' | 'clips' | 'tagged' | 'archived'; start?: string; ids?: undefined; groupId?: undefined }
+  | { ids: string[]; start?: string; userId?: undefined; set?: undefined; groupId?: undefined }
+  // A group's own feed (migrations 67 and 74): everything its members post, and what was shared to it only, newest first, under the Feed's top row.
+  | { groupId: string; start?: undefined; ids?: undefined; userId?: undefined; set?: undefined };
+
+/** What the Feed's top row needs to know from the feed under it: whether a picture fills the top, and whether the chrome is put away. */
+export interface FeedChrome { picture: boolean; hidden: boolean }
+
+/** Only a post shared with everyone is dealt into For you; one shared to a group only stays in that group's feed. */
+const forYou = (p: { imageUrl?: string; videoUrl?: string; groupId?: string }) => reachable(p) && !p.groupId;
 
 // On a phone — the app or a phone's browser — a vertical clip fills the whole
 // page, edge to edge. The tall 9:16 box in the middle is for computer windows.
@@ -267,7 +288,15 @@ const stageStyles = StyleSheet.create({
   blackStage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', opacity: 0 },
 });
 
-function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
+function Home({ scope, topRow, paused, onChrome }: {
+  previewSection?: string;
+  scope?: FeedScope;
+  /** The For you / groups row sits over the top: the per-page mark gives it the room. */
+  topRow?: boolean;
+  /** Another feed (a group's) is over this one: nothing plays. */
+  paused?: boolean;
+  onChrome?: (chrome: FeedChrome) => void;
+} = {}) {
   const styles = useThemedStyles(styleDefinitions);
   // The US Open ground is navy; the green wordmark sinks into it, white does not.
   const { theme } = useTheme();
@@ -398,15 +427,18 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       if (scope) {
         // One person's things, newest first, opened on the one that was tapped;
         // or a court's posts, in exactly the order its grid shows them.
-        const { ids, userId, set } = scope;
+        const { ids, userId, set, groupId } = scope;
         const byId = ids ? new Map(data.posts.map((p) => [p.id, p])) : null;
-        const mine = ids && byId
+        const group = groupId ? data.feedGroups.find((g) => g.id === groupId) : undefined;
+        const mine = groupId
+          ? data.posts.filter((p) => inGroupFeed(p, groupId, group) && reachable(p)).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+          : ids && byId
           ? ids.flatMap((id) => { const p = byId.get(id); return p && !p.archived ? [p] : []; })
           : data.posts
             // Archived posts only ever in your own archive's set, opened from the Archive page.
             .filter((p) => (set === 'archived'
               ? p.archived && p.authorId === userId && userId === data.currentUserId
-              : !p.archived && (set === 'tagged' ? isTaggedIn(p, userId) : p.authorId === userId && (set !== 'clips' || p.kind === 'clip'))))
+              : !p.archived && !p.groupId && (set === 'tagged' ? isTaggedIn(p, userId) : p.authorId === userId && (set !== 'clips' || p.kind === 'clip'))))
             .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
         setOrder(mine.map((p) => `p:${p.id}`));
         setActive(Math.max(0, mine.findIndex((p) => p.id === scope.start)));
@@ -415,7 +447,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       }
       // A post whose picture or video is a link only its author's phone could
       // open (an upload that never finished) is left out of the deal.
-      const ranked = rankFeed(data.posts.filter(reachable), data.questions.filter((q) => !q.source), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st))).flatMap((i) =>
+      const ranked = rankFeed(data.posts.filter(forYou), data.questions.filter((q) => !q.source), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st)), rankContext(data, seen.current)).flatMap((i) =>
         i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : [],
       );
       // Something of yours from the last few minutes goes first, so a fresh post
@@ -424,28 +456,13 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       // on it sits by its time like everyone else's. Holding your own day's posts
       // above everything put other people's newer posts pages down after a pull.
       const justMine: string[] = NEWEST_FIRST ? [] : data.posts
-        .filter((p) => p.authorId === data.currentUserId && !p.archived && Date.now() - Date.parse(p.createdAt) < 5 * 60_000)
+        .filter((p) => p.authorId === data.currentUserId && !p.archived && !p.groupId && Date.now() - Date.parse(p.createdAt) < 5 * 60_000)
         .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
         .map((p) => `p:${p.id}`);
-      // The feed is dealt, not listed: what you have already watched this
-      // session drops behind everything you have not, and both halves come
-      // out shuffled, so no two opens (or refreshes) read the same way.
-      const others = ranked.filter((k) => !justMine.includes(k));
-      const unseen = others.filter((k) => !seen.current.has(k));
-      const watched = others.filter((k) => seen.current.has(k));
-      // Newest first means just that: nothing already seen is moved to the back.
-      const rest = NEWEST_FIRST ? others : [...shuffleFeed(unseen), ...shuffleFeed(watched)];
-      const final = [...justMine, ...rest];
-      // New players' first posts, nearby first, are dealt near the top so
-      // they meet people (and likes) on their first day.
-      const me = data.users.find((u) => u.id === data.currentUserId);
-      const cityOf = (location?: string) => (location ?? '').split(',')[0].trim().toLowerCase();
-      const near = (p: { authorId: string }) => (me && cityOf(data.users.find((u) => u.id === p.authorId)?.location) === cityOf(me.location) ? 0 : 1);
-      const welcome = data.posts
-        .filter((p) => p.authorId !== data.currentUserId && !p.archived && isNewHere(p) && reachable(p) && !seen.current.has(`p:${p.id}`))
-        .sort((a, b) => near(a) - near(b) || Date.parse(b.createdAt) - Date.parse(a.createdAt))
-        .slice(0, 2)
-        .map((p) => `p:${p.id}`);
+      // The ranking already puts what you have watched this visit lower down
+      // and new players' first posts higher up, and it deals the same order
+      // from the same data, so a pull never reshuffles at random.
+      const final = [...justMine, ...ranked.filter((k) => !justMine.includes(k))];
       // The feed always opens on a clip (unless something of yours just
       // landed): the first clip in the order is brought to the front.
       // Newest first, the newest post leads whatever it is.
@@ -462,11 +479,6 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         if (first < 0) first = final.findIndex(isClip);
         if (first > 0) final.unshift(...final.splice(first, 1));
       }
-      if (!NEWEST_FIRST) welcome.forEach((key, i) => {
-        const at = final.indexOf(key);
-        if (at >= 0) final.splice(at, 1);
-        final.splice(Math.min(final.length, justMine.length + 1 + i * 2), 0, key);
-      });
       // After a pull, everything made since the feed was last dealt leads,
       // newest first — a new thread or Instant too, not left in its usual slot
       // a few pages down. Something older that has only just reached this
@@ -482,7 +494,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       setOrder(final);
       setActive(0);
       if (remount) setVisit((v) => v + 1);
-  }, [scope?.userId, scope?.set, scope?.start, scope?.ids?.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [scope?.userId, scope?.set, scope?.start, scope?.ids?.join(','), scope?.groupId]); // eslint-disable-line react-hooks/exhaustive-deps
   // Something of yours has just landed (saved, its picture or video hosted),
   // or "Posted — tap to see it" on the strip: its page goes to the very top
   // and the feed is taken there. Only that page moves; nothing else is dealt
@@ -498,15 +510,62 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   useEffect(() => subscribeReveal((id) => {
     if (scope) return;
     const data = latest.current;
+    // A post shared to a group never goes into For you (the row switches to its group instead).
+    if (data.posts.some((p) => p.id === id && p.groupId)) return;
     const key = data.posts.some((p) => p.id === id) ? `p:${id}` : data.stories.some((st) => st.id === id) ? `h:${id}` : null;
     offStage(() => { if (key) liftToTop(key); else rerank(); });
   }), [scope, rerank, liftToTop]); // eslint-disable-line react-hooks/exhaustive-deps
   const dealOnce = useCallback(() => {
-    const stamp = `${ready}:${currentUserId}:${scope?.userId ?? ''}:${scope?.set ?? ''}:${scope?.ids?.join(',') ?? ''}`;
+    const stamp = `${ready}:${currentUserId}:${scope?.userId ?? ''}:${scope?.set ?? ''}:${scope?.ids?.join(',') ?? ''}:${scope?.groupId ?? ''}`;
     if (rankedFor.current === stamp) return;
     rankedFor.current = stamp;
     rerank();
-  }, [ready, currentUserId, scope?.userId, scope?.set, scope?.ids?.join(','), rerank]);
+  }, [ready, currentUserId, scope?.userId, scope?.set, scope?.ids?.join(','), scope?.groupId, rerank]);
+  // A group's feed takes its posts as they arrive: the first page from the
+  // server deals it; after that, an older page goes on the end and anything
+  // newer goes in just after the page on screen, so nothing moves under you.
+  const groupOf = scope?.groupId ? app.feedGroups.find((g) => g.id === scope.groupId) : undefined;
+  const groupKeys = useMemo(() => {
+    const g = scope?.groupId;
+    if (!g) return '';
+    return posts.filter((p) => inGroupFeed(p, g, groupOf) && reachable(p)).map((p) => p.id).sort().join(',');
+  }, [posts, scope?.groupId, groupOf]);
+  useEffect(() => {
+    if (!scope?.groupId || !groupKeys) return;
+    if (!orderRef.current.length || activeRef.current === 0) { rerank(); return; }
+    const data = latest.current;
+    const byId = new Map(data.posts.map((p) => [p.id, p]));
+    const made = (k: string) => Date.parse(byId.get(k.slice(2))?.createdAt ?? '') || 0;
+    setOrder((prev) => {
+      const have = new Set(prev);
+      const add = groupKeys.split(',').map((id) => `p:${id}`).filter((k) => !have.has(k)).sort((a, b) => made(b) - made(a));
+      if (!add.length) return prev;
+      const last = made(prev[prev.length - 1]);
+      const older = add.filter((k) => made(k) <= last);
+      const newer = add.filter((k) => made(k) > last);
+      const at = Math.min(prev.length, activeRef.current + 1);
+      return [...prev.slice(0, at), ...newer, ...prev.slice(at), ...older];
+    });
+  }, [groupKeys]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Opening a group's feed asks the server for its newest page; nearing the
+  // end of what is loaded asks for the next, older one, until there is no more.
+  const groupNext = useRef<string | null | undefined>(undefined);
+  const groupAsking = useRef(false);
+  const askGroupPage = useCallback((before?: string) => {
+    const g = scope?.groupId;
+    if (!g || groupAsking.current) return;
+    groupAsking.current = true;
+    void latest.current.actions.loadFeedGroupPosts(g, before)
+      .then((next) => { groupNext.current = next; })
+      .finally(() => { groupAsking.current = false; });
+  }, [scope?.groupId]);
+  useEffect(() => { if (scope?.groupId) askGroupPage(); }, [scope?.groupId, askGroupPage]);
+  useEffect(() => {
+    if (!scope?.groupId || !ready) return;
+    const next = groupNext.current;
+    if (!next || active < order.length - 5) return;
+    askGroupPage(next);
+  }, [active, order.length, scope?.groupId, ready, askGroupPage]);
   useFocusEffect(dealOnce);
   // In a browser the Feed is built out of sight a moment after the app opens
   // (see the tabs' web layout), before you have been to it. It is dealt then
@@ -527,9 +586,11 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     void latest.current.actions.loadMorePosts().then((fresh) => {
       if (dropped || !fresh.length) return;
       const hidden = new Set([...latest.current.blockedIds, ...latest.current.mutedIds]);
-      // Shuffled out here, not inside the update: an update has to be able to
-      // run twice and come out the same, and a shuffle never would.
-      const dealt = shuffleFeed(fresh.filter((p) => !p.archived && !hidden.has(p.authorId) && reachable(p)).map((p) => `p:${p.id}`));
+      // The new page is ranked on its own and added to the end; nothing
+      // already in the feed moves.
+      const data = latest.current;
+      const dealt = rankFeed(fresh.filter((p) => !p.archived && !hidden.has(p.authorId) && forYou(p)), [], data.comments, data.currentUserId, [], rankContext(data, seenNow.current))
+        .flatMap((i) => (i.type === 'post' ? [`p:${i.post.id}`] : []));
       setOrder((prev) => {
         const have = new Set(prev);
         const keys = dealt.filter((k) => !have.has(k));
@@ -555,7 +616,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     const data = latest.current;
     const hidden = new Set([...data.blockedIds, ...data.mutedIds]);
     const have = new Set(orderRef.current);
-    const fresh = rankFeed(data.posts.filter((p) => reachable(p) && !p.archived && !hidden.has(p.authorId)), data.questions, data.comments, data.currentUserId, data.stories.filter((st) => isLive(st)))
+    const fresh = rankFeed(data.posts.filter((p) => forYou(p) && !p.archived && !hidden.has(p.authorId)), data.questions, data.comments, data.currentUserId, data.stories.filter((st) => isLive(st)), rankContext(data, seenNow.current))
       .flatMap((i) => (i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : []))
       .filter((k) => !have.has(k));
     if (!fresh.length) return;
@@ -566,7 +627,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     // Otherwise the new pages go in right after the one on screen, newest first.
     if (NEWEST_FIRST && activeRef.current === 0 && (!playable || !shownOnce.current)) { rerank(); return; }
     const made = madeAt(data);
-    const dealt = NEWEST_FIRST ? [...fresh].sort((a, b) => made(b) - made(a)) : shuffleFeed(fresh);
+    const dealt = NEWEST_FIRST ? [...fresh].sort((a, b) => made(b) - made(a)) : fresh;
     setOrder((prev) => {
       const at = Math.min(prev.length, activeRef.current + (NEWEST_FIRST ? 1 : 2));
       return [...prev.slice(0, at), ...dealt.filter((k) => !prev.includes(k)), ...prev.slice(at)];
@@ -577,6 +638,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   // no page named, the feed is dealt again.
   useEffect(() => subscribeFeedRefresh((key) => {
     if (scope) return;
+    if (key?.startsWith('p:') && latest.current.posts.some((p) => p.id === key.slice(2) && p.groupId)) return;
     offStage(() => { if (key) liftToTop(key); else rerank(); });
   }), [scope, rerank, liftToTop]); // eslint-disable-line react-hooks/exhaustive-deps
   // Pulling down on the first page fetches what is new and starts the feed over from the top.
@@ -688,7 +750,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     const hidden = new Set([...blockedIds, ...mutedIds]);
     const following = new Set(followingIds);
     // A private account is only in your feed once they have let you follow.
-    for (const u of users) if (u.isPrivate && u.id !== currentUserId && !following.has(u.id)) hidden.add(u.id);
+    // In a group's feed the server has already decided (migration 74): a private member's posts come only to members who follow them, or shared to the group only.
+    if (!scope?.groupId) for (const u of users) if (u.isPrivate && u.id !== currentUserId && !following.has(u.id)) hidden.add(u.id);
     // Found by id in one step each, not by scanning every post for every page.
     const postById = new Map(posts.map((p) => [p.id, p]));
     const storyById = new Map(stories.map((st) => [st.id, st]));
@@ -699,6 +762,10 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
         const post = postById.get(id);
         // In your archive's own set an archived post is the point, and one you
         // unarchive from there stays on screen rather than vanishing under you.
+        // A post shared to a group only is only ever in that group's feed,
+        // whatever else asked for it; a group's feed also holds its members'
+        // posts to everyone.
+        if (post && post.groupId && post.groupId !== scope?.groupId && !scope?.userId && !scope?.ids) return [];
         return post && !hidden.has(post.authorId) && (!post.archived || scope?.set === 'archived') ? [{ type: 'post' as const, post }] : [];
       }
       if (key.startsWith('h:')) {
@@ -709,7 +776,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       const question = questionById.get(id);
       return question && !hidden.has(question.authorId) ? [{ type: 'question' as const, question }] : [];
     });
-  }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds, scope?.set]);
+  }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds, scope?.set, scope?.groupId]);
   // This week's challenge, and its top clips so far. They are settled once
   // per visit: a like arriving mid-scroll must not reshuffle the pages.
   const challenge = useMemo(() => challengeFor(), []);
@@ -736,7 +803,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   // what `active` counts: `order` has no tip or challenge page.
   const activeKey = feed[active] ? keyOf(feed[active]) : undefined;
   const held = !!myStage && myStage.key === activeKey && !myStage.covered && !(PAUSE_AT_FULL && myStage.full);
-  const playing = (focused || held) && !touring;
+  const playing = (focused || held) && !touring && !paused;
   // A new page on screen (or the feed coming back to the front): the last one
   // is closed off and the new one's clock starts. Reading the comments under
   // a clip that is still playing counts as watching it.
@@ -763,31 +830,32 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const pageNodes = useRef(new Map<string, unknown>());
   const notePageNode = useCallback((key: string, node: unknown) => { if (node) pageNodes.current.set(key, node); else pageNodes.current.delete(key); }, []);
   const hitShapes = useRef(new Map<string, boolean>());
-  const openComments = (kind: 'post' | 'hit', id: string, subject: StageSubject, from?: unknown) => {
+  // The same stage for a clip's comments and for its session stats (See stats): only the page pushed differs.
+  const openStage = (route: '/comments' | '/session-stats', kind: 'post' | 'hit', id: string, subject: StageSubject, from?: unknown) => {
     const params = { kind, id };
     const now = getStage();
     // A second tap while this feed's comments are opening, open or closing does nothing.
     if (now && now.owner === owner) return;
     // Another feed's stage is still up under the pages opened over it (its
     // comments, a profile, then this feed): these comments open as the plain sheet.
-    if (now) { router.push({ pathname: '/comments', params }); return; }
+    if (now) { router.push({ pathname: route, params }); return; }
     const key = stageKeyOf(kind, id);
     const ownerOnTop = () => focusedNow.current;
     if (Platform.OS === 'web' && isDesktopBrowser() && typeof window !== 'undefined' && window.innerWidth >= 700) {
       // A computer: the docked panel keeps the clip playing beside it; the centred box does not.
       if (window.innerWidth >= SIDE_MIN_WINDOW) beginStage({ owner, key, mode: 'side', focusBack: keyboardFocus(from), ownerOnTop });
-      router.push({ pathname: '/comments', params });
+      router.push({ pathname: route, params });
       return;
     }
     const rect = readRect(pageNodes.current.get(key)) ?? { x: 0, y: 0, width: winW, height: winH };
     const geo = phone && (Platform.OS !== 'android' || STAGE_ON_ANDROID) ? stageGeometry(winW, winH, insets.top, rect, subject, owner, key) : null;
-    if (!geo) { router.push({ pathname: '/comments', params }); return; }
+    if (!geo) { router.push({ pathname: route, params }); return; }
     beginStage({ owner, key, mode: 'stage', geo, focusBack: Platform.OS === 'web' ? keyboardFocus(from) : from, ownerOnTop });
     // Everything on the stage reads the sheet's top: at the bottom edge, the
     // page exactly as it is. The sheet starts the rise itself once it has
     // drawn, so the clip and the sheet move as one.
     if (Platform.OS !== 'web') stageTop.value = geo.H;
-    router.push({ pathname: '/comments', params: { ...params, stage: '1' } });
+    router.push({ pathname: route, params: { ...params, stage: '1' } });
     // The comments never came: the push went nowhere and this feed is still
     // the page in front. The page goes back as it was. (A push that landed
     // but is slow to draw is left to finish: the feed is no longer in front.)
@@ -796,6 +864,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
       if (still && still.owner === owner && still.key === key && !still.mounted && navigation.isFocused()) endStage();
     }, 600);
   };
+  const openComments = (kind: 'post' | 'hit', id: string, subject: StageSubject, from?: unknown) => openStage('/comments', kind, id, subject, from);
   // The stage is over (or never got going): the page grows back to full size
   // if it is not there already (the comments went without their own close: a
   // browser's Back, a tab tapped from a page on top), then it is cleared.
@@ -1078,6 +1147,16 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   // Only clips and hits fill the screen with their picture; a photo or video post sits on the
   // page's own ground, so anything drawn at the top (the back arrow) stays dark there.
   const activeOnPicture = showing?.type === 'hit' || (showing?.type === 'post' && showing.post.kind === 'clip');
+  // The top row reads white over a picture and in the theme's ink on a written page, and steps aside while pinched in.
+  const chromeHidden = immersive || myStage?.mode === 'stage';
+  // A real picture, that is: the demo's court cards are the page's own light ground.
+  const topOnPicture = showing?.type === 'hit'
+    ? !!(showing.story.imageUrl || showing.story.videoUrl)
+    : showing?.type === 'post' && showing.post.kind === 'clip' && !!(showing.post.videoUrl || showing.post.thumbnailUrl || showing.post.imageUrl);
+  useEffect(() => { onChrome?.({ picture: topOnPicture, hidden: chromeHidden }); }, [onChrome, topOnPicture, chromeHidden]);
+  // A group's feed calls its posts after the group, where For you's say "For you".
+  const groupName = scope?.groupId ? app.feedGroups.find((g) => g.id === scope.groupId)?.name : undefined;
+  const scopedBack = !!scope && !scope.groupId;
   useEffect(() => {
     if (!focused || !showing) return;
     // A hit counts as watched through the story viewer, not here.
@@ -1109,26 +1188,45 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
     </View>
   );
 
+  // A feed with the For you / groups row keeps its band clear; the empty page centres in what is left, above the floating bar.
+  const banded = !!topRow || !!scope?.groupId;
+  const inviteToGroup = async (groupId: string, name: string) => {
+    const link = shareLink('group', groupId);
+    try { const said = await shareOutside(`Join ${name} on CourtSide`, link); if (said) showToast({ title: said, icon: 'link-outline' }); } catch { showToast({ title: `Share this link: ${link}`, icon: 'link-outline' }); }
+  };
+
   return (
+    <TopBandContext.Provider value={banded ? TOP_BAND_DROP : 0}>
     <View style={styles.root}>
       {!ready || !feed.length ? (
-        <EmptyState
-          title={scope ? 'Nothing here yet' : ready ? 'Your court is quiet' : 'Loading your clips'}
-          body={scope ? undefined : 'Be the first on it: a clip, a photo, or an instant after you play.'}
-          action={!scope && ready ? { label: 'Share something', onPress: () => router.push('/compose') } : undefined}
-        />
+        <View style={[styles.emptyWrap, { paddingTop: banded ? insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT : insets.top, paddingBottom: barInset }]}>
+          {scope?.groupId && ready ? (
+            // An empty group: its face, one line, and the two things to do about it.
+            // Its feed is everything its members post, so more people is the way to fill it.
+            <View style={styles.groupEmpty}>
+              <GroupTile name={groupName ?? 'Group'} size={72} />
+              <Text style={styles.groupEmptyTitle}>When members post, it shows up here</Text>
+              <Text style={styles.groupEmptyBody}>{`${groupName ?? 'A group'}’s feed shows everything its members post.`}</Text>
+              <View style={styles.groupEmptyActions}>
+                <Button label="Invite people" onPress={() => { void inviteToGroup(scope.groupId, groupName ?? 'my group'); }} full />
+                <Button label="Post something" variant="secondary" onPress={() => router.push('/compose')} full />
+              </View>
+            </View>
+          ) : (
+            <EmptyState
+              title={scope?.groupId ? 'Loading the group' : scope ? 'Nothing here yet' : ready ? 'Your court is quiet' : 'Loading your clips'}
+              body={scope ? undefined : 'Be the first on it: a clip, a photo, or an instant after you play.'}
+              action={!scope && ready ? { label: 'Share something', onPress: () => router.push('/compose') } : undefined}
+            />
+          )}
+        </View>
       ) : (
         // While a page is on the comments stage, TalkBack reads the comments only, not the feed behind them.
         <View ref={viewer} style={styles.viewer} importantForAccessibility={myStage?.mode === 'stage' ? 'no-hide-descendants' : 'auto'}>
           {/* Pull-to-refresh is for phones: the app and a phone's browser (`phone`, above). Asking
               isDesktopBrowser() alone took it off the iPhone app: the app has no browser to read,
               so the check answered "computer" there, and the pull strip was never built. */}
-          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onRefresh={scope || !phone ? undefined : refreshFeed} pullHeader={scope || !currentUser ? undefined : (
-            <View style={styles.pullGreeting}>
-              <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={28} />
-              <Text style={styles.pullGreetingText}>{`${currentUser.name.split(' ')[0]}'s homepage`}</Text>
-            </View>
-          )}>
+          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + TOP_BAND_HEIGHT : 0} pullHeader={scope ? undefined : <BrandMark size={40} />}>
             {[...feed.map((item, index) => {
               const distance = Math.abs(index - active);
               const ahead = index - active;
@@ -1233,7 +1331,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                   <View key={item.question.id} style={[styles.article, styles.threadArticle, scope && styles.articleScoped]}>
                     <Wash height={300} strength={0.6} />
                     <View style={styles.eyebrowRow}>
-                      <Text style={styles.eyebrow}>From the community</Text>
+                      <View style={{ flex: 1 }} />
                       {hiddenMarks.has(item.question.id) ? <View style={{ width: 34, height: 34 }} /> : <TapAway label="Hide the CourtSide logo" onHidden={() => hideMark(item.question.id)} style={styles.threadMark}><BrandMark size={34} /></TapAway>}
                     </View>
                     {strip}
@@ -1298,12 +1396,10 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
 
               if (post.kind !== 'clip') {
                 return (
-                  <View key={post.id} style={[styles.article, scope && styles.articleScoped, !phone && styles.articleCentred]}>
+                  // A session posted with no photo is its card: the page keeps clear of the
+                  // floating tab bar, so the caption and buttons under the card stay in view.
+                  <View key={post.id} style={[styles.article, scopedBack && styles.articleScoped, !phone && styles.articleCentred, (topRow || !!scope?.groupId) && { paddingTop: insets.top + 64 }, barInset > 0 && post.session && hasSessionStats(post.session) && !post.imageUrl && !post.videoUrl ? { paddingBottom: barInset + 8 } : null]}>
                     <Wash height={300} strength={0.6} />
-                    {/* Inside one person's posts the feed label means nothing, and the back chevron wants the room. */}
-                    {scope ? null : <Text style={styles.eyebrow}>
-                      {post.session?.activityId || (post.session?.sessionId && post.session.kind !== 'fitness') ? 'Tennis' : post.kind === 'match' ? 'Set play' : post.kind.charAt(0).toUpperCase() + post.kind.slice(1)} · For you
-                    </Text>}
                     {strip}
                     <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: 'flex-start' }}>
                       <PostCard
@@ -1318,6 +1414,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                         onPress={() => router.push(`/post/${post.id}`)}
                         onPressAuthor={() => router.push(`/user/${author.id}`)}
                         clamp={8}
+                        active={active === index && focused}
                       />
                     </View>
                   </View>
@@ -1384,7 +1481,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                         <View style={styles.net} />
                         <View style={styles.service} />
                       </View>
-                      <Ionicons name="tennisball-outline" size={54} color={colors.court} />
+                      <Ionicons name="cloud-offline-outline" size={54} color={colors.court} />
                       <Text style={styles.previewTitle}>{post.mediaLabel}</Text>
                       <Text style={styles.previewNote}>
                         This clip didn’t finish uploading
@@ -1399,7 +1496,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                   <ReelScrim bottom={wordsBottom} />
 
                   <Reanimated.View style={[styles.caption, { bottom: wordsBottom }, tuckStyle]}>
-                    <ReelCaption post={post} author={author} onAuthor={() => { tappedAuthor(`p:${post.id}`); router.push(`/user/${author.id}`); }} onOpenComments={openClipComments} />
+                    <ReelCaption post={post} author={author} onAuthor={() => { tappedAuthor(`p:${post.id}`); router.push(`/user/${author.id}`); }} onOpenComments={openClipComments} onOpenStats={() => openStage('/session-stats', 'post', post.id, post.orientation === 'landscape' ? 'landscape' : 'portrait')} active={active === index && focused} />
                     {/* Only while Home is on show (see the Instant's hint above). */}
                     {index === 0 && !scope && focused ? <SwipeHint /> : null}
                   </Reanimated.View>
@@ -1479,7 +1576,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               );
               // Over a picture the wordmark sits in a small pill of the theme's own
               // background, so it reads on anything without touching the picture.
-              const mark = scope || hiddenMarks.has(key) || (immersive && index === active) ? null
+              const mark = scope || topRow || hiddenMarks.has(key) || (immersive && index === active) ? null
                 : built ? <ChromeLayer pointerEvents="box-none" style={markStyle}>{markTile}</ChromeLayer>
                   : <View pointerEvents="box-none" style={markStyle}>{markTile}</View>;
               return (
@@ -1500,7 +1597,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
             }), ...(scope ? [] : [endPage])]}
           </VerticalPager>
 
-          {scope ? (
+          {scopedBack ? (
             // The same plain chevron every other page has. Over a picture it sits on the mark's tile, in
             // the mark's ink: a bare white arrow vanished on a bright sky or a white ceiling.
             <Reanimated.View ref={scopeBackFade.ref as never} pointerEvents="box-none" style={[styles.scopeBackLayer, scopeBackFade.style]}>
@@ -1511,17 +1608,25 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
           ) : null}
           {/* Over a clip or an Instant the phone's clock and battery turn white, as on TikTok, Reels and Shorts:
               the theme's dark clock sank into a dark court, and the top shade keeps a white one clear of a bright sky.
-              Only once the picture is in (the cover before it is the page's own ground), and only while this page is in front. */}
-          {focused && activeOnPicture && showing && (showing.type === 'hit' ? inNow(showing.story.id) : showing.type === 'post' && inNow(showing.post.id)) ? <StatusBar style="light" animated /> : null}
+              Only once the picture is in (the cover before it is the page's own ground), and only while this page is in front:
+              For you held still under a group's feed keeps quiet, or its white clock vanished on the group's light page. */}
+          {focused && !paused && activeOnPicture && showing && (showing.type === 'hit' ? inNow(showing.story.id) : showing.type === 'post' && inNow(showing.post.id)) ? <StatusBar style="light" animated /> : null}
         </View>
       )}
     </View>
+    </TopBandContext.Provider>
   );
 }
 
 /** "INSTANT · 22h left", ticking once a minute so it never reads stale. */
 const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, alignItems: 'center' },
+  // An empty feed: centred in the room between the top row's band and the floating bar, on the page's own ground.
+  emptyWrap: { flex: 1, alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg },
+  groupEmpty: { alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.xl, width: '100%', maxWidth: 360 },
+  groupEmptyTitle: { ...typography.title, color: colors.text, textAlign: 'center', marginTop: spacing.md },
+  groupEmptyBody: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
+  groupEmptyActions: { alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.lg },
   scopeBack: { position: 'absolute', left: 12, padding: 6, zIndex: 6 },
   // Its own layer over the feed, so it can fade as a clip goes onto the comments stage.
   scopeBackLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 6 },
@@ -1651,4 +1756,51 @@ const styleDefinitions = StyleSheet.create({
   endBack: { ...typography.smallStrong, color: colors.textMuted },
 });
 
-export default asTabRoute<{ previewSection?: string; scope?: FeedScope }>(Home);
+/**
+ * The Feed tab: For you, and a feed for each group you are in (migration 67),
+ * picked from the words across the top. For you stays built underneath a
+ * group's feed (held still), so coming back finds it where you left it. One
+ * person's or one court's feed (a scope) is the plain feed, with no row.
+ */
+function FeedTab({ scope, previewSection }: { previewSection?: string; scope?: FeedScope } = {}) {
+  if (scope) return <Home scope={scope} previewSection={previewSection} />;
+  return <GroupedFeed />;
+}
+
+function GroupedFeed() {
+  const app = useApp();
+  const { feedGroups, currentUserId, actions } = app;
+  const [groupId, setGroupId] = useState<string | null>(null);
+  const [chrome, setChrome] = useState<FeedChrome>({ picture: false, hidden: false });
+  useEffect(() => { if (currentUserId) void actions.loadFeedGroups(); }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A group you left (or were taken out of) goes back to For you.
+  useEffect(() => { if (groupId && !feedGroups.some((g) => g.id === groupId)) setGroupId(null); }, [feedGroups, groupId]);
+  // Opened from a group's page ("See the feed").
+  useEffect(() => onOpenGroupFeed((id) => { tookGroupFeed(); setGroupId(id); }), []);
+  const forYouChrome = useCallback((c: FeedChrome) => { if (!groupId) setChrome(c); }, [groupId]);
+  const groupChrome = useCallback((c: FeedChrome) => setChrome(c), []);
+  const waiting = feedGroups.some((g) => g.requests.length > 0 && g.members.some((m) => m.id === currentUserId && m.admin));
+  return (
+    <View style={{ flex: 1, alignSelf: 'stretch' }}>
+      <Home topRow paused={!!groupId} onChrome={forYouChrome} />
+      {groupId ? (
+        <View style={StyleSheet.absoluteFill}>
+          <Home key={groupId} scope={{ groupId }} onChrome={groupChrome} />
+        </View>
+      ) : null}
+      {currentUserId ? (
+        <FeedTopRow
+          groups={feedGroups}
+          selected={groupId}
+          onSelect={(next) => { if (next !== groupId) { haptics.tap(); setGroupId(next); } }}
+          onPlus={() => router.push('/find-groups')}
+          onPicture={chrome.picture}
+          hidden={chrome.hidden}
+          waiting={waiting}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+export default asTabRoute<{ previewSection?: string; scope?: FeedScope }>(FeedTab);

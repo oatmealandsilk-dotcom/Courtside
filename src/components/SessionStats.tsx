@@ -80,18 +80,18 @@ export function SessionStats({ session, compact = false }: { session: SessionDet
   const peopleText = [people.vs, people.with].filter(Boolean).map((c) => c!.map((b) => b.text).join('')).join(' · ');
   // One sentence for a screen reader, rather than a tile at a time. The handles stay links of their own.
   const spoken = (tracker
-    ? [`${duration(session.minutes)} on court`, peopleText || null, session.maxHr ? `max heart rate ${session.maxHr} bpm` : null, session.avgHr ? `average ${session.avgHr} bpm` : null, source]
+    ? [`${duration(session.minutes)} on court`, peopleText || null, session.maxHr ? `max heart rate ${session.maxHr} bpm` : null, session.avgHr ? `average ${session.avgHr} bpm` : null, session.strain != null ? `Strain ${session.strain.toFixed(1)}` : null, session.kcal ? `${session.kcal} calories` : null, source]
     : [statsLine(session, blockedIds)]
   ).filter(Boolean).join(', ');
   // The tiles alone (the people line under them is read on its own, each handle a link).
   const tilesSpoken = tracker
-    ? [`${duration(session.minutes)} on court`, session.maxHr ? `max heart rate ${session.maxHr} bpm` : null, session.avgHr ? `average ${session.avgHr} bpm` : null].filter(Boolean).join(', ')
+    ? [`${duration(session.minutes)} on court`, session.maxHr ? `max heart rate ${session.maxHr} bpm` : null, session.avgHr ? `average ${session.avgHr} bpm` : null, session.strain != null ? `Strain ${session.strain.toFixed(1)}` : null, session.kcal ? `${session.kcal} calories` : null].filter(Boolean).join(', ')
     : statsLine({ ...session, with: undefined });
 
   if (compact) {
     return (
       <View style={styles.line} accessibilityLabel={spoken}>
-        <Ionicons name="tennisball-outline" size={14} color={colors.court} />
+        <Ionicons name="stopwatch-outline" size={14} color={colors.court} />
         {/* Two lines at most (three with players named, so a doubles match never loses its time), wrapping rather than cutting off where the numbers came from. */}
         <StatsWords chunks={statsChunks(session, blockedIds)} style={styles.lineText} handleStyle={styles.handle} numberOfLines={people.vs || people.with ? 3 : 2} maxFontSizeMultiplier={MAX_GROW} />
       </View>
@@ -105,6 +105,9 @@ export function SessionStats({ session, compact = false }: { session: SessionDet
         { label: 'Time on court', value: duration(session.minutes) },
         session.maxHr ? { label: 'Max bpm', value: String(session.maxHr) } : null,
         session.avgHr ? { label: 'Avg bpm', value: String(session.avgHr) } : null,
+        // Shared on the post (migration 72): Strain is WHOOP's own score, always called Strain.
+        session.strain != null ? { label: 'Strain', value: session.strain.toFixed(1) } : null,
+        session.kcal ? { label: 'Calories', value: String(session.kcal) } : null,
       ]
     : [
         // A gym session is not time on court.
@@ -140,8 +143,9 @@ export function SessionStats({ session, compact = false }: { session: SessionDet
 
 const styleDefinitions = StyleSheet.create({
   wrap: { gap: spacing.xs },
-  tiles: { flexDirection: 'row', gap: spacing.sm },
-  tile: { flex: 1, gap: 2, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  // Up to three a row; Strain and calories, when shared, start a second.
+  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  tile: { flexGrow: 1, flexBasis: '30%', gap: 2, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   value: { ...typography.heading, color: colors.text, fontVariant: ['tabular-nums'] },
   label: { ...typography.caption, color: colors.textMuted, letterSpacing: 0.2 },
   source: { ...typography.caption, color: colors.textFaint, letterSpacing: 0.2 },

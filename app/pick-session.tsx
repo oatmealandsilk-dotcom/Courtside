@@ -95,7 +95,7 @@ export default function PickSession() {
           <View style={styles.wait}><ActivityIndicator color={colors.textMuted} /></View>
         ) : !list.length ? (
           <EmptyState
-            icon="tennisball-outline"
+            icon="stopwatch-outline"
             title="No sessions to add"
             body="Log a session after you play, then add its time on court to a post."
             action={{ label: 'Log a session', onPress: () => { toLog.current = true; close(); } }}
@@ -105,7 +105,7 @@ export default function PickSession() {
             {list.map((pick) => {
               const key = keyOf(pick);
               const used = !!postOf(pick, posted);
-              const icon = pick.type === 'tracker' ? <Ionicons name="tennisball-outline" size={18} color={colors.court} />
+              const icon = pick.type === 'tracker' ? <Ionicons name="stopwatch-outline" size={18} color={colors.court} />
                 : pick.session.kind === 'match' ? <Ionicons name="trophy-outline" size={18} color={colors.textMuted} />
                 : pick.session.kind === 'fitness' ? <Ionicons name="barbell-outline" size={18} color={colors.textMuted} />
                 : <CourtGlyph size={15} color={colors.textMuted} />;

@@ -51,7 +51,8 @@ export const dueText = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-let known: { on: boolean; fee: number; at: number } | null = null;
+/** The last answer, and whose it was: with a test key the answer differs per person (admins only). */
+let known: { on: boolean; fee: number; at: number; user: string | null } | null = null;
 
 /**
  * Whether paid booking is switched on: the server answers yes once a Stripe
@@ -61,18 +62,22 @@ let known: { on: boolean; fee: number; at: number } | null = null;
 export function usePayments(): { on: boolean | undefined; feePercent: number } {
   const { currentUserId } = useApp();
   const demo = !supabase || (!!currentUserId && !UUID.test(currentUserId));
+  const user = currentUserId ?? null;
+  const mine = known && known.user === user ? known : null;
   const [state, setState] = useState<{ on: boolean | undefined; feePercent: number }>(
-    demo ? { on: true, feePercent: 15 } : { on: known?.on, feePercent: known?.fee ?? 15 },
+    demo ? { on: true, feePercent: 15 } : { on: mine?.on, feePercent: mine?.fee ?? 15 },
   );
   useEffect(() => {
     if (demo) return;
+    // Someone else signed in on this device: their answer may differ.
+    if (known && known.user !== user) known = null;
     if (known && (known.on || Date.now() - known.at < 5 * 60_000)) { setState({ on: known.on, feePercent: known.fee }); return; }
     let current = true;
     void remote.paymentsStatus().then((s) => {
-      known = { on: !!s?.on, fee: s?.feePercent ?? 15, at: Date.now() };
+      known = { on: !!s?.on, fee: s?.feePercent ?? 15, at: Date.now(), user };
       if (current) setState({ on: known.on, feePercent: known.fee });
     });
     return () => { current = false; };
-  }, [demo]);
+  }, [demo, user]);
   return state;
 }

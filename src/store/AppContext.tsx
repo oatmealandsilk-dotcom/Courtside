@@ -10,6 +10,7 @@ import React, {
 } from 'react';
 import { AppState as DeviceState, Platform } from 'react-native';
 import { randomUUID } from 'expo-crypto';
+import { router } from 'expo-router';
 import { computeStats, localDay, streakAtRisk } from '@/features/practice/stats';
 import { planStreakReminder } from '@/features/practice/reminder';
 import { TERMS_VERSION } from '@/lib/legal';
@@ -25,11 +26,11 @@ import { GROUP_CAP, chatLockNote, eventText, findDirectChat, groupName, isDirect
 import { heardMessage, heardUnsent } from '@/features/messages/incoming';
 import { MAX_CHAT_PHOTOS, clearSendProgress, keepLocalCopy, setSendProgress } from '@/features/messages/chatPhotos';
 import { readReceiptPreference, saveReceiptPreference } from '@/features/messaging/preferences';
-import { connectProvider, disconnectProvider } from '@/lib/integrations';
+import { connectProvider, disconnectProvider, withCatalog } from '@/lib/integrations';
 import { appleHealthAvailable, connectAppleHealth, readAppleHealth, readAppleNutrition } from '@/features/health/appleHealth';
-import { tennisFlags } from '@/features/activity/flags';
+import { isTracker, tennisFlags, TRACKERS } from '@/features/activity/flags';
 import { checkForTennis } from '@/features/activity/check';
-import { fromWho } from '@/features/activity/format';
+import { pickSource } from '@/features/activity/recent';
 import { MAX_SESSION_TAGS, REFUSALS, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
 import { duration } from '@/lib/format';
 import { takeReferrer } from '@/features/invite/referral';
@@ -46,12 +47,14 @@ import * as toast from '@/lib/toast';
 import { anyUploading, cancelUpload, finishUpload, holdQuietUpload, setUploadProgress, simulateUpload, startUpload } from '@/lib/uploads';
 import { requestFeedRefresh } from '@/features/feed/feedBus';
 import { blockDevice, groupFor, rememberAnswered, yearsOld, type AgeGroup } from '@/features/age/ageCheck';
+import { knownOpen, notKnownAdult, type AgeSource, type Openness, type OpennessMap } from '@/features/players/age';
 import { show as showToast } from '@/lib/toast';
 import { forgetPushToken } from '@/features/push/push';
 import { framesAt } from '@/features/compose/frames';
 import { noteStep, reportError } from '@/lib/crashReporting';
 import { emptyCourtLife, useCourtLife, type CourtLifeActions, type CourtLifeState } from '@/store/courtLife';
 import { forgetLinkPreviews } from '@/features/messages/linkPreview';
+import { emptyFeedGroups, useFeedGroups, type FeedGroupsActions, type FeedGroupsState } from '@/store/feedGroups';
 import type {
   DailyHealth,
   DetectedActivity,
@@ -95,7 +98,7 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId } from '@/data/types';
 
 interface NewStoryInput {
   imageUrl?: string;
@@ -107,6 +110,8 @@ interface NewStoryInput {
 
 interface NewPostInput {
   kind: PostKind;
+  /** Shared to one group you are in, not everyone (migration 67). */
+  groupId?: ID;
   /** Where it was, if they said. */
   location?: string;
   /** The court it was played on, picked from the map's courts. */
@@ -300,7 +305,7 @@ export interface Prefs {
 export type PrefKey = keyof Prefs;
 const DEFAULT_PREFS: Prefs = { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true, pushMapFriends: true, pushMapHits: true, pushMapPlayers: true, pushCourts: true };
 
-interface AppState extends Bootstrap, CourtLifeState {
+interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
   ready: boolean;
   /** Health came from this account's own connections, not the demo; a reload must keep it. */
   healthIsReal?: boolean;
@@ -361,6 +366,26 @@ interface AppState extends Bootstrap, CourtLifeState {
    * Always on in the demo.
    */
   sessionTagsReady: boolean;
+  /**
+   * What the server has said about people (migration 64, open_to_you):
+   * whether you may start a chat with them. Nobody's age but your own
+   * reaches the app, so this is how it knows. Asked only about the people it
+   * is about to show or act on, kept for this session and account.
+   */
+  openness: OpennessMap;
+  /**
+   * Of the posts with a court that the app asked about (migration 64,
+   * shown_at_court), which may show on a court's page for you: the teen
+   * rule, which needs ages the app no longer has.
+   */
+  courtShown: Record<ID, boolean>;
+  /**
+   * Whether the last load found everyone's age on the profiles: true before
+   * migration 64, false since. Null until a load from the server says
+   * (treated like true: with no ages on the profiles, nobody counts as an
+   * adult, so nothing is opened or shown that should not be).
+   */
+  agesOnProfiles: boolean | null;
   /** Last spots for the map, by id, your own included (migration 46). */
   lastSeen: Record<ID, LastSeen>;
   /** Whether the last spots have come down once since signing in, so an empty map is known to be empty, not still loading. */
@@ -393,7 +418,7 @@ interface AppState extends Bootstrap, CourtLifeState {
   detectedCoords: { lat: number; lng: number } | null;
 }
 
-interface AppActions extends CourtLifeActions {
+interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /* Location */
   setLocationEnabled: (enabled: boolean) => Promise<string | null>;
   /** "Who can see you on the map?": takes effect at once. Resolves false when it could not be saved. */
@@ -573,9 +598,9 @@ interface AppActions extends CourtLifeActions {
   checkForActivities: (force?: boolean) => Promise<void>;
   /** "Not tennis": hides a session you have not logged, and its notification. */
   dismissActivity: (id: ID) => void;
-  /** Asks the source for workouts (Apple Health's sheet, or WHOOP's sign-in again), then turns tennis sessions on for it. */
-  turnOnTennis: (provider: 'apple-health' | 'whoop') => Promise<void>;
-  turnOffTennis: (provider: 'apple-health' | 'whoop') => Promise<void>;
+  /** Asks the source for workouts (Apple Health's sheet, or WHOOP's, Fitbit's, Oura's or Polar's sign-in again), then turns tennis sessions on for it. */
+  turnOnTennis: (provider: 'apple-health' | 'whoop' | TrackerId) => Promise<void>;
+  turnOffTennis: (provider: 'apple-health' | 'whoop' | TrackerId) => Promise<void>;
   /** If this person arrived through an invite link, it is claimed now: the two follow each other. */
   claimPendingReferral: () => Promise<void>;
   countReferrals: () => Promise<number>;
@@ -764,6 +789,25 @@ interface AppActions extends CourtLifeActions {
    */
   recheckFollows: (userIds: ID[]) => Promise<ID[]>;
   /**
+   * Whether you may message this person, or put them in a group, right now:
+   * asks the server again (whom they follow, and what it says about them)
+   * rather than trusting the app's copy. For a lock about to be shown as final.
+   */
+  reachNow: (userId: ID) => Promise<boolean>;
+  /**
+   * Of these people, the ones the app already has as locked for a group (see
+   * canAddToGroup), without asking the server about anyone new: for a page
+   * that re-checks its locks as it opens, so it never asks about everyone.
+   */
+  lockedNow: (userIds: ID[]) => ID[];
+  /**
+   * This phone's quick answer for the tag picker (Who you played): why this
+   * person cannot be tagged, or null. Asks the server about them in the
+   * background (migration 64), so a lock shows a moment later; the server's
+   * own check after each pick has the last word.
+   */
+  tagHint: (userId: ID) => SessionTagRefusal | null;
+  /**
    * Before opening a one-to-one chat from a button: null when you may
    * message them (asking the server again first if the app's copy says no);
    * otherwise why not, naming them, ready to show in a long note.
@@ -797,6 +841,28 @@ interface AppActions extends CourtLifeActions {
 interface AppContextValue extends AppState {
   currentUser: User | null;
   actions: AppActions;
+  /**
+   * Whether the teen rule lets someone's open hits show to you (leaving
+   * aside whether you follow them, which shows them anyway). Since migration
+   * 64 the server sends only the hits you may see, so every hit it sent may
+   * show; before it, by the author's age.
+   */
+  seeing: (u: Pick<User, 'id' | 'ageGroup'>) => boolean;
+  /**
+   * Whether this post may show on a court's page, its reel, the map's card
+   * and Courts near you under the teen rule (leaving aside you and people you
+   * follow, who show anyway): since migration 64 the server's answer about
+   * the post (asked in the background; not answered yet is not shown yet),
+   * before it the author's age.
+   */
+  shownAtCourt: (postId: ID, author: Pick<User, 'id' | 'ageGroup'>) => boolean;
+  /**
+   * Whether the age the app holds says this person is an adult. Only ever
+   * true for someone else on a database from before migration 64, or in the
+   * demo; for the few lists that still fall back on it (New on CourtSide,
+   * if the server's list cannot be had).
+   */
+  ageSaysAdult: (u: Pick<User, 'id' | 'ageGroup'>) => boolean;
 }
 
 
@@ -889,10 +955,11 @@ const cleanTitle = (title?: string) => (title ?? '').replace(/\s+/g, ' ').trim()
 /** A group function's answer that is a refusal rather than the chat's id. */
 const isRefusal = (result: string): result is GroupRefusal | 'failed' => ['blocked', 'teen', 'full', 'not-admin', 'failed'].includes(result);
 
-// In a browser, WHOOP's tennis sign-in comes back in its own small window
-// (?whoop=pending): that window hands the address to the one that opened it,
-// which collects the sign-in (connectWhoop). Every other page load: nothing.
-if (Platform.OS === 'web' && typeof window !== 'undefined' && /[?&]whoop=pending/.test(window.location?.search ?? '')) {
+// In a browser, WHOOP's tennis sign-in (and Fitbit's, Oura's or Polar's) comes
+// back in its own small window (?whoop=pending, ?tracker=pending): that window
+// hands the address to the one that opened it, which collects the sign-in
+// (connectWhoop, connectTracker). Every other page load: nothing.
+if (Platform.OS === 'web' && typeof window !== 'undefined' && /[?&](whoop|tracker)=pending/.test(window.location?.search ?? '')) {
   try { WebBrowser.maybeCompleteAuthSession(); } catch { /* the opener has gone; trying again starts afresh */ }
 }
 
@@ -904,9 +971,10 @@ if (Platform.OS === 'web' && typeof window !== 'undefined' && /[?&]whoop=pending
  * server and its fixtures carry no ages, so there only someone marked as a
  * teen is closed; otherwise the whole demo would be locked.
  */
-function openToYou(userId: ID, them: User | undefined, me: ID, edges: { followerId: ID; followingId: ID }[], real: boolean): boolean {
-  const known = real ? them?.ageGroup === 'adult' : them?.ageGroup !== 'teen';
-  return known || edges.some((e) => e.followerId === userId && e.followingId === me);
+function openToYou(userId: ID, them: User | undefined, me: ID, edges: { followerId: ID; followingId: ID }[], source: AgeSource, told: OpennessMap, ask?: (id: ID) => void): boolean {
+  if (edges.some((e) => e.followerId === userId && e.followingId === me)) return true;
+  // Before migration 64 every profile carried its age; since, only the server's answer says.
+  return knownOpen(them, userId, source, told, ask);
 }
 
 /** Why a new one-to-one chat was refused, naming who when the app knows them (see chatLockNote). */
@@ -926,7 +994,9 @@ const emptyBootstrap: Bootstrap = {
   answers: [],
   coaches: [],
   coachingRequests: [],
-  integrations: [],
+  // Every source, none connected, from the first frame: a real account that opens
+  // from its saved copy never gets the demo's list, and the Health screen needs one.
+  integrations: withCatalog([]),
   healthHistory: [],
   achievements: [],
   coachQuestions: [],
@@ -1036,6 +1106,15 @@ const withAccounts = (savedAccounts: SavedAccount[]) => (prev: AppState): AppSta
 
 /** Whether an id names a row in Supabase rather than a fixture. */
 const live = (...ids: (ID | null | undefined)[]) => isSupabaseConfigured && ids.every((id) => !!id && UUID.test(id));
+
+/** Where the app learns how the teen rules apply to `other` (see AgeSource). */
+const ageSource = (s: Pick<AppState, 'currentUserId' | 'agesOnProfiles'>, other: ID | null | undefined): AgeSource =>
+  !live(s.currentUserId, other) ? 'fixtures' : s.agesOnProfiles === false ? 'server' : 'ages';
+
+/** How long what the server said about someone (migration 64) stands before it is asked again on their next showing: their follows change. */
+const OPENNESS_KEPT = 10 * 60_000;
+/** After a question that got no answer (no connection, say), how soon it may be asked again. */
+const OPENNESS_RETRY = 30_000;
 
 /** The moment of the oldest post in a batch: where the next page carries on from. */
 const oldestOf = (posts: Post[]) => posts.reduce<string | null>((old, p) => (!old || p.createdAt < old ? p.createdAt : old), null);
@@ -1153,6 +1232,8 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       detectedActivities: data.activities ?? prev.detectedActivities,
       // Asked with the rest of the open (migration 62): names on posts and the people search follow it.
       sessionTagsReady: data.sessionTagsReady ?? prev.sessionTagsReady,
+      // Which database this is (migration 64), from what the profiles came down with; a saved copy does not say.
+      agesOnProfiles: !fromSnapshot && data.agesOnProfiles !== undefined ? data.agesOnProfiles : prev.agesOnProfiles,
       notifications: [...data.notifications, ...prev.notifications.filter((n) => !data.notifications.some((x) => x.id === n.id) && !gone(n.id))],
       tips: [...data.tips, ...prev.tips.filter((t) => !data.tips.some((x) => x.id === t.id) && !gone(t.id))],
       coachApplications: [...data.coachApplications, ...prev.coachApplications.filter((a) => !data.coachApplications.some((x) => x.id === a.id))],
@@ -1233,6 +1314,35 @@ function addLiveComments(prev: AppState, got: Comment[], kind: 'post' | 'hit'): 
   return { ...prev, comments: [...prev.comments, ...fresh], posts, stories };
 }
 
+/**
+ * Your posts carrying a tracker's session, kept in step with its log, as the
+ * server keeps them (migration 65): once logged (`activityId`, `log`) a post
+ * says what the log says, its time staying the tracker's; once the log is
+ * deleted (`deletedId`) a tracker's post goes back to "Tennis", with no names. A post from
+ * a session logged by hand keeps what it said.
+ */
+function postsFollowLog(posts: Post[], me: ID, activityId: ID | null, log: PracticeSession | null, deletedId?: ID): Post[] {
+  let changed = false;
+  const next = posts.map((p) => {
+    const s = p.session;
+    if (p.authorId !== me || !s || !s.activityId) return p;
+    if (log && s.activityId === activityId) {
+      changed = true;
+      const won = log.kind === 'match' && log.won !== undefined ? log.won : undefined;
+      const { won: _w, ...rest } = s;
+      return { ...p, session: { ...rest, kind: log.kind, focus: log.kind === 'match' && won !== undefined ? `Match · ${won ? 'Won' : 'Lost'}` : log.kind.charAt(0).toUpperCase() + log.kind.slice(1), sessionId: log.id, day: log.day, ...(won !== undefined ? { won } : {}) } };
+    }
+    if (deletedId && s.sessionId === deletedId) {
+      changed = true;
+      // The names go with the log too, as the server takes them off.
+      const { kind: _k, won: _w, sessionId: _s, with: _with, ...rest } = s;
+      return { ...p, session: { ...rest, focus: 'Tennis' } };
+    }
+    return p;
+  });
+  return changed ? next : posts;
+}
+
 /** A comment deleted elsewhere: gone here too, with its replies (the database removes them with it). */
 function dropComment(prev: AppState, commentId: ID): AppState {
   if (!prev.comments.some((c) => c.id === commentId)) return prev;
@@ -1254,6 +1364,12 @@ const demoHandle: string | null = (() => {
     if (asked) { window.sessionStorage.setItem('courtside-demo-as', asked); return asked; }
     return window.sessionStorage.getItem('courtside-demo-as');
   } catch { return null; }
+})();
+
+/** Demo build in a browser: `?toast=tennis` puts up the "Tennis detected" note for your waiting session, so the Log it flow can be seen. */
+const demoTennisToast: boolean = (() => {
+  if (isSupabaseConfigured || Platform.OS !== 'web') return false;
+  try { return new URLSearchParams(window.location.search).get('toast') === 'tennis'; } catch { return false; }
 })();
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -1285,12 +1401,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     sessions: [],
     sessionTags: [],
     sessionTagsReady: !isSupabaseConfigured,
+    openness: {},
+    courtShown: {},
+    agesOnProfiles: null,
     lastSeen: {},
     lastSeenLoaded: false,
     mapLive: isSupabaseConfigured ? null : true,
     mapVisibility: isSupabaseConfigured ? undefined : readDemoVisibility(),
     newOnCourtside: null,
     ...emptyCourtLife,
+    ...emptyFeedGroups,
     hitRequests: [],
     locationEnabled: readFlag('courtside-location'),
     locationAsked: readAsked('courtside-location'),
@@ -1749,6 +1869,150 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Keep a ref so async actions read fresh state without re-creating callbacks.
   const stateRef = React.useRef(state);
   stateRef.current = state;
+  /** Unpaid bookings already re-checked with Stripe this run (see refreshCoaching). */
+  const askedAboutPayment = useRef<Set<ID>>(new Set());
+
+  /*
+   * What the server says about people and posts (migration 64). Nobody's age
+   * but your own reaches the app any more, so two things are asked:
+   * open_to_you (may you message this person) and shown_at_court (may this
+   * post show on a court's page). Only about what a screen is about to show
+   * or act on (never everyone at once), a few at a time, and kept for this
+   * session and account. Until an answer comes the careful one stands
+   * (locked, not shown), the same as an account with no birthday on file.
+   * The server sends only the open hits you may see, so hits need no asking.
+   */
+  type Book = { me: ID | null; at: Map<ID, number> };
+  const opennessAsked = useRef<Book>({ me: null, at: new Map() });
+  const opennessQueue = useRef<Set<ID>>(new Set());
+  const opennessTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const courtAsked = useRef<Book>({ me: null, at: new Map() });
+  const courtQueue = useRef<Set<ID>>(new Set());
+  const courtTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A new account: nothing said about anyone yet.
+  useEffect(() => {
+    opennessAsked.current = { me: state.currentUserId, at: new Map() };
+    opennessQueue.current.clear();
+    courtAsked.current = { me: state.currentUserId, at: new Map() };
+    courtQueue.current.clear();
+    setState((prev) => (!Object.keys(prev.openness).length && !Object.keys(prev.courtShown).length ? prev : { ...prev, openness: {}, courtShown: {} }));
+  }, [state.currentUserId]);
+  /** Of these ids, the ones not asked about lately (all with `fresh`), marked as asked now. */
+  const dueFrom = (book: Book, me: ID, ids: ID[], fresh: boolean): ID[] => {
+    if (book.me !== me) { book.me = me; book.at = new Map(); }
+    const now = Date.now();
+    const due = Array.from(new Set(ids)).filter((id) => id !== me && live(id) && (fresh || !(now - (book.at.get(id) ?? -Infinity) < OPENNESS_KEPT)));
+    for (const id of due) book.at.set(id, now);
+    return due;
+  };
+  /** After a question that got no answer (no connection): asked again a little later, not on every redraw. */
+  const retrySoon = (book: Book, ids: ID[]) => { const now = Date.now(); for (const id of ids) book.at.set(id, now - OPENNESS_KEPT + OPENNESS_RETRY); };
+  /**
+   * Asks the server about these people (all of them with `fresh`, otherwise
+   * only those not asked in the last few minutes) and keeps the answers.
+   * Resolves with every answer the app now has. Nothing is asked before the
+   * first load has said this is a database with migration 64.
+   */
+  const askOpenness = useCallback(async (userIds: ID[], fresh = false): Promise<OpennessMap> => {
+    const s0 = stateRef.current;
+    const me = s0.currentUserId;
+    if (!me || !live(me) || s0.agesOnProfiles !== false) return s0.openness;
+    const want = dueFrom(opennessAsked.current, me, userIds, fresh);
+    if (!want.length) return s0.openness;
+    let got: Record<ID, Openness> | null;
+    try {
+      got = await remote.fetchOpenness(want);
+    } catch {
+      retrySoon(opennessAsked.current, want);
+      return stateRef.current.openness;
+    }
+    // Someone the server left out (blocked either way, gone, past the day's
+    // limit; or no such question at all): no answer, so nothing is locked on
+    // it and the server decides when you act.
+    const answers: Record<ID, Openness> = Object.fromEntries(want.map((id) => [id, got?.[id] ?? { chat: null }]));
+    if (stateRef.current.currentUserId !== me) return stateRef.current.openness;
+    setState((prev) => (prev.currentUserId === me ? { ...prev, openness: { ...prev.openness, ...answers } } : prev));
+    return { ...stateRef.current.openness, ...answers };
+  }, []);
+  /** Someone a screen is showing: asked about a moment later, with whoever else came up meanwhile. Nothing if asked lately. */
+  const wantOpenness = useCallback((userId: ID) => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    if (!me || userId === me || ageSource(s, userId) !== 'server') return;
+    const book = opennessAsked.current;
+    if (book.me === me && Date.now() - (book.at.get(userId) ?? -Infinity) < OPENNESS_KEPT) return;
+    opennessQueue.current.add(userId);
+    if (opennessTimer.current) return;
+    opennessTimer.current = setTimeout(() => {
+      opennessTimer.current = null;
+      const ids = Array.from(opennessQueue.current);
+      opennessQueue.current.clear();
+      void askOpenness(ids);
+    }, 40);
+  }, [askOpenness]);
+  /** Asks the server which of these posts may show on a court's page for you, and keeps the answers. */
+  const askCourt = useCallback(async (postIds: ID[]) => {
+    const s0 = stateRef.current;
+    const me = s0.currentUserId;
+    if (!me || !live(me) || s0.agesOnProfiles !== false) return;
+    const want = dueFrom(courtAsked.current, me, postIds, false);
+    if (!want.length) return;
+    let got: Set<ID> | null;
+    try {
+      got = await remote.fetchShownAtCourt(want);
+    } catch {
+      retrySoon(courtAsked.current, want);
+      return;
+    }
+    // No such question (a database without 64): nothing is shown on it until the next load says which database this is.
+    if (got === null || stateRef.current.currentUserId !== me) return;
+    const answers: Record<ID, boolean> = Object.fromEntries(want.map((id) => [id, got.has(id)]));
+    setState((prev) => (prev.currentUserId === me ? { ...prev, courtShown: { ...prev.courtShown, ...answers } } : prev));
+  }, []);
+  /** A post a court's page is showing: asked about a moment later, with the rest of the page. */
+  const wantCourt = useCallback((postId: ID) => {
+    const me = stateRef.current.currentUserId;
+    if (!me || !live(me, postId)) return;
+    const book = courtAsked.current;
+    if (book.me === me && Date.now() - (book.at.get(postId) ?? -Infinity) < OPENNESS_KEPT) return;
+    courtQueue.current.add(postId);
+    if (courtTimer.current) return;
+    courtTimer.current = setTimeout(() => {
+      courtTimer.current = null;
+      const ids = Array.from(courtQueue.current);
+      courtQueue.current.clear();
+      void askCourt(ids);
+    }, 40);
+  }, [askCourt]);
+  useEffect(() => () => {
+    if (opennessTimer.current) clearTimeout(opennessTimer.current);
+    if (courtTimer.current) clearTimeout(courtTimer.current);
+  }, []);
+  const seeing = useMemo(() => {
+    const me = state.currentUserId;
+    const agesOnProfiles = state.agesOnProfiles;
+    return (u: Pick<User, 'id' | 'ageGroup'>): boolean => {
+      if (me && u.id === me) return true;
+      // Since 64 the server sent only the hits you may see; before it (and in the demo) the author's age says.
+      return ageSource({ currentUserId: me, agesOnProfiles }, u.id) === 'server' || !notKnownAdult(u);
+    };
+  }, [state.currentUserId, state.agesOnProfiles]);
+  const shownAtCourt = useMemo(() => {
+    const me = state.currentUserId;
+    const agesOnProfiles = state.agesOnProfiles;
+    const told = state.courtShown;
+    return (postId: ID, author: Pick<User, 'id' | 'ageGroup'>): boolean => {
+      if (me && author.id === me) return true;
+      if (ageSource({ currentUserId: me, agesOnProfiles }, author.id) !== 'server') return !notKnownAdult(author);
+      if (!(postId in told)) wantCourt(postId);
+      return told[postId] === true;
+    };
+  }, [state.currentUserId, state.agesOnProfiles, state.courtShown, wantCourt]);
+  const ageSaysAdult = useMemo(() => {
+    const me = state.currentUserId;
+    const agesOnProfiles = state.agesOnProfiles;
+    return (u: Pick<User, 'id' | 'ageGroup'>): boolean => (me !== null && u.id === me ? !notKnownAdult(u) : ageSource({ currentUserId: me, agesOnProfiles }, u.id) !== 'server' && !notKnownAdult(u));
+  }, [state.currentUserId, state.agesOnProfiles]);
 
   // Your numbers come from what you logged and posted (features/practice/stats),
   // and a streak with nothing yet today gets its 7pm reminder on the phone.
@@ -1937,7 +2201,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (isSupabaseConfigured) void forgetPushToken().finally(() => remoteAuth.signOut());
     // One account's health (its tracker sessions too) never carries over to the next one signed in.
     // Nor do its courts: who it follows, what it said, where it checked in.
-    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [], ...emptyCourtLife, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null, mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility }));
+    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [], ...emptyCourtLife, ...emptyFeedGroups, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null, mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility }));
   }, []);
 
   const patchCurrentUser = useCallback(
@@ -2049,10 +2313,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const markActivity = (prev: AppState, patch: Pick<DetectedActivity, 'status' | 'sessionId'>) =>
       (had ? prev.detectedActivities.map((a) => (a.id === had.id ? { ...a, ...patch } : a)) : prev.detectedActivities);
     haptics.commit();
-    setState((prev) => ({ ...prev, sessions: [session, ...prev.sessions], detectedActivities: markActivity(prev, { status: 'logged', sessionId: session.id }) }));
+    // A tracker's session already on a post of yours: the post now says what the log says
+    // (the server does the same, migration 65; this is the copy on this phone meanwhile).
+    const before = stateRef.current.posts;
+    setState((prev) => ({ ...prev, sessions: [session, ...prev.sessions], detectedActivities: markActivity(prev, { status: 'logged', sessionId: session.id }), posts: input.activityId ? postsFollowLog(prev.posts, me, input.activityId, session) : prev.posts }));
     if (!live(me)) return session.id;
     try { await remote.insertSession(session); } catch (e) {
-      setState((prev) => ({ ...prev, sessions: prev.sessions.filter((x) => x.id !== session.id), detectedActivities: markActivity(prev, { status: had?.status ?? 'new', sessionId: had?.sessionId }) }));
+      setState((prev) => ({ ...prev, sessions: prev.sessions.filter((x) => x.id !== session.id), detectedActivities: markActivity(prev, { status: had?.status ?? 'new', sessionId: had?.sessionId }), posts: prev.posts.map((p) => (input.activityId && p.authorId === me && p.session?.activityId === input.activityId ? before.find((b) => b.id === p.id) ?? p : p)) }));
       throw e;
     }
     return session.id;
@@ -2063,6 +2330,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({
       ...prev,
       sessions: prev.sessions.filter((x) => x.id !== id),
+      // A tracker's post goes back to "Tennis"; one logged by hand keeps what it said (migration 65).
+      posts: me ? postsFollowLog(prev.posts, me, null, null, id) : prev.posts,
       // A tracker session it was logged from is waiting to be logged again, as the database puts it back (migration 58).
       detectedActivities: prev.detectedActivities.map((a) => (a.sessionId === id && a.status === 'logged' ? { ...a, status: 'new', sessionId: undefined } : a)),
       // Its tags go with it (the database deletes them too, migration 62); a copy of someone else's session only loses its link.
@@ -2279,7 +2548,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const sessionTagRefusal = useCallback(async (userId: ID): Promise<SessionTagRefusal | null> => {
     const s = stateRef.current;
     const me = s.currentUserId;
-    const guess = s.blockedIds.includes(userId) ? 'blocked' : localRefusal({ me, who: s.users.find((u) => u.id === userId), follows: s.followEdges, real: live(me, userId) });
+    const guess = s.blockedIds.includes(userId) ? 'blocked' : localRefusal({ me, who: s.users.find((u) => u.id === userId), follows: s.followEdges, source: ageSource(s, userId), told: s.openness });
     if (!live(me, userId) || !s.sessionTagsReady) return guess;
     // The server's answer counts; without one, this phone's guess.
     return remote.sessionTagRefusal(userId).catch(() => guess);
@@ -2533,7 +2802,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const celebration = {
         userId: me, targetId: post.id, targetKind: 'post' as const, preview: snippet(post.body || (post.kind === 'clip' ? 'Clip' : 'Post')),
         title: post.kind === 'clip' ? 'Clip posted' : 'Posted',
-        body: post.kind === 'clip' ? 'It is in the feed and on your profile.' : 'It is live in the feed.',
+        body: post.groupId ? 'It is in the group’s feed.' : post.kind === 'clip' ? 'It is in the feed and on your profile.' : 'It is live in the feed.',
         href: '/', icon: post.kind === 'clip' ? 'play' : 'checkmark',
       };
       const uploading = live(me) && (isLocalMedia(post.imageUrl) || isLocalMedia(post.videoUrl) || isLocalMedia(post.thumbnailUrl));
@@ -3945,10 +4214,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (why === 'blocked') return ids.length === 1 ? ids : [];
     if (why !== 'teen') return [];
     const following = await recheckFollows(ids);
+    // The server's answer, asked again: the app's may be from before an unfollow.
+    const told = await askOpenness(ids.filter((id) => !following.includes(id)), true);
     const users = stateRef.current.users;
     // Anyone who doesn't follow you and isn't known to be an adult.
-    return ids.filter((id) => !following.includes(id) && !openToYou(id, users.find((u) => u.id === id), me, [], live(me, id)));
-  }, [recheckFollows]);
+    return ids.filter((id) => !following.includes(id) && !openToYou(id, users.find((u) => u.id === id), me, [], ageSource(stateRef.current, id), told));
+  }, [recheckFollows, askOpenness]);
 
   /** A group with the people picked (two or more others) and an optional name. */
   const createGroup = useCallback(async (memberIds: ID[], title?: string): Promise<GroupOutcome | null> => {
@@ -4291,20 +4562,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return 'under13' as const;
     };
     const years = yearsOld(birthDate);
-    if (years < 13) return tooYoung();
-    let group: AgeGroup = groupFor(years);
+    let group: AgeGroup | null = null;
     if (live(me)) {
+      // The database first: it keeps the first date ever given and answers
+      // from that, so an account whose age is already on file (asked again
+      // because the age could not be read, say) is never deleted over a
+      // mistyped year here.
       const answer = await remote.setBirthDate(birthDate);
       if (answer === 'under_13') return tooYoung();
-      // The database's answer wins (it keeps the first date given); without its age check yet, the typed one stands.
-      if (answer) group = answer;
+      group = answer;
     }
+    // Without the database's answer (the demo, or its age check not reachable), the typed date stands.
+    if (!group) {
+      if (years < 13) return tooYoung();
+      group = groupFor(years);
+    }
+    const label: AgeGroup = group;
     setState((prev) => ({
       ...prev,
-      users: prev.users.map((u) => (u.id === me ? { ...u, ageGroup: group, isPrivate: group === 'teen' && !u.ageGroup ? true : u.isPrivate } : u)),
+      users: prev.users.map((u) => (u.id === me ? { ...u, ageGroup: label, isPrivate: label === 'teen' && !u.ageGroup ? true : u.isPrivate } : u)),
     }));
-    await rememberAnswered(me, group);
-    return group;
+    await rememberAnswered(me, label);
+    // An invite claimed before the age was on file made no follow; now it can.
+    if (label === 'adult') void followInviter();
+    return label;
   }, [requireUser]);
 
   const canMessage = useCallback((userId: ID) => {
@@ -4313,8 +4594,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!me) return false;
     // A chat you already have carries on: the server hands it back before it checks anything (open_conversation).
     if (findDirectChat(s.conversations, me, userId)) return true;
-    return openToYou(userId, s.users.find((u) => u.id === userId), me, s.followEdges, live(me, userId));
-  }, []);
+    return openToYou(userId, s.users.find((u) => u.id === userId), me, s.followEdges, ageSource(s, userId), s.openness, wantOpenness);
+  }, [wantOpenness]);
 
   // The group rule has no "already chatting" exception: a teen you message
   // one-to-one still has to follow you before you can put them in a group.
@@ -4322,14 +4603,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const s = stateRef.current;
     const me = s.currentUserId;
     if (!me || userId === me) return false;
-    return openToYou(userId, s.users.find((u) => u.id === userId), me, s.followEdges, live(me, userId));
+    return openToYou(userId, s.users.find((u) => u.id === userId), me, s.followEdges, ageSource(s, userId), s.openness, wantOpenness);
+  }, [wantOpenness]);
+
+  const reachNow = useCallback(async (userId: ID): Promise<boolean> => {
+    const me = stateRef.current.currentUserId;
+    if (!me || userId === me) return false;
+    const [following, told] = await Promise.all([recheckFollows([userId]), askOpenness([userId], true)]);
+    if (following.includes(userId)) return true;
+    const s = stateRef.current;
+    return openToYou(userId, s.users.find((u) => u.id === userId), me, [], ageSource(s, userId), told);
+  }, [recheckFollows, askOpenness]);
+
+  const lockedNow = useCallback((userIds: ID[]): ID[] => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    if (!me) return [];
+    // Not asked about yet is not "locked" here: only an answer already in (or, before migration 64, an age) counts.
+    return userIds.filter((id) => id !== me && (ageSource(s, id) !== 'server' || !!s.openness[id])
+      && !openToYou(id, s.users.find((u) => u.id === id), me, s.followEdges, ageSource(s, id), s.openness));
   }, []);
+
+  const tagHint = useCallback((userId: ID): SessionTagRefusal | null => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    return localRefusal({ me, who: s.users.find((u) => u.id === userId), follows: s.followEdges, source: ageSource(s, userId), told: s.openness, ask: wantOpenness });
+  }, [wantOpenness]);
 
   // A lock on a Message button is checked with the server before it is final.
   const messageLock = useCallback(async (userId: ID): Promise<string | null> => {
-    if (canMessage(userId) || (await recheckFollows([userId])).includes(userId)) return null;
+    if (canMessage(userId) || (await reachNow(userId))) return null;
     return chatLockNoteFor(stateRef.current.users, userId);
-  }, [canMessage, recheckFollows]);
+  }, [canMessage, reachNow]);
 
   /**
    * Sends something into chats, Instagram style: a post, thread, profile or
@@ -4515,6 +4820,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!live(me)) return;
     const [coaching, requests] = await Promise.all([remote.fetchCoaching(me!), remote.fetchCoachingRequests()]);
     setState((p) => ({ ...p, ...coaching, coachingRequests: requests }));
+    // A safety net: a booking of mine still "not paid" from the last day may
+    // have been paid after all (the tab closed before Stripe sent me back).
+    // Stripe is asked about each once per app run; any that turn out paid
+    // show up straight away.
+    const unsure = requests.filter((r) => r.userId === me && r.status === 'awaiting-payment' && !askedAboutPayment.current.has(r.id) && Date.now() - Date.parse(r.createdAt) < 24 * 3_600_000);
+    if (!unsure.length) return;
+    unsure.forEach((r) => askedAboutPayment.current.add(r.id));
+    const paid = await Promise.all(unsure.map((r) => remote.confirmPayment(r.id).then((x) => x.paid).catch(() => false)));
+    if (paid.some(Boolean)) {
+      const fresh = await remote.fetchCoachingRequests();
+      setState((p) => ({ ...p, coachingRequests: fresh }));
+    }
   }, []);
 
   const confirmBooking = useCallback(async (requestId: ID) => {
@@ -4548,7 +4865,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const paid = /[?&]paid=1/.test(cameBack) || (await confirmBooking(requestId));
     await refreshCoaching();
     if (paid) haptics.commit();
-    return { outcome: paid ? ('paid' as const) : result.type === 'success' ? ('pending' as const) : ('cancelled' as const), requestId };
+    // Not paid yet is not the same as cancelled: the sheet may have been
+    // closed while Stripe was still taking the payment. Only Stripe's own
+    // cancel link (handled above) means nothing was charged; anything else
+    // goes to the booking page, which keeps asking Stripe for a while.
+    return { outcome: paid ? ('paid' as const) : ('pending' as const), requestId };
   }, [requireUser, refreshCoaching, confirmBooking]);
 
   const answerBooking = useCallback(async (requestId: ID, response: string) => {
@@ -4631,6 +4952,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     const back = Linking.createURL('coach-studio');
     const { url } = await remote.connectPayouts(back);
+    if (!url) return checkPayouts();
     if (Platform.OS === 'web') { window.location.assign(url); return false; }
     await WebBrowser.openAuthSessionAsync(url, back);
     return checkPayouts();
@@ -4638,7 +4960,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const openPayoutDashboard = useCallback(async () => {
     const { url } = await remote.payoutDashboard();
-    if (Platform.OS === 'web') window.open(url, '_blank', 'noopener');
+    // Same tab on the web: Safari blocks a new tab opened this long after the tap.
+    if (Platform.OS === 'web') window.location.assign(url);
     else await WebBrowser.openBrowserAsync(url);
   }, []);
 
@@ -5065,7 +5388,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...prev,
       healthHistory: got.days,
       healthIsReal: true,
-      integrations: prev.integrations.map((i) => { const c = got.connections.find((x) => x.provider === i.provider); return { ...i, connected: !!c, lastSyncedAt: c?.lastSyncedAt, readsWorkouts: c?.readsWorkouts }; }),
+      integrations: withCatalog(prev.integrations).map((i) => { const c = got.connections.find((x) => x.provider === i.provider); return { ...i, connected: !!c, lastSyncedAt: c?.lastSyncedAt, readsWorkouts: c?.readsWorkouts }; }),
     }));
   }, []);
   /** Fetches your sources again; resolves with what came back (null when nothing did) for a step that cannot wait for the screen to redraw. */
@@ -5083,19 +5406,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!live(me)) return;
     const handle = await takeReferrer();
     if (!handle) return;
+    // Null when no follow was made: a teen, or someone whose age is not on
+    // file yet, is never made to follow the sharer (followInviter makes it
+    // once the birthday says adult).
     const who = await remote.claimReferral(handle);
     if (!who) return;
-    // You follow whoever invited you (or, if their account is private, ask
-    // to); they are never made to follow you back without saying so.
+    showInviterFollow(who, handle);
+  }, []);
+  // You follow whoever invited you (or, if their account is private, ask
+  // to); they are never made to follow you back without saying so.
+  const showInviterFollow = (who: ID, handle?: string) => {
+    const me = stateRef.current.currentUserId;
     const them = stateRef.current.users.find((u) => u.id === who);
     if (them?.isPrivate) {
       setState((prev) => ({ ...prev, followRequests: prev.followRequests.some((r) => r.fromId === me && r.toId === who) ? prev.followRequests : [...prev.followRequests, { fromId: me!, toId: who, createdAt: new Date().toISOString() }] }));
       showToast({ title: `Asked to follow @${them.handle}`, body: 'They invited you. Once they say yes, you will see their posts.', icon: 'people-outline' });
     } else {
       setState((prev) => ({ ...prev, followingIds: prev.followingIds.includes(who) ? prev.followingIds : [...prev.followingIds, who] }));
-      showToast({ title: `You're following @${them?.handle ?? handle}`, body: 'They invited you to CourtSide.', icon: 'people-outline' });
+      showToast({ title: them?.handle ?? handle ? `You're following @${them?.handle ?? handle}` : "You're following who invited you", body: 'They invited you to CourtSide.', icon: 'people-outline' });
     }
-  }, []);
+  };
+  const followInviter = async () => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me)) return;
+    const who = await remote.followMyInviter().catch(() => null);
+    if (who) showInviterFollow(who);
+  };
   useEffect(() => { if (live(state.currentUserId)) void claimPendingReferral(); }, [state.currentUserId, claimPendingReferral]);
   const countReferrals = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.countReferrals(me!) : 0; }, []);
 
@@ -5117,7 +5453,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return true;
     }
     if (provider === 'whoop') { await remote.whoop('sync'); return true; }
+    // Fitbit, Oura, Polar: "Sync now" looks back a week for tennis.
+    if (isTracker(provider)) { await remote.trackers('sync', { provider, days: 7 }); return true; }
     return false;
+  }, []);
+
+  /**
+   * Fitbit's, Oura's or Polar's sign-in, through the server's trackers
+   * function (migration 69), the same way as WHOOP's tennis sign-in: the
+   * server sends the browser to the tracker, the tracker sends it back, and
+   * the sign-in waits until this phone, signed in as you, collects it. So a
+   * sign-in link sent to someone else can never put their tracker on the
+   * sender's account. Connecting one turns its tennis sessions on.
+   */
+  const connectTracker = useCallback(async (provider: TrackerId) => {
+    const label = stateRef.current.integrations.find((i) => i.provider === provider)?.label ?? 'That tracker';
+    const back = Linking.createURL('health');
+    const start = await remote.trackers<{ on?: boolean; url?: string }>('start', { provider, back });
+    if (!start.on || !start.url) throw new Error(`${label} is coming soon.`);
+    const result = await WebBrowser.openAuthSessionAsync(start.url, back);
+    if (result.type !== 'success') throw new Error(`${label} was not connected.`);
+    const n = /[?&]n=([0-9a-f-]{36})/i.exec(result.url)?.[1];
+    if (!n) throw new Error(/tracker=expired/.test(result.url) ? 'That sign-in took too long. Try again.' : `${label} was not connected.`);
+    await remote.trackers('finish', { n });
   }, []);
 
   /**
@@ -5147,14 +5505,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const checkWith = useCallback(async (force: boolean, rows: Pick<Integration, 'provider' | 'connected' | 'readsWorkouts'>[]) => {
     const me = stateRef.current.currentUserId;
     if (!live(me) || !stateRef.current.remoteLoaded) return;
-    const apple = rows.find((i) => i.provider === 'apple-health');
-    const whoop = rows.find((i) => i.provider === 'whoop');
+    const on = (p: Integration['provider']) => rows.some((i) => i.provider === p && i.connected && i.readsWorkouts);
     // Nothing has tennis sessions on (always so on a database without
     // migration 58): no need to ask the server anything.
-    if (!(apple?.connected && apple.readsWorkouts) && !(whoop?.connected && whoop.readsWorkouts)) return;
+    if (!on('apple-health') && !on('whoop') && !TRACKERS.some(on)) return;
     const flags = await tennisFlags(me);
-    const src = { apple: !!(flags.apple && apple?.connected && apple.readsWorkouts), whoop: !!(flags.whoop && whoop?.connected && whoop.readsWorkouts) };
-    if (!src.apple && !src.whoop) return;
+    const src = { apple: flags.apple && on('apple-health'), whoop: flags.whoop && on('whoop'), trackers: TRACKERS.filter((p) => flags[p] && on(p)) };
+    if (!src.apple && !src.whoop && !src.trackers.length) return;
     const filed = await checkForTennis(me!, src, force);
     if (stateRef.current.currentUserId !== me) return;
     const list = await remote.fetchActivities(me!);
@@ -5167,9 +5524,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (notes.length) setState((prev) => ({ ...prev, notifications: [...notes.filter((n) => !prev.notifications.some((x) => x.id === n.id)), ...prev.notifications] }));
     // The newest one gets a banner; the rest wait in Notifications.
     const a = (list ?? stateRef.current.detectedActivities).filter((x) => filed.includes(x.id)).sort((x, y) => (x.startedAt < y.startedAt ? 1 : -1))[0];
-    if (a) showToast({ title: 'Tennis detected', body: `${duration(a.minutes)} from ${fromWho(a)}. Tap to log it.`, icon: 'tennisball-outline', href: `/log-session?activity=${a.id}` });
+    // Your own numbers, for you only: the lock-screen push never carries them (migration 58).
+    // "Log it" opens the composer with the session on it (Oct 2): post it, or just log it.
+    if (a) {
+      const href = `/compose?activity=${a.id}`;
+      showToast({
+        title: 'Tennis detected',
+        body: [duration(a.minutes), a.maxHr ? `${a.maxHr} max bpm` : null, pickSource({ type: 'tracker', activity: a })].filter(Boolean).join(' · '),
+        glyph: 'session',
+        href,
+        action: { label: 'Log it', onPress: () => router.push(href as never) },
+      });
+    }
   }, []);
   const checkForActivities = useCallback((force = false) => checkWith(force, stateRef.current.integrations), [checkWith]);
+  // The demo's own "Tennis detected" (see demoTennisToast), once the app is up.
+  const demoToastShown = useRef(false);
+  useEffect(() => {
+    if (!demoTennisToast || demoToastShown.current || !state.ready || !state.currentUserId) return undefined;
+    const a = state.detectedActivities.find((x) => x.userId === state.currentUserId && x.status === 'new');
+    if (!a) return undefined;
+    const t = setTimeout(() => {
+      demoToastShown.current = true;
+      const href = `/compose?activity=${a.id}`;
+      showToast({ title: 'Tennis detected', body: [duration(a.minutes), a.maxHr ? `${a.maxHr} max bpm` : null, pickSource({ type: 'tracker', activity: a })].filter(Boolean).join(' · '), glyph: 'session', href, action: { label: 'Log it', onPress: () => router.push(href as never) }, holdMs: 12000 });
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [state.ready, state.currentUserId, state.detectedActivities]);
 
   const refreshActivities = useCallback(async () => {
     const me = stateRef.current.currentUserId;
@@ -5190,7 +5571,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (live(me)) void remote.dismissActivity(id);
   }, []);
 
-  const turnOnTennis = useCallback(async (provider: 'apple-health' | 'whoop') => {
+  const turnOnTennis = useCallback(async (provider: 'apple-health' | 'whoop' | TrackerId) => {
     const me = stateRef.current.currentUserId;
     if (!live(me)) {
       // The demo: switched on at once.
@@ -5203,15 +5584,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await connectAppleHealth({ workouts: true });
       if (!stateRef.current.integrations.find((i) => i.provider === 'apple-health')?.connected) await pullFrom(me!, 'apple-health');
       await remote.setHealthConnection(me!, 'apple-health', true, { readsWorkouts: true });
-    } else {
+    } else if (provider === 'whoop') {
       await connectWhoop(true);
+    } else {
+      await connectTracker(provider);
     }
     haptics.commit();
     const got = await reloadHealth();
     void checkWith(true, got ? got.connections.map((c) => ({ ...c, connected: true })) : stateRef.current.integrations);
-  }, [connectWhoop, pullFrom, reloadHealth, checkWith]);
+  }, [connectWhoop, connectTracker, pullFrom, reloadHealth, checkWith]);
 
-  const turnOffTennis = useCallback(async (provider: 'apple-health' | 'whoop') => {
+  const turnOffTennis = useCallback(async (provider: 'apple-health' | 'whoop' | TrackerId) => {
     const me = stateRef.current.currentUserId;
     if (!live(me)) {
       setState((prev) => ({ ...prev, integrations: prev.integrations.map((i) => (i.provider === provider ? { ...i, readsWorkouts: false } : i)) }));
@@ -5225,15 +5608,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const toggleIntegration = useCallback(async (provider: Integration['provider'], opts: { tennis?: boolean } = {}) => {
     const me = stateRef.current.currentUserId;
-    const current = stateRef.current.integrations.find((i) => i.provider === provider);
+    const current = withCatalog(stateRef.current.integrations).find((i) => i.provider === provider);
     if (!current) return;
     if (!live(me)) {
       const updated = current.connected ? await disconnectProvider(current) : await connectProvider(current);
-      setState((prev) => ({ ...prev, integrations: prev.integrations.map((i) => (i.provider === provider ? updated : i)) }));
+      // A tracker connects for its tennis sessions, so in the demo they are on at once.
+      const shown = isTracker(provider) ? { ...updated, readsWorkouts: updated.connected } : updated;
+      setState((prev) => ({ ...prev, integrations: prev.integrations.map((i) => (i.provider === provider ? shown : i)) }));
       return;
     }
     if (current.connected) {
-      if (provider === 'whoop') await remote.whoop('disconnect'); else await remote.setHealthConnection(me!, provider, false);
+      if (provider === 'whoop') await remote.whoop('disconnect');
+      else if (isTracker(provider)) await remote.trackers('disconnect', { provider });
+      else await remote.setHealthConnection(me!, provider, false);
       haptics.untap();
       await reloadHealth();
       return;
@@ -5249,6 +5636,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } else if (provider === 'whoop') {
       tennis = opts.tennis === true && (await tennisFlags(me)).whoop;
       await connectWhoop(tennis);
+    } else if (isTracker(provider)) {
+      // Fitbit, Oura and Polar connect only for tennis sessions.
+      await connectTracker(provider);
+      tennis = true;
     } else if (provider === 'cronometer' || provider === 'myfitnesspal') {
       if (appleHealthAvailable()) await connectAppleHealth();
       if (!(await pullFrom(me!, provider))) return;
@@ -5256,7 +5647,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     haptics.commit();
     const got = await reloadHealth();
     if (tennis) void checkWith(true, got ? got.connections.map((c) => ({ ...c, connected: true })) : stateRef.current.integrations);
-  }, [pullFrom, reloadHealth, connectWhoop, checkWith]);
+  }, [pullFrom, reloadHealth, connectWhoop, connectTracker, checkWith]);
 
   const syncHealth = useCallback(async (provider: Integration['provider']) => {
     const me = stateRef.current.currentUserId;
@@ -5266,10 +5657,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // The courts' own state (migration 60): its actions are written in store/courtLife.
   const courtLife = useCourtLife(stateRef, setState, live);
+  // Groups with a feed of their own (migration 67): its actions are written in store/feedGroups.
+  const feedGroups = useFeedGroups(stateRef, setState, live);
 
   const actions = useMemo<AppActions>(
     () => ({
       ...courtLife,
+      ...feedGroups,
       addCoachResult,
       addCoachReview,
       bookCoach,
@@ -5434,6 +5828,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       canMessage,
       canAddToGroup,
       recheckFollows,
+      reachNow,
+      lockedNow,
+      tagHint,
       messageLock,
       editMessage,
       retryMessage,
@@ -5445,6 +5842,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }),
     [
       courtLife,
+      feedGroups,
       addCoachResult,
       addCoachReview,
       bookCoach,
@@ -5603,6 +6001,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       canMessage,
       canAddToGroup,
       recheckFollows,
+      reachNow,
+      lockedNow,
+      tagHint,
       messageLock,
       editMessage,
       retryMessage,
@@ -5615,8 +6016,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<AppContextValue>(
-    () => ({ ...state, ready: state.ready && state.authResolved, currentUser, actions }),
-    [state, currentUser, actions],
+    () => ({ ...state, ready: state.ready && state.authResolved, currentUser, actions, seeing, shownAtCourt, ageSaysAdult }),
+    [state, currentUser, actions, seeing, shownAtCourt, ageSaysAdult],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

@@ -1,14 +1,20 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { DragSheet } from '@/components/DragSheet';
 import { Chips, Section, SheetTitle, Submit, Tiles, formBody } from '@/components/sheet/SheetForm';
 import { WhoYouPlayed } from '@/components/WhoYouPlayed';
-import { activityDay, activityWhen, dayWords, fromWho, loggedLabel, privateLine, statsSourceOf } from '@/features/activity/format';
+import { activityDay, activityTitle, activityWhen, dayWords, fromWho, loggedLabel, privateLine, sessionEyebrow } from '@/features/activity/format';
+import { showLogged } from '@/features/activity/useTrackerSession';
+import { Duration } from '@/components/session/Duration';
+import { LENGTHS, lengthTile, trackerName } from '@/features/activity/lengths';
+import { TrackedLength } from '@/components/session/TrackedLength';
+import { computeStats } from '@/features/practice/stats';
 import { andList, canTagKind, firstName as firstOfName, isActive, tagsOnSession } from '@/features/activity/sessionTags';
-import { postOf, postedIndex } from '@/features/activity/recent';
+import { pickSource, postOf, postedIndex, sourceOn } from '@/features/activity/recent';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { hitPrefill, prefillFor } from '@/features/hits/followUp';
 import { localDay } from '@/features/practice/stats';
@@ -20,7 +26,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, font, lift, radius, spacing, typography } from '@/theme';
 
 const KINDS: { value: PracticeSession['kind']; label: string }[] = [
   { value: 'practice', label: 'Practice' },
@@ -28,16 +34,6 @@ const KINDS: { value: PracticeSession['kind']; label: string }[] = [
   { value: 'drills', label: 'Drills' },
   { value: 'fitness', label: 'Fitness' },
 ];
-const LENGTHS = [30, 60, 90, 120];
-const lengthLabel = (m: number) => (m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)}½ hr` : `${m / 60} hr`);
-const lengthTile = (m: number) => ({ value: m, top: m < 60 ? 'min' : m === 60 ? 'hour' : 'hours', main: m < 60 ? String(m) : m % 60 ? `${Math.floor(m / 60)}½` : String(m / 60), label: lengthLabel(m) });
-
-/** The usual lengths, with the nearest one swapped for the tracker's own minutes, so it sits where it belongs and is picked already. */
-function lengthsFor(a: DetectedActivity) {
-  const nearest = LENGTHS.reduce((best, m, i) => (Math.abs(m - a.minutes) < Math.abs(LENGTHS[best] - a.minutes) ? i : best), 0);
-  const top = a.source === 'whoop' ? 'WHOOP' : statsSourceOf(a) === 'apple-watch' ? 'Watch' : 'Health';
-  return LENGTHS.map((m, i) => (i === nearest ? { value: a.minutes, top, main: duration(a.minutes), label: duration(a.minutes) } : lengthTile(m)));
-}
 
 /**
  * Log a session in two taps: what it was (practice is picked already) and
@@ -66,10 +62,33 @@ function lengthsFor(a: DetectedActivity) {
  * people can be tagged after the fact. A copy of someone else's session
  * (from their tag) is theirs to tag, so it says so instead.
  */
-export default function LogSession() {
+export default function LogSessionRoute() {
+  const { activity, hit, edit } = useLocalSearchParams<{ activity?: string; hit?: string; edit?: string }>();
+  // A tracker's session is logged from the composer now (Oct 2): "Log it"
+  // opens a new post with the session on it, with "Just log it" beside Share.
+  // This page still opens from the lock screen's alert and older alert rows
+  // (the server's link says /log-session?activity=), so it hands those on.
+  if (activity && !edit) return <ToComposer activity={activity} hit={hit} />;
+  return <LogSession />;
+}
+
+function ToComposer({ activity, hit }: { activity: string; hit?: string }) {
+  useEffect(() => { router.replace({ pathname: '/compose', params: { activity, ...(hit ? { hit } : {}) } }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+/*
+ * Logging by hand (Your sessions, the + menu, a hit with no tracker copy) and
+ * editing a log (?edit=). Since Oct 2 a tracker's session (?activity=) never
+ * reaches here: LogSessionRoute hands it to the composer. The tracker parts
+ * below (`fresh`, "Save and post", "Post it") are only kept for an address
+ * carrying both ?edit= and ?activity=, which nothing in the app sends; they
+ * can go once the old lock-screen links have aged out (30 days).
+ */
+function LogSession() {
   const styles = useThemedStyles(styleDefinitions);
   const { activity, hit, edit } = useLocalSearchParams<{ activity?: string; hit?: string; edit?: string }>();
-  const { actions, detectedActivities, remoteLoaded, ready, hitRequests, currentUserId, users, posts, sessions, sessionTags, sessionTagsReady } = useApp();
+  const { actions, detectedActivities, remoteLoaded, ready, hitRequests, currentUserId, users, posts, stories, sessions, sessionTags, sessionTagsReady } = useApp();
   // The box you type in stays above a phone's keyboard, and so do the names listed under it.
   const { scroller, onScroll, reveal } = useKeyboardReveal();
   // The hit it was opened for: the prompt's words, or the hit itself if the app was reloaded on the way.
@@ -123,6 +142,7 @@ export default function LogSession() {
 
   const [kind, setKind] = useState<PracticeSession['kind']>(fromHit?.kind ?? 'practice');
   const [minutes, setMinutes] = useState<number | null>(fresh ? fresh.minutes : fromHit ? fromHit.minutes : null);
+  const [editLength, setEditLength] = useState(false);
   // A session that arrives after the sheet opened starts on its own length too.
   const [preset, setPreset] = useState(fresh?.id);
   if (fresh && preset !== fresh.id) { setPreset(fresh.id); setMinutes(fresh.minutes); }
@@ -138,6 +158,24 @@ export default function LogSession() {
   const [error, setError] = useState('');
 
   const firstOf = (id: ID) => users.find((u) => u.id === id)?.name.trim().split(/\s+/)[0] ?? 'They';
+
+  /*
+   * "Log a session" with nothing else asked (Your sessions' + Log, Profile,
+   * the + menu): first the sessions your tracker picked up that nobody has
+   * logged yet, newest first, each opening the composer for it ("Log it"),
+   * and "Log one yourself" under them for the by-hand log (owner, Oct 3).
+   * With none waiting, the by-hand log opens straight away, as before.
+   * Decided once, as the sheet opens, so it never swaps under your thumb.
+   */
+  const plain = !activity && !hit && !edit;
+  const unlogged = useMemo(
+    () => (plain ? detectedActivities.filter((x) => x.userId === currentUserId && x.status === 'new' && sourceOn(x, flags)).sort((x, y) => y.startedAt.localeCompare(x.startedAt)) : []),
+    [plain, detectedActivities, currentUserId, flags],
+  );
+  const [offered] = useState(() => unlogged.length > 0);
+  const [byHand, setByHand] = useState(false);
+  const choosing = offered && !byHand && unlogged.length > 0;
+  const logThis = (x: DetectedActivity) => { next.current = x.id; close(); };
 
   // Opened on a session already logged (?edit=): who you played, and nothing else.
   const editing = edit ? sessions.find((x) => x.id === edit && x.userId === currentUserId) : undefined;
@@ -228,7 +266,12 @@ export default function LogSession() {
       // save went through, and says "Posted" when shared. A toast there would
       // sit over its Share button for a few seconds.
       if (post && fresh) next.current = fresh.id;
-      else showToast({ title: 'Session logged', body: asked ? `${asked} will be asked to accept.` : 'Your streak and numbers are up to date.', icon: 'checkmark-circle-outline' });
+      else if (asked) showToast({ title: 'Logged', body: `${asked} will be asked to accept.`, glyph: 'logged' });
+      else {
+        // "Logged · 1h 30m · Match · Won", and the streak once it is two days or more.
+        const streak = currentUserId ? computeStats(currentUserId, [{ id: id, userId: currentUserId, day, minutes, kind, createdAt: new Date().toISOString() }, ...sessions], posts, stories).currentStreakDays : 0;
+        showLogged(minutes, { kind, won: kind === 'match' && won ? won === 'won' : undefined }, streak);
+      }
       close();
     } catch (e) {
       setFrozen(null);
@@ -240,6 +283,7 @@ export default function LogSession() {
     }
   };
 
+  const heroDay = when === 'today' ? localDay(new Date()) : localDay(Date.now() - 86_400_000);
   const hide = (x: DetectedActivity) => confirm({
     title: 'Hide this session?',
     message: 'It won’t count toward your streak.',
@@ -258,6 +302,8 @@ export default function LogSession() {
     <SheetTitle title={fromHit ? 'How was the hit?' : 'Log your tennis'} line={`${fromHit ? `${fromHit.place}. ` : ''}From ${fromWho(fresh)} · ${activityWhen(fresh)}. Only you see this.`} lines={2} onClose={close} />
   ) : done ? (
     <SheetTitle title="Log your tennis" line={done.status === 'logged' ? 'Logged. It counts toward your streak and hours.' : 'You already logged this session.'} lines={2} onClose={close} />
+  ) : choosing ? (
+    <SheetTitle title="Log a session" line="Your tracker picked these up. Pick one, or log one yourself." lines={2} onClose={close} />
   ) : fromHit ? (
     <SheetTitle title="How was the hit?" line={`${fromHit.place}${fromHit.who ? ` · with ${fromHit.who}` : ''}. Only you see this.`} lines={2} onClose={close} />
   ) : (
@@ -310,6 +356,35 @@ export default function LogSession() {
         </ScrollView>
       ) : waiting ? (
         <View style={styles.wait}><CourtSpinner size={34} /></View>
+      ) : choosing ? (
+        <ScrollView contentContainerStyle={formBody}>
+          <View style={styles.group}>
+            {unlogged.map((x, i) => (
+              <Pressable
+                key={x.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Log it: ${activityTitle(x)}, ${duration(x.minutes)}, ${pickSource({ type: 'tracker', activity: x })}, ${activityWhen(x)}`}
+                onPress={() => logThis(x)}
+                style={({ pressed }) => [styles.pickRow, i > 0 && styles.pickLine, pressed && styles.pressed]}
+              >
+                <View style={styles.pickIcon}><Ionicons name="stopwatch-outline" size={18} color={colors.court} /></View>
+                <View style={styles.pickWords}>
+                  <View style={styles.pickHeroLine}>
+                    <Text style={styles.pickHero}>{duration(x.minutes)}</Text>
+                    <View style={styles.pickTag}><Text style={styles.pickTagText} numberOfLines={1}>{pickSource({ type: 'tracker', activity: x })}</Text></View>
+                  </View>
+                  <Text style={styles.pickTitle} numberOfLines={1}>{activityTitle(x)}</Text>
+                  <Text style={styles.pickWhen}>{activityWhen(x, new Date(), ' · ')}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textFaint} style={styles.pickChevron} />
+              </Pressable>
+            ))}
+          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Log one yourself" onPress={() => setByHand(true)} style={({ pressed }) => [styles.second, styles.byHand, pressed && styles.pressed]}>
+            <Ionicons name="add" size={18} color={colors.text} />
+            <Text style={styles.secondText}>Log one yourself</Text>
+          </Pressable>
+        </ScrollView>
       ) : done ? (
         <ScrollView contentContainerStyle={formBody}>
           {done.status === 'logged' && postable(done) && !alreadyPosted ? (
@@ -327,12 +402,37 @@ export default function LogSession() {
         <ScrollView ref={scroller} onScroll={onScroll} scrollEventThrottle={32} contentContainerStyle={formBody} keyboardShouldPersistTaps="handled">
           {gone ? <Text style={styles.notice}>That session is no longer here.</Text> : null}
           {numbers ? <Text style={styles.numbers}>{numbers}</Text> : null}
+          {/* The session as it will go in your log, in the sessions' own look: what and when, then the time, big. */}
+          {minutes && !fresh ? (
+            <View style={styles.hero} accessible accessibilityLabel={`${sessionEyebrow({ kind, day: heroDay }).toLowerCase()}, ${duration(minutes)}`}>
+              <Text style={styles.heroEyebrow}>{sessionEyebrow({ kind, day: heroDay })}</Text>
+              <View style={styles.heroRow}>
+                <Duration minutes={minutes} size={56} color={colors.text} unitColor={colors.textMuted} />
+                {kind === 'match' && won ? (
+                  <View style={[styles.result, won === 'won' ? styles.resultWon : styles.resultLost]}>
+                    <Text style={[styles.resultText, { color: won === 'won' ? colors.brandInk : colors.textMuted }]}>{won === 'won' ? 'Won' : 'Lost'}</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
           <Section title="What was it">
             <Chips value={kind} onChange={(k) => { if (k) setKind(k); }} options={KINDS} />
           </Section>
           <Section title="How long">
-            <Tiles value={minutes ?? 0} onChange={(m) => setMinutes(m)} options={fresh ? lengthsFor(fresh) : LENGTHS.map(lengthTile)} />
-            {fresh ? <Text style={styles.hint}>Change the length if you took a break.</Text> : null}
+            {/* From a tracker the length is simply the tracker's (Oct 3): one line, with Edit for a break (hours and minutes, then Done). */}
+            {fresh ? (
+              <TrackedLength
+                minutes={minutes ?? fresh.minutes}
+                trackerMinutes={fresh.minutes}
+                tracker={trackerName(fresh)}
+                open={editLength}
+                onOpen={setEditLength}
+                onChange={(m) => setMinutes(m)}
+              />
+            ) : (
+              <Tiles value={minutes ?? 0} onChange={(m) => setMinutes(m)} options={LENGTHS.map(lengthTile)} />
+            )}
           </Section>
           {kind === 'match' ? (
             <Section title="Result">
@@ -387,6 +487,13 @@ export default function LogSession() {
 
 const styleDefinitions = StyleSheet.create({
   error: { ...typography.small, color: colors.danger },
+  hero: { gap: 4 },
+  heroEyebrow: { ...font('600'), fontSize: 11, letterSpacing: 0.88, color: colors.textMuted },
+  heroRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  result: { height: 30, paddingHorizontal: 12, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  resultWon: { backgroundColor: colors.brand },
+  resultLost: { borderWidth: 1, borderColor: colors.borderStrong },
+  resultText: { ...font('700'), fontSize: 14 },
   wait: { alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.xxl },
   notice: { ...typography.smallStrong, color: colors.text },
   numbers: { ...typography.caption, color: colors.textMuted, fontVariant: ['tabular-nums'] },
@@ -398,4 +505,18 @@ const styleDefinitions = StyleSheet.create({
   secondOff: { opacity: 0.5 },
   secondText: { ...typography.bodyStrong, fontSize: 16, color: colors.text },
   pressed: { opacity: 0.7 },
+  // The tracker's sessions waiting to be logged, as Your sessions lists them: how long, big, with the tracker's tag; what; the day and times.
+  group: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden', paddingHorizontal: spacing.lg },
+  pickRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingVertical: 14 },
+  pickLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  pickIcon: { width: 22, height: 32, alignItems: 'center', justifyContent: 'center' },
+  pickWords: { flex: 1, minWidth: 0, gap: 3 },
+  pickHeroLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 32 },
+  pickHero: { fontSize: 21, lineHeight: 26, ...font('600'), letterSpacing: -0.5, color: colors.text, fontVariant: ['tabular-nums'] },
+  pickTag: { flexShrink: 1, paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt },
+  pickTagText: { fontSize: 11, lineHeight: 15, ...font('600'), letterSpacing: 0.2, color: colors.textMuted },
+  pickTitle: { fontSize: 15, lineHeight: 20, ...font('500'), color: colors.text },
+  pickWhen: { fontSize: 14, lineHeight: 19, color: colors.textMuted, fontVariant: ['tabular-nums'] },
+  pickChevron: { alignSelf: 'center' },
+  byHand: { marginTop: 0 },
 });

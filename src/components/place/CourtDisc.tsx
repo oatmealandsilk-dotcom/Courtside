@@ -4,6 +4,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandWash } from '@/components/ui';
 import { TileCover } from '@/components/TileCover';
+import { CourtGlyph } from '@/components/map/CourtGlyph';
 import type { Post } from '@/data/types';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, radius } from '@/theme';
@@ -21,7 +22,7 @@ export function CourtDisc({ cover, label, onPress }: { cover: Post | null; label
   if (!cover || !picture) {
     return (
       <View style={styles.plain} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        <Ionicons name="tennisball" size={30} color={colors.brand} />
+        <CourtGlyph size={24} color={colors.brand} />
       </View>
     );
   }

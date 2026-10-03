@@ -21,6 +21,7 @@ import { confirmUnfollow } from '@/lib/confirm';
 import type { Notification, NotificationKind, PostKind } from '@/data/types';
 import { colors, radius, spacing, surfaceColorFor, typography } from '@/theme';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
+import { HitGlyph } from '@/components/HitGlyph';
 import { showCourtOnMap } from '@/features/players/courtLink';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 
@@ -35,7 +36,8 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
  * so you can still see what was new.
  */
 
-const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap; tint: keyof typeof colors }> = {
+// 'hit' is the app's own hit mark (HitGlyph), the one the map, the hit cards and Settings use.
+const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap | 'hit'; tint: keyof typeof colors }> = {
   like: { name: 'heart', tint: 'danger' },
   comment: { name: 'chatbubble', tint: 'info' },
   'comment-reply': { name: 'chatbubble-ellipses', tint: 'info' },
@@ -57,16 +59,22 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap; tin
   'upvote-reply': { name: 'arrow-up', tint: 'brand' },
   milestone: { name: 'flame', tint: 'warning' },
   joined: { name: 'hand-right', tint: 'court' },
-  'hit-join': { name: 'tennisball', tint: 'brand' },
-  'hit-match': { name: 'people', tint: 'brand' },
-  activity: { name: 'tennisball', tint: 'court' },
-  'map-friend-hit': { name: 'tennisball', tint: 'brand' },
+  'hit-join': { name: 'hit', tint: 'brand' },
+  'hit-match': { name: 'hit', tint: 'brand' },
+  // The outline: filled, the dial closes up at badge size.
+  activity: { name: 'stopwatch-outline', tint: 'court' },
+  'map-friend-hit': { name: 'hit', tint: 'brand' },
   'map-new-hit': { name: 'navigate', tint: 'brand' },
   'map-new-player': { name: 'location', tint: 'court' },
   // The court's own heart: the one you tapped to follow it.
   'court-activity': { name: 'heart', tint: 'court' },
   'session-tag': { name: 'pricetag', tint: 'court' },
 };
+// The hit mark fills the badge's inside (19 less its 2pt rim on each side), drawn bold for that size.
+const HIT_BADGE = 14;
+
+/** The line the server puts on the follow an invite makes (migration 68): said in the verb, not again under it. */
+const INVITE_LINE = 'Joined CourtSide from your link';
 
 const VERB: Record<NotificationKind, string> = {
   like: 'liked your post',
@@ -117,8 +125,8 @@ function routeFor(group: Group): string {
   // The map's alerts open the map: on the player, or on the hit with its card up.
   if (group.kind === 'map-friend-hit' || group.kind === 'map-new-player') return `/map?user=${group.actorIds[0]}`;
   if (group.kind === 'map-new-hit') return `/map?hit=${group.targetId}`;
-  // A tennis session a tracker picked up opens the log sheet, filled in from it.
-  if (group.kind === 'activity') return `/log-session?activity=${group.targetId}`;
+  // A tennis session a tracker picked up opens a new post with it on: post it, or just log it.
+  if (group.kind === 'activity') return `/compose?activity=${group.targetId}`;
   // Tagged in someone's session: the tag's sheet (its target is their session).
   if (group.kind === 'session-tag') return `/session-tag?session=${group.targetId}`;
   // A coach application update opens the application, which shows where it stands.
@@ -151,6 +159,18 @@ function sectionFor(unread: boolean, at: string): string {
   return 'Earlier';
 }
 const SECTIONS = ['New', 'Today', 'This week', 'This month', 'Earlier'];
+
+/**
+ * The server writes a session's length the long way ("1 hr 24 min · from
+ * your WHOOP", migration 58, also the lock-screen alert's words); the row
+ * says it the way the rest of the app does now ("1h 24m · from your WHOOP").
+ */
+function shortLength(preview: string): string {
+  return preview
+    .replace(/^(\d+) hr (\d+) min\b/, '$1h $2m')
+    .replace(/^(\d+) hr\b/, '$1h')
+    .replace(/^(\d+) min\b/, '$1m');
+}
 
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
@@ -203,6 +223,9 @@ export default function Notifications() {
   const verbFor = (group: Group) => {
     if (group.kind === 'milestone') return `just passed ${group.preview ?? 'a milestone'}`;
     if (group.kind === 'session-tag') return `tagged you in a ${group.preview === 'match' ? 'match' : 'practice'}`;
+    // Someone who joined through a link you shared (migration 68).
+    if (group.kind === 'follow' && group.preview === INVITE_LINE) return 'joined CourtSide from your link';
+    if (group.kind === 'follow-request' && group.preview === INVITE_LINE) return 'joined CourtSide from your link and asked to follow you';
     // A kind this build does not know yet (a newer server) still reads as a sentence.
     if (group.kind !== 'like' && group.kind !== 'comment' && group.kind !== 'share') return VERB[group.kind] ?? 'updated';
     const act = group.kind === 'like' ? 'liked' : group.kind === 'comment' ? 'commented on' : 'shared';
@@ -251,7 +274,7 @@ export default function Notifications() {
         actorIds: [n.actorId],
         createdAt: n.createdAt,
         // The server's stand-in for an Instant with no caption; the row already says what it was.
-        preview: n.preview === 'your hit' ? undefined : n.preview,
+        preview: n.preview === 'your hit' ? undefined : n.kind === 'activity' && n.preview ? shortLength(n.preview) : n.preview,
         unread: !n.read,
       });
     }
@@ -359,7 +382,9 @@ export default function Notifications() {
                     </View>
                   ) : <Avatar name={nameOf(first)} seed={seedOf(first)} uri={photoOf(first)} size={44} />}
                   <View style={[styles.badge, { backgroundColor: colors[icon.tint] }]}>
-                    <Ionicons name={icon.name} size={11} color={colors.brandInk} />
+                    {icon.name === 'hit'
+                      ? <HitGlyph size={HIT_BADGE} color={colors.brandInk} rim={colors[icon.tint]} />
+                      : <Ionicons name={icon.name} size={11} color={colors.brandInk} />}
                   </View>
                 </View>
 
@@ -375,7 +400,7 @@ export default function Notifications() {
                         {[tagState(tag), yourResult(tag), shortDay(tag.day), duration(tag.minutes)].filter(Boolean).join(' · ')}
                       </Text>
                     ) : null
-                  ) : group.preview && group.kind !== 'milestone' ? (
+                  ) : group.preview && group.kind !== 'milestone' && group.preview !== INVITE_LINE ? (
                     <Text style={styles.preview} numberOfLines={1}>
                       {group.preview}
                     </Text>

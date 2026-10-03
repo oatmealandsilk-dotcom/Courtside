@@ -1,8 +1,8 @@
-import type { DetectedActivity, ID, Post, PracticeSession, SessionDetail } from '@/data/types';
+import type { DetectedActivity, HealthShareKey, ID, Post, PracticeSession, SessionDetail } from '@/data/types';
 import { localDay } from '@/features/practice/stats';
 import { duration } from '@/lib/format';
 import type { TennisFlags } from './flags';
-import { activityTitle, activityWhen, dayWords, loggedLabel, loggedTitle, sessionFromActivity, sessionFromLogged, statsSourceOf } from './format';
+import { activityDay, activityTitle, activityWhen, dayWords, loggedLabel, loggedTitle, sessionFromActivity, sessionFromLogged, statsSourceOf } from './format';
 
 /*
  * Your recent sessions as one list, for attaching one to a Post or a Clip
@@ -80,16 +80,22 @@ export function recentSessions({ me, sessions, activities, flags, days = ATTACH_
   return picks.sort((x, y) => startOf(y) - startOf(x));
 }
 
-/** What the post will carry. Heart rate only from a tracker, only when switched on, only for adults. */
-export function statsOf(pick: SessionPick, showHr: boolean, adult: boolean): SessionDetail {
-  return pick.type === 'tracker' ? sessionFromActivity(pick.activity, showHr, adult) : sessionFromLogged(pick.session);
+/** What the post will carry. Health numbers only from a tracker, only those chosen ("Share health data"). */
+export function statsOf(pick: SessionPick, share: HealthShareKey[]): SessionDetail {
+  return pick.type === 'tracker' ? sessionFromActivity(pick.activity, share) : sessionFromLogged(pick.session);
 }
 
-/** "Evening tennis", "Match · Won". */
+/** "Tennis" (what the tracker called it), "Match · Won". */
 export const pickTitle = (pick: SessionPick) => (pick.type === 'tracker' ? activityTitle(pick.activity) : loggedLabel(pick.session));
 
-/** The caption a post from this session gets when you leave yours empty: "Evening tennis", "Tuesday practice". */
-export const pickCaption = (pick: SessionPick) => (pick.type === 'tracker' ? activityTitle(pick.activity) : loggedTitle(pick.session));
+/**
+ * The caption a post from this session gets when you leave yours empty:
+ * "Saturday tennis" (the day, and what the tracker called it), "Tuesday
+ * practice". Never the time of day.
+ */
+export const pickCaption = (pick: SessionPick) => (pick.type === 'tracker'
+  ? `${new Date(`${activityDay(pick.activity)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })} ${activityTitle(pick.activity).toLowerCase()}`
+  : loggedTitle(pick.session));
 
 /**
  * Where it came from, in a word or two: "WHOOP", "Apple Watch", or "By hand".
@@ -102,6 +108,9 @@ export function pickSource(pick: SessionPick): string {
     case 'whoop': return 'WHOOP';
     case 'apple-watch': return 'Apple Watch';
     case 'apple-health': return 'Apple Health';
+    case 'fitbit': return 'Fitbit';
+    case 'oura': return 'Oura';
+    case 'polar': return 'Polar';
     default: return 'Health Connect';
   }
 }

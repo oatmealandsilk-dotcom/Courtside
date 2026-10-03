@@ -17,8 +17,10 @@ import { useResponsive } from '@/lib/useResponsive';
 import { getPendingTab, setPendingTab, subscribePendingTab } from '@/features/navigation/pendingTab';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { askForCommunityMap, isStartTab } from '@/features/navigation/startTab';
-import { useCurtainDown } from '@/features/feed/warmup';
+import { launchSettle, useCurtainDown } from '@/features/feed/warmup';
 import { useApp } from '@/store/AppContext';
+import { isPublicPath } from '@/features/share/publicPaths';
+import { useShareLanding } from '@/features/share/useShareLanding';
 import { claimCarriedBirthDate, isDeviceBlocked, recallAnswered } from '@/features/age/ageCheck';
 import { auth as remoteAuth } from '@/data/remote';
 import { setCrashScreen } from '@/lib/crashReporting';
@@ -28,7 +30,7 @@ import { TERMS_VERSION } from '@/lib/legal';
 import { colors } from '@/theme';
 import { stageKeyOf, useStageSelect } from '@/features/feed/commentStage';
 import { useStageMotion } from '@/features/feed/useStageMotion';
-import Reanimated from 'react-native-reanimated';
+import Reanimated, { useAnimatedStyle } from 'react-native-reanimated';
 
 /**
  * The four tabs in the strip's order, left to right: Community, Home,
@@ -43,8 +45,10 @@ const routes = Object.keys(paths).map(name => ({ key: name, name }));
  * The comments close themselves on Escape, with their own animation (see
  * DragSheet.web), so they are not here: a second step back closed the page under them too.
  */
-const SHEETS = new Set(['/compose', '/share', '/pick-group', '/pick-court', '/ask', '/post-menu', '/edit-post', '/messages/new', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility']);
+const SHEETS = new Set(['/compose', '/share', '/pick-group', '/find-groups', '/group-form', '/pick-court', '/ask', '/post-menu', '/edit-post', '/messages/new', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility']);
 const TAB_ORDER: string[] = Object.values(paths);
+/** The pages that can take a clip's stage (see commentStage): its comments, and its session stats. */
+const STAGE_ROUTES = new Set(['/comments', '/session-stats']);
 export function AppShell({ children }: { children: React.ReactNode }) {
   useTheme();
   const pathname = usePathname();
@@ -173,7 +177,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // menu sits at the side, out of their way, so it stays, the way
   // Instagram's does behind its Create box. Sign-in, setup and the camera
   // hide it everywhere.
-  const phoneOnlyHide = ['/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/invite', '/comments', '/share', '/pick-group', '/likes', '/post-menu', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/wrapped'].includes(pathname) || pathname.startsWith('/messages/');
+  const phoneOnlyHide = ['/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/invite', '/comments', '/session-stats', '/who-played', '/share', '/pick-group', '/find-groups', '/group-form', '/likes', '/post-menu', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/wrapped', '/health-share'].includes(pathname) || pathname.startsWith('/messages/');
   // Arriving from the password-reset email is its own calm page, with no app around it yet.
   // (The comments' own address says which clip they are about, for the stage below.)
   const { reset, kind: routeKind, id: routeId, stage: routeStage } = useGlobalSearchParams<{ reset?: string; kind?: string; id?: string; stage?: string }>();
@@ -191,8 +195,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // and as the page grows back if the comments went without their own close.
   const stageBar = useStageSelect((s) => (s && s.mode === 'stage' && !s.covered ? `${s.key}|${s.mounted && !s.ending ? 'up' : 'moving'}` : ''));
   const [barKey, barPhase] = stageBar.split('|');
-  const commentsOnStage = pathname === '/comments' && routeStage === '1' && stageKeyOf(routeKind === 'hit' ? 'hit' : 'post', routeId ?? '') === barKey;
-  const barOnStage = isPhone && !!stageBar && (commentsOnStage || (barPhase === 'moving' && pathname !== '/comments'));
+  // The comments and a clip's stats (session-stats) both take the stage.
+  const commentsOnStage = STAGE_ROUTES.has(pathname) && routeStage === '1' && stageKeyOf(routeKind === 'hit' ? 'hit' : 'post', routeId ?? '') === barKey;
+  const barOnStage = isPhone && !!stageBar && (commentsOnStage || (barPhase === 'moving' && !STAGE_ROUTES.has(pathname)));
   // The bar is cut off at the sheet's top as it rises (navInner holds the bar
   // still inside the cut): the sheet comes up over it, never under it.
   const navFade = useStageMotion('nav', { enabled: barOnStage });
@@ -204,13 +209,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => { if (Platform.OS === 'web' && navLayer.current) navLayer.current.inert = barOnStage; }, [barOnStage]);
   const showNav = !!currentUserId && !hideEverywhere && !onSplash && (!(isPhone && phoneOnlyHide) || barOnStage);
   const curtainDown = useCurtainDown();
-  // A shared link opened while signed out goes to sign-in, not to an empty page.
-  const mustSignIn = ready && authResolved && !currentUserId && !['/', '/index', '/sign-in', '/onboarding', '/birthday'].includes(pathname);
+  // As the opening curtain lifts, the page under it settles from a touch large
+  // and low into place, on the curtain's own curve (see WarmCurtain), so the
+  // logo leaving and the app arriving are one motion. On the phone only: in a
+  // browser a transform round the whole app would trap everything that floats
+  // over the bar beneath it, and there the curtain's own lift carries it.
+  const settleOn = Platform.OS !== 'web';
+  const settle = useAnimatedStyle(() => (!settleOn ? {} : {
+    transform: [{ translateY: launchSettle.value * 10 }, { scale: 1 + launchSettle.value * 0.03 }],
+  }));
+  // A page opened while signed out goes to sign-in, not to an empty page. A
+  // shared link (a post, a profile, an open hit, a thread, a court, an
+  // invite) is the exception: it shows its public look (see publicRoute).
+  const mustSignIn = ready && authResolved && !currentUserId && !['/', '/index', '/sign-in', '/onboarding', '/birthday'].includes(pathname) && !isPublicPath(pathname);
   // The gates — sign in, birthday, terms — are reached by one replace each,
   // with the app left mounted underneath. Swapping the whole app for a
   // redirect unmounted the navigator; when it came back on the page it had
   // left, the gate fired again, and the two bounced until React gave up.
   const detour = mustSignIn ? '/sign-in' : needsBirthday ? '/birthday' : needsTerms ? '/agree' : null;
+  // Signed up from a shared link: once in, the app opens on what they were looking at.
+  useShareLanding({ pathname, held: !!detour });
   const sentTo = useRef<string | null>(null);
   useEffect(() => {
     if (!detour) { sentTo.current = null; return; }
@@ -257,7 +275,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return <View style={{ flex: 1, minHeight: 0, backgroundColor: colors.bg, flexDirection: isPhone ? 'column' : 'row' }}>
     {showNav && !isPhone && nav}
     {/* While the tour is up, TalkBack reads only the tour, not the page under the dim. */}
-    <View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={{ flex: 1, minWidth: 0, minHeight: 0 }}><RouteTransition>{children}</RouteTransition><Toast /><UploadBar /></View>
+    <Reanimated.View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={[{ flex: 1, minWidth: 0, minHeight: 0 }, settle]}><RouteTransition>{children}</RouteTransition><Toast /><UploadBar /></Reanimated.View>
     {showNav && isPhone ? (
       <Reanimated.View ref={((node: unknown) => { navLayer.current = node as HTMLElement | null; navFade.ref?.(node); }) as never} pointerEvents={barOnStage ? 'none' : 'box-none'} style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, barOnStage && { overflow: 'hidden' }, navFade.style]}>
         <Reanimated.View ref={navHold.ref as never} pointerEvents="box-none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, navHold.style]}>{nav}</Reanimated.View>

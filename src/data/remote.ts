@@ -20,16 +20,30 @@ import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Story, Tip, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole } from './types';
+import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Story, Tip, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
 import { isMapCourtId } from '@/features/places/courtName';
+import type { Openness } from '@/features/players/age';
 
 /** What a new player did first, after setup. */
 /** What the live handle check says about a handle. */
 export type HandleStatus = 'ok' | 'yours' | 'invalid' | 'taken' | 'held';
 
 export type FirstMove = 'post' | 'instant' | 'answer' | 'ask' | 'later';
+/** One person who has invited anyone, as the admin Invites page shows them (migration 71). */
+export interface InviteSummaryRow {
+  id: ID; name: string; handle: string; avatarUrl?: string; suspended?: boolean;
+  /** Signed up through their link (not deleted, not suspended, never themselves). */
+  invited: number;
+  /** Of those, finished setting up. */
+  setUp: number;
+  /** Set up and seen again on a later day: what is paid for. */
+  qualified: number;
+  paid: number; paidCents: number; owed: number; owedCents: number; lastPaidAt?: string;
+}
+/** Someone one person brought: only their name, @handle and dates. */
+export interface InviteeRow { id: ID; name: string; handle: string; avatarUrl?: string; joinedAt: string; setUp: boolean; qualifiedAt?: string }
 export interface FirstDayStats { new30: number; moved30: number; cohort: number; movers: number; moversBack: number; othersBack: number; picked: Record<FirstMove, number> }
 
 const need = () => {
@@ -92,10 +106,16 @@ interface ProfileRow {
   is_admin?: boolean | null;
   suspended_at?: string | null;
   following_count?: number | null;
+  /**
+   * Only before migration 64, when every profile carried it. Since then
+   * nobody's age is on a profile; your own comes from your settings row.
+   */
   age_group?: string | null;
   read_receipts?: boolean | null;
 }
 interface PostRow {
+  /** The group it is shared to, if any (migration 67). */
+  group_id?: string | null;
   id: string; author_id: string; kind: Post['kind']; body: string; media_label: string | null;
   image_url: string | null; video_url: string | null; thumbnail_url: string | null;
   match: Post['match'] | null; session: Post['session'] | null; tags: string[]; tagged_user_ids: string[];
@@ -159,6 +179,8 @@ const toUser = (row: ProfileRow, followers: number, following: number): User => 
 const POST_SELECT = '*, post_likes(user_id), post_saves(user_id), comments(*, comment_likes(user_id))';
 /** How many posts come at a time: on open, and each time the feed nears its end. */
 export const POST_PAGE = 40;
+/** A group's feed comes a page of this many at a time (group_feed, migration 74). */
+const GROUP_PAGE = 20;
 type FullPostRow = PostRow & { comments?: CommentRow[]; removed_at?: string | null };
 /**
  * Rows to the posts and comments the app holds. A post an admin removed never
@@ -204,6 +226,7 @@ const toPost = (row: PostRow): Post => ({
   featureOk: row.feature_ok === false ? false : undefined,
   isFirst: row.is_first || undefined,
   editedAt: row.edited_at ?? undefined,
+  groupId: row.group_id ?? undefined,
 });
 
 const toComment = (row: CommentRow): Comment => ({
@@ -306,6 +329,12 @@ export interface RemoteData {
   activities?: DetectedActivity[];
   /** Whether this server can tag players on sessions (migration 62 has run); missing when it could not be told. */
   sessionTagsReady?: boolean;
+  /**
+   * Whether the profiles came down with everyone's age on them: true on a
+   * database from before migration 64, false since (nobody's age but your
+   * own reaches the app). Missing in saved copies.
+   */
+  agesOnProfiles?: boolean;
 }
 
 interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null }
@@ -334,6 +363,8 @@ interface ActivityRow {
   id: string; user_id: string; source: DetectedActivity['source']; sport: 'tennis'; started_at: string; ended_at: string; tz_offset_min: number | null; minutes: number;
   avg_hr: number | null; max_hr: number | null; kcal: number | null; strain: number | string | null; device: string | null; status: DetectedActivity['status'];
   duplicate_of: string | null; session_id: string | null; created_at: string;
+  /** Minutes in heart-rate zones 1–5 (migration 65; absent before it runs). */
+  hr_zones?: number[] | null;
 }
 const toActivity = (r: ActivityRow): DetectedActivity => ({
   id: r.id, userId: r.user_id, source: r.source, sport: r.sport, startedAt: r.started_at, endedAt: r.ended_at, tzOffsetMin: r.tz_offset_min ?? undefined, minutes: r.minutes,
@@ -341,6 +372,7 @@ const toActivity = (r: ActivityRow): DetectedActivity => ({
   // numeric(3,1) arrives as a string.
   strain: r.strain == null ? undefined : Number(r.strain),
   device: r.device ?? undefined, status: r.status, duplicateOf: r.duplicate_of ?? undefined, sessionId: r.session_id ?? undefined, createdAt: r.created_at,
+  zones: r.hr_zones ?? undefined,
 });
 /** Your tracker sessions that ended in the last two weeks, newest first. Only your own rows come back (migration 58). */
 const activitiesQuery = (me: ID) => need().from('detected_activities').select('*').eq('user_id', me)
@@ -449,7 +481,9 @@ const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
 /** One pin from map_players (migration 63). */
 interface MapPlayerRow { user_id: ID; lat: number; lng: number; place: MapPlace | string; court_id: string | null; court_name: string | null; city: string | null; seen_at: string | null; open_until: string | null }
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
-interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints'] } | null; map_visibility?: string | null }
+interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints'] } | null; map_visibility?: string | null;
+  /** Your own age group, readable only by you (migration 64). Absent before it. */
+  age_group?: string | null }
 
 interface PollRow { question_id: string; options: string[]; counts: number[] | null }
 /** Each thread's poll, with the totals and your own vote, laid onto the threads. */
@@ -781,8 +815,15 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // A post or hit an admin removed never shows in a feed; admins see it only on the Reports screen.
   const postRows = ((posts.data ?? []) as (PostRow & { comments?: CommentRow[]; removed_at?: string | null })[]).filter((row) => !row.removed_at);
   const storyRows = ((stories.data ?? []) as (StoryRow & { removed_at?: string | null })[]).filter((row) => !row.removed_at);
+  // Your own age: from your settings row, the only place it is since
+  // migration 64; before that, from your profile row like everyone's.
+  const ownState = (ustate.data ?? null) as UserStateRow | null;
+  const ownAge = ownState?.age_group ?? profileRows.find((row) => row.id === me)?.age_group ?? null;
+  // Which database this is: a profile row has an age_group column only before 64.
+  const agesOnProfiles = profileRows.some((row) => 'age_group' in row);
   return {
-    users: profileRows.map((row) => toUser(row, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
+    agesOnProfiles,
+    users: profileRows.map((row) => toUser(row.id === me ? { ...row, age_group: ownAge } : row, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
     posts: postRows.map(toPost),
     comments: [
       ...postRows.flatMap((row) => (row.comments ?? []).map(toComment)),
@@ -901,6 +942,16 @@ const MIGRATION_FOR: Record<string, string> = {
 };
 const missingColumnsNote = (cols: string[]) =>
   `[remote] The posts table has no "${cols.join('", "')}" column yet, so this post was saved without that edit (it still went up). To keep it next time, open Supabase → SQL Editor → New query, paste the file supabase/migrations/${MIGRATION_FOR[cols[0]] ?? '…'} and press Run. It is safe to run more than once.`;
+
+interface GroupRow { id: ID; name: string; description: string | null; ask: boolean; discoverable?: boolean; createdAt: string; members?: { id: ID; admin: boolean }[]; requests?: ID[] }
+const toGroup = (row: GroupRow): FeedGroup => ({
+  id: row.id, name: row.name, description: row.description ?? undefined, ask: !!row.ask, discoverable: row.discoverable !== false, createdAt: row.createdAt,
+  members: row.members ?? [], requests: row.requests ?? [],
+});
+/** The server's word for why a group action said no (migration 67), or 'failed'. */
+const groupWord = (error: { code?: string; message: string }) =>
+  missingFunction(error) ? 'not_ready'
+    : /adults_only|their_age|group_limit|their_limit|not_admin|not_found|name_needed|slow_down/.exec(error.message)?.[0] ?? 'failed';
 
 export const remote = {
   /* ------------------------ discussions and coaching ------------------------ */
@@ -1318,6 +1369,54 @@ export const remote = {
   },
 
   /**
+   * What the server says about each of these people (migration 64,
+   * open_to_you): whether you may start a chat with them (or add them to a
+   * group, or tag them). Never their age. Someone it would not answer about
+   * (blocked either way, gone, or past the day's limit of people asked
+   * about) is left out. Up to 100 a question, so a longer list is asked in
+   * parts. Null when the database has no such question yet (before 64);
+   * throws when it could not be asked, so nobody is taken as closed for want
+   * of an answer.
+   */
+  async fetchOpenness(userIds: ID[]): Promise<Record<ID, Openness> | null> {
+    const ids = Array.from(new Set(userIds.filter((id) => UUID_RE.test(id))));
+    const out: Record<ID, Openness> = {};
+    for (let at = 0; at < ids.length; at += 100) {
+      const { data, error } = await need().rpc('open_to_you', { ids: ids.slice(at, at + 100) });
+      if (error) {
+        if (missingFunction(error)) return null;
+        fail('open to you')(error);
+        throw error;
+      }
+      for (const r of (data ?? []) as { user_id: string; chat: boolean | null }[]) out[r.user_id] = { chat: r.chat === true };
+    }
+    return out;
+  },
+  /**
+   * Of these posts, the ones that may show on a court's page for you
+   * (migration 64, shown_at_court: the teen rule, as court_rings counts
+   * posts). Up to 100 a question, so a longer list is asked in parts. Null
+   * when the database has no such question (before 64); throws when it could
+   * not be asked.
+   */
+  async fetchShownAtCourt(postIds: ID[]): Promise<Set<ID> | null> {
+    const ids = Array.from(new Set(postIds.filter((id) => UUID_RE.test(id))));
+    const out = new Set<ID>();
+    for (let at = 0; at < ids.length; at += 100) {
+      const { data, error } = await need().rpc('shown_at_court', { post_ids: ids.slice(at, at + 100) });
+      if (error) {
+        if (missingFunction(error)) return null;
+        fail('shown at court')(error);
+        throw error;
+      }
+      for (const r of (data ?? []) as (string | { shown_at_court?: string })[]) {
+        const id = typeof r === 'string' ? r : r?.shown_at_court;
+        if (id) out.add(id);
+      }
+    }
+    return out;
+  },
+  /**
    * Which of these people follow you right now. Whether a teen account is
    * open to you depends on it, and the app's own copy is from when it
    * opened, so the pickers ask again before showing a lock as final.
@@ -1429,7 +1528,8 @@ export const remote = {
   checkout: (serviceId: ID, question: string, back: string, videoUrl?: string) => coachPayments<{ url: string; requestId: ID }>('checkout', { serviceId, question, back, videoUrl }),
   confirmPayment: (requestId: ID) => coachPayments<{ paid: boolean }>('confirm', { requestId }),
   refundBooking: (requestId: ID) => coachPayments<{ refunded: boolean }>('refund', { requestId }),
-  connectPayouts: (back: string) => coachPayments<{ url: string; ready: boolean }>('connect', { back }),
+  /** No `url` when payouts are already set up: nothing to send the coach to Stripe for. */
+  connectPayouts: (back: string) => coachPayments<{ url?: string; ready: boolean }>('connect', { back }),
   checkPayouts: () => coachPayments<{ ready: boolean; started: boolean; due?: number }>('connect-check'),
   payoutDashboard: () => coachPayments<{ url: string }>('dashboard'),
   paymentsAdminStatus: () => coachPayments<{ stripe: boolean; live: boolean; webhook: boolean; feePercent: number }>('admin-status'),
@@ -1533,6 +1633,13 @@ export const remote = {
     return (data as ID | null) ?? null;
   },
 
+  /** Once the birthday says adult: the follow an invite waited on (follow_my_inviter). Who was followed, or null when nothing was made. */
+  async followMyInviter(): Promise<ID | null> {
+    const { data, error } = await need().rpc('follow_my_inviter');
+    if (error) return null;
+    return (data as ID | null) ?? null;
+  },
+
   async countReferrals(me: ID): Promise<number> {
     const { count, error } = await need().from('profiles').select('id', { count: 'exact', head: true }).eq('referred_by', me);
     if (error) return 0;
@@ -1544,6 +1651,24 @@ export const remote = {
     const { data, error } = await need().rpc('first_day_stats');
     if (error || !data) return null;
     return data as FirstDayStats;
+  },
+
+  /** Admin: everyone who has invited anyone, with what is owed. Throws (so the page can say so) when refused or missing. */
+  async fetchInviteSummary(): Promise<InviteSummaryRow[]> {
+    const { data, error } = await need().rpc('admin_invite_summary');
+    if (error) throw new Error(missingFunction(error) ? 'The Invites page needs migration 71 in Supabase.' : error.message);
+    return (data ?? []) as InviteSummaryRow[];
+  },
+  /** Admin: the people one person brought. */
+  async fetchInvitees(referrer: ID): Promise<InviteeRow[]> {
+    const { data, error } = await need().rpc('admin_invitees', { referrer });
+    if (error) throw new Error(missingFunction(error) ? 'The Invites page needs migration 71 in Supabase.' : error.message);
+    return (data ?? []) as InviteeRow[];
+  },
+  /** Admin: records a payout covering `count` qualified players. The server refuses more than is owed. */
+  async markInvitesPaid(referrer: ID, count: number, note?: string): Promise<void> {
+    const { error } = await need().rpc('admin_mark_invites_paid', { referrer, count, note: note ?? null });
+    if (error) throw new Error(/only \d+ owed/.test(error.message) ? 'Some of that was already marked paid. The numbers are refreshed.' : error.message);
   },
 
   /** Just enough of some posts to show them small: their picture and what kind they are. For notifications. */
@@ -1949,6 +2074,91 @@ export const remote = {
     if (ready === false) console.warn('[remote] Tagging players on sessions needs the session tags update. Open Supabase → SQL Editor → New query, paste the file supabase/migrations/20261002000062_session_tags.sql and press Run. It is safe to run more than once.');
     return ready;
   },
+  /* ---------------------------------------------------------- groups (67) */
+  /** Your groups and the groups you asked to join. Null on a database without groups (before migration 67). */
+  async myFeedGroups(): Promise<{ groups: FeedGroup[]; asked: { id: ID; name: string }[] } | null> {
+    const { data, error } = await need().rpc('my_feed_groups');
+    if (error) { if (!missingFunction(error)) fail('groups')(error); return null; }
+    const raw = (data ?? {}) as { groups?: GroupRow[]; asked?: { id: ID; name: string }[] };
+    return { groups: (raw.groups ?? []).map(toGroup), asked: raw.asked ?? [] };
+  },
+  /** Starts a group; its id. Throws with the server's word ('group_limit', 'name_needed', 'slow_down'). */
+  async createFeedGroup(name: string, description: string, ask: boolean): Promise<ID> {
+    const { data, error } = await need().rpc('create_feed_group', { p_name: name, p_description: description || null, p_ask: ask });
+    if (error) throw new Error(groupWord(error));
+    return data as string;
+  },
+  /** What an invite link shows. Null when there is no such group (or no groups yet). */
+  async feedGroupCard(id: ID): Promise<FeedGroupCard | null> {
+    if (!UUID_RE.test(id)) return null;
+    const { data, error } = await need().rpc('feed_group_card', { g: id });
+    if (error || !data) return null;
+    const c = data as { id: ID; name: string; description: string | null; ask: boolean; members: number; member: boolean; requested: boolean };
+    return { id: c.id, name: c.name, description: c.description ?? undefined, ask: c.ask, memberCount: Number(c.members) || 0, member: c.member, requested: c.requested };
+  },
+  /** Joins, or asks to. Throws with the server's word ('group_limit', 'not_found', 'slow_down'). */
+  async joinFeedGroup(id: ID): Promise<'joined' | 'requested' | 'already'> {
+    const { data, error } = await need().rpc('join_feed_group', { g: id });
+    if (error) throw new Error(groupWord(error));
+    return data as 'joined' | 'requested' | 'already';
+  },
+  async leaveFeedGroup(id: ID) {
+    const { error } = await need().rpc('leave_feed_group', { g: id });
+    if (error) throw new Error(groupWord(error));
+  },
+  async answerFeedGroupRequest(id: ID, who: ID, accept: boolean) {
+    const { error } = await need().rpc('answer_feed_group_request', { g: id, who, accept });
+    if (error) throw new Error(groupWord(error));
+  },
+  async removeFeedGroupMember(id: ID, who: ID) {
+    const { error } = await need().rpc('remove_feed_group_member', { g: id, who });
+    if (error) throw new Error(groupWord(error));
+  },
+  async updateFeedGroup(id: ID, name: string, description: string, ask: boolean) {
+    const { error } = await need().rpc('update_feed_group', { g: id, p_name: name, p_description: description || null, p_ask: ask });
+    if (error) throw new Error(groupWord(error));
+  },
+  /**
+   * Groups to find and join (migration 70): only ones shown in Find groups,
+   * near you first, then the biggest. Null on a database without it yet.
+   */
+  async discoverGroups(q: string, limit = 30): Promise<DiscoverGroup[] | null> {
+    const { data, error } = await need().rpc('discover_groups', { q: q.trim() || null, lim: limit });
+    if (error) { if (!missingFunction(error)) fail('find groups')(error); return null; }
+    const rows = (Array.isArray(data) ? data : []) as { id: ID; name: string; description: string | null; ask: boolean; members: number; member: boolean; requested: boolean; near: boolean }[];
+    return rows.map((c) => ({ id: c.id, name: c.name, description: c.description ?? undefined, ask: !!c.ask, memberCount: Number(c.members) || 0, member: !!c.member, requested: !!c.requested, near: !!c.near }));
+  },
+  /** An admin shows or hides a group in Find groups. Throws with the server's word ('not_admin', or 'not_ready' before migration 70). */
+  async setFeedGroupDiscoverable(id: ID, on: boolean) {
+    const { error } = await need().rpc('set_feed_group_discoverable', { g: id, p_on: on });
+    if (error) throw new Error(groupWord(error));
+  },
+  /**
+   * A page of a group's feed, newest first, older than `before`: everything
+   * its members post, plus what was shared to that group only (migration 74,
+   * group_feed). `next` is where the following page starts; null at the end.
+   * Before migration 74 it falls back to the group-only posts, as in 67.
+   */
+  async fetchFeedGroupPosts(id: ID, before?: string): Promise<{ posts: Post[]; comments: Comment[]; next: string | null } | null> {
+    if (!UUID_RE.test(id)) return null;
+    const db = need();
+    const page = await db.rpc('group_feed', { g: id, before: before ?? null, lim: GROUP_PAGE });
+    if (page.error && !missingFunction(page.error)) { fail('group feed')(page.error); return null; }
+    if (!page.error) {
+      const listed = (Array.isArray(page.data) ? page.data : []) as { id: ID; created_at: string }[];
+      if (!listed.length) return { posts: [], comments: [], next: null };
+      const { data, error } = await db.from('posts').select(POST_SELECT).in('id', listed.map((r) => r.id));
+      if (error) { fail('group feed')(error); return null; }
+      return { ...toPosts((data ?? []) as FullPostRow[]), next: listed.length === GROUP_PAGE ? listed[listed.length - 1].created_at : null };
+    }
+    let q = db.from('posts').select(POST_SELECT).eq('group_id', id).eq('archived', false);
+    if (before) q = q.lt('created_at', before);
+    const { data, error } = await q.order('created_at', { ascending: false }).limit(POST_PAGE);
+    if (error) { fail('group posts')(error); return null; }
+    const rows = (data ?? []) as FullPostRow[];
+    return { ...toPosts(rows), next: rows.length === POST_PAGE ? rows[rows.length - 1].created_at : null };
+  },
+
   /** Every tag you made and every tag of you, newest first. Null when they could not be read. */
   async mySessionTags(): Promise<SessionTag[] | null> {
     const { data, error } = await need().rpc('my_session_tags');
@@ -1998,6 +2208,18 @@ export const remote = {
       })
       .subscribe((status) => { if (status === 'SUBSCRIBED') changed(); });
     return () => { void db.removeChannel(channel); };
+  },
+
+  /**
+   * The trackers function on the server (Fitbit, Oura, Polar; migration 69):
+   * status (which are set up), start (their sign-in page, or {on: false}),
+   * finish (this phone collects a sign-in), sync and disconnect.
+   */
+  async trackers<T = { url?: string; on?: boolean; ok?: boolean; fresh?: ID[] }>(path: 'status' | 'start' | 'finish' | 'sync' | 'disconnect', body: object = {}): Promise<T> {
+    const { data, error } = await need().functions.invoke<T & { error?: string }>(`trackers/${path}`, { body });
+    if (error) throw new Error('That tracker is not reachable right now.');
+    if (data && (data as { error?: string }).error) throw new Error((data as { error?: string }).error);
+    return data as T;
   },
 
   /* ------------------------------------------- tennis sessions (migration 58) */
@@ -2283,6 +2505,9 @@ export const remote = {
       tags: post.tags,
       tagged_user_ids: post.taggedUserIds ?? [],
       created_at: post.createdAt,
+      // A group post must never go up without its group (it would be public),
+      // so this is never dropped like the optional edits below.
+      ...(post.groupId ? { group_id: post.groupId } : {}),
     };
     // The edits a clip carries, only sent when set. Each column came with its
     // own migration; one the database does not know yet is dropped on its
@@ -2335,6 +2560,10 @@ export const remote = {
         dropped.push(...Object.keys(sending));
         for (const key of Object.keys(sending)) delete sending[key];
         continue;
+      }
+      if (post.groupId && /group_id|not_in_group/.test(error.message)) {
+        fail('group post insert')(error);
+        throw new Error(/not_in_group/.test(error.message) ? 'You are not in that group any more.' : 'Groups are not switched on yet. Share it with everyone instead.');
       }
       // Before saying it failed (and you post it again, as a second post): is it there after all?
       if (await landed()) return;
@@ -2879,7 +3108,8 @@ export const auth = {
       const base = (process.env.EXPO_BASE_URL ?? '').replace(/\/$/, '');
       const { error } = await client.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: `${window.location.origin}${base}/` },
+        // Always Google's account chooser, so someone with two Google accounts can pick.
+        options: { redirectTo: `${window.location.origin}${base}/`, queryParams: { prompt: 'select_account' } },
       });
       if (error) throw new Error(error.message);
       return null;
@@ -2887,7 +3117,7 @@ export const auth = {
     const redirectTo = nativeReturnAddress();
     const { data, error } = await client.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo, skipBrowserRedirect: true },
+      options: { redirectTo, skipBrowserRedirect: true, queryParams: { prompt: 'select_account' } },
     });
     if (error) throw new Error(error.message);
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);

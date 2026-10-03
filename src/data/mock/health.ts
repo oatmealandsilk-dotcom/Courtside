@@ -1,39 +1,14 @@
 import { isoDaysAgo } from '@/lib/format';
+import { INTEGRATION_CATALOG } from '@/lib/integrations';
 import type { DailyHealth, Integration } from '../types';
 
-export const integrations: Integration[] = [
-  {
-    provider: 'apple-health',
-    label: 'Apple Health',
-    category: 'wearable',
-    connected: false,
-    provides: ['Sleep', 'HRV', 'Resting heart rate', 'Steps', 'Active energy'],
-    readsWorkouts: true,
-  },
-  {
-    provider: 'whoop',
-    label: 'WHOOP',
-    category: 'wearable',
-    connected: true,
-    lastSyncedAt: isoDaysAgo(0, 5),
-    provides: ['Recovery', 'HRV', 'Resting heart rate', 'Sleep', 'Strain'],
-    readsWorkouts: true,
-  },
-  {
-    provider: 'cronometer',
-    label: 'Cronometer',
-    category: 'nutrition',
-    connected: true,
-    lastSyncedAt: isoDaysAgo(0, 2),
-    provides: ['Calories', 'Protein', 'Carbs', 'Fat'],
-  },  {
-    provider: 'myfitnesspal',
-    label: 'MyFitnessPal',
-    category: 'nutrition',
-    connected: false,
-    provides: ['Calories', 'Protein', 'Carbs', 'Fat'],
-  },
-];
+/** The demo's sources: the full list, with WHOOP and Cronometer already connected. */
+const demoState: Partial<Record<Integration['provider'], Partial<Integration>>> = {
+  'apple-health': { readsWorkouts: true },
+  whoop: { connected: true, lastSyncedAt: isoDaysAgo(0, 5), readsWorkouts: true },
+  cronometer: { connected: true, lastSyncedAt: isoDaysAgo(0, 2) },
+};
+export const integrations: Integration[] = INTEGRATION_CATALOG.map((i) => ({ ...i, provides: [...i.provides], ...demoState[i.provider] }));
 
 function day(offset: number, over: Partial<DailyHealth>): DailyHealth {
   return {

@@ -1,0 +1,123 @@
+import { useEffect, useRef, useState } from 'react';
+
+import type { DetectedActivity, ID, PracticeSession, SessionPlayer } from '@/data/types';
+import { activityDay } from '@/features/activity/format';
+import { andList, canTagKind } from '@/features/activity/sessionTags';
+import { sourceOn } from '@/features/activity/recent';
+import { useTennisFlags } from '@/features/activity/useTennisFlags';
+import { computeStats } from '@/features/practice/stats';
+import { duration } from '@/lib/format';
+import { isSupabaseConfigured } from '@/lib/supabase';
+import { show as showToast } from '@/lib/toast';
+import { useApp } from '@/store/AppContext';
+import { loggedLabel } from './format';
+
+/** What logging a session takes: what it was, a match's result, who you played (tagged, or a name typed). */
+export interface LogInput {
+  kind: PracticeSession['kind'];
+  won?: boolean;
+  players?: SessionPlayer[];
+  opponent?: string;
+  note?: string;
+  /** The length in your log when it differs from the tracker's (a break taken off). Left out: the tracker's time. */
+  minutes?: number;
+}
+
+/**
+ * A tracker's session opened by its id (a "Tennis detected" alert, Log it,
+ * a link from the lock screen): found among yours, or waited for when the
+ * app was opened cold. Asks the server once more if it is still not there,
+ * and gives up after ten seconds rather than spinning for ever. A copy of
+ * one the other tracker saw first (the same game from the watch and from
+ * WHOOP) stands for that one, logged or not. Held still from the moment it arrives, so a refresh of your
+ * sessions while you write cannot change it (`activity`); `live` is how it
+ * stands now (logged, hidden).
+ *
+ * `save` logs it, with who you played, and tells anyone the server would
+ * not tag why.
+ */
+export function useTrackerSession(activityId: ID | undefined) {
+  const { actions, detectedActivities, remoteLoaded, users, currentUserId, sessions, posts, stories } = useApp();
+  const flags = useTennisFlags();
+  const postable = (x: DetectedActivity) => sourceOn(x, flags);
+  const found = activityId ? detectedActivities.find((x) => x.id === activityId) : undefined;
+  // The copy of a game the other tracker saw first stands for it, however that
+  // one stands now: once it is logged, this one shows as logged too (never a
+  // second log of the same game).
+  const twin = found?.status === 'duplicate' && found.duplicateOf ? detectedActivities.find((x) => x.id === found.duplicateOf) : undefined;
+  const live = twin ?? found;
+
+  const [looked, setLooked] = useState(false);
+  const [gaveUp, setGaveUp] = useState(false);
+  useEffect(() => {
+    if (!activityId || found || !remoteLoaded || looked) return;
+    void actions.refreshActivities().finally(() => setLooked(true));
+  }, [activityId, found, remoteLoaded, looked, actions]);
+  useEffect(() => {
+    if (!activityId) return undefined;
+    const t = setTimeout(() => setGaveUp(true), 10_000);
+    return () => clearTimeout(t);
+  }, [activityId]);
+  const waiting = !!activityId && !found && isSupabaseConfigured && !gaveUp && (!remoteLoaded || !looked);
+
+  // Frozen on first arrival, late or not.
+  const [held, setHeld] = useState<DetectedActivity | null>(() => live ?? null);
+  useEffect(() => { if (!held && live) setHeld(live); }, [live?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const activity = held ?? undefined;
+  const gone = !!activityId && !waiting && !live;
+  // Its entry in your log, once it has one.
+  const logged = activity ? sessions.find((s) => s.activityId === activity.id || (!!live?.sessionId && s.id === live.sessionId)) : undefined;
+
+  const firstOf = (id: ID) => users.find((u) => u.id === id)?.name.trim().split(/\s+/)[0] ?? 'They';
+  const saving = useRef(false);
+  /** Logs it (once), then asks each player tagged. Returns the log's id; throws if it did not save. */
+  const save = async (input: LogInput): Promise<ID> => {
+    if (!activity) throw new Error('That session is no longer here.');
+    if (logged) return logged.id;
+    if (saving.current) throw new Error('Saving…');
+    saving.current = true;
+    try {
+      const tagging = canTagKind(input.kind) ? input.players ?? [] : [];
+      const id = await actions.logSession({
+        minutes: input.minutes && input.minutes > 0 ? input.minutes : activity.minutes,
+        kind: input.kind,
+        won: input.kind === 'match' ? input.won : undefined,
+        opponent: canTagKind(input.kind) ? input.opponent ?? '' : '',
+        day: activityDay(activity),
+        activityId: activity.id,
+        ...(input.note ? { note: input.note } : {}),
+      });
+      if (tagging.length) {
+        const refused = await actions.setSessionPlayers(id, tagging).catch(() => []);
+        for (const r of refused) showToast({ title: `${firstOf(r.id)} wasn’t tagged`, body: r.why, icon: 'pricetag-outline' });
+      }
+      return id;
+    } catch (e) {
+      // Logged already (on another phone, say): catch up.
+      if (e instanceof Error && e.message === 'Already logged.') void actions.refreshActivities();
+      throw e;
+    } finally {
+      saving.current = false;
+    }
+  };
+
+  /** The streak once a session on `day` is in your log. */
+  const streakWith = (day: string) => (currentUserId
+    ? computeStats(currentUserId, [{ id: '__new', userId: currentUserId, day, minutes: 1, kind: 'practice', createdAt: new Date().toISOString() }, ...sessions], posts, stories).currentStreakDays
+    : 0);
+
+  return { activity, live, waiting, gone, logged, flags, postable, save, streakWith, askedNames: (players: SessionPlayer[]) => andList(players.map((p) => firstOf(p.id))) };
+}
+
+/**
+ * "Logged · 1h 24m · Match · Won", with the streak beside it from two days
+ * on: the note after a session goes into your log without a post.
+ */
+export function showLogged(minutes: number, s: Pick<PracticeSession, 'kind' | 'won'>, streak: number) {
+  showToast({
+    title: 'Logged',
+    body: `${duration(minutes)} · ${loggedLabel(s)}`,
+    glyph: 'logged',
+    ...(streak >= 2 ? { stat: { value: streak, label: 'day streak' } } : {}),
+  });
+}

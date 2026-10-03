@@ -722,7 +722,7 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
       <View style={styles.grabber} />
       <View style={styles.personRow}>
         <Pressable accessibilityRole="button" accessibilityLabel={ringed && lead ? `Play the newest from ${court.name}` : `Open ${court.name}'s page`} onPress={tapDisc} style={({ pressed }) => [ringed && styles.courtRing, pressed && styles.postedPressed]}>
-          <View style={[styles.courtDisc, closed && styles.courtDiscClosed]}>{closed ? null : <BrandWash />}<Ionicons name="tennisball" size={20} color={closed ? colors.textMuted : colors.brandInk} /></View>
+          <View style={[styles.courtDisc, closed && styles.courtDiscClosed]}>{closed ? null : <BrandWash />}<CourtGlyph size={16} color={closed ? colors.textMuted : colors.brandInk} /></View>
         </Pressable>
         <Pressable accessibilityRole="link" accessibilityLabel={`Open ${court.name}'s page`} onPress={() => openCourt(place)} style={({ pressed }) => [styles.personWords, pressed && styles.postedPressed]}>
           <Text style={styles.personName} numberOfLines={1}>{court.name}</Text>

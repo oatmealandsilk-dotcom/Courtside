@@ -49,26 +49,30 @@ export function Section({ title, hint, right, children }: { title: string; hint?
 }
 
 /** One choice among a few, as the Community tab's chips: the chosen one filled with ink. Tap it again to clear, if clearing is allowed. */
-export function Chips<T extends string>({ options, value, onChange, clearable = false }: { options: { value: T; label: string }[]; value: T | undefined; onChange: (v: T | undefined) => void; clearable?: boolean }) {
+export function Chips<T extends string>({ options, value, onChange, clearable = false, brand = false }: { options: { value: T; label: string }[]; value: T | undefined; onChange: (v: T | undefined) => void; clearable?: boolean; /** The chosen one in the brand colour with a tick (a match's result). */ brand?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.chips} accessibilityRole="radiogroup">
       {options.map((o) => (
-        <Chip key={o.value} label={o.label} selected={value === o.value} tint={colors.text} ink={colors.bg} onPress={() => onChange(clearable && value === o.value ? undefined : o.value)} />
+        <Chip key={o.value} label={o.label} selected={value === o.value} tint={brand ? undefined : colors.text} ink={brand ? colors.brandInk : colors.bg} icon={brand ? 'checkmark' : undefined} onPress={() => onChange(clearable && value === o.value ? undefined : o.value)} />
       ))}
     </View>
   );
 }
 
 /** Choices as small white tiles on a shadow, a top line and a big one: days of the week, lengths of a session. */
-export function Tiles<T extends string | number>({ options, value, onChange, scroll = false, inCard = false }: { options: { value: T; top: string; main: string; label?: string }[]; value: T; onChange: (v: T) => void; scroll?: boolean; inCard?: boolean }) {
+export function Tiles<T extends string | number>({ options, value, onChange, scroll = false, inCard = false }: { options: { value: T; top: string; main: string; label?: string; /** Drawn in place of the two lines (a length as "1h 30m", big figures and small units). */ draw?: (on: boolean) => React.ReactNode }[]; value: T; onChange: (v: T) => void; scroll?: boolean; inCard?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const tiles = options.map((o) => {
     const on = o.value === value;
     return (
       <Pressable key={String(o.value)} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={o.label ?? `${o.top} ${o.main}`} onPress={() => onChange(o.value)} style={({ pressed }) => [styles.tile, inCard && styles.tileInCard, scroll ? styles.tileFixed : styles.tileFlex, on && styles.tileOn, pressed && !on && { opacity: 0.8 }]}>
-        <Text style={[styles.tileTop, on && styles.tileInk]}>{o.top}</Text>
-        <Text style={[styles.tileMain, on && styles.tileInk]}>{o.main}</Text>
+        {o.draw ? o.draw(on) : (
+          <>
+            <Text style={[styles.tileTop, on && styles.tileInk]}>{o.top}</Text>
+            <Text style={[styles.tileMain, on && styles.tileInk]}>{o.main}</Text>
+          </>
+        )}
       </Pressable>
     );
   });

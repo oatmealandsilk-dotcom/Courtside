@@ -12,12 +12,15 @@ import { downloadMedia } from '@/lib/downloadMedia';
 import { goBack } from '@/lib/goBack';
 import { colors, radius, spacing, typography } from '@/theme';
 import { shareLink } from '@/lib/shareLink';
+import { postShareText } from '@/features/share/shareText';
 import { confirm, confirmBlock } from '@/lib/confirm';
 import { notKnownAdult } from '@/features/players/age';
+import { CourtGlyph } from '@/components/map/CourtGlyph';
 
 type Row = {
   key: string;
-  icon: React.ComponentProps<typeof Ionicons>['name'];
+  /** An Ionicon, or 'court' for the court drawn the app's way. */
+  icon: React.ComponentProps<typeof Ionicons>['name'] | 'court';
   label: string;
   note?: string;
   danger?: boolean;
@@ -68,13 +71,13 @@ export default function PostMenu() {
 
   if (!item) return <View style={styles.backdrop}><SheetBackdrop /><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => goBack('/')} style={StyleSheet.absoluteFill} /></View>;
 
-  const url = shareLink('post', item.id);
+  const url = shareLink('post', item.id, currentUser?.handle);
   // A hit is a moment, not a keepsake: nothing to save or send on.
   const rows: Row[] = post ? [
     { key: 'save', icon: isSaved ? 'bookmark' : 'bookmark-outline', label: isSaved ? 'Remove from saved' : 'Save', onPress: () => { actions.toggleSavePost(post.id); close(); } },
     { key: 'send', icon: 'paper-plane-outline', label: 'Send to…', onPress: () => router.replace({ pathname: '/share', params: { kind: 'post', id: post.id } }) },
     { key: 'card', icon: 'image-outline', label: 'Share as image', onPress: () => router.replace({ pathname: '/share-card', params: { id: post.id } }) },
-    { key: 'link', icon: 'link-outline', label: 'Share link', onPress: async () => { try { const note = await shareOutside(post.body || 'A CourtSide post', url); if (note) setDone(note); else close(); } catch { setDone(`Share this link: ${url}`); } } },
+    { key: 'link', icon: 'link-outline', label: 'Share link', onPress: async () => { try { const note = await shareOutside(postShareText(post, users.find((u) => u.id === post.authorId), currentUserId), url); if (note) setDone(note); else close(); } catch { setDone(`Share this link: ${url}`); } } },
   ] : [];
   if (mine && story) {
     rows.push(
@@ -91,7 +94,7 @@ export default function PostMenu() {
       // A place only typed, with no court: one tap to pick the court, so the post shows on its page.
       // Known adults only: a court tag says where a minor regularly plays.
       ...(post.location && !post.court && currentUser && !notKnownAdult(currentUser)
-        ? [{ key: 'court', icon: 'tennisball-outline' as const, label: 'Add the court', note: 'Shows this post on the court’s page.', onPress: () => router.replace({ pathname: '/edit-post', params: { id: post.id, kind: 'post', pickPlace: '1' } }) }]
+        ? [{ key: 'court', icon: 'court' as const, label: 'Add the court', note: 'Shows this post on the court’s page.', onPress: () => router.replace({ pathname: '/edit-post', params: { id: post.id, kind: 'post', pickPlace: '1' } }) }]
         : []),
       { key: 'pin', icon: 'pin-outline', label: post.pinned ? 'Unpin from profile' : 'Pin to profile', note: post.pinned ? undefined : 'Shown first on your profile.', onPress: () => { actions.togglePinPost(post.id); close(); } },
       { key: 'archive', icon: 'archive-outline', label: post.archived ? 'Unarchive' : 'Archive', note: post.archived ? undefined : 'Hidden from everyone; kept in your archive.', onPress: () => { actions.toggleArchivePost(post.id); close(); } },
@@ -126,7 +129,9 @@ export default function PostMenu() {
           </View>
         ) : rows.map((row) => (
           <Pressable key={row.key} accessibilityRole="button" accessibilityLabel={row.label} onPress={() => { void row.onPress(); }} style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
-            <Ionicons name={row.icon} size={22} color={row.danger ? colors.danger : colors.text} />
+            {row.icon === 'court'
+              ? <View style={styles.glyph}><CourtGlyph size={17} color={row.danger ? colors.danger : colors.text} /></View>
+              : <Ionicons name={row.icon} size={22} color={row.danger ? colors.danger : colors.text} />}
             <View style={{ flex: 1 }}>
               <Text style={[styles.label, row.danger && { color: colors.danger }]}>{row.label}</Text>
               {row.note ? <Text style={styles.note}>{row.note}</Text> : null}
@@ -143,6 +148,8 @@ const styleDefinitions = StyleSheet.create({
   sheet: { backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: spacing.md, paddingTop: spacing.sm, gap: 4 },
   grabber: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 13, paddingHorizontal: spacing.sm, borderRadius: radius.md },
+  // The court glyph is narrower than an icon: as wide as one, so the labels line up.
+  glyph: { width: 22, alignItems: 'center' },
   rowPressed: { backgroundColor: colors.surface },
   label: { ...typography.body, fontWeight: '600', color: colors.text },
   note: { ...typography.small, color: colors.textMuted, marginTop: 2 },

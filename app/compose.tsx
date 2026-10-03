@@ -1,19 +1,20 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { Image, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { show as showToast } from '@/lib/toast';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
-import Reanimated, { Easing, FadeInDown, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Reanimated, { Easing, FadeInDown, FadeOut, LinearTransition, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
 import { MediaPicker, pickFromDevice, type PickedMedia } from '@/components/MediaPicker';
 import { MediaEditor, type EditedMedia } from '@/components/MediaEditor';
 import { takePendingShot } from '@/features/compose/pendingShot';
 import { registerCreateClose } from '@/features/compose/createMenu';
 import { SheetBackdrop } from '@/components/SheetBackdrop';
-import { Button, Field, Screen, Toggle } from '@/components/ui';
+import { Button, Chip, Field, Screen, Toggle } from '@/components/ui';
+import { alsoShowsIn } from '@/features/groups/groupFeed';
+import { openGroupFeed } from '@/features/groups/openGroupFeed';
 import { FormRow } from '@/components/FormRow';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { openPlacePicker } from '@/features/places/picker';
@@ -24,6 +25,24 @@ import { pickCaption, statsOf, type SessionPick } from '@/features/activity/rece
 import { openSessionPicker } from '@/features/activity/sessionPicker';
 import { isActive, tagsOnSession } from '@/features/activity/sessionTags';
 import { addToBank, getBank } from '@/features/compose/mediaBank';
+import { Avatar } from '@/components/ui';
+import { Chips } from '@/components/sheet/SheetForm';
+import { trackerName } from '@/features/activity/lengths';
+import { TrackedLength } from '@/components/session/TrackedLength';
+import { LogComposerTop, LogDock, DOCK_ROOM } from '@/components/session/LogComposer';
+import { ZoneGlyph } from '@/components/session/ZoneGlyph';
+import { HealthShareRow } from '@/components/session/HealthShareRow';
+import { availableShare, chosenShare } from '@/features/activity/healthShare';
+import { useHealthChoice } from '@/features/activity/useHealthChoice';
+import type { CardPerson } from '@/components/session/SessionCard';
+import { KIND_LABEL, activityDay, loggedLabel } from '@/features/activity/format';
+import { canTagKind } from '@/features/activity/sessionTags';
+import { showLogged, useTrackerSession } from '@/features/activity/useTrackerSession';
+import { openWhoPlayed } from '@/features/activity/whoPlayedPicker';
+import { hitPrefill, prefillFor } from '@/features/hits/followUp';
+import { confirm } from '@/lib/confirm';
+import * as haptics from '@/lib/haptics';
+import type { PracticeSession, SessionDetail, SessionPlayer } from '@/data/types';
 import { useApp } from '@/store/AppContext';
 import { courtRows, fetchCourts, peekCourts, type Court } from '@/features/players/courts';
 import { labelOf } from '@/features/places/courtName';
@@ -37,8 +56,14 @@ import { goHome } from '@/lib/goBack';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 
 type Mode = 'clip' | 'post' | 'story' | 'hit';
+/** What a session was, the log sheet's four. */
+const KINDS: { value: PracticeSession['kind']; label: string }[] = [
+  { value: 'practice', label: 'Practice' },
+  { value: 'match', label: 'Match' },
+  { value: 'drills', label: 'Drills' },
+  { value: 'fitness', label: 'Fitness' },
+];
 
-const goBackNow = () => router.back();
 /**
  * Posting lands you on the feed, whichever tab (or challenge page) the Create
  * box was opened over, the way Instagram does. The strip across the top
@@ -50,14 +75,14 @@ const goBackNow = () => router.back();
 // A Create box opened as the very first page (a browser refreshed on it) has
 // nothing to close down to: it is swapped for the tabs rather than left under them.
 const landOnFeed = () => { if (router.canDismiss()) goHome(); else router.replace('/(tabs)'); };
+/**
+ * Closing without posting: back to the page underneath, or, when this is the
+ * first page open (a lock-screen alert, a link, a reload), to the tabs; a
+ * plain back has nowhere to go then and leaves a blank screen.
+ */
+const goBackNow = () => { if (router.canGoBack()) router.back(); else landOnFeed(); };
 /** Each choice in the Create box arrives a moment after the one above it. */
 const arrive = (index: number) => FadeInDown.delay(90 + index * 55).duration(260).easing(Easing.out(Easing.cubic));
-/**
- * "Show heart rate" is remembered on this phone for the next session posted,
- * one choice per account: switching accounts on a shared phone must not
- * switch someone else's heart rate on for them.
- */
-const showHrKey = (userId: string) => `courtside-activity-show-hr:${userId}`;
 /** choose → library → form, with back always stepping one page left. */
 type Stage = 'choose' | 'library' | 'edit' | 'form';
 
@@ -76,31 +101,60 @@ type Stage = 'choose' | 'library' | 'edit' | 'form';
  */
 export default function Compose() {
   const styles = useThemedStyles(styleDefinitions);
-  const { actions, posts, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions, sessionTags } = useApp();
+  const { actions, posts, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions, sessionTags, users, hitRequests, blockedIds, feedGroups, feedGroupsOn } = useApp();
 
   // The story rail opens this straight at the library with ?mode=story.
-  const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string; activity?: string; session?: string }>();
-  // The session being posted, held from the moment the page opens so a
+  const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string; activity?: string; session?: string; hit?: string; group?: string }>();
+  // A tracker's session (?activity=, from "Log it"): found among yours, or
+  // waited for when the app was opened cold from an alert (useTrackerSession).
+  const tracker = useTrackerSession(params.activity);
+  // Share to: everyone (the default, which also shows in each of your groups'
+  // feeds, migration 74) or one group only (migration 67). Opened with
+  // ?group=<id>, that group only is picked to start with.
+  const [shareTo, setShareTo] = useState<string | null>(params.group ?? null);
+  // Never falls back to Everyone on its own: a group that is not (or no
+  // longer) yours stops Share instead, so nothing goes public by accident.
+  // Opened from a group's feed, the groups are read first.
+  const [groupsRead, setGroupsRead] = useState(feedGroupsOn !== null);
+  useEffect(() => {
+    if (!params.group || groupsRead) return;
+    let on = true;
+    void actions.loadFeedGroups().catch(() => undefined).finally(() => { if (on) setGroupsRead(true); });
+    return () => { on = false; };
+  }, [params.group]); // eslint-disable-line react-hooks/exhaustive-deps
+  const groupWaiting = !!shareTo && !groupsRead;
+  const groupGone = !!shareTo && groupsRead && !feedGroups.some((g) => g.id === shareTo);
+  // A group post stays out of everything public: no map court, never offered for CourtSide's Instagram.
+  const groupPost = !!shareTo;
+  // The session being posted, held from the moment it is known so a
   // refresh of your sessions in the meantime cannot change what is posted.
-  const [opened] = useState<SessionPick | undefined>(() => {
-    const activity = params.activity ? detectedActivities.find((x) => x.id === params.activity) : undefined;
+  const [opened, setOpened] = useState<SessionPick | undefined>(() => {
+    const activity = tracker.activity;
     if (activity) return { type: 'tracker', activity, session: sessions.find((x) => x.activityId === activity.id) };
     const logged = params.session ? sessions.find((x) => x.id === params.session) : undefined;
     return logged ? { type: 'logged', session: logged } : undefined;
   });
-  // Heart rate only ever goes on a confirmed adult's post.
-  const adult = currentUser?.ageGroup === 'adult';
+  // Arriving late (opened cold): taken the moment it lands, then held.
+  useEffect(() => {
+    const activity = tracker.activity;
+    if (opened || !activity) return;
+    setOpened({ type: 'tracker', activity, session: sessions.find((x) => x.activityId === activity.id) });
+    setAttached(true);
+  }, [tracker.activity?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // "Share health data" starts on for someone known to be an adult, off for
+  // everyone else; anyone can switch it on (owner, Oct 3; migration 72).
+  const adult = !!currentUser && !notKnownAdult(currentUser);
   const [attached, setAttached] = useState(!!opened);
   // One session, one post: whether this one is on a post of yours already.
   // The app may hold only the newest few of your posts, so they are asked
   // for fresh first; Share waits for that answer (or for it to fail).
-  const [postsChecked, setPostsChecked] = useState(!opened);
+  const [postsChecked, setPostsChecked] = useState(!opened && !params.activity);
   useEffect(() => {
     if (!opened) return undefined;
     let on = true;
     void actions.loadMySessionPosts().finally(() => { if (on) setPostsChecked(true); });
     return () => { on = false; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [!!opened]); // eslint-disable-line react-hooks/exhaustive-deps
   const openedPosted = !!opened && posts.some((p) => p.authorId === currentUserId && (opened.type === 'tracker' ? p.session?.activityId === opened.activity.id : p.session?.sessionId === opened.session.id));
   // Already posted: the stats come off, and this can only be a plain post.
   useEffect(() => { if (openedPosted) setAttached(false); }, [openedPosted]);
@@ -109,23 +163,10 @@ export default function Compose() {
   const [statsPick, setStatsPick] = useState<SessionPick | null>(null);
   // Attaching it logged it on the way (a tracker's session nobody had logged).
   const [justLogged, setJustLogged] = useState(false);
-  const [showHr, setShowHr] = useState(false);
-  const hrTouched = useRef(false);
-  // Read once the page opens, whichever way a tracker's session gets attached.
-  useEffect(() => {
-    if (!currentUserId) return;
-    let live = true;
-    try {
-      void AsyncStorage.getItem(showHrKey(currentUserId)).then((v) => { if (live && !hrTouched.current) setShowHr(v === '1'); }).catch(() => undefined);
-    } catch { /* storage unavailable: it starts off */ }
-    return () => { live = false; };
-  }, [currentUserId]);
-  const flipHr = (on: boolean) => {
-    hrTouched.current = true;
-    setShowHr(on);
-    if (!currentUserId) return;
-    try { void AsyncStorage.setItem(showHrKey(currentUserId), on ? '1' : '0').catch(() => undefined); } catch { /* not remembered, still applied */ }
-  };
+  // "Share health data": remembered on this phone for the next post, one choice per account.
+  const [health, setHealth] = useHealthChoice(currentUserId, adult);
+  // The numbers a session's post shares: only a tracker's, only those chosen that it has.
+  const shareFor = (pick: SessionPick) => (pick.type === 'tracker' ? chosenShare(health, availableShare(pick.activity)) : []);
   // Opened from the weekly challenge: its tag starts the caption, which is what makes the clip an entry.
   // A challenge takes a clip and nothing else: no Post, Instant or Thread here,
   // the phone's videos open straight away, and a photo is never taken.
@@ -137,7 +178,7 @@ export default function Compose() {
   const shotUri = params.shot === 'pending' ? takePendingShot() : params.shot;
   const isHit = params.mode === 'hit' && !!shotUri;
   // A session being posted goes straight to the form too: the photo is optional.
-  const [stage, setStage] = useState<Stage>(isHit ? 'form' : opened ? 'form' : 'choose');
+  const [stage, setStage] = useState<Stage>(isHit ? 'form' : opened || params.activity || params.session ? 'form' : 'choose');
   // The courts around you start loading while you pick and edit, so Add
   // location opens on a full list (it asks for the same spot, from the same cache).
   useEffect(() => {
@@ -164,6 +205,8 @@ export default function Compose() {
     ],
   }));
   const dimStyle = useAnimatedStyle(() => ({ opacity: 1 - leave.value }));
+  // The form leaves the same way (Just log it): fading, sinking a little, a touch smaller.
+  const formLeave = useAnimatedStyle(() => ({ opacity: 1 - leave.value, transform: [{ translateY: leave.value * 16 }, { scale: 1 - 0.05 * leave.value }] }));
   // The Create box never runs off a short screen: it is held to the screen's
   // height (inside the notch and home bar), its title and × stay put, and
   // the choices under them scroll if they still don't fit. On a short
@@ -279,10 +322,154 @@ export default function Compose() {
   }, [fromSessionKey]);
   const pickStats = () => openSessionPicker((pick, logged) => { setStatsPick(pick); setJustLogged(logged); });
 
+  /*
+   * "Log it" (Oct 2): a tracker's session opens here, the normal composer,
+   * with the session's card at the top. What is added decides what it is: a
+   * photo makes it a Post, a clip a Clip, nothing at all a Post that is the
+   * session's card. "Just log it" puts it in your log and your streak and
+   * posts nothing. A session logged already ("Post it", "Try again") has
+   * nothing left to choose: Share alone.
+   */
+  const fromHit = useState(() => {
+    if (!params.hit) return null;
+    const known = hitPrefill(params.hit);
+    if (known) return known;
+    const h = hitRequests.find((x) => x.id === params.hit);
+    return h && currentUserId ? prefillFor(h, currentUserId, users) : null;
+  })[0];
+  const logNow = !!params.activity && !openedPosted && (opened?.type === 'tracker' || (!opened && tracker.waiting));
+  // Once the session has opened here, this stays the "Log it" page: Share
+  // posts it, which would otherwise turn it into the plain composer (stats
+  // taken off) for the moment it takes to close.
+  const wasLog = useRef(false);
+  if (logNow && opened) wasLog.current = true;
+  const logMode = logNow || wasLog.current;
+  // Logged before this page opened: what it was is already said.
+  const openedLog = opened?.type === 'tracker' ? opened.session : undefined;
+  const [kind, setKind] = useState<PracticeSession['kind']>(fromHit?.kind ?? 'practice');
+  const [won, setWon] = useState<'won' | 'lost' | null>(null);
+  // How long, in your log (Oct 3): simply the tracker's time, shown as one
+  // line; a small Edit opens hours and minutes steppers, for a break taken off.
+  // The post keeps the tracker's own time (the server writes it, migration 65).
+  const [logMinutes, setLogMinutes] = useState<number | null>(null);
+  const [editLength, setEditLength] = useState(false);
+  const [players, setPlayers] = useState<SessionPlayer[]>([]);
+  const [opponentText, setOpponentText] = useState('');
+  const [busy, setBusy] = useState<null | 'log' | 'share'>(null);
+  const [ticked, setTicked] = useState(false);
+  const [logError, setLogError] = useState('');
+  const keysUp = useKeysUp();
+  const shownKind = openedLog?.kind ?? kind;
+  const shownWon = openedLog ? (openedLog.kind === 'match' ? openedLog.won : undefined) : kind === 'match' && won ? won === 'won' : undefined;
+  const sessionFor = (logId?: string): SessionDetail | null => (opened?.type === 'tracker' ? {
+    ...statsOf(opened, shareFor(opened)),
+    kind: shownKind,
+    focus: loggedLabel({ kind: shownKind, won: shownWon }),
+    ...(shownWon !== undefined ? { won: shownWon } : {}),
+    ...(logId ? { sessionId: logId } : {}),
+  } : null);
+  const cardSession = logMode ? sessionFor() : null;
+  // Who you played, as the card shows it to you: those still to accept, faded.
+  const cardPeople: CardPerson[] | undefined = !logMode ? undefined : openedLog && currentUserId
+    ? tagsOnSession(sessionTags, openedLog.id, currentUserId).filter(isActive).flatMap((t) => {
+      const u = users.find((x) => x.id === t.taggedId);
+      return u ? [{ id: u.id, handle: u.handle, name: u.name, role: t.role, pending: t.status !== 'accepted' }] : [];
+    })
+    : players.flatMap((p) => {
+      const u = users.find((x) => x.id === p.id);
+      return u ? [{ id: u.id, handle: u.handle, name: u.name, role: p.role, pending: true }] : [];
+    });
+  // "Practice — how did it go?": the hint follows what it was, never a time
+  // of day. Left empty, the post says the day instead ("Saturday match").
+  const logHint = opened?.type === 'tracker' ? KIND_LABEL[shownKind] : '';
+  const logCaption = opened?.type === 'tracker'
+    ? `${new Date(`${activityDay(opened.activity)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })} ${KIND_LABEL[shownKind].toLowerCase()}`
+    : '';
+  const logInput = () => ({
+    kind,
+    won: kind === 'match' && won ? won === 'won' : undefined,
+    players: canTagKind(kind) ? players : [],
+    // From a hit with nobody tagged and nothing typed, its people's names are kept as private words, as before.
+    opponent: canTagKind(kind) ? (opponentText.trim() || (fromHit && !players.length ? fromHit.who : '')) : '',
+    note: fromHit ? `At ${fromHit.place}` : undefined,
+    ...(opened?.type === 'tracker' && logMinutes && logMinutes !== opened.activity.minutes ? { minutes: logMinutes } : {}),
+  });
+  // "Mira +1" with Mira's face; a clock while she has not accepted yet.
+  const whoFirst = players.length ? users.find((u) => u.id === players[0].id) : undefined;
+  const whoValue = (() => {
+    if (!players.length) return opponentText.trim() || undefined;
+    const name = whoFirst ? whoFirst.name.trim().split(/\s+/)[0] || `@${whoFirst.handle}` : 'Someone';
+    return players.length > 1 ? `${name} +${players.length - 1}` : name;
+  })();
+  const whoAccessory = players.length && whoValue ? (
+    <View pointerEvents="none" style={styles.who} aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      {whoFirst ? <Avatar name={whoFirst.name} seed={whoFirst.avatarSeed} uri={whoFirst.avatarUrl} size={24} /> : null}
+      <Text style={styles.whoName} numberOfLines={1}>{whoValue}</Text>
+      <Ionicons name="time-outline" size={14} color={colors.textFaint} />
+    </View>
+  ) : null;
+  const pickWho = () => openWhoPlayed({
+    kind,
+    players,
+    text: opponentText,
+    suggested: fromHit?.playerIds ?? [],
+    onDone: (next, text) => { setPlayers(next); setOpponentText(text); },
+  });
+  const added = !!body.trim() || !!media;
+  // One of Just log it and Share at a time, held from the first tap (the
+  // `busy` state is a frame behind a quick second tap).
+  const acting = useRef(false);
+  // Just log it: into your log and your streak, nothing posted. A tick, a buzz, and the page sinks away.
+  const runJustLog = async () => {
+    if (acting.current || ticked || opened?.type !== 'tracker') return;
+    acting.current = true;
+    const activity = opened.activity;
+    setBusy('log');
+    setLogError('');
+    const input = logInput();
+    try {
+      try { await tracker.save(input); } catch (e) {
+        // Logged already (on another phone, say): that is what was asked for.
+        if (!(e instanceof Error && e.message === 'Already logged.')) throw e;
+      }
+      setBusy(null);
+      setTicked(true);
+      const streak = tracker.streakWith(activityDay(activity));
+      setTimeout(() => {
+        haptics.reward();
+        closeMenu();
+        showLogged(input.minutes ?? activity.minutes, { kind: input.kind, won: input.won }, streak);
+      }, 300);
+    } catch {
+      acting.current = false;
+      setBusy(null);
+      setLogError('That session didn’t save. Try again.');
+    }
+  };
+  const justLog = () => {
+    if (!added) { void runJustLog(); return; }
+    confirm({
+      title: 'Just log it?',
+      message: media?.kind === 'video' ? 'Your caption and clip won’t be posted.' : media ? 'Your caption and photo won’t be posted.' : 'Your caption won’t be posted.',
+      confirmLabel: 'Log it',
+      onConfirm: () => { void runJustLog(); },
+    });
+  };
+  // × logs nothing: the session stays "Not logged yet". Anything written or added is asked about first.
+  const leaveLog = () => {
+    if (!added || ticked) { goBackNow(); return; }
+    confirm({ title: 'Discard post?', confirmLabel: 'Discard', destructive: true, onConfirm: goBackNow });
+  };
+  const hideIt = () => {
+    if (opened?.type !== 'tracker') return;
+    const id = opened.activity.id;
+    confirm({ title: 'Hide this session?', message: 'It won’t count toward your streak.', confirmLabel: 'Hide', destructive: true, onConfirm: () => { actions.dismissActivity(id); goBackNow(); } });
+  };
+
   // A quick second tap on Share would post it twice.
   const sent = useRef(false);
   const submit = () => {
-    if (!canSubmit || sent.current) return;
+    if (!canSubmit || groupWaiting || groupGone || sent.current) return;
     sent.current = true;
 
     if (mode === 'story' || mode === 'hit') {
@@ -296,6 +483,8 @@ export default function Compose() {
       landOnFeed();
       return;
     }
+
+    if (opened && logMode) { void shareFromLog(); return; }
 
     if (opened) {
       // The stats go on only while attached (and never twice: once your posts
@@ -312,16 +501,17 @@ export default function Compose() {
         tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
         taggedUserIds: tagged.length ? tagged : undefined,
         location: location.trim() || undefined,
-        court: location.trim() && court ? court : undefined,
-        featureOk: stats ? false : featureOk ? undefined : false,
+        court: location.trim() && court && !groupPost ? court : undefined,
+        featureOk: stats || groupPost ? false : featureOk ? undefined : false,
+        groupId: shareTo ?? undefined,
         imageUrl: media?.kind === 'photo' ? media.uri : undefined,
         videoUrl: media?.kind === 'video' ? media.uri : undefined,
         mediaLabel: media?.label,
         thumbnailUrl: media?.thumbnailUrl ?? (media?.kind === 'photo' ? media.uri : undefined),
-        session: stats ? statsOf(opened, showHr, adult) : undefined,
+        session: stats ? statsOf(opened, shareFor(opened)) : undefined,
       });
       const firstPost = !posts.some((p) => p.authorId === currentUserId);
-      landOnFeed();
+      if (shareTo) openGroupFeed(shareTo); else landOnFeed();
       if (firstPost) setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800);
       return;
     }
@@ -330,7 +520,7 @@ export default function Compose() {
     // A session from "Add session stats" rides on the Post or Clip, which stays
     // a Post or a Clip (and lands under Posts or Clips on the profile). Like a
     // post made from a session, it is never offered for CourtSide's Instagram.
-    const stats = statsRow && statsPick ? statsOf(statsPick, showHr, adult) : undefined;
+    const stats = statsRow && statsPick ? statsOf(statsPick, shareFor(statsPick)) : undefined;
     actions.addPost({
       kind: mode === 'clip' ? 'clip' : 'note',
       orientation,
@@ -340,8 +530,9 @@ export default function Compose() {
       tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
       taggedUserIds: tagged.length ? tagged : undefined,
       location: location.trim() || undefined,
-      court: location.trim() && court ? court : undefined,
-      featureOk: stats ? false : featureOk ? undefined : false,
+      court: location.trim() && court && !groupPost ? court : undefined,
+      featureOk: stats || groupPost ? false : featureOk ? undefined : false,
+      groupId: shareTo ?? undefined,
       imageUrl: media?.kind === 'photo' ? media.uri : undefined,
       videoUrl: media?.kind === 'video' ? media.uri : undefined,
       mediaLabel: media?.label,
@@ -354,6 +545,56 @@ export default function Compose() {
     // The first post is the moment to ask who they hit with, but only after
     // they have seen it go up: a light nudge on the feed, not a whole screen.
     const firstPost = !posts.some((p) => p.authorId === currentUserId);
+    if (shareTo) openGroupFeed(shareTo); else landOnFeed();
+    if (firstPost) setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800);
+  };
+
+  // Share from "Log it": log it first (unless it already is), then post it with the log's
+  // kind and result for the first draw; the server writes them again from the log (migration 65).
+  const shareFromLog = async () => {
+    if (opened?.type !== 'tracker' || acting.current) { sent.current = false; return; }
+    acting.current = true;
+    const activity = opened.activity;
+    setBusy('share');
+    setLogError('');
+    let logId = openedLog?.id ?? tracker.logged?.id;
+    if (!logId) {
+      try { logId = await tracker.save(logInput()); } catch (e) {
+        // Logged already on another phone: post it all the same; the server
+        // finds that log and puts what it says on the post (migration 65).
+        if (!(e instanceof Error && e.message === 'Already logged.')) {
+          setBusy(null);
+          setLogError('That session didn’t save. Try again.');
+          sent.current = false;
+          acting.current = false;
+          return;
+        }
+      }
+    }
+    const firstPost = !posts.some((p) => p.authorId === currentUserId);
+    try {
+      actions.addPost({
+        kind: openedClip ? 'clip' : 'note',
+        orientation,
+        trimStart: edit.trimStart, trimEnd: edit.trimEnd, muted: edit.muted, volume: edit.volume, speed: edit.speed, crop: edit.crop,
+        body: body.trim() || logCaption,
+        tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map((tag) => tag.slice(1).toLowerCase()))),
+        taggedUserIds: tagged.length ? tagged : undefined,
+        location: location.trim() || undefined,
+        court: location.trim() && court ? court : undefined,
+        featureOk: false,
+        imageUrl: media?.kind === 'photo' ? media.uri : undefined,
+        videoUrl: media?.kind === 'video' ? media.uri : undefined,
+        mediaLabel: media?.label,
+        thumbnailUrl: media?.thumbnailUrl ?? (media?.kind === 'photo' ? media.uri : undefined),
+        session: sessionFor(logId) ?? undefined,
+      });
+    } catch {
+      // Logged, but the post did not go: the session waits in Your sessions, ready to post.
+      landOnFeed();
+      showToast({ title: 'Logged. The post didn’t go up.', icon: 'alert-circle-outline', action: { label: 'Try again', onPress: () => router.push({ pathname: '/compose', params: { activity: activity.id } }) } });
+      return;
+    }
     landOnFeed();
     if (firstPost) setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800);
   };
@@ -368,6 +609,8 @@ export default function Compose() {
     setMedia(next);
     setOrientation(next.orientation ?? 'portrait');
     setEdit({});
+    // Back from the editor, "Log it" shows the length as its one line again.
+    setEditLength(false);
     // A clip or photo goes through the edit step first; a hit already has its shot.
     setStage(mode === 'hit' ? 'form' : 'edit');
   };
@@ -423,6 +666,42 @@ export default function Compose() {
     const fallback = setTimeout(open, 700);
     return () => { opened = true; clearTimeout(fallback); stop(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Where it was: "Played at …?" when you are standing at a court, or Add location.
+  const placeRows = (
+    <>
+                  {!location && nearCourt && !nearWaved && (mode === 'post' || mode === 'clip' || logMode) ? (
+                    <FormRow
+                      line
+                      lead={<CourtGlyph size={16} color={colors.brand} />}
+                      label={`Played at ${nearCourt.name}?`}
+                      accessibilityLabel={`Played at ${nearCourt.name}? Tap to tag it`}
+                      onPress={() => { setLocation(nearCourt.name); setCourt(nearCourt); }}
+                      control={
+                        <Pressable accessibilityRole="button" accessibilityLabel="Not this court" hitSlop={12} onPress={() => setNearWaved(true)}>
+                          <Ionicons name="close" size={18} color={colors.textFaint} />
+                        </Pressable>
+                      }
+                    />
+                  ) : null}
+                  {location ? (
+                    <FormRow
+                      line
+                      lead={court ? <CourtGlyph size={16} color={colors.brand} /> : <Ionicons name="location" size={20} color={colors.brand} />}
+                      label={location}
+                      accessibilityLabel={`Location: ${location}. Tap to change it`}
+                      onPress={() => openPlacePicker((value, picked) => { setLocation(value); setCourt(picked ?? null); }, location)}
+                      control={
+                        <Pressable accessibilityRole="button" accessibilityLabel="Remove location" hitSlop={12} onPress={() => { setLocation(''); setCourt(null); }}>
+                          <Ionicons name="close-circle" size={18} color={colors.textFaint} />
+                        </Pressable>
+                      }
+                    />
+                  ) : (
+                    <FormRow line icon="location-outline" label="Add location" chevron onPress={() => openPlacePicker((value, picked) => { setLocation(value); setCourt(picked ?? null); }, location)} />
+                  )}
+    </>
+  );
 
   if (stage === 'choose') return <View style={styles.choiceBackdrop}>
     <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimStyle]}><SheetBackdrop /></Reanimated.View>
@@ -549,6 +828,94 @@ export default function Compose() {
     );
   }
 
+  if (logMode) {
+    const logFromSession = openedLog ? fromSession : players.map((p) => ({ id: p.id, accepted: false }));
+    return (
+      <View style={styles.backdrop}>
+        <SheetBackdrop />
+        <Reanimated.View style={[styles.sheet, formLeave]}>
+          <Screen
+            // Still "New post" with a clip on it (owner, Oct 3): the page stays the same page.
+            title="New post"
+            compactTitle
+            bar={false}
+            onBack={leaveLog}
+            // The dock has Share; while the keyboard hides the dock, Share is up here.
+            right={keysUp ? <Button label="Share" variant="secondary" onPress={submit} disabled={!opened || !postsChecked || !!busy || ticked} /> : undefined}
+          >
+            <View style={styles.logTop}>
+              <LogComposerTop
+                session={cardSession}
+                people={cardPeople}
+                hidden={blockedIds}
+                waiting={!opened}
+                media={media}
+                preparing={preparing}
+                prepDone={prepDone}
+                onPhoto={() => { void openDevice('all'); }}
+                onClip={() => { void openDevice('video'); }}
+                onEdit={() => setStage('edit')}
+                onRemove={() => { setMedia(null); setPicked(null); setEdit({}); }}
+                error={pickError}
+                // With a photo or clip, the top is the post as the feed will show it, caption and all.
+                preview={{ orientation, edit, author: currentUser ?? undefined, caption: body.trim() || logCaption, captionIsDefault: !body.trim(), location: location.trim() || undefined }}
+              />
+            </View>
+            <View style={styles.logCaption}>
+              {currentUser ? <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={30} style={styles.logAvatar} /> : null}
+              <View style={styles.flex}>
+                <Field bare accessibilityLabel="Caption" value={body} onChangeText={setBody} placeholder={`${logHint} — how did it go?`} multiline minHeight={44} mentions />
+              </View>
+            </View>
+            {openedLog ? null : (
+              <Reanimated.View layout={LinearTransition.duration(220)} style={styles.logChips}>
+                <Chips value={kind} onChange={(k) => { if (!k) return; setKind(k); if (k !== 'match') setWon(null); }} options={KINDS} />
+                {kind === 'match' ? (
+                  <Reanimated.View entering={FadeInDown.duration(220).easing(Easing.bezier(0.32, 0.72, 0, 1))} exiting={FadeOut.duration(160)}>
+                    <Chips brand clearable value={won ?? undefined} onChange={(v) => setWon(v ?? null)} options={[{ value: 'won', label: 'Won' }, { value: 'lost', label: 'Lost' }]} />
+                  </Reanimated.View>
+                ) : null}
+              </Reanimated.View>
+            )}
+            {opened?.type === 'tracker' && !openedLog ? (
+              <Reanimated.View layout={LinearTransition.duration(220)} style={styles.lengthBox}>
+                <TrackedLength
+                  minutes={logMinutes ?? opened.activity.minutes}
+                  trackerMinutes={opened.activity.minutes}
+                  tracker={trackerName(opened.activity)}
+                  open={editLength}
+                  onOpen={setEditLength}
+                  onChange={(m) => setLogMinutes(m === opened.activity.minutes ? null : m)}
+                  hint={`Change it if you took a break. Your post keeps ${trackerName(opened.activity)}’s time.`}
+                />
+              </Reanimated.View>
+            ) : null}
+            <Reanimated.View layout={LinearTransition.duration(220)} style={styles.logRows}>
+              {!openedLog && canTagKind(kind) ? (
+                <FormRow icon="people-outline" label="Who you played" value={whoAccessory ? undefined : whoValue} accessory={whoAccessory} accessibilityLabel={whoValue ? `Who you played, ${whoValue}${players.length ? ', waiting to accept' : ''}` : 'Who you played'} chevron onPress={pickWho} />
+              ) : null}
+              {opened?.type === 'tracker' ? (
+                <HealthShareRow line={!openedLog && canTagKind(kind)} activity={opened.activity} choice={health} onChoice={setHealth} />
+              ) : null}
+              {placeRows}
+              {/* With a photo or a clip there is someone to tag in it; without, "Who you played" is the only people row. */}
+              {media ? <TagPlayers variant="row" label="Tag people" tagged={tagged} onChange={setTagged} fromSession={logFromSession} /> : null}
+            </Reanimated.View>
+            {opened?.type === 'tracker' && !openedLog && opened.activity.status === 'new' ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Not tennis? Hide this session" hitSlop={8} onPress={hideIt} style={({ pressed }) => [styles.hideIt, pressed && { opacity: 0.6 }]}>
+                <Text style={styles.hideItText}>Not tennis? Hide it</Text>
+              </Pressable>
+            ) : null}
+            <View style={{ height: DOCK_ROOM + insets.bottom }} />
+          </Screen>
+          {keysUp ? null : (
+            <LogDock canJustLog={!openedLog} busy={busy} ticked={ticked} error={logError} onJustLog={justLog} onShare={submit} shareDisabled={!opened || !postsChecked} />
+          )}
+        </Reanimated.View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.backdrop, mode === 'hit' && { backgroundColor: colors.bg }]}>
       {mode === 'hit' ? null : <SheetBackdrop />}
@@ -556,18 +923,19 @@ export default function Compose() {
         <Screen
           title={mode === 'clip' || openedClip ? 'New clip' : mode === 'post' ? 'New post' : mode === 'story' ? 'New story' : 'New instant'}
           compactTitle
-          onBack={() => (mode === 'hit' ? router.navigate('/hit') : opened && !media ? router.back() : setStage('edit'))}
-          right={<Button label={mode === 'story' || mode === 'hit' ? 'Post instant' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit} />}
+          onBack={() => (mode === 'hit' ? router.navigate('/hit') : opened && !media ? goBackNow() : setStage('edit'))}
+          right={<Button label={mode === 'story' || mode === 'hit' ? 'Post instant' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit || groupWaiting || groupGone} />}
         >
           <View style={mode === 'story' || mode === 'hit' ? styles.form : null}>
+            {/* Opened for a tracker's session that never came (hidden, gone after 30 days): a plain new post. */}
+            {params.activity && !opened && !tracker.waiting ? <Text style={styles.goneNote}>That session is no longer here.</Text> : null}
             {opened ? (
               <AttachSessionStats
                 pick={opened}
                 attached={withStats}
                 onAttach={setAttached}
-                adult={adult}
-                showHr={showHr}
-                onShowHr={flipHr}
+                health={health}
+                onHealth={setHealth}
                 posted={openedPosted}
                 loggedMinutes={opened.type === 'tracker' ? sessions.find((x) => x.activityId === opened.activity.id)?.minutes : undefined}
               />
@@ -624,42 +992,27 @@ export default function Compose() {
                     <Text style={styles.challengeChipText}>Entering {challenge.title}</Text>
                   </View>
                 ) : null}
+                {/* Share to: shown once you are in a group. Everyone is the default, and it reaches your groups too; "Only <group>" is the private choice. */}
+                {(feedGroups.length || shareTo) && !inChallenge ? (
+                  <View style={styles.shareTo} accessibilityRole="radiogroup" accessibilityLabel="Share to">
+                    <Text style={styles.shareToLabel}>Share to</Text>
+                    <View style={styles.shareToChips}>
+                      <Chip label="Everyone" selected={!shareTo} onPress={() => setShareTo(null)} />
+                      {feedGroups.map((g) => <Chip key={g.id} label={`Only ${g.name}`} selected={shareTo === g.id} onPress={() => setShareTo(g.id)} />)}
+                    </View>
+                    {groupWaiting ? <Text style={styles.shareToNote}>Checking your groups…</Text>
+                      : groupGone ? <Text style={styles.shareToNote}>You're not in that group any more. Pick Everyone or one of your groups to share.</Text>
+                      : shareTo ? <Text style={styles.shareToNote}>Only people in {feedGroups.find((g) => g.id === shareTo)?.name ?? 'the group'} will see this.</Text>
+                      : feedGroups.length ? <Text style={styles.shareToNote}>{`Everyone · also shows in ${alsoShowsIn(feedGroups)}`}</Text> : null}
+                  </View>
+                ) : null}
                 {/* One list of rows, the Settings rows' size without their card. */}
                 <View style={styles.rows}>
                   <TagPlayers variant="row" tagged={tagged} onChange={setTagged} fromSession={fromSession} />
-                  {!location && nearCourt && !nearWaved && (mode === 'post' || mode === 'clip') ? (
-                    <FormRow
-                      line
-                      lead={<CourtGlyph size={16} color={colors.brand} />}
-                      label={`Played at ${nearCourt.name}?`}
-                      accessibilityLabel={`Played at ${nearCourt.name}? Tap to tag it`}
-                      onPress={() => { setLocation(nearCourt.name); setCourt(nearCourt); }}
-                      control={
-                        <Pressable accessibilityRole="button" accessibilityLabel="Not this court" hitSlop={12} onPress={() => setNearWaved(true)}>
-                          <Ionicons name="close" size={18} color={colors.textFaint} />
-                        </Pressable>
-                      }
-                    />
-                  ) : null}
-                  {location ? (
-                    <FormRow
-                      line
-                      lead={court ? <CourtGlyph size={16} color={colors.brand} /> : <Ionicons name="location" size={20} color={colors.brand} />}
-                      label={location}
-                      accessibilityLabel={`Location: ${location}. Tap to change it`}
-                      onPress={() => openPlacePicker((value, picked) => { setLocation(value); setCourt(picked ?? null); }, location)}
-                      control={
-                        <Pressable accessibilityRole="button" accessibilityLabel="Remove location" hitSlop={12} onPress={() => { setLocation(''); setCourt(null); }}>
-                          <Ionicons name="close-circle" size={18} color={colors.textFaint} />
-                        </Pressable>
-                      }
-                    />
-                  ) : (
-                    <FormRow line icon="location-outline" label="Add location" chevron onPress={() => openPlacePicker((value, picked) => { setLocation(value); setCourt(picked ?? null); }, location)} />
-                  )}
+                  {placeRows}
                   {/* A Post or a Clip can carry one of your sessions: a row to pick it, then its stats in the row's place. */}
                   {statsRow && !statsPick ? (
-                    <FormRow line icon="tennisball-outline" label="Add session stats" chevron onPress={pickStats} />
+                    <FormRow line icon="stopwatch-outline" label="Add session stats" chevron onPress={pickStats} />
                   ) : null}
                   {statsRow && statsPick ? (
                     <View style={styles.statsCard}>
@@ -669,9 +1022,8 @@ export default function Compose() {
                         attached
                         onAttach={(on) => { if (!on) { setStatsPick(null); setJustLogged(false); } }}
                         onChange={pickStats}
-                        adult={adult}
-                        showHr={showHr}
-                        onShowHr={flipHr}
+                        health={health}
+                        onHealth={setHealth}
                         posted={false}
                         loggedMinutes={statsPick.type === 'tracker' ? statsPick.session?.minutes : undefined}
                         justLogged={justLogged}
@@ -704,7 +1056,7 @@ export default function Compose() {
                     }
                   />}
                   {/* A post with session stats is never offered for CourtSide's Instagram. */}
-                  {(opened && withStats) || (statsRow && statsPick) ? null : <FormRow
+                  {(opened && withStats) || (statsRow && statsPick) || groupPost ? null : <FormRow
                     line
                     icon="megaphone-outline"
                     label="Feature on CourtSide's Instagram"
@@ -763,6 +1115,10 @@ const styleDefinitions = StyleSheet.create({
   // A clip or post: the caption 24 under the preview, the challenge chip 8
   // under that, and the rows 16 under whichever is last.
   caption: { marginTop: spacing.xl },
+  shareTo: { gap: spacing.sm, marginTop: spacing.md },
+  shareToLabel: { ...typography.smallStrong, color: colors.textMuted },
+  shareToChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  shareToNote: { ...typography.small, color: colors.textMuted },
   challengeChip: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, marginTop: spacing.sm, paddingVertical: 5, paddingHorizontal: 10, borderRadius: radius.pill, backgroundColor: colors.brandDim },
   challengeChipText: { ...typography.smallStrong, color: colors.brand },
   rows: { marginTop: spacing.lg },
@@ -777,6 +1133,20 @@ const styleDefinitions = StyleSheet.create({
   addMedia: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 56, paddingHorizontal: spacing.lg, borderRadius: radius.lg, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderStrong },
   addMediaText: { ...typography.body, color: colors.textMuted, flexShrink: 1 },
   addMediaError: { marginTop: spacing.sm },
+  // "Log it": the card and its tiles, the caption beside your picture, the chips, the rows.
+  logTop: { marginTop: spacing.sm },
+  goneNote: { ...typography.smallStrong, color: colors.text, marginTop: spacing.sm, marginBottom: spacing.md },
+  logCaption: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, marginTop: spacing.xl, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  logAvatar: { marginTop: 6 },
+  flex: { flex: 1 },
+  logChips: { gap: spacing.md, marginTop: spacing.lg },
+  who: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 170 },
+  whoName: { ...font('600'), fontSize: 15, color: colors.text, flexShrink: 1 },
+  logRows: { marginTop: spacing.md },
+  // How long: the tracker's time on one line, with a small Edit (TrackedLength, as Log your tennis has it).
+  lengthBox: { marginTop: spacing.lg },
+  hideIt: { alignSelf: 'center', paddingVertical: spacing.lg },
+  hideItText: { ...font('600'), fontSize: 13, color: colors.textMuted },
   hitFrame: { width: '100%', aspectRatio: 4 / 3, maxHeight: 520, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000', alignSelf: 'center' },
   hitMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   hitPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: colors.brand, backgroundColor: colors.brandDim },
@@ -787,3 +1157,16 @@ const styleDefinitions = StyleSheet.create({
   tile: { width: '32.5%', aspectRatio: 9 / 12, borderRadius: radius.sm, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
   tileBadge: { position: 'absolute', right: 6, bottom: 6, textShadowColor: '#0008', textShadowRadius: 3 },
 });
+
+/** Whether the phone's keyboard is up (never, in a browser): the composer's dock steps aside for it. */
+function useKeysUp(): boolean {
+  const [up, setUp] = useState(false);
+  useEffect(() => {
+    if (Platform.OS === 'web') return undefined;
+    const ios = Platform.OS === 'ios';
+    const a = Keyboard.addListener(ios ? 'keyboardWillShow' : 'keyboardDidShow', () => setUp(true));
+    const b = Keyboard.addListener(ios ? 'keyboardWillHide' : 'keyboardDidHide', () => setUp(false));
+    return () => { a.remove(); b.remove(); };
+  }, []);
+  return up;
+}

@@ -111,22 +111,27 @@ export async function pickPhotos(limit: number): Promise<PickedPhoto[] | null> {
 }
 
 /**
- * In Expo Go a picked video is converted by the iPhone itself to standard
- * 720p H.264 before it is handed over: several times smaller than the raw
- * file (often 4K), quicker to upload and to watch, and playable on every
- * phone and browser (the raw file is often HEVC, which some Android phones
- * and browsers cannot play). A video the phone has offloaded to iCloud is
- * fetched automatically when converting. Photos are handed over as they are.
+ * A picked video is always converted by the iPhone itself to standard
+ * H.264 before it is handed over: playable on every phone and browser (the
+ * raw file is often HEVC, which some Android phones and browsers cannot
+ * play). A video the phone has offloaded to iCloud is fetched automatically
+ * when converting. Photos are handed over as they are.
  *
- * The App Store build carries its own compressor (see shrinkVideo), which
- * shrinks the video while it uploads, the way Instagram does — so there the
- * picker hands the video over as it is, with no "Preparing video" wait.
+ * The conversion also turns an HDR clip into a normal (SDR) one. iPhones
+ * film in HDR by default, and an HDR clip shows black or glitchy in most
+ * browsers. Apple's H.264 conversions always produce SDR; handing the raw
+ * file to the compressor (see shrinkVideo) did not, because it keeps the
+ * clip's HDR colour labels — which is how HDR posts reached the website.
+ *
+ * In Expo Go the conversion is to 720p: about half the bytes and half the
+ * wait, and a minute of it fits under the 50 MB upload cap. The App Store
+ * build converts to 1080p and then its own compressor shrinks it while it
+ * uploads, the way Instagram does.
  */
 const AS_IS = {
   preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current,
-  // 720p, not 1080p: about half the bytes and half the wait, and a minute of
-  // it fits under the 50 MB upload cap; on a phone the difference is hard to see.
-  videoExportPreset: canShrinkVideo() ? ImagePicker.VideoExportPreset.Passthrough : ImagePicker.VideoExportPreset.H264_1280x720,
+  // Never Passthrough: that hands over the raw file, HDR and all.
+  videoExportPreset: canShrinkVideo() ? ImagePicker.VideoExportPreset.H264_1920x1080 : ImagePicker.VideoExportPreset.H264_1280x720,
   shouldDownloadFromNetwork: true,
   // Full screen, not a card: a card leaves the composer showing behind it, so
   // the "Preparing video" note was read once while choosing and again while

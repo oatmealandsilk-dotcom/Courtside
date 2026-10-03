@@ -6,7 +6,138 @@ import { DEMO_PARK } from './courts';
 /** A demo park as a post's court tag. */
 const courtTag = (n: number) => { const c = DEMO_PARK(n); return { id: c.id, name: c.name ?? 'Public courts', lat: c.lat, lng: c.lng }; };
 
+/** Day `n` days ago as 'YYYY-MM-DD' on this phone's clock. */
+const dayAgo = (n: number) => { const d = new Date(Date.now() - n * 86_400_000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+/**
+ * A court at dusk, drawn rather than shipped (the demo ships no pictures):
+ * for a photo post with a session on it, so the strip under a photo shows.
+ */
+const DUSK_COURT = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1000" viewBox="0 0 800 1000">
+<defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E9A27A"/><stop offset="0.55" stop-color="#F3D2A6"/><stop offset="1" stop-color="#F6E3C4"/></linearGradient>
+<linearGradient id="c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3D6E8F"/><stop offset="1" stop-color="#2B5876"/></linearGradient></defs>
+<rect width="800" height="1000" fill="url(#s)"/>
+<path d="M0 360 L120 300 L230 340 L360 270 L470 330 L590 280 L700 320 L800 290 L800 430 L0 430 Z" fill="#9C8B6E" opacity="0.55"/>
+<rect x="0" y="420" width="800" height="70" fill="#4E6E52"/>
+<rect x="0" y="470" width="800" height="530" fill="#5D8A62"/>
+<path d="M210 500 L590 500 L760 1000 L40 1000 Z" fill="url(#c)"/>
+<g stroke="#FFFFFF" stroke-width="5" fill="none" opacity="0.92">
+<path d="M210 500 L590 500 L760 1000 L40 1000 Z"/><path d="M250 500 L120 1000"/><path d="M550 500 L680 1000"/>
+<path d="M196 620 L604 620"/><path d="M80 880 L720 880"/><path d="M400 620 L400 880"/></g>
+<rect x="150" y="700" width="500" height="10" fill="#1F2A2F"/>
+<g stroke="#1F2A2F" stroke-width="2" opacity="0.5">${Array.from({ length: 24 }, (_, i) => `<line x1="${160 + i * 20}" y1="660" x2="${160 + i * 20}" y2="705"/>`).join('')}</g>
+<rect x="150" y="656" width="500" height="6" fill="#F4F4F0"/>
+<circle cx="520" cy="820" r="10" fill="#E3EF5A"/>
+</svg>`)}`;
+
 export const posts: Post[] = [
+  {
+    // Dev's clip from WHOOP, heart rate and zones shared: the glass "See stats" pill over it, the stats over the playing clip.
+    id: 'p-dev-clip',
+    authorId: 'u-dev',
+    kind: 'clip',
+    createdAt: isoDaysAgo(0, 1),
+    body: 'Two points from the third set. The second is the best backhand I have hit all year.',
+    mediaLabel: 'Third set · 0:24',
+    session: {
+      focus: 'Match · Won', minutes: 72, drills: [], activityId: 'act-dev-2', source: 'whoop', kind: 'match', won: true, day: dayAgo(0),
+      maxHr: 176, avgHr: 150, zones: [8, 12, 22, 20, 10],
+      with: [{ id: 'u-mira', handle: 'miraplays', name: 'Mira Okafor', role: 'opponent' }],
+    },
+    likedBy: ['u-mira', 'u-june'],
+    commentIds: [],
+    // A demo clip is kept only with a court tag (api.ts drops the old demo reels).
+    court: courtTag(1),
+    location: courtTag(1).name,
+    tags: [],
+  },
+  {
+    // Sam's clip from WHOOP without heart rate: the pill says who it was against instead ("vs Mira").
+    id: 'p-sam-clip',
+    authorId: 'u-sam',
+    kind: 'clip',
+    createdAt: isoDaysAgo(0, 6),
+    body: 'Lost this one, but look at that lob.',
+    mediaLabel: 'Match point · 0:18',
+    session: {
+      focus: 'Match · Lost', minutes: 65, drills: [], activityId: 'act-sam-1', source: 'whoop', kind: 'match', won: false, day: dayAgo(0),
+      with: [{ id: 'u-mira', handle: 'miraplays', name: 'Mira Okafor', role: 'opponent' }],
+    },
+    likedBy: ['u-dev'],
+    commentIds: [],
+    // A demo clip is kept only with a court tag (api.ts drops the old demo reels).
+    court: courtTag(1),
+    location: courtTag(1).name,
+    tags: [],
+  },
+  {
+    // Dev's evening match from WHOOP, with a photo: the stats strip under it, and the zone foot along its bottom edge.
+    id: 'p-dev-photo',
+    authorId: 'u-dev',
+    kind: 'note',
+    createdAt: isoDaysAgo(0, 2),
+    body: 'Sunset tiebreak at Alder Park. Took the forehand early all match and it finally paid off.',
+    imageUrl: DUSK_COURT,
+    thumbnailUrl: DUSK_COURT,
+    mediaLabel: 'Court at dusk',
+    session: {
+      focus: 'Match · Won', minutes: 84, drills: [], activityId: 'act-dev-1', source: 'whoop', kind: 'match', won: true, day: dayAgo(0),
+      maxHr: 171, avgHr: 141, zones: [14, 18, 25, 21, 6],
+      with: [{ id: 'u-mira', handle: 'miraplays', name: 'Mira Okafor', role: 'opponent' }],
+    },
+    court: courtTag(1),
+    location: courtTag(1).name,
+    likedBy: ['u-mira', 'u-june', CURRENT_USER_ID],
+    commentIds: [],
+    tags: [],
+  },
+  {
+    // Mira's match from WHOOP, no photo: the session's card is the post. Heart rate and zones shared.
+    id: 'p-mira-whoop',
+    authorId: 'u-mira',
+    kind: 'note',
+    createdAt: isoDaysAgo(0, 5),
+    body: 'Clay finally feels like home. Serve was there all night and Dev made me earn every point.',
+    session: {
+      focus: 'Match · Won', minutes: 84, drills: [], activityId: 'act-mira-1', source: 'whoop', kind: 'match', won: true, day: dayAgo(0),
+      maxHr: 171, avgHr: 141, zones: [14, 18, 25, 21, 6],
+      with: [{ id: 'u-dev', handle: 'devbackhand', name: 'Dev Sharma', role: 'opponent' }],
+    },
+    likedBy: ['u-dev', 'u-june', 'u-tomas'],
+    commentIds: [],
+    tags: [],
+  },
+  {
+    // June's practice from an Apple Watch: heart rate shared, and no zones (Apple gives none).
+    id: 'p-june-watch',
+    authorId: 'u-june',
+    kind: 'note',
+    createdAt: isoDaysAgo(1, 3),
+    body: 'An hour of serve and volley patterns. Legs are done.',
+    session: { focus: 'Practice', minutes: 62, drills: [], activityId: 'act-june-1', source: 'apple-watch', kind: 'practice', day: dayAgo(1), maxHr: 158, avgHr: 132 },
+    likedBy: ['u-mira'],
+    commentIds: [],
+    tags: [],
+  },
+  {
+    // Your match a week ago from WHOOP (act-demo-3, logged as ses-demo-13), heart rate and zones shared:
+    // your stats sheet adds Strain, calories and the start time, for you only.
+    id: 'p-demo-whoop',
+    authorId: CURRENT_USER_ID,
+    kind: 'note',
+    createdAt: isoDaysAgo(7, -3),
+    body: 'Finally closed one out against Mira. Third set, no tiebreak.',
+    session: {
+      focus: 'Match · Won', minutes: 96, drills: [], activityId: 'act-demo-3', source: 'whoop', kind: 'match', won: true, day: dayAgo(7), sessionId: 'ses-demo-13',
+      maxHr: 174, avgHr: 146, zones: [10, 16, 28, 30, 12],
+      with: [{ id: 'u-mira', handle: 'miraplays', name: 'Mira Okafor', role: 'opponent' }],
+    },
+    court: courtTag(1),
+    location: courtTag(1).name,
+    likedBy: ['u-mira', 'u-dev'],
+    commentIds: [],
+    tags: [],
+  },
   {
     id: 'p1',
     authorId: 'u-mira',
@@ -190,7 +321,7 @@ export const posts: Post[] = [
     kind: 'note',
     createdAt: isoDaysAgo(4, -1),
     body: 'Forty-five minutes of crosscourt backhands before work. Ugly start, clean finish.',
-    session: { focus: 'Drills', minutes: 45, drills: [], sessionId: 'ses-demo-3', kind: 'drills' },
+    session: { focus: 'Drills', minutes: 45, drills: [], sessionId: 'ses-demo-3', kind: 'drills', day: dayAgo(4) },
     likedBy: ['u-mira'],
     commentIds: [],
     tags: [],
@@ -203,7 +334,7 @@ export const posts: Post[] = [
     createdAt: isoDaysAgo(0, 14),
     body: 'Two tiebreaks and a lot of running. The first serve finally showed up in the second set.',
     session: {
-      focus: 'Match · Won', minutes: 90, drills: [], sessionId: 'ses-demo-1', kind: 'match', won: true,
+      focus: 'Match · Won', minutes: 90, drills: [], sessionId: 'ses-demo-1', kind: 'match', won: true, day: dayAgo(1),
       with: [{ id: 'u-mira', handle: 'miraplays', name: 'Mira Okafor', role: 'opponent' }],
     },
     likedBy: ['u-mira', 'u-dev'],
@@ -217,7 +348,7 @@ export const posts: Post[] = [
     kind: 'note',
     createdAt: isoDaysAgo(1, 20),
     body: 'Lost a close one. Their backhand down the line was on all night.',
-    session: { focus: 'Match · Lost', minutes: 75, drills: [], sessionId: 'ses-sam-1', kind: 'match', won: false },
+    session: { focus: 'Match · Lost', minutes: 75, drills: [], sessionId: 'ses-sam-1', kind: 'match', won: false, day: dayAgo(2) },
     likedBy: ['u-dev'],
     commentIds: [],
     tags: [],
@@ -230,7 +361,7 @@ export const posts: Post[] = [
     createdAt: isoDaysAgo(4, 3),
     body: 'An hour of crosscourt patterns. Good legs today.',
     session: {
-      focus: 'Practice', minutes: 60, drills: [], sessionId: 'ses-mira-1', kind: 'practice',
+      focus: 'Practice', minutes: 60, drills: [], sessionId: 'ses-mira-1', kind: 'practice', day: dayAgo(5),
       with: [{ id: CURRENT_USER_ID, handle: 'you', name: 'Alex Rivera', role: 'partner' }],
     },
     likedBy: [CURRENT_USER_ID, 'u-june'],

@@ -9,6 +9,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { LevelPill } from '@/components/LevelPill';
 import { SectionPager } from '@/components/SectionPager';
 import { TileCover } from '@/components/TileCover';
+import { SessionTile } from '@/components/session/SessionTile';
+import { hasSessionStats } from '@/features/activity/format';
 import { PlayerName } from '@/components/PlayerName';
 import { Tappable } from '@/components/Tappable';
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
@@ -25,6 +27,7 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { ProfileSkeleton } from '@/components/Skeleton';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { isTaggedIn } from '@/features/activity/sessionTags';
+import { publicRoute } from '@/features/share/publicRoute';
 
 const TABS = ['Posts', 'Clips', 'Tagged'] as const;
 
@@ -34,7 +37,7 @@ const TABS = ['Posts', 'Clips', 'Tagged'] as const;
  * card, then a grid of what they have posted. A private account shows only
  * the top until they have let you follow.
  */
-export default function UserProfile() {
+function UserProfile() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { users, posts, coaches, currentUserId, followingIds, followRequests, mutedIds, blockedIds, alertIds, actions } = useApp();
@@ -69,10 +72,11 @@ export default function UserProfile() {
   const coach = coaches.find((c) => c.userId === user.id);
   // What a private account keeps behind the door until they say yes.
   const locked = !!user.isPrivate && !isMe && !following;
-  const own = posts.filter((p) => p.authorId === user.id && !p.archived);
-  const itemsFor = (section: (typeof TABS)[number]) => (section === 'Tagged' ? posts.filter((p) => isTaggedIn(p, user.id) && !p.archived) : own.filter((p) => section !== 'Clips' || p.kind === 'clip'))
+  // A post shared to a group lives in that group's feed only (migration 67).
+  const own = posts.filter((p) => p.authorId === user.id && !p.archived && !p.groupId);
+  const itemsFor = (section: (typeof TABS)[number]) => (section === 'Tagged' ? posts.filter((p) => isTaggedIn(p, user.id) && !p.archived && !p.groupId) : own.filter((p) => section !== 'Clips' || p.kind === 'clip'))
     .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
-  const counts = { Posts: own.length, Clips: own.filter((p) => p.kind === 'clip').length, Tagged: posts.filter((p) => isTaggedIn(p, user.id) && !p.archived).length };
+  const counts = { Posts: own.length, Clips: own.filter((p) => p.kind === 'clip').length, Tagged: posts.filter((p) => isTaggedIn(p, user.id) && !p.archived && !p.groupId).length };
   const unlocked = evaluateAchievements(user).filter((a) => a.unlocked);
   const profile = user.profile;
 
@@ -82,7 +86,7 @@ export default function UserProfile() {
               {itemsFor(section).map((p) => (
                 <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.pinned && section !== 'Tagged' ? 'pinned ' : ''}${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: section === 'Clips' ? 'clips' : section === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
                   <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
-                  {p.thumbnailUrl ? <TileCover accessibilityIgnoresInvertColors uri={p.thumbnailUrl} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120} /> : null}
+                  {p.thumbnailUrl ? <TileCover accessibilityIgnoresInvertColors uri={p.thumbnailUrl} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120} /> : p.session && hasSessionStats(p.session) && !p.imageUrl && !p.videoUrl ? <SessionTile session={p.session} width={tileW} /> : null}
                   {p.kind === 'clip' && <Ionicons name="play" size={14} color="#FFFFFF" style={styles.tilePlay} />}
                   {(p.videoUrl || p.kind === 'clip') && (p.views ?? 0) > 0 ? <TileViews views={p.views ?? 0} /> : null}
                   {/* Pinned, top left; the tile's own label says "pinned" to a screen reader. */}
@@ -311,3 +315,6 @@ const styleDefinitions = StyleSheet.create({
   menuBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   menuLabel: { ...typography.body, color: colors.text },
 });
+
+// A link shared outside the app opens here for anyone; signed out, it shows the public look (see SharedPage).
+export default publicRoute('profile', UserProfile);

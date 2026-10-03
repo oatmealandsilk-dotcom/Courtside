@@ -266,7 +266,7 @@ Apple's current age ratings are **4+, 9+, 13+, 16+ and 18+**. You answer questio
 - **Its own age check.** Everyone gives a date of birth once: on the sign-up form, or on a one-time screen (`app/(auth)/birthday.tsx`) for accounts made through Google. The question is neutral (it does not hint at which answers pass). **Under 13:** no account is kept, and the phone remembers the answer so the question cannot simply be answered again with a different date. **13 to 17:** a teen account, private to start with, and only people the teen follows can start a new chat with them. The database itself enforces this (`supabase/migrations/20260918000013_age_check.sql`), so the app cannot be tricked around it. The date of birth is never shown to anyone.
 - **Reporting.** Posts and hits (from their ••• menu) and profiles (••• at the top right) can be reported. Each report is saved in the `reports` table (think of it as one tab of a spreadsheet) with who reported what. Nobody can read that table from the app; you read it in Supabase (Table Editor → reports).
 - **Blocking and muting** from the same ••• menus. Blocked people are listed in Settings → Blocked.
-- **No ads, no in-app purchases, no in-app web browser.**
+- **No ads, no in-app purchases (Apple's own payment system), no in-app web browser.** Paid coaching is paid on Stripe's own web page, which opens from the app.
 
 ### In-App Controls
 
@@ -395,7 +395,7 @@ Tracking is **No** in every row.
 | Contact Info → Other User Contact Info | No | – | – | Not asked for. |
 | Health & Fitness → **Health** | No. See the note below | – | – | The "Health and nutrition" screen only shows sample numbers, and linking a wearable does nothing yet. Nothing on screen lets a person type injury notes. **Change to Yes (linked, App Functionality) as soon as people can add injury notes or connect Apple Health or a wearable.** |
 | **Health & Fitness → Fitness** | Yes | Yes | App Functionality | The tennis profile (fitness level, sessions per week, years playing, goals, next tournament) and session and match posts (minutes, drills, intensity, scores). |
-| Financial Info → Payment Info | No | – | – | CourtSide takes no payments. The Payments screen is a preview with sample entries; it only saves short labels like "Apple Pay", never card or bank numbers. |
+| Financial Info → Payment Info | No | – | – | Cards are typed into Stripe's own hosted pay page; CourtSide never receives or stores card or bank numbers. (Check the old sample-card Payments screen is gone: the Payments screen now only lists paid bookings.) |
 | Financial Info → Credit Info | No | – | – | – |
 | Financial Info → Other Financial Info | No | – | – | – |
 | Location → Precise Location | No | – | – | See "How location works" below. |
@@ -412,7 +412,7 @@ Tracking is **No** in every row.
 | Search History | No | – | – | Searches run on the phone against what is already loaded. Nothing is sent or saved. |
 | **Identifiers → User ID** | Yes | Yes | App Functionality | The account ID and @handle. |
 | **Identifiers → Device ID** | Yes | Yes | App Functionality | The phone's push address (the code that lets alerts reach one phone), saved with the account once someone allows notifications. It is **not** the advertising ID. |
-| Purchases → Purchase History | No | – | – | Nothing is sold. **If paid coaching goes live, change to Yes.** |
+| Purchases → Purchase History | Yes | Yes | No | App Functionality. Each paid coaching booking (what was bought, the price, when, and whether it was refunded) is kept with the account so the player and coach can see it. |
 | **Usage Data → Product Interaction** | Yes | Yes | App Functionality, Product Personalization | Likes, saves, votes, follows, views of posts and hits (each view is saved with the viewer's account; the poster sees only the count), and when each person last read a chat (unread counts and read receipts). |
 | Usage Data → Advertising Data | No | – | – | No ads. |
 | Usage Data → Other Usage Data | No | – | – | – |
@@ -483,7 +483,7 @@ Apple's reviewer uses these to reach you with questions. They are not shown on t
 
 ### Notes (limit 4,000 characters)
 
-Replace `[SECOND DEMO EMAIL]` and `[SECOND DEMO PASSWORD]` first. If you remove the Talk Tennis threads from the app instead of getting permission, **delete the whole "THREADS FROM OTHER WEBSITES" paragraph**. These notes assume the fixes in section 6 are done (Sign in with Apple added or Google removed, sample content, Payments and Health screens gone, reports on the listed places, accounts deleted with their files).
+Replace `[SECOND DEMO EMAIL]` and `[SECOND DEMO PASSWORD]` first. If you remove the Talk Tennis threads from the app instead of getting permission, **delete the whole "THREADS FROM OTHER WEBSITES" paragraph**. These notes assume the fixes in section 6 are done (Sign in with Apple added or Google removed, sample content and the Health screens gone, reports on the listed places, accounts deleted with their files). The Payments screen and priced coaching buttons stay: they are real now (see "Paid coaching" below).
 
 ```text
 Thank you for reviewing CourtSide, a social app for tennis players.
@@ -519,7 +519,7 @@ PERMISSIONS
 
 GOOD TO KNOW
 - iPhone only.
-- No purchases, subscriptions or ads in this version.
+- Paid coaching: approved coaches sell video reviews, written answers, training plans and live sessions. Tapping "Continue to payment" opens Stripe's own pay page in the browser; the app never handles card details. There are no subscriptions, no ads, and no Apple in-app purchases. The app is offered in the United States storefront only.
 - Training, injury and fitness content is general information, not medical advice, and the app says so.
 
 Contact: oatmealandsilk@gmail.com
@@ -557,7 +557,7 @@ Items marked **(Claude)** are code or website changes Claude makes once you say 
 
 - [ ] **(Claude) Sign in with Apple**, or remove "Continue with Google" from the iPhone app (rule 4.8).
 - [ ] **(Claude) Remove the sample content** that real users see today: invented players, their posts and discussions, and invented coaches with their credentials, ratings, reviews and prices. Before that, **(you)** post some real content (a few clips, a photo, two or three discussions) so the reviewer's feed is not empty.
-- [ ] **(Claude) Hide the Payments screen** and the priced "Send request" buttons on coach pages (sample Visa card, "Google Pay", "No payment is taken in this demo"). Mentioning Google Pay on an iPhone also breaks rule 2.3.10 on naming other phone platforms.
+- [x] ~~(Claude) Hide the Payments screen~~ No longer needed: the sample card screen was replaced by the real Payments list, and the priced buttons are real Stripe bookings. Check no screen still mentions "Google Pay" (rule 2.3.10).
 - [ ] **(Claude) Hide "Health and nutrition"** and the Profile tab's "Apple Health · Whoop · Cronometer" row until they work.
 - [ ] **(Claude) Hide the "Coming soon" AI coach card** and the "What the coach remembers" row, or keep them and add the extra reviewer line from section 5. Apple dislikes placeholder features (rule 2.1), so hiding is safer.
 - [ ] **(Claude) Remove "demo build"** from the About screen, and its lines "Coaches are verified by hand" and "coaching, human or AI".
@@ -614,9 +614,9 @@ Items marked **(Claude)** are code or website changes Claude makes once you say 
 1. **Store name:** is "CourtSide: Tennis Community" right (and is it free), or do you prefer a fallback?
 2. **Individual or company developer account?** This decides the public seller name and the Copyright line.
 3. **Talk Tennis:** ask Tennis Warehouse for permission, or take the forum threads out of the iPhone app for launch? And may Claude remove the Reddit backup?
-4. **Coaching at launch:** will real coaches be on CourtSide, ready to answer questions? If not, what should the Coaching tab show once the sample coaches are removed? Also, for later: when paid coaching arrives, Apple will likely require its own In-App Purchase system (Apple takes a commission) for anything that is not a live one-to-one session, such as video reviews, written answers and training plans. Only live, real-time one-to-one sessions may be paid another way (rule 3.1.3(d)).
+4. **Coaching at launch:** real, approved coaches only; the sample coaches are removed. The plan for Apple's payment rules: live one-to-one sessions are paid outside Apple's system under rule 3.1.3(d). Video reviews, written answers and plans are digital services, so they rely on the US rules that let apps link out to pay on the web; that is why the app is offered in the United States storefront only. In App Store Connect → Pricing and Availability, set the countries to **United States only**. If Apple's reviewer disagrees, the fallback is Apple In-App Purchase for those three kinds.
 5. **Sign in with Apple:** add it (recommended), or drop Google on iPhone?
-6. **Unfinished features:** OK to hide Payments, Health and nutrition, and the AI coach card for version 1.0?
+6. **Unfinished features:** Payments stays (it is real now). OK to hide Health and nutrition, and the AI coach card, for version 1.0?
 7. **Theme names:** decided Sep 30: Melbourne, Paris, London, New York.
 8. **Teen accounts on the Find Players map:** hide them from adults?
 9. **Weather:** add the credit line, and is CourtSide commercial (pay Open-Meteo, or switch to Apple's WeatherKit)?
