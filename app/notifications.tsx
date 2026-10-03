@@ -125,8 +125,8 @@ function routeFor(group: Group): string {
   // The map's alerts open the map: on the player, or on the hit with its card up.
   if (group.kind === 'map-friend-hit' || group.kind === 'map-new-player') return `/map?user=${group.actorIds[0]}`;
   if (group.kind === 'map-new-hit') return `/map?hit=${group.targetId}`;
-  // A tennis session a tracker picked up opens the log sheet, filled in from it.
-  if (group.kind === 'activity') return `/log-session?activity=${group.targetId}`;
+  // A tennis session a tracker picked up opens a new post with it on: post it, or just log it.
+  if (group.kind === 'activity') return `/compose?activity=${group.targetId}`;
   // Tagged in someone's session: the tag's sheet (its target is their session).
   if (group.kind === 'session-tag') return `/session-tag?session=${group.targetId}`;
   // A coach application update opens the application, which shows where it stands.
@@ -159,6 +159,18 @@ function sectionFor(unread: boolean, at: string): string {
   return 'Earlier';
 }
 const SECTIONS = ['New', 'Today', 'This week', 'This month', 'Earlier'];
+
+/**
+ * The server writes a session's length the long way ("1 hr 24 min · from
+ * your WHOOP", migration 58, also the lock-screen alert's words); the row
+ * says it the way the rest of the app does now ("1h 24m · from your WHOOP").
+ */
+function shortLength(preview: string): string {
+  return preview
+    .replace(/^(\d+) hr (\d+) min\b/, '$1h $2m')
+    .replace(/^(\d+) hr\b/, '$1h')
+    .replace(/^(\d+) min\b/, '$1m');
+}
 
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
@@ -262,7 +274,7 @@ export default function Notifications() {
         actorIds: [n.actorId],
         createdAt: n.createdAt,
         // The server's stand-in for an Instant with no caption; the row already says what it was.
-        preview: n.preview === 'your hit' ? undefined : n.preview,
+        preview: n.preview === 'your hit' ? undefined : n.kind === 'activity' && n.preview ? shortLength(n.preview) : n.preview,
         unread: !n.read,
       });
     }

@@ -115,3 +115,12 @@ export function experienceLabel(years: number): string {
   if (years === 12) return '10+ years';
   return years === 1 ? '1 year' : `${years} years`;
 }
+
+/** Hours as hours and minutes, never a decimal: 5.6 → "5h 36m", 0.75 → "45m", 8 → "8h". */
+export function hoursAndMinutes(hours: number): string {
+  const total = Math.round(hours * 60);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (!h) return `${m}m`;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}

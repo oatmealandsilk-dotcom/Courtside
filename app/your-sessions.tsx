@@ -246,7 +246,7 @@ function Waiting({ activity, line }: { activity: DetectedActivity; line: boolean
         </View>
       </View>
       <View style={styles.actionSpot}>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Log it: ${activityTitle(activity)}, ${duration(activity.minutes)}`} hitSlop={8} onPress={() => router.push({ pathname: '/log-session', params: { activity: activity.id } })} style={({ pressed }) => [styles.action, styles.actionOn, pressed && styles.pressed]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Log it: ${activityTitle(activity)}, ${duration(activity.minutes)}`} hitSlop={8} onPress={() => router.push({ pathname: '/compose', params: { activity: activity.id } })} style={({ pressed }) => [styles.action, styles.actionOn, pressed && styles.pressed]}>
           <Text style={[styles.actionText, styles.actionTextOn]}>Log it</Text>
         </Pressable>
       </View>

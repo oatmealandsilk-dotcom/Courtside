@@ -348,6 +348,8 @@ interface ActivityRow {
   id: string; user_id: string; source: DetectedActivity['source']; sport: 'tennis'; started_at: string; ended_at: string; tz_offset_min: number | null; minutes: number;
   avg_hr: number | null; max_hr: number | null; kcal: number | null; strain: number | string | null; device: string | null; status: DetectedActivity['status'];
   duplicate_of: string | null; session_id: string | null; created_at: string;
+  /** Minutes in heart-rate zones 1–5 (migration 65; absent before it runs). */
+  hr_zones?: number[] | null;
 }
 const toActivity = (r: ActivityRow): DetectedActivity => ({
   id: r.id, userId: r.user_id, source: r.source, sport: r.sport, startedAt: r.started_at, endedAt: r.ended_at, tzOffsetMin: r.tz_offset_min ?? undefined, minutes: r.minutes,
@@ -355,6 +357,7 @@ const toActivity = (r: ActivityRow): DetectedActivity => ({
   // numeric(3,1) arrives as a string.
   strain: r.strain == null ? undefined : Number(r.strain),
   device: r.device ?? undefined, status: r.status, duplicateOf: r.duplicate_of ?? undefined, sessionId: r.session_id ?? undefined, createdAt: r.created_at,
+  zones: r.hr_zones ?? undefined,
 });
 /** Your tracker sessions that ended in the last two weeks, newest first. Only your own rows come back (migration 58). */
 const activitiesQuery = (me: ID) => need().from('detected_activities').select('*').eq('user_id', me)

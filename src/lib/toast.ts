@@ -9,6 +9,17 @@ export interface ToastMessage {
   /** Where a tap on the toast goes. */
   href?: string;
   /**
+   * A mark drawn in a brand-coloured disc instead of the plain icon:
+   * 'session' (the zone bars, "Tennis detected") or 'logged' (a tick that
+   * draws itself, "Logged").
+   */
+  glyph?: 'session' | 'logged';
+  /**
+   * A number on the right, under a thin rule: "10 day streak". It rolls up
+   * from the one before as the toast lands.
+   */
+  stat?: { value: number; label: string };
+  /**
    * A small text button on the right, such as "Undo". Tapping it runs
    * `onPress` and closes the toast. A toast with one stays up longer, so
    * there is time to reach it.

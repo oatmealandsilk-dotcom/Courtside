@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { openCourt } from '@/features/players/courtLink';
 import { TaggedLine } from '@/components/TaggedLine';
-import React, { useState, memo } from 'react';
+import React, { useEffect, useState, memo } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
@@ -22,6 +22,8 @@ import { compactNumber, duration, relativeTime } from '@/lib/format';
 import type { Post, QuestionTopic, User } from '@/data/types';
 import { RichText } from '@/components/RichText';
 import { SessionStats } from '@/components/SessionStats';
+import { SessionCard } from '@/components/session/SessionCard';
+import { useApp } from '@/store/AppContext';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { hasSessionStats } from '@/features/activity/format';
 import { requestSection } from '@/features/navigation/swipeOrder';
@@ -52,7 +54,12 @@ interface Props {
   /** Shown as ••• on your own posts: archive or delete. */
   onArchive?: () => void;
   onDelete?: () => void;
+  /** This post's page is the one on show: a session card counts its numbers up, once per post per app run. */
+  active?: boolean;
 }
+
+/** Session cards that have already counted up this run: after the first time, they just show their numbers. */
+const counted = new Set<string>();
 
 /** Which Community topic each kind of post belongs with, for the tappable label. */
 const KIND_TOPIC: Record<Post['kind'], QuestionTopic | 'all'> = {
@@ -89,8 +96,22 @@ function PostCardInner({
   onArchive,
   onDelete,
   playing = true,
+  active = false,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
+  const { blockedIds } = useApp();
+  // A session with no photo or video: the session's card is the post's picture (Oct 2).
+  const sessionCard = !!post.session && hasSessionStats(post.session) && !post.imageUrl && !post.videoUrl && post.kind !== 'clip';
+  // The room the card has: as wide as the post, and in the feed's fixed-height
+  // page only as tall as is left once the caption and buttons have theirs.
+  const [slot, setSlot] = useState({ w: 0, h: 0 });
+  const [play, setPlay] = useState(false);
+  useEffect(() => {
+    if (!sessionCard || !active || counted.has(post.id)) return;
+    counted.add(post.id);
+    setPlay(true);
+  }, [sessionCard, active, post.id]);
+  const openStats = () => router.push({ pathname: '/session-stats', params: { kind: 'post', id: post.id } });
   const [menuOpen, setMenuOpen] = useState(false);
   // The tutorial never starts under this menu.
   useHoldTour(menuOpen);
@@ -157,8 +178,25 @@ function PostCardInner({
           <View style={cropLayer(post.crop)}><ClipVideo uri={post.videoUrl} poster={post.thumbnailUrl} active={playing} trimStart={post.trimStart} trimEnd={post.trimEnd} speed={post.speed} volume={post.volume} /></View>
         </View>
       ) : post.kind === 'clip' ? <MediaPlaceholder label={post.mediaLabel ?? 'Clip'} seed={post.id} portrait /> : null}
+      {sessionCard ? (
+        <View
+          // Asks for the card's full 4:5 height and gives way first when the
+          // page is short (the feed's page is a fixed height), so the caption
+          // and the buttons under it always stay on screen; the card is then
+          // drawn smaller, still 4:5, centred.
+          style={slot.w ? [styles.cardSlot, { height: Math.round(Math.min(slot.w, 420) * 1.25) }] : [styles.cardSlot, styles.cardWait]}
+          onLayout={(e) => {
+            const w = Math.floor(e.nativeEvent.layout.width);
+            const h = Math.floor(e.nativeEvent.layout.height);
+            if (w > 0 && (w !== slot.w || h !== slot.h)) setSlot({ w, h });
+          }}
+        >
+          {slot.w && slot.h ? <SessionCard session={post.session!} width={Math.max(1, Math.min(slot.w, 420, Math.floor(slot.h * 0.8)))} play={play} hidden={blockedIds} onPress={openStats} /> : null}
+        </View>
+      ) : null}
       <Pressable onPress={onPress} style={styles.body}>
-        <Tappable
+        {/* The session's card already says what it was: no label over its words. */}
+        {sessionCard ? null : <Tappable
           accessibilityLabel={`${meta.label}: see discussions about this in Community`}
           onPress={() => { requestSection('/discuss', 'discussions'); requestSection('/discuss#topic', KIND_TOPIC[post.kind]); goToTab('/discuss'); }}
           style={[styles.kindRow, { borderColor: `${meta.tint}55` }]}
@@ -168,7 +206,7 @@ function PostCardInner({
             : <Ionicons name={meta.icon} size={13} color={meta.tint} />}
           <Text style={[styles.kindLabel, { color: meta.tint }]}>{meta.label}</Text>
           <Ionicons name="chevron-forward" size={11} color={meta.tint} />
-        </Tappable>
+        </Tappable>}
 
         <RichText numberOfLines={clamp} style={styles.text}>{post.body}</RichText>
 
@@ -194,7 +232,7 @@ function PostCardInner({
           </View>
         ) : null}
 
-        {post.session && hasSessionStats(post.session) ? (
+        {sessionCard ? null : post.session && hasSessionStats(post.session) ? (
           <SessionStats session={post.session} />
         ) : post.session ? (
           <View style={styles.detailBox}>
@@ -288,6 +326,8 @@ const styleDefinitions = StyleSheet.create({
   sub: { ...typography.small, color: colors.textFaint },
   courtLink: { ...typography.smallStrong, color: colors.brand },
   body: { gap: spacing.md, flexShrink: 1, minHeight: 0, overflow: 'hidden' },
+  cardSlot: { width: '100%', alignItems: 'center', justifyContent: 'center', flexShrink: 6, minHeight: 0, overflow: 'hidden' },
+  cardWait: { aspectRatio: 4 / 5 },
   kindRow: {
     flexDirection: 'row',
     alignItems: 'center',

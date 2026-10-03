@@ -15,7 +15,7 @@ import { FoodSection } from '@/features/health/FoodSection';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { isTracker, useTrackerStatus } from '@/features/activity/trackers';
 import { confirm } from '@/lib/confirm';
-import { relativeTime } from '@/lib/format';
+import { relativeTime, hoursAndMinutes } from '@/lib/format';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import type { Integration } from '@/data/types';
@@ -224,7 +224,7 @@ export default function Health() {
           <Text style={styles.todayTitle}>Latest<Text style={styles.todayDate}> · {new Date(latest.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</Text></Text>
           <View style={styles.stats}>
             {stat('Recovery', latest.recovery ? `${latest.recovery}%` : null)}
-            {stat('Sleep', latest.sleepHours ? `${latest.sleepHours}h` : null)}
+            {stat('Sleep', latest.sleepHours ? hoursAndMinutes(latest.sleepHours) : null)}
             {stat('HRV', latest.hrvMs ? `${latest.hrvMs}` : null)}
             {stat('Resting HR', latest.restingHeartRate ? `${latest.restingHeartRate}` : null)}
           </View>

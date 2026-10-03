@@ -28,7 +28,7 @@ import { colors, radius, spacing, typography } from '@/theme';
  * there, and their name goes on the post only once they do, so they are
  * never tagged straight onto it here instead.
  */
-export function TagPlayers({ tagged, onChange, variant = 'button', line = false, fromSession = [] }: {
+export function TagPlayers({ tagged, onChange, variant = 'button', line = false, fromSession = [], label = 'Tag players' }: {
   tagged: string[];
   onChange: (ids: string[]) => void;
   variant?: 'button' | 'row';
@@ -36,6 +36,8 @@ export function TagPlayers({ tagged, onChange, variant = 'button', line = false,
   line?: boolean;
   /** The session's tagged players and whether each has accepted (migration 62). */
   fromSession?: { id: string; accepted: boolean }[];
+  /** The row's words ("Tag people" in the composer opened from a session). */
+  label?: string;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { users } = useApp();
@@ -119,7 +121,7 @@ export function TagPlayers({ tagged, onChange, variant = 'button', line = false,
       // First names: "Maya", "Maya, Jonah", then "Maya, Jonah +1".
       const names = tagged.map((id) => users.find((u) => u.id === id)?.name.split(' ')[0]).filter((n): n is string => !!n);
       const summary = names.length > 2 ? `${names.slice(0, 2).join(', ')} +${names.length - 2}` : names.join(', ');
-      return <FormRow line={line} icon="pricetag-outline" label="Tag players" value={summary || undefined} chevron onPress={() => { setOpen(true); setQuery(''); }} />;
+      return <FormRow line={line} icon="pricetag-outline" label={label} value={summary || undefined} chevron onPress={() => { setOpen(true); setQuery(''); }} />;
     }
     return (
       <View ref={block} style={[styles.rowBlock, line && styles.rowLine]}>

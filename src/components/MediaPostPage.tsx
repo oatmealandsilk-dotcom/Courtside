@@ -27,7 +27,9 @@ import { useOptimisticToggle } from '@/lib/useOptimisticToggle';
 import { Avatar, Chip } from '@/components/ui';
 import { LevelPill } from '@/components/LevelPill';
 import { RichText } from '@/components/RichText';
-import { SessionStats } from '@/components/SessionStats';
+import { SessionStrip } from '@/components/session/SessionStrip';
+import { ZoneBar } from '@/components/session/ZoneBar';
+import { postZones, zoneColors } from '@/features/activity/zones';
 import { hasSessionStats } from '@/features/activity/format';
 import { compactNumber, relativeTime } from '@/lib/format';
 import type { Post, User } from '@/data/types';
@@ -66,6 +68,8 @@ interface Props {
  * in the app's own type and colours, rather than painted over the picture.
  */
 const desktopWeb = Platform.OS === 'web' && isDesktopBrowser();
+/** Posts whose session strip has already counted up this run. */
+const counted = new Set<string>();
 /** The breathing room either side of a post on a computer, when the window has it to spare. */
 export const LANE_INSET = 28;
 /**
@@ -81,7 +85,15 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
   // Fills on the tap; the store's own redraw follows without changing anything on screen.
   const like = useOptimisticToggle(`p:${post.id}`, liked, onToggleLike, pop);
   const styles = useThemedStyles(styleDefinitions);
-  const { comments, currentUser, currentUserId, actions } = useApp();
+  const { comments, currentUser, currentUserId, actions, blockedIds } = useApp();
+  const footZones = postZones(post.session);
+  // The strip's numbers count up the first time its page is on show this run.
+  const [stripPlay, setStripPlay] = useState(false);
+  useEffect(() => {
+    if (!active || !post.session || counted.has(post.id)) return;
+    counted.add(post.id);
+    setStripPlay(true);
+  }, [active, post.id, post.session]);
   // Newest first, the way the sheet lists them; they fill the bottom of the page.
   // Replies stay folded on the page: "View 2 replies" opens the sheet at them.
   const thread = threadsOf(comments, post.id, 'newest');
@@ -220,6 +232,8 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
             <ExpoImage accessibilityIgnoresInvertColors source={{ uri: post.imageUrl ?? post.thumbnailUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" onLoad={() => onReady?.(true)} />
           </Pressable>
         )}
+        {/* Heart-rate zones, when shared: a thin foot along the picture's bottom edge, nothing over the picture itself. */}
+        {footZones ? <ZoneBar zones={footZones} colors={zoneColors('media')} height={6} square style={styles.foot} /> : null}
         {burst}
       </View>
       {!post.videoUrl ? (
@@ -236,8 +250,13 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
       ) : null}
 
       <View style={[styles.details, lane]}>
-        {/* A session's stats (a tracker's numbers, or one from the author's log), on one line under the picture. */}
-        {post.session && hasSessionStats(post.session) ? <SessionStats session={post.session} compact /> : null}
+        {/* A session's stats (a tracker's numbers, or one from the author's log), straight under the picture; a tap opens them all. */}
+        {post.session && hasSessionStats(post.session) ? (
+          <>
+            <SessionStrip session={post.session} hidden={blockedIds} play={stripPlay} onPress={() => router.push({ pathname: '/session-stats', params: { kind: 'post', id: post.id } })} />
+            <View style={styles.stripRule} />
+          </>
+        ) : null}
         {post.body ? (
           <Pressable accessibilityRole="button" accessibilityLabel={captionOpen ? 'Show less' : 'Show the whole caption'} onPress={() => setCaptionOpen((o) => !o)}>
             <Text numberOfLines={captionOpen ? undefined : 4} style={styles.caption}><Text style={styles.captionName}>{author.handle} </Text><RichText style={styles.caption}>{post.body}</RichText></Text>
@@ -326,6 +345,8 @@ const styleDefinitions = StyleSheet.create({
   actionText: { ...typography.smallStrong, color: colors.text },
   thread: { flexShrink: 1, minHeight: 0, marginTop: spacing.xs },
   threadInner: { gap: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.sm },
+  foot: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+  stripRule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginTop: 2 },
   addComment: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   addCommentText: { ...typography.body, color: colors.textFaint, flex: 1 },
   caption: { ...typography.body, color: colors.text, lineHeight: 21 },

@@ -45,6 +45,7 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { subscribeFeedRefresh } from '@/features/feed/feedBus';
 import { BAR_TUCK, barCompact, setBarCompact } from '@/features/navigation/barShrink';
 import { BAR_OVERLAY_PX, useBarInset } from '@/features/navigation/barInset';
+import { hasSessionStats } from '@/features/activity/format';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { TipPage } from '@/components/TipPage';
 import { isLive } from '@/features/stories/stories';
@@ -783,31 +784,32 @@ function Home({ scope, topRow, paused, onChrome }: {
   const pageNodes = useRef(new Map<string, unknown>());
   const notePageNode = useCallback((key: string, node: unknown) => { if (node) pageNodes.current.set(key, node); else pageNodes.current.delete(key); }, []);
   const hitShapes = useRef(new Map<string, boolean>());
-  const openComments = (kind: 'post' | 'hit', id: string, subject: StageSubject, from?: unknown) => {
+  // The same stage for a clip's comments and for its session stats (See stats): only the page pushed differs.
+  const openStage = (route: '/comments' | '/session-stats', kind: 'post' | 'hit', id: string, subject: StageSubject, from?: unknown) => {
     const params = { kind, id };
     const now = getStage();
     // A second tap while this feed's comments are opening, open or closing does nothing.
     if (now && now.owner === owner) return;
     // Another feed's stage is still up under the pages opened over it (its
     // comments, a profile, then this feed): these comments open as the plain sheet.
-    if (now) { router.push({ pathname: '/comments', params }); return; }
+    if (now) { router.push({ pathname: route, params }); return; }
     const key = stageKeyOf(kind, id);
     const ownerOnTop = () => focusedNow.current;
     if (Platform.OS === 'web' && isDesktopBrowser() && typeof window !== 'undefined' && window.innerWidth >= 700) {
       // A computer: the docked panel keeps the clip playing beside it; the centred box does not.
       if (window.innerWidth >= SIDE_MIN_WINDOW) beginStage({ owner, key, mode: 'side', focusBack: keyboardFocus(from), ownerOnTop });
-      router.push({ pathname: '/comments', params });
+      router.push({ pathname: route, params });
       return;
     }
     const rect = readRect(pageNodes.current.get(key)) ?? { x: 0, y: 0, width: winW, height: winH };
     const geo = phone && (Platform.OS !== 'android' || STAGE_ON_ANDROID) ? stageGeometry(winW, winH, insets.top, rect, subject, owner, key) : null;
-    if (!geo) { router.push({ pathname: '/comments', params }); return; }
+    if (!geo) { router.push({ pathname: route, params }); return; }
     beginStage({ owner, key, mode: 'stage', geo, focusBack: Platform.OS === 'web' ? keyboardFocus(from) : from, ownerOnTop });
     // Everything on the stage reads the sheet's top: at the bottom edge, the
     // page exactly as it is. The sheet starts the rise itself once it has
     // drawn, so the clip and the sheet move as one.
     if (Platform.OS !== 'web') stageTop.value = geo.H;
-    router.push({ pathname: '/comments', params: { ...params, stage: '1' } });
+    router.push({ pathname: route, params: { ...params, stage: '1' } });
     // The comments never came: the push went nowhere and this feed is still
     // the page in front. The page goes back as it was. (A push that landed
     // but is slow to draw is left to finish: the feed is no longer in front.)
@@ -816,6 +818,7 @@ function Home({ scope, topRow, paused, onChrome }: {
       if (still && still.owner === owner && still.key === key && !still.mounted && navigation.isFocused()) endStage();
     }, 600);
   };
+  const openComments = (kind: 'post' | 'hit', id: string, subject: StageSubject, from?: unknown) => openStage('/comments', kind, id, subject, from);
   // The stage is over (or never got going): the page grows back to full size
   // if it is not there already (the comments went without their own close: a
   // browser's Back, a tab tapped from a page on top), then it is cleared.
@@ -1351,7 +1354,9 @@ function Home({ scope, topRow, paused, onChrome }: {
 
               if (post.kind !== 'clip') {
                 return (
-                  <View key={post.id} style={[styles.article, scopedBack && styles.articleScoped, !phone && styles.articleCentred, (topRow || !!scope?.groupId) && { paddingTop: insets.top + 64 }]}>
+                  // A session posted with no photo is its card: the page keeps clear of the
+                  // floating tab bar, so the caption and buttons under the card stay in view.
+                  <View key={post.id} style={[styles.article, scopedBack && styles.articleScoped, !phone && styles.articleCentred, (topRow || !!scope?.groupId) && { paddingTop: insets.top + 64 }, barInset > 0 && post.session && hasSessionStats(post.session) && !post.imageUrl && !post.videoUrl ? { paddingBottom: barInset + 8 } : null]}>
                     <Wash height={300} strength={0.6} />
                     {/* Inside one person's posts the feed label means nothing, and the back chevron wants the room. */}
                     {scopedBack ? null : <Text style={styles.eyebrow}>
@@ -1371,6 +1376,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                         onPress={() => router.push(`/post/${post.id}`)}
                         onPressAuthor={() => router.push(`/user/${author.id}`)}
                         clamp={8}
+                        active={active === index && focused}
                       />
                     </View>
                   </View>
@@ -1452,7 +1458,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                   <ReelScrim bottom={wordsBottom} />
 
                   <Reanimated.View style={[styles.caption, { bottom: wordsBottom }, tuckStyle]}>
-                    <ReelCaption post={post} author={author} onAuthor={() => { tappedAuthor(`p:${post.id}`); router.push(`/user/${author.id}`); }} onOpenComments={openClipComments} />
+                    <ReelCaption post={post} author={author} onAuthor={() => { tappedAuthor(`p:${post.id}`); router.push(`/user/${author.id}`); }} onOpenComments={openClipComments} onOpenStats={() => openStage('/session-stats', 'post', post.id, post.orientation === 'landscape' ? 'landscape' : 'portrait')} active={active === index && focused} />
                     {/* Only while Home is on show (see the Instant's hint above). */}
                     {index === 0 && !scope && focused ? <SwipeHint /> : null}
                   </Reanimated.View>
