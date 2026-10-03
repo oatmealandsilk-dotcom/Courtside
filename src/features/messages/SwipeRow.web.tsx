@@ -37,8 +37,10 @@ export function SwipeRow({ actions, actionCount, mark, onMark, open, onOpen, chi
     const m = elementOf(markRef.current);
     if (m) { const show = Math.min(1, Math.max(0, x / FIRE_AT)); m.style.opacity = String(show); m.style.transform = `scale(${x >= FIRE_AT ? 1.08 : 0.85 + 0.15 * show})`; }
     const a = elementOf(actionsRef.current);
-    if (a) a.style.opacity = x < -4 ? '1' : '0';
+    if (a) { a.style.opacity = x < -4 ? '1' : '0'; hideActions(a, x >= -4); }
   };
+  // Closed, the buttons under the row are out of the Tab key's reach and a screen reader's.
+  useEffect(() => { const a = elementOf(actionsRef.current); if (a) hideActions(a, true); }, []);
   useEffect(() => { if (!open && at.current !== 0) place(0, true); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -134,6 +136,13 @@ export function SwipeRow({ actions, actionCount, mark, onMark, open, onOpen, chi
       <View ref={body}>{children}</View>
     </View>
   );
+}
+
+/** Takes the buttons under a closed row out of the Tab order and away from screen readers (and puts them back). */
+function hideActions(el: HTMLElement, hidden: boolean) {
+  (el as HTMLElement & { inert: boolean }).inert = hidden;
+  if (hidden) el.setAttribute('aria-hidden', 'true');
+  else el.removeAttribute('aria-hidden');
 }
 
 const styles = StyleSheet.create({

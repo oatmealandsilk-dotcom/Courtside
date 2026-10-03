@@ -18,6 +18,13 @@ export const lightColors = {
   onMedia: '#FFFFFF',
   // Someone else's chat bubble: a shade deeper than the page, with no outline (iMessage's grey bubble, in the court's own tone).
   bubble: '#ECE9DE',
+  // Your own chat bubble: the brand's colour, deepened a shade where its ink on it fell short of
+  // 4.5:1 (Melbourne's blue). Each court's value is its own, so a style written with it is recoloured as itself.
+  bubbleMine: '#3D6E47',
+  // Words and icons on a danger-red button (the inbox's Delete): white, or dark on the two dark courts,
+  // where white on their lighter red fell short. Read from `colors` when drawing, not from a style sheet:
+  // white is also a page colour, so a style sheet would recolour it as the page.
+  onDanger: '#FFFFFF',
 } as const;
 
 export const colors: Record<keyof typeof lightColors, string> = { ...lightColors };

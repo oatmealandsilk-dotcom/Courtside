@@ -13,7 +13,7 @@ import { colors, radius, font } from '@/theme';
  * person's seed so it never changes between visits — but it does change
  * with the court, so Roland Garros avatars are clay and Wimbledon's are grass.
  */
-function tintFor(seed: string): string {
+export function tintFor(seed: string): string {
   const palette = [colors.brand, colors.court, colors.hard, colors.clay, colors.grass, colors.borderStrong];
   let hash = 0;
   for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) % 100000;

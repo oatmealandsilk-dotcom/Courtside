@@ -71,7 +71,7 @@ export function CourtCard({ place, width = COURT_CARD_W, mine, tail, joinTop = f
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={320}
-      style={[styles.card, { width }, tail && (mine ? styles.tailMine : styles.tailTheirs), joinTop && (mine ? styles.joinMine : styles.joinTheirs)]}
+      style={[styles.card, !mine && styles.cardTheirs, { width }, tail && (mine ? styles.tailMine : styles.tailTheirs), joinTop && (mine ? styles.joinMine : styles.joinTheirs)]}
     >
       <View style={styles.map}>
         <CourtMapThumb lat={place.lat} lng={place.lng} width={width - 2} height={MAP_H} />
@@ -101,6 +101,8 @@ const styleDefinitions = StyleSheet.create({
     backgroundColor: colors.surface,
     overflow: 'hidden',
   },
+  // Theirs on their bubbles' own colour, with no outline, so a run of their messages reads as one piece.
+  cardTheirs: { backgroundColor: colors.bubble, borderColor: colors.bubble },
   tailMine: { borderBottomRightRadius: 5 },
   tailTheirs: { borderBottomLeftRadius: 5 },
   joinMine: { borderTopRightRadius: 5 },

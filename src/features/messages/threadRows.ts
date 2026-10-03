@@ -100,3 +100,23 @@ export function buildRows(thread: Message[], opts: { me: ID | null; group: boole
   }
   return rows;
 }
+
+const sameIds = (a?: ID[], b?: ID[]) => (a?.join(',') ?? '') === (b?.join(',') ?? '');
+
+/**
+ * The rows, with each one that has not changed since last time handed back
+ * as the very same object, so the list leaves its row alone (a row is drawn
+ * again only when its own values change). `cache` is last time's rows by
+ * key, and is brought up to date.
+ */
+export function keepRows(cache: Map<string, ThreadRow>, rows: ThreadRow[]): ThreadRow[] {
+  const out = rows.map((row) => {
+    const was = cache.get(row.key);
+    return was && was.message === row.message && was.stamp === row.stamp && was.gap === row.gap && was.joinBelow === row.joinBelow
+      && was.name === row.name && was.face === row.face && sameIds(was.folded, row.folded) && sameIds(was.seenBy, row.seenBy)
+      ? was : row;
+  });
+  cache.clear();
+  for (const row of out) cache.set(row.key, row);
+  return out;
+}

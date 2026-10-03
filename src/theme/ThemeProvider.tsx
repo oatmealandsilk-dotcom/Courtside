@@ -22,6 +22,7 @@ export const darkColors: Palette = {
   overlay: 'rgba(0, 0, 0, 0.65)',
   link: '#8EBEDD', onMedia: '#FFFFFF',
   bubble: '#232D28',
+  bubbleMine: '#6EB382', onDanger: '#0C1710',
 };
 
 /**
@@ -39,6 +40,7 @@ const cleanColors: Palette = {
   overlay: 'rgba(15, 20, 25, 0.5)',
   link: '#1B6699', onMedia: '#FFFFFF',
   bubble: '#EEF0F1',
+  bubbleMine: '#2B7345', onDanger: '#FFFFFF',
 };
 
 /**
@@ -54,6 +56,7 @@ const aoColors: Palette = {
   overlay: 'rgba(7, 26, 42, 0.58)',
   link: '#1F64A0', onMedia: '#FFFFFF',
   bubble: '#D9EAF6',
+  bubbleMine: '#2471A6', onDanger: '#FFFFFF',
 };
 
 /**
@@ -70,6 +73,7 @@ const rolandGarrosColors: Palette = {
   overlay: 'rgba(46, 22, 12, 0.58)',
   link: '#2F6587', onMedia: '#FFFFFF',
   bubble: '#F0E2D5',
+  bubbleMine: '#AB4D2D', onDanger: '#FFFFFF',
 };
 
 /**
@@ -85,6 +89,7 @@ const wimbledonColors: Palette = {
   overlay: 'rgba(14, 26, 16, 0.55)',
   link: '#245E93', onMedia: '#FFFFFF',
   bubble: '#E2EBD6',
+  bubbleMine: '#246A39', onDanger: '#FFFFFF',
 };
 
 /**
@@ -102,6 +107,7 @@ const usOpenColors: Palette = {
   overlay: 'rgba(4, 12, 22, 0.7)',
   link: '#A4CCF4', onMedia: '#FFFFFF',
   bubble: '#24425F',
+  bubbleMine: '#F4D35F', onDanger: '#1B1A0A',
 };
 
 export type ThemeName = 'default' | 'clean' | 'night' | 'ao' | 'roland-garros' | 'wimbledon' | 'us-open';

@@ -143,7 +143,7 @@ export function LinkCard({ url, mine, width = LINK_CARD_W, joinTop = false, join
   );
 
   const label = `Link${title ? `: ${title}` : ''}, ${site}${sentAt ? `, sent ${sentAt}` : ''}`;
-  const frame = [styles.card, corners, { width: w }];
+  const frame = [styles.card, !mine && styles.cardTheirs, corners, { width: w }];
   if (still) return <View style={frame}>{body}</View>;
   return (
     <Tappable
@@ -169,6 +169,8 @@ const styleDefinitions = StyleSheet.create({
     backgroundColor: colors.surface,
     overflow: 'hidden',
   },
+  // Theirs on their bubbles' own colour, with no outline, so a run of their messages reads as one piece.
+  cardTheirs: { backgroundColor: colors.bubble, borderColor: colors.bubble },
   media: { width: '100%', backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   mediaWait: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   // A play mark over a video's picture: a soft dark disc, so it reads on any picture.

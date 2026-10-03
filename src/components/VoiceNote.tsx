@@ -53,10 +53,11 @@ function Playing({ url, ms, mine, onDone }: { url: string; ms: number; mine: boo
 
 const styleDefinitions = StyleSheet.create({
   note: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20, minWidth: 200 },
-  mine: { backgroundColor: colors.brand },
-  theirs: { backgroundColor: colors.surface },
+  mine: { backgroundColor: colors.bubbleMine },
+  // Theirs in their bubbles' own colour, so a voice note reads as one of their messages.
+  theirs: { backgroundColor: colors.bubble },
   track: { flex: 1, height: 4, borderRadius: 2, backgroundColor: colors.border, overflow: 'hidden' },
-  trackMine: { backgroundColor: 'rgba(255,255,255,0.35)' },
+  trackMine: { backgroundColor: `${colors.brandInk}59` },
   fill: { height: 4, backgroundColor: colors.text },
   fillMine: { backgroundColor: colors.brandInk },
   time: { fontSize: 13, ...font('600'), fontVariant: ['tabular-nums'], minWidth: 34, textAlign: 'right' },

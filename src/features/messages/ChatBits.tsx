@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,7 +9,7 @@ import { EmojiKeyboard } from '@/components/EmojiKeyboard';
 import type { ID, Message, User } from '@/data/types';
 import { chatStamp } from '@/lib/format';
 import { useReducedMotion } from '@/lib/useReducedMotion';
-import { colors, font, radius, spacing, typography, withAlpha } from '@/theme';
+import { colors, font, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { messageSummary } from './groupRules';
 
@@ -45,21 +45,25 @@ const QUOTE_ICON: Partial<Record<Message['kind'], keyof typeof Ionicons.glyphMap
  * The message a reply answers, drawn small inside the reply's bubble (or
  * above a photo or voice note that answers it): a bar, who said it, and its
  * first words. Tapping it goes to the original and lights it up.
- * `original` undefined: it is gone (unsent, or deleted for you).
+ * `original` undefined: it is gone (unsent, or deleted for you). `blocked`:
+ * it is from someone you blocked, folded away in the chat, so its words stay
+ * hidden here too (the inbox's wording).
  */
-export function ReplyQuote({ original, who, mine, onPress, standalone = false }: {
+export function ReplyQuote({ original, who, mine, onPress, standalone = false, blocked = false }: {
   original?: Message; who: string; mine: boolean; onPress?: () => void;
   /** Above a photo or voice note rather than inside a bubble: on its own soft card. */
   standalone?: boolean;
+  blocked?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const ink = mine && !standalone;
-  const icon = original ? QUOTE_ICON[original.kind] : undefined;
+  const icon = original && !blocked ? QUOTE_ICON[original.kind] : undefined;
+  const words = !original ? 'This message is no longer available' : blocked ? 'Message from someone you blocked' : quoteWords(original);
   return (
     <Pressable
       // Inside a bubble (itself a button) it cannot be a button too: a browser refuses a button in a button.
       accessibilityRole={standalone ? 'button' : undefined}
-      accessibilityLabel={original ? `Replying to ${who}: ${quoteWords(original)}. Go to the message` : 'Replying to a message that is gone'}
+      accessibilityLabel={original ? `Replying to ${blocked ? 'someone you blocked' : who}: ${words}. Go to the message` : 'Replying to a message that is gone'}
       disabled={!original || !onPress}
       onPress={onPress}
       hitSlop={4}
@@ -67,11 +71,11 @@ export function ReplyQuote({ original, who, mine, onPress, standalone = false }:
     >
       <View style={[styles.quoteBar, ink ? styles.quoteBarMine : null]} />
       <View style={styles.quoteWords}>
-        <Text style={[styles.quoteWho, ink && styles.quoteWhoMine]} numberOfLines={1}>{original ? who : 'Message'}</Text>
+        <Text style={[styles.quoteWho, ink && styles.quoteWhoMine]} numberOfLines={1}>{original && !blocked ? who : 'Message'}</Text>
         <View style={styles.quoteLine}>
-          {icon ? <Ionicons name={icon} size={13} color={ink ? withAlpha(colors.brandInk, 0.8) : colors.textMuted} /> : null}
-          <Text style={[styles.quoteText, ink && styles.quoteTextMine, !original && styles.quoteGone]} numberOfLines={2}>
-            {original ? quoteWords(original) : 'This message is no longer available'}
+          {icon ? <Ionicons name={icon} size={13} color={ink ? colors.brandInk : colors.textMuted} /> : null}
+          <Text style={[styles.quoteText, ink && styles.quoteTextMine, (!original || blocked) && styles.quoteGone]} numberOfLines={2}>
+            {words}
           </Text>
         </View>
       </View>
@@ -134,22 +138,27 @@ export type ArriveMode = 'none' | 'sent' | 'received';
  * someone else's fades in with a soft rise. History, and anything under
  * Reduce Motion, simply appears.
  */
-export function Arrive({ mode, mine, children }: { mode: ArriveMode; mine: boolean; children: React.ReactNode }) {
+export function Arrive({ mode: firstMode, mine, children }: { mode: ArriveMode; mine: boolean; children: React.ReactNode }) {
   const still = useReducedMotion();
-  const p = useSharedValue(mode === 'none' || still ? 1 : 0);
+  // Settled the first time the message is drawn, and the wrapper is the same
+  // whatever it is: a row drawn again later (the next key typed, a moment on)
+  // keeps everything inside it as it was, so a voice note playing goes on
+  // playing and a picture never flickers.
+  const [mode] = useState<ArriveMode>(() => (still ? 'none' : firstMode));
+  const p = useSharedValue(mode === 'none' ? 1 : 0);
   useEffect(() => {
-    if (p.value >= 1) return;
+    if (mode === 'none') return;
     p.value = mode === 'sent'
       ? withSpring(1, { damping: 17, stiffness: 260, mass: 0.7 })
       : withTiming(1, { duration: 300, easing: Easing.out(Easing.cubic) });
   // Only on arriving: a row drawn again later never plays it twice.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const look = useAnimatedStyle(() => (mode === 'sent'
-    ? { opacity: Math.min(1, p.value * 3), transform: [{ translateY: (1 - p.value) * 26 }, { scale: 0.92 + 0.08 * p.value }] }
-    : { opacity: Math.min(1, p.value * 1.4), transform: [{ translateY: (1 - p.value) * 12 }] }));
-  if (mode === 'none' || still) return <>{children}</>;
-  return <Reanimated.View style={[look, { transformOrigin: mine ? 'right bottom' : 'left bottom' }]}>{children}</Reanimated.View>;
+  const look = useAnimatedStyle(() => (mode === 'none' ? {}
+    : mode === 'sent'
+      ? { opacity: Math.min(1, p.value * 3), transform: [{ translateY: (1 - p.value) * 26 }, { scale: 0.92 + 0.08 * p.value }] }
+      : { opacity: Math.min(1, p.value * 1.4), transform: [{ translateY: (1 - p.value) * 12 }] }));
+  return <Reanimated.View style={[look, mode !== 'none' && { transformOrigin: mine ? 'right bottom' : 'left bottom' }]}>{children}</Reanimated.View>;
 }
 
 /** A double tap's reaction bursting over the bubble (Instagram's heart): it pops up, holds a beat, and floats away. */
@@ -202,7 +211,8 @@ export function SeenFaces({ people, align, style }: { people: User[]; align: 'le
     >
       {shown.map((u, i) => (
         <View key={u.id} style={[styles.faceRing, i > 0 && styles.faceOverlap]}>
-          <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={16} />
+          {/* Too small for initials (they were cut off): the person's own colour, or their photo. */}
+          <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={16} plain />
         </View>
       ))}
       {more > 0 ? <Text style={styles.facesMore}>+{more}</Text> : null}
@@ -292,18 +302,20 @@ export function EmojiReactSheet({ visible, onPick, onClose }: { visible: boolean
 /**
  * "Info" from a held message: when it was sent (and edited), and who has
  * seen it — each person in a group, with when; "Seen" or "Not seen yet" in a
- * one-to-one (only when they let read receipts show).
+ * one-to-one. Someone who keeps read receipts off is listed as that, never
+ * as "Not seen yet": they may well have read it.
  */
 export function MessageInfoSheet({ message, readers, sender, mine, onClose }: {
   message: Message | null;
-  /** Everyone else in the chat who could have read it, with when they did (undefined: not yet, or they keep it to themselves). */
-  readers: { user: User; at?: string }[];
+  /** Everyone else in the chat who could have read it, with when they did (undefined: not yet); `off`: they keep read receipts off. */
+  readers: { user: User; at?: string; off?: boolean }[];
   sender?: User; mine: boolean; onClose: () => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   if (!message) return <Sheet visible={false} onClose={onClose}>{null}</Sheet>;
-  const seen = readers.filter((r) => r.at);
-  const unseen = readers.filter((r) => !r.at);
+  const seen = readers.filter((r) => r.at && !r.off);
+  const unseen = readers.filter((r) => !r.at && !r.off);
+  const quiet = readers.filter((r) => r.off);
   return (
     <Sheet visible title="Message info" onClose={onClose}>
       <View style={styles.infoBlock}>
@@ -327,6 +339,13 @@ export function MessageInfoSheet({ message, readers, sender, mine, onClose }: {
               <Text style={[styles.personName, styles.personNameFlex]} numberOfLines={1}>{user.name}</Text>
             </View>
           ))}
+          {quiet.length ? <Text style={styles.infoHead}>Read receipts off</Text> : null}
+          {quiet.map(({ user }) => (
+            <View key={user.id} style={[styles.person, styles.personQuiet]}>
+              <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={34} />
+              <Text style={[styles.personName, styles.personNameFlex]} numberOfLines={1}>{user.name}</Text>
+            </View>
+          ))}
         </ScrollView>
       ) : null}
     </Sheet>
@@ -344,19 +363,21 @@ function InfoLine({ styles, icon, label, value }: { styles: ReturnType<typeof us
 }
 
 const styleDefinitions = StyleSheet.create({
-  // A reply's quote: inside the bubble, a soft block in the bubble's own ink (yours) or the page's text (theirs).
+  // A reply's quote: inside the bubble, a soft block. In yours, the bubble's colour a step toward the
+  // page's text (darker on a light court, lighter on a dark one), so the ink on it stays solid and
+  // clear (it was see-through ink on see-through ink, under 3:1 on Melbourne's blue); in theirs, the page's text, faint.
   quote: { flexDirection: 'row', borderRadius: 10, overflow: 'hidden', marginBottom: 5, marginTop: 1, minWidth: 120 },
-  quoteMine: { backgroundColor: `${colors.brandInk}29` },
+  quoteMine: { backgroundColor: `${colors.text}29` },
   quoteTheirs: { backgroundColor: `${colors.text}0F` },
   quoteAlone: { backgroundColor: colors.bubble, marginBottom: 3, maxWidth: 260 },
   quoteBar: { width: 3, backgroundColor: colors.brand },
-  quoteBarMine: { backgroundColor: `${colors.brandInk}BF` },
+  quoteBarMine: { backgroundColor: colors.brandInk },
   quoteWords: { flexShrink: 1, paddingHorizontal: 8, paddingVertical: 5, gap: 1 },
   quoteWho: { ...font('600'), fontSize: 12.5, lineHeight: 16, color: colors.brand },
   quoteWhoMine: { color: colors.brandInk },
   quoteLine: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   quoteText: { ...font('400'), fontSize: 13.5, lineHeight: 18, color: colors.textMuted, flexShrink: 1 },
-  quoteTextMine: { color: `${colors.brandInk}E0` },
+  quoteTextMine: { color: colors.brandInk },
   quoteGone: { fontStyle: 'italic' },
   replyBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.md + 4, marginTop: spacing.xs, marginBottom: 2, maxWidth: 700, alignSelf: 'stretch' },
   replyBarEdge: { width: 3, alignSelf: 'stretch', borderRadius: 2, backgroundColor: colors.brand },
@@ -382,7 +403,7 @@ const styleDefinitions = StyleSheet.create({
   faceOverlap: { marginLeft: -4 },
   facesMore: { ...font('500'), fontSize: 11, color: colors.textFaint, marginLeft: 4 },
   backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
-  backdropClear: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.2)', justifyContent: 'flex-end' },
+  backdropClear: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
   sheet: { backgroundColor: colors.bg, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingTop: spacing.sm, maxWidth: 520, width: '100%', alignSelf: 'center' },
   emojiSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingTop: spacing.sm, maxWidth: 520, width: '100%', alignSelf: 'center', overflow: 'hidden' },
   grabber: { width: 36, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, alignSelf: 'center', marginBottom: spacing.md },

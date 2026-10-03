@@ -30,7 +30,8 @@ import { colors, font, radius, spacing, typography } from '@/theme';
  */
 export default function PickCourt() {
   const styles = useThemedStyles(styleDefinitions);
-  const { conversation } = useLocalSearchParams<{ conversation?: string }>();
+  // `reply`: the message being answered in the chat when the court was picked; the court goes as its answer.
+  const { conversation, reply } = useLocalSearchParams<{ conversation?: string; reply?: string }>();
   const { currentUser, currentUserId, conversations, users, detectedCoords, actions } = useApp();
   const home = useMemo(() => (currentUser ? homeFor(currentUser, detectedCoords) : null), [currentUser, detectedCoords]);
   const [courts, setCourts] = useState<Court[] | null>(null);
@@ -64,7 +65,7 @@ export default function PickCourt() {
     // The name as the map knows it, its id (so the card opens this court's
     // page) and how many courts stand there; the distance would be from
     // here, which means nothing to whoever reads it.
-    actions.sendCourt(conversation, { id: c.id, name: labelOf(c), lat: c.lat, lng: c.lng, count: c.count > 0 ? c.count : undefined });
+    actions.sendCourt(conversation, { id: c.id, name: labelOf(c), lat: c.lat, lng: c.lng, count: c.count > 0 ? c.count : undefined }, reply || undefined);
     close();
   };
   return (

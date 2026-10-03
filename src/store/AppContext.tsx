@@ -762,7 +762,7 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /** Reports a chat to CourtSide for a person to review. */
   reportChat: (conversationId: ID, reason: string) => void;
   /** Send a court in a chat: where to meet (with how many courts stand there, when known). */
-  sendCourt: (conversationId: ID, place: { id?: string; name: string; lat: number; lng: number; count?: number }) => void;
+  sendCourt: (conversationId: ID, place: { id?: string; name: string; lat: number; lng: number; count?: number }, replyToId?: ID) => void;
   /** Send a voice note recorded on this device (uploaded first). */
   sendVoice: (conversationId: ID, recording: { uri: string; ms: number }, replyToId?: ID) => void;
   /**
@@ -4082,36 +4082,59 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [requireUser, appendMessage, makeMessage, refreshChat],
   );
 
-  const sendCourt = useCallback((conversationId: ID, place: { id?: string; name: string; lat: number; lng: number; count?: number }) => {
+  /** A message of yours changed in place (sent at last, failed, its recording now up), found by its id. */
+  const patchMessage = useCallback((messageId: ID, patch: Partial<Message>) => {
+    setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, ...patch } : m)) }));
+  }, []);
+
+  const sendCourt = useCallback((conversationId: ID, place: { id?: string; name: string; lat: number; lng: number; count?: number }, replyToId?: ID) => {
     haptics.commit();
     const me = requireUser();
-    const message: Message = { ...makeMessage(conversationId, me, place.name), kind: 'court', place };
+    const sending = live(me, conversationId);
+    // "Sending…" under it until the server has it, as a message of words.
+    const message: Message = { ...makeMessage(conversationId, me, place.name), kind: 'court', place, ...(replyToId ? { replyToId } : null), ...(sending ? { sending: true } : null) };
     setState((prev) => appendMessage(prev, message));
-    if (live(me, conversationId)) void remote.insertMessage(message).catch(() => 'failed' as const).then((result) => {
-      if (result === 'failed' || result === 'refused') setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, failed: true } : m)) }));
+    if (sending) void remote.insertMessage({ ...message, sending: undefined }).catch(() => 'failed' as const).then((result) => {
+      patchMessage(message.id, { sending: undefined, ...(result === 'failed' || result === 'refused' ? { failed: true } : null) });
       if (result === 'refused') void refreshChat(conversationId);
     });
-  }, [requireUser, appendMessage, makeMessage, refreshChat]);
+  }, [requireUser, appendMessage, makeMessage, refreshChat, patchMessage]);
+
+  /**
+   * Puts a voice note's recording up (when it is still only on this phone),
+   * then saves the message. A retry goes through here too, so a recording
+   * whose upload failed is uploaded again rather than saved with an address
+   * only the sender's phone can play. "Sending…" until the server has it.
+   */
+  const deliverVoice = useCallback(async (message: Message) => {
+    const me = stateRef.current.currentUserId;
+    const audio = message.audio;
+    if (!me || !audio) return;
+    const stillThere = () => stateRef.current.messages.some((m) => m.id === message.id);
+    let url = audio.url;
+    if (!/^https?:/i.test(url)) {
+      try { url = await uploadMedia(me, url, 'audio'); } catch {
+        patchMessage(message.id, { sending: undefined, failed: true });
+        return;
+      }
+      // Kept on the message as soon as it is up, so a retry after this only saves it.
+      patchMessage(message.id, { audio: { url, ms: audio.ms } });
+    }
+    // Unsent while it went up: nothing is saved.
+    if (!stillThere()) return;
+    const result = await remote.insertMessage({ ...message, audio: { url, ms: audio.ms }, sending: undefined, failed: undefined }).catch(() => 'failed' as const);
+    patchMessage(message.id, { sending: undefined, ...(result === 'failed' || result === 'refused' ? { failed: true } : null) });
+    if (result === 'refused') void refreshChat(message.conversationId);
+  }, [refreshChat, patchMessage]);
 
   const sendVoice = useCallback((conversationId: ID, recording: { uri: string; ms: number }, replyToId?: ID) => {
     haptics.commit();
     const me = requireUser();
-    const message: Message = { ...makeMessage(conversationId, me, 'Voice note'), kind: 'voice', audio: { url: recording.uri, ms: recording.ms }, ...(replyToId ? { replyToId } : null) };
+    const sending = live(me, conversationId);
+    const message: Message = { ...makeMessage(conversationId, me, 'Voice note'), kind: 'voice', audio: { url: recording.uri, ms: recording.ms }, ...(replyToId ? { replyToId } : null), ...(sending ? { sending: true } : null) };
     setState((prev) => appendMessage(prev, message));
-    if (!live(me, conversationId)) return;
-    void (async () => {
-      let url: string;
-      try { url = await uploadMedia(me, recording.uri, 'audio'); } catch {
-        setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, failed: true } : m)) }));
-        return;
-      }
-      const hosted: Message = { ...message, audio: { url, ms: recording.ms } };
-      setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? hosted : m)) }));
-      const result = await remote.insertMessage(hosted).catch(() => 'failed' as const);
-      if (result === 'failed' || result === 'refused') setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, failed: true } : m)) }));
-      if (result === 'refused') void refreshChat(conversationId);
-    })();
-  }, [requireUser, appendMessage, makeMessage, refreshChat]);
+    if (sending) void deliverVoice(message);
+  }, [requireUser, appendMessage, makeMessage, deliverVoice]);
 
   /**
    * Puts a photo message's photos up, one after another (the bubble's ring
@@ -4124,7 +4147,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = stateRef.current.currentUserId;
     const photos = message.photos ?? [];
     if (!me || !photos.length) return;
-    const setFailed = () => setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, failed: true } : m)) }));
+    const setFailed = () => patchMessage(message.id, { sending: undefined, failed: true });
     const stillThere = () => stateRef.current.messages.some((m) => m.id === message.id);
     const sent: ChatPhoto[] = [];
     setSendProgress(message.id, 0);
@@ -4154,22 +4177,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (hosted.length) void remote.removeChatPhotos(hosted);
       return;
     }
-    const hosted: Message = { ...message, photos: sent, failed: undefined };
+    const hosted: Message = { ...message, photos: sent, failed: undefined, sending: undefined };
     const result = await remote.insertMessage(hosted).catch(() => 'failed' as const);
     clearSendProgress(message.id);
     if (result === 'failed' || result === 'refused') setFailed();
+    else patchMessage(message.id, { sending: undefined });
     if (result === 'refused') void refreshChat(message.conversationId);
-  }, [refreshChat]);
+  }, [refreshChat, patchMessage]);
 
   const sendPhotos = useCallback((conversationId: ID, picked: { uri: string; width: number; height: number }[], caption = '', replyToId?: ID) => {
     const photos: ChatPhoto[] = picked.slice(0, MAX_CHAT_PHOTOS).map((p) => ({ path: p.uri, w: Math.max(1, p.width), h: Math.max(1, p.height) }));
     if (!photos.length) return;
     haptics.commit();
     const me = requireUser();
-    const message: Message = { ...makeMessage(conversationId, me, caption.trim(), 'photo'), photos, ...(replyToId ? { replyToId } : null) };
+    const sending = live(me, conversationId);
+    const message: Message = { ...makeMessage(conversationId, me, caption.trim(), 'photo'), photos, ...(replyToId ? { replyToId } : null), ...(sending ? { sending: true } : null) };
     setState((prev) => appendMessage(prev, message));
     // The demo has nowhere to put them: they stay as they are, on this device.
-    if (live(me, conversationId)) void deliverPhotos(message);
+    if (sending) void deliverPhotos(message);
   }, [requireUser, appendMessage, makeMessage, deliverPhotos]);
 
   /* Group chats. Most changes show at once and are saved afterwards; when the
@@ -4507,14 +4532,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const message = stateRef.current.messages.find((m) => m.id === messageId);
     if (!message?.failed || message.senderId !== me) return;
     haptics.tap();
-    const text = message.kind !== 'photo';
-    setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, failed: false, ...(text ? { sending: true } : null) } : m)) }));
+    // "Sending…" again while it goes.
+    patchMessage(messageId, { failed: undefined, sending: true });
     // Photos go up again first (only the ones that had not yet), then the message.
-    if (message.kind === 'photo') { void deliverPhotos({ ...message, failed: undefined }); return; }
+    if (message.kind === 'photo') { void deliverPhotos({ ...message, failed: undefined, sending: true }); return; }
+    // A voice note's recording too, when it never got up.
+    if (message.kind === 'voice') { void deliverVoice({ ...message, failed: undefined, sending: true }); return; }
     void remote.insertMessage({ ...message, failed: undefined, sending: undefined }).catch(() => 'failed' as const).then((result) => {
-      setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, sending: undefined, ...(result === 'failed' ? { failed: true } : null) } : m)) }));
+      patchMessage(messageId, { sending: undefined, ...(result === 'failed' || result === 'refused' ? { failed: true } : null) });
     });
-  }, [requireUser, deliverPhotos]);
+  }, [requireUser, deliverPhotos, deliverVoice, patchMessage]);
 
   const editMessage = useCallback((messageId: ID, body: string) => {
     const me = requireUser();

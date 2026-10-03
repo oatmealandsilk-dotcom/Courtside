@@ -243,28 +243,50 @@ export default function Inbox() {
         <View style={styles.list}>
           {threads.map((t, index) => {
             const { conversation, muted, unread, name } = t;
+            // Mute only where the database has it (the hold menu's rule too).
+            const canMute = hasGroupControls(conversation);
+            const toggleMute = () => { if (muted) actions.muteChat(conversation.id, null); else setHeld({ conversation, name, step: 'mute' }); };
             const actionsUnder = (
               <>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={muted ? `Unmute ${name}` : `Mute ${name}`}
-                  onPress={() => { setOpenRow(null); if (muted) actions.muteChat(conversation.id, null); else setHeld({ conversation, name, step: 'mute' }); }}
-                  style={[styles.action, styles.actionQuiet]}
-                >
-                  <Ionicons name={muted ? 'notifications-outline' : 'notifications-off-outline'} size={21} color={colors.text} />
-                  <Text style={styles.actionText}>{muted ? 'Unmute' : 'Mute'}</Text>
-                </Pressable>
+                {canMute ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={muted ? `Unmute ${name}` : `Mute ${name}`}
+                    onPress={() => { setOpenRow(null); toggleMute(); }}
+                    style={[styles.action, styles.actionQuiet]}
+                  >
+                    <Ionicons name={muted ? 'notifications-outline' : 'notifications-off-outline'} size={21} color={colors.text} />
+                    <Text style={styles.actionText}>{muted ? 'Unmute' : 'Mute'}</Text>
+                  </Pressable>
+                ) : null}
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Delete chat with ${name}`}
                   onPress={() => { setOpenRow(null); askDelete(conversation); }}
                   style={[styles.action, styles.actionDanger]}
                 >
-                  <Ionicons name="trash-outline" size={21} color={colors.onMedia} />
-                  <Text style={[styles.actionText, styles.actionTextLight]}>Delete</Text>
+                  {/* Dark on the two dark courts, where white on their lighter red fell short. */}
+                  <Ionicons name="trash-outline" size={21} color={colors.onDanger} />
+                  <Text style={[styles.actionText, { color: colors.onDanger }]}>Delete</Text>
                 </Pressable>
               </>
             );
+            // What the swipes and the hold menu offer, for a screen reader (which cannot swipe a row).
+            const rowActions: RowAction[] = [
+              // Pin only while there is room for another (up to MAX_PINNED_CHATS).
+              ...(conversation.pinnedAt
+                ? [{ name: 'unpin', label: 'Unpin', run: () => actions.pinChat(conversation.id, false) }]
+                : pinnedCount < MAX_PINNED_CHATS ? [{ name: 'pin', label: 'Pin to the top', run: () => actions.pinChat(conversation.id, true) }] : []),
+              unread
+                ? { name: 'read', label: 'Mark as read', run: () => actions.markChatUnread(conversation.id, false) }
+                : { name: 'unread', label: 'Mark as unread', run: () => actions.markChatUnread(conversation.id, true) },
+              ...(canMute ? [{ name: 'mute', label: muted ? 'Unmute' : 'Mute messages', run: toggleMute }] : []),
+              { name: 'delete', label: 'Delete chat', run: () => askDelete(conversation) },
+              ...(t.group ? [{
+                name: 'leave', label: 'Leave group',
+                run: () => confirm({ title: 'Leave this group?', message: leaveGroupMessage(conversation, hitRequests, currentUserId), confirmLabel: 'Leave', destructive: true, onConfirm: () => actions.leaveGroup(conversation.id) }),
+              }] : []),
+            ];
             const mark = (
               <View style={styles.markDisc}>
                 <Ionicons name={unread ? 'checkmark-done' : 'mail-unread'} size={20} color={colors.brandInk} />
@@ -274,7 +296,7 @@ export default function Inbox() {
               <SwipeRow
                 key={conversation.id}
                 actions={actionsUnder}
-                actionCount={2}
+                actionCount={canMute ? 2 : 1}
                 mark={mark}
                 onMark={() => actions.markChatUnread(conversation.id, !unread)}
                 open={openRow === conversation.id}
@@ -288,6 +310,7 @@ export default function Inbox() {
                   line={(said) => preview(t.group, t.last, said)}
                   onOpen={() => { if (openRow) { setOpenRow(null); return; } router.push(`/messages/${conversation.id}`); }}
                   onHold={() => { setOpenRow(null); setHeld({ conversation, name, step: 'menu' }); }}
+                  rowActions={rowActions}
                 />
               </SwipeRow>
             );
@@ -309,8 +332,11 @@ export default function Inbox() {
  * something new), when it last moved, and its last message (in full ink
  * while new). A link reads as its title once it is known.
  */
-function InboxRow({ thread, first, styles, line, onOpen, onHold }: {
-  thread: Thread; first: boolean; styles: any; line: (said: string) => string; onOpen: () => void; onHold: () => void;
+/** Something a row offers a screen reader: what the swipes and the hold menu do. */
+interface RowAction { name: string; label: string; run: () => void }
+
+function InboxRow({ thread, first, styles, line, onOpen, onHold, rowActions }: {
+  thread: Thread; first: boolean; styles: any; line: (said: string) => string; onOpen: () => void; onHold: () => void; rowActions: RowAction[];
 }) {
   const { conversation, other, last, group, muted, unread, name, people } = thread;
   const link = last?.kind === 'text' ? isOnlyLink(last.body) : null;
@@ -325,6 +351,8 @@ function InboxRow({ thread, first, styles, line, onOpen, onHold }: {
       accessibilityRole="link"
       accessibilityLabel={`${group ? `Open ${name}` : `Open conversation with ${name}`}${pinned ? ', pinned' : ''}${muted ? ', muted' : ''}${unread ? ', new messages' : ''}`}
       accessibilityHint="Swipe or hold for pin, mute and more"
+      accessibilityActions={rowActions.map(({ name, label }) => ({ name, label }))}
+      onAccessibilityAction={(e) => rowActions.find((a) => a.name === e.nativeEvent.actionName)?.run()}
       onPress={onOpen}
       onLongPress={onHold}
       delayLongPress={400}
@@ -390,7 +418,6 @@ const styleDefinitions = StyleSheet.create({
   actionQuiet: { backgroundColor: colors.surfaceAlt },
   actionDanger: { backgroundColor: colors.danger },
   actionText: { ...typography.smallStrong, fontSize: 12, color: colors.text },
-  actionTextLight: { color: colors.onMedia },
   // Under a row slid to the right: read or unread.
   markDisc: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brand },
 });

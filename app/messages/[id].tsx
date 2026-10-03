@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { Wash } from '@/components/Wash';
 import { PlayerName } from '@/components/PlayerName';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -15,6 +15,7 @@ import {
   TextInput,
   View,
   useWindowDimensions,
+  type AccessibilityActionEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
@@ -52,7 +53,7 @@ import { useLinkPreview } from '@/features/messages/linkPreview';
 import { useDragDownDismiss, useKeyboardLift } from '@/features/messages/keyboardLift';
 import { Slide, TimeAnchor, TimeSwipeArea } from '@/features/messages/MessageTimes';
 import { SwipeReply } from '@/features/messages/SwipeReply';
-import { buildRows, type Gap, type ThreadRow } from '@/features/messages/threadRows';
+import { buildRows, keepRows, type Gap, type ThreadRow } from '@/features/messages/threadRows';
 import {
   Arrive, Burst, EmojiReactSheet, Flash, MessageInfoSheet, NewMessagesButton, ReactionsSheet, ReplyBar, ReplyQuote, SeenFaces, type ArriveMode,
 } from '@/features/messages/ChatBits';
@@ -66,7 +67,7 @@ import { show as showToast } from '@/lib/toast';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { afterMenu, confirm, confirmAfterMenu } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
-import type { Message, Post, Question, User } from '@/data/types';
+import type { HitRequest, ID, Message, Post, Question, User } from '@/data/types';
 import Reanimated, { Easing, FadeIn, FadeInDown, FadeInUp, FadeOut, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { colors, lift, pageIsDark, radius, spacing, typography, font, withAlpha } from '@/theme';
 
@@ -81,13 +82,75 @@ const INPUT_MAX_H = INPUT_LINE * 5;
  */
 const FACE = 28;
 
-/** Scrolled up this far from the newest message: the round "back down" button shows, and new messages are counted on it. */
-const AWAY_PX = 260;
+/**
+ * Within this far of the newest message you are "at the bottom": a new
+ * message is followed in (with a faint tick). Any further up, the round
+ * "back down" button shows and counts what comes meanwhile. One number for
+ * all three, so a message can never land out of sight with no sign of it.
+ */
+const NEAR_PX = 80;
 
 /** Held this long, the mic records while held and sends on letting go; a quicker tap records until Send (or the bin). */
 const HOLD_MS = 350;
 /** Slid this far to the left while holding the mic: the recording is thrown away. */
 const CANCEL_AT = 110;
+
+type Styles = typeof styleDefinitions;
+
+/**
+ * What the rows and the message box call. Made once for the life of the
+ * chat and pointed at the screen's latest code each time it draws, so a row
+ * (drawn again only when something of its own changes) never holds an old one.
+ */
+interface Calls {
+  openMenu: (target: MenuTarget) => void;
+  startReply: (message: Message) => void;
+  react: (messageId: ID, emoji?: string) => void;
+  anyEmoji: (message: Message) => void;
+  copy: (text: string) => void;
+  retry: (messageId: ID) => void;
+  openReactions: (message: Message) => void;
+  jumpTo: (messageId: ID) => void;
+  showFolded: (ids: ID[]) => void;
+  openPhoto: (message: Message, index: number, rects: (TileRect | undefined)[]) => void;
+  // The message box.
+  send: (text: string) => void;
+  sendVoice: (recording: { uri: string; ms: number }) => void;
+  recording: (on: boolean) => void;
+  typed: (text: string) => void;
+  focused: (on: boolean) => void;
+  toggleEmoji: () => void;
+  plusToggled: () => void;
+  camera: () => void;
+  photos: () => void;
+  court: () => void;
+  escape: () => void;
+}
+const CALL_NAMES: (keyof Calls)[] = [
+  'openMenu', 'startReply', 'react', 'anyEmoji', 'copy', 'retry', 'openReactions', 'jumpTo', 'showFolded', 'openPhoto',
+  'send', 'sendVoice', 'recording', 'typed', 'focused', 'toggleEmoji', 'plusToggled', 'camera', 'photos', 'court', 'escape',
+];
+
+/** What every row shares: the chat's look and people, and the calls. Changes only when one of those does. */
+interface RowCtx {
+  styles: Styles;
+  me: ID | null;
+  group: boolean;
+  defaultReaction: string;
+  users: User[];
+  posts: Post[];
+  questions: Question[];
+  hitRequests: HitRequest[];
+  /** Where you are, for a court card's distance. */
+  from: { lat: number; lng: number } | null;
+  winW: number;
+  faceOf: (uid: ID) => User | undefined;
+  nameOf: (uid: ID) => string;
+  arrivalOf: (m: Message) => ArriveMode;
+  call: Calls;
+}
+
+const firstName = (u?: User) => u?.name.trim().split(/\s+/)[0] ?? 'Someone';
 
 /**
  * One conversation: bubbles, shared-item cards and a message box.
@@ -96,7 +159,10 @@ const CANCEL_AT = 110;
  * is the newest message, at the bottom, so the chat opens already there
  * with nothing to scroll, the keyboard lifts the newest message with the
  * box by itself, older pages load at its far end (the top) without moving
- * anything, and only the rows on screen are drawn.
+ * anything, and only the rows on screen are drawn. Each row is drawn again
+ * only when something of its own changes (Messages' and WhatsApp's way):
+ * typing redraws only the box, and a new message only its own row and the
+ * one it joins.
  */
 export default function Thread() {
   const styles = useThemedStyles(styleDefinitions);
@@ -104,7 +170,9 @@ export default function Thread() {
   const insets = useSafeAreaInsets();
   const { width: winW } = useWindowDimensions();
   const { conversations, messages, users, posts, questions, hitRequests, currentUserId, currentUser, detectedCoords, defaultReaction, actions, blockedIds, lastSeen } = useApp();
-  const [draft, setDraft] = useState('');
+  // The message box keeps its own words, cursor and recording (Composer, below):
+  // a key typed redraws the box alone, never the chat above it.
+  const composer = useRef<ComposerHandle>(null);
   // Photos picked from the camera roll, waiting above the box for Send (the box becomes their caption).
   const [picked, setPicked] = useState<TrayPhoto[]>([]);
   // A photo opened full screen: which message, which of its photos, and where it sits in the chat.
@@ -114,17 +182,19 @@ export default function Thread() {
   // Holding a message opens its menu over the chat; Edit puts its words back in the box.
   const [menu, setMenu] = useState<MenuTarget | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
+  // What was in the box when Edit filled it with a message's words: it comes back when the edit ends.
+  const draftBeforeEdit = useRef<string | null>(null);
   // The message being answered: "Replying to …" over the box, and quoted above what is sent.
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   // The sheets a held message or a reaction chip opens.
   const [reactionsOf, setReactionsOf] = useState<Message | null>(null);
   const [infoOf, setInfoOf] = useState<Message | null>(null);
   const [anyEmojiFor, setAnyEmojiFor] = useState<Message | null>(null);
-  // The "+" in the box: photos and courts, one tap away.
-  const [plusOpen, setPlusOpen] = useState(false);
   // Going to the message a reply answers: it lights up.
   const [flash, setFlash] = useState<{ id: string; n: number } | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  // A voice note recording in the box: the emoji keyboard steps aside.
+  const [recording, setRecording] = useState(false);
   // The emoji keyboard takes the phone keyboard's place at the phone keyboard's
   // height, so switching between them leaves the typing bar where it was.
   const keyboardHeight = useRef(Platform.OS === 'web' ? 260 : 300);
@@ -136,7 +206,6 @@ export default function Thread() {
     });
     return () => sub.remove();
   }, [insets.bottom]);
-  const inputRef = useRef<TextInput>(null);
   const [typingFocus, setTypingFocus] = useState(false);
   const focused = useIsFocused();
   // The room under the typing bar: a little above the home indicator with the
@@ -146,7 +215,7 @@ export default function Thread() {
   const room = useKeyboardLift({ rest: Math.max(insets.bottom, 12) + 2, focused, typing: typingFocus, emojiRoom });
   // Dragging the messages down puts the keyboard away (on an iPhone, following the finger).
   const dragDown = useDragDownDismiss(
-    () => { inputRef.current?.blur(); Keyboard.dismiss(); setEmojiOpen(false); },
+    () => { composer.current?.blur(); Keyboard.dismiss(); setEmojiOpen(false); },
     // On an iPhone the phone's own keyboard follows the finger by itself; the emoji keyboard is closed by the drag.
     () => setEmojiOpen(false),
   );
@@ -230,11 +299,10 @@ export default function Thread() {
   const typers = Object.keys(typing).filter((uid) => uid !== currentUserId && !blockedIds.includes(uid));
   // While you type, the others hear it every couple of seconds, never on every key.
   const lastPing = useRef(0);
-  const pingTyping = (text: string) => {
-    if (!text.trim()) return;
-    const now = Date.now();
-    if (now - lastPing.current > 2000) { lastPing.current = now; typingLink.current?.ping(); }
-  };
+  // A court (or anything else) sent from elsewhere as the answer to the message being replied to: the strip has done its job.
+  useEffect(() => {
+    if (replyTo && lastReal?.senderId === currentUserId && lastReal.replyToId === replyTo.id) setReplyTo(null);
+  }, [lastReal?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A one-to-one chat with someone you are blocked with (either of you
   // blocked the other) can still be read, but not written in: the box gives
@@ -249,6 +317,8 @@ export default function Thread() {
     return () => { on = false; };
   }, [conversation?.id, checkBlocked, blockedIds, removed]);
   const blockedHere = chatBlocked || (!group && !!other && blockedIds.includes(other.id));
+  // Nothing can be written here (nor reacted with): the box gives way to a note.
+  const canWrite = !removed && !blockedHere;
 
   // Reaching the top of the list loads the page of messages before the
   // oldest here, like Instagram. The list is upside down, so they go in at
@@ -269,8 +339,10 @@ export default function Thread() {
 
   // In a group, whose read position is shown as faces: the others who let read receipts show (never someone you blocked).
   const readers = useMemo(() => (group ? people.filter((u) => u.readReceiptsEnabled !== false && !blockedIds.includes(u.id)) : []), [group, people, blockedIds]);
+  // The rows, each kept as the same object while nothing about it changes, so its row is not drawn again.
+  const rowCache = useRef(new Map<string, ThreadRow>());
   const rows = useMemo(
-    () => buildRows(thread, { me: currentUserId, group, blockedIds, shownIds, readers }),
+    () => keepRows(rowCache.current, buildRows(thread, { me: currentUserId, group, blockedIds, shownIds, readers })),
     [thread, currentUserId, group, blockedIds, shownIds, readers],
   );
   // The list is upside down: its first row is the newest message.
@@ -281,7 +353,7 @@ export default function Thread() {
   // Scrolled up to read: the "back down" button, and how many came meanwhile.
   const [away, setAway] = useState(false);
   const awayRef = useRef(false);
-  // Resting on the newest message (within a few points of it): a new one is followed in, with a faint tick.
+  // Resting at the newest message (within NEAR_PX of it): a new one is followed in, with a faint tick.
   const atBottom = useRef(true);
   const [unseen, setUnseen] = useState(0);
   const toNewest = useCallback((animated = true) => {
@@ -297,11 +369,11 @@ export default function Thread() {
    */
   const known = useRef<Set<string> | null>(null);
   const arrivedAt = useRef(new Map<string, number>());
-  const arrivalOf = (m: Message): ArriveMode => {
+  const arrivalOf = useCallback((m: Message): ArriveMode => {
     const at = arrivedAt.current.get(m.id);
     const fresh = at !== undefined ? Date.now() - at < 900 : !!known.current && !known.current.has(m.id) && Date.now() - Date.parse(m.createdAt) < 60_000;
     return !fresh ? 'none' : m.senderId === currentUserId ? 'sent' : 'received';
-  };
+  }, [currentUserId]);
   useEffect(() => {
     const first = !known.current;
     const seen = known.current ?? new Set<string>();
@@ -325,8 +397,8 @@ export default function Thread() {
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const y = e.nativeEvent.contentOffset.y;
-    atBottom.current = y < 48;
-    const isAway = y > AWAY_PX;
+    atBottom.current = y < NEAR_PX;
+    const isAway = !atBottom.current;
     if (isAway !== awayRef.current) {
       awayRef.current = isAway;
       setAway(isAway);
@@ -360,45 +432,62 @@ export default function Thread() {
     setFlash({ id: messageId, n: Date.now() });
   };
 
-  // "@" in a message offers people, following first, the same as a comment.
-  // (These hooks sit above the early return below: a thread that loads a
-  // moment after the page would otherwise change the hook count and crash.)
-  const [caret, setCaret] = useState(0);
-  // In a group, its own people come first: they are who you are talking to.
+  // In a group, its own people come first in "@" suggestions: they are who you are talking to.
   const memberKey = conversation?.participantIds.join(',') ?? '';
   const memberIds = useMemo(() => (memberKey ? memberKey.split(',').filter((p) => p !== currentUserId) : []), [memberKey, currentUserId]);
-  const candidatesFor = useMentionCandidates(group ? memberIds : undefined);
-  // Voice notes: the mic sits where Send is while the box is empty. A tap
-  // records until Send or the bin; held, it records while held, sends on
-  // letting go, and a slide to the left throws it away (WhatsApp's).
-  const voice = useVoiceRecorder();
-  const [recMode, setRecMode] = useState<'hold' | 'locked'>('locked');
-  const recSlide = useSharedValue(0);
-  const sendRecording = async () => {
-    const answering = replyTo;
-    const got = await voice.finish();
-    setRecMode('locked');
-    if (got && conversation) {
-      actions.sendVoice(conversation.id, got, answering?.id);
-      setReplyTo(null);
-      toNewest(awayRef.current);
-    }
-  };
-  const throwRecording = () => { haptics.untap(); setRecMode('locked'); void voice.finish(); };
-  const startRecording = async () => {
-    const result = await voice.start();
-    if (result === 'denied') showToast({ title: 'Microphone is off for CourtSide', body: 'Turn it on in your phone’s Settings to send voice notes.', icon: 'mic-off-outline' });
-    else if (result === 'failed') showToast({ title: 'Couldn’t start recording', body: 'Try again in a moment.', icon: 'alert-circle-outline' });
-  };
-  useEffect(() => { if (voice.recording && voice.elapsed >= VOICE_LIMIT_MS) void sendRecording(); }, [voice.elapsed]); // eslint-disable-line react-hooks/exhaustive-deps
-  // In a browser the box grows with the words as a phone's does (up to a few lines, then it scrolls), and shrinks back once they are sent.
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    const box = inputRef.current as unknown as HTMLTextAreaElement | null;
-    if (!box?.style) return;
-    box.style.height = 'auto';
-    box.style.height = `${Math.min(INPUT_MAX_H, box.scrollHeight)}px`;
-  }, [draft]);
+
+  const faceOf = useCallback((uid: ID) => users.find((u) => u.id === uid), [users]);
+  const nameOf = useCallback((uid: ID) => (uid === currentUserId ? 'You' : firstName(faceOf(uid))), [currentUserId, faceOf]);
+
+  // The read line under your newest message (event lines aside), small and at
+  // its right edge, like iMessage's "Delivered" and "Read": "Sending…" until
+  // the server has it, then "Seen" or "Sent" in a one-to-one chat (Seen only
+  // when they let read receipts show). In a group, faces show who has read
+  // up to where; "Sent" until anyone has.
+  const readLine = !typers.length && lastReal && lastReal.senderId === currentUserId && !lastReal.failed
+    ? lastSending || lastReal.sending ? 'Sending…' : group
+      ? (rows.some((r) => r.seenBy?.length && r.message.id === lastReal.id) ? null : 'Sent')
+      : other && other.readReceiptsEnabled !== false && lastReal.readAtBy?.[other.id] ? 'Seen' : 'Sent'
+    : null;
+
+  // The calls the rows and the box make, made once (see Calls).
+  const live = useRef<Calls | null>(null);
+  const calls = useMemo(() => Object.fromEntries(CALL_NAMES.map((name) => [
+    name, (...args: unknown[]) => (live.current?.[name] as ((...a: unknown[]) => void) | undefined)?.(...args),
+  ])) as unknown as Calls, []);
+
+  // Where you are, for court cards' distances: the same object while you have not moved.
+  const fromRaw = detectedCoords ?? currentUser?.cityAt ?? null;
+  const fromKey = fromRaw ? `${fromRaw.lat},${fromRaw.lng}` : '';
+  const from = useMemo(() => fromRaw, [fromKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rowCtx = useMemo<RowCtx>(() => ({
+    styles, me: currentUserId, group, defaultReaction, users, posts, questions, hitRequests, from, winW, faceOf, nameOf, arrivalOf, call: calls,
+  }), [styles, currentUserId, group, defaultReaction, users, posts, questions, hitRequests, from, winW, faceOf, nameOf, arrivalOf, calls]);
+
+  // One row of the list. What changes for only some rows goes in as small
+  // values of their own (held, lit up, the read line), so only those rows draw again.
+  const menuId = menu?.message.id;
+  const typingNow = typers.length > 0;
+  const lastRealId = lastReal?.id;
+  const renderRow = useCallback(({ item }: { item: ThreadRow }) => {
+    const m = item.message;
+    const got = m.replyToId ? byId.get(m.replyToId) : undefined;
+    const original = got && (!hiddenAt || got.createdAt > hiddenAt) ? got : undefined;
+    return (
+      <MessageRow
+        item={item}
+        ctx={rowCtx}
+        original={original}
+        // Answering someone you blocked, whose words are folded away here: the quote keeps them hidden too.
+        originalBlocked={!!original && group && original.senderId !== currentUserId && blockedIds.includes(original.senderId) && !shownIds.includes(original.id)}
+        held={menuId === m.id}
+        flashKey={flash?.id === m.id ? flash.n : undefined}
+        readLine={m.id === lastRealId ? readLine : null}
+        seenHidden={!!item.seenBy?.length && typingNow}
+        canWrite={canWrite}
+      />
+    );
+  }, [rowCtx, byId, hiddenAt, group, currentUserId, blockedIds, shownIds, menuId, flash, lastRealId, readLine, typingNow, canWrite]);
 
   // A group opens even with nobody else left in it (or nobody else loaded yet).
   if (!conversation || (!group && !other)) {
@@ -431,19 +520,6 @@ export default function Thread() {
     destructive: true,
     onConfirm: () => { actions.leaveGroup(conversation.id); router.replace('/messages'); },
   });
-  const firstName = (u?: User) => u?.name.trim().split(/\s+/)[0] ?? 'Someone';
-  const faceOf = (uid: string) => users.find((u) => u.id === uid);
-  const nameOf = (uid: string) => (uid === currentUserId ? 'You' : firstName(faceOf(uid)));
-  // The read line under your newest message (event lines aside), small and at
-  // its right edge, like iMessage's "Delivered" and "Read": "Sending…" until
-  // the server has it, then "Seen" or "Sent" in a one-to-one chat (Seen only
-  // when they let read receipts show). In a group, faces show who has read
-  // up to where; "Sent" until anyone has.
-  const readLine = !typers.length && lastReal && lastReal.senderId === currentUserId && !lastReal.failed
-    ? lastSending || lastReal.sending ? 'Sending…' : group
-      ? (rows.some((r) => r.seenBy?.length && r.message.id === lastReal.id) ? null : 'Sent')
-      : other && other.readReceiptsEnabled !== false && lastReal.readAtBy?.[other.id] ? 'Seen' : 'Sent'
-    : null;
   // Under the name in the header, something worth knowing: who is typing; in
   // a one-to-one chat, the court they are at, or that they are up to hit
   // today; else their handle. A group shows how many are in it.
@@ -457,43 +533,12 @@ export default function Thread() {
   const statusLive = !typingLine && (!!atCourt || upToHit);
   // Every message of the chat is here (nothing older left to load): its start, with who it is with, can show above the first.
   const wholeHistory = noMoreOlder.current || thread.length < MESSAGE_PAGE;
-  // A link's card reaches as far as a court card does.
-  const linkWidth = (beside: boolean) => Math.min(LINK_CARD_W, reach(beside));
-  // Nothing can be written here: the box gives way to a note.
-  const canWrite = !removed && !blockedHere;
-  // How far a court card or photos may reach across the chat: most of its
-  // width (less the face beside others' messages in a group), so they never
-  // run off the side of a small phone.
-  const reach = (beside: boolean) => Math.floor((Math.min(700, winW) - spacing.lg * 2 - (beside ? FACE + spacing.sm : 0)) * 0.84);
-  // An emoji goes in where the cursor is, and the cursor moves past it.
-  const placeCaret = (at: number) => { setCaret(at); setTimeout(() => inputRef.current?.setNativeProps?.({ selection: { start: at, end: at } }), 0); };
-  const insertEmoji = (emoji: string) => {
-    const at = Math.min(caret, draft.length);
-    setDraft(draft.slice(0, at) + emoji + draft.slice(at));
-    placeCaret(at + emoji.length);
-  };
-  const deleteBack = () => {
-    const at = Math.min(caret, draft.length);
-    if (at === 0) return;
-    const before = dropLastCharacter(draft.slice(0, at));
-    setDraft(before + draft.slice(at));
-    placeCaret(before.length);
-  };
   // The emoji button swaps the phone keyboard for the emoji one and back.
   const toggleEmoji = () => {
-    setPlusOpen(false);
-    if (emojiOpen) { room.holdUntilKeyboard(emojiRoom); setEmojiOpen(false); inputRef.current?.focus(); return; }
+    composer.current?.closePlus();
+    if (emojiOpen) { room.holdUntilKeyboard(emojiRoom); setEmojiOpen(false); composer.current?.focus(); return; }
     Keyboard.dismiss();
     setEmojiOpen(true);
-  };
-  const mention = activeMention(draft, caret);
-  const mentionRows = mention ? candidatesFor(mention.query, 5) : [];
-  const pickMention = (handle: string) => {
-    if (!mention) return;
-    const next = applyMention(draft, mention.start, caret, handle);
-    setDraft(next.text);
-    setCaret(next.caret);
-    setTimeout(() => inputRef.current?.setNativeProps?.({ selection: { start: next.caret, end: next.caret } }), 0);
   };
 
   /*
@@ -504,10 +549,11 @@ export default function Thread() {
    * keyboard, being part of the page, simply stays open underneath: taking
    * it away would drop the bar in one jump.
    */
-  const letGo = () => { inputRef.current?.blur(); Keyboard.dismiss(); };
+  const letGo = () => { composer.current?.blur(); Keyboard.dismiss(); };
   const openCourtPicker = () => {
-    setPlusOpen(false);
-    const go = () => router.push({ pathname: '/pick-court', params: { conversation: conversation.id } });
+    composer.current?.closePlus();
+    // Picked while answering a message: the court goes as the answer.
+    const go = () => router.push({ pathname: '/pick-court', params: { conversation: conversation.id, ...(replyTo && canWrite ? { reply: replyTo.id } : null) } });
     if (Platform.OS === 'ios' && Keyboard.isVisible()) {
       // The sheet opens the moment the keyboard starts down, the bar riding
       // down on it (keyboardLift.ts; once the sheet is in front, the bar only
@@ -524,7 +570,7 @@ export default function Thread() {
     go();
   };
   const choosePhotos = () => {
-    setPlusOpen(false);
+    composer.current?.closePlus();
     const left = MAX_CHAT_PHOTOS - picked.length;
     if (left <= 0) { showToast({ title: `Up to ${MAX_CHAT_PHOTOS} photos at a time`, icon: 'images-outline' }); return; }
     letGo();
@@ -535,7 +581,7 @@ export default function Thread() {
   };
   // The camera button (Instagram's, at the start of the box): one photo, straight into the tray to send.
   const openCamera = () => {
-    setPlusOpen(false);
+    composer.current?.closePlus();
     if (picked.length >= MAX_CHAT_PHOTOS) { showToast({ title: `Up to ${MAX_CHAT_PHOTOS} photos at a time`, icon: 'images-outline' }); return; }
     letGo();
     takePhoto()
@@ -546,15 +592,29 @@ export default function Thread() {
       .catch((e: unknown) => showToast({ title: 'Couldn’t open the camera', body: e instanceof Error ? e.message : undefined, icon: 'alert-circle-outline' }));
   };
 
-  const send = () => {
-    const body = draft.trim();
+  // Editing a message of yours: its words go in the box, and whatever you were writing waits for the edit to end.
+  const startEditing = (message: Message) => {
+    setReplyTo(null);
+    if (!editing) draftBeforeEdit.current = composer.current?.getText() ?? '';
+    setEditing(message);
+    composer.current?.setText(message.body);
+    setTimeout(() => composer.current?.focus(), 60);
+  };
+  // The edit saved, called off, or given up for a reply: what you were writing comes back.
+  const endEditing = () => {
+    setEditing(null);
+    composer.current?.setText(draftBeforeEdit.current ?? '');
+    draftBeforeEdit.current = null;
+  };
+
+  const send = (text: string) => {
+    const body = text.trim();
     const answering = replyTo?.id;
-    setPlusOpen(false);
     // Picked photos go with whatever is in the box as their caption.
     if (picked.length && !editing) {
       actions.sendPhotos(conversation.id, picked, body, answering);
       setPicked([]);
-      setDraft('');
+      composer.current?.setText('');
       setReplyTo(null);
       toNewest(awayRef.current);
       return;
@@ -562,287 +622,78 @@ export default function Thread() {
     if (!body) return;
     if (editing) {
       actions.editMessage(editing.id, body);
-      setEditing(null);
-      setDraft('');
+      endEditing();
       return;
     }
     actions.sendMessage(conversation.id, body, answering);
-    setDraft('');
+    composer.current?.setText('');
     setReplyTo(null);
     // Stay in the box so the next message can be typed straight away.
-    inputRef.current?.focus();
+    composer.current?.focus();
     // Your own message always shows: from further up, the list glides down to it.
     toNewest(awayRef.current);
   };
   // A new chat's first hello, one tap from the empty chat (Instagram's wave).
   const sayHi = () => actions.sendMessage(conversation.id, 'Hi 👋');
   // Answering a message: the strip over the box, and the keyboard up to type.
+  // Not one still on its way (or not sent): the server would drop the quote.
   const startReply = (message: Message) => {
-    if (!canWrite || message.kind === 'system') return;
-    setEditing(null);
+    if (!canWrite || message.kind === 'system' || message.sending || message.failed) return;
+    if (editing) endEditing();
     setReplyTo(message);
-    if (!emojiOpen) setTimeout(() => inputRef.current?.focus(), 40);
+    if (!emojiOpen) setTimeout(() => composer.current?.focus(), 40);
   };
-  // Who reacted, and with what; your own can be taken off from there.
-  const openReactions = (message: Message) => setReactionsOf(message);
-
-  // The photo and court buttons step aside while there are words (or photos) to send, as Instagram's do, and the box takes the room.
-  const tools = !draft.trim() && !editing && !picked.length;
-  const showSend = !!draft.trim() || !!picked.length || !!editing;
-  const sendReady = (!!picked.length && !editing) || (!!draft.trim() && (!editing || draft.trim() !== editing.body));
-  const cameraOn = photosOn === 'on';
-
-  /** One row of the list: a message (with its time line, sender's name and read line), an event line, or a folded run. */
-  const renderRow = ({ item }: { item: ThreadRow }) => {
-    const { message } = item;
-    const mine = message.senderId === currentUserId;
-    const stamp = item.stamp ? <DayLine iso={message.createdAt} styles={styles} /> : null;
-    // An event line ("Mira added Dev", "You named the group…"): a quiet
-    // centred sentence, worded for whoever reads it. Nobody sent it, so
-    // it takes no reactions and no menu.
-    if (message.kind === 'system') {
-      return (
-        <View>
-          {stamp}
-          <Text style={styles.event}>{eventText(message, users, currentUserId)}</Text>
-        </View>
-      );
-    }
-    const gutter = group && !mine;
-    // From someone you blocked: folded to one quiet line per run, until you choose to see it.
-    if (item.folded) {
-      const run = item.folded;
-      return (
-        <View>
-          {stamp}
-          <Row mine={false} gap="plain" leading={<View style={styles.faceSpace} />} styles={styles}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`${run.length === 1 ? 'A message' : `${run.length} messages`} from someone you blocked. Show`}
-              onPress={() => setShownIds((s) => [...s, ...run])}
-              style={({ pressed }) => [styles.folded, pressed && { opacity: 0.7 }]}
-            >
-              <Ionicons name="eye-off-outline" size={14} color={colors.textFaint} />
-              <Text style={styles.foldedText}>
-                {run.length === 1 ? 'Message' : `${run.length} messages`} from someone you blocked · <Text style={styles.foldedShow}>Show</Text>
-              </Text>
-            </Pressable>
-          </Row>
-        </View>
-      );
-    }
-
-    const arrive = arrivalOf(message);
-    // In a group, others' messages carry who sent them: a face by the
-    // last bubble of each run, a name over the first. Both open their profile.
-    const sender = gutter ? faceOf(message.senderId) : undefined;
-    const leading = !gutter ? undefined : item.face && sender ? (
-      <Pressable accessibilityRole="link" accessibilityLabel={`${sender.name}'s profile`} hitSlop={4} onPress={() => router.push(`/user/${sender.id}`)}>
-        <Avatar name={sender.name} seed={sender.avatarSeed} uri={sender.avatarUrl} size={FACE} />
-      </Pressable>
-    ) : <View style={styles.faceSpace} />;
-    const who = item.name ? (
-      <View style={styles.senderLink}>
-        <Pressable accessibilityRole="link" disabled={!sender} onPress={() => sender && router.push(`/user/${sender.id}`)}>
-          <Text style={[styles.sender, styles.senderBeside]}>{firstName(sender)}</Text>
-        </Pressable>
-      </View>
-    ) : null;
-    const gap: Gap = item.gap;
-    // When it was sent: shown at the right edge when the chat is swiped to the left.
-    const sentAt = chatTime(message.createdAt);
-    // Swiping it to the right answers it.
-    const onReply = canWrite ? () => startReply(message) : undefined;
-    const flashKey = flash?.id === message.id ? flash.n : undefined;
-    // The message it answers, quoted: inside a bubble of words, on its own over a photo, a court or a voice note.
-    const original = message.replyToId ? byId.get(message.replyToId) : undefined;
-    const quote = (standalone: boolean) => (message.replyToId ? (
-      <ReplyQuote
-        original={original && (!hiddenAt || original.createdAt > hiddenAt) ? original : undefined}
-        who={original ? nameOf(original.senderId) : ''}
-        mine={mine}
-        standalone={standalone}
-        onPress={original ? () => { void jumpTo(original.id); } : undefined}
-      />
-    ) : null);
-    const quoteAbove = message.replyToId ? <View style={[styles.quoteAbove, mine ? styles.mineAlign : styles.theirsAlign, gutter && styles.quoteBeside]}>{quote(true)}</View> : null;
-    const failedMark = mine && message.failed ? (
-      <Pressable accessibilityRole="button" accessibilityLabel="Not sent. Tap to try again" hitSlop={8} onPress={() => actions.retryMessage(message.id)} style={styles.failedMark}>
-        <Ionicons name="alert-circle" size={22} color={colors.danger} />
-      </Pressable>
-    ) : null;
-    const rowProps: RowLook = { mine, gap, leading, styles, time: sentAt, onReply, flash: flashKey };
-
-    let body: React.ReactNode;
-    if (message.kind === 'voice' && message.audio) {
-      const audio = message.audio;
-      body = (
-        <>
-          {quoteAbove}
-          <Row {...rowProps}>
-            <HoldArea onHold={(rect) => openMenu({ message, mine, rect, copy: <VoiceNote url={audio.url} ms={audio.ms} mine={mine} /> })} style={[{ opacity: message.failed ? 0.5 : 1 }, menu?.message.id === message.id && styles.heldAway]}>
-              {() => (
-                <>
-                  <VoiceNote url={audio.url} ms={audio.ms} mine={mine} sentAt={sentAt} />
-                  {failedMark}
-                </>
-              )}
-            </HoldArea>
-            {message.failed ? (
-              <Pressable accessibilityRole="button" accessibilityLabel="Not sent. Tap to try again" onPress={() => actions.retryMessage(message.id)} hitSlop={8}>
-                <Text style={[styles.edited, styles.notSent]}>Not sent · Tap to retry</Text>
-              </Pressable>
-            ) : null}
-            <Reactions message={message} me={currentUserId} mine={mine} styles={styles} onOpen={openReactions} inline />
-          </Row>
-        </>
-      );
-    } else if (message.kind === 'court' && message.place) {
-      // A court: a still map of the spot, its name and where it is; the whole card opens the court's page.
-      const place = message.place;
-      const card = { place, width: Math.min(COURT_CARD_W, reach(gutter)), mine, tail: item.joinBelow, joinTop: gap === 'run', from: detectedCoords ?? currentUser?.cityAt ?? null, sentAt };
-      body = (
-        <>
-          {quoteAbove}
-          <Row {...rowProps}>
-            {/* Held, the menu draws it lifted and bright above the dimmed chat, so this one steps out of sight. */}
-            <HoldArea onHold={(rect) => openMenu({ message, mine, rect, copy: <CourtCard {...card} onPress={() => {}} /> })} style={[styles.cardArea, menu?.message.id === message.id && styles.heldAway]}>
-              {(hold) => (
-                <>
-                  <CourtCard
-                    {...card}
-                    onPress={() => openCourt({ id: place.id, name: place.name, lat: place.lat, lng: place.lng })}
-                    onLongPress={hold}
-                  />
-                  {failedMark}
-                </>
-              )}
-            </HoldArea>
-            {message.failed ? (
-              <Pressable accessibilityRole="button" accessibilityLabel="Not sent. Tap to try again" onPress={() => actions.retryMessage(message.id)} hitSlop={8} style={styles.notSentWrap}>
-                <Text style={[styles.edited, styles.notSent]}>Not sent · Tap to retry</Text>
-              </Pressable>
-            ) : null}
-            <Reactions message={message} me={currentUserId} mine={mine} styles={styles} onOpen={openReactions} inline />
-          </Row>
-        </>
-      );
-    } else if (message.kind === 'photo' && message.photos?.length) {
-      body = (
-        <>
-          {quoteAbove}
-          <PhotoMessage
-            message={message}
-            rowProps={rowProps}
-            joinBottom={item.joinBelow}
-            me={currentUserId}
-            width={Math.min(PHOTO_W, reach(gutter))}
-            held={menu?.message.id === message.id}
-            defaultReaction={defaultReaction}
-            onHold={(rect, copy) => openMenu({ message, mine, rect, copy })}
-            onReact={(emoji) => { if (!removed) actions.reactToMessage(message.id, emoji); }}
-            onOpenReactions={openReactions}
-            onRetry={() => actions.retryMessage(message.id)}
-            onOpen={(index, rects) => { Keyboard.dismiss(); setViewing({ message, index, rects }); }}
-          />
-        </>
-      );
-    } else if (message.kind === 'hit-request') {
-      // A "Looking for a hit" post sent into the chat: when, where, how
-      // many spots are left; it opens the hit. Once it is gone (called
-      // off, or over), the card says so.
-      const hit = hitRequests.find((h) => h.id === message.sharedId && !h.cancelled);
-      const left = hit ? Math.max(0, hit.spots - hit.joinedIds.length) : 0;
-      body = (
-        <Row {...rowProps}>
-          <HoldArea onHold={(rect) => openMenu({ message, mine, rect })} style={styles.sharedCardArea}>
-            {(hold) => (
-              <Tappable
-                accessibilityRole="link"
-                accessibilityLabel={`${hit ? `Looking for a hit, ${hitWhen(hit.startsAt)}, ${hit.place.name}` : 'This hit is over'}, sent ${sentAt}`}
-                scaleTo={0.97}
-                onLongPress={hold}
-                onPress={() => (hit ? router.push(`/hit-request/${hit.id}`) : undefined)}
-                style={[styles.sharedCard, styles.courtCard]}
-              >
-                <View style={styles.sharedHead}>
-                  <HitGlyph size={16} color={hit ? colors.brand : colors.textFaint} />
-                  <Text style={[styles.sharedKind, !hit && styles.sharedKindOver]}>{hit ? 'Looking for a hit' : 'Hit'}</Text>
-                </View>
-                {hit ? (
-                  <>
-                    <Text numberOfLines={1} style={styles.courtName}>{hitWhen(hit.startsAt)}</Text>
-                    <Text numberOfLines={2} style={styles.sharedBody}>{hit.place.name} · {left ? `${left} ${left === 1 ? 'spot' : 'spots'} left` : 'Full'}</Text>
-                  </>
-                ) : (
-                  // Gone (played or called off): a quiet card that says so, not a live-looking one.
-                  <>
-                    <Text numberOfLines={1} style={[styles.courtName, styles.overTitle]}>This hit is over</Text>
-                    <Text style={styles.overBody}>It was played or called off.</Text>
-                  </>
-                )}
-              </Tappable>
-            )}
-          </HoldArea>
-          <Reactions message={message} me={currentUserId} mine={mine} styles={styles} onOpen={openReactions} inline />
-        </Row>
-      );
-    } else if (message.kind !== 'text' && message.sharedId) {
-      body = (
-        <Row {...rowProps}>
-          <HoldArea onHold={(rect) => openMenu({ message, mine, rect })} style={styles.sharedCardArea}>
-            {(hold) => <SharedCard message={message} posts={posts} questions={questions} users={users} sentAt={sentAt} onLongPress={hold} styles={styles} />}
-          </HoldArea>
-          <Reactions message={message} me={currentUserId} mine={mine} styles={styles} onOpen={openReactions} inline />
-        </Row>
-      );
-    } else {
-      body = (
-        <Bubble
-          message={message}
-          rowProps={rowProps}
-          joinBottom={item.joinBelow}
-          me={currentUserId}
-          cardWidth={linkWidth(gutter)}
-          held={menu?.message.id === message.id}
-          quote={quote(false)}
-          failedMark={failedMark}
-          defaultReaction={defaultReaction}
-          onHold={(rect, copy) => openMenu({ message, mine, rect, copy })}
-          onReact={(emoji) => { if (!removed) actions.reactToMessage(message.id, emoji); }}
-          onOpenReactions={openReactions}
-          onRetry={() => actions.retryMessage(message.id)}
-        />
-      );
-    }
-
-    // Under your newest message, at its right edge: "Sending…", "Sent" or "Seen". In a group, the faces of who has read up to here.
-    const readUnder = readLine && message.id === lastReal?.id ? (
-      <Reanimated.View entering={arrive !== 'none' ? FadeIn.delay(180).duration(220) : undefined}>
-        <Slide mine><Text accessibilityLiveRegion="polite" style={styles.readLine}>{readLine}</Text></Slide>
-      </Reanimated.View>
-    ) : null;
-    const seen = item.seenBy?.length && !typers.length ? (
-      <Slide mine={mine}>
-        <SeenFaces people={item.seenBy.map(faceOf).filter((u): u is User => !!u)} align="right" />
-      </Slide>
-    ) : null;
-
-    return (
-      <View>
-        {stamp}
-        {who}
-        <Arrive mode={arrive} mine={mine}>{body}</Arrive>
-        {readUnder}
-        {seen}
-      </View>
-    );
+  // Reacting: never where nothing can be written, nor to a message the server does not have yet.
+  const react = (messageId: ID, emoji?: string) => {
+    if (!canWrite) return;
+    const m = byId.get(messageId);
+    if (!m || m.sending || m.failed) return;
+    actions.reactToMessage(messageId, emoji);
+  };
+  const sendVoiceNote = (got: { uri: string; ms: number }) => {
+    actions.sendVoice(conversation.id, got, replyTo?.id);
+    setReplyTo(null);
+    toNewest(awayRef.current);
+  };
+  // While you type, the others hear it every couple of seconds, never on every key.
+  const pingTyping = (text: string) => {
+    if (!text.trim()) return;
+    const now = Date.now();
+    if (now - lastPing.current > 2000) { lastPing.current = now; typingLink.current?.ping(); }
+  };
+  // Tapping into the words brings the phone keyboard back in the emoji keyboard's place.
+  const boxFocused = (on: boolean) => {
+    setTypingFocus(on);
+    if (on && emojiOpen && !desktopWeb) { room.holdUntilKeyboard(emojiRoom); setEmojiOpen(false); }
+  };
+  live.current = {
+    openMenu,
+    startReply,
+    react,
+    anyEmoji: (m) => setAnyEmojiFor(m),
+    copy: (text) => { void Clipboard.setStringAsync(text); haptics.tap(); showToast({ title: 'Copied', icon: 'copy-outline' }); },
+    retry: (messageId) => actions.retryMessage(messageId),
+    openReactions: (m) => setReactionsOf(m),
+    jumpTo: (messageId) => { void jumpTo(messageId); },
+    showFolded: (ids) => setShownIds((s) => [...s, ...ids]),
+    openPhoto: (m, index, rects) => { Keyboard.dismiss(); setViewing({ message: m, index, rects }); },
+    send,
+    sendVoice: sendVoiceNote,
+    recording: setRecording,
+    typed: pingTyping,
+    focused: boxFocused,
+    toggleEmoji,
+    plusToggled: () => { if (emojiOpen) setEmojiOpen(false); },
+    camera: openCamera,
+    photos: choosePhotos,
+    court: openCourtPicker,
+    escape: () => { if (editing) endEditing(); else if (replyTo) setReplyTo(null); },
   };
 
-  // Who could have read a message, with when, for its Info sheet.
+  // Who could have read a message, with when, for its Info sheet; who keeps read receipts off, as that.
   const readersOf = (m: Message) => (group ? people : other ? [other] : [])
     .filter((u) => u.id !== m.senderId && !blockedIds.includes(u.id))
-    .map((u) => ({ user: u, at: u.readReceiptsEnabled !== false ? m.readAtBy?.[u.id] : undefined }));
+    .map((u) => ({ user: u, at: u.readReceiptsEnabled !== false ? m.readAtBy?.[u.id] : undefined, off: u.readReceiptsEnabled === false }));
 
   const listHeader = (
     // The list is upside down: its header is the bottom of the chat. Someone typing shows there, under the newest message.
@@ -884,6 +735,8 @@ export default function Thread() {
   );
 
   const menuMessage = menu?.message;
+  // Not on the server yet (on its way, or not sent): its menu offers only what cannot go wrong.
+  const menuPending = !!(menuMessage?.sending || menuMessage?.failed);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -983,8 +836,8 @@ export default function Thread() {
               inverted
               data={data}
               keyExtractor={(row) => row.key}
+              // Each row draws again only when something of its own changes (see renderRow).
               renderItem={renderRow}
-              extraData={[menu, flash, readLine, typers.length, replyTo, canWrite, defaultReaction]}
               style={styles.scroll}
               contentContainerStyle={styles.scrollContent}
               ListHeaderComponent={listHeader}
@@ -993,7 +846,7 @@ export default function Thread() {
               onEndReachedThreshold={0.6}
               // A new message while you read further up leaves you where you were (the button counts it);
               // at the bottom, the list follows it in.
-              maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: 80 }}
+              maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: NEAR_PX }}
               initialNumToRender={16}
               maxToRenderPerBatch={12}
               windowSize={13}
@@ -1008,7 +861,7 @@ export default function Thread() {
             />
           </TimeSwipeArea>
         )}
-        <NewMessagesButton visible={away && !menu} count={unseen} onPress={() => toNewest(true)} />
+        <NewMessagesButton visible={(away || unseen > 0) && !menu} count={unseen} onPress={() => toNewest(true)} />
       </View>
 
       {menu && menuMessage ? (
@@ -1017,17 +870,19 @@ export default function Thread() {
           me={currentUserId}
           styles={styles}
           canReply={canWrite}
+          canReact={canWrite && !menuPending}
+          pending={menuPending}
           onClose={() => setMenu(null)}
-          onReact={(emoji) => actions.reactToMessage(menuMessage.id, emoji)}
+          onReact={(emoji) => react(menuMessage.id, emoji)}
           onMoreEmoji={() => { const m = menuMessage; afterMenu(() => setAnyEmojiFor(m)); }}
           onReply={() => startReply(menuMessage)}
           onInfo={() => { const m = menuMessage; afterMenu(() => setInfoOf(m)); }}
           onCopy={() => { void Clipboard.setStringAsync(menuMessage.body); haptics.tap(); showToast({ title: 'Copied', icon: 'copy-outline' }); }}
           onCopyLink={(url) => { void Clipboard.setStringAsync(url); haptics.tap(); showToast({ title: 'Link copied', icon: 'link-outline' }); }}
-          onEdit={() => { setReplyTo(null); setEditing(menuMessage); setDraft(menuMessage.body); setCaret(menuMessage.body.length); setTimeout(() => inputRef.current?.focus(), 60); }}
+          onEdit={() => startEditing(menuMessage)}
           // Both ask first; the card comes over the closing menu.
           onUnsend={() => { const messageId = menuMessage.id; confirmAfterMenu({ title: 'Unsend message?', message: "It's removed for everyone in the chat.", confirmLabel: 'Unsend', destructive: true, onConfirm: () => actions.unsendMessage(messageId) }); }}
-          onDelete={() => { const messageId = menuMessage.id; confirmAfterMenu({ title: 'Delete message?', message: menu.mine ? "It's removed for you. Others in the chat still see it." : "It's removed for you only.", confirmLabel: 'Delete', destructive: true, onConfirm: () => actions.deleteMessageForMe(messageId) }); }}
+          onDelete={() => { const messageId = menuMessage.id; confirmAfterMenu({ title: 'Delete message?', message: menuPending ? 'It hasn’t been sent, so it’s simply removed.' : menu.mine ? "It's removed for you. Others in the chat still see it." : "It's removed for you only.", confirmLabel: 'Delete', destructive: true, onConfirm: () => actions.deleteMessageForMe(messageId) }); }}
           // The Send-to sheet, once the menu has gone: pick chats (groups too) and it goes to each as it is.
           onForward={() => { const messageId = menuMessage.id; afterMenu(() => router.push({ pathname: '/share', params: { kind: 'message', id: messageId } })); }}
           doubleTap={defaultReaction}
@@ -1042,7 +897,7 @@ export default function Thread() {
         onRemove={(emoji) => { if (reactionsOf) actions.reactToMessage(reactionsOf.id, emoji); }}
         onClose={() => setReactionsOf(null)}
       />
-      <EmojiReactSheet visible={!!anyEmojiFor} onPick={(emoji) => { if (anyEmojiFor) actions.reactToMessage(anyEmojiFor.id, emoji); }} onClose={() => setAnyEmojiFor(null)} />
+      <EmojiReactSheet visible={!!anyEmojiFor} onPick={(emoji) => { if (anyEmojiFor) react(anyEmojiFor.id, emoji); }} onClose={() => setAnyEmojiFor(null)} />
       <MessageInfoSheet
         message={infoOf ? byId.get(infoOf.id) ?? null : null}
         readers={infoOf ? readersOf(infoOf) : []}
@@ -1069,19 +924,13 @@ export default function Thread() {
           <View style={styles.editBar}>
             <Ionicons name="create-outline" size={16} color={colors.brand} />
             <Text style={styles.editLabel} numberOfLines={1}>Editing message</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Stop editing" hitSlop={10} onPress={() => { setEditing(null); setDraft(''); }}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Stop editing" hitSlop={10} onPress={endEditing}>
               <Ionicons name="close" size={20} color={colors.textMuted} />
             </Pressable>
           </View>
         ) : null}
         {replyTo && !editing && canWrite ? (
           <ReplyBar to={replyTo} who={replyTo.senderId === currentUserId ? 'yourself' : nameOf(replyTo.senderId)} onClose={() => setReplyTo(null)} />
-        ) : null}
-
-        {mention && mentionRows.length ? (
-          <View style={styles.mentionTray}>
-            <MentionSuggestions candidates={mentionRows} onPick={pickMention} />
-          </View>
         ) : null}
         {blockedInGroup.length && !blockedHere && !removed ? (
           // Someone you blocked is in this group: you both stay, their messages fold away, and leaving is one tap.
@@ -1113,113 +962,254 @@ export default function Thread() {
                 <PhotoTray photos={picked} max={MAX_CHAT_PHOTOS} onRemove={(i) => setPicked((now) => now.filter((_, j) => j !== i))} onAdd={choosePhotos} />
               </View>
             ) : null}
-            {plusOpen && tools && !voice.recording ? (
-              // The "+": what else can go in the chat, one tap away (iMessage's apps row).
-              <Reanimated.View entering={FadeInDown.duration(160).easing(Easing.out(Easing.cubic))} exiting={FadeOut.duration(100)} style={styles.plusRow}>
-                {photosOn === 'on' ? (
-                  <Tappable accessibilityLabel="Send photos" onPress={choosePhotos} scaleTo={0.95} style={styles.plusChip}>
-                    <Ionicons name="images-outline" size={17} color={colors.brand} />
-                    <Text style={styles.plusChipText}>Photos</Text>
-                  </Tappable>
-                ) : null}
-                <Tappable accessibilityLabel="Send a court" onPress={openCourtPicker} scaleTo={0.95} style={styles.plusChip}>
-                  <Ionicons name="location-outline" size={17} color={colors.brand} />
-                  <Text style={styles.plusChipText}>Court</Text>
-                </Tappable>
-              </Reanimated.View>
-            ) : null}
-            <View style={styles.composer}>
-              {/* One soft rounded box: the camera, the words (growing with them), the emoji key, the "+" while it
-                  is empty, and the mic, which turns into Send once there is something to send. */}
-              <View style={styles.field}>
-                {voice.recording ? (
-                  <RecordingStrip mode={recMode} elapsed={voice.elapsed} slide={recSlide} onThrow={throwRecording} styles={styles} />
-                ) : (
-                  <>
-                    {cameraOn ? (
-                      <Tappable immediate accessibilityLabel="Take a photo" onPress={openCamera} scaleTo={0.92} style={[styles.camera, pageIsDark() && styles.sendCircleDark]}>
-                        <BrandWash />
-                        <Ionicons name="camera" size={18} color={colors.brandInk} />
-                      </Tappable>
-                    ) : photosOn === 'unknown' ? <View style={styles.cameraSpace} /> : <View style={styles.fieldStart} />}
-                    {/* The box's room above and below the words stays put while they scroll inside it (iMessage's way);
-                        a tap anywhere in it, padding included, puts the cursor in. */}
-                    <Pressable accessible={false} onPress={() => inputRef.current?.focus()} style={styles.inputWrap}>
-                      <TextInput
-                        ref={inputRef}
-                        value={draft}
-                        multiline
-                        // A browser's box starts one line tall (it grows with the words in the effect above).
-                        {...(Platform.OS === 'web' ? ({ rows: 1 } as object) : null)}
-                        onChangeText={(text) => { setDraft(text); setCaret((c) => c + (text.length - draft.length)); pingTyping(text); if (text) setPlusOpen(false); }}
-                        onSelectionChange={(e) => setCaret(e.nativeEvent.selection.end)}
-                        // Tapping into the words brings the phone keyboard back in the emoji keyboard's place.
-                        onFocus={() => { setTypingFocus(true); setPlusOpen(false); if (emojiOpen && !desktopWeb) { room.holdUntilKeyboard(emojiRoom); setEmojiOpen(false); } }}
-                        onBlur={() => setTypingFocus(false)}
-                        placeholder={picked.length ? 'Add a caption…' : replyTo ? 'Reply…' : 'Message…'}
-                        placeholderTextColor={colors.textFaint}
-                        style={styles.input}
-                        onSubmitEditing={send}
-                        // Return sends (as it always has here); the box still wraps and grows with long messages.
-                        submitBehavior="submit"
-                        // In a browser a multi-line box would put a new line in: Return sends, Shift+Return is a new line.
-                        onKeyPress={Platform.OS === 'web' ? (e) => {
-                          const key = e.nativeEvent as unknown as { key: string; shiftKey?: boolean; isComposing?: boolean };
-                          if (key.key === 'Enter' && !key.shiftKey && !key.isComposing) { (e as unknown as { preventDefault: () => void }).preventDefault(); send(); }
-                          if (key.key === 'Escape' && replyTo) setReplyTo(null);
-                        } : undefined}
-                        returnKeyType="send"
-                        enterKeyHint="send"
-                        accessibilityLabel={replyTo ? `Reply to ${nameOf(replyTo.senderId)}` : 'Message text'}
-                      />
-                    </Pressable>
-                    <ComposerTool label={emojiOpen ? 'Show the keyboard' : 'Add an emoji'} onPress={toggleEmoji} styles={styles}>
-                      {emojiOpen && !desktopWeb
-                        ? <KeyboardGlyph size={23} color={colors.textMuted} />
-                        : <Ionicons name={emojiOpen ? 'happy' : 'happy-outline'} size={23} color={emojiOpen ? colors.brand : colors.textMuted} />}
-                    </ComposerTool>
-                    {tools ? (
-                      <Reanimated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(90)}>
-                        <ComposerTool label={plusOpen ? 'Close' : 'More: photos and courts'} onPress={() => { setPlusOpen((o) => !o); if (emojiOpen) setEmojiOpen(false); }} styles={styles}>
-                          <PlusGlyph open={plusOpen} />
-                        </ComposerTool>
-                      </Reanimated.View>
-                    ) : null}
-                  </>
-                )}
-                <SendOrMic
-                  showSend={showSend || (voice.recording && recMode === 'locked')}
-                  ready={voice.recording ? true : sendReady}
-                  editing={!!editing}
-                  recording={voice.recording}
-                  holding={voice.recording && recMode === 'hold'}
-                  slide={recSlide}
-                  onSend={voice.recording ? () => { void sendRecording(); } : send}
-                  onMicDown={() => { if (voice.recording) return; setPlusOpen(false); setRecMode('hold'); void startRecording(); }}
-                  onMicUp={(heldMs) => {
-                    // A quick tap: it keeps recording until Send or the bin. Held: letting go sends.
-                    if (heldMs < HOLD_MS || !voice.recording) { setRecMode('locked'); return; }
-                    void sendRecording();
-                  }}
-                  onMicCancel={throwRecording}
-                  styles={styles}
-                />
-              </View>
-            </View>
+            <Composer
+              ref={composer}
+              styles={styles}
+              pickedCount={picked.length}
+              editingBody={editing ? editing.body : null}
+              replyName={replyTo ? nameOf(replyTo.senderId) : null}
+              photosOn={photosOn}
+              emojiOpen={emojiOpen}
+              mentionIds={group ? memberIds : undefined}
+              call={calls}
+            />
           </>
         )}
       </View>
       {/* The room under the bar: above the home indicator, or the keyboard's height while it is up. */}
       <Reanimated.View pointerEvents="none" style={room.spacer} />
-      {emojiOpen && canWrite && !voice.recording ? (
+      {emojiOpen && canWrite && !recording ? (
         // Laid over the room under the bar, at the phone keyboard's height, so swapping keyboards leaves the bar where it was.
         <View style={styles.emojiLayer}>
-          <EmojiKeyboard height={keyboardHeight.current} bottomInset={insets.bottom} onPick={insertEmoji} onDelete={deleteBack} />
+          <EmojiKeyboard height={keyboardHeight.current} bottomInset={insets.bottom} onPick={(emoji) => composer.current?.insert(emoji)} onDelete={() => composer.current?.deleteBack()} />
         </View>
       ) : null}
     </View>
   );
 }
+
+/** What the screen can do to the message box from outside it. */
+interface ComposerHandle {
+  focus: () => void;
+  blur: () => void;
+  getText: () => string;
+  setText: (text: string) => void;
+  /** An emoji from the emoji keyboard, where the cursor is. */
+  insert: (emoji: string) => void;
+  /** The emoji keyboard's delete key: the last character before the cursor (a whole emoji). */
+  deleteBack: () => void;
+  closePlus: () => void;
+}
+
+/**
+ * The message box: one soft rounded box with the camera, the words (growing
+ * with them), the emoji key, the "+" while it is empty, and the mic, which
+ * turns into Send once there is something to send; "@" suggestions and the
+ * "+" row sit over it. It keeps its own words, cursor and recording, so a
+ * key typed (or a recording's clock ticking) redraws only this, never the
+ * chat above it. The screen reaches in through `ref` (focus, set the words,
+ * an emoji) and hears back through `call`.
+ */
+const Composer = memo(function Composer({ ref, styles, pickedCount, editingBody, replyName, photosOn, emojiOpen, mentionIds, call }: {
+  ref?: React.Ref<ComposerHandle>;
+  styles: Styles;
+  pickedCount: number;
+  /** Editing a message of yours: its words as they were (Send stays dim until they change). */
+  editingBody: string | null;
+  /** Answering someone: their first name ("You" for your own). */
+  replyName: string | null;
+  photosOn: 'on' | 'off' | 'unknown';
+  emojiOpen: boolean;
+  /** In a group, its people, who come first in "@" suggestions. */
+  mentionIds?: string[];
+  call: Calls;
+}) {
+  const [draft, setDraft] = useState('');
+  const [caret, setCaret] = useState(0);
+  // The "+": photos and courts, one tap away.
+  const [plusOpen, setPlusOpen] = useState(false);
+  const now = useRef({ draft, caret });
+  now.current = { draft, caret };
+  const inputRef = useRef<TextInput>(null);
+  // "@" in a message offers people, following first, the same as a comment.
+  const candidatesFor = useMentionCandidates(mentionIds);
+  // Voice notes: the mic sits where Send is while the box is empty. A tap
+  // records until Send or the bin; held, it records while held, sends on
+  // letting go, and a slide to the left throws it away (WhatsApp's).
+  const voice = useVoiceRecorder();
+  const [recMode, setRecMode] = useState<'hold' | 'locked'>('locked');
+  const recSlide = useSharedValue(0);
+
+  // An emoji goes in where the cursor is, and the cursor moves past it.
+  const placeCaret = (at: number) => { setCaret(at); setTimeout(() => inputRef.current?.setNativeProps?.({ selection: { start: at, end: at } }), 0); };
+  useImperativeHandle(ref, () => ({
+    focus: () => inputRef.current?.focus(),
+    blur: () => inputRef.current?.blur(),
+    getText: () => now.current.draft,
+    setText: (text) => { setDraft(text); placeCaret(text.length); },
+    insert: (emoji) => {
+      const { draft: d, caret: c } = now.current;
+      const at = Math.min(c, d.length);
+      setDraft(d.slice(0, at) + emoji + d.slice(at));
+      placeCaret(at + emoji.length);
+    },
+    deleteBack: () => {
+      const { draft: d, caret: c } = now.current;
+      const at = Math.min(c, d.length);
+      if (at === 0) return;
+      const before = dropLastCharacter(d.slice(0, at));
+      setDraft(before + d.slice(at));
+      placeCaret(before.length);
+    },
+    closePlus: () => setPlusOpen(false),
+  }), []);
+
+  const sendRecording = async () => {
+    const got = await voice.finish();
+    setRecMode('locked');
+    if (got) call.sendVoice(got);
+  };
+  const throwRecording = () => { haptics.untap(); setRecMode('locked'); void voice.finish(); };
+  const startRecording = async () => {
+    const result = await voice.start();
+    if (result === 'denied') showToast({ title: 'Microphone is off for CourtSide', body: 'Turn it on in your phone’s Settings to send voice notes.', icon: 'mic-off-outline' });
+    else if (result === 'failed') showToast({ title: 'Couldn’t start recording', body: 'Try again in a moment.', icon: 'alert-circle-outline' });
+  };
+  useEffect(() => { if (voice.recording && voice.elapsed >= VOICE_LIMIT_MS) void sendRecording(); }, [voice.elapsed]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { call.recording(voice.recording); }, [voice.recording, call]);
+  // The box going away mid-recording (the chat locked under it): the screen stops waiting on it.
+  useEffect(() => () => call.recording(false), [call]);
+  // In a browser the box grows with the words as a phone's does (up to a few lines, then it scrolls), and shrinks back once they are sent.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const box = inputRef.current as unknown as HTMLTextAreaElement | null;
+    if (!box?.style) return;
+    box.style.height = 'auto';
+    box.style.height = `${Math.min(INPUT_MAX_H, box.scrollHeight)}px`;
+  }, [draft]);
+
+  const editing = editingBody !== null;
+  const words = draft.trim();
+  // The photo and court buttons step aside while there are words (or photos) to send, as Instagram's do, and the box takes the room.
+  const tools = !words && !editing && !pickedCount;
+  const showSend = !!words || !!pickedCount || editing;
+  const sendReady = (!!pickedCount && !editing) || (!!words && (!editing || words !== editingBody));
+  const cameraOn = photosOn === 'on';
+  const mention = activeMention(draft, caret);
+  const mentionRows = mention ? candidatesFor(mention.query, 5) : [];
+  const pickMention = (handle: string) => {
+    if (!mention) return;
+    const next = applyMention(draft, mention.start, caret, handle);
+    setDraft(next.text);
+    placeCaret(next.caret);
+  };
+  const submit = () => { setPlusOpen(false); call.send(now.current.draft); };
+
+  return (
+    <>
+      {mention && mentionRows.length ? (
+        <View style={styles.mentionTray}>
+          <MentionSuggestions candidates={mentionRows} onPick={pickMention} />
+        </View>
+      ) : null}
+      {plusOpen && tools && !voice.recording ? (
+        // The "+": what else can go in the chat, one tap away (iMessage's apps row).
+        <Reanimated.View entering={FadeInDown.duration(160).easing(Easing.out(Easing.cubic))} exiting={FadeOut.duration(100)} style={styles.plusRow}>
+          {cameraOn ? (
+            <Tappable accessibilityLabel="Send photos" onPress={call.photos} scaleTo={0.95} style={styles.plusChip}>
+              <Ionicons name="images-outline" size={17} color={colors.brand} />
+              <Text style={styles.plusChipText}>Photos</Text>
+            </Tappable>
+          ) : null}
+          <Tappable accessibilityLabel="Send a court" onPress={call.court} scaleTo={0.95} style={styles.plusChip}>
+            <Ionicons name="location-outline" size={17} color={colors.brand} />
+            <Text style={styles.plusChipText}>Court</Text>
+          </Tappable>
+        </Reanimated.View>
+      ) : null}
+      <View style={styles.composer}>
+        <View style={styles.field}>
+          {voice.recording ? (
+            <RecordingStrip mode={recMode} elapsed={voice.elapsed} slide={recSlide} onThrow={throwRecording} styles={styles} />
+          ) : (
+            <>
+              {cameraOn ? (
+                <Tappable immediate accessibilityLabel="Take a photo" onPress={call.camera} scaleTo={0.92} style={[styles.camera, pageIsDark() && styles.sendCircleDark]}>
+                  <BrandWash />
+                  <Ionicons name="camera" size={18} color={colors.brandInk} />
+                </Tappable>
+              ) : photosOn === 'unknown' ? <View style={styles.cameraSpace} /> : <View style={styles.fieldStart} />}
+              {/* The box's room above and below the words stays put while they scroll inside it (iMessage's way);
+                  a tap anywhere in it, padding included, puts the cursor in. */}
+              <Pressable accessible={false} onPress={() => inputRef.current?.focus()} style={styles.inputWrap}>
+                <TextInput
+                  ref={inputRef}
+                  value={draft}
+                  multiline
+                  // A browser's box starts one line tall (it grows with the words in the effect above).
+                  {...(Platform.OS === 'web' ? ({ rows: 1 } as object) : null)}
+                  onChangeText={(text) => {
+                    setCaret((c) => c + (text.length - now.current.draft.length));
+                    setDraft(text);
+                    call.typed(text);
+                    if (text) setPlusOpen(false);
+                  }}
+                  onSelectionChange={(e) => setCaret(e.nativeEvent.selection.end)}
+                  onFocus={() => { setPlusOpen(false); call.focused(true); }}
+                  onBlur={() => call.focused(false)}
+                  placeholder={pickedCount ? 'Add a caption…' : replyName ? 'Reply…' : 'Message…'}
+                  placeholderTextColor={colors.textFaint}
+                  style={styles.input}
+                  onSubmitEditing={submit}
+                  // Return sends (as it always has here); the box still wraps and grows with long messages.
+                  submitBehavior="submit"
+                  // In a browser a multi-line box would put a new line in: Return sends, Shift+Return is a new line.
+                  onKeyPress={Platform.OS === 'web' ? (e) => {
+                    const key = e.nativeEvent as unknown as { key: string; shiftKey?: boolean; isComposing?: boolean };
+                    if (key.key === 'Enter' && !key.shiftKey && !key.isComposing) { (e as unknown as { preventDefault: () => void }).preventDefault(); submit(); }
+                    if (key.key === 'Escape') call.escape();
+                  } : undefined}
+                  returnKeyType="send"
+                  enterKeyHint="send"
+                  accessibilityLabel={replyName ? `Reply to ${replyName}` : editing ? 'Edit your message' : 'Message text'}
+                />
+              </Pressable>
+              <ComposerTool label={emojiOpen ? 'Show the keyboard' : 'Add an emoji'} onPress={call.toggleEmoji} styles={styles}>
+                {emojiOpen && !desktopWeb
+                  ? <KeyboardGlyph size={23} color={colors.textMuted} />
+                  : <Ionicons name={emojiOpen ? 'happy' : 'happy-outline'} size={23} color={emojiOpen ? colors.brand : colors.textMuted} />}
+              </ComposerTool>
+              {tools ? (
+                <Reanimated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(90)}>
+                  <ComposerTool label={plusOpen ? 'Close' : 'More: photos and courts'} onPress={() => { setPlusOpen((o) => !o); call.plusToggled(); }} styles={styles}>
+                    <PlusGlyph open={plusOpen} />
+                  </ComposerTool>
+                </Reanimated.View>
+              ) : null}
+            </>
+          )}
+          <SendOrMic
+            showSend={showSend || (voice.recording && recMode === 'locked')}
+            ready={voice.recording ? true : sendReady}
+            editing={editing}
+            recording={voice.recording}
+            holding={voice.recording && recMode === 'hold'}
+            slide={recSlide}
+            onSend={voice.recording ? () => { void sendRecording(); } : submit}
+            onMicDown={() => { if (voice.recording) return; setPlusOpen(false); setRecMode('hold'); void startRecording(); }}
+            onMicUp={(heldMs) => {
+              // A quick tap: it keeps recording until Send or the bin. Held: letting go sends.
+              if (heldMs < HOLD_MS || !voice.recording) { setRecMode('locked'); return; }
+              void sendRecording();
+            }}
+            onMicCancel={throwRecording}
+            styles={styles}
+          />
+        </View>
+      </View>
+    </>
+  );
+});
 
 /**
  * The keyboard key that swaps the emoji keyboard back for the typing one:
@@ -1255,13 +1245,286 @@ function listNames(names: string[]): string {
   return `${names[0]}, ${names[1]} and ${names.length - 2} others`;
 }
 
+
 type RowLook = {
-  mine: boolean; gap: Gap; leading?: React.ReactNode; styles: any; time?: string;
-  /** Swiping it to the right answers it (none where nothing can be sent). */
+  mine: boolean; gap: Gap; leading?: React.ReactNode; styles: Styles; time?: string;
+  /** Swiping it to the right answers it (none where nothing can be sent, or it is not sent yet). */
   onReply?: () => void;
   /** Going to it from a reply: it lights up (a fresh number each time). */
   flash?: number;
 };
+
+const noop = () => {};
+
+/**
+ * One row of the chat: a message (with its time line, sender's name and
+ * read line), an event line, or a folded run. Drawn again only when one of
+ * its own values changes (see Thread's renderRow).
+ */
+const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlocked, held, flashKey, readLine, seenHidden, canWrite }: {
+  item: ThreadRow;
+  ctx: RowCtx;
+  /** The message it answers, when it is here (undefined: gone, or not loaded yet). */
+  original?: Message;
+  /** That message is from someone you blocked, folded away here. */
+  originalBlocked: boolean;
+  /** Its menu is open: the lifted copy stands in for it. */
+  held: boolean;
+  flashKey?: number;
+  /** Under your newest message: "Sending…", "Sent" or "Seen". */
+  readLine: string | null;
+  /** Someone is typing: the seen faces give way to the dots. */
+  seenHidden: boolean;
+  canWrite: boolean;
+}) {
+  const { styles, me, group, call } = ctx;
+  const { message } = item;
+  // Whether it comes in moving: settled the first time it is drawn.
+  const [arrive] = useState(() => ctx.arrivalOf(message));
+  const mine = message.senderId === me;
+  const stamp = item.stamp ? <DayLine iso={message.createdAt} styles={styles} /> : null;
+  // An event line ("Mira added Dev", "You named the group…"): a quiet
+  // centred sentence, worded for whoever reads it. Nobody sent it, so
+  // it takes no reactions and no menu.
+  if (message.kind === 'system') {
+    return (
+      <View>
+        {stamp}
+        <Text style={styles.event}>{eventText(message, ctx.users, me)}</Text>
+      </View>
+    );
+  }
+  const gutter = group && !mine;
+  // From someone you blocked: folded to one quiet line per run, until you choose to see it.
+  if (item.folded) {
+    const run = item.folded;
+    return (
+      <View>
+        {stamp}
+        <Row mine={false} gap="plain" leading={<View style={styles.faceSpace} />} styles={styles}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${run.length === 1 ? 'A message' : `${run.length} messages`} from someone you blocked. Show`}
+            onPress={() => call.showFolded(run)}
+            style={({ pressed }) => [styles.folded, pressed && { opacity: 0.7 }]}
+          >
+            <Ionicons name="eye-off-outline" size={14} color={colors.textFaint} />
+            <Text style={styles.foldedText}>
+              {run.length === 1 ? 'Message' : `${run.length} messages`} from someone you blocked · <Text style={styles.foldedShow}>Show</Text>
+            </Text>
+          </Pressable>
+        </Row>
+      </View>
+    );
+  }
+
+  // In a group, others' messages carry who sent them: a face by the
+  // last bubble of each run, a name over the first. Both open their profile.
+  const sender = gutter ? ctx.faceOf(message.senderId) : undefined;
+  const leading = !gutter ? undefined : item.face && sender ? (
+    <Pressable accessibilityRole="link" accessibilityLabel={`${sender.name}'s profile`} hitSlop={4} onPress={() => router.push(`/user/${sender.id}`)}>
+      <Avatar name={sender.name} seed={sender.avatarSeed} uri={sender.avatarUrl} size={FACE} />
+    </Pressable>
+  ) : <View style={styles.faceSpace} />;
+  const who = item.name ? (
+    <View style={styles.senderLink}>
+      <Pressable accessibilityRole="link" disabled={!sender} onPress={() => sender && router.push(`/user/${sender.id}`)}>
+        <Text style={[styles.sender, styles.senderBeside]}>{firstName(sender)}</Text>
+      </Pressable>
+    </View>
+  ) : null;
+  const gap: Gap = item.gap;
+  // When it was sent: shown at the right edge when the chat is swiped to the left.
+  const sentAt = chatTime(message.createdAt);
+  // Not on the server yet (on its way, or not sent): nothing can answer it or
+  // react to it until it is, or the answer would land without it.
+  const pending = !!(message.sending || message.failed);
+  const canReact = canWrite && !pending;
+  // Swiping it to the right answers it.
+  const onReply = canWrite && !pending ? () => call.startReply(message) : undefined;
+  const openMenu = (target: MenuTarget) => call.openMenu(target);
+  // The message it answers, quoted: inside a bubble of words, on its own over a photo, a court or a voice note.
+  const quote = (standalone: boolean) => (message.replyToId ? (
+    <ReplyQuote
+      original={original}
+      blocked={originalBlocked}
+      who={original ? ctx.nameOf(original.senderId) : ''}
+      mine={mine}
+      standalone={standalone}
+      onPress={original ? () => call.jumpTo(original.id) : undefined}
+    />
+  ) : null);
+  const quoteAbove = message.replyToId ? <View style={[styles.quoteAbove, mine ? styles.mineAlign : styles.theirsAlign, gutter && styles.quoteBeside]}>{quote(true)}</View> : null;
+  const failedMark = mine && message.failed ? (
+    <Pressable accessibilityRole="button" accessibilityLabel="Not sent. Tap to try again" hitSlop={8} onPress={() => call.retry(message.id)} style={styles.failedMark}>
+      <Ionicons name="alert-circle" size={22} color={colors.danger} />
+    </Pressable>
+  ) : null;
+  const rowProps: RowLook = { mine, gap, leading, styles, time: sentAt, onReply, flash: flashKey };
+  // On a computer: React, Reply and More beside a message while the pointer is over it (Messenger's).
+  const hover: HoverTools | undefined = desktopWeb ? { mine, styles, reaction: ctx.defaultReaction, onReact: canReact ? () => call.react(message.id) : undefined, onReply } : undefined;
+  // How far a court card or photos may reach across the chat: most of its
+  // width (less the face beside others' messages in a group), so they never
+  // run off the side of a small phone.
+  const reach = (beside: boolean) => Math.floor((Math.min(700, ctx.winW) - spacing.lg * 2 - (beside ? FACE + spacing.sm : 0)) * 0.84);
+  const notSent = message.failed ? (
+    <Pressable accessibilityRole="button" accessibilityLabel="Not sent. Tap to try again" onPress={() => call.retry(message.id)} hitSlop={8} style={styles.notSentWrap}>
+      <Text style={[styles.edited, styles.notSent]}>Not sent · Tap to retry</Text>
+    </Pressable>
+  ) : null;
+
+  let body: React.ReactNode;
+  if (message.kind === 'voice' && message.audio) {
+    const audio = message.audio;
+    body = (
+      <>
+        {quoteAbove}
+        <Row {...rowProps}>
+          <HoldArea hover={hover} onHold={(rect) => openMenu({ message, mine, rect, copy: <VoiceNote url={audio.url} ms={audio.ms} mine={mine} /> })} style={[{ opacity: message.failed ? 0.5 : message.sending ? 0.82 : 1 }, held && styles.heldAway]}>
+            {() => (
+              <>
+                <VoiceNote url={audio.url} ms={audio.ms} mine={mine} sentAt={sentAt} />
+                {failedMark}
+              </>
+            )}
+          </HoldArea>
+          {notSent}
+          <Reactions message={message} me={me} mine={mine} styles={styles} onOpen={call.openReactions} inline />
+        </Row>
+      </>
+    );
+  } else if (message.kind === 'court' && message.place) {
+    // A court: a still map of the spot, its name and where it is; the whole card opens the court's page.
+    const place = message.place;
+    const card = { place, width: Math.min(COURT_CARD_W, reach(gutter)), mine, tail: item.joinBelow, joinTop: gap === 'run', from: ctx.from, sentAt };
+    body = (
+      <>
+        {quoteAbove}
+        <Row {...rowProps}>
+          {/* Held, the menu draws it lifted and bright above the dimmed chat, so this one steps out of sight. */}
+          <HoldArea hover={hover} onHold={(rect) => openMenu({ message, mine, rect, copy: <CourtCard {...card} onPress={() => {}} /> })} style={[styles.cardArea, { opacity: message.sending ? 0.82 : 1 }, held && styles.heldAway]}>
+            {(hold) => (
+              <>
+                <CourtCard
+                  {...card}
+                  onPress={() => openCourt({ id: place.id, name: place.name, lat: place.lat, lng: place.lng })}
+                  onLongPress={hold}
+                />
+                {failedMark}
+              </>
+            )}
+          </HoldArea>
+          {notSent}
+          <Reactions message={message} me={me} mine={mine} styles={styles} onOpen={call.openReactions} inline />
+        </Row>
+      </>
+    );
+  } else if (message.kind === 'photo' && message.photos?.length) {
+    body = (
+      <>
+        {quoteAbove}
+        <PhotoMessage
+          message={message}
+          rowProps={rowProps}
+          joinBottom={item.joinBelow}
+          ctx={ctx}
+          width={Math.min(PHOTO_W, reach(gutter))}
+          held={held}
+          canReact={canReact}
+          hover={hover}
+          onHold={(rect, copy) => openMenu({ message, mine, rect, copy })}
+        />
+      </>
+    );
+  } else if (message.kind === 'hit-request') {
+    // A "Looking for a hit" post sent into the chat: when, where, how
+    // many spots are left; it opens the hit. Once it is gone (called
+    // off, or over), the card says so.
+    const hit = ctx.hitRequests.find((h) => h.id === message.sharedId && !h.cancelled);
+    const left = hit ? Math.max(0, hit.spots - hit.joinedIds.length) : 0;
+    body = (
+      <Row {...rowProps}>
+        <HoldArea hover={hover} onHold={(rect) => openMenu({ message, mine, rect })} style={styles.sharedCardArea}>
+          {(hold) => (
+            <Tappable
+              accessibilityRole="link"
+              accessibilityLabel={`${hit ? `Looking for a hit, ${hitWhen(hit.startsAt)}, ${hit.place.name}` : 'This hit is over'}, sent ${sentAt}`}
+              scaleTo={0.97}
+              onLongPress={hold}
+              onPress={() => (hit ? router.push(`/hit-request/${hit.id}`) : undefined)}
+              style={[styles.sharedCard, styles.courtCard]}
+            >
+              <View style={styles.sharedHead}>
+                <HitGlyph size={16} color={hit ? colors.brand : colors.textFaint} />
+                <Text style={[styles.sharedKind, !hit && styles.sharedKindOver]}>{hit ? 'Looking for a hit' : 'Hit'}</Text>
+              </View>
+              {hit ? (
+                <>
+                  <Text numberOfLines={1} style={styles.courtName}>{hitWhen(hit.startsAt)}</Text>
+                  <Text numberOfLines={2} style={styles.sharedBody}>{hit.place.name} · {left ? `${left} ${left === 1 ? 'spot' : 'spots'} left` : 'Full'}</Text>
+                </>
+              ) : (
+                // Gone (played or called off): a quiet card that says so, not a live-looking one.
+                <>
+                  <Text numberOfLines={1} style={[styles.courtName, styles.overTitle]}>This hit is over</Text>
+                  <Text style={styles.overBody}>It was played or called off.</Text>
+                </>
+              )}
+            </Tappable>
+          )}
+        </HoldArea>
+        <Reactions message={message} me={me} mine={mine} styles={styles} onOpen={call.openReactions} inline />
+      </Row>
+    );
+  } else if (message.kind !== 'text' && message.sharedId) {
+    body = (
+      <Row {...rowProps}>
+        <HoldArea hover={hover} onHold={(rect) => openMenu({ message, mine, rect })} style={styles.sharedCardArea}>
+          {(hold) => <SharedCard message={message} posts={ctx.posts} questions={ctx.questions} users={ctx.users} sentAt={sentAt} onLongPress={hold} styles={styles} />}
+        </HoldArea>
+        <Reactions message={message} me={me} mine={mine} styles={styles} onOpen={call.openReactions} inline />
+      </Row>
+    );
+  } else {
+    body = (
+      <Bubble
+        message={message}
+        rowProps={rowProps}
+        joinBottom={item.joinBelow}
+        ctx={ctx}
+        cardWidth={Math.min(LINK_CARD_W, reach(gutter))}
+        held={held}
+        quote={quote(false)}
+        failedMark={failedMark}
+        canReact={canReact}
+        hover={hover}
+        onHold={(rect, copy) => openMenu({ message, mine, rect, copy })}
+      />
+    );
+  }
+
+  // Under your newest message, at its right edge: "Sending…", "Sent" or "Seen". In a group, the faces of who has read up to here.
+  const readUnder = readLine ? (
+    <Reanimated.View entering={arrive !== 'none' ? FadeIn.delay(180).duration(220) : undefined}>
+      <Slide mine><Text accessibilityLiveRegion="polite" style={styles.readLine}>{readLine}</Text></Slide>
+    </Reanimated.View>
+  ) : null;
+  const seen = item.seenBy?.length && !seenHidden ? (
+    <Slide mine={mine}>
+      <SeenFaces people={item.seenBy.map((uid) => ctx.faceOf(uid)).filter((u): u is User => !!u)} align="right" />
+    </Slide>
+  ) : null;
+
+  return (
+    <View>
+      {stamp}
+      {who}
+      <Arrive mode={arrive} mine={mine}>{body}</Arrive>
+      {readUnder}
+      {seen}
+    </View>
+  );
+});
 
 /**
  * One message's line across the chat: yours on the right, theirs on the
@@ -1269,6 +1532,8 @@ type RowLook = {
  * space the same size) beside the message, the face lined up with its bottom.
  * The line slides left when the chat is swiped for its times (and `time`
  * comes into view at the right edge as it does), and right to answer it.
+ * (The swipe's wrapper stays whether or not it can answer, so a message
+ * that goes from "Sending…" to sent keeps everything inside it as it was.)
  */
 function Row({ mine, gap, leading, styles, time, onReply, flash, children }: RowLook & { children: React.ReactNode }) {
   const inner = (
@@ -1284,7 +1549,7 @@ function Row({ mine, gap, leading, styles, time, onReply, flash, children }: Row
   return (
     <View style={[styles.row, gap === 'run' ? styles.inRun : gap === 'turn' ? styles.newTurn : styles.plainGap]}>
       {flash ? <Flash key={flash} /> : null}
-      {onReply ? <SwipeReply onReply={onReply}>{inner}</SwipeReply> : inner}
+      <SwipeReply enabled={!!onReply} onReply={onReply ?? noop}>{inner}</SwipeReply>
     </View>
   );
 }
@@ -1295,7 +1560,7 @@ function Row({ mine, gap, leading, styles, time, onReply, flash, children }: Row
  * on a bubble; under a card or a voice note (`inline`), a small row of
  * their own. A tap shows who reacted (yours can be taken off there).
  */
-function Reactions({ message, me, mine, styles, onOpen, inline = false }: { message: Message; me: string | null; mine: boolean; styles: any; onOpen: (m: Message) => void; inline?: boolean }) {
+function Reactions({ message, me, mine, styles, onOpen, inline = false }: { message: Message; me: string | null; mine: boolean; styles: Styles; onOpen: (m: Message) => void; inline?: boolean }) {
   const reactions = message.reactions ?? {};
   const tally = Object.values(reactions).reduce<Record<string, number>>((acc, emoji) => { acc[emoji] = (acc[emoji] ?? 0) + 1; return acc; }, {});
   if (!Object.keys(tally).length) return null;
@@ -1354,6 +1619,40 @@ function clipPicture(post: Post): string | undefined {
 }
 
 /**
+ * What a screen reader offers on a message, in place of the double tap and
+ * the hold it cannot make: activating it leaves your reaction (VoiceOver's
+ * double tap is a single press here, which never made a double tap), and
+ * Reply, another emoji, Copy and the rest of the menu are its actions.
+ */
+function messageA11y({ who, words, time, reaction, canReact, react, reply, anyEmoji, copy, more }: {
+  who: string; words: string; time?: string; reaction: string; canReact: boolean;
+  react: () => void; reply?: () => void; anyEmoji: () => void; copy?: () => void; more: () => void;
+}) {
+  const actionList = [
+    ...(canReact ? [{ name: 'activate', label: `React with ${reaction}` }] : []),
+    ...(reply ? [{ name: 'reply', label: 'Reply' }] : []),
+    ...(canReact ? [{ name: 'react', label: 'React with another emoji' }] : []),
+    ...(copy ? [{ name: 'copy', label: 'Copy' }] : []),
+    { name: 'more', label: 'More options' },
+  ];
+  return {
+    accessibilityLabel: `${who}: ${words}${time ? `, sent ${time}` : ''}`,
+    accessibilityHint: canReact ? `Double tap to react with ${reaction}. More in actions.` : 'More in actions.',
+    accessibilityActions: actionList,
+    onAccessibilityAction: (e: AccessibilityActionEvent) => {
+      switch (e.nativeEvent.actionName) {
+        case 'activate': if (canReact) react(); break;
+        case 'reply': reply?.(); break;
+        case 'react': if (canReact) anyEmoji(); break;
+        case 'copy': copy?.(); break;
+        case 'more': more(); break;
+        default: break;
+      }
+    },
+  };
+}
+
+/**
  * One text message.
  *
  * Double tap leaves your default reaction (it bursts over the bubble as it
@@ -1363,8 +1662,8 @@ function clipPicture(post: Post): string | undefined {
  * iMessage shows one; words with a link show the card under them once there
  * is something to show on it (a picture or a title).
  */
-function Bubble({ message, rowProps, joinBottom, me, cardWidth, held = false, quote, failedMark, defaultReaction, onHold, onReact, onOpenReactions, onRetry }: {
-  message: Message; rowProps: RowLook; me: string | null;
+function Bubble({ message, rowProps, joinBottom, ctx, cardWidth, held = false, quote, failedMark, canReact, hover, onHold }: {
+  message: Message; rowProps: RowLook; ctx: RowCtx;
   /** The next message is the same person's, moments later: the corner below on the sender's side is small. */
   joinBottom: boolean;
   /** How wide a link's card may be here. */
@@ -1375,19 +1674,24 @@ function Bubble({ message, rowProps, joinBottom, me, cardWidth, held = false, qu
   quote: React.ReactNode;
   /** Yours, not sent: the red mark beside it (iMessage's). */
   failedMark: React.ReactNode;
-  defaultReaction: string;
+  /** A reaction can be left (it is on the server, and the chat can be written in). */
+  canReact: boolean;
+  hover?: HoverTools;
   /** A hold: where it sits, and (a message with a link's card) the copy the menu lifts in its place. */
-  onHold: (rect: Rect, copy?: React.ReactNode) => void; onReact: (emoji?: string) => void; onOpenReactions: (m: Message) => void; onRetry?: () => void;
+  onHold: (rect: Rect, copy?: React.ReactNode) => void;
 }) {
   const styles = rowProps.styles;
-  const { mine, gap, time } = rowProps;
+  const { mine, gap, time, onReply } = rowProps;
+  const { me, defaultReaction, call } = ctx;
   const [burst, setBurst] = useState(0);
   const mineMark = me ? message.reactions?.[me] : undefined;
-  const tap = useDoubleTap(() => {
+  const react = () => {
+    if (!canReact) return;
     // Leaving it (not taking it back off): it bursts over the bubble.
     if (mineMark !== defaultReaction) setBurst((n) => n + 1);
-    onReact();
-  });
+    call.react(message.id);
+  };
+  const tap = useDoubleTap(react);
   const reactions = message.reactions ?? {};
   const only = useMemo(() => (message.replyToId ? null : isOnlyLink(message.body)), [message.body, message.replyToId]);
   const link = useMemo(() => only ?? firstLink(message.body), [only, message.body]);
@@ -1408,7 +1712,7 @@ function Bubble({ message, rowProps, joinBottom, me, cardWidth, held = false, qu
     </RichText>
   );
   const card = (still: boolean, hold?: () => void) => (link ? (
-    <LinkCard url={link.url} mine={mine} width={cardWidth} joinTop={!only || joinTop} joinBottom={joinBottom} sentAt={time ?? ''} onLongPress={hold} onReact={() => onReact()} still={still} />
+    <LinkCard url={link.url} mine={mine} width={cardWidth} joinTop={!only || joinTop} joinBottom={joinBottom} sentAt={time ?? ''} onLongPress={hold} onReact={canReact ? react : undefined} still={still} />
   ) : null);
   // What the menu lifts while a message with a card (or a quote) is held: the same thing, bright, taking no taps.
   const copy = showCard ? (
@@ -1419,14 +1723,15 @@ function Bubble({ message, rowProps, joinBottom, me, cardWidth, held = false, qu
   ) : message.replyToId ? (
     <View style={[styles.bubble, ...corners, mine ? styles.mineAlign : styles.theirsAlign]}>{quote}{words()}</View>
   ) : undefined;
-  const chips = <Reactions message={message} me={me} mine={mine} styles={styles} onOpen={onOpenReactions} />;
+  const chips = <Reactions message={message} me={me} mine={mine} styles={styles} onOpen={call.openReactions} />;
+  const bubbleHover = hover ? { ...hover, onReact: canReact ? react : undefined } : undefined;
 
   return (
     // The row spans the chat, so the bubble's width limit is a share of the
     // chat itself. (A row that shrank to fit its text made that limit a share
     // of the text's own width, and short messages broke onto a second line.)
     <Row {...rowProps}>
-      <HoldArea onHold={(rect) => onHold(rect, copy)} style={[showCard ? styles.linkWrap : styles.bubbleWrap, showCard && (mine ? styles.mineAlign : styles.theirsAlign), reacted && styles.bubbleWrapReacted, held && { opacity: 0 }]}>
+      <HoldArea hover={bubbleHover} onHold={(rect) => onHold(rect, copy)} style={[showCard ? styles.linkWrap : styles.bubbleWrap, showCard && (mine ? styles.mineAlign : styles.theirsAlign), reacted && styles.bubbleWrapReacted, held && { opacity: 0 }]}>
         {(hold) => (
           <>
             {only ? null : (
@@ -1435,7 +1740,18 @@ function Bubble({ message, rowProps, joinBottom, me, cardWidth, held = false, qu
                 onLongPress={hold}
                 delayLongPress={320}
                 accessibilityRole="button"
-                accessibilityLabel={`Message: ${message.body}, sent ${time}. Double tap to react, hold for more.`}
+                {...messageA11y({
+                  who: mine ? 'You' : ctx.nameOf(message.senderId),
+                  words: message.body,
+                  time,
+                  reaction: defaultReaction,
+                  canReact,
+                  react,
+                  reply: onReply,
+                  anyEmoji: () => call.anyEmoji(message),
+                  copy: () => call.copy(message.body),
+                  more: hold,
+                })}
                 // Beside a card the words keep a plain bubble's width, so a run's bubbles line up.
                 style={[styles.bubble, ...corners, showCard && styles.textInCard, showCard && (mine ? styles.mineAlign : styles.theirsAlign), message.sending && styles.bubbleSending]}
               >
@@ -1456,8 +1772,8 @@ function Bubble({ message, rowProps, joinBottom, me, cardWidth, held = false, qu
       </HoldArea>
       {message.editedAt ? <Text style={styles.edited}>Edited</Text> : null}
       {message.failed ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="Not sent. Tap to try again" onPress={onRetry} hitSlop={8}>
-          <Text style={[styles.edited, { color: colors.danger }]}>Not sent · Tap to retry</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Not sent. Tap to try again" onPress={() => call.retry(message.id)} hitSlop={8}>
+          <Text style={[styles.edited, styles.notSent]}>Not sent · Tap to retry</Text>
         </Pressable>
       ) : null}
     </Row>
@@ -1470,28 +1786,32 @@ function Bubble({ message, rowProps, joinBottom, me, cardWidth, held = false, qu
  * tap opens a photo full screen; a double tap leaves your reaction (it
  * bursts over the photos), as on a message; a hold opens the menu. While the
  * photos go up, a ring fills over them; one that did not go offers a retry.
+ * Its reactions sit on the caption's corner when it has one (on the photos'
+ * own when it has none), so a chip never hangs in the air beside a short caption.
  */
-function PhotoMessage({ message, rowProps, joinBottom, me, width, held = false, defaultReaction, onHold, onReact, onOpenReactions, onRetry, onOpen }: {
-  message: Message; rowProps: RowLook; me: string | null;
+function PhotoMessage({ message, rowProps, joinBottom, ctx, width, held = false, canReact, hover, onHold }: {
+  message: Message; rowProps: RowLook; ctx: RowCtx;
   /** The next message is the same person's, moments later: the corner below on the sender's side is small. */
   joinBottom: boolean;
   /** How wide the photos sit (narrower on a small phone, and beside a face in a group). */
   width: number;
   /** Its menu is open: the lifted copy stands in for it, so it steps out of sight. */
   held?: boolean;
-  defaultReaction: string;
+  canReact: boolean;
+  hover?: HoverTools;
   /** A hold: where it sits, and the copy the menu lifts above the dimmed chat. */
-  onHold: (rect: Rect, copy: React.ReactNode) => void; onReact: (emoji?: string) => void; onOpenReactions: (m: Message) => void; onRetry: () => void; onOpen: (index: number, rects: (TileRect | undefined)[]) => void;
+  onHold: (rect: Rect, copy: React.ReactNode) => void;
 }) {
   const styles = rowProps.styles;
-  const { mine, gap, time } = rowProps;
+  const { mine, gap, time, onReply } = rowProps;
+  const { me, defaultReaction, call } = ctx;
   const progress = useSendProgress(message.id);
   const [burst, setBurst] = useState(0);
   const mineMark = me ? message.reactions?.[me] : undefined;
-  const react = () => { if (mineMark !== defaultReaction) setBurst((n) => n + 1); onReact(); };
+  const react = () => { if (!canReact) return; if (mineMark !== defaultReaction) setBurst((n) => n + 1); call.react(message.id); };
   // A single tap waits out the double-tap window, so a double tap never opens the photo too.
   const tapped = useRef<{ index: number; rects: (TileRect | undefined)[] }>({ index: 0, rects: [] });
-  const tap = useDoubleTap(react, () => onOpen(tapped.current.index, tapped.current.rects));
+  const tap = useDoubleTap(react, () => call.openPhoto(message, tapped.current.index, tapped.current.rects));
   // The caption answers like any message: a double tap leaves your reaction.
   const captionTap = useDoubleTap(react);
   const reacted = Object.keys(message.reactions ?? {}).length > 0;
@@ -1511,9 +1831,10 @@ function PhotoMessage({ message, rowProps, joinBottom, me, width, held = false, 
       {caption ? <View style={captionStyle}>{captionText()}</View> : null}
     </View>
   );
+  const chips = <Reactions message={message} me={me} mine={mine} styles={styles} onOpen={call.openReactions} />;
   return (
     <Row {...rowProps}>
-      <HoldArea onHold={(rect) => onHold(rect, copy)} style={[styles.photoWrap, mine ? styles.mineAlign : styles.theirsAlign, reacted && styles.bubbleWrapReacted, held && styles.heldAway]}>
+      <HoldArea hover={hover ? { ...hover, onReact: canReact ? react : undefined } : undefined} onHold={(rect) => onHold(rect, copy)} style={[styles.photoWrap, mine ? styles.mineAlign : styles.theirsAlign, reacted && styles.bubbleWrapReacted, held && styles.heldAway]}>
         {(hold) => (
           <>
             <View style={{ opacity: message.failed ? 0.6 : 1 }}>
@@ -1532,18 +1853,38 @@ function PhotoMessage({ message, rowProps, joinBottom, me, width, held = false, 
               />
             </View>
             {caption ? (
-              <Pressable onPress={captionTap} onLongPress={hold} delayLongPress={320} accessibilityRole="button" accessibilityLabel={`Caption: ${caption}, sent ${time}. Double tap to react, hold for more.`} style={captionStyle}>
-                {captionText(hold)}
-              </Pressable>
-            ) : null}
-            <Reactions message={message} me={me} mine={mine} styles={styles} onOpen={onOpenReactions} />
+              <View style={[styles.captionWrap, mine ? styles.mineAlign : styles.theirsAlign]}>
+                <Pressable
+                  onPress={captionTap}
+                  onLongPress={hold}
+                  delayLongPress={320}
+                  accessibilityRole="button"
+                  {...messageA11y({
+                    who: mine ? 'You' : ctx.nameOf(message.senderId),
+                    words: `Photo, ${caption}`,
+                    time,
+                    reaction: defaultReaction,
+                    canReact,
+                    react,
+                    reply: onReply,
+                    anyEmoji: () => call.anyEmoji(message),
+                    copy: () => call.copy(caption),
+                    more: hold,
+                  })}
+                  style={captionStyle}
+                >
+                  {captionText(hold)}
+                </Pressable>
+                {chips}
+              </View>
+            ) : chips}
             {burst ? <Burst key={burst} emoji={defaultReaction} onDone={() => setBurst(0)} /> : null}
           </>
         )}
       </HoldArea>
       {message.editedAt ? <Text style={styles.edited}>Edited</Text> : null}
       {message.failed && progress === null ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="Not sent. Tap to try again" onPress={onRetry} hitSlop={8}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Not sent. Tap to try again" onPress={() => call.retry(message.id)} hitSlop={8}>
           <Text style={[styles.edited, styles.notSent]}>Not sent · Tap to retry</Text>
         </Pressable>
       ) : null}
@@ -1556,7 +1897,7 @@ function PhotoMessage({ message, rowProps, joinBottom, me, width, held = false, 
  * iOS's own bar buttons answer: no dip, no spring, so the bar stays
  * perfectly still while a sheet or the photo picker opens over it.
  */
-function ComposerTool({ label, onPress, disabled = false, styles, children }: { label: string; onPress: () => void; disabled?: boolean; styles: any; children: React.ReactNode }) {
+function ComposerTool({ label, onPress, disabled = false, styles, children }: { label: string; onPress: () => void; disabled?: boolean; styles: Styles; children: React.ReactNode }) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -1575,18 +1916,78 @@ function ComposerTool({ label, onPress, disabled = false, styles, children }: { 
 interface Rect { x: number; y: number; w: number; h: number }
 /** A held message: where it sits, and (for photos and court cards) the copy the menu lifts in its place. */
 interface MenuTarget { message: Message; mine: boolean; rect: Rect; copy?: React.ReactNode }
+/** On a computer, the small bar beside a message under the pointer: React (your double-tap reaction), Reply, More. */
+interface HoverTools { mine: boolean; styles: Styles; reaction: string; onReact?: () => void; onReply?: () => void }
 
 /**
  * Wraps a message so a hold can tell the menu exactly where the message sits
- * on screen (and its row where to line up the time a swipe shows).
+ * on screen (and its row where to line up the time a swipe shows). On a
+ * computer, a right click opens the same menu, and while the pointer is over
+ * the message a small bar beside it offers React, Reply and More, as
+ * Messenger's and WhatsApp's do on the web (there is no hold with a mouse).
  */
-function HoldArea({ onHold, style, children }: { onHold: (rect: Rect) => void; style?: any; children: (hold: () => void) => React.ReactNode }) {
+function HoldArea({ onHold, style, hover, children }: { onHold: (rect: Rect) => void; style?: any; hover?: HoverTools; children: (hold: () => void) => React.ReactNode }) {
   const ref = useRef<View>(null);
   const hold = () => {
     haptics.tap();
     ref.current?.measureInWindow((x, y, w, h) => onHold({ x, y, w, h }));
   };
-  return <TimeAnchor ref={ref} style={style}>{children(hold)}</TimeAnchor>;
+  const holdNow = useRef(hold);
+  holdNow.current = hold;
+  const [over, setOver] = useState(false);
+  useEffect(() => {
+    if (!desktopWeb) return undefined;
+    const el = ref.current as unknown as HTMLElement | null;
+    if (!el?.addEventListener) return undefined;
+    const enter = () => setOver(true);
+    const leave = () => setOver(false);
+    const menu = (e: MouseEvent) => {
+      // A link keeps the browser's own menu (copy its address, open it in a new tab).
+      if ((e.target as HTMLElement | null)?.closest?.('a[href]')) return;
+      e.preventDefault();
+      setOver(false);
+      holdNow.current();
+    };
+    el.addEventListener('mouseenter', enter);
+    el.addEventListener('mouseleave', leave);
+    el.addEventListener('contextmenu', menu);
+    return () => {
+      el.removeEventListener('mouseenter', enter);
+      el.removeEventListener('mouseleave', leave);
+      el.removeEventListener('contextmenu', menu);
+    };
+  }, []);
+  return (
+    <TimeAnchor ref={ref} style={style}>
+      {children(hold)}
+      {hover && over ? <HoverBar tools={hover} onMore={() => { setOver(false); hold(); }} /> : null}
+    </TimeAnchor>
+  );
+}
+
+function HoverBar({ tools, onMore }: { tools: HoverTools; onMore: () => void }) {
+  const { styles, mine, reaction, onReact, onReply } = tools;
+  const button = (label: string, icon: keyof typeof Ionicons.glyphMap, run: () => void) => (
+    <Pressable
+      key={label}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      // The browser's own little label on the pointer, as every desktop chat has.
+      {...({ title: label } as object)}
+      onPress={run}
+      style={(state) => [styles.hoverTool, (state as { hovered?: boolean }).hovered && styles.hoverToolOn]}
+    >
+      <Ionicons name={icon} size={17} color={colors.textMuted} />
+    </Pressable>
+  );
+  return (
+    // Beside the message on the side away from its sender's edge, the reaction button nearest it.
+    <View style={[styles.hoverBar, mine ? styles.hoverBarMine : styles.hoverBarTheirs]}>
+      {onReact ? button(`React with ${reaction}`, 'happy-outline', onReact) : null}
+      {onReply ? button('Reply', 'arrow-undo-outline', onReply) : null}
+      {button('More', 'ellipsis-horizontal', onMore)}
+    </View>
+  );
 }
 
 /**
@@ -1595,10 +1996,13 @@ function HoldArea({ onHold, style, children }: { onHold: (rect: Rect) => void; s
  * it (with a "+" for any emoji) and the actions below. Reply comes first.
  * Your own message: Reply, Copy, Edit, Forward, Info, Unsend, Delete.
  * Theirs: Reply, Copy, Forward, Info and Delete. Delete only takes it out of
- * your own view; Forward opens the Send-to sheet.
+ * your own view; Forward opens the Send-to sheet. One not on the server yet
+ * (`pending`: on its way, or not sent) offers only Copy and Delete, and no
+ * reactions: an answer, an edit or an unsend could otherwise reach the
+ * server before it and be lost.
  */
-function MessageMenu({ target, me, styles, canReply, onClose, onReact, onMoreEmoji, onReply, onInfo, onCopy, onCopyLink, onEdit, onForward, onUnsend, onDelete, doubleTap, onDoubleTap }: {
-  target: MenuTarget; me: string | null; styles: any; canReply: boolean;
+function MessageMenu({ target, me, styles, canReply, canReact, pending, onClose, onReact, onMoreEmoji, onReply, onInfo, onCopy, onCopyLink, onEdit, onForward, onUnsend, onDelete, doubleTap, onDoubleTap }: {
+  target: MenuTarget; me: string | null; styles: Styles; canReply: boolean; canReact: boolean; pending: boolean;
   onClose: () => void; onReact: (emoji: string) => void; onMoreEmoji: () => void; onReply: () => void; onInfo: () => void; onCopy: () => void; onCopyLink: (url: string) => void; onEdit: () => void; onForward: () => void; onUnsend: () => void; onDelete: () => void;
   /** The reaction a double tap leaves, and how to change it: the last row turns the reactions above into that choice. */
   doubleTap: string; onDoubleTap: (emoji: string) => void;
@@ -1613,20 +2017,23 @@ function MessageMenu({ target, me, styles, canReply, onClose, onReact, onMoreEmo
   // A message with a link offers its address on its own; one that is only a link offers just that.
   const link = text || caption ? firstLink(message.body) : null;
   const onlyLink = text && !!isOnlyLink(message.body);
-  const actions = [
-    ...(canReply && message.kind !== 'system' ? [{ key: 'reply', label: 'Reply', icon: 'arrow-undo-outline' as const, run: onReply }] : []),
+  const actionRows = [
+    ...(canReply && !pending && message.kind !== 'system' ? [{ key: 'reply', label: 'Reply', icon: 'arrow-undo-outline' as const, run: onReply }] : []),
     ...((text || caption) && !onlyLink ? [{ key: 'copy', label: caption ? 'Copy caption' : 'Copy', icon: 'copy-outline' as const, run: onCopy }] : []),
     ...(link ? [{ key: 'copy-link', label: 'Copy link', icon: 'link-outline' as const, run: () => onCopyLink(link.url) }] : []),
-    ...(mine && text ? [{ key: 'edit', label: 'Edit', icon: 'create-outline' as const, run: onEdit }] : []),
+    ...(!pending && mine && text ? [{ key: 'edit', label: 'Edit', icon: 'create-outline' as const, run: onEdit }] : []),
     // Anything anyone sent can go on to other chats; an event line ("Mira added Dev") is not a message,
     // and photos stay on their own chat's private shelf.
-    ...(message.kind !== 'system' && message.kind !== 'photo' ? [{ key: 'forward', label: 'Forward', icon: 'arrow-redo-outline' as const, run: onForward }] : []),
-    { key: 'info', label: 'Info', icon: 'information-circle-outline' as const, run: onInfo },
-    ...(mine ? [{ key: 'unsend', label: 'Unsend', icon: 'arrow-undo-circle-outline' as const, run: onUnsend }] : []),
-    { key: 'delete', label: mine ? 'Delete for you' : 'Delete', icon: 'trash-outline' as const, run: onDelete, danger: true },
+    ...(!pending && message.kind !== 'system' && message.kind !== 'photo' ? [{ key: 'forward', label: 'Forward', icon: 'arrow-redo-outline' as const, run: onForward }] : []),
+    ...(!pending ? [{ key: 'info', label: 'Info', icon: 'information-circle-outline' as const, run: onInfo }] : []),
+    ...(!pending && mine ? [{ key: 'unsend', label: 'Unsend', icon: 'arrow-undo-circle-outline' as const, run: onUnsend }] : []),
+    { key: 'delete', label: mine && !pending ? 'Delete for you' : 'Delete', icon: 'trash-outline' as const, run: onDelete, danger: true },
   ];
-  const rows = actions.length + 1;
-  const ROW = 44, CARD_W = 220, BAR_H = 46, GAP = 8;
+  // The "Double tap" row only where a reaction can be left.
+  const rows = actionRows.length + (canReact ? 1 : 0);
+  const ROW = 44, CARD_W = 220, GAP = 8;
+  // No reaction bar where none can be left.
+  const BAR_H = canReact ? 46 : 0;
   const BAR_W = (REACTIONS.length + (choosing ? 0 : 1)) * 38 + 12;
   const cardH = rows * ROW;
   const floor = H - insets.bottom - 12;
@@ -1638,7 +2045,7 @@ function MessageMenu({ target, me, styles, canReply, onClose, onReact, onMoreEmo
   const shown = { x: mine ? rect.x + rect.w * (1 - scale) : rect.x, y: rect.y, w: rect.w * scale, h: rect.h * scale };
   // Reactions above, the message, the actions below; the group slides up or
   // down as one if it would run off the screen, the way iMessage does.
-  const top = shown.y - BAR_H - GAP;
+  const top = shown.y - BAR_H - (BAR_H ? GAP : 0);
   const bottom = shown.y + shown.h + GAP + cardH;
   let shift = 0;
   if (bottom > floor) shift = bottom - floor;
@@ -1673,41 +2080,45 @@ function MessageMenu({ target, me, styles, canReply, onClose, onReact, onMoreEmo
             <RichText style={[styles.bubbleText, mine && { color: colors.brandInk }]}>{message.body}</RichText>
           </View>
         ) : null}
-        <Reanimated.View entering={FadeInDown.duration(160).easing(Easing.out(Easing.cubic))} style={[styles.menuReactions, { top: top - shift, height: BAR_H }, side(BAR_W)]}>
-          {REACTIONS.map((emoji) => (
-            <Pressable
-              key={emoji}
-              accessibilityRole="button"
-              accessibilityLabel={choosing ? `Double tap leaves ${emoji}` : `React with ${emoji}`}
-              onPress={() => pick(() => (choosing ? onDoubleTap(emoji) : onReact(emoji)))}
-              style={[styles.menuReaction, (choosing ? doubleTap === emoji : mark === emoji) && styles.menuReactionOn]}
-            >
-              <Text style={{ fontSize: 22 }}>{emoji}</Text>
-            </Pressable>
-          ))}
-          {!choosing ? (
-            // Any emoji at all, from the whole emoji keyboard (Instagram's "+").
-            <Pressable accessibilityRole="button" accessibilityLabel="React with another emoji" onPress={() => pick(onMoreEmoji)} style={[styles.menuReaction, styles.menuReactionMore]}>
-              <Ionicons name="add" size={22} color={colors.textMuted} />
-            </Pressable>
-          ) : null}
-        </Reanimated.View>
-        {choosing ? (
+        {canReact ? (
+          <Reanimated.View entering={FadeInDown.duration(160).easing(Easing.out(Easing.cubic))} style={[styles.menuReactions, { top: top - shift, height: BAR_H }, side(BAR_W)]}>
+            {REACTIONS.map((emoji) => (
+              <Pressable
+                key={emoji}
+                accessibilityRole="button"
+                accessibilityLabel={choosing ? `Double tap leaves ${emoji}` : `React with ${emoji}`}
+                onPress={() => pick(() => (choosing ? onDoubleTap(emoji) : onReact(emoji)))}
+                style={[styles.menuReaction, (choosing ? doubleTap === emoji : mark === emoji) && styles.menuReactionOn]}
+              >
+                <Text style={{ fontSize: 22 }}>{emoji}</Text>
+              </Pressable>
+            ))}
+            {!choosing ? (
+              // Any emoji at all, from the whole emoji keyboard (Instagram's "+").
+              <Pressable accessibilityRole="button" accessibilityLabel="React with another emoji" onPress={() => pick(onMoreEmoji)} style={[styles.menuReaction, styles.menuReactionMore]}>
+                <Ionicons name="add" size={22} color={colors.textMuted} />
+              </Pressable>
+            ) : null}
+          </Reanimated.View>
+        ) : null}
+        {choosing && canReact ? (
           <Reanimated.View entering={FadeIn.duration(140)} pointerEvents="none" style={[styles.menuHint, { top: top - shift - 30 }, side(BAR_W)]}>
-            <Text style={styles.menuHintText}>Pick what a double tap leaves</Text>
+            <Text style={[styles.menuHintText, { color: colors.onMedia }]}>Pick what a double tap leaves</Text>
           </Reanimated.View>
         ) : null}
         <Reanimated.View entering={FadeInUp.duration(160).easing(Easing.out(Easing.cubic))} style={[styles.menuCard, { top: shown.y + shown.h + GAP - shift, width: CARD_W }, side(CARD_W)]}>
-          {actions.map((a, i) => (
+          {actionRows.map((a, i) => (
             <Pressable key={a.key} accessibilityRole="button" onPress={() => pick(a.run)} style={({ pressed }) => [styles.menuRow, i > 0 && styles.menuRowRule, pressed && styles.menuRowPressed]}>
               <Text style={[styles.menuLabel, a.danger && { color: colors.danger }]}>{a.label}</Text>
               <Ionicons name={a.icon} size={19} color={a.danger ? colors.danger : colors.text} />
             </Pressable>
           ))}
-          <Pressable accessibilityRole="button" accessibilityLabel={`Double tap leaves ${doubleTap}. Change it`} accessibilityState={{ selected: choosing }} onPress={() => { if (!settledMenu()) return; haptics.tap(); setChoosing((c) => !c); }} style={({ pressed }) => [styles.menuRow, styles.menuRowRule, (pressed || choosing) && styles.menuRowPressed]}>
-            <Text style={styles.menuLabel}>Double tap</Text>
-            <Text style={{ fontSize: 19 }}>{doubleTap}</Text>
-          </Pressable>
+          {canReact ? (
+            <Pressable accessibilityRole="button" accessibilityLabel={`Double tap leaves ${doubleTap}. Change it`} accessibilityState={{ selected: choosing }} onPress={() => { if (!settledMenu()) return; haptics.tap(); setChoosing((c) => !c); }} style={({ pressed }) => [styles.menuRow, styles.menuRowRule, (pressed || choosing) && styles.menuRowPressed]}>
+              <Text style={styles.menuLabel}>Double tap</Text>
+              <Text style={{ fontSize: 19 }}>{doubleTap}</Text>
+            </Pressable>
+          ) : null}
         </Reanimated.View>
       </Reanimated.View>
     </Modal>
@@ -1959,10 +2370,10 @@ const styleDefinitions = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 18,
   },
-  // Yours in the court's colour; theirs a shade deeper than the page, with no outline. Round all over on
-  // their own; in a run (Instagram's rule) the corners on the sender's side where they join are small:
-  // the first one's below, the middle ones' above and below, the last one's above.
-  mine: { alignSelf: 'flex-end', backgroundColor: colors.brand },
+  // Yours in the court's colour (deepened where its ink needed it); theirs a shade deeper than the page,
+  // with no outline. Round all over on their own; in a run (Instagram's rule) the corners on the sender's
+  // side where they join are small: the first one's below, the middle ones' above and below, the last one's above.
+  mine: { alignSelf: 'flex-end', backgroundColor: colors.bubbleMine },
   theirs: { alignSelf: 'flex-start', backgroundColor: colors.bubble },
   joinMine: { borderTopRightRadius: 5 },
   joinTheirs: { borderTopLeftRadius: 5 },
@@ -2006,7 +2417,8 @@ const styleDefinitions = StyleSheet.create({
   menuReactionOn: { backgroundColor: colors.brandDim },
   menuReactionMore: { backgroundColor: colors.surfaceAlt, width: 32, height: 32, borderRadius: 16, marginLeft: 3 },
   menuHint: { position: 'absolute', alignItems: 'center' },
-  menuHintText: { ...typography.smallStrong, color: 'white', paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: 'rgba(0,0,0,0.55)', overflow: 'hidden' },
+  // A dark pill over the dimmed chat; its words take the over-a-picture white when drawn (see menuHint).
+  menuHintText: { ...typography.smallStrong, paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: colors.overlay, overflow: 'hidden' },
   menuCard: { position: 'absolute', borderRadius: radius.lg, backgroundColor: colors.bgElevated, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 16, shadowOffset: { width: 0, height: 6 } },
   menuRow: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg },
   menuRowRule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
@@ -2046,6 +2458,14 @@ const styleDefinitions = StyleSheet.create({
   // A held photo or court card: the menu's lifted copy stands in for it.
   heldAway: { opacity: 0 },
   caption: { marginTop: 2 },
+  // The caption and the reactions on its corner.
+  captionWrap: { maxWidth: '100%' },
+  // On a computer, the bar beside a message under the pointer: just past its edge, centred on it.
+  hoverBar: { position: 'absolute', top: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: 2, zIndex: 3 },
+  hoverBarMine: { right: '100%', paddingRight: 6, flexDirection: 'row-reverse' },
+  hoverBarTheirs: { left: '100%', paddingLeft: 6 },
+  hoverTool: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  hoverToolOn: { backgroundColor: colors.surfaceAlt },
   captionReacted: { paddingBottom: 11 },
   notSent: { color: colors.danger },
   notSentWrap: { alignSelf: 'flex-end', marginRight: spacing.xs },
@@ -2072,7 +2492,7 @@ const styleDefinitions = StyleSheet.create({
   sharedCardClip: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: 8, paddingRight: spacing.md, minWidth: 230 },
   sharedWords: { flexShrink: 1, gap: 4 },
   clipThumb: { width: 54, height: 72, borderRadius: 10, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceAlt },
-  clipPlay: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)' },
+  clipPlay: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.overlay },
   sharedHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   sharedKind: { ...typography.caption, color: colors.brand },
   sharedKindOver: { color: colors.textFaint },
@@ -2096,8 +2516,9 @@ const styleDefinitions = StyleSheet.create({
   blockedBannerLink: { ...typography.smallStrong, color: colors.danger },
   // "Seen" / "Sent" under your newest message, small, at its right edge.
   readLine: { ...font('500'), fontSize: 11.5, lineHeight: 15, letterSpacing: 0.1, color: colors.textFaint, textAlign: 'right', marginTop: 3, paddingRight: 4 },
-  // A day line: small and faint, the day a little stronger than the time, with room above it.
-  stamp: { ...font('400'), fontSize: 11, lineHeight: 14, color: colors.textFaint, opacity: 0.85, textAlign: 'center', paddingTop: spacing.lg, paddingBottom: 6 },
+  // A day line: small and faint, the day a little stronger than the time, with room above it. (Faint is
+  // as quiet as it gets at this size: any fainter fell under 4.5:1.)
+  stamp: { ...font('400'), fontSize: 11, lineHeight: 14, color: colors.textFaint, textAlign: 'center', paddingTop: spacing.lg, paddingBottom: 6 },
   stampDay: { ...font('600'), color: colors.textFaint },
   mentionTray: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm, maxWidth: 700, width: '100%', alignSelf: 'center' },
   // A new chat with nobody's words in it yet.

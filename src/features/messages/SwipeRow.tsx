@@ -78,7 +78,14 @@ export function SwipeRow({ actions, actionCount, mark, onMark, open, onOpen, chi
     <GestureDetector gesture={pan}>
       <View collapsable={false} style={styles.wrap}>
         <Animated.View pointerEvents="none" style={[styles.mark, markLook]}>{mark}</Animated.View>
-        <Animated.View style={[styles.actions, { width }, actionsLook]}>{actions}</Animated.View>
+        {/* Out of a screen reader's reach while the row covers them (the row's own actions offer the same). */}
+        <Animated.View
+          accessibilityElementsHidden={!open}
+          importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}
+          style={[styles.actions, { width }, actionsLook]}
+        >
+          {actions}
+        </Animated.View>
         <Animated.View style={moved}>{children}</Animated.View>
       </View>
     </GestureDetector>

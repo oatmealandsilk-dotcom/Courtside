@@ -81,7 +81,7 @@ export function SwipeReply({ enabled = true, onReply, children }: { enabled?: bo
     const show = arrowShow(x.value);
     return { opacity: show, transform: [{ scale: 0.55 + 0.45 * show + (x.value >= REPLY_AT ? 0.08 : 0) }] };
   });
-  if (!enabled) return <>{children}</>;
+  // The same wrapper on or off: a message going from "Sending…" to sent keeps everything inside it as it was.
   return (
     <GestureDetector gesture={pan}>
       <View style={styles.wrap} collapsable={false}>

@@ -110,7 +110,7 @@ export function SwipeReply({ enabled = true, onReply, children }: { enabled?: bo
     };
   }, [enabled]);
 
-  if (!enabled) return <>{children}</>;
+  // The same wrapper on or off: a message going from "Sending…" to sent keeps everything inside it as it was.
   return (
     <View
       ref={wrap}
