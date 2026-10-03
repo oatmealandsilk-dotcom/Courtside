@@ -12,6 +12,7 @@ export type BodyDay = Pick<DailyHealth, 'date'> & Partial<Pick<DailyHealth, 'res
  * which world we are in.
  */
 type Sample = { startDate: string; endDate: string; value: number };
+type SourcedSample = Sample & { sourceName?: string; sourceId?: string };
 /** One workout as the library hands it over (RCTAppleHealthKit+Queries.m, the workout branch of fetchSamplesOfType). */
 type AppleWorkout = { id: string; activityId: number; activityName: string; calories: number; start: string; end: string; sourceName: string; sourceId: string; device: string; tracked: boolean };
 type HrSample = { value: number; startDate: string; endDate: string; sourceId?: string; sourceName?: string };
@@ -151,29 +152,73 @@ export async function readAppleHealth(days = 7): Promise<BodyDay[]> {
 /** A day of what was eaten, as a food app wrote it into Health. */
 export type FoodDay = Pick<DailyHealth, 'date'> & Partial<Pick<DailyHealth, 'calories' | 'proteinGrams' | 'carbGrams' | 'fatGrams'>>;
 
+/** The same day for the Health page's Food card, with the app it came from when one stands out. */
+export type FoodDayFrom = FoodDay & { source?: string };
+
+/** The four food numbers Health holds that Cronometer and MyFitnessPal both write. */
+const FOOD_KEYS = ['calories', 'proteinGrams', 'carbGrams', 'fatGrams'] as const;
+type FoodKey = (typeof FOOD_KEYS)[number];
+
+/** Midnight on this phone `back` days ago, so the first day read is a whole day, never half of one. */
+const midnightDaysAgo = (back: number) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - back); return d; };
+
+/** Asks for the food numbers alone, for the Food card. Throws when refused or when HealthKit is not in this build. */
+export async function connectAppleFood(): Promise<void> {
+  const h = load();
+  if (!h) throw new Error('Apple Health is not available in this version of CourtSide.');
+  const P = h.Constants.Permissions;
+  const read = [P.EnergyConsumed, P.Protein, P.Carbohydrates, P.FatTotal].filter(Boolean);
+  await new Promise<void>((res, rej) => h.initHealthKit({ permissions: { read, write: [] } }, (err) => (err ? rej(new Error(err)) : res())));
+}
+
 /**
  * What MyFitnessPal or Cronometer logged, read from Health: both apps write
  * each meal's calories, protein, carbs and fat there once their own "share
  * with Apple Health" switch is on. Summed per day, newest first.
+ *
+ * Someone with both apps sharing would otherwise be counted twice, so each
+ * day's numbers all come from the one app that logged the most calories that day.
  */
-export async function readAppleNutrition(days = 14): Promise<FoodDay[]> {
+export async function readAppleNutritionFrom(days = 14): Promise<FoodDayFrom[]> {
   const h = load();
   if (!h) return [];
-  const end = new Date();
-  const start = new Date(end.getTime() - days * 86_400_000);
-  const range = { startDate: start.toISOString(), endDate: end.toISOString() };
-  const out = new Map<string, FoodDay>();
+  const range = { startDate: midnightDaysAgo(days - 1).toISOString(), endDate: new Date().toISOString() };
   const settle = async <T,>(p: Promise<T>) => { try { return await p; } catch { return null; } };
-  const add = (rows: Sample[] | null, key: 'calories' | 'proteinGrams' | 'carbGrams' | 'fatGrams') => {
+  // day -> number -> app -> total
+  const sums = new Map<string, Map<FoodKey, Map<string, number>>>();
+  const add = (rows: SourcedSample[] | null, key: FoodKey) => {
     for (const r of rows ?? []) {
-      const d = out.get(dayOf(r.startDate)) ?? { date: dayOf(r.startDate) };
-      d[key] = Math.round((d[key] ?? 0) + r.value);
-      out.set(d.date, d);
+      if (!(r.value > 0)) continue;
+      const day = sums.get(dayOf(r.startDate)) ?? new Map<FoodKey, Map<string, number>>();
+      const bySource = day.get(key) ?? new Map<string, number>();
+      const from = r.sourceName || r.sourceId || 'Health';
+      bySource.set(from, (bySource.get(from) ?? 0) + r.value);
+      day.set(key, bySource);
+      sums.set(dayOf(r.startDate), day);
     }
   };
-  add(await settle(call<Sample[]>((cb) => h.getEnergyConsumedSamples(range, cb))), 'calories');
-  add(await settle(call<Sample[]>((cb) => h.getProteinSamples(range, cb))), 'proteinGrams');
-  add(await settle(call<Sample[]>((cb) => h.getCarbohydratesSamples(range, cb))), 'carbGrams');
-  add(await settle(call<Sample[]>((cb) => h.getTotalFatSamples(range, cb))), 'fatGrams');
-  return [...out.values()].filter((d) => (d.calories ?? 0) > 0).sort((a, b) => (a.date < b.date ? 1 : -1));
+  add(await settle(call<SourcedSample[]>((cb) => h.getEnergyConsumedSamples(range, cb))), 'calories');
+  add(await settle(call<SourcedSample[]>((cb) => h.getProteinSamples(range, cb))), 'proteinGrams');
+  add(await settle(call<SourcedSample[]>((cb) => h.getCarbohydratesSamples(range, cb))), 'carbGrams');
+  add(await settle(call<SourcedSample[]>((cb) => h.getTotalFatSamples(range, cb))), 'fatGrams');
+  const out: FoodDayFrom[] = [];
+  for (const [date, byKey] of sums) {
+    // One app per day (the one that logged the most calories), and all four
+    // numbers from it, so a day never mixes one app's calories with another's protein.
+    const d: FoodDayFrom = { date };
+    const top = [...(byKey.get('calories') ?? new Map<string, number>()).entries()].sort((a, b) => b[1] - a[1])[0];
+    if (!top) continue;
+    d.source = top[0];
+    for (const key of FOOD_KEYS) {
+      const v = byKey.get(key)?.get(top[0]);
+      if (v !== undefined) d[key] = Math.round(v);
+    }
+    out.push(d);
+  }
+  return out.filter((d) => (d.calories ?? 0) > 0).sort((a, b) => (a.date < b.date ? 1 : -1));
+}
+
+/** The same days without where they came from, as the server keeps them. */
+export async function readAppleNutrition(days = 14): Promise<FoodDay[]> {
+  return (await readAppleNutritionFrom(days)).map(({ source: _source, ...day }) => day);
 }

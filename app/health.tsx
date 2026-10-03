@@ -11,6 +11,7 @@ import { BrandWash } from '@/components/ui/BrandWash';
 import * as haptics from '@/lib/haptics';
 import { Screen } from '@/components/ui';
 import { appleHealthAvailable } from '@/features/health/appleHealth';
+import { FoodSection } from '@/features/health/FoodSection';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { confirm } from '@/lib/confirm';
 import { relativeTime } from '@/lib/format';
@@ -34,13 +35,21 @@ const ABOUT_TENNIS: Partial<Record<Integration['provider'], { line: string; how:
 };
 
 /**
+ * On an iPhone with Apple Health, the Food card above the list connects
+ * Cronometer and MyFitnessPal (through Health), so their own rows would only
+ * repeat it. One already connected keeps its row, so it can still be synced
+ * or disconnected. Elsewhere the rows stay: they import the apps' export files.
+ */
+const foodCardCovers = (i: Integration) => (i.provider === 'cronometer' || i.provider === 'myfitnesspal') && !i.connected && appleHealthAvailable();
+
+/**
  * Where the coach's numbers come from. Three sources, each a row: what it
  * gives, whether it is connected, and one button that does the real thing —
  * Apple Health asks the phone, WHOOP opens its sign-in, Cronometer takes a file.
  */
 export default function Health() {
   const styles = useThemedStyles(styleDefinitions);
-  const { integrations, healthHistory, actions } = useApp();
+  const { integrations, healthHistory, actions, currentUserId } = useApp();
   const [busy, setBusy] = useState<string | null>(null);
   const latest = healthHistory[0];
   const connected = integrations.filter((i) => i.connected).length;
@@ -107,8 +116,10 @@ export default function Health() {
         </View>
       ) : null}
 
+      <FoodSection userId={currentUserId} />
+
       <View style={styles.list}>
-        {integrations.map((i, index) => {
+        {integrations.filter((i) => ABOUT[i.provider] && !foodCardCovers(i)).map((i, index) => {
           const base = ABOUT[i.provider];
           if (!base) return null;
           const tennis = tennisOn(i.provider);
