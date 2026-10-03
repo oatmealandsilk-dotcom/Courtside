@@ -8,7 +8,7 @@ import { DragSheet } from '@/components/DragSheet';
 import { Avatar } from '@/components/ui';
 import { SheetTitle, Submit } from '@/components/sheet/SheetForm';
 import type { MapVisibility } from '@/data/types';
-import { VISIBILITY_CHOICES, settleWhoSeesYou } from '@/features/players/mapPrivacy';
+import { TEEN_NOTICE, choicesFor, onTeenMap, settleWhoSeesYou } from '@/features/players/mapPrivacy';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography, withAlpha } from '@/theme';
@@ -25,13 +25,24 @@ const ICON: Record<MapVisibility, keyof typeof Ionicons.glyphMap> = { nearby: 'p
  * without Continue changes nothing, and it asks again next time.
  * `mode=manage`: from the full map's location button, your card on the map,
  * or Settings → Privacy. A tap saves at once; Location off is at the bottom.
+ *
+ * Someone not known to be an adult (migration 78) gets two answers instead:
+ * Friends who follow you back (their rough area, just for them) or Only me,
+ * under a short notice: only friends who follow them back can see where
+ * they are, and turning Location off on the map hides them. Nothing of
+ * theirs is shared until they answer here. (Under 16 never gets this
+ * screen: they stay off the map.)
  */
 export default function MapVisibilitySheet() {
   const styles = useThemedStyles(styleDefinitions);
   const params = useLocalSearchParams<{ mode?: string }>();
   const first = params.mode !== 'manage';
-  const { actions, mapVisibility, currentUser, locationEnabled } = useApp();
-  const [picked, setPicked] = useState<MapVisibility>(mapVisibility ?? 'nearby');
+  const { actions, mapVisibility, currentUser, locationEnabled, teenMap } = useApp();
+  const teen = onTeenMap(currentUser, teenMap);
+  const choices = choicesFor(teen);
+  // A teen's "Players nearby" is kept as friends only, so it reads as that here.
+  const shownAs = (v: MapVisibility | null | undefined): MapVisibility => (teen ? (v === 'none' ? 'none' : 'mutuals') : v ?? 'nearby');
+  const [picked, setPicked] = useState<MapVisibility>(shownAs(mapVisibility));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [closeSignal, setCloseSignal] = useState(0);
@@ -47,7 +58,7 @@ export default function MapVisibilitySheet() {
     if (first || v === mapVisibility) return;
     const ok = await actions.setMapVisibility(v);
     if (ok) answer.current = v;
-    else { setError('Couldn’t save that. Try again.'); setPicked(mapVisibility ?? 'nearby'); }
+    else { setError('Couldn’t save that. Try again.'); setPicked(shownAs(mapVisibility)); }
   };
   const proceed = async () => {
     if (busy) return;
@@ -75,8 +86,17 @@ export default function MapVisibilitySheet() {
     >
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <WhoSeesArt choice={picked} name={currentUser?.name ?? 'You'} seed={currentUser?.avatarSeed ?? 'you'} uri={currentUser?.avatarUrl} />
+        {teen ? (
+          <View style={styles.notice} accessibilityRole="text">
+            <Ionicons name="shield-checkmark-outline" size={18} color={colors.brand} />
+            <View style={styles.noticeWords}>
+              <Text style={styles.noticeText}>{TEEN_NOTICE}</Text>
+              <Text style={styles.noticeSmall}>Under 18, the map is only between friends who follow each other: strangers never see you, and you only see friends. Under 16s stay off the map.</Text>
+            </View>
+          </View>
+        ) : null}
         <View style={styles.choices} accessibilityRole="radiogroup">
-          {VISIBILITY_CHOICES.map((c) => {
+          {choices.map((c) => {
             const on = picked === c.value;
             return (
               <Pressable key={c.value} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={`${c.label}. ${c.line}`} onPress={() => { void pick(c.value); }} style={({ pressed }) => [styles.choice, on && styles.choiceOn, pressed && { transform: [{ scale: 0.985 }] }]}>
@@ -178,6 +198,10 @@ const styleDefinitions = StyleSheet.create({
   radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
   radioOn: { borderColor: colors.text },
   radioDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.text },
+  notice: { flexDirection: 'row', gap: spacing.sm, padding: spacing.md, borderRadius: radius.lg, backgroundColor: withAlpha(colors.brand, 0.08), borderWidth: 1, borderColor: withAlpha(colors.brand, 0.2) },
+  noticeWords: { flex: 1, gap: 4 },
+  noticeText: { ...typography.bodyStrong, color: colors.text, lineHeight: 21 },
+  noticeSmall: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
   error: { ...typography.small, color: colors.danger },
   off: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 46, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong, marginTop: spacing.xs },
   offText: { ...typography.smallStrong, ...font('600'), color: colors.text },

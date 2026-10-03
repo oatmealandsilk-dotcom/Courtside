@@ -14,7 +14,7 @@ import { LevelPill } from '@/components/LevelPill';
 import { NearbyMap } from '@/components/NearbyMap';
 import { UpToday, useUpToday } from '@/components/UpToday';
 import { HitGlyph } from '@/components/HitGlyph';
-import { useLocationToggle } from '@/features/players/useLocationToggle';
+import { useLocationToggle, useOpenToHitToggle } from '@/features/players/useLocationToggle';
 import { QuestionCard, TOPIC_META } from '@/components/QuestionCard';
 import { HitCard } from '@/components/HitCard';
 import { Avatar, Chip, EmptyState, Screen } from '@/components/ui';
@@ -26,7 +26,7 @@ import { EarlyInvite } from '@/components/EarlyInvite';
 import { FollowPill } from '@/components/FollowPill';
 import { takeInviteCourt } from '@/features/invite/referral';
 import { notKnownAdult } from '@/features/players/age';
-import { askWhoSeesYouOnLaunch, canChooseVisibility } from '@/features/players/mapPrivacy';
+import { askWhoSeesYouOnLaunch, canChooseVisibility, onTeenMap } from '@/features/players/mapPrivacy';
 import { isTourOpen, useTourOpen } from '@/features/tour/tourStore';
 import { IN_TOWN_MILES } from '@/features/players/mapModel';
 import { isClosedCourt } from '@/features/players/courts';
@@ -83,7 +83,7 @@ const joinedLabel = (iso: string) => {
 
 function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
-  const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, followingIds, saved, actions, detectedCoords, locationEnabled, hitRequests, lastSeen, lastSeenLoaded, followedCourts, onboardingComplete, mapLive, newOnCourtside, mapVisibility, seeing, ageSaysAdult } = useApp();
+  const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, followingIds, saved, actions, detectedCoords, locationEnabled, hitRequests, lastSeen, lastSeenLoaded, followedCourts, onboardingComplete, mapLive, newOnCourtside, mapVisibility, teenMap, seeing, ageSaysAdult } = useApp();
   // The section lives here, not in the address: listening to the address made
   // this whole tab re-render on every route change anywhere in the app.
   // Other pages ask for a section through requestSection before navigating;
@@ -128,9 +128,11 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // question comes here, where the app opens, a moment after the page has
   // drawn, once per launch until answered (never over the tutorial). Until
   // then the server shows you to about a kilometre for everyone, as before.
+  // Never for a teen (migration 78): they are asked only when they turn
+  // Location or "up today" on themselves, and stay hidden until they answer.
   const tourOpen = useTourOpen();
   const askOnLaunch = !previewSection && section === 'players' && !!onboardingComplete && !tourOpen && locationEnabled
-    && mapVisibility === null && canChooseVisibility(mapLive, currentUser);
+    && mapVisibility === null && canChooseVisibility(mapLive, currentUser, teenMap) && !!currentUser && !notKnownAdult(currentUser);
   useEffect(() => {
     if (!askOnLaunch) return undefined;
     const t = setTimeout(() => { if (!isTourOpen()) void askWhoSeesYouOnLaunch('card'); }, 1200);
@@ -236,11 +238,16 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // are (the phone's fix, or your own last spot), never from a profile's city.
   const ownSpot = detectedCoords ?? (currentUserId && lastSeen[currentUserId] ? { lat: lastSeen[currentUserId].lat, lng: lastSeen[currentUserId].lng } : null);
   const upToday = useUpToday({ users, lastSeen, me: currentUserId, from: ownSpot, blockedIds });
-  const showUpToday = !!currentUser && !notKnownAdult(currentUser);
+  // A teen (migration 78) has it too: only friends who follow each other with
+  // them are in it, and only those friends see theirs. Never under 16.
+  const teen = onTeenMap(currentUser, teenMap);
+  const showUpToday = !!currentUser && (!notKnownAdult(currentUser) || teen);
+  const toggleOpen = useOpenToHitToggle();
   // Nobody sharing a spot within 30 miles (once the spots have come down): the map fills up with the people you already play with.
   // Only somewhere we know: with no spot and no city, "early here" would be a guess.
-  // Only for a known adult: anyone else is shown nobody's spot (migration 46),
-  // so an empty list says nothing about the town for them.
+  // Only for a known adult: a teen sees only friends who follow each other
+  // with them (migration 78; before it, nobody), so an empty list says nothing
+  // about the town for them.
   const early = !!currentUser && !notKnownAdult(currentUser) && !!nearFrom && (lastSeenLoaded || !isSupabaseConfigured) && nearPlayers.length === 0;
   const myCityName = (currentUser?.location ?? '').split(',')[0].trim() || null;
   // The court the invite carries: one you follow in town, else the nearest
@@ -303,7 +310,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : <View style={styles.mapStandIn} />) : null}
         {/* Who's up today: you first (one tap, never Location), then who near you is up for a hit. */}
-        {currentUser && !search && showUpToday ? <UpToday me={currentUser} people={upToday} locationOn={location.locationOn} onLocation={ownSpot ? undefined : location.toggle} onToggle={actions.setOpenToHit} /> : null}
+        {currentUser && !search && showUpToday ? <UpToday me={currentUser} people={upToday} teen={teen} locationOn={location.locationOn} onLocation={ownSpot ? undefined : location.toggle} onToggle={(on) => { void toggleOpen(on); }} /> : null}
         {/* Nobody sharing a spot within 30 miles: the way to fill the map, right under it. */}
         {!search && early ? <EarlyInvite city={myCityName} court={inviteCourt} /> : null}
         {/* A quiet area leads with where to play (your courts, then the others
