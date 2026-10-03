@@ -26,6 +26,7 @@ import { useStillLoading } from '@/lib/useStillLoading';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography } from '@/theme';
+import { publicRoute } from '@/features/share/publicRoute';
 
 type Params = { id: string; name?: string; lat?: string; lng?: string };
 
@@ -39,7 +40,7 @@ type Params = { id: string; name?: string; lat?: string; lng?: string };
  * first. A tile opens the court's reel on that post. The heart up top
  * follows it.
  */
-export default function CourtPage() {
+function CourtPage() {
   const styles = useThemedStyles(styleDefinitions);
   const params = useLocalSearchParams<Params>();
   const { posts, users, currentUser, currentUserId, detectedCoords, courtFacts, courtFollows, courtExtras, actions } = useApp();
@@ -247,3 +248,6 @@ const styleDefinitions = StyleSheet.create({
   pills: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg, maxWidth: 440 },
   pill: { flex: 1 },
 });
+
+// A link shared outside the app opens here for anyone; signed out, it shows the public look (see SharedPage).
+export default publicRoute('court', CourtPage);

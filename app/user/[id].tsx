@@ -25,6 +25,7 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { ProfileSkeleton } from '@/components/Skeleton';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { isTaggedIn } from '@/features/activity/sessionTags';
+import { publicRoute } from '@/features/share/publicRoute';
 
 const TABS = ['Posts', 'Clips', 'Tagged'] as const;
 
@@ -34,7 +35,7 @@ const TABS = ['Posts', 'Clips', 'Tagged'] as const;
  * card, then a grid of what they have posted. A private account shows only
  * the top until they have let you follow.
  */
-export default function UserProfile() {
+function UserProfile() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { users, posts, coaches, currentUserId, followingIds, followRequests, mutedIds, blockedIds, alertIds, actions } = useApp();
@@ -311,3 +312,6 @@ const styleDefinitions = StyleSheet.create({
   menuBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   menuLabel: { ...typography.body, color: colors.text },
 });
+
+// A link shared outside the app opens here for anyone; signed out, it shows the public look (see SharedPage).
+export default publicRoute('profile', UserProfile);

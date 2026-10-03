@@ -73,6 +73,9 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap | 'h
 // The hit mark fills the badge's inside (19 less its 2pt rim on each side), drawn bold for that size.
 const HIT_BADGE = 14;
 
+/** The line the server puts on the follow an invite makes (migration 68): said in the verb, not again under it. */
+const INVITE_LINE = 'Joined CourtSide from your link';
+
 const VERB: Record<NotificationKind, string> = {
   like: 'liked your post',
   comment: 'commented on your post',
@@ -208,6 +211,9 @@ export default function Notifications() {
   const verbFor = (group: Group) => {
     if (group.kind === 'milestone') return `just passed ${group.preview ?? 'a milestone'}`;
     if (group.kind === 'session-tag') return `tagged you in a ${group.preview === 'match' ? 'match' : 'practice'}`;
+    // Someone who joined through a link you shared (migration 68).
+    if (group.kind === 'follow' && group.preview === INVITE_LINE) return 'joined CourtSide from your link';
+    if (group.kind === 'follow-request' && group.preview === INVITE_LINE) return 'joined CourtSide from your link and asked to follow you';
     // A kind this build does not know yet (a newer server) still reads as a sentence.
     if (group.kind !== 'like' && group.kind !== 'comment' && group.kind !== 'share') return VERB[group.kind] ?? 'updated';
     const act = group.kind === 'like' ? 'liked' : group.kind === 'comment' ? 'commented on' : 'shared';
@@ -382,7 +388,7 @@ export default function Notifications() {
                         {[tagState(tag), yourResult(tag), shortDay(tag.day), duration(tag.minutes)].filter(Boolean).join(' · ')}
                       </Text>
                     ) : null
-                  ) : group.preview && group.kind !== 'milestone' ? (
+                  ) : group.preview && group.kind !== 'milestone' && group.preview !== INVITE_LINE ? (
                     <Text style={styles.preview} numberOfLines={1}>
                       {group.preview}
                     </Text>

@@ -34,7 +34,9 @@ export default {
     const match = url.pathname.match(/^\/(post|user|question)\/([^/]+)\/?$/);
     if (!match) return Response.redirect(`${APP}${url.pathname}${url.search}`, 302);
     const [, kind, id] = match;
-    const target = `${APP}/${kind}/${encodeURIComponent(id)}`;
+    // The sharer's handle rides along, so whoever joins through the link is counted as theirs.
+    const ref = url.searchParams.get('ref') || '';
+    const target = `${APP}/${kind}/${encodeURIComponent(id)}${/^[a-z0-9_]{2,24}$/i.test(ref) ? `?ref=${ref.toLowerCase()}` : ''}`;
     const agent = request.headers.get('user-agent') || '';
     if (agent && !ROBOT.test(agent)) return Response.redirect(target, 302);
     let card = FALLBACK;

@@ -1098,6 +1098,45 @@ export interface HitRequest {
   joinedIds: ID[];
 }
 
+/* ------------------------------ Shared links ----------------------------- */
+
+/** What a link shared outside the app can point at. */
+export type ShareKind = 'post' | 'profile' | 'hit-request' | 'question' | 'court';
+
+/** The few things a stranger sees about a person on a shared link (migration 68). */
+export interface SharePerson { id: ID; name: string; handle: string; avatarUrl?: string; location?: string; isCoach?: boolean }
+
+/** One post as a small picture tile on a shared profile or court. */
+export interface ShareTile { id: ID; kind: PostKind; body?: string; imageUrl?: string; thumbnailUrl?: string }
+
+/**
+ * The read-only look a shared link gives someone with no account
+ * (share_preview, migration 68). `open: false` says nothing else: a private
+ * account, a teen, something taken down or never there all read the same.
+ * `gone` is a hit that is over or called off.
+ */
+export interface SharePreview {
+  kind: ShareKind;
+  open: boolean;
+  gone?: boolean;
+  author?: SharePerson;
+  post?: {
+    id: ID; kind: PostKind; body: string; createdAt: string;
+    imageUrl?: string; videoUrl?: string; thumbnailUrl?: string; orientation?: 'portrait' | 'landscape';
+    /** Demo posts carry a court card instead of a picture. */
+    mediaLabel?: string;
+    likes: number; comments: number; courtName?: string; courtId?: string; location?: string;
+    session?: { minutes?: number; focus?: string; kind?: PracticeSession['kind'] };
+  };
+  profile?: { bio?: string; followers: number; posts: number; skillSystem?: SkillSystem; rating?: number; openHits: number; recent: ShareTile[] };
+  hit?: {
+    id: ID; startsAt: string; format: HitRequest['format']; spots: number; spotsLeft: number;
+    levelMin?: number; levelMax?: number; note?: string; place: { id?: string; name: string; lat?: number; lng?: number };
+  };
+  question?: { id: ID; title: string; body: string; createdAt: string; answers: number };
+  court?: { name?: string; openHits: number; posts: number; players: number; recent: ShareTile[] };
+}
+
 export interface Notification {
   id: ID;
   /** Who should see this. */
