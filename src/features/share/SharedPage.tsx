@@ -11,7 +11,7 @@ import { HitGlyph } from '@/components/HitGlyph';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { Avatar, Button } from '@/components/ui';
-import { fetchSharePreview } from '@/data/api';
+import { fetchSharePreview, fetchShareReferrer } from '@/data/api';
 import type { ShareKind, SharePerson, SharePreview, ShareTile } from '@/data/types';
 import { FORMAT_LABEL, hitWhen, levelText } from '@/features/hits/format';
 import { rememberReferrer, rememberShareTarget } from '@/features/invite/referral';
@@ -35,7 +35,15 @@ export function SharedPage({ kind, id }: { kind: ShareKind; id: string }) {
   const params = useLocalSearchParams<{ ref?: string; name?: string; lat?: string; lng?: string }>();
   const [preview, setPreview] = useState<SharePreview | null | undefined>(undefined);
 
-  useEffect(() => { if (params.ref) void rememberReferrer(String(params.ref)); }, [params.ref]);
+  // The "shared this with you" line only names someone the server vouches for.
+  const [sharer, setSharer] = useState<SharePerson | null>(null);
+  useEffect(() => {
+    if (!params.ref) return;
+    let live = true;
+    void rememberReferrer(String(params.ref));
+    fetchShareReferrer(String(params.ref)).then((who) => { if (live) setSharer(who); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [params.ref]);
   useEffect(() => {
     let live = true;
     setPreview(undefined);
@@ -85,10 +93,10 @@ export function SharedPage({ kind, id }: { kind: ShareKind; id: string }) {
             </Pressable>
           </View>
 
-          {params.ref ? (
+          {sharer ? (
             <View style={styles.invited}>
               <Ionicons name="paper-plane-outline" size={13} color={colors.brand} />
-              <Text style={styles.invitedText} numberOfLines={1}>@{String(params.ref).toLowerCase()} shared this with you</Text>
+              <Text style={styles.invitedText} numberOfLines={1}>@{sharer.handle} shared this with you</Text>
             </View>
           ) : null}
 

@@ -311,6 +311,25 @@ export async function fetchSharePreview(kind: ShareKind, id: string): Promise<Sh
   return answer(locked);
 }
 
+/**
+ * The person a link's ?ref= names, only when they are someone a stranger may
+ * see (a public adult account). Null otherwise, so a made-up link cannot say
+ * it came from anyone.
+ */
+export async function fetchShareReferrer(handle: string): Promise<SharePerson | null> {
+  const clean = handle.trim().toLowerCase();
+  if (!/^[a-z0-9_]{2,24}$/.test(clean)) return null;
+  if (supabase) {
+    const { data, error } = await supabase.rpc('share_preview', { p_kind: 'referrer', p_id: clean });
+    if (error || !data || typeof data !== 'object') return null;
+    const got = data as { open?: boolean; author?: SharePerson };
+    return got.open && got.author ? got.author : null;
+  }
+  const u = users.find((x) => x.handle.toLowerCase() === clean);
+  if (!u || u.isPrivate || u.suspended || u.ageGroup !== 'adult') return null;
+  return delay(clone({ id: u.id, name: u.name, handle: u.handle, avatarUrl: u.avatarUrl, location: u.location || undefined, isCoach: u.isCoach || undefined }));
+}
+
 /* ------------------------------- Coach memory ------------------------------ */
 
 export interface CoachMemory {

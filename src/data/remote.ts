@@ -1602,6 +1602,13 @@ export const remote = {
     return (data as ID | null) ?? null;
   },
 
+  /** Once the birthday says adult: the follow an invite waited on (follow_my_inviter). Who was followed, or null when nothing was made. */
+  async followMyInviter(): Promise<ID | null> {
+    const { data, error } = await need().rpc('follow_my_inviter');
+    if (error) return null;
+    return (data as ID | null) ?? null;
+  },
+
   async countReferrals(me: ID): Promise<number> {
     const { count, error } = await need().from('profiles').select('id', { count: 'exact', head: true }).eq('referred_by', me);
     if (error) return 0;

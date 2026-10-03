@@ -13,6 +13,15 @@
 --    the invite makes carries that line, so it rides the existing follow
 --    alert and its push).
 --
+-- 3. A teen (or anyone whose age is not on file yet) who joins through a
+--    link is not made to follow the sharer: under migration 64 a teen who
+--    follows an adult is open to them. The invite is still counted
+--    (referred_by); the follow waits until the age says adult
+--    (follow_my_inviter, called by the app once the birthday is in).
+-- 4. Group posts (migration 67, posts.group_id) never show, are never
+--    counted, and someone blocked by the author is never shown anything.
+--    group_id is read through to_jsonb so this still runs before 67.
+--
 -- Needs migrations 18, 36 and 64. Safe to run more than once.
 
 -- ============================================================ 1. helpers (server only)
@@ -26,6 +35,21 @@ returns boolean language sql stable security definer set search_path = public as
      and public.known_adult(u)
 $$;
 revoke all on function public.share_open(uuid) from public, anon, authenticated;
+
+-- share_open, and the signed-in person asking is not blocked either way.
+create or replace function public.share_open_to_me(u uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select public.share_open(u)
+     and (auth.uid() is null or not public.is_blocked_between(auth.uid(), u))
+$$;
+revoke all on function public.share_open_to_me(uuid) from public, anon, authenticated;
+
+-- A post that lives in a group (migration 67): never shown outside it.
+create or replace function public.share_in_group(p public.posts)
+returns boolean language sql stable security definer set search_path = public as $$
+  select (to_jsonb(p)->>'group_id') is not null
+$$;
+revoke all on function public.share_in_group(public.posts) from public, anon, authenticated;
 
 -- The few things a stranger sees about a person.
 create or replace function public.share_person(u uuid)
@@ -47,7 +71,7 @@ $$;
 revoke all on function public.share_tile(public.posts) from public, anon, authenticated;
 
 -- ============================================================ 2. the public look
--- p_kind: 'post' | 'profile' | 'hit-request' | 'question' | 'court'.
+-- p_kind: 'post' | 'profile' | 'hit-request' | 'question' | 'court' | 'referrer'.
 -- Always answers with { kind, open }: open true carries the thing; open
 -- false carries nothing else. "gone" is only said about something whose
 -- author a stranger may see anyway (a hit that is over or called off).
@@ -65,7 +89,7 @@ begin
   if p_kind = 'post' then
     if not is_uuid then return locked; end if;
     select * into p from public.posts where id = p_id::uuid;
-    if p.id is null or p.archived or p.removed_at is not null or not public.share_open(p.author_id) then return locked; end if;
+    if p.id is null or p.archived or p.removed_at is not null or public.share_in_group(p) or not public.share_open_to_me(p.author_id) then return locked; end if;
     return jsonb_build_object('kind', 'post', 'open', true,
       'author', public.share_person(p.author_id),
       'post', jsonb_strip_nulls(jsonb_build_object(
@@ -84,26 +108,26 @@ begin
   if p_kind = 'profile' then
     if not is_uuid then return locked; end if;
     select * into pr from public.profiles where id = p_id::uuid;
-    if pr.id is null or not public.share_open(pr.id) then return locked; end if;
+    if pr.id is null or not public.share_open_to_me(pr.id) then return locked; end if;
     return jsonb_build_object('kind', 'profile', 'open', true,
       'author', public.share_person(pr.id),
       'profile', jsonb_strip_nulls(jsonb_build_object(
         'bio', left(pr.bio, 200),
         'followers', pr.followers_count,
-        'posts', (select count(*) from public.posts x where x.author_id = pr.id and not x.archived and x.removed_at is null),
+        'posts', (select count(*) from public.posts x where x.author_id = pr.id and not x.archived and x.removed_at is null and not public.share_in_group(x)),
         'skillSystem', case when pr.profile->>'skillSystem' in ('NTRP', 'UTR', 'ITF') then pr.profile->>'skillSystem' end,
         'rating', case when jsonb_typeof(pr.profile->'rating') = 'number' then pr.profile->'rating' end,
         'openHits', (select count(*) from public.hit_requests y where y.author_id = pr.id and not y.cancelled and y.starts_at > now()),
         'recent', coalesce((select jsonb_agg(public.share_tile(x) order by x.created_at desc) from (
           select * from public.posts x where x.author_id = pr.id and not x.archived and x.removed_at is null
-            and (x.image_url is not null or x.thumbnail_url is not null)
+            and (x.image_url is not null or x.thumbnail_url is not null) and not public.share_in_group(x)
           order by x.created_at desc limit 6) x), '[]'::jsonb))));
   end if;
 
   if p_kind = 'hit-request' then
     if not is_uuid then return locked; end if;
     select * into h from public.hit_requests where id = p_id::uuid;
-    if h.id is null or not public.share_open(h.author_id) then return locked; end if;
+    if h.id is null or not public.share_open_to_me(h.author_id) then return locked; end if;
     select count(*) into joined from public.hit_joins j where j.hit_id = h.id;
     return jsonb_build_object('kind', 'hit-request', 'open', true,
       'gone', h.cancelled or h.starts_at < now() - interval '1 hour',
@@ -123,7 +147,7 @@ begin
   if p_kind = 'question' then
     if not is_uuid then return locked; end if;
     select * into q from public.questions where id = p_id::uuid;
-    if q.id is null or not public.share_open(q.author_id) then return locked; end if;
+    if q.id is null or not public.share_open_to_me(q.author_id) then return locked; end if;
     return jsonb_build_object('kind', 'question', 'open', true,
       'author', public.share_person(q.author_id),
       'question', jsonb_build_object(
@@ -137,14 +161,22 @@ begin
     if coalesce(p_id, '') !~ '^(node|way|relation)[0-9]{1,15}$' then return locked; end if;
     return jsonb_build_object('kind', 'court', 'open', true,
       'court', jsonb_strip_nulls(jsonb_build_object(
-        'name', (select x.court_name from public.posts x where x.court_id = p_id and x.court_name is not null order by x.created_at desc limit 1),
-        'openHits', (select count(*) from public.hit_requests y where y.place->>'id' = p_id and not y.cancelled and y.starts_at > now() and public.share_open(y.author_id)),
-        'posts', (select count(*) from public.posts x where x.court_id = p_id and not x.archived and x.removed_at is null and public.share_open(x.author_id)),
-        'players', (select count(distinct x.author_id) from public.posts x where x.court_id = p_id and not x.archived and x.removed_at is null and public.share_open(x.author_id)),
+        'name', (select x.court_name from public.posts x where x.court_id = p_id and x.court_name is not null and not public.share_in_group(x) order by x.created_at desc limit 1),
+        'openHits', (select count(*) from public.hit_requests y where y.place->>'id' = p_id and not y.cancelled and y.starts_at > now() and public.share_open_to_me(y.author_id)),
+        'posts', (select count(*) from public.posts x where x.court_id = p_id and not x.archived and x.removed_at is null and not public.share_in_group(x) and public.share_open_to_me(x.author_id)),
+        'players', (select count(distinct x.author_id) from public.posts x where x.court_id = p_id and not x.archived and x.removed_at is null and not public.share_in_group(x) and public.share_open_to_me(x.author_id)),
         'recent', coalesce((select jsonb_agg(public.share_tile(x) order by x.created_at desc) from (
           select * from public.posts x where x.court_id = p_id and not x.archived and x.removed_at is null
-            and (x.image_url is not null or x.thumbnail_url is not null) and public.share_open(x.author_id)
+            and (x.image_url is not null or x.thumbnail_url is not null) and not public.share_in_group(x) and public.share_open_to_me(x.author_id)
           order by x.created_at desc limit 6) x), '[]'::jsonb))));
+  end if;
+
+  if p_kind = 'referrer' then
+    -- The handle on a link (?ref=): only named back when it is someone a
+    -- stranger may see, so a made-up link cannot claim to come from anyone.
+    select * into pr from public.profiles where handle = lower(btrim(coalesce(p_id, '')));
+    if pr.id is null or not public.share_open_to_me(pr.id) then return locked; end if;
+    return jsonb_build_object('kind', 'referrer', 'open', true, 'author', public.share_person(pr.id));
   end if;
 
   return locked;
@@ -179,6 +211,23 @@ begin
   perform set_config('courtside.referral', 'on', true);
   update public.profiles set referred_by = who where id = me;
   perform set_config('courtside.referral', 'off', true);
+  -- The invite counts either way. The follow only when this person is known
+  -- to be an adult: a teen following an adult opens the teen to them
+  -- (migration 64). Answers null when no follow was made, so the app says
+  -- nothing; follow_my_inviter makes it once the birthday says adult.
+  if not public.known_adult(me) then return null; end if;
+  perform public.follow_inviter_now(me, who);
+  return who;
+end;
+$$;
+revoke all on function public.claim_referral(text) from public;
+grant execute on function public.claim_referral(text) to authenticated;
+
+-- The follow (or follow request, for a private account) an invite makes,
+-- carrying the "joined from your link" line.
+create or replace function public.follow_inviter_now(me uuid, who uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
   perform set_config('courtside.invite', 'on', true);
   if coalesce((select is_private from public.profiles where id = who), false) then
     insert into public.follow_requests (requester_id, target_id) values (me, who) on conflict do nothing;
@@ -186,11 +235,33 @@ begin
     insert into public.follows (follower_id, following_id) values (me, who) on conflict do nothing;
   end if;
   perform set_config('courtside.invite', 'off', true);
-  return who;
-end;
-$$;
-revoke all on function public.claim_referral(text) from public;
-grant execute on function public.claim_referral(text) to authenticated;
+end $$;
+revoke all on function public.follow_inviter_now(uuid, uuid) from public, anon, authenticated;
+
+-- For someone whose age was not on file when they claimed their invite
+-- (signed up with Google, say): once it says adult, the follow is made.
+-- Only inside a week of signing up, never across a block, and never over
+-- an existing follow, request or follow alert between the two.
+create or replace function public.follow_my_inviter()
+returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  me uuid := auth.uid();
+  mine public.profiles;
+begin
+  if me is null then return null; end if;
+  select * into mine from public.profiles where id = me;
+  if mine.id is null or mine.referred_by is null or mine.created_at < now() - interval '7 days' then return null; end if;
+  if not public.known_adult(me) or public.is_blocked_between(me, mine.referred_by) then return null; end if;
+  if exists (select 1 from public.follows where follower_id = me and following_id = mine.referred_by)
+     or exists (select 1 from public.follow_requests where requester_id = me and target_id = mine.referred_by)
+     or exists (select 1 from public.notifications where user_id = mine.referred_by and actor_id = me and kind in ('follow', 'follow-request', 'follow-accepted')) then
+    return null;
+  end if;
+  perform public.follow_inviter_now(me, mine.referred_by);
+  return mine.referred_by;
+end $$;
+revoke all on function public.follow_my_inviter() from public, anon;
+grant execute on function public.follow_my_inviter() to authenticated;
 
 -- The line an invite's alert carries. The app reads it to say "joined
 -- CourtSide from your link"; the push shows it under the follow.
