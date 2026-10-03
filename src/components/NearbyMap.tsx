@@ -70,16 +70,16 @@ export function NearbyMap(props: NearbyMapProps) {
   // Your own pin, tapped: the card with your open-to-hit switch.
   const [meOpen, setMeOpen] = useState(false);
   const openToHit = isOpenToHit(me);
-  const model = useMapModel(me, players, at, focusCourt, !expanded, focusHit, focusUser, focusSpot);
+  const model = useMapModel(me, players, at, focusCourt, !expanded, focusHit, focusUser, focusSpot, !!locationOn);
   // The still card on the start page holds the opening curtain until its streets are drawn (see warmup).
   const painted = useStartMapHold(!expanded && (!!model.city || model.cityPending));
   // Anything else picked (a search result, a pin) takes the place of your own card.
   useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit]);
   const { home, start } = model;
-  // The full map opens where you are; the still card always on your profile's city.
+  // The full map opens where you are; the still card on your town (location on) or your profile's city.
   const view = expanded ? { center: start.center, zoom: start.zoom ?? CITY_ZOOM } : { center: model.city ?? start.center, zoom: CITY_ZOOM };
   const weather = useWeather(home);
-  const cityName = me.location.trim() ? me.location.split(',')[0] : 'you';
+  const cityName = model.cityName;
   const canvas = useRef<MapCanvasHandle | null>(null);
   // A fix arriving after the map is up moves the map to it.
   const lastHome = useRef(home);
