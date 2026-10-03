@@ -1,23 +1,57 @@
-import type { Post, Question, Comment, Story } from '@/data/types';
+import type { Post, Question, Comment, Story, User, ID } from '@/data/types';
+import { isNewHere } from '@/features/feed/newHere';
 export type FeedItem = { type: 'post'; post: Post } | { type: 'question'; question: Question } | { type: 'hit'; story: Story } | { type: 'tip' } | { type: 'challenge' };
 
 /**
- * While CourtSide has only a few posts, the feed is simply newest first:
- * a new post is at the top for everyone the next time they refresh, and
- * the shuffle below stands aside. Turn this off once there is enough to
- * rank and deal.
+ * Off: the feed is ranked (see scorePost below). On: simply newest first,
+ * as it was while CourtSide had only a few posts.
  */
-export const NEWEST_FIRST = true;
+export const NEWEST_FIRST = false;
+
+/** What the ranking may know about you beyond the posts themselves. All optional. */
+export type RankContext = {
+  /** People you follow. */
+  followingIds?: ID[];
+  /** Who follows whom, as loaded; used for "they follow you". */
+  followEdges?: { followerId: ID; followingId: ID }[];
+  /** Profiles, for each author's city and join date. */
+  users?: User[];
+  /** Pages already shown this visit, as feed keys ("p:<id>", "q:<id>", "h:<id>"). */
+  seen?: Set<string>;
+  /** The clock to rank against; fixed in the sanity check. */
+  now?: number;
+};
+
+const DAY = 86_400_000;
+/** How many slots apart one author's pages must be. */
+const AUTHOR_GAP = 5;
+/** Every Nth slot is a thread or a hit. */
+const MIX_EVERY = 4;
 
 const newest = <T extends { createdAt: string }>(list: T[]) => [...list].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+const cityOf = (location?: string) => (location ?? '').split(',')[0].trim().toLowerCase();
+/** Hits are today's moments: yours first, then newest first. */
+const orderHits = (hits: Story[], userId: string | null) =>
+  [...hits].sort((a, b) => (a.authorId === userId ? -1 : b.authorId === userId ? 1 : Date.parse(b.createdAt) - Date.parse(a.createdAt) || a.id.localeCompare(b.id)));
 
-/** Session-local recommendations: likes, authored posts, comments and question votes. */
-export function rankFeed(posts: Post[], questions: Question[], comments: Comment[], userId: string | null, hits: Story[] = []): FeedItem[] {
+/** 10 points when brand new, halving every 24 hours. */
+const recency = (createdAt: string, now: number) => 10 * Math.pow(0.5, Math.max(0, now - Date.parse(createdAt)) / DAY);
+
+/**
+ * The feed, ranked. Each post gets a score from what is already on the
+ * phone — how new it is, how much people liked, commented on and saved it,
+ * how close you are to its author, whether its author is new here, whether
+ * it matches what you engage with, and whether you have seen it this visit —
+ * then it is dealt so no author appears twice within five pages, with a
+ * thread or a hit in every fourth slot. The same data always deals the same
+ * order: nothing here is random.
+ */
+export function rankFeed(posts: Post[], questions: Question[], comments: Comment[], userId: string | null, hits: Story[] = [], ctx: RankContext = {}): FeedItem[] {
   if (NEWEST_FIRST) {
     // Posts in the order they were made; a thread and a hit after every two.
     const all = newest(posts);
     const forum = newest(questions);
-    const moments = [...hits].sort((a, b) => (a.authorId === userId ? -1 : b.authorId === userId ? 1 : Date.parse(b.createdAt) - Date.parse(a.createdAt)));
+    const moments = orderHits(hits, userId);
     const result: FeedItem[] = [];
     while (all.length || forum.length || moments.length) {
       for (const post of all.splice(0, 2)) result.push({ type: 'post', post });
@@ -26,46 +60,85 @@ export function rankFeed(posts: Post[], questions: Question[], comments: Comment
     }
     return result;
   }
-  const interests = new Map<string, number>();
+  const now = ctx.now ?? Date.now();
+  const seen = ctx.seen ?? new Set<string>();
+
+  // Taste: the tags of everything you posted, liked, commented on or upvoted.
   // Looked up once, not once per post: with thousands of both, scanning every comment for every post was the slow part.
-  const commented = new Set(userId ? comments.filter(c => c.authorId === userId).map(c => c.postId) : []);
-  const add = (tags: string[], weight: number) => tags.forEach(tag => interests.set(tag, (interests.get(tag) ?? 0) + weight));
-  posts.forEach(p => {
-    const engaged = p.authorId === userId || (!!userId && p.likedBy.includes(userId)) || commented.has(p.id);
-    if (engaged) add([p.kind, ...p.tags], 2);
+  const commented = new Set(userId ? comments.filter((c) => c.authorId === userId).map((c) => c.postId) : []);
+  const interests = new Set<string>();
+  const myCourts = new Set<string>();
+  posts.forEach((p) => {
+    const engaged = p.authorId === userId || (!!userId && (p.likedBy.includes(userId) || !!p.savedBy?.includes(userId))) || commented.has(p.id);
+    if (engaged) [p.kind, ...p.tags].forEach((t) => interests.add(t));
+    if (p.authorId === userId && p.court) myCourts.add(p.court.id);
   });
-  questions.forEach(q => { if (q.authorId === userId || (!!userId && q.votedBy[userId] === 1)) add([q.topic, ...q.tags], 3); });
-  const score = (tags: string[], date: string) => tags.reduce((sum, t) => sum + (interests.get(t) ?? 0), 0) + 3 / (1 + Math.max(0, Date.now() - Date.parse(date)) / 86400000);
-  const sorted = [...posts].sort((a,b) => score([b.kind,...b.tags],b.createdAt) - score([a.kind,...a.tags],a.createdAt));
-  const clips = sorted.filter(p => p.kind === 'clip');
-  const others = sorted.filter(p => p.kind !== 'clip');
-  const forum = [...questions].sort((a,b) => score([b.topic,...b.tags],b.createdAt) - score([a.topic,...a.tags],a.createdAt));
-  // Hits are today's moments: yours first, then newest first.
-  const moments = [...hits].sort((a, b) => (a.authorId === userId ? -1 : b.authorId === userId ? 1 : Date.parse(b.createdAt) - Date.parse(a.createdAt)));
+  questions.forEach((q) => { if (q.authorId === userId || (!!userId && q.votedBy[userId] === 1)) [q.topic, ...q.tags].forEach((t) => interests.add(t)); });
+  const taste = (tags: string[]) => tags.reduce((sum, t) => sum + (interests.has(t) ? 1 : 0), 0);
+
+  // Closeness.
+  const following = new Set(ctx.followingIds ?? []);
+  const followsMe = new Set((ctx.followEdges ?? []).filter((e) => e.followingId === userId).map((e) => e.followerId));
+  const usersById = new Map((ctx.users ?? []).map((u) => [u.id, u]));
+  const myCity = cityOf(userId ? usersById.get(userId)?.location : undefined);
+  const closeness = (p: Post) => {
+    if (p.authorId === userId) return 0;
+    const author = usersById.get(p.authorId);
+    return (following.has(p.authorId) ? 6 : 0)
+      + (followsMe.has(p.authorId) ? 3 : 0)
+      + (myCity && cityOf(author?.location) === myCity ? 3 : 0)
+      + (p.court && myCourts.has(p.court.id) ? 2 : 0);
+  };
+  // New creator: a first post still in its welcome window, or anything from someone who joined this week.
+  const newCreator = (p: Post) => {
+    if (p.authorId === userId) return 0;
+    const joined = Date.parse(usersById.get(p.authorId)?.joinedAt ?? '');
+    return isNewHere(p) || (!Number.isNaN(joined) && now - joined < 7 * DAY) ? 4 : 0;
+  };
+  const engagement = (p: Post) => 3 * Math.log2(1 + p.likedBy.length + 2 * p.commentIds.length + 3 * (p.savedBy?.length ?? 0));
+  const scorePost = (p: Post) =>
+    recency(p.createdAt, now) + engagement(p) + closeness(p) + newCreator(p) + taste([p.kind, ...p.tags]) - (seen.has(`p:${p.id}`) ? 8 : 0);
+  const scoreQuestion = (q: Question) =>
+    recency(q.createdAt, now) + taste([q.topic, ...q.tags]) - (seen.has(`q:${q.id}`) ? 8 : 0);
+
+  // Highest first; ties by newest, then by id, so equal scores never trade places between deals.
+  const byScore = <T extends { id: string; createdAt: string }>(list: T[], score: (x: T) => number) =>
+    list.map((x) => ({ x, s: score(x) }))
+      .sort((a, b) => b.s - a.s || Date.parse(b.x.createdAt) - Date.parse(a.x.createdAt) || a.x.id.localeCompare(b.x.id))
+      .map((e) => e.x);
+  const ranked = byScore(posts, scorePost);
+  const forum = byScore(questions, scoreQuestion);
+  const moments = orderHits(hits, userId);
+
   const result: FeedItem[] = [];
-  // Lead with a clip, then retain a varied mix instead of letting one topic take over.
-  while (clips.length || others.length || forum.length || moments.length) {
-    const clip = clips.shift(); if (clip) result.push({ type: 'post', post: clip });
-    const post = others.shift(); if (post) result.push({ type: 'post', post });
-    const question = forum.shift(); if (question) result.push({ type: 'question', question });
-    const hit = moments.shift(); if (hit) result.push({ type: 'hit', story: hit });
-    const next = others.shift(); if (next) result.push({ type: 'post', post: next });
+  const authors: string[] = [];
+  const recent = () => new Set(authors.slice(-(AUTHOR_GAP - 1)));
+  // The best page whose author has not been on any of the last four.
+  const take = <T extends { authorId: string }>(list: T[]): T | undefined => {
+    if (!list.length) return undefined;
+    const busy = recent();
+    const at = list.findIndex((x) => !busy.has(x.authorId));
+    return list.splice(at < 0 ? 0 : at, 1)[0];
+  };
+  let threadNext = true;
+  const takeMix = (): FeedItem | undefined => {
+    const order = threadNext ? [forum, moments] as const : [moments, forum] as const;
+    for (const list of order) {
+      const x = take(list as (Question | Story)[]);
+      if (!x) continue;
+      threadNext = list !== forum;
+      return list === forum ? { type: 'question', question: x as Question } : { type: 'hit', story: x as Story };
+    }
+    return undefined;
+  };
+  while (ranked.length || forum.length || moments.length) {
+    const slot = result.length + 1;
+    let item: FeedItem | undefined;
+    if (slot % MIX_EVERY === 0 || !ranked.length) item = takeMix();
+    if (!item) { const post = take(ranked); if (post) item = { type: 'post', post }; }
+    if (!item) break;
+    result.push(item);
+    authors.push(item.type === 'post' ? item.post.authorId : item.type === 'question' ? item.question.authorId : item.type === 'hit' ? item.story.authorId : '');
   }
   return result;
-}
-
-/**
- * A shuffle that still knows what is fresh. Every page draws a random number,
- * and a page the ranking liked gets a head start on it, so the feed comes out
- * in a different order every time it is dealt without the newest clips
- * sinking out of sight. The head start is deliberately small: the randomness
- * spreads across the whole list, the ranking only leans on it.
- */
-export function shuffleFeed(keys: string[]): string[] {
-  if (NEWEST_FIRST) return keys;
-  const lean = 0.35;
-  return keys
-    .map((key, rank) => ({ key, at: Math.random() * keys.length + rank * lean }))
-    .sort((a, b) => a.at - b.at)
-    .map((x) => x.key);
 }
