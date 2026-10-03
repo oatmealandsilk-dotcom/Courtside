@@ -10,6 +10,7 @@ import { router, useFocusEffect, useIsFocused as useRouteFocused, useNavigation 
 import { FeedTopRow } from '@/features/groups/FeedTopRow';
 import { onOpenGroupFeed, tookGroupFeed } from '@/features/groups/openGroupFeed';
 import { GroupTile } from '@/features/groups/GroupTile';
+import { inGroupFeed } from '@/features/groups/groupFeed';
 import { TOP_BAND_DROP, TOP_BAND_HEIGHT, TOP_BAND_TOP, TopBandContext } from '@/features/feed/topBand';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { useTourOpen } from '@/features/tour/tourStore';
@@ -159,13 +160,13 @@ function LikeBurst({ token }: { token: number }) {
 export type FeedScope =
   | { userId: string; set: 'own' | 'clips' | 'tagged' | 'archived'; start?: string; ids?: undefined; groupId?: undefined }
   | { ids: string[]; start?: string; userId?: undefined; set?: undefined; groupId?: undefined }
-  // A group's own feed (migration 67): its posts, newest first, under the Feed's top row.
+  // A group's own feed (migrations 67 and 74): everything its members post, and what was shared to it only, newest first, under the Feed's top row.
   | { groupId: string; start?: undefined; ids?: undefined; userId?: undefined; set?: undefined };
 
 /** What the Feed's top row needs to know from the feed under it: whether a picture fills the top, and whether the chrome is put away. */
 export interface FeedChrome { picture: boolean; hidden: boolean }
 
-/** Only a post shared with everyone is dealt into For you; a group's posts stay in that group's feed. */
+/** Only a post shared with everyone is dealt into For you; one shared to a group only stays in that group's feed. */
 const forYou = (p: { imageUrl?: string; videoUrl?: string; groupId?: string }) => reachable(p) && !p.groupId;
 
 // On a phone — the app or a phone's browser — a vertical clip fills the whole
@@ -425,8 +426,9 @@ function Home({ scope, topRow, paused, onChrome }: {
         // or a court's posts, in exactly the order its grid shows them.
         const { ids, userId, set, groupId } = scope;
         const byId = ids ? new Map(data.posts.map((p) => [p.id, p])) : null;
+        const group = groupId ? data.feedGroups.find((g) => g.id === groupId) : undefined;
         const mine = groupId
-          ? data.posts.filter((p) => p.groupId === groupId && !p.archived && reachable(p)).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+          ? data.posts.filter((p) => inGroupFeed(p, groupId, group) && reachable(p)).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
           : ids && byId
           ? ids.flatMap((id) => { const p = byId.get(id); return p && !p.archived ? [p] : []; })
           : data.posts
@@ -516,9 +518,51 @@ function Home({ scope, topRow, paused, onChrome }: {
     rankedFor.current = stamp;
     rerank();
   }, [ready, currentUserId, scope?.userId, scope?.set, scope?.ids?.join(','), scope?.groupId, rerank]);
-  // A group's feed is dealt again as its posts arrive (opening it asks the server for them, and your own new one lands).
-  const groupPostCount = scope?.groupId ? posts.filter((p) => p.groupId === scope.groupId).length : 0;
-  useEffect(() => { if (scope?.groupId && groupPostCount) rerank(); }, [groupPostCount]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A group's feed takes its posts as they arrive: the first page from the
+  // server deals it; after that, an older page goes on the end and anything
+  // newer goes in just after the page on screen, so nothing moves under you.
+  const groupOf = scope?.groupId ? app.feedGroups.find((g) => g.id === scope.groupId) : undefined;
+  const groupKeys = useMemo(() => {
+    const g = scope?.groupId;
+    if (!g) return '';
+    return posts.filter((p) => inGroupFeed(p, g, groupOf) && reachable(p)).map((p) => p.id).sort().join(',');
+  }, [posts, scope?.groupId, groupOf]);
+  useEffect(() => {
+    if (!scope?.groupId || !groupKeys) return;
+    if (!orderRef.current.length || activeRef.current === 0) { rerank(); return; }
+    const data = latest.current;
+    const byId = new Map(data.posts.map((p) => [p.id, p]));
+    const made = (k: string) => Date.parse(byId.get(k.slice(2))?.createdAt ?? '') || 0;
+    setOrder((prev) => {
+      const have = new Set(prev);
+      const add = groupKeys.split(',').map((id) => `p:${id}`).filter((k) => !have.has(k)).sort((a, b) => made(b) - made(a));
+      if (!add.length) return prev;
+      const last = made(prev[prev.length - 1]);
+      const older = add.filter((k) => made(k) <= last);
+      const newer = add.filter((k) => made(k) > last);
+      const at = Math.min(prev.length, activeRef.current + 1);
+      return [...prev.slice(0, at), ...newer, ...prev.slice(at), ...older];
+    });
+  }, [groupKeys]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Opening a group's feed asks the server for its newest page; nearing the
+  // end of what is loaded asks for the next, older one, until there is no more.
+  const groupNext = useRef<string | null | undefined>(undefined);
+  const groupAsking = useRef(false);
+  const askGroupPage = useCallback((before?: string) => {
+    const g = scope?.groupId;
+    if (!g || groupAsking.current) return;
+    groupAsking.current = true;
+    void latest.current.actions.loadFeedGroupPosts(g, before)
+      .then((next) => { groupNext.current = next; })
+      .finally(() => { groupAsking.current = false; });
+  }, [scope?.groupId]);
+  useEffect(() => { if (scope?.groupId) askGroupPage(); }, [scope?.groupId, askGroupPage]);
+  useEffect(() => {
+    if (!scope?.groupId || !ready) return;
+    const next = groupNext.current;
+    if (!next || active < order.length - 5) return;
+    askGroupPage(next);
+  }, [active, order.length, scope?.groupId, ready, askGroupPage]);
   useFocusEffect(dealOnce);
   // In a browser the Feed is built out of sight a moment after the app opens
   // (see the tabs' web layout), before you have been to it. It is dealt then
@@ -703,7 +747,7 @@ function Home({ scope, topRow, paused, onChrome }: {
     const hidden = new Set([...blockedIds, ...mutedIds]);
     const following = new Set(followingIds);
     // A private account is only in your feed once they have let you follow.
-    // In a group's feed the server has already decided: members see each other's group posts.
+    // In a group's feed the server has already decided (migration 74): a private member's posts come only to members who follow them, or shared to the group only.
     if (!scope?.groupId) for (const u of users) if (u.isPrivate && u.id !== currentUserId && !following.has(u.id)) hidden.add(u.id);
     // Found by id in one step each, not by scanning every post for every page.
     const postById = new Map(posts.map((p) => [p.id, p]));
@@ -715,8 +759,10 @@ function Home({ scope, topRow, paused, onChrome }: {
         const post = postById.get(id);
         // In your archive's own set an archived post is the point, and one you
         // unarchive from there stays on screen rather than vanishing under you.
-        // A group's post is only ever in that group's feed, whatever else asked for it.
-        if (post && (post.groupId ?? null) !== (scope?.groupId ?? null) && !scope?.userId && !scope?.ids) return [];
+        // A post shared to a group only is only ever in that group's feed,
+        // whatever else asked for it; a group's feed also holds its members'
+        // posts to everyone.
+        if (post && post.groupId && post.groupId !== scope?.groupId && !scope?.userId && !scope?.ids) return [];
         return post && !hidden.has(post.authorId) && (!post.archived || scope?.set === 'archived') ? [{ type: 'post' as const, post }] : [];
       }
       if (key.startsWith('h:')) {
@@ -1149,13 +1195,14 @@ function Home({ scope, topRow, paused, onChrome }: {
         <View style={[styles.emptyWrap, { paddingTop: banded ? insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT : insets.top, paddingBottom: barInset }]}>
           {scope?.groupId && ready ? (
             // An empty group: its face, one line, and the two things to do about it.
+            // Its feed is everything its members post, so more people is the way to fill it.
             <View style={styles.groupEmpty}>
               <GroupTile name={groupName ?? 'Group'} look={app.feedGroups.find((g) => g.id === scope.groupId)?.look} size={72} />
-              <Text style={styles.groupEmptyTitle}>{`Nothing in ${groupName ?? 'this group'} yet`}</Text>
-              <Text style={styles.groupEmptyBody}>Only people in the group see what’s shared here.</Text>
+              <Text style={styles.groupEmptyTitle}>When members post, it shows up here</Text>
+              <Text style={styles.groupEmptyBody}>{`${groupName ?? 'A group'}’s feed shows everything its members post.`}</Text>
               <View style={styles.groupEmptyActions}>
-                <Button label={`Post to ${groupName ?? 'the group'}`} onPress={() => router.push({ pathname: '/compose', params: { group: scope.groupId } })} full />
-                <Button label="Invite people" variant="secondary" onPress={() => router.push({ pathname: '/group-invite', params: { id: scope.groupId } })} full />
+                <Button label="Invite people" onPress={() => router.push({ pathname: '/group-invite', params: { id: scope.groupId } })} full />
+                <Button label="Post something" variant="secondary" onPress={() => router.push('/compose')} full />
               </View>
             </View>
           ) : (
@@ -1172,12 +1219,7 @@ function Home({ scope, topRow, paused, onChrome }: {
           {/* Pull-to-refresh is for phones: the app and a phone's browser (`phone`, above). Asking
               isDesktopBrowser() alone took it off the iPhone app: the app has no browser to read,
               so the check answered "computer" there, and the pull strip was never built. */}
-          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onRefresh={scope || !phone ? undefined : refreshFeed} pullHeader={scope || !currentUser ? undefined : (
-            <View style={styles.pullGreeting}>
-              <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={28} />
-              <Text style={styles.pullGreetingText}>{`${currentUser.name.split(' ')[0]}'s homepage`}</Text>
-            </View>
-          )}>
+          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + TOP_BAND_HEIGHT : 0} pullHeader={scope ? undefined : <BrandMark size={40} />}>
             {[...feed.map((item, index) => {
               const distance = Math.abs(index - active);
               const ahead = index - active;
@@ -1282,7 +1324,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                   <View key={item.question.id} style={[styles.article, styles.threadArticle, scope && styles.articleScoped]}>
                     <Wash height={300} strength={0.6} />
                     <View style={styles.eyebrowRow}>
-                      <Text style={styles.eyebrow}>From the community</Text>
+                      <View style={{ flex: 1 }} />
                       {hiddenMarks.has(item.question.id) ? <View style={{ width: 34, height: 34 }} /> : <TapAway label="Hide the CourtSide logo" onHidden={() => hideMark(item.question.id)} style={styles.threadMark}><BrandMark size={34} /></TapAway>}
                     </View>
                     {strip}
@@ -1351,10 +1393,6 @@ function Home({ scope, topRow, paused, onChrome }: {
                   // floating tab bar, so the caption and buttons under the card stay in view.
                   <View key={post.id} style={[styles.article, scopedBack && styles.articleScoped, !phone && styles.articleCentred, (topRow || !!scope?.groupId) && { paddingTop: insets.top + 64 }, barInset > 0 && post.session && hasSessionStats(post.session) && !post.imageUrl && !post.videoUrl ? { paddingBottom: barInset + 8 } : null]}>
                     <Wash height={300} strength={0.6} />
-                    {/* Inside one person's posts the feed label means nothing, and the back chevron wants the room. */}
-                    {scopedBack ? null : <Text style={styles.eyebrow}>
-                      {post.session?.activityId || (post.session?.sessionId && post.session.kind !== 'fitness') ? 'Tennis' : post.kind === 'match' ? 'Set play' : post.kind.charAt(0).toUpperCase() + post.kind.slice(1)} · {groupName ?? 'For you'}
-                    </Text>}
                     {strip}
                     <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: 'flex-start' }}>
                       <PostCard
@@ -1730,7 +1768,6 @@ function GroupedFeed() {
   useEffect(() => { if (currentUserId) void actions.loadFeedGroups(); }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
   // A group you left (or were taken out of) goes back to For you.
   useEffect(() => { if (groupId && !feedGroups.some((g) => g.id === groupId)) setGroupId(null); }, [feedGroups, groupId]);
-  useEffect(() => { if (groupId) void actions.loadFeedGroupPosts(groupId); }, [groupId]); // eslint-disable-line react-hooks/exhaustive-deps
   // Opened from a group's page ("See the feed").
   useEffect(() => onOpenGroupFeed((id) => { tookGroupFeed(); setGroupId(id); }), []);
   const forYouChrome = useCallback((c: FeedChrome) => { if (!groupId) setChrome(c); }, [groupId]);

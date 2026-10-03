@@ -1,16 +1,21 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { View } from 'react-native';
 import type { SharedValue } from 'react-native-reanimated';
 
 import { SwipeSurface } from '@/components/SwipeSurface';
+import { PAGE_GUTTER } from '@/features/navigation/gestureClaim';
 import { listenForSlides } from '@/features/navigation/pageSlide';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 
 /**
  * Sections inside a tab, on the web: the drag-to-swipe surface with the
  * neighbouring pane shown as the preview. Same contract as the phone's
- * side-by-side pager, so the pages do not care which they got.
+ * side-by-side pager, so the pages do not care which they got: whole-width
+ * panes, each clipped to itself, a gutter between them, reaching out over
+ * the page's side margin (`bleed`), and a slow drag turns the page once it
+ * is more than half way.
  */
-export function SectionPager({ index, panes, onIndex, progress, delegateLeft = false, delegateRight = false, slideChannel, fill = false, slideOnTap = false }: {
+export function SectionPager({ index, panes, onIndex, progress, delegateLeft = false, delegateRight = false, slideChannel, fill = false, slideOnTap = false, bleed = 0 }: {
   index: number;
   panes: React.ReactNode[];
   onIndex: (next: number) => void;
@@ -31,6 +36,8 @@ export function SectionPager({ index, panes, onIndex, progress, delegateLeft = f
    * would play after you had arrived.
    */
   slideOnTap?: boolean;
+  /** The page's side margin: the row reaches out over it and each pane puts it back inside. */
+  bleed?: number;
 }) {
   const last = panes.length - 1;
   const reduced = useReducedMotion();
@@ -77,10 +84,15 @@ export function SectionPager({ index, panes, onIndex, progress, delegateLeft = f
   };
   // Before paint, so a flip never shows the old pane for a frame.
   useLayoutEffect(() => { seek.current(); }, [slideOnTap, index, reduced]);
+  // Each pane a page of its own, clipped to itself, with the margin inside.
+  const page = (pane: React.ReactNode) => <View style={{ flex: fill ? 1 : undefined, paddingHorizontal: bleed, overflow: 'hidden' }}>{pane}</View>;
   return (
+    <View style={{ alignSelf: 'stretch', marginHorizontal: -bleed, flex: fill ? 1 : undefined }}>
     <SwipeSurface
       slideRef={slide}
       fill={fill}
+      gap={PAGE_GUTTER}
+      commitAt={0.5}
       progress={tapSliding ? undefined : progress}
       settledKey={slideOnTap ? `${shown}:${landings}` : String(index)}
       // Here the landed pane is drawn in the same render as the key changes.
@@ -119,10 +131,11 @@ export function SectionPager({ index, panes, onIndex, progress, delegateLeft = f
       }}
       renderPreview={(direction) => {
         const next = tapTarget.current ?? drawnRef.current + direction;
-        return next >= 0 && next <= last && next !== drawnRef.current ? panes[next] : null;
+        return next >= 0 && next <= last && next !== drawnRef.current ? page(panes[next]) : null;
       }}
     >
-      {panes[drawn]}
+      {page(panes[drawn])}
     </SwipeSurface>
+    </View>
   );
 }

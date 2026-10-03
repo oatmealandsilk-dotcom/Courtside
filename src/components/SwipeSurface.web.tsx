@@ -44,6 +44,10 @@ export interface SwipeSurfaceProps {
    * one empty frame on every landing.
    */
   landInPlace?: boolean;
+  /** Points of page background between the page and the one sliding in beside it. */
+  gap?: number;
+  /** How far across (0..1) a slow drag must go before letting go turns the page. */
+  commitAt?: number;
 }
 
 const SETTLE_MS = 300;
@@ -57,7 +61,7 @@ const EASE = 'cubic-bezier(.22,.61,.36,1)';
  * preview) and when it ends. Routing every pointer move through state meant
  * re-rendering the whole page per frame, which is what made swipes stutter.
  */
-export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false, settledKey, progress, slideRef, onRest, landInPlace = false }: SwipeSurfaceProps) {
+export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false, settledKey, progress, slideRef, onRest, landInPlace = false, gap = 0, commitAt = 0.28 }: SwipeSurfaceProps) {
   const { isPhone } = useResponsive();
   const enabled = requestedEnabled && isPhone;
   const start = useRef<{ x: number; y: number; lastX: number; time: number; velocity: number; horizontal: boolean; delegateOnly?: boolean; delegateDirection?: string | null } | null>(null);
@@ -82,7 +86,7 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
     }
     if (previewEl.current) {
       previewEl.current.style.transition = transition;
-      previewEl.current.style.transform = `translate3d(calc(${direction * 100}% + ${offset}px),0,0)`;
+      previewEl.current.style.transform = `translate3d(calc(${direction * 100}% + ${direction * gap + offset}px),0,0)`;
     }
   };
 
@@ -103,7 +107,7 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
   useEffect(() => {
     if (dragging && previewEl.current && start.current) {
       previewEl.current.style.transition = 'none';
-      previewEl.current.style.transform = `translate3d(calc(${direction * 100}% + ${start.current.lastX - start.current.x}px),0,0)`;
+      previewEl.current.style.transform = `translate3d(calc(${direction * 100}% + ${direction * gap + start.current.lastX - start.current.x}px),0,0)`;
     }
   }, [dragging, direction]);
 
@@ -115,7 +119,7 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
     else latest.current.onDragTo?.(null);
     latest.current.onProgress?.(commit ? next : 0);
     if (progress) progress.value = withTiming(commit ? next : 0, { duration: reduced ? 0 : SETTLE_MS });
-    place(commit ? -next * width : 0, !reduced);
+    place(commit ? -next * (width + gap) : 0, !reduced);
     timer.current = setTimeout(() => {
       if (!commit) return release();
       latest.current.onSwipe(next);
@@ -221,13 +225,14 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
       point.lastX = event.clientX;
       point.time = now;
       const next = dx < 0 ? 1 : -1;
-      const width = event.currentTarget.clientWidth;
+      // One page along: the page's width and the gap beside it.
+      const span = event.currentTarget.clientWidth + gap;
       // At a boundary, provide resistance instead of revealing an empty page.
       const available = !latest.current.renderPreview || !!latest.current.renderPreview(next);
-      const offset = available ? Math.max(-width, Math.min(width, dx)) : dx * 0.16;
+      const offset = available ? Math.max(-span, Math.min(span, dx)) : dx * 0.16;
       if (available) latest.current.onDragTo?.(next);
-      latest.current.onProgress?.(-offset / width);
-      if (progress) progress.value = -offset / width;
+      latest.current.onProgress?.(-offset / span);
+      if (progress) progress.value = -offset / span;
       setDirection(next);
       setDragging(true);
       place(offset, false);
@@ -244,13 +249,13 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
       const width = event.currentTarget.clientWidth;
       const available = !latest.current.renderPreview || !!latest.current.renderPreview(next);
       const velocity = performance.now() - point.time < 100 ? point.velocity : 0;
-      const commit = available && (Math.abs(dx) > width * 0.28 || (Math.abs(dx) > 35 && Math.abs(velocity) > 0.5 && Math.sign(velocity) === Math.sign(dx)));
+      const commit = available && (Math.abs(dx) > width * commitAt || (Math.abs(dx) > 35 && Math.abs(velocity) > 0.5 && Math.sign(velocity) === Math.sign(dx)));
       settle(commit, next);
     }}
     onPointerCancel={() => { if (start.current?.horizontal) settle(false, direction); start.current = null; }}
     onClickCapture={event => { if (suppressClick.current) { event.preventDefault(); event.stopPropagation(); suppressClick.current = false; } }}>
     <div ref={content} style={{ display: 'flex', flexDirection: 'column', flex: fill ? 1 : undefined, minHeight: 0, width: '100%', willChange: dragging ? 'transform' : undefined }}>{children}</div>
     {preview && <div ref={previewEl} aria-hidden="true" style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', pointerEvents: 'none', willChange: 'transform',
-      transform: `translate3d(${direction * 100}%,0,0)` }}>{preview}</div>}
+      transform: `translate3d(calc(${direction * 100}% + ${direction * gap}px),0,0)` }}>{preview}</div>}
   </div>;
 }

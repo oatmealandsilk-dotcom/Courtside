@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { openCourt } from '@/features/players/courtLink';
+import { PlaceLine } from '@/components/PlaceLine';
 import { TaggedLine } from '@/components/TaggedLine';
 import { Wash } from '@/components/Wash';
 import React, { useEffect, useRef, useState, memo } from 'react';
@@ -78,6 +78,15 @@ export const LANE_INSET = 28;
  * a narrow window.
  */
 export const laneInsetFor = (columnWidth: number) => (desktopWeb && columnWidth >= 520 + LANE_INSET * 2 ? LANE_INSET : 0);
+/**
+ * The shape a post's picture is drawn at (width over height): a wide clip at
+ * its own shape (16:9 until it is known), a photo at its own (exactly what
+ * its author cut in the editor), a tall clip 4:5. The composer's preview
+ * draws the post being written at the same shape.
+ */
+export const feedFrameRatio = (landscape: boolean, video: boolean, shape: number | null) => (landscape ? (shape ?? 16 / 9) : (!video && shape ? shape : 4 / 5));
+/** A picture's measured shape, kept within what the feed draws. */
+export const feedShape = (landscape: boolean, w: number, h: number) => (landscape ? Math.max(1.2, Math.min(2.6, w / h)) : Math.max(0.5, Math.min(1.3, w / h)));
 /** The narrowest the words and buttons under a post get, so a tall picture never squeezes them. */
 const LANE_MIN = 400;
 /** The buttons' one size: like, comment, send, save and more all read as a set. */
@@ -155,7 +164,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
     let live = true;
     Image.getSize(cover, (w, h) => {
       if (!live || w <= 0 || h <= 0) return;
-      setShape(landscape ? Math.max(1.2, Math.min(2.6, w / h)) : Math.max(0.5, Math.min(1.3, w / h)));
+      setShape(feedShape(landscape, w, h));
     }, () => undefined);
     return () => { live = false; };
   }, [landscape, post.thumbnailUrl, post.imageUrl, sized]);
@@ -187,7 +196,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
   const inset = room ? laneInsetFor(room.w) : 0;
   const frameSize = (() => {
     if (!room) return null;
-    const ratio = landscape ? (shape ?? 16 / 9) : (!post.videoUrl && shape ? shape : 4 / 5);
+    const ratio = feedFrameRatio(landscape, !!post.videoUrl, shape);
     // Until the words have measured, the old share of the page; after, the
     // page less its words (and a comment's worth of room when there are some),
     // never under 40% of it, so a long caption cannot shrink the picture away.
@@ -233,13 +242,15 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
           <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={40} />
           <View style={{ flex: 1, gap: 1 }}>
             <View style={styles.nameRow}>
+              {/* The name keeps some room: the badges beside it never squeeze it down to a letter ("New" is the short tag here, the lane can be narrow). */}
               <Text style={styles.name} numberOfLines={1}>{author.name}</Text>
               {author.isCoach ? <Ionicons name="shield-checkmark" size={14} color={colors.brand} /> : null}
               <LevelPill profile={author.profile} small />
-              {isNewHere(post) ? <NewHereTag /> : null}
+              {isNewHere(post) ? <NewHereTag short /> : null}
             </View>
-            <Text style={styles.sub} numberOfLines={1}>@{author.handle} · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}{post.court ? <> · <Text accessibilityRole="link" accessibilityLabel={`${post.court.name}, see posts from here`} onPress={(e) => { e?.stopPropagation?.(); openCourt(post.court!); }} style={styles.courtLink}>{post.court.name}</Text></> : post.location ? ` · ${post.location}` : ''}</Text>
-            <TaggedLine post={post} />
+            <Text style={styles.sub} numberOfLines={1}>@{author.handle} · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}</Text>
+            {/* Where, on its own line under the name, as Instagram sets it: the whole place, a tap opens the court. */}
+            <PlaceLine court={post.court} location={post.location} />
           </View>
         </Pressable>
       </View>
@@ -287,6 +298,8 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
               <Text numberOfLines={captionOpen ? undefined : 2} style={styles.caption}><Text style={styles.captionName}>{author.handle} </Text><RichText style={styles.caption}>{post.body}</RichText></Text>
             </Pressable>
           ) : null}
+          {/* Who with, right under the words, out of the name's lines. */}
+          <TaggedLine post={post} />
           {/* Tags the caption does not already say: a #tag written in it is not repeated as a chip. */}
           {tagsNotInCaption(post.body, post.tags).length ? (
             <View style={styles.tags}>
@@ -373,9 +386,8 @@ const styleDefinitions = StyleSheet.create({
   whoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   who: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  name: { ...typography.bodyStrong, color: colors.text },
+  name: { ...typography.bodyStrong, color: colors.text, flexShrink: 1, minWidth: 56 },
   sub: { ...typography.small, color: colors.textFaint },
-  courtLink: { ...typography.smallStrong, color: colors.brand },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 18 },
   action: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32 },
   // The last glyph's dots end on the page's right edge, like the caption's words.

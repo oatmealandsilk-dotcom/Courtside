@@ -95,8 +95,13 @@ export interface FeedGroupsActions {
   removeFeedGroupMember: (id: ID, who: ID) => Promise<void>;
   /** An admin changes the name, description, open / ask first, whether it shows in Find groups, or its look. */
   updateFeedGroup: (id: ID, patch: { name: string; description: string; ask: boolean; discoverable?: boolean; look?: GroupLook }) => Promise<void>;
-  /** A group's posts, newest first, into the app's posts; older ones with `before`. Whether there are more. */
-  loadFeedGroupPosts: (id: ID, before?: string) => Promise<boolean>;
+  /**
+   * A page of a group's feed (everything its members post, and what was
+   * shared to it only), newest first, into the app's posts; older ones with
+   * `before`. Where the next page starts, or null when there is no more (or
+   * it could not be read, or in the demo, whose posts are all loaded).
+   */
+  loadFeedGroupPosts: (id: ID, before?: string) => Promise<string | null>;
 }
 
 /** The server's word, as a sentence for the person who tapped. */
@@ -346,9 +351,9 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
 
   const loadFeedGroupPosts = useCallback(async (id: ID, before?: string) => {
     const you = me();
-    if (!you || !live(you, id)) return false;
+    if (!you || !live(you, id)) return null;
     const got = await remote.fetchFeedGroupPosts(id, before).catch(() => null);
-    if (!got || stateRef.current.currentUserId !== you) return false;
+    if (!got || stateRef.current.currentUserId !== you) return null;
     setState((prev) => {
       const havePost = new Set(prev.posts.map((p) => p.id));
       const haveComment = new Set(prev.comments.map((c) => c.id));
@@ -356,7 +361,7 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
       const comments = got.comments.filter((c) => !haveComment.has(c.id));
       return posts.length || comments.length ? { ...prev, posts: [...prev.posts, ...posts], comments: [...prev.comments, ...comments] } : prev;
     });
-    return got.more;
+    return got.next;
   }, [stateRef, setState, live]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return useMemo(

@@ -27,3 +27,9 @@ export function waitsForDeeper(depth: number) {
   'worklet';
   return depth < 2;
 }
+
+/**
+ * The strip of page background between two section panes while they slide
+ * (SectionPager, on the phone and in the browser alike).
+ */
+export const PAGE_GUTTER = 12;

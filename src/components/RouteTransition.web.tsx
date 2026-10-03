@@ -11,7 +11,7 @@ const AUTH = new Set(['/sign-in', '/onboarding']);
  * See-through sheets over the current page. The page underneath stays put,
  * so animating the content here would make it flash behind the sheet.
  */
-const SHEETS = new Set(['/compose', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/pick-court', '/ask', '/ask-coach', '/comments', '/session-stats', '/who-played', '/post-menu', '/edit-post', '/log-session', '/pick-session', '/session-tag', '/hit-request/new']);
+const SHEETS = new Set(['/compose', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/pick-court', '/ask', '/ask-coach', '/comments', '/session-stats', '/who-played', '/post-menu', '/edit-post', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/health-share']);
 /** On a computer, New message is a box over the inbox too (on a phone it is a page, and slides). */
 if (isDesktopBrowser()) SHEETS.add('/messages/new');
 // A court's own two sheets ("Add what you know", "How is it right now?") sit over its page or card the same way.

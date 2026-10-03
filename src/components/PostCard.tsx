@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { openCourt } from '@/features/players/courtLink';
+import { PlaceLine } from '@/components/PlaceLine';
 import { TaggedLine } from '@/components/TaggedLine';
 import React, { useEffect, useState, memo } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -139,9 +139,10 @@ function PostCardInner({
             {isNewHere(post) ? <NewHereTag /> : null}
           </View>
           <Text style={styles.sub} numberOfLines={1}>
-            @{author.handle} · {relativeTime(post.createdAt)}{post.court ? <> · <Text accessibilityRole="link" accessibilityLabel={`${post.court.name}, see posts from here`} onPress={(e) => { e?.stopPropagation?.(); openCourt(post.court!); }} style={styles.courtLink}>{post.court.name}</Text></> : post.location ? ` · ${post.location}` : ''}
+            @{author.handle} · {relativeTime(post.createdAt)}
           </Text>
-          <TaggedLine post={post} />
+          {/* Where, on its own line under the name, as Instagram sets it: the whole place, a tap opens the court. */}
+          <PlaceLine court={post.court} location={post.location} />
         </View>
         {onDelete || onArchive ? (
           <Pressable accessibilityRole="button" accessibilityLabel="Post options" hitSlop={10} onPress={() => setMenuOpen(true)} style={styles.more}>
@@ -211,6 +212,8 @@ function PostCardInner({
         </Tappable>}
 
         <RichText numberOfLines={clamp} style={styles.text}>{post.body}</RichText>
+        {/* Who with, right under the words, out of the name's lines. */}
+        <TaggedLine post={post} />
 
         {post.match ? (
           <View style={styles.detailBox}>
@@ -316,7 +319,7 @@ const styleDefinitions = StyleSheet.create({
   // In the feed the card sits in a page of fixed height. It shrinks rather
   // than overflowing, and the words below are what gives, so the row of
   // buttons is never sliced through the middle.
-  card: { gap: spacing.md, borderRadius: 0, borderWidth: 0, borderBottomWidth: 1, paddingHorizontal: 0, paddingBottom: spacing.xl, backgroundColor: colors.bg, flexShrink: 1, minHeight: 0 },
+  card: { gap: spacing.md, borderRadius: 0, borderWidth: 0, borderBottomWidth: 1, paddingHorizontal: 0, paddingBottom: spacing.xl, backgroundColor: 'transparent', flexShrink: 1, minHeight: 0 },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   more: { padding: 4 },
   backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
@@ -329,7 +332,6 @@ const styleDefinitions = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   name: { ...typography.bodyStrong, color: colors.text },
   sub: { ...typography.small, color: colors.textFaint },
-  courtLink: { ...typography.smallStrong, color: colors.brand },
   body: { gap: spacing.md, flexShrink: 1, minHeight: 0, overflow: 'hidden' },
   // Pictures round off like the feed's photo posts.
   photo: { width: '100%', aspectRatio: 1, borderRadius: radius.lg },

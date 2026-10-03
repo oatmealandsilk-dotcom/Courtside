@@ -180,6 +180,8 @@ const toUser = (row: ProfileRow, followers: number, following: number): User => 
 const POST_SELECT = '*, post_likes(user_id), post_saves(user_id), comments(*, comment_likes(user_id))';
 /** How many posts come at a time: on open, and each time the feed nears its end. */
 export const POST_PAGE = 40;
+/** A group's feed comes a page of this many at a time (group_feed, migration 74). */
+const GROUP_PAGE = 20;
 type FullPostRow = PostRow & { comments?: CommentRow[]; removed_at?: string | null };
 /**
  * Rows to the posts and comments the app holds. A post an admin removed never
@@ -2185,15 +2187,30 @@ export const remote = {
     const { error } = await need().rpc('set_feed_group_look', { g: id, p_color: look.color ?? null, p_emoji: look.emoji ?? null, p_photo: look.photoUrl ?? null });
     if (error) throw new Error(groupWord(error));
   },
-  /** A group's posts, newest first, a page at a time (older than `before`). */
-  async fetchFeedGroupPosts(id: ID, before?: string): Promise<{ posts: Post[]; comments: Comment[]; more: boolean } | null> {
+  /**
+   * A page of a group's feed, newest first, older than `before`: everything
+   * its members post, plus what was shared to that group only (migration 74,
+   * group_feed). `next` is where the following page starts; null at the end.
+   * Before migration 74 it falls back to the group-only posts, as in 67.
+   */
+  async fetchFeedGroupPosts(id: ID, before?: string): Promise<{ posts: Post[]; comments: Comment[]; next: string | null } | null> {
     if (!UUID_RE.test(id)) return null;
-    let q = need().from('posts').select(POST_SELECT).eq('group_id', id).eq('archived', false);
+    const db = need();
+    const page = await db.rpc('group_feed', { g: id, before: before ?? null, lim: GROUP_PAGE });
+    if (page.error && !missingFunction(page.error)) { fail('group feed')(page.error); return null; }
+    if (!page.error) {
+      const listed = (Array.isArray(page.data) ? page.data : []) as { id: ID; created_at: string }[];
+      if (!listed.length) return { posts: [], comments: [], next: null };
+      const { data, error } = await db.from('posts').select(POST_SELECT).in('id', listed.map((r) => r.id));
+      if (error) { fail('group feed')(error); return null; }
+      return { ...toPosts((data ?? []) as FullPostRow[]), next: listed.length === GROUP_PAGE ? listed[listed.length - 1].created_at : null };
+    }
+    let q = db.from('posts').select(POST_SELECT).eq('group_id', id).eq('archived', false);
     if (before) q = q.lt('created_at', before);
     const { data, error } = await q.order('created_at', { ascending: false }).limit(POST_PAGE);
     if (error) { fail('group posts')(error); return null; }
     const rows = (data ?? []) as FullPostRow[];
-    return { ...toPosts(rows), more: rows.length === POST_PAGE };
+    return { ...toPosts(rows), next: rows.length === POST_PAGE ? rows[rows.length - 1].created_at : null };
   },
 
   /** Every tag you made and every tag of you, newest first. Null when they could not be read. */

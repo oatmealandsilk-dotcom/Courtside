@@ -14,7 +14,7 @@ import { activationDistance, claimedDepth, waitsForDeeper } from '@/features/nav
  * JavaScript only hears from the gesture at three moments: when it starts (to
  * mount the preview), when it is known to be going through, and when it lands.
  */
-export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false, settledKey, progress: progressValue, depth = 1, slideRef, onRest }: {
+export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false, settledKey, progress: progressValue, depth = 1, slideRef, onRest, gap = 0, commitAt = 0.28 }: {
   children: React.ReactNode; onSwipe: (direction: 1 | -1) => void;
   /** Fires the instant the gesture is known to be going through, before the animation. */
   onCommit?: (direction: 1 | -1) => void;
@@ -46,6 +46,10 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
    * page is put back on the animation thread in the same step as it lands.
    */
   landInPlace?: boolean;
+  /** Points of page background between the page and the one sliding in beside it. */
+  gap?: number;
+  /** How far across (0..1) a slow drag must go before letting go turns the page. */
+  commitAt?: number;
 }) {
   const { isPhone } = useResponsive();
   const enabled = requestedEnabled && isPhone;
@@ -57,8 +61,8 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
   // What this render allows, readable from the UI thread.
   const canNext = !renderPreview || !!renderPreview(1);
   const canPrev = !renderPreview || !!renderPreview(-1);
-  const config = useSharedValue({ enabled, delegateLeft, delegateRight, canNext, canPrev, depth });
-  useEffect(() => { config.value = { enabled, delegateLeft, delegateRight, canNext, canPrev, depth }; }, [enabled, delegateLeft, delegateRight, canNext, canPrev, depth, config]);
+  const config = useSharedValue({ enabled, delegateLeft, delegateRight, canNext, canPrev, depth, gap, commitAt });
+  useEffect(() => { config.value = { enabled, delegateLeft, delegateRight, canNext, canPrev, depth, gap, commitAt }; }, [enabled, delegateLeft, delegateRight, canNext, canPrev, depth, gap, commitAt, config]);
   useEffect(() => {
     locked.value = isPageSwipeLocked();
     return subscribePageSwipeLock(() => { locked.value = isPageSwipeLocked(); });
@@ -152,8 +156,9 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
         // that goes nowhere still feels like it was heard.
         const dx = available ? e.translationX : e.translationX * 0.16;
         offset.value = dx;
-        if (progressValue) progressValue.value = -dx / width.value;
-        else runOnJS(progress)(-dx / width.value);
+        const span = width.value + c.gap;
+        if (progressValue) progressValue.value = -dx / span;
+        else runOnJS(progress)(-dx / span);
       })
       .onEnd((e) => {
         'worklet';
@@ -162,12 +167,12 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
         const c = config.value;
         const available = next === 1 ? c.canNext : c.canPrev;
         const flick = Math.abs(dx) > 28 && Math.abs(e.velocityX) > 350 && Math.sign(dx) === Math.sign(e.velocityX);
-        const commit = available && c.enabled && (Math.abs(dx) > width.value * 0.28 || flick);
+        const commit = available && c.enabled && (Math.abs(dx) > width.value * c.commitAt || flick);
         busy.value = true;
         runOnJS(decided)(commit, next);
         if (progressValue) progressValue.value = withTiming(commit ? next : 0, { duration: commit ? 220 : 170, easing: Easing.bezier(0.22, 0.61, 0.36, 1) });
         offset.value = withTiming(
-          commit ? -next * width.value : 0,
+          commit ? -next * (width.value + c.gap) : 0,
           { duration: commit ? 220 : 170, easing: Easing.bezier(0.22, 0.61, 0.36, 1) },
           (finished) => { if (finished) runOnJS(landed)(commit, next); },
         );
@@ -212,7 +217,7 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
     decided(true, next);
     const timing = { duration: 220, easing: Easing.bezier(0.22, 0.61, 0.36, 1) };
     if (progressValue) progressValue.value = withTiming(next, timing);
-    offset.value = withTiming(-next * width.value, timing, (finished) => { if (finished) runOnJS(landed)(true, next); });
+    offset.value = withTiming(-next * (width.value + gap), timing, (finished) => { if (finished) runOnJS(landed)(true, next); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dragging, direction]);
 
@@ -225,7 +230,7 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
       <View onLayout={(event) => { width.value = event.nativeEvent.layout.width; }} style={{ flex: fill ? 1 : undefined, overflow: 'hidden' }}>
         <Animated.View style={[{ flex: fill ? 1 : undefined }, pageStyle]}>{children}</Animated.View>
         {preview ? (
-          <Animated.View pointerEvents="none" accessibilityElementsHidden style={[{ position: 'absolute', top: 0, bottom: 0, width: '100%', left: `${direction * 100}%` }, previewStyle]}>
+          <Animated.View pointerEvents="none" accessibilityElementsHidden style={[{ position: 'absolute', top: 0, bottom: 0, width: '100%', left: `${direction * 100}%`, marginLeft: direction * gap }, previewStyle]}>
             {preview}
           </Animated.View>
         ) : null}

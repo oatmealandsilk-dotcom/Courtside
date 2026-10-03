@@ -127,7 +127,7 @@ function GroupPage() {
             : asked
             ? <Button label="Asked to join · Cancel" variant="secondary" onPress={() => act(async () => { await actions.leaveFeedGroup(id); await readCard(); })} disabled={busy} full />
             : <Button label={ask ? 'Ask to join' : 'Join group'} onPress={join} loading={busy} disabled={busy} full />}
-          {open ? <Text style={styles.joinNote}>Only people in the group see what’s shared to it. You can be in up to {MAX_GROUPS} groups.</Text> : null}
+          {open ? <Text style={styles.joinNote}>A group’s feed shows everything its members post. You can be in up to {MAX_GROUPS} groups.</Text> : null}
         </View>
       )}
       {note ? <Text style={styles.note} accessibilityLiveRegion="polite">{note}</Text> : null}
