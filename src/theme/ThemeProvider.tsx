@@ -21,6 +21,7 @@ export const darkColors: Palette = {
   open: '#4FD487',
   overlay: 'rgba(0, 0, 0, 0.65)',
   link: '#8EBEDD', onMedia: '#FFFFFF',
+  bubble: '#232D28',
 };
 
 /**
@@ -37,6 +38,7 @@ const cleanColors: Palette = {
   open: '#17803F',
   overlay: 'rgba(15, 20, 25, 0.5)',
   link: '#1B6699', onMedia: '#FFFFFF',
+  bubble: '#EEF0F1',
 };
 
 /**
@@ -51,6 +53,7 @@ const aoColors: Palette = {
   open: '#1A8147',
   overlay: 'rgba(7, 26, 42, 0.58)',
   link: '#1F64A0', onMedia: '#FFFFFF',
+  bubble: '#D9EAF6',
 };
 
 /**
@@ -66,6 +69,7 @@ const rolandGarrosColors: Palette = {
   open: '#1A8147',
   overlay: 'rgba(46, 22, 12, 0.58)',
   link: '#2F6587', onMedia: '#FFFFFF',
+  bubble: '#F0E2D5',
 };
 
 /**
@@ -80,6 +84,7 @@ const wimbledonColors: Palette = {
   open: '#1A8147',
   overlay: 'rgba(14, 26, 16, 0.55)',
   link: '#245E93', onMedia: '#FFFFFF',
+  bubble: '#E2EBD6',
 };
 
 /**
@@ -96,6 +101,7 @@ const usOpenColors: Palette = {
   open: '#4FD487',
   overlay: 'rgba(4, 12, 22, 0.7)',
   link: '#A4CCF4', onMedia: '#FFFFFF',
+  bubble: '#24425F',
 };
 
 export type ThemeName = 'default' | 'clean' | 'night' | 'ao' | 'roland-garros' | 'wimbledon' | 'us-open';

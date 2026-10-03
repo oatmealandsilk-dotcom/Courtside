@@ -111,6 +111,24 @@ export async function pickPhotos(limit: number): Promise<PickedPhoto[] | null> {
 }
 
 /**
+ * Takes one photo with the camera for a chat (the camera button by the
+ * message box, Instagram's). Asks for the camera the first time. Null when
+ * nothing was taken; 'denied' when the camera is off for CourtSide.
+ */
+export async function takePhoto(): Promise<PickedPhoto | null | 'denied'> {
+  try {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) return 'denied';
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1, exif: false });
+    if (result.canceled || !result.assets.length) return null;
+    const a = result.assets[0];
+    return { uri: a.uri, width: a.width || 1, height: a.height || 1 };
+  } catch (err) {
+    throw new Error(explainPickError(err));
+  }
+}
+
+/**
  * A picked video is always converted by the iPhone itself to standard
  * H.264 before it is handed over: playable on every phone and browser (the
  * raw file is often HEVC, which some Android phones and browsers cannot

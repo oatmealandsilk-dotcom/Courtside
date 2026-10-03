@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Keyboard, Platform } from 'react-native';
-import { measure, scrollTo, useAnimatedKeyboard, useAnimatedReaction, useAnimatedStyle, useScrollOffset, useSharedValue } from 'react-native-reanimated';
+import { useAnimatedKeyboard, useAnimatedReaction, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 
 import type { DragDismiss, KeyboardLift, KeyboardLiftOptions } from './keyboardLiftTypes';
 
@@ -13,13 +13,14 @@ export type { DragDismiss, KeyboardLift, KeyboardLiftOptions } from './keyboardL
  * on the animation thread, so nothing in React draws while it moves): the
  * bar rides up with the keyboard and, when the messages are dragged down
  * (iMessage's way of putting the keyboard away), back down under the
- * finger. The browser's version is keyboardLift.web.ts.
+ * finger. The chat's list is upside down (its newest message is its start),
+ * so as the room grows the newest message rides up with the bar by itself,
+ * with no scrolling to do. The browser's version is keyboardLift.web.ts.
  */
 
 /** On an iPhone: the keyboard's own position, every frame. */
-function useIosLift({ rest, focused, typing, emojiRoom, scrollRef, pinned, contentHeight }: KeyboardLiftOptions): KeyboardLift {
+function useIosLift({ rest, focused, typing, emojiRoom }: KeyboardLiftOptions): KeyboardLift {
   const keyboard = useAnimatedKeyboard();
-  const offset = useScrollOffset(scrollRef);
   const restRoom = useSharedValue(rest);
   const front = useSharedValue(focused);
   const emoji = useSharedValue(emojiRoom);
@@ -46,19 +47,7 @@ function useIosLift({ rest, focused, typing, emojiRoom, scrollRef, pinned, conte
       // The emoji keyboard lies over the bottom of the page at the keyboard's height, so
       // swapping one keyboard for the other leaves the bar exactly where it was.
       const want = Math.max(restAt, height, held, emojiAt);
-      const next = follow.value ? want : Math.min(room.value, want);
-      const grew = next - room.value;
-      room.value = next;
-      // The newest message stays in view as the keyboard comes up, frame by frame, as in iMessage:
-      // the list goes to its end as it will be this frame (its box as last drawn, less what the room
-      // grew by). Never past the end: a short chat, resting on the bar, stays where it is.
-      if (grew > 0 && pinned.value) {
-        const box = measure(scrollRef);
-        if (box) {
-          const end = contentHeight.value - (box.height - grew);
-          if (end > offset.value) scrollTo(scrollRef, 0, end, false);
-        }
-      }
+      room.value = follow.value ? want : Math.min(room.value, want);
     },
   );
   const spacer = useAnimatedStyle(() => ({ height: room.value }));
@@ -128,8 +117,9 @@ export function useDragDownDismiss(blur: () => void, closePanel: () => void = bl
         },
         onTouchEnd: () => { touch.current = null; },
       },
+      // The list is upside down: dragging the messages down (back through the chat) scrolls it further from its start.
       onScrollY: (y) => {
-        if (from.current !== null && y < from.current - 16) { from.current = null; done(); }
+        if (from.current !== null && y > from.current + 16) { from.current = null; done(); }
       },
     };
   }, []);

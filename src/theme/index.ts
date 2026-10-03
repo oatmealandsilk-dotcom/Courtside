@@ -16,6 +16,8 @@ export const lightColors = {
   link: '#2B6688',
   // A mark laid over a photo (the play button on a video's picture): white on every court.
   onMedia: '#FFFFFF',
+  // Someone else's chat bubble: a shade deeper than the page, with no outline (iMessage's grey bubble, in the court's own tone).
+  bubble: '#ECE9DE',
 } as const;
 
 export const colors: Record<keyof typeof lightColors, string> = { ...lightColors };

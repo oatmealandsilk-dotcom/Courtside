@@ -15,12 +15,15 @@ const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString(
  * src/features/messages/DemoPhoto.tsx): the demo ships no picture files.
  */
 export const messages: Message[] = [
+  // Mira: a run of each kind, so the demo shows them together — words, a link
+  // (its card), a reply quoting it, a photo with a caption, a voice note, a
+  // court, reactions both ways, and an hour's quiet bringing a time line.
   {
     id: 'm-mira-1',
     conversationId: 'cv-mira',
     senderId: 'u-mira',
     body: 'That kick serve clip you posted — what grip are you on? Looks closer to continental than mine.',
-    createdAt: isoDaysAgo(1, 4),
+    createdAt: minutesAgo(28 * 60),
     kind: 'text',
   },
   {
@@ -28,8 +31,48 @@ export const messages: Message[] = [
     conversationId: 'cv-mira',
     senderId: CURRENT_USER_ID,
     body: 'Continental, edge on. Took a month to stop shanking it.',
-    createdAt: isoDaysAgo(1, 3),
+    createdAt: minutesAgo(27 * 60),
     kind: 'text',
+  },
+  {
+    // A bare link, right under the words before it: one run, its card joined on.
+    id: 'm-mira-2b',
+    conversationId: 'cv-mira',
+    senderId: CURRENT_USER_ID,
+    body: 'https://youtu.be/kickserve101',
+    createdAt: minutesAgo(27 * 60 - 1),
+    kind: 'text',
+    reactions: { 'u-mira': '🔥' },
+  },
+  {
+    // A reply: swiped from the link above, it carries a quote of it.
+    id: 'm-mira-2c',
+    conversationId: 'cv-mira',
+    senderId: 'u-mira',
+    body: 'Watching tonight. That toss cue is gold 🙌',
+    createdAt: minutesAgo(27 * 60 - 8),
+    kind: 'text',
+    replyToId: 'm-mira-2b',
+  },
+  {
+    id: 'm-mira-2d',
+    conversationId: 'cv-mira',
+    senderId: 'u-mira',
+    body: 'New cans for Saturday',
+    createdAt: minutesAgo(27 * 60 - 9),
+    kind: 'photo',
+    photos: [{ path: 'demo:balls', w: 1400, h: 1400 }],
+    reactions: { [CURRENT_USER_ID]: '❤️' },
+  },
+  {
+    // A voice note (the demo draws it; there is no recording to play).
+    id: 'm-mira-2e',
+    conversationId: 'cv-mira',
+    senderId: CURRENT_USER_ID,
+    body: 'Voice note',
+    createdAt: minutesAgo(25 * 60),
+    kind: 'voice',
+    audio: { url: 'demo:voice', ms: 9000 },
   },
   {
     id: 'm-mira-3',
@@ -38,6 +81,15 @@ export const messages: Message[] = [
     body: 'Are you playing the Saturday round robin at Griffith?',
     createdAt: isoDaysAgo(0, 5),
     kind: 'text',
+  },
+  {
+    id: 'm-mira-4',
+    conversationId: 'cv-mira',
+    senderId: 'u-mira',
+    body: 'Griffith Park Riverside Courts',
+    createdAt: new Date(Date.parse(isoDaysAgo(0, 5)) + 60_000).toISOString(),
+    kind: 'court',
+    place: { name: 'Griffith Park Riverside Courts', lat: 34.1105, lng: -118.2721, count: 12 },
   },
 
   {
@@ -225,9 +277,9 @@ export const conversations: Conversation[] = [
   {
     id: 'cv-mira',
     participantIds: [CURRENT_USER_ID, 'u-mira'],
-    messageIds: ['m-mira-1', 'm-mira-2', 'm-mira-3'],
-    updatedAt: isoDaysAgo(0, 5),
-    unreadCount: 1,
+    messageIds: ['m-mira-1', 'm-mira-2', 'm-mira-2b', 'm-mira-2c', 'm-mira-2d', 'm-mira-2e', 'm-mira-3', 'm-mira-4'],
+    updatedAt: new Date(Date.parse(isoDaysAgo(0, 5)) + 60_000).toISOString(),
+    unreadCount: 2,
   },
   {
     id: 'cv-sam',

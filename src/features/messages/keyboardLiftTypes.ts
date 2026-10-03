@@ -1,6 +1,5 @@
 import type { ScrollViewProps, ViewStyle } from 'react-native';
-import type Reanimated from 'react-native-reanimated';
-import type { AnimatedRef, SharedValue, useAnimatedStyle } from 'react-native-reanimated';
+import type { useAnimatedStyle } from 'react-native-reanimated';
 
 /** What keyboardLift.ts (phone) and keyboardLift.web.ts (browser) are given and give back. */
 export interface KeyboardLiftOptions {
@@ -16,12 +15,6 @@ export interface KeyboardLiftOptions {
    * it, so the room under the bar is at least this.
    */
   emojiRoom: number;
-  /** The list of messages, kept on its newest message as the keyboard comes up. */
-  scrollRef: AnimatedRef<Reanimated.ScrollView>;
-  /** Whether the list is resting on its newest message (it is kept there); scrolled up to read, it is left alone. */
-  pinned: SharedValue<boolean>;
-  /** How tall the messages themselves are (not stretched to fill the list), so the list is never scrolled past its end. */
-  contentHeight: SharedValue<number>;
 }
 
 export interface KeyboardLift {

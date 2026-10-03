@@ -134,13 +134,15 @@ export interface PickedPhoto { uri: string; width: number; height: number }
  * browser cannot open (an iPhone's HEIC in Chrome, say) is left out with a
  * note: it could not be shown, nor re-drawn as the JPEG a chat sends.
  */
-export function pickPhotos(limit: number): Promise<PickedPhoto[] | null> {
+export function pickPhotos(limit: number, capture = false): Promise<PickedPhoto[] | null> {
   const most = Math.max(1, Math.min(10, limit));
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    input.multiple = most > 1;
+    input.multiple = most > 1 && !capture;
+    // A phone's browser opens its camera straight away; a computer's shows the file dialog.
+    if (capture) input.setAttribute('capture', 'environment');
     input.style.display = 'none';
     let settled = false;
     const finish = (value: PickedPhoto[] | null) => { if (!settled) { settled = true; resolve(value); input.remove(); } };
@@ -164,6 +166,15 @@ export function pickPhotos(limit: number): Promise<PickedPhoto[] | null> {
     document.body.appendChild(input);
     input.click();
   });
+}
+
+/**
+ * The camera button by a chat's message box: a phone's browser opens its
+ * camera for one photo (a computer's, the file dialog). Must be called from a click.
+ */
+export async function takePhoto(): Promise<PickedPhoto | null | 'denied'> {
+  const got = await pickPhotos(1, true);
+  return got?.[0] ?? null;
 }
 
 /**

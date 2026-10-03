@@ -26,7 +26,9 @@ const SECTIONS: { title: string; emoji: string[] }[] = [
  * holding it keeps deleting.
  */
 export function EmojiKeyboard({ height, bottomInset, onPick, onDelete }: {
-  height: number; bottomInset: number; onPick: (emoji: string) => void; onDelete: () => void;
+  height: number; bottomInset: number; onPick: (emoji: string) => void;
+  /** Deleting back from the box; without it (picking a reaction) there is no delete key. */
+  onDelete?: () => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const [recent, setRecent] = useState<string[]>([]);
@@ -48,6 +50,7 @@ export function EmojiKeyboard({ height, bottomInset, onPick, onDelete }: {
   const stop = () => { clearTimeout(repeat.current.wait); clearInterval(repeat.current.every); repeat.current = {}; };
   useEffect(() => stop, []);
   const startDelete = () => {
+    if (!onDelete) return;
     haptics.tap();
     onDelete();
     repeat.current.wait = setTimeout(() => { repeat.current.every = setInterval(onDelete, 90); }, 420);
@@ -72,16 +75,18 @@ export function EmojiKeyboard({ height, bottomInset, onPick, onDelete }: {
         {recent.length ? section('Recent', recent) : null}
         {SECTIONS.map((s) => section(s.title, s.emoji))}
       </ScrollView>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Delete"
-        onPressIn={startDelete}
-        onPressOut={stop}
-        hitSlop={8}
-        style={({ pressed }) => [styles.delete, { bottom: bottomInset + spacing.md }, pressed && styles.deletePressed]}
-      >
-        <Ionicons name="backspace-outline" size={22} color={colors.text} />
-      </Pressable>
+      {onDelete ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Delete"
+          onPressIn={startDelete}
+          onPressOut={stop}
+          hitSlop={8}
+          style={({ pressed }) => [styles.delete, { bottom: bottomInset + spacing.md }, pressed && styles.deletePressed]}
+        >
+          <Ionicons name="backspace-outline" size={22} color={colors.text} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
