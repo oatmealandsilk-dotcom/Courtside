@@ -84,13 +84,17 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
     return () => { on = false; };
   }, [townKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const looked = townName && townName.key === townKey ? townName.name : null;
+  // While the app is young, the card is the big city you are near (Oct 3, owner's
+  // call): Wake Forest and North Raleigh both read "Raleigh", centred on Raleigh,
+  // counting everyone in town, so the map feels as full as it is. The small
+  // towns still show as the map's own labels. Far from any big city the app
+  // knows, it is the town you are in.
   const live = useMemo<{ at: LatLng; name: string } | null>(() => {
     if (fixLat === undefined || fixLng === undefined) return null;
     const at = { lat: fixLat, lng: fixLng };
-    if (looked) return { at, name: looked };
     const place = nearestPlace(fixLat, fixLng);
-    const near = milesBetween(at, place) <= IN_TOWN_MILES;
-    return near ? { at, name: place.name.split(',')[0] } : { at, name: 'you' };
+    if (milesBetween(at, place) <= IN_TOWN_MILES) return { at: { lat: place.lat, lng: place.lng }, name: place.name.split(',')[0] };
+    return { at, name: looked ?? 'you' };
   }, [fixLat, fixLng, looked]);
   const city = live ? live.at : profileCity;
   const cityPending = live ? false : profilePending;
