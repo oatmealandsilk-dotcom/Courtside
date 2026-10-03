@@ -1199,9 +1199,15 @@ const Composer = memo(function Composer({ ref, styles, pickedCount, editingBody,
             slide={recSlide}
             onSend={voice.recording ? () => { void sendRecording(); } : submit}
             onMicDown={() => { if (voice.recording) return; setPlusOpen(false); setRecMode('hold'); void startRecording(); }}
-            onMicUp={(heldMs) => {
-              // A quick tap: it keeps recording until Send or the bin. Held: letting go sends.
-              if (heldMs < HOLD_MS || !voice.recording) { setRecMode('locked'); return; }
+            onMicUp={(heldMs, locked) => {
+              // Hold to record, let go to send (owner, Oct 3). A quick tap records nothing and says how;
+              // a screen reader's tap (which cannot hold) still records until Send or the bin.
+              if (locked) { setRecMode('locked'); return; }
+              if (heldMs < HOLD_MS || !voice.recording) {
+                throwRecording();
+                showToast({ title: 'Hold to record', body: 'Keep holding the mic, then let go to send.', icon: 'mic-outline' });
+                return;
+              }
               void sendRecording();
             }}
             onMicCancel={throwRecording}
@@ -2214,7 +2220,7 @@ function RecordingStrip({ mode, elapsed, slide, onThrow, styles }: { mode: 'hold
  */
 function SendOrMic({ showSend, ready, editing, recording, holding, slide, onSend, onMicDown, onMicUp, onMicCancel, styles }: {
   showSend: boolean; ready: boolean; editing: boolean; recording: boolean; holding: boolean; slide: SharedValue<number>;
-  onSend: () => void; onMicDown: () => void; onMicUp: (heldMs: number) => void; onMicCancel: () => void; styles: any;
+  onSend: () => void; onMicDown: () => void; onMicUp: (heldMs: number, locked?: boolean) => void; onMicCancel: () => void; styles: any;
 }) {
   const shown = useSharedValue(showSend ? 1 : 0);
   const live = useSharedValue(ready ? 1 : 0);
@@ -2258,8 +2264,8 @@ function SendOrMic({ showSend, ready, editing, recording, holding, slide, onSend
           accessible
           accessibilityRole="button"
           accessibilityLabel={recording ? 'Recording. Let go to send' : 'Record a voice note'}
-          accessibilityHint="Tap to record; hold to record and let go to send"
-          onAccessibilityTap={() => { latest.current.onMicDown(); latest.current.onMicUp(0); }}
+          accessibilityHint="Hold to record, let go to send"
+          onAccessibilityTap={() => { latest.current.onMicDown(); latest.current.onMicUp(0, true); }}
           // Only the layer in front takes touches, and it is drawn in front: in a browser the hidden layer's
           // own insides still caught them through "none" on the layer.
           style={[styles.endLayer, { pointerEvents: showSend ? 'none' : 'auto', zIndex: showSend ? 1 : 2 }, micLook]}
