@@ -5,6 +5,7 @@ import type { CourtRing, HitRequest, TaggedCourt, User } from '@/data/types';
 import { NEAR_HIT_MILES, canSeeHitAt, hitSpot, openHits } from '@/features/hits/visible';
 import { sameCourt } from '@/features/places/court';
 import { looksPublic } from '@/features/places/courtName';
+import { townNameAt } from '@/features/places/search';
 import { useCourtSearch } from '@/features/places/useCourtSearch';
 import { courtRows, fetchCourts, isClosedCourt, peekCourts, type Court, type CourtRow } from '@/features/players/courts';
 import { milesBetween } from '@/features/players/geo';
@@ -71,13 +72,26 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   // picked on your profile, as before.
   const fixLat = locationOn ? fix?.lat : undefined;
   const fixLng = locationOn ? fix?.lng : undefined;
+  // The town's real name from the map search ("Wake Forest", Oct 3), not
+  // the nearest big city the app happens to know; until it answers (or
+  // offline), the nearest known city when one is close.
+  const [townName, setTownName] = useState<{ key: string; name: string | null } | null>(null);
+  const townKey = fixLat === undefined || fixLng === undefined ? '' : `${fixLat.toFixed(2)},${fixLng.toFixed(2)}`;
+  useEffect(() => {
+    if (!townKey || fixLat === undefined || fixLng === undefined) return undefined;
+    let on = true;
+    void townNameAt({ lat: fixLat, lng: fixLng }).then((name) => { if (on) setTownName({ key: townKey, name }); });
+    return () => { on = false; };
+  }, [townKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const looked = townName && townName.key === townKey ? townName.name : null;
   const live = useMemo<{ at: LatLng; name: string } | null>(() => {
     if (fixLat === undefined || fixLng === undefined) return null;
     const at = { lat: fixLat, lng: fixLng };
+    if (looked) return { at, name: looked };
     const place = nearestPlace(fixLat, fixLng);
     const near = milesBetween(at, place) <= IN_TOWN_MILES;
-    return near ? { at: { lat: place.lat, lng: place.lng }, name: place.name.split(',')[0] } : { at, name: 'you' };
-  }, [fixLat, fixLng]);
+    return near ? { at, name: place.name.split(',')[0] } : { at, name: 'you' };
+  }, [fixLat, fixLng, looked]);
   const city = live ? live.at : profileCity;
   const cityPending = live ? false : profilePending;
   const cityName = live ? live.name : me.location.trim() ? me.location.split(',')[0] : 'you';
