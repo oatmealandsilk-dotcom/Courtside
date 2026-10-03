@@ -80,6 +80,8 @@ const KIND_META: Record<Post['kind'], KindMeta> = {
   milestone: { label: 'Milestone', icon: 'flag-outline', tint: 'warning' },
 };
 const TENNIS_META: KindMeta = { label: 'Tennis', icon: 'court', tint: 'court' };
+/** The buttons' one size, the same set as under a photo post. */
+const ICON = 24;
 
 function PostCardInner({
   onComment,
@@ -171,10 +173,10 @@ function PostCardInner({
         </Modal>
       ) : null}
 
-      {post.imageUrl && <ExpoImage accessibilityLabel={post.mediaLabel ?? "Post photo"} source={{uri:post.imageUrl}} style={{width:"100%",aspectRatio:1,borderRadius:12}} contentFit="cover" cachePolicy="memory-disk"/>}
+      {post.imageUrl && <ExpoImage accessibilityLabel={post.mediaLabel ?? "Post photo"} source={{uri:post.imageUrl}} style={styles.photo} contentFit="cover" cachePolicy="memory-disk"/>}
       {/* The player fills whatever box it is given, so the card gives it one in the post's own shape. */}
       {post.videoUrl ? (
-        <View style={{ width: '100%', aspectRatio: post.orientation === 'landscape' ? 16 / 9 : 4 / 5, borderRadius: 12, overflow: 'hidden', backgroundColor: '#000' }}>
+        <View style={[styles.video, { aspectRatio: post.orientation === 'landscape' ? 16 / 9 : 4 / 5 }]}>
           <View style={cropLayer(post.crop)}><ClipVideo uri={post.videoUrl} poster={post.thumbnailUrl} active={playing} trimStart={post.trimStart} trimEnd={post.trimEnd} speed={post.speed} volume={post.volume} /></View>
         </View>
       ) : post.kind === 'clip' ? <MediaPlaceholder label={post.mediaLabel ?? 'Clip'} seed={post.id} portrait /> : null}
@@ -265,25 +267,28 @@ function PostCardInner({
           <Tappable onPress={like.toggle} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: post.id } }); }} scaleTo={0.8} hitSlop={8} accessibilityLabel={like.on ? 'Unlike' : 'Like'}>
             <Ionicons
               name={like.on ? 'heart' : 'heart-outline'}
-              size={23}
+              size={ICON}
               color={like.on ? colors.danger : colors.textMuted}
             />
           </Tappable>
-          <Pressable accessibilityRole="button" accessibilityLabel="See who liked this" hitSlop={8} disabled={post.likedBy.length + like.delta === 0} onPress={() => router.push({ pathname: '/likes', params: { id: post.id } })} style={styles.countHit}>
-            {(state) => (
-              <Text style={[styles.actionText, like.on && { color: colors.danger }, (state as { hovered?: boolean }).hovered && styles.countHover]}>
-                {compactNumber(post.likedBy.length + like.delta)}
-              </Text>
-            )}
-          </Pressable>
+          {/* A count only once there is one, as on Instagram: no zeros. */}
+          {post.likedBy.length + like.delta > 0 ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="See who liked this" hitSlop={8} onPress={() => router.push({ pathname: '/likes', params: { id: post.id } })} style={styles.countHit}>
+              {(state) => (
+                <Text style={[styles.actionText, like.on && { color: colors.danger }, (state as { hovered?: boolean }).hovered && styles.countHover]}>
+                  {compactNumber(post.likedBy.length + like.delta)}
+                </Text>
+              )}
+            </Pressable>
+          ) : null}
         </View>
         <Tappable onPress={onComment ?? onPress} scaleTo={0.8} style={styles.action} accessibilityLabel="Comments">
-          <Ionicons name="chatbubble-outline" size={22} color={colors.textMuted} />
-          <Text style={styles.actionText}>{compactNumber(post.commentIds.length)}</Text>
+          <Ionicons name="chatbubble-outline" size={ICON - 1} color={colors.textMuted} />
+          {post.commentIds.length ? <Text style={styles.actionText}>{compactNumber(post.commentIds.length)}</Text> : null}
         </Tappable>
         {onShare ? (
           <Tappable onPress={onShare} scaleTo={0.8} style={styles.action} accessibilityLabel="Share this post">
-            <Ionicons name="arrow-redo-outline" size={22} color={colors.textMuted} />
+            <Ionicons name="arrow-redo-outline" size={ICON} color={colors.textMuted} />
           </Tappable>
         ) : null}
         {onToggleSave ? (
@@ -296,7 +301,7 @@ function PostCardInner({
             >
               <Ionicons
                 name={saved ? 'bookmark' : 'bookmark-outline'}
-                size={22}
+                size={ICON - 1}
                 color={saved ? colors.brand : colors.textMuted}
               />
             </Tappable>
@@ -326,6 +331,9 @@ const styleDefinitions = StyleSheet.create({
   sub: { ...typography.small, color: colors.textFaint },
   courtLink: { ...typography.smallStrong, color: colors.brand },
   body: { gap: spacing.md, flexShrink: 1, minHeight: 0, overflow: 'hidden' },
+  // Pictures round off like the feed's photo posts.
+  photo: { width: '100%', aspectRatio: 1, borderRadius: radius.lg },
+  video: { width: '100%', borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000' },
   cardSlot: { width: '100%', alignItems: 'center', justifyContent: 'center', flexShrink: 6, minHeight: 0, overflow: 'hidden' },
   cardWait: { aspectRatio: 4 / 5 },
   kindRow: {
@@ -367,7 +375,7 @@ const styleDefinitions = StyleSheet.create({
     borderTopColor: colors.border,
     paddingTop: spacing.md,
   },
-  action: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2 },
+  action: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 28 },
   actionText: { ...typography.bodyStrong, fontSize: 14, color: colors.textMuted },
   // Browsers ignore hitSlop, so on a computer the number gets a real, bigger click area (without moving anything) and underlines on hover.
   countHit: Platform.OS === 'web' ? ({ padding: 8, margin: -8, cursor: 'pointer' } as object) : {},

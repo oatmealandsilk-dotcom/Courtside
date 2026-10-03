@@ -19,14 +19,7 @@ export const lengthTile = (m: number) => ({
     : <Figure value={m < 60 ? m : m / 60} unit={m < 60 ? 'm' : 'h'} size={22} unitScale={0.4} color={on ? colors.bg : colors.text} unitColor={on ? colors.bg : colors.textMuted} />),
 });
 
-/** The tracker's short name, as on its length tile and its "from WHOOP" line. */
+/** The tracker's short name, as on its "from WHOOP" line and "Use WHOOP's time". */
 export function trackerName(a: DetectedActivity) {
   return ({ whoop: 'WHOOP', 'apple-watch': 'Watch', fitbit: 'Fitbit', oura: 'Oura', polar: 'Polar' } as Partial<Record<ReturnType<typeof statsSourceOf>, string>>)[statsSourceOf(a)] ?? 'Health';
-}
-
-/** The usual lengths, with the nearest one swapped for the tracker's own minutes, so it sits where it belongs and is picked already. */
-export function lengthsFor(a: DetectedActivity) {
-  const nearest = LENGTHS.reduce((best, m, i) => (Math.abs(m - a.minutes) < Math.abs(LENGTHS[best] - a.minutes) ? i : best), 0);
-  const top = trackerName(a);
-  return LENGTHS.map((m, i) => (i === nearest ? { value: a.minutes, top, main: duration(a.minutes), label: duration(a.minutes) } : lengthTile(m)));
 }

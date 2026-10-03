@@ -87,7 +87,7 @@ export default function SessionStatsSheet() {
       <DragSheet
         closeSignal={closeSignal}
         onDismissed={leave}
-        peekFraction={sparse ? 0.5 : 0.72}
+        peekFraction={sparse ? 0.46 : 0.64}
         fitContent={short && !staged}
         contentHeight={short && contentH ? contentH : undefined}
         active={focused}

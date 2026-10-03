@@ -1,4 +1,5 @@
-import { Platform } from 'react-native';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
+import { NativeModules, Platform, TurboModuleRegistry } from 'react-native';
 
 import type { DailyHealth } from '@/data/types';
 
@@ -33,6 +34,24 @@ type HK = {
 };
 
 let hk: HK | null | undefined;
+/** The phone's own HealthKit module, when this build carries it (see load). */
+function nativeHealthKit(): object | null {
+  const usable = (m: unknown) => (m && typeof (m as Partial<HK>).initHealthKit === 'function' ? (m as object) : null);
+  try {
+    return usable(NativeModules.AppleHealthKit) ?? usable(TurboModuleRegistry.get('AppleHealthKit'));
+  } catch {
+    return null;
+  }
+}
+/**
+ * Under React Native's new architecture (on since SDK 52) a native module
+ * reaches JavaScript as an empty object whose methods are looked up through
+ * its prototype. The library's index copies the module with Object.assign,
+ * which only copies an object's own properties, so its export came out with
+ * no initHealthKit at all and the app thought HealthKit was missing even in
+ * the App Store build. So the methods are read straight off the native
+ * module, and only the library's constants (plain JavaScript) come from it.
+ */
 function load(): HK | null {
   if (hk !== undefined) return hk;
   if (Platform.OS !== 'ios') { hk = null; return hk; }
@@ -40,7 +59,10 @@ function load(): HK | null {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = require('react-native-health') as { default?: HK } & HK;
     const m = mod.default ?? mod;
-    hk = typeof m?.initHealthKit === 'function' ? m : null;
+    const native = nativeHealthKit();
+    const constants = m?.Constants;
+    if (native && constants) hk = Object.assign(Object.create(native) as HK, { Constants: constants });
+    else hk = typeof m?.initHealthKit === 'function' ? m : null;
   } catch {
     hk = null;
   }
@@ -48,6 +70,9 @@ function load(): HK | null {
 }
 
 export const appleHealthAvailable = () => load() !== null;
+
+/** Expo Go on an iPhone: HealthKit can never be there, only in the App Store build. */
+export const inExpoGo = () => Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
 const call = <T,>(fn: (cb: (err: string | null, r: T) => void) => void) => new Promise<T>((res, rej) => fn((err, r) => (err ? rej(new Error(err)) : res(r))));
 

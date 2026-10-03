@@ -26,7 +26,7 @@ import { GROUP_CAP, chatLockNote, eventText, findDirectChat, groupName, isDirect
 import { heardMessage, heardUnsent } from '@/features/messages/incoming';
 import { MAX_CHAT_PHOTOS, clearSendProgress, keepLocalCopy, setSendProgress } from '@/features/messages/chatPhotos';
 import { readReceiptPreference, saveReceiptPreference } from '@/features/messaging/preferences';
-import { connectProvider, disconnectProvider } from '@/lib/integrations';
+import { connectProvider, disconnectProvider, withCatalog } from '@/lib/integrations';
 import { appleHealthAvailable, connectAppleHealth, readAppleHealth, readAppleNutrition } from '@/features/health/appleHealth';
 import { isTracker, tennisFlags, TRACKERS } from '@/features/activity/flags';
 import { checkForTennis } from '@/features/activity/check';
@@ -993,7 +993,9 @@ const emptyBootstrap: Bootstrap = {
   answers: [],
   coaches: [],
   coachingRequests: [],
-  integrations: [],
+  // Every source, none connected, from the first frame: a real account that opens
+  // from its saved copy never gets the demo's list, and the Health screen needs one.
+  integrations: withCatalog([]),
   healthHistory: [],
   achievements: [],
   coachQuestions: [],
@@ -5379,7 +5381,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...prev,
       healthHistory: got.days,
       healthIsReal: true,
-      integrations: prev.integrations.map((i) => { const c = got.connections.find((x) => x.provider === i.provider); return { ...i, connected: !!c, lastSyncedAt: c?.lastSyncedAt, readsWorkouts: c?.readsWorkouts }; }),
+      integrations: withCatalog(prev.integrations).map((i) => { const c = got.connections.find((x) => x.provider === i.provider); return { ...i, connected: !!c, lastSyncedAt: c?.lastSyncedAt, readsWorkouts: c?.readsWorkouts }; }),
     }));
   }, []);
   /** Fetches your sources again; resolves with what came back (null when nothing did) for a step that cannot wait for the screen to redraw. */
@@ -5599,7 +5601,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const toggleIntegration = useCallback(async (provider: Integration['provider'], opts: { tennis?: boolean } = {}) => {
     const me = stateRef.current.currentUserId;
-    const current = stateRef.current.integrations.find((i) => i.provider === provider);
+    const current = withCatalog(stateRef.current.integrations).find((i) => i.provider === provider);
     if (!current) return;
     if (!live(me)) {
       const updated = current.connected ? await disconnectProvider(current) : await connectProvider(current);

@@ -26,13 +26,13 @@ import { openSessionPicker } from '@/features/activity/sessionPicker';
 import { isActive, tagsOnSession } from '@/features/activity/sessionTags';
 import { addToBank, getBank } from '@/features/compose/mediaBank';
 import { Avatar } from '@/components/ui';
-import { Chips, Tiles } from '@/components/sheet/SheetForm';
-import { lengthsFor, trackerName } from '@/features/activity/lengths';
-import { duration as lengthWords } from '@/lib/format';
+import { Chips } from '@/components/sheet/SheetForm';
+import { trackerName } from '@/features/activity/lengths';
+import { TrackedLength } from '@/components/session/TrackedLength';
 import { LogComposerTop, LogDock, DOCK_ROOM } from '@/components/session/LogComposer';
 import { ZoneGlyph } from '@/components/session/ZoneGlyph';
 import type { CardPerson } from '@/components/session/SessionCard';
-import { KIND_LABEL, activityDay, loggedLabel, timeOfDay } from '@/features/activity/format';
+import { KIND_LABEL, activityDay, loggedLabel } from '@/features/activity/format';
 import { canTagKind } from '@/features/activity/sessionTags';
 import { showLogged, useTrackerSession } from '@/features/activity/useTrackerSession';
 import { openWhoPlayed } from '@/features/activity/whoPlayedPicker';
@@ -362,7 +362,7 @@ export default function Compose() {
   const [kind, setKind] = useState<PracticeSession['kind']>(fromHit?.kind ?? 'practice');
   const [won, setWon] = useState<'won' | 'lost' | null>(null);
   // How long, in your log (Oct 3): simply the tracker's time, shown as one
-  // line; a small Edit opens the usual lengths, for a break taken off.
+  // line; a small Edit opens hours and minutes steppers, for a break taken off.
   // The post keeps the tracker's own time (the server writes it, migration 65).
   const [logMinutes, setLogMinutes] = useState<number | null>(null);
   const [editLength, setEditLength] = useState(false);
@@ -392,10 +392,9 @@ export default function Compose() {
       const u = users.find((x) => x.id === p.id);
       return u ? [{ id: u.id, handle: u.handle, name: u.name, role: p.role, pending: true }] : [];
     });
-  // "Evening match — how did it go?": the hint follows what it was. Left
-  // empty, the post says the day instead ("Saturday match"): the time of
-  // day is yours alone, like the start time.
-  const logHint = opened?.type === 'tracker' ? `${timeOfDay(opened.activity.startedAt)} ${KIND_LABEL[shownKind].toLowerCase()}` : '';
+  // "Practice — how did it go?": the hint follows what it was, never a time
+  // of day. Left empty, the post says the day instead ("Saturday match").
+  const logHint = opened?.type === 'tracker' ? KIND_LABEL[shownKind] : '';
   const logCaption = opened?.type === 'tracker'
     ? `${new Date(`${activityDay(opened.activity)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })} ${KIND_LABEL[shownKind].toLowerCase()}`
     : '';
@@ -623,6 +622,8 @@ export default function Compose() {
     setMedia(next);
     setOrientation(next.orientation ?? 'portrait');
     setEdit({});
+    // Back from the editor, "Log it" shows the length as its one line again.
+    setEditLength(false);
     // A clip or photo goes through the edit step first; a hit already has its shot.
     setStage(mode === 'hit' ? 'form' : 'edit');
   };
@@ -848,7 +849,8 @@ export default function Compose() {
         <SheetBackdrop />
         <Reanimated.View style={[styles.sheet, formLeave]}>
           <Screen
-            title={openedClip ? 'New clip' : 'New post'}
+            // Still "New post" with a clip on it (owner, Oct 3): the page stays the same page.
+            title="New post"
             compactTitle
             bar={false}
             onBack={leaveLog}
@@ -867,6 +869,7 @@ export default function Compose() {
                 onPhoto={() => { void openDevice('all'); }}
                 onClip={() => { void openDevice('video'); }}
                 onEdit={() => setStage('edit')}
+                onRemove={() => { setMedia(null); setPicked(null); setEdit({}); }}
                 error={pickError}
               />
             </View>
@@ -888,20 +891,15 @@ export default function Compose() {
             )}
             {opened?.type === 'tracker' && !openedLog ? (
               <Reanimated.View layout={LinearTransition.duration(220)} style={styles.lengthBox}>
-                {editLength ? (
-                  <Reanimated.View entering={FadeInDown.duration(220).easing(Easing.bezier(0.32, 0.72, 0, 1))} style={styles.lengthTiles}>
-                    <Tiles value={logMinutes ?? opened.activity.minutes} onChange={(m) => setLogMinutes(m)} options={lengthsFor(opened.activity)} />
-                    <Text style={styles.lengthHint}>Change the length if you took a break. Your post keeps {trackerName(opened.activity)}’s time.</Text>
-                  </Reanimated.View>
-                ) : (
-                  <View style={styles.trackedRow}>
-                    <Text style={styles.trackedTime}>{lengthWords(logMinutes ?? opened.activity.minutes)}</Text>
-                    <Text style={styles.trackedFrom}>{!logMinutes || logMinutes === opened.activity.minutes ? `from ${trackerName(opened.activity)}` : 'edited'}</Text>
-                    <Pressable accessibilityRole="button" accessibilityLabel="Edit how long" hitSlop={10} onPress={() => setEditLength(true)} style={({ pressed }) => [styles.trackedEdit, pressed && { opacity: 0.6 }]}>
-                      <Text style={styles.trackedEditText}>Edit</Text>
-                    </Pressable>
-                  </View>
-                )}
+                <TrackedLength
+                  minutes={logMinutes ?? opened.activity.minutes}
+                  trackerMinutes={opened.activity.minutes}
+                  tracker={trackerName(opened.activity)}
+                  open={editLength}
+                  onOpen={setEditLength}
+                  onChange={(m) => setLogMinutes(m === opened.activity.minutes ? null : m)}
+                  hint={`Change it if you took a break. Your post keeps ${trackerName(opened.activity)}’s time.`}
+                />
               </Reanimated.View>
             ) : null}
             <Reanimated.View layout={LinearTransition.duration(220)} style={styles.logRows}>
@@ -1167,15 +1165,8 @@ const styleDefinitions = StyleSheet.create({
   who: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 170 },
   whoName: { ...font('600'), fontSize: 15, color: colors.text, flexShrink: 1 },
   logRows: { marginTop: spacing.md },
-  // How long: the tracker's time on one line, with a small Edit (as Log your tennis has it).
+  // How long: the tracker's time on one line, with a small Edit (TrackedLength, as Log your tennis has it).
   lengthBox: { marginTop: spacing.lg },
-  lengthTiles: { gap: spacing.sm },
-  lengthHint: { ...typography.small, color: colors.textFaint },
-  trackedRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
-  trackedTime: { ...typography.title, color: colors.text, fontVariant: ['tabular-nums'] },
-  trackedFrom: { ...typography.small, color: colors.textMuted, flex: 1 },
-  trackedEdit: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: colors.surfaceAlt },
-  trackedEditText: { ...typography.smallStrong, color: colors.text },
   hideIt: { alignSelf: 'center', paddingVertical: spacing.lg },
   hideItText: { ...font('600'), fontSize: 13, color: colors.textMuted },
   hitFrame: { width: '100%', aspectRatio: 4 / 3, maxHeight: 520, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000', alignSelf: 'center' },

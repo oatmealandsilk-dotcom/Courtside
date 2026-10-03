@@ -74,6 +74,40 @@ export const providerSetup: Record<IntegrationProvider, ProviderSetup> = {
 };
 
 /**
+ * Every source the Health screen lists, none connected: what each one is,
+ * independent of any account. A signed-in account's connections (the
+ * health_connections rows) are laid over this list, so a source shows on the
+ * Health screen whether or not the server has a row for it.
+ */
+export const INTEGRATION_CATALOG: readonly Integration[] = [
+  { provider: 'apple-health', label: 'Apple Health', category: 'wearable', connected: false, provides: ['Sleep', 'HRV', 'Resting heart rate', 'Steps', 'Active energy'] },
+  { provider: 'whoop', label: 'WHOOP', category: 'wearable', connected: false, provides: ['Recovery', 'HRV', 'Resting heart rate', 'Sleep', 'Strain'] },
+  // Tennis sessions only (migration 69), so 'activity' rather than 'wearable':
+  // the coach's recovery numbers never come from these.
+  { provider: 'fitbit', label: 'Fitbit', category: 'activity', connected: false, provides: ['Tennis sessions', 'Heart rate'] },
+  { provider: 'oura', label: 'Oura', category: 'activity', connected: false, provides: ['Tennis sessions', 'Heart rate'] },
+  { provider: 'polar', label: 'Polar', category: 'activity', connected: false, provides: ['Tennis sessions', 'Heart rate'] },
+  // No connection of its own: on an iPhone it comes in through Apple Health.
+  { provider: 'garmin', label: 'Garmin', category: 'activity', connected: false, provides: ['Tennis sessions'] },
+  { provider: 'cronometer', label: 'Cronometer', category: 'nutrition', connected: false, provides: ['Calories', 'Protein', 'Carbs', 'Fat'] },
+  { provider: 'myfitnesspal', label: 'MyFitnessPal', category: 'nutrition', connected: false, provides: ['Calories', 'Protein', 'Carbs', 'Fat'] },
+];
+
+/**
+ * The catalog with `list`'s entries in place of the matching ones (and any
+ * extra entry kept at the end), so no source is ever missing: a real account
+ * that opened from its saved copy, before the demo list had loaded, used to
+ * end up with an empty list and an empty "Your trackers".
+ */
+export function withCatalog(list: readonly Integration[]): Integration[] {
+  const known = new Set(INTEGRATION_CATALOG.map((i) => i.provider));
+  return [
+    ...INTEGRATION_CATALOG.map((c) => list.find((i) => i.provider === c.provider) ?? { ...c, provides: [...c.provides] }),
+    ...list.filter((i) => !known.has(i.provider)),
+  ];
+}
+
+/**
  * Placeholder connect flow. Flips the local flag and stamps a sync time so the
  * UI is exercisable; a real implementation opens the provider's OAuth screen.
  */

@@ -31,6 +31,19 @@ import type { Openness } from '@/features/players/age';
 export type HandleStatus = 'ok' | 'yours' | 'invalid' | 'taken' | 'held';
 
 export type FirstMove = 'post' | 'instant' | 'answer' | 'ask' | 'later';
+/** One person who has invited anyone, as the admin Invites page shows them (migration 71). */
+export interface InviteSummaryRow {
+  id: ID; name: string; handle: string; avatarUrl?: string; suspended?: boolean;
+  /** Signed up through their link (not deleted, not suspended, never themselves). */
+  invited: number;
+  /** Of those, finished setting up. */
+  setUp: number;
+  /** Set up and seen again on a later day: what is paid for. */
+  qualified: number;
+  paid: number; paidCents: number; owed: number; owedCents: number; lastPaidAt?: string;
+}
+/** Someone one person brought: only their name, @handle and dates. */
+export interface InviteeRow { id: ID; name: string; handle: string; avatarUrl?: string; joinedAt: string; setUp: boolean; qualifiedAt?: string }
 export interface FirstDayStats { new30: number; moved30: number; cohort: number; movers: number; moversBack: number; othersBack: number; picked: Record<FirstMove, number> }
 
 const need = () => {
@@ -1636,6 +1649,24 @@ export const remote = {
     const { data, error } = await need().rpc('first_day_stats');
     if (error || !data) return null;
     return data as FirstDayStats;
+  },
+
+  /** Admin: everyone who has invited anyone, with what is owed. Throws (so the page can say so) when refused or missing. */
+  async fetchInviteSummary(): Promise<InviteSummaryRow[]> {
+    const { data, error } = await need().rpc('admin_invite_summary');
+    if (error) throw new Error(missingFunction(error) ? 'The Invites page needs migration 71 in Supabase.' : error.message);
+    return (data ?? []) as InviteSummaryRow[];
+  },
+  /** Admin: the people one person brought. */
+  async fetchInvitees(referrer: ID): Promise<InviteeRow[]> {
+    const { data, error } = await need().rpc('admin_invitees', { referrer });
+    if (error) throw new Error(missingFunction(error) ? 'The Invites page needs migration 71 in Supabase.' : error.message);
+    return (data ?? []) as InviteeRow[];
+  },
+  /** Admin: records a payout covering `count` qualified players. The server refuses more than is owed. */
+  async markInvitesPaid(referrer: ID, count: number, note?: string): Promise<void> {
+    const { error } = await need().rpc('admin_mark_invites_paid', { referrer, count, note: note ?? null });
+    if (error) throw new Error(/only \d+ owed/.test(error.message) ? 'Some of that was already marked paid. The numbers are refreshed.' : error.message);
   },
 
   /** Just enough of some posts to show them small: their picture and what kind they are. For notifications. */

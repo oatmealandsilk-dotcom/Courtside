@@ -115,6 +115,7 @@ export default function Settings() {
         { icon: 'hand-left-outline' as const, label: 'Welcome new players', onPress: () => router.push('/admin-welcome') },
         { icon: 'flag-outline' as const, label: 'Reports', onPress: () => router.push('/admin-reports') },
         { icon: 'mail-outline' as const, label: 'Waitlist', onPress: () => router.push('/admin-waitlist') },
+        { icon: 'people-outline' as const, label: 'Invites', onPress: () => router.push('/admin-invites') },
         { icon: 'school-outline' as const, label: 'Coaches and payments', onPress: () => router.push('/admin-coaches') },
       ],
     }] : []),

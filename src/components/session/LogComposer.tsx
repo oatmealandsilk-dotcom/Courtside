@@ -3,16 +3,14 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Reanimated, { Easing, FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Reanimated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { PreparingRing } from '@/components/PreparingRing';
 import type { ID, SessionDetail } from '@/data/types';
-import { colors, font, lift, radius, spacing, withAlpha } from '@/theme';
+import { colors, font, lift, spacing, withAlpha } from '@/theme';
 import { SessionCard, type CardPerson } from './SessionCard';
-import { SessionStrip } from './SessionStrip';
-import { StatsPill } from './StatsPill';
 import { DrawnTick } from './DrawnTick';
 
 /** The composer's card: the feed's 358-wide card at about two thirds. */
@@ -30,18 +28,19 @@ export function useLogSizes() {
   const tileW = Math.max(88, Math.min(110, room - CARD_W));
   const cardW = Math.max(150, Math.min(CARD_W, room - tileW));
   const cardH = Math.round(cardW * 1.25);
-  return { cardW, cardH, tileW, tileH: (cardH - 10) / 2, clipW: Math.round(cardH * (9 / 16)) };
+  return { cardW, cardH, tileW, tileH: (cardH - 10) / 2 };
 }
 
 /**
  * The top of the composer opened from a session ("Log it"): the session's
- * card with Photo and Clip beside it while nothing is added; once a photo is
- * picked, the photo as the feed will show it with the stats strip under it;
- * once a clip is picked, the clip with its stats pill on it. Either way an
- * Edit button reopens the editor. While the session is still on its way
- * (opened cold from an alert), a waiting card stands in, and the tiles wait.
+ * card with Photo and Clip beside it. Once a photo or clip is picked the page
+ * keeps this same look (owner, Oct 3): the card stays the main thing, and the
+ * picture takes the tiles' place beside it, the full height of the card. A
+ * tap on it opens the editor (trim, crop, cover); its × takes it off. While
+ * the session is still on its way (opened cold from an alert), a waiting
+ * card stands in, and the tiles wait.
  */
-export function LogComposerTop({ session, people, hidden, waiting, media, preparing, prepDone, onPhoto, onClip, onEdit, error }: {
+export function LogComposerTop({ session, people, hidden, waiting, media, preparing, prepDone, onPhoto, onClip, onEdit, onRemove, error }: {
   session: SessionDetail | null;
   people?: CardPerson[];
   hidden: ID[];
@@ -52,6 +51,7 @@ export function LogComposerTop({ session, people, hidden, waiting, media, prepar
   onPhoto: () => void;
   onClip: () => void;
   onEdit: () => void;
+  onRemove: () => void;
   error?: string;
 }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -59,34 +59,6 @@ export function LogComposerTop({ session, people, hidden, waiting, media, prepar
   // The card counts up once, a moment after the composer opens.
   const [play, setPlay] = useState(false);
   useEffect(() => { if (session && !play) setPlay(true); }, [!!session]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (media) {
-    const video = media.kind === 'video';
-    const clock = /·\s*(\d+:\d\d)\s*$/.exec(media.label)?.[1];
-    return (
-      <Reanimated.View entering={FadeIn.duration(220)} style={styles.previewWrap}>
-        <PreviewIn>
-          <View style={[styles.preview, video ? { width: size.clipW, height: size.cardH } : { width: size.cardW, height: size.cardH }]}>
-            {media.thumbnailUrl || (!video && media.uri) ? (
-              <Image accessibilityIgnoresInvertColors source={{ uri: media.thumbnailUrl ?? media.uri }} resizeMode="cover" style={StyleSheet.absoluteFill} accessibilityLabel={video ? 'Your clip' : 'Your photo'} />
-            ) : (
-              <View style={[StyleSheet.absoluteFill, styles.blank]}><Ionicons name="videocam" size={26} color="#FFFFFF" /></View>
-            )}
-            {video && clock ? <View style={styles.badge}><Text style={styles.badgeText}>{clock}</Text></View> : null}
-            {video && session ? (
-              <View style={styles.pillOn}>
-                <StatsPill session={session} hidden={hidden} scale={0.6 * (size.clipW / 166)} />
-              </View>
-            ) : null}
-          </View>
-          {!video && session ? <View style={[styles.strip, { width: size.cardW }]}><SessionStrip session={session} hidden={hidden} scale={0.64 * (size.cardW / CARD_W)} play={play} /></View> : null}
-        </PreviewIn>
-        <Pressable accessibilityRole="button" accessibilityLabel={video ? 'Edit the clip' : 'Edit the photo'} onPress={onEdit} style={({ pressed }) => [styles.edit, pressed && styles.pressed]}>
-          <Ionicons name="cut-outline" size={18} color={colors.text} />
-        </Pressable>
-      </Reanimated.View>
-    );
-  }
 
   return (
     <View>
@@ -99,8 +71,14 @@ export function LogComposerTop({ session, people, hidden, waiting, media, prepar
           </View>
         )}
         <View style={[styles.tiles, { width: size.tileW }]}>
-          <Tile icon="images-outline" label="Photo" height={size.tileH} busy={preparing === 'all'} done={prepDone} disabled={!session} onPress={onPhoto} />
-          <Tile icon="videocam-outline" label="Clip" height={size.tileH} busy={preparing === 'video'} done={prepDone} disabled={!session} onPress={onClip} />
+          {media ? (
+            <MediaTile media={media} height={size.cardH} onEdit={onEdit} onRemove={onRemove} />
+          ) : (
+            <>
+              <Tile icon="images-outline" label="Photo" height={size.tileH} busy={preparing === 'all'} done={prepDone} disabled={!session} onPress={onPhoto} />
+              <Tile icon="videocam-outline" label="Clip" height={size.tileH} busy={preparing === 'video'} done={prepDone} disabled={!session} onPress={onClip} />
+            </>
+          )}
         </View>
       </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -108,12 +86,38 @@ export function LogComposerTop({ session, people, hidden, waiting, media, prepar
   );
 }
 
-/** A picked photo or clip arriving: from a touch smaller, fading in. */
-function PreviewIn({ children }: { children: React.ReactNode }) {
-  const s = useSharedValue(0.96);
-  useEffect(() => { s.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.cubic) }); }, [s]);
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
-  return <Reanimated.View style={[{ alignItems: 'center' }, style]}>{children}</Reanimated.View>;
+/** The picked photo or clip in the tiles' place: tap to edit it, × to take it off. */
+function MediaTile({ media, height, onEdit, onRemove }: {
+  media: { kind: 'photo' | 'video'; uri?: string; thumbnailUrl?: string; label: string };
+  height: number;
+  onEdit: () => void;
+  onRemove: () => void;
+}) {
+  const styles = useThemedStyles(styleDefinitions);
+  const video = media.kind === 'video';
+  const clock = /·\s*(\d+:\d\d)\s*$/.exec(media.label)?.[1];
+  const what = video ? 'clip' : 'photo';
+  return (
+    <Reanimated.View entering={FadeIn.duration(220)} style={{ height }}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Your ${what}. Edit it`} onPress={onEdit} style={({ pressed }) => [styles.media, { height }, pressed && styles.pressed]}>
+        {media.thumbnailUrl || (!video && media.uri) ? (
+          <Image accessibilityIgnoresInvertColors source={{ uri: media.thumbnailUrl ?? media.uri }} resizeMode="cover" style={StyleSheet.absoluteFill} />
+        ) : (
+          <View style={[StyleSheet.absoluteFill, styles.blank]}><Ionicons name="videocam" size={24} color={colors.textMuted} /></View>
+        )}
+        {video ? (
+          <View style={styles.badge}>
+            <Ionicons name="play" size={10} color="white" />
+            {clock ? <Text style={styles.badgeText}>{clock}</Text> : null}
+          </View>
+        ) : null}
+        <View style={styles.editMark}><Ionicons name="cut-outline" size={14} color="white" /></View>
+      </Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Remove the ${what}`} hitSlop={10} onPress={onRemove} style={({ pressed }) => [styles.remove, pressed && styles.pressed]}>
+        <Ionicons name="close" size={14} color="white" />
+      </Pressable>
+    </Reanimated.View>
+  );
 }
 
 function Tile({ icon, label, height, busy, done, disabled, onPress }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; height: number; busy: boolean; done: boolean; disabled: boolean; onPress: () => void }) {
@@ -203,14 +207,13 @@ const styleDefinitions = StyleSheet.create({
   off: { opacity: 0.45 },
   pressed: { opacity: 0.7 },
   error: { ...font('500'), fontSize: 13, color: colors.danger, marginTop: spacing.sm },
-  previewWrap: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', gap: 10, paddingLeft: 48 },
-  preview: { borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000' },
+  // The picked photo or clip, in the tiles' place: rounded like them, the × on its corner.
+  media: { borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border },
   blank: { alignItems: 'center', justifyContent: 'center' },
-  badge: { position: 'absolute', top: 8, right: 8, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: 'rgba(0, 0, 0, 0.5)' },
+  badge: { position: 'absolute', left: 6, bottom: 6, flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: 'rgba(0, 0, 0, 0.5)' },
   badgeText: { ...font('600'), fontSize: 11, color: 'white', fontVariant: ['tabular-nums'] },
-  pillOn: { position: 'absolute', left: 8, right: 8, bottom: 10 },
-  strip: { marginTop: 8 },
-  edit: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  editMark: { position: 'absolute', right: 6, bottom: 6, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)' },
+  remove: { position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.55)' },
   dock: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: 26, paddingHorizontal: 16 },
   dockError: { ...font('500'), fontSize: 13, color: colors.danger, textAlign: 'center', marginBottom: 8 },
   dockRow: { flexDirection: 'row', gap: 10 },
