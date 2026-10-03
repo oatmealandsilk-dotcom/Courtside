@@ -227,7 +227,7 @@ function UserProfile() {
           </View>
           {/* Posts, Clips and Tagged side by side: a swipe slides between them,
               the way your own profile does, instead of landing on a tile as a tap. */}
-          <SectionPager index={TABS.indexOf(tab)} panes={TABS.map((section) => grid(section))} depth={1} delegateRight onIndex={(i) => setTab(TABS[i])} />
+          <SectionPager index={TABS.indexOf(tab)} panes={TABS.map((section) => grid(section))} depth={1} delegateRight bleed={spacing.lg} onIndex={(i) => setTab(TABS[i])} />
         </>
       )}
 

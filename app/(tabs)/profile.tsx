@@ -180,7 +180,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    {live
      // Under the tab line only the grid slides, all three grids riding side by
      // side. A swipe right from Posts is handed up to the tab row (Coaching).
-     ? <SectionPager index={index} panes={grids} progress={underline.progress} depth={2} delegateRight onIndex={(i) => setTab(TABS[i])} />
+     ? <SectionPager index={index} panes={grids} progress={underline.progress} depth={2} delegateRight bleed={spacing.lg} onIndex={(i) => setTab(TABS[i])} />
      : content(selected)}
   </>;
   // The top half never slides between sections: above the line, a swipe is
