@@ -31,7 +31,7 @@
 -- 'their_limit' (the person asking is now in 3), 'not_admin', 'not_found',
 -- 'name_needed', 'slow_down', 'not_in_group', 'group_fixed'.
 --
--- Needs migrations 02, 21, 23 and 62. Safe to run more than once. Nothing
+-- Needs migrations 02, 21, 23, 56 and 62. Safe to run more than once. Nothing
 -- here deletes anyone's posts.
 
 -- ============================================================ 1. tables
@@ -93,8 +93,13 @@ create or replace function public.in_feed_group(g uuid)
 returns boolean language sql stable security definer set search_path = public as $$
   select g is not null and exists (select 1 from public.feed_group_members where group_id = g and user_id = auth.uid());
 $$;
-revoke all on function public.in_feed_group(uuid) from public, anon;
-grant execute on function public.in_feed_group(uuid) to authenticated;
+revoke all on function public.in_feed_group(uuid) from public;
+-- anon too: the posts rule below names it, and Postgres checks the right to
+-- call every function in a rule before the query runs, even on a branch
+-- that never runs. Without this, every signed-out read of posts (and of
+-- comments and likes, whose rules look at posts) fails. Signed out it
+-- always answers false.
+grant execute on function public.in_feed_group(uuid) to anon, authenticated;
 
 create or replace function public.is_feed_group_admin(g uuid, who uuid)
 returns boolean language sql stable security definer set search_path = public as $$
@@ -210,6 +215,50 @@ begin
   end if;
   return new;
 end $$;
+
+-- A comment on a group post (migration 56's notify_comment otherwise): the
+-- one answered is told only if they are still in the group, and @mentions
+-- alert only members, since the comment's words would reach people who
+-- cannot open the post. The post's author is always told.
+create or replace function public.notify_comment()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  owner uuid;
+  grp uuid;
+  replied_to uuid;
+  wanted text;
+  who uuid;
+begin
+  select author_id, group_id into owner, grp from public.posts where id = new.post_id;
+  if new.parent_id is not null then
+    select author_id into replied_to from public.comments where id = coalesce(new.reply_to_id, new.parent_id);
+    if grp is null or replied_to = owner
+       or exists (select 1 from public.feed_group_members m where m.group_id = grp and m.user_id = replied_to) then
+      perform public.file_notification(replied_to, new.author_id, 'comment-reply', new.post_id::text, 'post', new.body, false);
+    end if;
+  end if;
+  if owner is distinct from replied_to then
+    perform public.file_notification(owner, new.author_id, 'comment', new.post_id::text, 'post', new.body, false);
+  end if;
+  if grp is null then
+    perform public.file_mentions_except(new.body, new.author_id, new.post_id::text, 'post', array[owner, replied_to]);
+  else
+    for wanted in
+      select distinct lower(r.parts[1]) from regexp_matches(coalesce(new.body, ''), '@([A-Za-z0-9_]{2,24})', 'g') as r(parts)
+    loop
+      who := null;
+      select id into who from public.profiles where handle = wanted;
+      if who is not null and who <> new.author_id and who is distinct from owner and who is distinct from replied_to
+         and exists (select 1 from public.feed_group_members m where m.group_id = grp and m.user_id = who) then
+        perform public.file_notification(who, new.author_id, 'tag', new.post_id::text, 'post', new.body);
+      end if;
+    end loop;
+  end if;
+  return new;
+end $$;
+revoke all on function public.notify_comment() from public, anon, authenticated;
+drop trigger if exists notify_comment on public.comments;
+create trigger notify_comment after insert on public.comments for each row execute function public.notify_comment();
 
 -- ============================================================ 5. keeping an admin
 

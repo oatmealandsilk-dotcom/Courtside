@@ -77,13 +77,24 @@ type Stage = 'choose' | 'library' | 'edit' | 'form';
  */
 export default function Compose() {
   const styles = useThemedStyles(styleDefinitions);
-  const { actions, posts, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions, sessionTags, feedGroups } = useApp();
+  const { actions, posts, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions, sessionTags, feedGroups, feedGroupsOn } = useApp();
 
   // The story rail opens this straight at the library with ?mode=story.
   const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string; activity?: string; session?: string; group?: string }>();
   // Share to: everyone (the default) or one group you are in (migration 67). A group's feed opens this with ?group=<id>.
   const [shareTo, setShareTo] = useState<string | null>(params.group ?? null);
-  useEffect(() => { if (shareTo && !feedGroups.some((g) => g.id === shareTo)) setShareTo(null); }, [feedGroups, shareTo]);
+  // Never falls back to Everyone on its own: a group that is not (or no
+  // longer) yours stops Share instead, so nothing goes public by accident.
+  // Opened from a group's feed, the groups are read first.
+  const [groupsRead, setGroupsRead] = useState(feedGroupsOn !== null);
+  useEffect(() => {
+    if (!params.group || groupsRead) return;
+    let on = true;
+    void actions.loadFeedGroups().catch(() => undefined).finally(() => { if (on) setGroupsRead(true); });
+    return () => { on = false; };
+  }, [params.group]); // eslint-disable-line react-hooks/exhaustive-deps
+  const groupWaiting = !!shareTo && !groupsRead;
+  const groupGone = !!shareTo && groupsRead && !feedGroups.some((g) => g.id === shareTo);
   // A group post stays out of everything public: no map court, never offered for CourtSide's Instagram.
   const groupPost = !!shareTo;
   // The session being posted, held from the moment the page opens so a
@@ -288,7 +299,7 @@ export default function Compose() {
   // A quick second tap on Share would post it twice.
   const sent = useRef(false);
   const submit = () => {
-    if (!canSubmit || sent.current) return;
+    if (!canSubmit || groupWaiting || groupGone || sent.current) return;
     sent.current = true;
 
     if (mode === 'story' || mode === 'hit') {
@@ -565,7 +576,7 @@ export default function Compose() {
           title={mode === 'clip' || openedClip ? 'New clip' : mode === 'post' ? 'New post' : mode === 'story' ? 'New story' : 'New instant'}
           compactTitle
           onBack={() => (mode === 'hit' ? router.navigate('/hit') : opened && !media ? router.back() : setStage('edit'))}
-          right={<Button label={mode === 'story' || mode === 'hit' ? 'Post instant' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit} />}
+          right={<Button label={mode === 'story' || mode === 'hit' ? 'Post instant' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit || groupWaiting || groupGone} />}
         >
           <View style={mode === 'story' || mode === 'hit' ? styles.form : null}>
             {opened ? (
@@ -633,14 +644,16 @@ export default function Compose() {
                   </View>
                 ) : null}
                 {/* Share to: shown once you are in a group. Everyone is the default. */}
-                {feedGroups.length && !inChallenge ? (
+                {(feedGroups.length || shareTo) && !inChallenge ? (
                   <View style={styles.shareTo} accessibilityRole="radiogroup" accessibilityLabel="Share to">
                     <Text style={styles.shareToLabel}>Share to</Text>
                     <View style={styles.shareToChips}>
                       <Chip label="Everyone" selected={!shareTo} onPress={() => setShareTo(null)} />
                       {feedGroups.map((g) => <Chip key={g.id} label={g.name} selected={shareTo === g.id} onPress={() => setShareTo(g.id)} />)}
                     </View>
-                    {shareTo ? <Text style={styles.shareToNote}>Only people in {feedGroups.find((g) => g.id === shareTo)?.name ?? 'the group'} will see this.</Text> : null}
+                    {groupWaiting ? <Text style={styles.shareToNote}>Checking your groups…</Text>
+                      : groupGone ? <Text style={styles.shareToNote}>You're not in that group any more. Pick Everyone or one of your groups to share.</Text>
+                      : shareTo ? <Text style={styles.shareToNote}>Only people in {feedGroups.find((g) => g.id === shareTo)?.name ?? 'the group'} will see this.</Text> : null}
                   </View>
                 ) : null}
                 {/* One list of rows, the Settings rows' size without their card. */}
