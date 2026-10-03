@@ -12,7 +12,8 @@ import { CardStage } from '@/components/map/CardStage';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { milesBetween } from '@/features/players/geo';
 import { useMapModel } from '@/features/players/mapModel';
-import { askWhoSeesYou, canChooseVisibility } from '@/features/players/mapPrivacy';
+import { askWhoSeesYou, canChooseVisibility, onTeenMap } from '@/features/players/mapPrivacy';
+import { useOpenToHitToggle } from '@/features/players/useLocationToggle';
 import { askToHit } from '@/features/players/courtLink';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { useBarInset } from '@/features/navigation/barInset';
@@ -57,9 +58,14 @@ export function NearbyMap(props: NearbyMapProps) {
   const { theme, night } = useTheme();
   const insets = useSafeAreaInsets();
   const barInset = useBarInset();
-  const { followingIds, actions, mapLive, mapVisibility } = useApp();
+  const { followingIds, actions, mapLive, mapVisibility, teenMap } = useApp();
   // Who can see you on the map (migration 63): from your card and the location button, once there is a choice to make.
-  const choosing = canChooseVisibility(mapLive, me);
+  const choosing = canChooseVisibility(mapLive, me, teenMap);
+  // A teen (migration 78) is shared only with friends who follow them back, and with nobody until they say so.
+  const teen = onTeenMap(me, teenMap);
+  const hiddenMe = choosing && (mapVisibility === 'none' || (teen && mapVisibility == null));
+  // The "Open to hit today" switch on your card: a teen who never said who sees them is asked first.
+  const toggleOpen = useOpenToHitToggle();
   // Your own pin, tapped: the card with your open-to-hit switch.
   const [meOpen, setMeOpen] = useState(false);
   const openToHit = isOpenToHit(me);
@@ -242,8 +248,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const selectedCourtId = model.selectedCourt?.id ?? null;
   const selectedHitId = model.selectedHit?.hit.id ?? null;
   const markers = useMemo(
-    () => mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden: choosing && mapVisibility === 'none' }),
-    [model.courts, model.ringed, model.cardCourts, model.cardRinged, model.hits, shown, selectedId, selectedCourtId, selectedHitId, expanded, me, night, theme, openToHit, model.mePos, choosing, mapVisibility], // eslint-disable-line react-hooks/exhaustive-deps
+    () => mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden: hiddenMe }),
+    [model.courts, model.ringed, model.cardCourts, model.cardRinged, model.hits, shown, selectedId, selectedCourtId, selectedHitId, expanded, me, night, theme, openToHit, model.mePos, hiddenMe], // eslint-disable-line react-hooks/exhaustive-deps
   );
   // What "+N" pins look like, in this theme's colours.
   const tpl = useMemo(() => clusterTemplates(), [theme, night]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -317,7 +323,7 @@ export function NearbyMap(props: NearbyMapProps) {
           ) : stageKey === 'tray' ? (
             <NearbyRail items={model.tray} cityName={model.place ? model.place.name.split(',')[0] : cityName} selectedId={null} onSelect={model.select} weather={weather} query={model.query} filter={model.filter} courts={model.nearestCourts} onPickCourt={model.selectCourt} />
           ) : meOpen ? (
-            <YouSheet me={me} open={openToHit} onToggle={actions.setOpenToHit} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} seenBy={mapVisibility} onSeenBy={choosing ? () => { void askWhoSeesYou('manage'); } : undefined} />
+            <YouSheet me={me} open={openToHit} teen={teen} onToggle={(on) => { void toggleOpen(on); }} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} seenBy={mapVisibility} onSeenBy={choosing ? () => { void askWhoSeesYou('manage'); } : undefined} />
           ) : model.selected ? (
             <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onAskToHit={actions.canMessage(model.selected.user.id) ? () => askToHit([model.selected!.user.id]) : undefined} onAddToGroup={() => addToGroup(model.selected!.user.id)} onFollow={() => { const who = model.selected!.user; if (followingIds.includes(who.id)) confirmUnfollow(who, () => actions.toggleFollow(who.id)); else actions.toggleFollow(who.id); }} />
           ) : model.selectedCourt ? (

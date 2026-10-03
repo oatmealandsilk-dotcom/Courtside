@@ -36,7 +36,7 @@ const ACCESS: readonly string[] = ['public', 'members', 'pay', 'private'];
 export default function CourtNowSheet() {
   const styles = useThemedStyles(styleDefinitions);
   const params = useLocalSearchParams<{ id?: string; name?: string; access?: string }>();
-  const { actions, courtNow, courtFacts, users, currentUser, currentUserId, locationEnabled, mapLive, mapVisibility } = useApp();
+  const { actions, courtNow, courtFacts, users, currentUser, currentUserId, locationEnabled, mapLive, mapVisibility, teenMap } = useApp();
   const courtId = isMapCourtId(params.id) ? params.id : null;
   const name = params.name?.trim() || 'This court';
   const [closeSignal, setCloseSignal] = useState(0);
@@ -55,7 +55,7 @@ export default function CourtNowSheet() {
   // Nor does anyone at a club's or someone's home court.
   const canCheckIn = !!currentUser && !notKnownAdult(currentUser) && access !== 'members' && access !== 'private';
   // Who sees you here follows who can see you on the map, once you have said (migration 63).
-  const seenBy = canChooseVisibility(mapLive, currentUser) ? mapVisibility ?? null : null;
+  const seenBy = canChooseVisibility(mapLive, currentUser, teenMap) ? mapVisibility ?? null : null;
   const hereNote = !locationEnabled ? 'Turn on Location to check in.'
     : seenBy === 'none' ? 'You chose Only me on the map, so no one sees you here.'
       : seenBy === 'nearby' ? 'For 2 hours. Players nearby see you on this court.'

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { MapVisibility } from '@/data/types';
 import { useApp } from '@/store/AppContext';
 import { show as showToast } from '@/lib/toast';
-import { askWhoSeesYou, canChooseVisibility, dismissHideTip, showHideTip, type TipSpot } from '@/features/players/mapPrivacy';
+import { askWhoSeesYou, canChooseVisibility, dismissHideTip, onTeenMap, showHideTip, type TipSpot } from '@/features/players/mapPrivacy';
 
 /**
  * The map's Location switch. Turning it on asks the device where it is,
@@ -16,11 +16,16 @@ import { askWhoSeesYou, canChooseVisibility, dismissHideTip, showHideTip, type T
  * button: "Tap here any time to hide yourself." `where` says which button
  * that is. On the full map, the button with Location on opens the same
  * choices (and Location off) rather than switching straight off.
+ *
+ * A teen (migration 78) is asked the same question the first time, with a
+ * short notice on top: only friends who follow them back can see where they
+ * are, and turning Location off here hides them. Nothing is shared until
+ * they answer.
  */
 export function useLocationToggle(where: TipSpot = 'card') {
-  const { locationEnabled, actions, mapLive, mapVisibility, currentUser } = useApp();
+  const { locationEnabled, actions, mapLive, mapVisibility, currentUser, teenMap } = useApp();
   const [locating, setLocating] = useState(false);
-  const choosing = canChooseVisibility(mapLive, currentUser);
+  const choosing = canChooseVisibility(mapLive, currentUser, teenMap);
   /** Never chosen who can see you: the screen comes first. */
   const mustChoose = choosing && mapVisibility === null;
 
@@ -65,4 +70,22 @@ export function useLocationToggle(where: TipSpot = 'card') {
   };
 
   return { locationOn: locationEnabled, locating, toggle, mustChoose, chooseFirst };
+}
+
+/**
+ * The "Open to hit today" switch (Who's up today, your card on the map).
+ * Someone not known to be an adult who has never said who can see them on
+ * the map (migration 78) gets the same question first, with its short
+ * notice, so their ring is never shared before they choose; closed without
+ * an answer, the switch stays off. Everyone else: straight through.
+ */
+export function useOpenToHitToggle() {
+  const { actions, mapLive, mapVisibility, currentUser, teenMap } = useApp();
+  return async (on: boolean) => {
+    if (on && mapLive === true && mapVisibility === null && onTeenMap(currentUser, teenMap)) {
+      const chose = await askWhoSeesYou('first');
+      if (!chose) return;
+    }
+    actions.setOpenToHit(on);
+  };
 }

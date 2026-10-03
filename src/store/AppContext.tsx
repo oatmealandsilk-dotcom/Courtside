@@ -31,7 +31,7 @@ import { appleHealthAvailable, connectAppleHealth, readAppleHealth, readAppleNut
 import { isTracker, tennisFlags, TRACKERS } from '@/features/activity/flags';
 import { checkForTennis } from '@/features/activity/check';
 import { pickSource } from '@/features/activity/recent';
-import { MAX_SESSION_TAGS, REFUSALS, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
+import { REFUSALS, maxTagsFor, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
 import { duration } from '@/lib/format';
 import { takeReferrer } from '@/features/invite/referral';
 import { endOfToday } from '@/features/players/openToHit';
@@ -48,6 +48,7 @@ import { anyUploading, cancelUpload, finishUpload, holdQuietUpload, setUploadPro
 import { requestFeedRefresh } from '@/features/feed/feedBus';
 import { blockDevice, groupFor, rememberAnswered, yearsOld, type AgeGroup } from '@/features/age/ageCheck';
 import { knownOpen, notKnownAdult, type AgeSource, type Openness, type OpennessMap } from '@/features/players/age';
+import type { TeenMap } from '@/features/players/mapPrivacy';
 import { show as showToast } from '@/lib/toast';
 import { opensAtFor } from '@/features/hits/audience';
 import { forgetPushToken } from '@/features/push/push';
@@ -401,6 +402,13 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
   mapLive: boolean | null;
   /** Your answer to "Who can see you on the map?": null never chosen; undefined not known (or a database before 63). */
   mapVisibility: MapVisibility | null | undefined;
+  /**
+   * The map's teen rule (migration 78), for an account not known to be an
+   * adult: 'off' until the database has it (on the map only adults, as
+   * before), 'on' (shared only between friends who follow each other), or
+   * 'under16' (never on the map).
+   */
+  teenMap: TeenMap;
   /** New on CourtSide as the server lists it for you (migration 63), newest first; null until asked, or before 63. */
   newOnCourtside: { userId: ID; joinedAt: string }[] | null;
   /** Open "Looking for a hit" posts. */
@@ -973,6 +981,25 @@ function foldChatInto(prev: AppState, from: ID, to: ID): AppState {
 const cleanTitle = (title?: string) => (title ?? '').replace(/\s+/g, ' ').trim().slice(0, 60).trim() || undefined;
 
 /** A group function's answer that is a refusal rather than the chat's id. */
+/**
+ * "Up for a hit today" as the map told it (map_players' open_until) laid
+ * onto the people it is about. A teen's ring is never on their public
+ * profile (migration 78): the map, which shows it only to friends who
+ * follow each other with them, is the one place it comes from, so the pin,
+ * the card and Who's up today all light up from here. Unchanged people keep
+ * their objects (and nothing redraws when nobody changed).
+ */
+function withMapRings(users: User[], seen: Record<ID, LastSeen>, me: ID | null): User[] {
+  let changed = false;
+  const next = users.map((u) => {
+    const until = u.id === me ? undefined : seen[u.id]?.openUntil;
+    if (!until || (u.openToHitUntil && u.openToHitUntil >= until)) return u;
+    changed = true;
+    return { ...u, openToHitUntil: until };
+  });
+  return changed ? next : users;
+}
+
 const isRefusal = (result: string): result is GroupRefusal | 'failed' => ['blocked', 'teen', 'full', 'not-admin', 'failed'].includes(result);
 
 // In a browser, WHOOP's tennis sign-in (and Fitbit's, Oura's or Polar's) comes
@@ -1264,6 +1291,8 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       // The settings row carries map_visibility only once migration 63 has run: its key says the map's round 2 is live.
       mapVisibility: data.userState && data.userState.mapVisibility !== undefined ? data.userState.mapVisibility : prev.mapVisibility,
       mapLive: data.userState && data.userState.mapVisibility !== undefined ? true : prev.mapLive,
+      // The settings row carries map_answered_at only once migration 78 has run.
+      teenMap: data.userState?.teenMap ?? (data.userState ? 'off' : prev.teenMap),
       prefs: data.userState
         ? {
           showActivity: data.userState.showActivity, pushLikes: data.userState.pushLikes, pushCoach: data.userState.pushCoach, pushMessages: data.userState.pushMessages ?? true, pushActivity: data.userState.pushActivity ?? true,
@@ -1428,6 +1457,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     lastSeenLoaded: false,
     mapLive: isSupabaseConfigured ? null : true,
     mapVisibility: isSupabaseConfigured ? undefined : readDemoVisibility(),
+    teenMap: isSupabaseConfigured ? 'off' : 'on',
     newOnCourtside: null,
     ...emptyCourtLife,
     ...emptyFeedGroups,
@@ -2221,7 +2251,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (isSupabaseConfigured) void forgetPushToken().finally(() => remoteAuth.signOut());
     // One account's health (its tracker sessions too) never carries over to the next one signed in.
     // Nor do its courts: who it follows, what it said, where it checked in.
-    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [], ...emptyCourtLife, ...emptyFeedGroups, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null, mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility }));
+    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [], ...emptyCourtLife, ...emptyFeedGroups, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null, mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility, teenMap: isSupabaseConfigured ? 'off' : prev.teenMap }));
   }, []);
 
   const patchCurrentUser = useCallback(
@@ -2404,7 +2434,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     else if (view) seenInView.current = loaded;
     else seenAround.current = loaded;
     const merged = { ...seenAround.current, ...seenInView.current };
-    setState((prev) => ({ ...prev, lastSeen: merged, lastSeenLoaded: true }));
+    setState((prev) => ({ ...prev, lastSeen: merged, lastSeenLoaded: true, users: withMapRings(prev.users, merged, me) }));
   }, []);
 
   const setMapVisibility = useCallback(async (v: MapVisibility): Promise<boolean> => {
@@ -2612,9 +2642,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (live(me) && !s.sessionTagsReady) return players.map((p) => ({ id: p.id, why: tagWords('other') }));
     if (session.fromSessionId) return players.map((p) => ({ id: p.id, why: tagWords('copy') }));
     const mine = tagsOnSession(s.sessionTags, sessionId, me, true);
-    const wanted = new Map(players.slice(0, MAX_SESSION_TAGS).map((p) => [p.id, roleOn(session.kind, p.role)]));
-    const refused: { id: ID; why: string }[] = players.slice(MAX_SESSION_TAGS).map((p) => ({ id: p.id, why: tagWords('too_many') }));
-    // Taken out first, so the three places have room; then sides changed; then the new people.
+    const room = maxTagsFor(session.kind);
+    const wanted = new Map(players.slice(0, room).map((p) => [p.id, roleOn(session.kind, p.role)]));
+    const refused: { id: ID; why: string }[] = players.slice(room).map((p) => ({ id: p.id, why: tagWords('too_many') }));
+    // Taken out first, so there is room; then sides changed; then the new people.
     const drop = mine.filter((t) => isActive(t) && !wanted.has(t.taggedId));
     // Someone switched to the other side of the net after saying yes is asked again (the server does the same).
     const turn = mine.filter((t) => isActive(t) && wanted.has(t.taggedId) && wanted.get(t.taggedId) !== t.role);

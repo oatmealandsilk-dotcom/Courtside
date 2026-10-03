@@ -59,8 +59,12 @@ export function useUpToday({ users, lastSeen, me, from, blockedIds }: { users: U
  * your card on the map; it never turns Location on), then a face for each
  * player near you who is up today, with how far and how long ago. A face
  * opens the map on them, their card up.
+ *
+ * For a teen (migration 78) it is the same row, between friends only: the
+ * faces are friends who follow each other with them, and their own ring is
+ * seen only by those friends; the words say so.
  */
-export function UpToday({ me, people, locationOn, onLocation, onToggle }: { me: User; people: Up[]; locationOn: boolean; /** No spot of yours yet: the way to give one. */ onLocation?: () => void; onToggle: (on: boolean) => void }) {
+export function UpToday({ me, people, teen = false, locationOn, onLocation, onToggle }: { me: User; people: Up[]; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** No spot of yours yet: the way to give one. */ onLocation?: () => void; onToggle: (on: boolean) => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const up = isOpenToHit(me);
   const flip = () => {
@@ -68,7 +72,7 @@ export function UpToday({ me, people, locationOn, onLocation, onToggle }: { me: 
     haptics.tap();
     onToggle(next);
     // Up, but not on the map: say so, and leave Location to them.
-    if (next && !locationOn) showToast({ title: 'You’re up today', body: 'Turn on Location to show on the map.', icon: 'navigate-outline' });
+    if (next && !locationOn) showToast({ title: 'You’re up today', body: teen ? 'Turn on Location to show your friends who follow you back.' : 'Turn on Location to show on the map.', icon: 'navigate-outline' });
   };
   return (
     <View style={styles.wrap}>
@@ -98,10 +102,11 @@ export function UpToday({ me, people, locationOn, onLocation, onToggle }: { me: 
           <View style={styles.empty}>
             {onLocation ? (
               <Pressable accessibilityRole="button" onPress={onLocation} hitSlop={6} style={({ pressed }) => pressed && styles.pressed}>
-                <Text style={styles.emptyText}>See who’s up near you.</Text>
+                <Text style={styles.emptyText}>{teen ? 'See which friends are up.' : 'See who’s up near you.'}</Text>
                 <Text style={styles.emptyLink}>Turn on Location</Text>
+                {teen ? <Text style={styles.emptyNote}>Only friends who follow you back see you.</Text> : null}
               </Pressable>
-            ) : <Text style={styles.emptyText}>No one near you yet today.</Text>}
+            ) : <Text style={styles.emptyText}>{teen ? 'No friends up near you yet today.' : 'No one near you yet today.'}</Text>}
           </View>
         ) : null}
       </ScrollView>
@@ -128,4 +133,5 @@ const styleDefinitions = StyleSheet.create({
   empty: { justifyContent: 'center', height: FACE + 18, paddingLeft: spacing.sm, maxWidth: 210 },
   emptyText: { ...typography.small, color: colors.textMuted },
   emptyLink: { ...typography.smallStrong, color: colors.brand, marginTop: 2 },
+  emptyNote: { ...typography.caption, letterSpacing: 0, color: colors.textMuted, marginTop: 2 },
 });

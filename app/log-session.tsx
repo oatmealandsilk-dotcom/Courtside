@@ -54,8 +54,8 @@ const KINDS: { value: PracticeSession['kind']; label: string }[] = [
  * the one logged, with its own day and length, and the hit fills in the
  * rest, so one game is never logged twice.
  *
- * "Who you played" (a match or a practice) tags CourtSide players, up to
- * three, each asked to accept before their name shows on a post; a name
+ * "Who was there" (a match or a practice) tags CourtSide players, up to
+ * 3 on a match or 8 on a practice, each asked to accept before their name shows on a post; a name
  * typed that isn't on CourtSide stays private, as before (migration 62).
  * From a hit, its people are offered first. Opened on a session already
  * logged (?edit=, a row in Your sessions), the sheet is that part alone, so
@@ -293,9 +293,9 @@ function LogSession() {
   });
 
   const header = editing ? (
-    <SheetTitle title="Who you played" line={`${loggedLabel(editing)} · ${dayWords(editing.day)} · ${duration(editing.minutes)}`} onClose={close} />
+    <SheetTitle title="Who was there" line={`${loggedLabel(editing)} · ${dayWords(editing.day)} · ${duration(editing.minutes)}`} onClose={close} />
   ) : edit ? (
-    <SheetTitle title="Who you played" onClose={close} />
+    <SheetTitle title="Who was there" onClose={close} />
   ) : waiting ? (
     <SheetTitle title="Log your tennis" onClose={close} />
   ) : fresh ? (
@@ -440,7 +440,7 @@ function LogSession() {
             </Section>
           ) : null}
           {canTagKind(kind) ? (
-            <Section title="Who you played">
+            <Section title="Who was there">
               <WhoYouPlayed
                 kind={kind}
                 players={players}

@@ -23,7 +23,7 @@ import { demoLastSeen } from './mock/presence';
 import { DEMO_FOLLOWING, DEMO_MAP_ALERTS } from './mock/courtLife';
 import { demoSessionTagNotifications, demoSessionTags, demoSessions } from './mock/sessions';
 import { supabase } from '@/lib/supabase';
-import { MAX_SESSION_TAGS, canTagKind, isActive, isClosed, mirrorCopy } from '@/features/activity/sessionTags';
+import { canTagKind, isActive, isClosed, maxTagsFor, mirrorCopy } from '@/features/activity/sessionTags';
 import type {
   Achievement,
   Answer,
@@ -198,7 +198,7 @@ export async function tagSession({ me, session, who, role, tags, refusal, newId 
     if (!isActive(there)) throw new Error('declined');
     return there.id;
   }
-  if (on.filter(isActive).length >= MAX_SESSION_TAGS) throw new Error('too_many');
+  if (on.filter(isActive).length >= maxTagsFor(session.kind)) throw new Error('too_many');
   if (tags.filter((t) => t.taggerId === me && Date.now() - Date.parse(t.createdAt) < 86_400_000).length >= 30) throw new Error('rate_limited');
   return newId;
 }
@@ -224,7 +224,7 @@ export async function respondSessionTag({ me, tag, accept, addToMine, sessions, 
   if (!accept) return null;
   if (isClosed(tag)) throw new Error('removed');
   if (!canTagKind(tag.kind)) throw new Error('not_a_match_or_practice');
-  if (tag.status === 'declined' && tags.filter((t) => t.sessionId === tag.sessionId && t.id !== tag.id && isActive(t)).length >= MAX_SESSION_TAGS) throw new Error('too_many');
+  if (tag.status === 'declined' && tags.filter((t) => t.sessionId === tag.sessionId && t.id !== tag.id && isActive(t)).length >= maxTagsFor(tag.kind)) throw new Error('too_many');
   const have = sessions.some((s) => s.userId === me && (s.id === tag.mirroredSessionId || s.fromSessionId === tag.sessionId));
   if (!have && !addToMine) return null;
   return clone(mirrorCopy({ me, tag, sessions, taggerName, newId }));

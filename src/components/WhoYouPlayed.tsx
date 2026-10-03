@@ -4,7 +4,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Field } from '@/components/ui';
 import type { ID, PracticeSession, SessionPlayer, SessionTagStatus, User } from '@/data/types';
-import { MAX_SESSION_TAGS, flipRole, nameFor, nextRole, refusalWords, rolesForMatch } from '@/features/activity/sessionTags';
+import { flipRole, maxTagsFor, nameFor, nextRole, refusalWords, rolesForMatch } from '@/features/activity/sessionTags';
 import { useMentionCandidates, type MentionCandidate } from '@/features/mentions/useMentionCandidates';
 import * as haptics from '@/lib/haptics';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
@@ -19,10 +19,11 @@ const LISTED_TYPING = 3;
 const firstName = (u: User) => u.name.trim().split(/\s+/)[0] || u.handle;
 
 /**
- * "Who you played", on the log sheet: one box for the people you played with
- * or against. Typing finds CourtSide players with the same search as Tag
- * players on a post (people you follow first, then your followers); a tap
- * picks one, up to three (a doubles partner and two opponents), and in a
+ * "Who was there", on the log sheet and on a session's post: one box for the
+ * people you played with or against. Typing finds CourtSide players with the
+ * same search as Tag people on a post (people you follow first, then your
+ * followers); a tap picks one, up to 3 on a match (a doubles partner and two
+ * opponents) or 8 on a practice (a group, migration 77), and in a
  * match each says which side of the net they were on ("vs" or "with", a tap
  * to switch). Whatever is left typed in the box is a name that isn't on
  * CourtSide: it stays in your log, for your eyes only, as it always has.
@@ -32,7 +33,7 @@ const firstName = (u: User) => u.name.trim().split(/\s+/)[0] || u.handle;
  * first. Before the server can tag (`search` off), it is the free-text box alone.
  *
  * Opened again on a session already logged (`status`), each person says
- * where their tag stands: waiting, or accepted (a tick; their side is fixed,
+ * where their tag stands: asked (quietly), or accepted (a tick; their side is fixed,
  * since that is what they said yes to: take them off and tag them again to
  * change it). Someone who said no, or took their name off, shows as "Said
  * no" or "Removed"; × takes them off your log, and they are still never
@@ -70,7 +71,7 @@ export function WhoYouPlayed({ kind, players, onPlayers, text, onText, search, s
   const closing = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (closing.current) clearTimeout(closing.current); }, []);
   const match = kind === 'match';
-  const full = players.length >= MAX_SESSION_TAGS;
+  const full = players.length >= maxTagsFor(kind);
   const picked = new Set(players.map((p) => p.id));
   const userOf = (id: ID) => users.find((u) => u.id === id);
   // Accepted: their side is what they said yes to, so it is not switched here.
@@ -183,7 +184,7 @@ export function WhoYouPlayed({ kind, players, onPlayers, text, onText, search, s
                 <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={26} />
                 <Text style={styles.chipName} numberOfLines={1}>{firstName(u)}</Text>
                 {state === 'accepted' ? <Ionicons name="checkmark-circle" size={15} color={colors.brand} accessibilityLabel="Accepted" />
-                  : state === 'pending' ? <Text style={styles.chipState}>Waiting</Text> : null}
+                  : state === 'pending' ? <Text style={styles.chipState}>Asked</Text> : null}
                 <Pressable accessibilityRole="button" accessibilityLabel={`Take ${firstName(u)} off`} hitSlop={8} onPress={() => remove(p.id)} style={({ pressed }) => [styles.chipX, pressed && styles.pressed]}>
                   <Ionicons name="close" size={14} color={colors.textMuted} />
                 </Pressable>
@@ -217,7 +218,7 @@ export function WhoYouPlayed({ kind, players, onPlayers, text, onText, search, s
         value={text}
         onChangeText={(t) => { setNote(''); onText(t); }}
         placeholder={placeholder}
-        accessibilityLabel={search ? 'Who you played: search CourtSide players or type a name' : placeholder}
+        accessibilityLabel={search ? 'Who was there: search CourtSide players or type a name' : placeholder}
         autoCapitalize="words"
         autoCorrect={false}
         onFocus={() => { if (closing.current) clearTimeout(closing.current); setFocused(true); reveal(block.current); }}
@@ -280,7 +281,7 @@ export function WhoYouPlayed({ kind, players, onPlayers, text, onText, search, s
       ) : null}
 
       {note ? <Text style={styles.note}>{note}</Text>
-        : players.some((p) => status[p.id] !== 'accepted') ? <Text style={styles.hint}>Their name shows on posts once they accept.</Text>
+        : players.some((p) => status[p.id] !== 'accepted') ? <Text style={styles.hint}>Everyone here is asked to accept. Their name shows on the post once they do.</Text>
         : null}
     </View>
   );
