@@ -102,17 +102,20 @@ export interface TileRect { x: number; y: number; w: number; h: number }
 
 /**
  * A photo message's pictures, the way iMessage and Instagram lay them out,
- * with rounded corners like the bubbles (the last of a run keeps the small
- * tail corner). While they go up, a ring fills over them; if they could not
+ * with rounded corners like the bubbles (small on the sender's side where
+ * they join the message above or below, or their own caption). While they go up, a ring fills over them; if they could not
  * be sent, a small mark says so (the retry is under the bubble). A tap on a
  * photo says which one and where it sits, so full screen can grow out of it.
  */
-export function PhotoStack({ photos, width = PHOTO_W, mine, tail, progress, failed, idKey, sentAt, onTile, onHold }: {
+export function PhotoStack({ photos, width = PHOTO_W, mine, tail, joinTop = false, progress, failed, idKey, sentAt, onTile, onHold }: {
   photos: ChatPhoto[];
   /** How wide they sit; narrower on a small phone. */
   width?: number;
   mine: boolean;
+  /** Joined to what is below (its caption, or the next message in a run): the corner below on the sender's side is small. */
   tail: boolean;
+  /** Joined to the message above it in a run: the corner on the sender's side is small there too. */
+  joinTop?: boolean;
   /** 0 to 1 while going up; null otherwise. */
   progress: number | null;
   failed?: boolean;
@@ -140,7 +143,7 @@ export function PhotoStack({ photos, width = PHOTO_W, mine, tail, progress, fail
   };
   return (
     <View
-      style={[styles.stack, { width, height }, tail && (mine ? styles.tailMine : styles.tailTheirs)]}
+      style={[styles.stack, { width, height }, tail && (mine ? styles.tailMine : styles.tailTheirs), joinTop && (mine ? styles.joinMine : styles.joinTheirs)]}
       accessibilityLabel={photos.length > 1 ? `${photos.length} photos` : 'Photo'}
     >
       {tiles.map((t, i) => (
@@ -399,6 +402,8 @@ const styleDefinitions = StyleSheet.create({
   stack: { borderRadius: ROUND, overflow: 'hidden', backgroundColor: colors.bg },
   tailMine: { borderBottomRightRadius: 6 },
   tailTheirs: { borderBottomLeftRadius: 6 },
+  joinMine: { borderTopRightRadius: 6 },
+  joinTheirs: { borderTopLeftRadius: 6 },
   tile: { position: 'absolute', overflow: 'hidden', backgroundColor: colors.surfaceAlt },
   tilePressed: { opacity: 0.88 },
   more: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.42)', alignItems: 'center', justifyContent: 'center' },

@@ -20,6 +20,7 @@ export const darkColors: Palette = {
   hard: '#7FA9C4', grass: '#86B393', info: '#7FA9C4', success: '#6FB483', warning: '#D2B36A', danger: '#D97F73',
   open: '#4FD487',
   overlay: 'rgba(0, 0, 0, 0.65)',
+  link: '#8EBEDD', onMedia: '#FFFFFF',
 };
 
 /**
@@ -35,6 +36,7 @@ const cleanColors: Palette = {
   hard: '#2C6885', grass: '#477F50', info: '#2C6885', success: '#2C7446', warning: '#806311', danger: '#B93129',
   open: '#17803F',
   overlay: 'rgba(15, 20, 25, 0.5)',
+  link: '#1B6699', onMedia: '#FFFFFF',
 };
 
 /**
@@ -48,6 +50,7 @@ const aoColors: Palette = {
   hard: '#2E85BF', grass: '#4E8A57', info: '#3979AF', success: '#2A7F60', warning: '#9C7016', danger: '#B8463F',
   open: '#1A8147',
   overlay: 'rgba(7, 26, 42, 0.58)',
+  link: '#1F64A0', onMedia: '#FFFFFF',
 };
 
 /**
@@ -62,6 +65,7 @@ const rolandGarrosColors: Palette = {
   hard: '#3E6982', grass: '#1F5F3F', info: '#3E6982', success: '#1F5F3F', warning: '#9A6718', danger: '#9E432E',
   open: '#1A8147',
   overlay: 'rgba(46, 22, 12, 0.58)',
+  link: '#2F6587', onMedia: '#FFFFFF',
 };
 
 /**
@@ -75,6 +79,7 @@ const wimbledonColors: Palette = {
   hard: '#4F2683', grass: '#4E8A4A', info: '#4F2683', success: '#256B3A', warning: '#8A6A19', danger: '#943634',
   open: '#1A8147',
   overlay: 'rgba(14, 26, 16, 0.55)',
+  link: '#245E93', onMedia: '#FFFFFF',
 };
 
 /**
@@ -90,6 +95,7 @@ const usOpenColors: Palette = {
   // The one green on this court, kept for Open to hit: the ring a player wears reads as green, as promised.
   open: '#4FD487',
   overlay: 'rgba(4, 12, 22, 0.7)',
+  link: '#A4CCF4', onMedia: '#FFFFFF',
 };
 
 export type ThemeName = 'default' | 'clean' | 'night' | 'ao' | 'roland-garros' | 'wimbledon' | 'us-open';

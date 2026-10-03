@@ -37,15 +37,21 @@ export function chatTime(iso: string): string {
 
 /** A time line in a chat: "Today 2:14 PM", "Yesterday 9:03 AM", "Mon 4:20 PM" this week, else the date and time. */
 export function chatStamp(iso: string, now: Date = new Date()): string {
+  const { day, time } = chatStampParts(iso, now);
+  return /\d/.test(day) ? `${day}, ${time}` : `${day} ${time}`;
+}
+
+/** A chat's time line in its two parts, the day ("Today", "Mon", "Sep 25") and the time ("2:14 PM"), for the day to be set a little stronger. */
+export function chatStampParts(iso: string, now: Date = new Date()): { day: string; time: string } {
   const when = new Date(iso);
   const time = when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const days = Math.round((startOf(now) - startOf(when)) / 86_400_000);
-  if (days === 0) return `Today ${time}`;
-  if (days === 1) return `Yesterday ${time}`;
-  if (days < 7) return `${when.toLocaleDateString(undefined, { weekday: 'short' })} ${time}`;
+  if (days === 0) return { day: 'Today', time };
+  if (days === 1) return { day: 'Yesterday', time };
+  if (days < 7) return { day: when.toLocaleDateString(undefined, { weekday: 'short' }), time };
   const sameYear = when.getFullYear() === now.getFullYear();
-  return `${when.toLocaleDateString(undefined, sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' })}, ${time}`;
+  return { day: when.toLocaleDateString(undefined, sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' }), time };
 }
 
 export function compactNumber(value: number): string {

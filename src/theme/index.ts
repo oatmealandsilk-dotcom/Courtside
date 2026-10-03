@@ -11,6 +11,11 @@ export const lightColors = {
   // fresher green than the brand, so it reads as "up for it now" on every court, New York's included.
   open: '#1A8147',
   overlay: 'rgba(24, 32, 27, 0.5)',
+  // A web address in someone's message: its own slot (info shares a value with hard here, so a
+  // style asking for info was handed hard on some courts), at least 4.5:1 on the bubbles of every court.
+  link: '#2B6688',
+  // A mark laid over a photo (the play button on a video's picture): white on every court.
+  onMedia: '#FFFFFF',
 } as const;
 
 export const colors: Record<keyof typeof lightColors, string> = { ...lightColors };

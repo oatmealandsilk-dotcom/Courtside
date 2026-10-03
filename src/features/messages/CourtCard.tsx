@@ -38,16 +38,18 @@ export function courtLine(place: NonNullable<Message['place']>, from?: LatLng | 
  * A court sent in a chat: a still map of the spot with the court's badge on
  * it, the court's name, a quiet line under it, and "See the court". The
  * whole card opens the court's page. Sent and received look the same; the
- * row puts yours on the right. Its corners match the chat's bubbles, the
- * last of a run keeping the small tail corner.
+ * row puts yours on the right. Its corners match the chat's bubbles: small
+ * on the sender's side where it joins the message above or below in a run.
  */
-export function CourtCard({ place, width = COURT_CARD_W, mine, tail, from, sentAt, onPress, onLongPress }: {
+export function CourtCard({ place, width = COURT_CARD_W, mine, tail, joinTop = false, from, sentAt, onPress, onLongPress }: {
   place: NonNullable<Message['place']>;
   /** Narrower on a small phone; the map is drawn at this width. */
   width?: number;
   mine: boolean;
-  /** Last of a run of messages from the same person: the tail corner, like a bubble. */
+  /** Joined to the next message, the same person's moments later: the corner below on the sender's side is small, like a bubble's. */
   tail: boolean;
+  /** Joined to the message above it in a run: the corner on the sender's side is small there too. */
+  joinTop?: boolean;
   /** Where you are, when the app knows (for the distance). */
   from?: LatLng | null;
   /** When it was sent ("9:41 AM"), for a screen reader. */
@@ -66,7 +68,7 @@ export function CourtCard({ place, width = COURT_CARD_W, mine, tail, from, sentA
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={320}
-      style={[styles.card, { width }, tail && (mine ? styles.tailMine : styles.tailTheirs)]}
+      style={[styles.card, { width }, tail && (mine ? styles.tailMine : styles.tailTheirs), joinTop && (mine ? styles.joinMine : styles.joinTheirs)]}
     >
       <View style={styles.map}>
         <CourtMapThumb lat={place.lat} lng={place.lng} width={width - 2} height={MAP_H} />
@@ -99,6 +101,8 @@ const styleDefinitions = StyleSheet.create({
   },
   tailMine: { borderBottomRightRadius: 6 },
   tailTheirs: { borderBottomLeftRadius: 6 },
+  joinMine: { borderTopRightRadius: 6 },
+  joinTheirs: { borderTopLeftRadius: 6 },
   map: { height: MAP_H, backgroundColor: colors.bgElevated, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   pinWrap: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   halo: { position: 'absolute', width: 46, height: 46, borderRadius: 23, backgroundColor: `${colors.court}33` },

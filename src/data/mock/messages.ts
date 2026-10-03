@@ -74,6 +74,26 @@ export const messages: Message[] = [
     createdAt: isoDaysAgo(0, 2),
     kind: 'text',
   },
+  {
+    // Words with a link in them: the link lights up in the bubble and its card sits under it.
+    id: 'm-june-2',
+    conversationId: 'cv-june',
+    senderId: 'u-june',
+    body: 'You can book it here before someone grabs it: www.laparks.org/tennis',
+    createdAt: isoDaysAgo(0, 2),
+    kind: 'text',
+  },
+
+  {
+    // A bare link, the way most links arrive: the chat shows it as a preview
+    // card (the demo's previews are in src/data/mock/linkPreviews.ts).
+    id: 'm-sam-1',
+    conversationId: 'cv-sam',
+    senderId: 'u-sam',
+    body: 'https://www.tiktok.com/@clayseason/video/7421503318874521902',
+    createdAt: minutesAgo(38),
+    kind: 'text',
+  },
 
   {
     id: 'm-tomas-1',
@@ -210,11 +230,18 @@ export const conversations: Conversation[] = [
     unreadCount: 1,
   },
   {
+    id: 'cv-sam',
+    participantIds: [CURRENT_USER_ID, 'u-sam'],
+    messageIds: ['m-sam-1'],
+    updatedAt: minutesAgo(38),
+    unreadCount: 1,
+  },
+  {
     id: 'cv-june',
     participantIds: [CURRENT_USER_ID, 'u-june'],
-    messageIds: ['m-june-1'],
+    messageIds: ['m-june-1', 'm-june-2'],
     updatedAt: isoDaysAgo(0, 2),
-    unreadCount: 1,
+    unreadCount: 2,
   },
   {
     id: 'cv-dev',

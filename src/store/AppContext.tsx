@@ -51,6 +51,7 @@ import { forgetPushToken } from '@/features/push/push';
 import { framesAt } from '@/features/compose/frames';
 import { noteStep, reportError } from '@/lib/crashReporting';
 import { emptyCourtLife, useCourtLife, type CourtLifeActions, type CourtLifeState } from '@/store/courtLife';
+import { forgetLinkPreviews } from '@/features/messages/linkPreview';
 import type {
   DailyHealth,
   DetectedActivity,
@@ -1856,6 +1857,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const linkGoogle = useCallback(() => remoteAuth.linkGoogle(), []);
   const signOutEverywhere = useCallback(async () => {
     const me = stateRef.current.currentUserId;
+    void forgetLinkPreviews();
     if (isSupabaseConfigured) await remoteAuth.signOutEverywhere();
     // Everywhere includes this device: the remembered login is gone too.
     const savedAccounts = me ? await forgetAccount(me) : stateRef.current.savedAccounts;
@@ -1865,6 +1867,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const switchAccount = useCallback(async (id: ID) => {
     const saved = stateRef.current.savedAccounts.find((a) => a.id === id);
     if (!saved) throw new Error('That account is not saved on this device.');
+    // One account's chat link cards never show for the next.
+    void forgetLinkPreviews();
     let session;
     try {
       session = await remoteAuth.resumeAccount(saved.refreshToken);
@@ -1883,6 +1887,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
   const deleteAccount = useCallback(async () => {
     const me = stateRef.current.currentUserId;
+    void forgetLinkPreviews();
     if (isSupabaseConfigured) await remoteAuth.deleteAccount();
     // A deleted account has no business in the remembered-logins list.
     const savedAccounts = me ? await forgetAccount(me) : stateRef.current.savedAccounts;
@@ -1926,6 +1931,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Nothing of this account stays on the device for the next person.
     const leaving = stateRef.current.currentUserId;
     if (leaving) void clearSnapshot(leaving);
+    // Nor the cards of the links in its chats.
+    void forgetLinkPreviews();
     // This phone stops getting the account's alerts before the session ends (the removal needs it).
     if (isSupabaseConfigured) void forgetPushToken().finally(() => remoteAuth.signOut());
     // One account's health (its tracker sessions too) never carries over to the next one signed in.
