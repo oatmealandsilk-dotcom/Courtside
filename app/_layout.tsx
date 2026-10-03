@@ -102,6 +102,8 @@ export default function RootLayout() {
           />
           {/* "Add to a group" from a profile or the map: a sheet that brings its own rise (DragSheet). */}
           <Stack.Screen name="pick-group" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+          {/* The Feed's "+": find a group to join, or start one; a sheet over the feed (DragSheet). */}
+          <Stack.Screen name="find-groups" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           {/* "Start a group" and a group's "Edit": a sheet over the Groups list or the group's page (DragSheet). */}
           <Stack.Screen name="group-form" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           {/* "Send a court" from a chat: a sheet over the chat, so the chat (and its message bar) never moves under it. */}

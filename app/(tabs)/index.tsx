@@ -1756,7 +1756,7 @@ function GroupedFeed() {
           groups={feedGroups}
           selected={groupId}
           onSelect={(next) => { if (next !== groupId) { haptics.tap(); setGroupId(next); } }}
-          onPlus={() => router.push('/groups')}
+          onPlus={() => router.push('/find-groups')}
           onPicture={chrome.picture}
           hidden={chrome.hidden}
           waiting={waiting}

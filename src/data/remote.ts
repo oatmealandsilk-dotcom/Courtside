@@ -20,7 +20,7 @@ import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Story, Tip, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard } from './types';
+import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Story, Tip, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
 import { isMapCourtId } from '@/features/places/courtName';
@@ -928,9 +928,9 @@ const MIGRATION_FOR: Record<string, string> = {
 const missingColumnsNote = (cols: string[]) =>
   `[remote] The posts table has no "${cols.join('", "')}" column yet, so this post was saved without that edit (it still went up). To keep it next time, open Supabase → SQL Editor → New query, paste the file supabase/migrations/${MIGRATION_FOR[cols[0]] ?? '…'} and press Run. It is safe to run more than once.`;
 
-interface GroupRow { id: ID; name: string; description: string | null; ask: boolean; createdAt: string; members?: { id: ID; admin: boolean }[]; requests?: ID[] }
+interface GroupRow { id: ID; name: string; description: string | null; ask: boolean; discoverable?: boolean; createdAt: string; members?: { id: ID; admin: boolean }[]; requests?: ID[] }
 const toGroup = (row: GroupRow): FeedGroup => ({
-  id: row.id, name: row.name, description: row.description ?? undefined, ask: !!row.ask, createdAt: row.createdAt,
+  id: row.id, name: row.name, description: row.description ?? undefined, ask: !!row.ask, discoverable: row.discoverable !== false, createdAt: row.createdAt,
   members: row.members ?? [], requests: row.requests ?? [],
 });
 /** The server's word for why a group action said no (migration 67), or 'failed'. */
@@ -2083,6 +2083,21 @@ export const remote = {
   },
   async updateFeedGroup(id: ID, name: string, description: string, ask: boolean) {
     const { error } = await need().rpc('update_feed_group', { g: id, p_name: name, p_description: description || null, p_ask: ask });
+    if (error) throw new Error(groupWord(error));
+  },
+  /**
+   * Groups to find and join (migration 70): only ones shown in Find groups,
+   * near you first, then the biggest. Null on a database without it yet.
+   */
+  async discoverGroups(q: string, limit = 30): Promise<DiscoverGroup[] | null> {
+    const { data, error } = await need().rpc('discover_groups', { q: q.trim() || null, lim: limit });
+    if (error) { if (!missingFunction(error)) fail('find groups')(error); return null; }
+    const rows = (Array.isArray(data) ? data : []) as { id: ID; name: string; description: string | null; ask: boolean; members: number; member: boolean; requested: boolean; near: boolean }[];
+    return rows.map((c) => ({ id: c.id, name: c.name, description: c.description ?? undefined, ask: !!c.ask, memberCount: Number(c.members) || 0, member: !!c.member, requested: !!c.requested, near: !!c.near }));
+  },
+  /** An admin shows or hides a group in Find groups. Throws with the server's word ('not_admin', or 'not_ready' before migration 70). */
+  async setFeedGroupDiscoverable(id: ID, on: boolean) {
+    const { error } = await need().rpc('set_feed_group_discoverable', { g: id, p_on: on });
     if (error) throw new Error(groupWord(error));
   },
   /** A group's posts, newest first, a page at a time (older than `before`). */

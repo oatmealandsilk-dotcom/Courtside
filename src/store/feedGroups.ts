@@ -1,8 +1,8 @@
 import { useCallback, useMemo } from 'react';
 
 import { remote } from '@/data/remote';
-import { demoGroups } from '@/data/mock/groups';
-import type { Comment, FeedGroup, FeedGroupCard, ID, Post, User } from '@/data/types';
+import { demoDiscoverGroups, demoGroups } from '@/data/mock/groups';
+import type { Comment, DiscoverGroup, FeedGroup, FeedGroupCard, ID, Post, User } from '@/data/types';
 import { notKnownAdult } from '@/features/players/age';
 import * as haptics from '@/lib/haptics';
 
@@ -45,8 +45,10 @@ interface Reads { currentUserId: ID | null; posts: Post[]; comments: Comment[]; 
 export interface FeedGroupsActions {
   /** Your groups, their members and (for an admin) their requests. */
   loadFeedGroups: () => Promise<void>;
-  /** Starts a group with you as admin; its id. Throws a plain sentence when it cannot. */
-  createFeedGroup: (input: { name: string; description: string; ask: boolean }) => Promise<ID>;
+  /** Starts a group with you as admin; its id. Throws a plain sentence when it cannot. `discoverable` false keeps it out of Find groups. */
+  createFeedGroup: (input: { name: string; description: string; ask: boolean; discoverable?: boolean }) => Promise<ID>;
+  /** Find groups (migration 70): groups shown there, near you first. Null when they could not be read. */
+  discoverFeedGroups: (q: string) => Promise<DiscoverGroup[] | null>;
   /** What an invite link shows. Null when there is no such group. */
   feedGroupCard: (id: ID) => Promise<FeedGroupCard | null>;
   /** Joins an open group or asks to join one. Throws a plain sentence when it cannot. */
@@ -57,8 +59,8 @@ export interface FeedGroupsActions {
   answerFeedGroupRequest: (id: ID, who: ID, accept: boolean) => Promise<void>;
   /** An admin takes someone out. */
   removeFeedGroupMember: (id: ID, who: ID) => Promise<void>;
-  /** An admin changes the name, description or open / ask first. */
-  updateFeedGroup: (id: ID, patch: { name: string; description: string; ask: boolean }) => Promise<void>;
+  /** An admin changes the name, description, open / ask first, or whether it shows in Find groups. */
+  updateFeedGroup: (id: ID, patch: { name: string; description: string; ask: boolean; discoverable?: boolean }) => Promise<void>;
   /** A group's posts, newest first, into the app's posts; older ones with `before`. Whether there are more. */
   loadFeedGroupPosts: (id: ID, before?: string) => Promise<boolean>;
 }
@@ -80,6 +82,8 @@ export function groupSentence(word: string): string {
 }
 
 const demoId = () => `g-${Date.now().toString(36)}`;
+/** A demo group by id: one of the demo's own, or one Find groups lists. */
+const demoGroup = (id: ID): FeedGroup | undefined => demoGroups.find((x) => x.id === id) ?? demoDiscoverGroups.find((x) => x.id === id);
 
 export function useFeedGroups<S extends FeedGroupsState & Reads>(
   stateRef: { current: S },
@@ -117,7 +121,7 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
     feedGroups: prev.feedGroups.flatMap((g) => { if (g.id !== id) return [g]; const next = change(g); return next ? [next] : []; }),
   }));
 
-  const createFeedGroup = useCallback(async (input: { name: string; description: string; ask: boolean }) => {
+  const createFeedGroup = useCallback(async (input: { name: string; description: string; ask: boolean; discoverable?: boolean }) => {
     const name = input.name.replace(/\s+/g, ' ').trim().slice(0, 40);
     if (!name) throw new Error(groupSentence('name_needed'));
     const you = me();
@@ -128,10 +132,15 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
       if (stateRef.current.feedGroups.length >= MAX_GROUPS) throw new Error(groupSentence('group_limit'));
       const id = demoId();
       haptics.commit();
-      setState((prev) => ({ ...prev, feedGroups: [...prev.feedGroups, { id, name, description: input.description.trim().slice(0, 140) || undefined, ask: input.ask, createdAt: new Date().toISOString(), members: [{ id: you, admin: true }], requests: [] }] }));
+      setState((prev) => ({ ...prev, feedGroups: [...prev.feedGroups, { id, name, description: input.description.trim().slice(0, 140) || undefined, ask: input.ask, discoverable: input.discoverable !== false, createdAt: new Date().toISOString(), members: [{ id: you, admin: true }], requests: [] }] }));
       return id;
     }
-    const id = await run(() => remote.createFeedGroup(name, input.description.trim().slice(0, 140), input.ask));
+    const id = await run(async () => {
+      const made = await remote.createFeedGroup(name, input.description.trim().slice(0, 140), input.ask);
+      // Hidden from Find groups straight away (create_feed_group keeps 67's shape). Before migration 70 there is no list to hide from.
+      if (input.discoverable === false) await remote.setFeedGroupDiscoverable(made, false).catch(() => undefined);
+      return made;
+    });
     haptics.commit();
     return id;
   }, [stateRef, setState, live, run]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -140,7 +149,7 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
     const you = me();
     if (!you) return null;
     if (!live(you)) {
-      const g = stateRef.current.feedGroups.find((x) => x.id === id) ?? demoGroups.find((x) => x.id === id);
+      const g = stateRef.current.feedGroups.find((x) => x.id === id) ?? demoGroup(id);
       if (!g) return null;
       const member = g.members.some((m) => m.id === you) && stateRef.current.feedGroups.some((x) => x.id === id);
       return { id: g.id, name: g.name, description: g.description, ask: g.ask, memberCount: g.members.length, member, requested: stateRef.current.feedGroupsAsked.some((a) => a.id === id) };
@@ -154,7 +163,7 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
     if (!live(you)) {
       // The demo says what the server says (migration 67, 'adults_only').
       if (!groupsOpenTo(stateRef.current.users.find((u) => u.id === you))) throw new Error(GROUPS_AGE_LINE);
-      const g = demoGroups.find((x) => x.id === id);
+      const g = demoGroup(id);
       if (!g) throw new Error(groupSentence('not_found'));
       if (stateRef.current.feedGroups.some((x) => x.id === id)) return 'already';
       if (stateRef.current.feedGroups.length >= MAX_GROUPS) throw new Error(groupSentence('group_limit'));
@@ -166,6 +175,25 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
     haptics.commit();
     return out;
   }, [stateRef, setState, live, run]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const discoverFeedGroups = useCallback(async (q: string): Promise<DiscoverGroup[] | null> => {
+    const you = me();
+    if (!you) return null;
+    if (!live(you)) {
+      // The demo says what the server says: nothing for someone not known to be an adult.
+      if (!groupsOpenTo(stateRef.current.users.find((u) => u.id === you))) return [];
+      const term = q.trim().toLowerCase();
+      const { feedGroups, feedGroupsAsked } = stateRef.current;
+      return demoDiscoverGroups
+        .filter((g) => !term || `${g.name} ${g.description ?? ''}`.toLowerCase().includes(term))
+        .sort((a, b) => Number(b.near) - Number(a.near) || b.members.length - a.members.length)
+        .map((g) => {
+          const mine = feedGroups.find((x) => x.id === g.id);
+          return { id: g.id, name: g.name, description: g.description, ask: g.ask, memberCount: mine?.members.length ?? g.members.length, member: !!mine, requested: feedGroupsAsked.some((a) => a.id === g.id), near: g.near };
+        });
+    }
+    return remote.discoverGroups(q).catch(() => null);
+  }, [stateRef, live]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const leaveFeedGroup = useCallback(async (id: ID) => {
     const you = me();
@@ -200,14 +228,19 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
     await run(() => remote.removeFeedGroupMember(id, who));
   }, [live, run]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const updateFeedGroup = useCallback(async (id: ID, patch: { name: string; description: string; ask: boolean }) => {
+  const updateFeedGroup = useCallback(async (id: ID, patch: { name: string; description: string; ask: boolean; discoverable?: boolean }) => {
     const you = me();
     if (!you) return;
     const name = patch.name.replace(/\s+/g, ' ').trim().slice(0, 40);
     if (!name) throw new Error(groupSentence('name_needed'));
-    patchGroup(id, (g) => ({ ...g, name, description: patch.description.trim().slice(0, 140) || undefined, ask: patch.ask }));
+    const wasListed = stateRef.current.feedGroups.find((g) => g.id === id)?.discoverable !== false;
+    const listed = patch.discoverable ?? wasListed;
+    patchGroup(id, (g) => ({ ...g, name, description: patch.description.trim().slice(0, 140) || undefined, ask: patch.ask, discoverable: listed }));
     if (!live(you)) return;
-    await run(() => remote.updateFeedGroup(id, name, patch.description.trim(), patch.ask));
+    await run(async () => {
+      await remote.updateFeedGroup(id, name, patch.description.trim(), patch.ask);
+      if (listed !== wasListed) await remote.setFeedGroupDiscoverable(id, listed);
+    });
   }, [live, run]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadFeedGroupPosts = useCallback(async (id: ID, before?: string) => {
@@ -226,7 +259,7 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
   }, [stateRef, setState, live]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return useMemo(
-    () => ({ loadFeedGroups: reload, createFeedGroup, feedGroupCard, joinFeedGroup, leaveFeedGroup, answerFeedGroupRequest, removeFeedGroupMember, updateFeedGroup, loadFeedGroupPosts }),
-    [reload, createFeedGroup, feedGroupCard, joinFeedGroup, leaveFeedGroup, answerFeedGroupRequest, removeFeedGroupMember, updateFeedGroup, loadFeedGroupPosts],
+    () => ({ loadFeedGroups: reload, createFeedGroup, discoverFeedGroups, feedGroupCard, joinFeedGroup, leaveFeedGroup, answerFeedGroupRequest, removeFeedGroupMember, updateFeedGroup, loadFeedGroupPosts }),
+    [reload, createFeedGroup, discoverFeedGroups, feedGroupCard, joinFeedGroup, leaveFeedGroup, answerFeedGroupRequest, removeFeedGroupMember, updateFeedGroup, loadFeedGroupPosts],
   );
 }

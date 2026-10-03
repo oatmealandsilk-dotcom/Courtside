@@ -10,7 +10,8 @@ import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 
 /*
  * The words across the top of the Feed, the way Reels has them: "For you",
- * then each group you are in, then a "+" for the Groups page. Plain words, no
+ * then each group you are in, then a "+" that opens Find groups (a sheet:
+ * join a group, or start one). Plain words, no
  * pills: the one you are on is bold and full strength, the rest are dimmer.
  * Over a clip they are white with the rail's dark edge, so they read on any
  * picture; on a written post they take the theme's own ink. They sit in a
@@ -61,7 +62,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
             </React.Fragment>
           );
         })}
-        <Pressable accessibilityRole="button" accessibilityLabel={waiting ? 'Groups, someone is asking to join' : 'Groups'} hitSlop={10} onPress={onPlus} style={styles.plus}>
+        <Pressable accessibilityRole="button" accessibilityLabel={waiting ? 'Find or start a group, someone is asking to join yours' : 'Find or start a group'} hitSlop={10} onPress={onPlus} style={styles.plus}>
           <Ionicons name="add" size={22} color={ink} style={[{ opacity: 0.85 }, edge]} />
           {waiting ? <View style={styles.waiting} /> : null}
         </Pressable>

@@ -38,6 +38,23 @@ export const demoGroups: FeedGroup[] = [
   },
 ];
 
+/*
+ * Groups the demo's Find groups window lists (the "+" on the Feed): ones you
+ * are not in yet, some near you (the demo's player is in Los Angeles), some
+ * open, some asking first. Joining one makes it yours, as on a real account.
+ */
+const crewIds = ['u-mira', 'u-dev', 'u-june', 'u-tomas', 'u-nadia', 'u-leo', 'u-sam', 'u-priya', 'u-marcus', 'u-rosa', 'u-kai', 'u-ella', 'u-noor', 'u-theo', 'u-lena', 'u-omar', 'u-bea', 'u-jonah', 'u-ivy', 'u-diego'];
+const crew = (from: number, n: number) => Array.from({ length: n }, (_, i) => ({ id: crewIds[(from + i) % crewIds.length], admin: i === 0 }));
+
+export const demoDiscoverGroups: (FeedGroup & { near: boolean })[] = [
+  { id: 'g-silverlake', name: 'Silver Lake sunrise', description: '6:30am hitting before work. All levels welcome.', ask: false, near: true, createdAt: isoHoursAgo(24 * 30), members: crew(3, 9), requests: [] },
+  { id: 'g-pasadena', name: 'Pasadena 4.0 doubles', description: 'Competitive doubles on Sundays. Say your level when you ask.', ask: true, near: true, createdAt: isoHoursAgo(24 * 50), members: crew(7, 14), requests: [] },
+  { id: 'g-venice', name: 'Venice rallies', description: 'Casual hitting by the boardwalk, then tacos.', ask: false, near: true, createdAt: isoHoursAgo(24 * 6), members: crew(12, 6), requests: [] },
+  { id: 'g-over40', name: 'Over-40 comeback club', description: 'Back on court after a break. Fitness, drills, no egos.', ask: true, near: false, createdAt: isoHoursAgo(24 * 80), members: crew(1, 17), requests: [] },
+  { id: 'g-lefties', name: 'Lefties', description: 'Left-handed players swapping tips and match videos.', ask: false, near: false, createdAt: isoHoursAgo(24 * 40), members: crew(5, 12), requests: [] },
+  { id: 'g-serve-lab', name: 'Serve lab', description: 'Post your serve, get notes from the group.', ask: false, near: false, createdAt: isoHoursAgo(24 * 12), members: crew(9, 8), requests: [] },
+];
+
 export const demoGroupPosts: Post[] = [
   {
     id: 'p-group-wake-1',

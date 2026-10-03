@@ -399,6 +399,8 @@ export interface FeedGroup {
   description?: string;
   /** Ask to join: an admin says yes first. Otherwise anyone with the link is straight in. */
   ask: boolean;
+  /** Shows in Find groups (migration 70). Off: only its invite link finds it. Missing before 70 runs, which reads as on. */
+  discoverable?: boolean;
   createdAt: string;
   /** Everyone in it you can see (someone you are blocked with is left out), oldest first. */
   members: FeedGroupMember[];
@@ -415,6 +417,15 @@ export interface FeedGroupCard {
   memberCount: number;
   member: boolean;
   requested: boolean;
+}
+
+/**
+ * A group as Find groups lists it (migration 70, discover_groups): enough to
+ * decide whether to join, never who is in it or what they posted.
+ */
+export interface DiscoverGroup extends FeedGroupCard {
+  /** Someone in it lives near your city. */
+  near: boolean;
 }
 
 /* --------------------------------- Stories ------------------------------- */
