@@ -24,11 +24,11 @@ const touched = new Set<HTMLElement>();
 /** The glide's animations now running, stopped the moment the sheet is sent anywhere else. */
 const running = new Set<Animation>();
 
-type Look = { transform?: string; opacity?: string };
+type Look = { transform?: string; opacity?: string; borderRadius?: string };
 function look(role: StageRole, y: number, G: StageGeo, fade: number, height: number): Look {
   const f = stageFrame(y, G);
   switch (role) {
-    case 'page': return { transform: `translate(${f.tx}px, ${f.ty}px) scale(${f.s})`, opacity: String(f.video * fade) };
+    case 'page': return { transform: `translate(${f.tx}px, ${f.ty}px) scale(${f.s})`, opacity: String(f.video * fade), borderRadius: `${(18 * f.p) / Math.max(f.s, 0.01)}px` };
     case 'black': return { opacity: '1' };
     case 'rail': return { transform: `translateY(${f.cy - height / 2 + f.railDy}px)`, opacity: String(f.rail) };
     case 'nav': return { transform: `translateY(${-f.rise}px)`, opacity: String(f.nav) };
@@ -41,6 +41,8 @@ function put(el: HTMLElement, l: Look) {
   touched.add(el);
   if (l.transform !== undefined) el.style.transform = l.transform;
   if (l.opacity !== undefined) el.style.opacity = l.opacity;
+  // Rounded as the clip shrinks above a sheet (see the phone's twin).
+  if (l.borderRadius !== undefined) { el.style.borderRadius = l.borderRadius; el.style.overflow = 'hidden'; }
 }
 
 const follows = (e: Entry, G: StageGeo) => e.enabled && e.el.isConnected
@@ -106,6 +108,8 @@ function release(el: HTMLElement) {
   if (!touched.delete(el)) return;
   el.style.transform = '';
   el.style.opacity = '';
+  el.style.borderRadius = '';
+  el.style.overflow = '';
 }
 
 if (typeof window !== 'undefined') {
