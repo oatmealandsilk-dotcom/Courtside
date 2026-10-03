@@ -172,8 +172,10 @@ export default function NewMessage() {
         <TextInput value={title} onChangeText={(v) => setTitle(v.slice(0, 60))} placeholder="Group name (optional)" placeholderTextColor={colors.textFaint} style={styles.groupName} accessibilityLabel="Group name" />
       ) : null}
       {picked.length ? (
-        <Pressable accessibilityRole="button" accessibilityState={{ disabled: held, busy }} disabled={held} onPress={() => { void start(); }} style={({ pressed }) => [styles.start, held && styles.startHeld, pressed && { opacity: 0.85 }]}>
-          <Text style={styles.startText}>{picked.length === 1 ? 'Chat' : sameGroup ? 'Open group' : busy ? 'Creating group…' : `Create group · ${picked.length + 1}`}</Text>
+        <Pressable accessibilityRole="button" accessibilityState={{ disabled: held, busy }} disabled={held} onPress={() => { void start(); }} style={({ pressed }) => [styles.start, picked.length > 1 && styles.startGroup, held && styles.startHeld, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}>
+          {/* Two or more ticked: the group is the point now, so the button says so with its people. */}
+          {picked.length > 1 && !sameGroup ? <Ionicons name="people" size={19} color={colors.brandInk} /> : null}
+          <Text style={styles.startText}>{picked.length === 1 ? 'Chat' : sameGroup ? 'Open group' : busy ? 'Creating group…' : `Create group · ${picked.length + 1} people`}</Text>
         </Pressable>
       ) : null}
     </View>
@@ -238,13 +240,25 @@ export default function NewMessage() {
   if (isPhone) {
     return (
       <View style={{ flex: 1 }}>
-        <Screen title="New message" compactTitle onBack={close}>
-          <View style={styles.toRow}>
-            <Text style={styles.to}>To</Text>
-            <TextInput value={query} onChangeText={setQuery} placeholder="Search" placeholderTextColor={colors.textFaint} autoCapitalize="none" autoCorrect={false} autoFocus style={styles.toInput} accessibilityLabel="To" />
-          </View>
-          {chips}
-          {list}
+        <Screen
+          title="New message"
+          compactTitle
+          onBack={close}
+          // "To" and the people picked stay pinned under the title while the list scrolls (Instagram's).
+          headerWrapper={(header) => (
+            <>
+              {header}
+              <View style={styles.toPinned}>
+                <View style={styles.toRow}>
+                  <Text style={styles.to}>To</Text>
+                  <TextInput value={query} onChangeText={setQuery} placeholder="Search" placeholderTextColor={colors.textFaint} autoCapitalize="none" autoCorrect={false} autoFocus style={styles.toInput} accessibilityLabel="To" />
+                </View>
+                {chips}
+              </View>
+            </>
+          )}
+        >
+          <View style={styles.phoneList}>{list}</View>
           {/* Room under the list for the footer pinned over it (taller with a note in it). */}
           <View style={{ height: picked.length || notes.length ? 140 + notes.length * 90 : 0 }} />
         </Screen>
@@ -307,7 +321,11 @@ const styleDefinitions = StyleSheet.create({
   locked: { opacity: 0.45 },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, gap: spacing.sm, padding: spacing.lg, paddingBottom: spacing.xl, backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   groupName: { ...typography.body, color: colors.text, height: 44, paddingHorizontal: 14, borderRadius: 12, backgroundColor: colors.bgElevated, outlineStyle: 'none' } as object,
-  start: { height: 48, borderRadius: 24, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  start: { height: 50, borderRadius: 25, backgroundColor: colors.brand, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center' },
+  startGroup: { boxShadow: '0px 6px 18px rgba(0, 0, 0, 0.16)' },
+  toPinned: { paddingBottom: spacing.xs },
+  // The list under the pinned "To" runs edge to edge, as the rows draw their own room.
+  phoneList: { marginHorizontal: -spacing.lg },
   startHeld: { opacity: 0.5 },
   startText: { ...typography.bodyStrong, color: colors.brandInk },
 });
