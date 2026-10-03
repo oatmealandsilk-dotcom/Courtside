@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { openCourt } from '@/features/players/courtLink';
+import { PlaceLine } from '@/components/PlaceLine';
 import { TaggedLine } from '@/components/TaggedLine';
 import { Wash } from '@/components/Wash';
 import React, { useEffect, useRef, useState, memo } from 'react';
@@ -242,13 +242,15 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
           <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={40} />
           <View style={{ flex: 1, gap: 1 }}>
             <View style={styles.nameRow}>
+              {/* The name keeps some room: the badges beside it never squeeze it down to a letter ("New" is the short tag here, the lane can be narrow). */}
               <Text style={styles.name} numberOfLines={1}>{author.name}</Text>
               {author.isCoach ? <Ionicons name="shield-checkmark" size={14} color={colors.brand} /> : null}
               <LevelPill profile={author.profile} small />
-              {isNewHere(post) ? <NewHereTag /> : null}
+              {isNewHere(post) ? <NewHereTag short /> : null}
             </View>
-            <Text style={styles.sub} numberOfLines={1}>@{author.handle} · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}{post.court ? <> · <Text accessibilityRole="link" accessibilityLabel={`${post.court.name}, see posts from here`} onPress={(e) => { e?.stopPropagation?.(); openCourt(post.court!); }} style={styles.courtLink}>{post.court.name}</Text></> : post.location ? ` · ${post.location}` : ''}</Text>
-            <TaggedLine post={post} />
+            <Text style={styles.sub} numberOfLines={1}>@{author.handle} · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}</Text>
+            {/* Where, on its own line under the name, as Instagram sets it: the whole place, a tap opens the court. */}
+            <PlaceLine court={post.court} location={post.location} />
           </View>
         </Pressable>
       </View>
@@ -296,6 +298,8 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
               <Text numberOfLines={captionOpen ? undefined : 2} style={styles.caption}><Text style={styles.captionName}>{author.handle} </Text><RichText style={styles.caption}>{post.body}</RichText></Text>
             </Pressable>
           ) : null}
+          {/* Who with, right under the words, out of the name's lines. */}
+          <TaggedLine post={post} />
           {/* Tags the caption does not already say: a #tag written in it is not repeated as a chip. */}
           {tagsNotInCaption(post.body, post.tags).length ? (
             <View style={styles.tags}>
@@ -382,9 +386,8 @@ const styleDefinitions = StyleSheet.create({
   whoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   who: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  name: { ...typography.bodyStrong, color: colors.text },
+  name: { ...typography.bodyStrong, color: colors.text, flexShrink: 1, minWidth: 56 },
   sub: { ...typography.small, color: colors.textFaint },
-  courtLink: { ...typography.smallStrong, color: colors.brand },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 18 },
   action: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32 },
   // The last glyph's dots end on the page's right edge, like the caption's words.

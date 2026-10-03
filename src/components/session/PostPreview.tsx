@@ -5,6 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import Reanimated, { FadeIn } from 'react-native-reanimated';
 
 import { feedFrameRatio, feedShape } from '@/components/MediaPostPage';
+import { PlaceLine } from '@/components/PlaceLine';
 import { PostVideo } from '@/components/PostVideo';
 import { Avatar } from '@/components/ui';
 import type { ID, MediaCrop, SessionDetail, User } from '@/data/types';
@@ -73,7 +74,9 @@ export function PostPreview({ media, orientation, edit, session, author, caption
           <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={28} />
           <View style={styles.whoWords}>
             <Text style={styles.name} numberOfLines={1}>{author.name}</Text>
-            <Text style={styles.sub} numberOfLines={1}>@{author.handle} · now{where ? ` · ${where}` : ''}</Text>
+            <Text style={styles.sub} numberOfLines={1}>@{author.handle} · now</Text>
+            {/* The place on its own line under the name, as the feed sets it. */}
+            <PlaceLine location={where} />
           </View>
         </View>
       ) : null}
