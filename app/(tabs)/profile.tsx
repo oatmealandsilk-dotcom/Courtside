@@ -25,12 +25,16 @@ import { colors, spacing, typography, font, lift } from '@/theme';
 import { wrappedYear } from '@/features/wrapped/yearInTennis';
 import { useTourTarget } from '@/features/tour/tourStore';
 import { isTaggedIn } from '@/features/activity/sessionTags';
+import { studioLine } from '@/features/coaching/studioSummary';
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
  // December to mid-January: the year's recap sits at the top of your links.
  const wrapped = wrappedYear();
   const styles = useThemedStyles(styleDefinitions);
- const { currentUser: user, posts, questions, answers, saved, notifications, currentUserId, savedAccounts, actions } = useApp();
+ const { currentUser: user, posts, questions, answers, saved, notifications, currentUserId, savedAccounts, coaches, coachingRequests, coachQuestions, actions } = useApp();
+ // A coach's studio, first of your links: what is waiting there, or how far setup has got.
+ const myCoach = coaches.find((c) => c.userId === currentUserId);
+ const studio = myCoach ? studioLine(myCoach, coachingRequests, coachQuestions, currentUserId) : null;
  // Nothing posted, asked or answered yet: the profile offers the first move.
  const hasMoved = !currentUserId || posts.some((p) => p.authorId === currentUserId) || questions.some((q) => q.authorId === currentUserId) || answers.some((a) => a.authorId === currentUserId);
  // Your own posts, however far back they go: the grid and the counts are
@@ -153,7 +157,8 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    </Pressable>
    {/* One grouped list, the way Settings reads, instead of three boxes. */}
    <View style={styles.links}>
-     <Pressable accessibilityRole="link" accessibilityLabel="Saved videos and discussions" onPress={() => router.push('/saved')} style={({ pressed }) => [styles.linkRow, pressed && styles.linkPressed]}><Ionicons name="bookmark-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Saved</Text>{savedCount ? <Text style={styles.linkValue}>{savedCount}</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
+     {studio ? <Pressable accessibilityRole="link" accessibilityLabel={`Coach studio. ${studio.line}`} onPress={() => router.push('/coach-studio')} style={({ pressed }) => [styles.linkRow, pressed && styles.linkPressed]}><Ionicons name="ribbon-outline" size={20} color={colors.brand}/><Text style={styles.linkText}>Coach studio</Text>{studio.waiting ? <Text style={styles.linkValue}>{studio.waiting} waiting</Text> : studio.doneCount < 4 ? <Text style={styles.linkValue}>{studio.doneCount} of 4</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable> : null}
+     <Pressable accessibilityRole="link" accessibilityLabel="Saved videos and discussions" onPress={() => router.push('/saved')} style={({ pressed }) => [styles.linkRow, studio && styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="bookmark-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Saved</Text>{savedCount ? <Text style={styles.linkValue}>{savedCount}</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
      {wrapped ? <Pressable accessibilityRole="link" accessibilityLabel={`Your ${wrapped} in tennis`} onPress={() => router.push('/wrapped')} style={({ pressed }) => [styles.linkRow, styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="sparkles-outline" size={20} color={colors.brand}/><Text style={styles.linkText}>Your {wrapped} in tennis</Text><Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable> : null}
      {/* Always here, streak or not: the way to every session you logged, and to post one. Only you see it. */}
      <Pressable accessibilityRole="link" accessibilityLabel="Your sessions. Only you see them" onPress={() => router.push('/your-sessions')} style={({ pressed }) => [styles.linkRow, styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="stopwatch-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Your sessions</Text><Ionicons name="lock-closed-outline" size={13} color={colors.textFaint}/><Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
