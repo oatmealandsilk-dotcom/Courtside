@@ -23,7 +23,7 @@ import { TagPlayers } from '@/components/TagPlayers';
 import { AttachSessionStats } from '@/components/AttachSessionStats';
 import { pickCaption, statsOf, type SessionPick } from '@/features/activity/recent';
 import { openSessionPicker } from '@/features/activity/sessionPicker';
-import { isActive, tagsOnSession } from '@/features/activity/sessionTags';
+import { firstName, isActive, nextRole, tagsOnSession } from '@/features/activity/sessionTags';
 import { addToBank, getBank } from '@/features/compose/mediaBank';
 import { Avatar } from '@/components/ui';
 import { Chips } from '@/components/sheet/SheetForm';
@@ -42,7 +42,7 @@ import { openWhoPlayed } from '@/features/activity/whoPlayedPicker';
 import { hitPrefill, prefillFor } from '@/features/hits/followUp';
 import { confirm } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
-import type { PracticeSession, SessionDetail, SessionPlayer } from '@/data/types';
+import type { ID, PracticeSession, SessionDetail, SessionPlayer, SessionTagStatus } from '@/data/types';
 import { useApp } from '@/store/AppContext';
 import { courtRows, fetchCourts, peekCourts, type Court } from '@/features/players/courts';
 import { labelOf } from '@/features/places/courtName';
@@ -306,20 +306,6 @@ export default function Compose() {
   // "Add session stats" is for a Post or a Clip, never a challenge entry (the
   // weekly clip stays exactly as it was) and never a story or an instant.
   const statsRow = !opened && !entering && !inChallenge && (mode === 'post' || mode === 'clip');
-  // The players tagged in the session on this post (migration 62): asked to
-  // accept there, so Tag players lists them apart and never tags them
-  // straight onto the post; anyone tagged here before the session went on
-  // moves to that list.
-  const statsSession = (withStats ? opened : statsRow ? statsPick : null)?.session;
-  const fromSession = statsSession && currentUserId
-    ? tagsOnSession(sessionTags, statsSession.id, currentUserId).filter(isActive).map((t) => ({ id: t.taggedId, accepted: t.status === 'accepted' }))
-    : [];
-  const fromSessionKey = fromSession.map((f) => f.id).join(',');
-  useEffect(() => {
-    if (!fromSessionKey) return;
-    const ids = new Set(fromSessionKey.split(','));
-    setTagged((was) => (was.some((id) => ids.has(id)) ? was.filter((id) => !ids.has(id)) : was));
-  }, [fromSessionKey]);
   const pickStats = () => openSessionPicker((pick, logged) => { setStatsPick(pick); setJustLogged(logged); });
 
   /*
@@ -369,16 +355,6 @@ export default function Compose() {
     ...(logId ? { sessionId: logId } : {}),
   } : null);
   const cardSession = logMode ? sessionFor() : null;
-  // Who you played, as the card shows it to you: those still to accept, faded.
-  const cardPeople: CardPerson[] | undefined = !logMode ? undefined : openedLog && currentUserId
-    ? tagsOnSession(sessionTags, openedLog.id, currentUserId).filter(isActive).flatMap((t) => {
-      const u = users.find((x) => x.id === t.taggedId);
-      return u ? [{ id: u.id, handle: u.handle, name: u.name, role: t.role, pending: t.status !== 'accepted' }] : [];
-    })
-    : players.flatMap((p) => {
-      const u = users.find((x) => x.id === p.id);
-      return u ? [{ id: u.id, handle: u.handle, name: u.name, role: p.role, pending: true }] : [];
-    });
   // "Practice — how did it go?": the hint follows what it was, never a time
   // of day. Left empty, the post says the day instead ("Saturday match").
   const logHint = opened?.type === 'tracker' ? KIND_LABEL[shownKind] : '';
@@ -394,27 +370,128 @@ export default function Compose() {
     note: fromHit ? `At ${fromHit.place}` : undefined,
     ...(opened?.type === 'tracker' && logMinutes && logMinutes !== opened.activity.minutes ? { minutes: logMinutes } : {}),
   });
-  // "Mira +1" with Mira's face; a clock while she has not accepted yet.
-  const whoFirst = players.length ? users.find((u) => u.id === players[0].id) : undefined;
+  /*
+   * Who was there (owner, Oct 3: "on a session the tag functions more like a
+   * group thing"). A Post or a Clip with no session has one people row, Tag
+   * people: Instagram's tags, nobody asked. Once the post carries a match or
+   * a practice of yours (Log it, Post it, Add session stats) that row becomes
+   * "Who was there", one list with one search: everyone in it is tagged on
+   * the session (migration 62), asked to accept, and named on the post once
+   * they do (the post updates itself; until then they read "Asked"). The
+   * people are kept on the session, so they stay when a post fails. Anyone
+   * tagged before the session went on moves into the list, and back out if
+   * it comes off. A session someone else logged and tagged you in (your copy)
+   * is theirs to tag: its list shows who logged it, and the server names the
+   * whole group on your post (migration 77).
+   */
+  const peoplePick = logMode || withStats ? opened : statsRow ? statsPick ?? undefined : undefined;
+  const logOf = (pick: SessionPick | undefined) => !pick ? undefined
+    : pick.type === 'tracker' ? sessions.find((x) => x.userId === currentUserId && x.activityId === pick.activity.id) ?? pick.session
+    : sessions.find((x) => x.id === pick.session.id) ?? pick.session;
+  // "Log it" holds the log entry it opened with (none until Share logs it).
+  const peopleLog = logMode ? openedLog : logOf(peoplePick);
+  const peopleKind = logMode ? shownKind : peopleLog?.kind;
+  const copyLog = peopleLog?.fromSessionId ? peopleLog : undefined;
+  const groupMode = !!peoplePick && !copyLog && canTagKind(peopleKind) && (logMode || !!peopleLog);
+  const peopleTags = groupMode && peopleLog && currentUserId ? tagsOnSession(sessionTags, peopleLog.id, currentUserId) : [];
+  const standing = peopleTags.filter(isActive);
+  const tagStatus: Record<ID, SessionTagStatus> = Object.fromEntries(peopleTags.map((t) => [t.taggedId, t.status]));
+  // On a session already logged, what is changed here waits for Share; untouched, the list is the session's own.
+  const [draft, setDraft] = useState<{ logId: ID; players: SessionPlayer[]; text: string } | null>(null);
+  const drafted = !!peopleLog && draft?.logId === peopleLog.id ? draft : null;
+  const whoPlayers: SessionPlayer[] = !groupMode ? [] : peopleLog ? drafted?.players ?? standing.map((t) => ({ id: t.taggedId, role: t.role })) : players;
+  const whoText = !groupMode ? '' : peopleLog ? drafted?.text ?? peopleLog.opponent ?? '' : opponentText;
+  const setWho = (next: SessionPlayer[], text: string) => {
+    if (peopleLog) setDraft({ logId: peopleLog.id, players: next, text });
+    else { setPlayers(next); setOpponentText(text); }
+  };
+  // Post tags move into the list as the session goes on, and the people added here move back out if it comes off.
+  const addedHere = whoPlayers.filter((p) => !standing.some((t) => t.taggedId === p.id)).map((p) => p.id);
+  const addedRef = useRef<ID[]>(addedHere);
+  addedRef.current = addedHere;
+  const groupKey = groupMode ? peopleLog?.id ?? 'new' : '';
+  const lastGroup = useRef(groupKey);
+  useEffect(() => {
+    const was = lastGroup.current;
+    lastGroup.current = groupKey;
+    if (groupKey && tagged.length) {
+      const have = new Set(whoPlayers.map((p) => p.id));
+      const next = [...whoPlayers];
+      for (const id of tagged) if (!have.has(id) && id !== currentUserId) next.push({ id, role: nextRole(peopleKind ?? 'practice', next) });
+      setWho(next, whoText);
+      setTagged([]);
+    } else if (!groupKey && was) {
+      const back = addedRef.current;
+      if (back.length) setTagged((now) => Array.from(new Set([...now, ...back])));
+      setDraft(null);
+      setPlayers([]);
+    }
+  }, [groupKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The card in "Log it" shows them as the post will: anyone not accepted yet, faded.
+  const cardPeople: CardPerson[] | undefined = !logMode ? undefined : whoPlayers.flatMap((p) => {
+    const u = users.find((x) => x.id === p.id);
+    return u ? [{ id: u.id, handle: u.handle, name: u.name, role: p.role, pending: tagStatus[p.id] !== 'accepted' }] : [];
+  });
+  // "Mira +1" with Mira's face, and "Asked" while anyone has still to answer.
+  const whoFirst = whoPlayers.length ? users.find((u) => u.id === whoPlayers[0].id) : undefined;
   const whoValue = (() => {
-    if (!players.length) return opponentText.trim() || undefined;
-    const name = whoFirst ? whoFirst.name.trim().split(/\s+/)[0] || `@${whoFirst.handle}` : 'Someone';
-    return players.length > 1 ? `${name} +${players.length - 1}` : name;
+    if (!whoPlayers.length) return whoText.trim() || undefined;
+    const name = whoFirst ? firstName(whoFirst.name) || `@${whoFirst.handle}` : 'Someone';
+    return whoPlayers.length > 1 ? `${name} +${whoPlayers.length - 1}` : name;
   })();
-  const whoAccessory = players.length && whoValue ? (
+  const whoAsked = whoPlayers.some((p) => tagStatus[p.id] === 'pending');
+  const whoAccessory = whoPlayers.length && whoValue ? (
     <View pointerEvents="none" style={styles.who} aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       {whoFirst ? <Avatar name={whoFirst.name} seed={whoFirst.avatarSeed} uri={whoFirst.avatarUrl} size={24} /> : null}
       <Text style={styles.whoName} numberOfLines={1}>{whoValue}</Text>
-      <Ionicons name="time-outline" size={14} color={colors.textFaint} />
+      {whoAsked ? <Text style={styles.whoAsked}>Asked</Text> : null}
     </View>
   ) : null;
   const pickWho = () => openWhoPlayed({
-    kind,
-    players,
-    text: opponentText,
+    kind: peopleKind ?? 'practice',
+    players: whoPlayers,
+    text: whoText,
     suggested: fromHit?.playerIds ?? [],
-    onDone: (next, text) => { setPlayers(next); setOpponentText(text); },
+    status: tagStatus,
+    declined: peopleTags.filter((t) => !isActive(t)).map((t) => ({ id: t.taggedId, status: t.status })),
+    closed: peopleLog && currentUserId ? tagsOnSession(sessionTags, peopleLog.id, currentUserId, true).filter((t) => !isActive(t)).map((t) => t.taggedId) : [],
+    onDone: setWho,
   });
+  const whoRow = groupMode ? (
+    <FormRow
+      icon="people-outline"
+      label="Who was there"
+      value={whoAccessory ? undefined : whoValue}
+      accessory={whoAccessory}
+      accessibilityLabel={whoValue ? `Who was there, ${whoValue}${whoAsked ? ', asked to accept' : ''}` : 'Who was there'}
+      chevron
+      onPress={pickWho}
+    />
+  ) : null;
+  // Your copy of someone's session: who logged it (the server names everyone who accepted).
+  const copyTag = copyLog ? sessionTags.find((t) => t.taggedId === currentUserId && (t.mirroredSessionId === copyLog.id || t.sessionId === copyLog.fromSessionId)) : undefined;
+  const copyBy = copyTag ? users.find((u) => u.id === copyTag.taggerId) : undefined;
+  const copyRow = copyLog && peoplePick ? (
+    <FormRow
+      icon="people-outline"
+      label="Who was there"
+      value={copyBy ? `with ${firstName(copyBy.name)}` : undefined}
+      accessibilityLabel={`Who was there: ${copyBy ? `${copyBy.name}, who logged it, ` : ''}and everyone who accepted. ${copyBy ? firstName(copyBy.name) : 'They'} can add people.`}
+    />
+  ) : null;
+  // A session's people are tagged on the session, never as post tags; a post without one keeps its Instagram tags.
+  const postTags = groupMode || copyRow ? undefined : tagged.length ? tagged : undefined;
+  // On Share: what was changed in the list goes on the session (asking anyone new); a name typed goes in your log.
+  const applyWho = () => {
+    if (!groupMode || !peopleLog || !drafted) return;
+    if (drafted.text.trim() !== (peopleLog.opponent ?? '').trim()) void actions.setSessionOpponent(peopleLog.id, drafted.text.trim()).catch(() => undefined);
+    const same = drafted.players.length === standing.length && drafted.players.every((p) => standing.some((t) => t.taggedId === p.id && t.role === p.role));
+    if (same) return;
+    const first = (id: ID) => { const u = users.find((x) => x.id === id); return u ? firstName(u.name) : 'They'; };
+    void actions.setSessionPlayers(peopleLog.id, drafted.players).then((refused) => {
+      for (const r of refused) showToast({ title: `${first(r.id)} wasn’t tagged`, body: r.why, icon: 'pricetag-outline' });
+    }).catch(() => undefined);
+  };
   const added = !!body.trim() || !!media;
   // One of Just log it and Share at a time, held from the first tap (the
   // `busy` state is a frame behind a quick second tap).
@@ -493,13 +570,14 @@ export default function Compose() {
       // that rule too). Not a post type of its own: a Clip with a video, a
       // Post otherwise, as from "Add session stats".
       const stats = withStats && postsChecked;
+      applyWho();
       actions.addPost({
         kind: openedClip ? 'clip' : 'note',
         orientation,
         trimStart: edit.trimStart, trimEnd: edit.trimEnd, muted: edit.muted, volume: edit.volume, speed: edit.speed, crop: edit.crop,
         body: body.trim() || (stats ? pickCaption(opened) : ''),
         tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
-        taggedUserIds: tagged.length ? tagged : undefined,
+        taggedUserIds: postTags,
         location: location.trim() || undefined,
         court: location.trim() && court && !groupPost ? court : undefined,
         featureOk: stats || groupPost ? false : featureOk ? undefined : false,
@@ -521,6 +599,7 @@ export default function Compose() {
     // a Post or a Clip (and lands under Posts or Clips on the profile). Like a
     // post made from a session, it is never offered for CourtSide's Instagram.
     const stats = statsRow && statsPick ? statsOf(statsPick, shareFor(statsPick)) : undefined;
+    applyWho();
     actions.addPost({
       kind: mode === 'clip' ? 'clip' : 'note',
       orientation,
@@ -528,7 +607,7 @@ export default function Compose() {
       trimStart: edit.trimStart, trimEnd: edit.trimEnd, muted: edit.muted, volume: edit.volume, speed: edit.speed, crop: edit.crop,
       body: body.trim(),
       tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
-      taggedUserIds: tagged.length ? tagged : undefined,
+      taggedUserIds: postTags,
       location: location.trim() || undefined,
       court: location.trim() && court && !groupPost ? court : undefined,
       featureOk: stats || groupPost ? false : featureOk ? undefined : false,
@@ -558,6 +637,12 @@ export default function Compose() {
     setBusy('share');
     setLogError('');
     let logId = openedLog?.id ?? tracker.logged?.id;
+    if (openedLog) applyWho();
+    // Logged already from here (a Just log it that came back, say): the people picked go on it now.
+    else if (logId && canTagKind(kind) && players.length) {
+      const id = logId;
+      void actions.setSessionPlayers(id, players).catch(() => undefined);
+    }
     if (!logId) {
       try { logId = await tracker.save(logInput()); } catch (e) {
         // Logged already on another phone: post it all the same; the server
@@ -579,7 +664,7 @@ export default function Compose() {
         trimStart: edit.trimStart, trimEnd: edit.trimEnd, muted: edit.muted, volume: edit.volume, speed: edit.speed, crop: edit.crop,
         body: body.trim() || logCaption,
         tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map((tag) => tag.slice(1).toLowerCase()))),
-        taggedUserIds: tagged.length ? tagged : undefined,
+        taggedUserIds: postTags,
         location: location.trim() || undefined,
         court: location.trim() && court ? court : undefined,
         featureOk: false,
@@ -829,7 +914,6 @@ export default function Compose() {
   }
 
   if (logMode) {
-    const logFromSession = openedLog ? fromSession : players.map((p) => ({ id: p.id, accepted: false }));
     return (
       <View style={styles.backdrop}>
         <SheetBackdrop />
@@ -891,15 +975,13 @@ export default function Compose() {
               </Reanimated.View>
             ) : null}
             <Reanimated.View layout={LinearTransition.duration(220)} style={styles.logRows}>
-              {!openedLog && canTagKind(kind) ? (
-                <FormRow icon="people-outline" label="Who you played" value={whoAccessory ? undefined : whoValue} accessory={whoAccessory} accessibilityLabel={whoValue ? `Who you played, ${whoValue}${players.length ? ', waiting to accept' : ''}` : 'Who you played'} chevron onPress={pickWho} />
-              ) : null}
+              {whoRow}
               {opened?.type === 'tracker' ? (
-                <HealthShareRow line={!openedLog && canTagKind(kind)} activity={opened.activity} choice={health} onChoice={setHealth} />
+                <HealthShareRow line={!!whoRow} activity={opened.activity} choice={health} onChoice={setHealth} />
               ) : null}
               {placeRows}
-              {/* With a photo or a clip there is someone to tag in it; without, "Who you played" is the only people row. */}
-              {media ? <TagPlayers variant="row" label="Tag people" tagged={tagged} onChange={setTagged} fromSession={logFromSession} /> : null}
+              {/* One people row: "Who was there" on a match or a practice; on drills or fitness, Tag people once there is a photo or a clip to tag them in. */}
+              {!whoRow && (media || tagged.length) ? <TagPlayers variant="row" line label="Tag people" tagged={tagged} onChange={setTagged} /> : null}
             </Reanimated.View>
             {opened?.type === 'tracker' && !openedLog && opened.activity.status === 'new' ? (
               <Pressable accessibilityRole="button" accessibilityLabel="Not tennis? Hide this session" hitSlop={8} onPress={hideIt} style={({ pressed }) => [styles.hideIt, pressed && { opacity: 0.6 }]}>
@@ -1008,7 +1090,8 @@ export default function Compose() {
                 ) : null}
                 {/* One list of rows, the Settings rows' size without their card. */}
                 <View style={styles.rows}>
-                  <TagPlayers variant="row" tagged={tagged} onChange={setTagged} fromSession={fromSession} />
+                  {/* One people row: "Who was there" with a session (its people asked to accept), Tag people without. */}
+                  {whoRow ?? copyRow ?? <TagPlayers variant="row" label="Tag people" tagged={tagged} onChange={setTagged} />}
                   {placeRows}
                   {/* A Post or a Clip can carry one of your sessions: a row to pick it, then its stats in the row's place. */}
                   {statsRow && !statsPick ? (
@@ -1142,6 +1225,7 @@ const styleDefinitions = StyleSheet.create({
   logChips: { gap: spacing.md, marginTop: spacing.lg },
   who: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 170 },
   whoName: { ...font('600'), fontSize: 15, color: colors.text, flexShrink: 1 },
+  whoAsked: { ...typography.small, color: colors.textFaint },
   logRows: { marginTop: spacing.md },
   // How long: the tracker's time on one line, with a small Edit (TrackedLength, as Log your tennis has it).
   lengthBox: { marginTop: spacing.lg },

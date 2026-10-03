@@ -11,10 +11,12 @@ import { KeyboardScrollContext, useKeyboardReveal } from '@/lib/keyboardScroll';
 import { useApp } from '@/store/AppContext';
 
 /**
- * "Who you played", over the composer of a session's post: the same people
- * search as the log sheet. Done hands the players back to the post being
- * written (see whoPlayedPicker); nobody is asked anything until the session
- * is logged. Opened with nothing waiting for it (a reload), it just closes.
+ * "Who was there", over the composer of a session's post: the same people
+ * search as the log sheet, the post's one list of people (owner, Oct 3: on a
+ * session, a tag works like a group). Done hands the players back to the
+ * post being written (see whoPlayedPicker); nobody is asked anything until
+ * the post is shared (or the session logged). Opened with nothing waiting
+ * for it (a reload), it just closes.
  */
 export default function WhoPlayedSheet() {
   const { sessionTagsReady } = useApp();
@@ -27,12 +29,12 @@ export default function WhoPlayedSheet() {
   useEffect(() => () => { if (request) clearWhoPlayed(request); }, [request]);
   const done = () => { request?.onDone(players, text); close(); };
   return (
-    <DragSheet fitContent closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.62} header={<SheetTitle title="Who you played" onClose={close} />}>
+    <DragSheet fitContent closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.62} header={<SheetTitle title="Who was there" onClose={close} />}>
       <KeyboardScrollContext.Provider value={reveal}>
         <ScrollView ref={scroller} onScroll={onScroll} scrollEventThrottle={32} contentContainerStyle={formBody} keyboardShouldPersistTaps="handled">
           {request ? (
             <>
-              <WhoYouPlayed kind={request.kind} players={players} onPlayers={setPlayers} text={text} onText={setText} search={sessionTagsReady} suggested={request.suggested} />
+              <WhoYouPlayed kind={request.kind} players={players} onPlayers={setPlayers} text={text} onText={setText} search={sessionTagsReady} suggested={request.suggested} status={request.status} declined={request.declined} closed={request.closed} />
               <Submit label="Done" onPress={done} />
             </>
           ) : (

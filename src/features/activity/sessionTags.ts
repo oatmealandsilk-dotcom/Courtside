@@ -13,8 +13,16 @@ import type { AgeSource, OpennessMap } from '@/features/players/age';
  * the same way the server does.
  */
 
-/** A doubles partner and two opponents. The server holds the same limit. */
-export const MAX_SESSION_TAGS = 3;
+/**
+ * How many people a session can have tagged (waiting or accepted): a match
+ * holds a doubles partner and two opponents (a court holds four); a practice
+ * is a group, up to 8 (migration 77; before it the server held every
+ * session to 3, and refuses past that with 'too_many').
+ */
+export const maxTagsFor = (kind: PracticeSession['kind'] | undefined): number => (kind === 'match' ? 3 : 8);
+
+/** The most any session can have: a practice's. */
+export const MAX_SESSION_TAGS = 8;
 
 /** Only a match or a practice can have people tagged on it. */
 export const canTagKind = (kind: PracticeSession['kind'] | undefined): boolean => kind === 'match' || kind === 'practice';
@@ -141,6 +149,22 @@ export function withListFor(tags: SessionTag[], sessionId: ID, taggerId: ID, use
   return list.length ? ordered(list) : undefined;
 }
 
+/**
+ * A post made from your copy of someone's session (you accepted their tag)
+ * names the group (migration 77): the person who logged it, and everyone else
+ * who accepted, from your side of the net. This phone only knows the one who
+ * logged it (nobody else's tag reaches it), so that is the list shown straight
+ * away; the server works out the whole of it. Undefined while your tag isn't
+ * accepted, or on a copy that is not a match or a practice.
+ */
+export function copyWithFor(copy: PracticeSession, me: ID, tags: SessionTag[], users: User[]): SessionWith[] | undefined {
+  if (!copy.fromSessionId || !canTagKind(copy.kind)) return undefined;
+  const mine = tags.find((t) => t.taggedId === me && t.sessionId === copy.fromSessionId && t.status === 'accepted');
+  const logger = mine ? users.find((u) => u.id === mine.taggerId) : undefined;
+  if (!mine || !logger) return undefined;
+  return [withEntry(logger, copy.kind === 'match' && mine.role === 'opponent' ? 'opponent' : 'partner')];
+}
+
 /** Whether a post's stats are from this session of its author's: by its log id, or the tracker session it was logged from. */
 const carries = (s: SessionDetail | undefined, session: Pick<PracticeSession, 'id' | 'activityId'>) =>
   !!s && (s.sessionId === session.id || (!!session.activityId && s.activityId === session.activityId));
@@ -154,7 +178,7 @@ export function withOnNewPost(stats: SessionDetail | undefined, me: ID, sessions
   if (!stats) return stats;
   const { with: _sent, ...rest } = stats;
   const session = sessions.find((s) => s.userId === me && carries(rest, s));
-  const list = session ? withListFor(tags, session.id, me, users) : undefined;
+  const list = session ? (session.fromSessionId ? copyWithFor(session, me, tags, users) : withListFor(tags, session.id, me, users)) : undefined;
   if (!session || !list) return rest;
   return { ...rest, ...(rest.sessionId ? {} : { sessionId: session.id }), with: list };
 }
@@ -196,7 +220,8 @@ export function reconcileWith(posts: Post[], me: ID, sessions: PracticeSession[]
     if (!p.session) return p;
     if (p.authorId === me) {
       const session = sessions.find((s) => s.userId === me && carries(p.session, s));
-      if (!session) return p;
+      // A copy's list (the group, migration 77) is the server's: this phone can't see everyone's tags.
+      if (!session || session.fromSessionId) return p;
       const list = withListFor(tags, session.id, me, users);
       if (same(list, p.session.with)) return p;
       changed = true;
@@ -276,7 +301,7 @@ export function refusalWords(code: string, who?: Named): string {
     case 'declined': return `${first} can’t be tagged on this session.`;
     case 'copy': return 'This session came from someone else’s tag. It’s theirs to tag.';
     case 'removed': return 'This tag was taken off.';
-    case 'too_many': return `Up to ${MAX_SESSION_TAGS} players a session. This one is full.`;
+    case 'too_many': return 'This session is full: up to 3 on a match, 8 on a practice.';
     case 'rate_limited': return 'That’s a lot of tags today. Try again tomorrow.';
     case 'not_a_match_or_practice': return 'Players can be tagged on a match or a practice.';
     case 'not_your_session': return 'Only the player who logged it can tag people on it.';

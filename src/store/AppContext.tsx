@@ -31,7 +31,7 @@ import { appleHealthAvailable, connectAppleHealth, readAppleHealth, readAppleNut
 import { isTracker, tennisFlags, TRACKERS } from '@/features/activity/flags';
 import { checkForTennis } from '@/features/activity/check';
 import { pickSource } from '@/features/activity/recent';
-import { MAX_SESSION_TAGS, REFUSALS, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
+import { REFUSALS, maxTagsFor, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
 import { duration } from '@/lib/format';
 import { takeReferrer } from '@/features/invite/referral';
 import { endOfToday } from '@/features/players/openToHit';
@@ -2612,9 +2612,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (live(me) && !s.sessionTagsReady) return players.map((p) => ({ id: p.id, why: tagWords('other') }));
     if (session.fromSessionId) return players.map((p) => ({ id: p.id, why: tagWords('copy') }));
     const mine = tagsOnSession(s.sessionTags, sessionId, me, true);
-    const wanted = new Map(players.slice(0, MAX_SESSION_TAGS).map((p) => [p.id, roleOn(session.kind, p.role)]));
-    const refused: { id: ID; why: string }[] = players.slice(MAX_SESSION_TAGS).map((p) => ({ id: p.id, why: tagWords('too_many') }));
-    // Taken out first, so the three places have room; then sides changed; then the new people.
+    const room = maxTagsFor(session.kind);
+    const wanted = new Map(players.slice(0, room).map((p) => [p.id, roleOn(session.kind, p.role)]));
+    const refused: { id: ID; why: string }[] = players.slice(room).map((p) => ({ id: p.id, why: tagWords('too_many') }));
+    // Taken out first, so there is room; then sides changed; then the new people.
     const drop = mine.filter((t) => isActive(t) && !wanted.has(t.taggedId));
     // Someone switched to the other side of the net after saying yes is asked again (the server does the same).
     const turn = mine.filter((t) => isActive(t) && wanted.has(t.taggedId) && wanted.get(t.taggedId) !== t.role);

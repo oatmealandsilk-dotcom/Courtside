@@ -62,8 +62,10 @@ function weekLabel(start: string, now = new Date()): string {
  * a match or a practice opens "Who you played" for it, to tag people after
  * the fact. Tags of you that you haven't answered sit at the very top, under
  * "Tagged you", with Accept and Decline and your side of the result ("You
- * won"); a session you accepted into your log reads as yours ("Practice with
- * Mira", "Mira's tag"), and a tap on it opens that tag. The phone alert for
+ * won"); a session you accepted into your log reads as yours, shared with
+ * you ("Practice", labelled "with Mira"), with Post it to post it as your
+ * own (its people named by the server, migration 77), and a tap on it opens
+ * that tag. The phone alert for
  * a tag opens this page with ?tag= (the tagger's session), and the tag's
  * sheet opens on top.
  */
@@ -169,14 +171,13 @@ export default function YourSessions() {
                 const activity = found && sourceOn(found, flags) ? found : undefined;
                 const pick: SessionPick = activity ? { type: 'tracker', activity, session: s } : { type: 'logged', session: s };
                 const postId = postOf(pick, posted);
-                // A copy from someone's tag reads as yours, built from the tag ("Practice with Mira", "Mira's tag"), and opens that tag.
+                // A copy from someone's tag reads as yours, a session shared with you: "with Mira" beside its length
+                // ("Match · Lost vs Mira" when she was across the net), Post it to post it as your own, and a tap opens the tag.
                 const from = s.fromSessionId ? sessionTags.find((t) => t.taggedId === currentUserId && (t.mirroredSessionId === s.id || t.sessionId === s.fromSessionId)) : undefined;
                 const fromWho = from ? users.find((u) => u.id === from.taggerId) : undefined;
                 const fromFirst = fromWho ? firstName(fromWho.name) : '';
                 const people: PeopleLine | null = from && fromFirst
-                  ? (s.kind === 'match' && from.role === 'opponent'
-                    ? { vs: [{ name: fromFirst, state: 'typed' }], with: [], allWaiting: false }
-                    : { vs: [], with: [{ name: fromFirst, state: 'typed' }], allWaiting: false })
+                  ? (s.kind === 'match' && from.role === 'opponent' ? { vs: [{ name: fromFirst, state: 'typed' }], with: [], allWaiting: false } : null)
                   : peopleWords(s, sessionTags, users);
                 return (
                   <Logged
@@ -188,7 +189,7 @@ export default function YourSessions() {
                       : undefined}
                     // Built from the tag, the title already says who it was with: no note line repeating it.
                     hideNote={!!(from && fromFirst)}
-                    source={s.fromSessionId ? (fromFirst ? `${fromFirst}’s tag` : 'From a tag') : pickSource(pick)}
+                    source={s.fromSessionId ? (fromFirst ? `with ${fromFirst}` : 'Shared with you') : pickSource(pick)}
                     postId={postId}
                     postable={checked && !postId && s.day >= firstPostable}
                     onPost={() => router.push({ pathname: '/compose', params: pick.type === 'tracker' ? { activity: pick.activity.id } : { session: s.id } })}
