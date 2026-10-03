@@ -210,7 +210,7 @@ export interface SessionPlayer {
 export interface DetectedActivity {
   id: ID;
   userId: ID;
-  source: 'whoop' | 'apple-health' | 'health-connect';
+  source: 'whoop' | 'apple-health' | 'health-connect' | TrackerId;
   sport: 'tennis';
   startedAt: string;
   endedAt: string;
@@ -222,7 +222,7 @@ export interface DetectedActivity {
   kcal?: number;
   /** WHOOP's own 0–21 score. Only from WHOOP, always called Strain, shown privately only. */
   strain?: number;
-  /** 'WHOOP', or the Apple device that saved it, such as 'Watch7,1'. */
+  /** 'WHOOP', the Apple device that saved it (such as 'Watch7,1'), or the tracker's own name for itself ('Charge 6'). */
   device?: string;
   status: 'new' | 'logged' | 'dismissed' | 'duplicate' | 'withdrawn';
   duplicateOf?: ID;
@@ -231,7 +231,10 @@ export interface DetectedActivity {
 }
 
 /** Where a post's session numbers came from, for its label. */
-export type StatsSource = 'whoop' | 'apple-watch' | 'apple-health' | 'health-connect';
+export type StatsSource = 'whoop' | 'apple-watch' | 'apple-health' | 'health-connect' | TrackerId;
+
+/** The trackers the server's trackers function signs in to (migration 69): tennis sessions only. */
+export type TrackerId = 'fitbit' | 'oura' | 'polar';
 
 export interface PlayerStats {
   sessionsLogged: number;
@@ -561,6 +564,7 @@ export type IntegrationProvider =
   | 'myfitnesspal'
   | 'apple-health'
   | 'whoop'
+  | TrackerId
   | 'garmin'
   | 'strava';
 

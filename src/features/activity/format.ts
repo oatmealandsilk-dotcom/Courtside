@@ -54,7 +54,7 @@ export function activityWhen(a: DetectedActivity, now = new Date(), sep = ', '):
 
 /** Which label a session's numbers carry: an Apple Watch only when the workout says it was saved by one. */
 export function statsSourceOf(a: DetectedActivity): StatsSource {
-  if (a.source === 'whoop') return 'whoop';
+  if (a.source === 'whoop' || a.source === 'fitbit' || a.source === 'oura' || a.source === 'polar') return a.source;
   if (a.source === 'apple-health') return /^Watch[0-9]+,[0-9]+$/.test(a.device ?? '') ? 'apple-watch' : 'apple-health';
   return 'health-connect';
 }
@@ -69,6 +69,9 @@ export function sourceLabel(s: StatsSource): string {
     case 'whoop': return 'Data by WHOOP';
     case 'apple-watch': return 'From Apple Watch';
     case 'apple-health': return 'From Apple Health';
+    case 'fitbit': return 'From Fitbit';
+    case 'oura': return 'From Oura';
+    case 'polar': return 'From Polar';
     default: return 'From Health Connect';
   }
 }
@@ -79,6 +82,9 @@ export function fromWho(a: DetectedActivity): string {
     case 'whoop': return 'your WHOOP';
     case 'apple-watch': return 'your Apple Watch';
     case 'apple-health': return 'Apple Health';
+    case 'fitbit': return 'your Fitbit';
+    case 'oura': return 'your Oura Ring';
+    case 'polar': return 'your Polar';
     default: return 'your tracker';
   }
 }

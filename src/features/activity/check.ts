@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { remote } from '@/data/remote';
-import type { ID } from '@/data/types';
+import type { ID, TrackerId } from '@/data/types';
 import { appleHealthAvailable, readTennisWorkouts } from '@/features/health/appleHealth';
 
 /*
@@ -9,7 +9,8 @@ import { appleHealthAvailable, readTennisWorkouts } from '@/features/health/appl
  * the front. Apple Health can only be read on the phone, so the phone reads
  * it and hands each tennis workout to the server; WHOOP lives on WHOOP's
  * servers, so the phone asks ours to look (at most hourly — WHOOP's own alert
- * usually arrives first). The server decides, once and under a lock, whether
+ * usually arrives first). Fitbit, Oura and Polar (migration 69) are asked of
+ * the server the same way, at most hourly each. The server decides, once and under a lock, whether
  * a session is new, so two checks at once never announce it twice.
  *
  * No .web twin: Apple Health is never available in a browser, and the WHOOP
@@ -35,8 +36,8 @@ async function noteLook(key: string, at: number) {
   try { await AsyncStorage.setItem(key, String(at)); } catch { /* the next check simply looks again */ }
 }
 
-/** New tennis sessions: Apple Health read on this phone, WHOOP asked of the server. Returns the ids just filed. Never throws. */
-export function checkForTennis(me: ID, src: { apple: boolean; whoop: boolean }, force = false): Promise<ID[]> {
+/** New tennis sessions: Apple Health read on this phone, WHOOP and the other trackers asked of the server. Returns the ids just filed. Never throws. */
+export function checkForTennis(me: ID, src: { apple: boolean; whoop: boolean; trackers?: TrackerId[] }, force = false): Promise<ID[]> {
   running ??= (async () => {
     const filed: ID[] = [];
     const now = Date.now();
@@ -67,6 +68,17 @@ export function checkForTennis(me: ID, src: { apple: boolean; whoop: boolean }, 
       if (force || last === null || now - last > WHOOP_EVERY) {
         // A server without the tennis part yet answers with an error, which is simply ignored.
         const r = await remote.whoop<{ fresh?: ID[] }>('sync', { only: 'workouts' }).catch(() => null);
+        filed.push(...(r?.fresh ?? []));
+        await noteLook(key, now);
+      }
+    }
+
+    for (const provider of src.trackers ?? []) {
+      const key = `courtside-tennis-${provider}:${me}`;
+      const last = await lastLook(key);
+      if (force || last === null || now - last > WHOOP_EVERY) {
+        // A server without the trackers function answers with an error, which is simply ignored.
+        const r = await remote.trackers<{ fresh?: ID[] }>('sync', { provider }).catch(() => null);
         filed.push(...(r?.fresh ?? []));
         await noteLook(key, now);
       }

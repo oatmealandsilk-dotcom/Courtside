@@ -27,7 +27,7 @@ import { MAX_CHAT_PHOTOS, clearSendProgress, keepLocalCopy, setSendProgress } fr
 import { readReceiptPreference, saveReceiptPreference } from '@/features/messaging/preferences';
 import { connectProvider, disconnectProvider } from '@/lib/integrations';
 import { appleHealthAvailable, connectAppleHealth, readAppleHealth, readAppleNutrition } from '@/features/health/appleHealth';
-import { tennisFlags } from '@/features/activity/flags';
+import { isTracker, tennisFlags, TRACKERS } from '@/features/activity/flags';
 import { checkForTennis } from '@/features/activity/check';
 import { fromWho } from '@/features/activity/format';
 import { MAX_SESSION_TAGS, REFUSALS, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
@@ -95,7 +95,7 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId } from '@/data/types';
 
 interface NewStoryInput {
   imageUrl?: string;
@@ -593,9 +593,9 @@ interface AppActions extends CourtLifeActions {
   checkForActivities: (force?: boolean) => Promise<void>;
   /** "Not tennis": hides a session you have not logged, and its notification. */
   dismissActivity: (id: ID) => void;
-  /** Asks the source for workouts (Apple Health's sheet, or WHOOP's sign-in again), then turns tennis sessions on for it. */
-  turnOnTennis: (provider: 'apple-health' | 'whoop') => Promise<void>;
-  turnOffTennis: (provider: 'apple-health' | 'whoop') => Promise<void>;
+  /** Asks the source for workouts (Apple Health's sheet, or WHOOP's, Fitbit's, Oura's or Polar's sign-in again), then turns tennis sessions on for it. */
+  turnOnTennis: (provider: 'apple-health' | 'whoop' | TrackerId) => Promise<void>;
+  turnOffTennis: (provider: 'apple-health' | 'whoop' | TrackerId) => Promise<void>;
   /** If this person arrived through an invite link, it is claimed now: the two follow each other. */
   claimPendingReferral: () => Promise<void>;
   countReferrals: () => Promise<number>;
@@ -950,10 +950,11 @@ const cleanTitle = (title?: string) => (title ?? '').replace(/\s+/g, ' ').trim()
 /** A group function's answer that is a refusal rather than the chat's id. */
 const isRefusal = (result: string): result is GroupRefusal | 'failed' => ['blocked', 'teen', 'full', 'not-admin', 'failed'].includes(result);
 
-// In a browser, WHOOP's tennis sign-in comes back in its own small window
-// (?whoop=pending): that window hands the address to the one that opened it,
-// which collects the sign-in (connectWhoop). Every other page load: nothing.
-if (Platform.OS === 'web' && typeof window !== 'undefined' && /[?&]whoop=pending/.test(window.location?.search ?? '')) {
+// In a browser, WHOOP's tennis sign-in (and Fitbit's, Oura's or Polar's) comes
+// back in its own small window (?whoop=pending, ?tracker=pending): that window
+// hands the address to the one that opened it, which collects the sign-in
+// (connectWhoop, connectTracker). Every other page load: nothing.
+if (Platform.OS === 'web' && typeof window !== 'undefined' && /[?&](whoop|tracker)=pending/.test(window.location?.search ?? '')) {
   try { WebBrowser.maybeCompleteAuthSession(); } catch { /* the opener has gone; trying again starts afresh */ }
 }
 
@@ -5383,7 +5384,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return true;
     }
     if (provider === 'whoop') { await remote.whoop('sync'); return true; }
+    // Fitbit, Oura, Polar: "Sync now" looks back a week for tennis.
+    if (isTracker(provider)) { await remote.trackers('sync', { provider, days: 7 }); return true; }
     return false;
+  }, []);
+
+  /**
+   * Fitbit's, Oura's or Polar's sign-in, through the server's trackers
+   * function (migration 69), the same way as WHOOP's tennis sign-in: the
+   * server sends the browser to the tracker, the tracker sends it back, and
+   * the sign-in waits until this phone, signed in as you, collects it. So a
+   * sign-in link sent to someone else can never put their tracker on the
+   * sender's account. Connecting one turns its tennis sessions on.
+   */
+  const connectTracker = useCallback(async (provider: TrackerId) => {
+    const label = stateRef.current.integrations.find((i) => i.provider === provider)?.label ?? 'That tracker';
+    const back = Linking.createURL('health');
+    const start = await remote.trackers<{ on?: boolean; url?: string }>('start', { provider, back });
+    if (!start.on || !start.url) throw new Error(`${label} is coming soon.`);
+    const result = await WebBrowser.openAuthSessionAsync(start.url, back);
+    if (result.type !== 'success') throw new Error(`${label} was not connected.`);
+    const n = /[?&]n=([0-9a-f-]{36})/i.exec(result.url)?.[1];
+    if (!n) throw new Error(/tracker=expired/.test(result.url) ? 'That sign-in took too long. Try again.' : `${label} was not connected.`);
+    await remote.trackers('finish', { n });
   }, []);
 
   /**
@@ -5413,14 +5436,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const checkWith = useCallback(async (force: boolean, rows: Pick<Integration, 'provider' | 'connected' | 'readsWorkouts'>[]) => {
     const me = stateRef.current.currentUserId;
     if (!live(me) || !stateRef.current.remoteLoaded) return;
-    const apple = rows.find((i) => i.provider === 'apple-health');
-    const whoop = rows.find((i) => i.provider === 'whoop');
+    const on = (p: Integration['provider']) => rows.some((i) => i.provider === p && i.connected && i.readsWorkouts);
     // Nothing has tennis sessions on (always so on a database without
     // migration 58): no need to ask the server anything.
-    if (!(apple?.connected && apple.readsWorkouts) && !(whoop?.connected && whoop.readsWorkouts)) return;
+    if (!on('apple-health') && !on('whoop') && !TRACKERS.some(on)) return;
     const flags = await tennisFlags(me);
-    const src = { apple: !!(flags.apple && apple?.connected && apple.readsWorkouts), whoop: !!(flags.whoop && whoop?.connected && whoop.readsWorkouts) };
-    if (!src.apple && !src.whoop) return;
+    const src = { apple: flags.apple && on('apple-health'), whoop: flags.whoop && on('whoop'), trackers: TRACKERS.filter((p) => flags[p] && on(p)) };
+    if (!src.apple && !src.whoop && !src.trackers.length) return;
     const filed = await checkForTennis(me!, src, force);
     if (stateRef.current.currentUserId !== me) return;
     const list = await remote.fetchActivities(me!);
@@ -5456,7 +5478,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (live(me)) void remote.dismissActivity(id);
   }, []);
 
-  const turnOnTennis = useCallback(async (provider: 'apple-health' | 'whoop') => {
+  const turnOnTennis = useCallback(async (provider: 'apple-health' | 'whoop' | TrackerId) => {
     const me = stateRef.current.currentUserId;
     if (!live(me)) {
       // The demo: switched on at once.
@@ -5469,15 +5491,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await connectAppleHealth({ workouts: true });
       if (!stateRef.current.integrations.find((i) => i.provider === 'apple-health')?.connected) await pullFrom(me!, 'apple-health');
       await remote.setHealthConnection(me!, 'apple-health', true, { readsWorkouts: true });
-    } else {
+    } else if (provider === 'whoop') {
       await connectWhoop(true);
+    } else {
+      await connectTracker(provider);
     }
     haptics.commit();
     const got = await reloadHealth();
     void checkWith(true, got ? got.connections.map((c) => ({ ...c, connected: true })) : stateRef.current.integrations);
-  }, [connectWhoop, pullFrom, reloadHealth, checkWith]);
+  }, [connectWhoop, connectTracker, pullFrom, reloadHealth, checkWith]);
 
-  const turnOffTennis = useCallback(async (provider: 'apple-health' | 'whoop') => {
+  const turnOffTennis = useCallback(async (provider: 'apple-health' | 'whoop' | TrackerId) => {
     const me = stateRef.current.currentUserId;
     if (!live(me)) {
       setState((prev) => ({ ...prev, integrations: prev.integrations.map((i) => (i.provider === provider ? { ...i, readsWorkouts: false } : i)) }));
@@ -5495,11 +5519,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!current) return;
     if (!live(me)) {
       const updated = current.connected ? await disconnectProvider(current) : await connectProvider(current);
-      setState((prev) => ({ ...prev, integrations: prev.integrations.map((i) => (i.provider === provider ? updated : i)) }));
+      // A tracker connects for its tennis sessions, so in the demo they are on at once.
+      const shown = isTracker(provider) ? { ...updated, readsWorkouts: updated.connected } : updated;
+      setState((prev) => ({ ...prev, integrations: prev.integrations.map((i) => (i.provider === provider ? shown : i)) }));
       return;
     }
     if (current.connected) {
-      if (provider === 'whoop') await remote.whoop('disconnect'); else await remote.setHealthConnection(me!, provider, false);
+      if (provider === 'whoop') await remote.whoop('disconnect');
+      else if (isTracker(provider)) await remote.trackers('disconnect', { provider });
+      else await remote.setHealthConnection(me!, provider, false);
       haptics.untap();
       await reloadHealth();
       return;
@@ -5515,6 +5543,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } else if (provider === 'whoop') {
       tennis = opts.tennis === true && (await tennisFlags(me)).whoop;
       await connectWhoop(tennis);
+    } else if (isTracker(provider)) {
+      // Fitbit, Oura and Polar connect only for tennis sessions.
+      await connectTracker(provider);
+      tennis = true;
     } else if (provider === 'cronometer' || provider === 'myfitnesspal') {
       if (appleHealthAvailable()) await connectAppleHealth();
       if (!(await pullFrom(me!, provider))) return;
@@ -5522,7 +5554,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     haptics.commit();
     const got = await reloadHealth();
     if (tennis) void checkWith(true, got ? got.connections.map((c) => ({ ...c, connected: true })) : stateRef.current.integrations);
-  }, [pullFrom, reloadHealth, connectWhoop, checkWith]);
+  }, [pullFrom, reloadHealth, connectWhoop, connectTracker, checkWith]);
 
   const syncHealth = useCallback(async (provider: Integration['provider']) => {
     const me = stateRef.current.currentUserId;

@@ -35,7 +35,7 @@ const lengthTile = (m: number) => ({ value: m, top: m < 60 ? 'min' : m === 60 ? 
 /** The usual lengths, with the nearest one swapped for the tracker's own minutes, so it sits where it belongs and is picked already. */
 function lengthsFor(a: DetectedActivity) {
   const nearest = LENGTHS.reduce((best, m, i) => (Math.abs(m - a.minutes) < Math.abs(LENGTHS[best] - a.minutes) ? i : best), 0);
-  const top = a.source === 'whoop' ? 'WHOOP' : statsSourceOf(a) === 'apple-watch' ? 'Watch' : 'Health';
+  const top = ({ whoop: 'WHOOP', 'apple-watch': 'Watch', fitbit: 'Fitbit', oura: 'Oura', polar: 'Polar' } as Partial<Record<ReturnType<typeof statsSourceOf>, string>>)[statsSourceOf(a)] ?? 'Health';
   return LENGTHS.map((m, i) => (i === nearest ? { value: a.minutes, top, main: duration(a.minutes), label: duration(a.minutes) } : lengthTile(m)));
 }
 
