@@ -8,7 +8,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Screen, Toggle } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
-import { askWhoSeesYou, canChooseVisibility } from '@/features/players/mapPrivacy';
+import { askWhoSeesYou, canChooseVisibility, onTeenMap } from '@/features/players/mapPrivacy';
 import { useTheme, themeList, themes, type ThemeName } from '@/theme/ThemeProvider';
 import { Wash } from '@/components/Wash';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -41,11 +41,12 @@ interface Row {
  */
 export default function Settings() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras, mapLive, mapVisibility } = useApp();
+  const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras, mapLive, mapVisibility, teenMap } = useApp();
   const [locationNote, setLocationNote] = useState('');
   const toggleLocation = async (next: boolean) => {
     // Never said who can see you on the map (migration 63): that comes first, the same as on the map.
-    if (next && canChooseVisibility(mapLive, currentUser) && mapVisibility === null && !(await askWhoSeesYou('first'))) return;
+    // A teen (migration 78) gets the same screen, with its short notice: nothing is shared until they answer.
+    if (next && canChooseVisibility(mapLive, currentUser, teenMap) && mapVisibility === null && !(await askWhoSeesYou('first'))) return;
     setLocationNote(next ? 'Asking…' : '');
     const problem = await actions.setLocationEnabled(next);
     setLocationNote(problem ?? '');
@@ -54,6 +55,8 @@ export default function Settings() {
   // The tennis-session alert switch shows once WHOOP's tennis sessions are switched on (migration 58).
   const tennis = useTennisFlags();
   const mapAdult = !!currentUser && !notKnownAdult(currentUser);
+  // A teen on the map (migration 78) can hear when a friend who follows them back is up for a hit.
+  const mapTeen = onTeenMap(currentUser, teenMap);
   // The map alerts' switches show only once the server is known to have
   // them (migration 60): before that a switch would do nothing, and come
   // back on at the next start. Asking for Your courts is what finds out.
@@ -80,13 +83,16 @@ export default function Settings() {
       ],
     }]),
     // The map's own alerts, each with its own switch. On a computer too: they also land in your Notifications.
-    // The first three only ever go to adults (the server's rule), so a teen sees just the courts one.
+    // New open hits and new players only ever go to adults (the server's rule); a teen also gets
+    // "Friends up for a hit", from friends who follow each other with them (migration 78).
     ...(!mapAlerts ? [] : [{
       title: 'Map alerts',
       note: 'At most one a day each.',
       rows: [
-        ...(mapAdult ? [
+        ...(mapAdult || mapTeen ? [
           { icon: 'people-outline' as const, leading: <HitGlyph size={20} color={colors.textMuted} />, label: 'Friends up for a hit', toggle: { value: prefs.pushMapFriends, onChange: (v: boolean) => actions.setPref('pushMapFriends', v) } },
+        ] : []),
+        ...(mapAdult ? [
           { icon: 'navigate-outline' as const, label: 'New open hits', detail: 'Within 15 miles', toggle: { value: prefs.pushMapHits, onChange: (v: boolean) => actions.setPref('pushMapHits', v) } },
           { icon: 'location-outline' as const, label: 'New players nearby', toggle: { value: prefs.pushMapPlayers, onChange: (v: boolean) => actions.setPref('pushMapPlayers', v) } },
         ] : []),

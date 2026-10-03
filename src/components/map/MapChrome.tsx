@@ -595,7 +595,7 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
  * face here draws on its green ring, the box around the switch warms to
  * green, and your pin on the map behind does the same.
  */
-export function YouSheet({ me, open, onToggle, onProfile, onClose, seenBy, onSeenBy }: { me: User; open: boolean; onToggle: (on: boolean) => void; onProfile: () => void; onClose: () => void; /** Who can see you on the map (migration 63), with a way to change it; absent before it. */ seenBy?: MapVisibility | null; onSeenBy?: () => void }) {
+export function YouSheet({ me, open, teen = false, onToggle, onProfile, onClose, seenBy, onSeenBy }: { me: User; open: boolean; /** Not known to be an adult, with the map's teen rule on (migration 78): only friends who follow you back see you. */ teen?: boolean; onToggle: (on: boolean) => void; onProfile: () => void; onClose: () => void; /** Who can see you on the map (migration 63), with a way to change it; absent before it. */ seenBy?: MapVisibility | null; onSeenBy?: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const pull = useDragToClose(onClose);
   const reduce = useReducedMotion();
@@ -638,7 +638,7 @@ export function YouSheet({ me, open, onToggle, onProfile, onClose, seenBy, onSee
           <Text style={styles.openTitle}>Open to hit today</Text>
           {/* Both sentences hold the same place (the longer one keeps the room), so the card never changes height as they hand over. */}
           <View>
-            <Animated.Text style={[styles.openNote, noteOn]} aria-hidden={!open} accessibilityElementsHidden={!open} importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}>Players nearby see your green ring until midnight.</Animated.Text>
+            <Animated.Text style={[styles.openNote, noteOn]} aria-hidden={!open} accessibilityElementsHidden={!open} importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}>{teen ? 'Friends who follow you back see your green ring until midnight.' : 'Players nearby see your green ring until midnight.'}</Animated.Text>
             <Animated.Text style={[styles.openNote, styles.noteOver, noteOff]} aria-hidden={open} accessibilityElementsHidden={open} importantForAccessibility={open ? 'no-hide-descendants' : 'auto'}>Wear a green ring on the map until midnight.</Animated.Text>
           </View>
         </View>
@@ -646,10 +646,10 @@ export function YouSheet({ me, open, onToggle, onProfile, onClose, seenBy, onSee
         <Toggle value={open} onChange={onToggle} haptic tint={colors.open} accessibilityLabel="Open to hit today" />
       </Animated.View>
       {onSeenBy ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={`Who can see you: ${visibilityLabel(seenBy)}. Change`} onPress={onSeenBy} style={({ pressed }) => [styles.seenRow, pressed && styles.listPressed]}>
-          <Ionicons name={seenBy === 'none' ? 'eye-off-outline' : 'eye-outline'} size={17} color={colors.textMuted} />
+        <Pressable accessibilityRole="button" accessibilityLabel={`Who can see you: ${visibilityLabel(seenBy, teen)}. Change`} onPress={onSeenBy} style={({ pressed }) => [styles.seenRow, pressed && styles.listPressed]}>
+          <Ionicons name={seenBy === 'none' || (teen && seenBy == null) ? 'eye-off-outline' : 'eye-outline'} size={17} color={colors.textMuted} />
           <Text style={styles.seenLabel}>Who can see you</Text>
-          <Text style={styles.seenValue} numberOfLines={1}>{visibilityLabel(seenBy)}</Text>
+          <Text style={styles.seenValue} numberOfLines={1}>{visibilityLabel(seenBy, teen)}</Text>
           <Ionicons name="chevron-forward" size={15} color={colors.textFaint} />
         </Pressable>
       ) : null}
@@ -829,8 +829,9 @@ export function HitSheet({ hit, miles, onClose }: { hit: HitRequest; miles?: num
  */
 export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, weather, locationOn, locating, onToggleLocation }: { cityName: string; count: number; /** Places to play in town (one per park, not single courts). */ placeCount?: number; /** Open hits in town. */ hitCount?: number; weather: Weather | null; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
-  // Only an adult sees anyone's spot (migration 46), so for anyone else an
-  // empty map says nothing about the town: no "be the first" for them.
+  // A teen sees only friends who follow each other with them (migration 78),
+  // so for anyone not known to be an adult an empty map says nothing about
+  // the town: no "be the first" for them.
   const { currentUser } = useApp();
   const adult = !!currentUser && !notKnownAdult(currentUser);
   // Players first; with none sharing yet, the courts still say the map is worth opening.

@@ -18,8 +18,9 @@ const atPark = (n: number, name: string) => {
  * there); Omar follows you back, so he shows exactly where he was; everyone
  * else is about a kilometre out. Priya hides her activity, so her spot has no time. Up for a
  * hit today: Sam, Noor, Lena and Bea (`openUntil`, as their profiles say).
- * Never a row for Ella, the teen: the database never shows an adult a
- * teen's spot (migration 46), and the demo keeps that rule.
+ * Never a row for Ella, the teen: the database shows a teen's spot only
+ * to friends who follow each other with them (migration 78), and Ella and
+ * the demo player don't, so the demo keeps that rule.
  */
 export const demoLastSeen: Record<ID, LastSeen> = Object.fromEntries(([
   { userId: 'u-sam', ...atPark(1, 'Alder Park'), city: 'Los Angeles', seenAt: minutesAgo(12), openUntil: endOfToday() },

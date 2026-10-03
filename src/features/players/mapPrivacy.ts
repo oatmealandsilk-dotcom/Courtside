@@ -28,17 +28,50 @@ export const VISIBILITY_CHOICES: { value: MapVisibility; label: string; line: st
   { value: 'none', label: 'Only me', line: 'No one sees you on the map.' },
 ];
 
-/** The answer as a settings row says it: the screen's own words, so the two never differ. */
-export const visibilityLabel = (v: MapVisibility | null | undefined) =>
-  (VISIBILITY_CHOICES.find((c) => c.value === (v ?? 'nearby')) ?? VISIBILITY_CHOICES[0]).label;
+/**
+ * The two answers for someone not known to be an adult (migration 78): the
+ * map is only ever between friends who follow each other, so there is no
+ * "Players nearby", and their spot is only ever their rough area.
+ */
+export const TEEN_CHOICES: { value: MapVisibility; label: string; line: string }[] = [
+  { value: 'mutuals', label: 'Friends who follow you back', line: 'Your rough area, just for them. Strangers never see you.' },
+  { value: 'none', label: 'Only me', line: 'No one sees you on the map.' },
+];
+
+/** What a teen is told the first time, before anything is shared (the owner's words). */
+export const TEEN_NOTICE = 'Only friends who follow you back can see where you are. Turn off location on the map anytime to hide.';
+
+/** The choices to offer: the adults' three, or the teens' two. */
+export const choicesFor = (teen: boolean) => (teen ? TEEN_CHOICES : VISIBILITY_CHOICES);
+
+/**
+ * The answer as a settings row says it: the screen's own words, so the two
+ * never differ. For a teen, no answer yet means nobody sees them (Only me).
+ */
+export const visibilityLabel = (v: MapVisibility | null | undefined, teen = false) => {
+  if (teen) return (v === 'nearby' || v === 'mutuals' ? TEEN_CHOICES[0] : TEEN_CHOICES[1]).label;
+  return (VISIBILITY_CHOICES.find((c) => c.value === (v ?? 'nearby')) ?? VISIBILITY_CHOICES[0]).label;
+};
+
+/**
+ * Where someone not known to be an adult stands with the map (migration
+ * 78): 'off' on a database without it (they are never on the map, and see
+ * only themselves), 'on' (only between friends who follow each other), or
+ * 'under16' (a birthday on file says under 16: never on the map).
+ */
+export type TeenMap = 'off' | 'on' | 'under16';
 
 /**
  * Whether there is a choice to make here at all: the map's round 2 is on
- * the database, and you are known to be an adult (anyone else is never
- * shown on the map, so there is nobody to choose between).
+ * the database, and you are known to be an adult, or (migration 78) a teen
+ * of 16 or 17, or anyone with no age on file, who may share with friends
+ * who follow them back.
  */
-export const canChooseVisibility = (mapLive: boolean | null, me: User | null | undefined) =>
-  mapLive === true && !!me && !notKnownAdult(me);
+export const canChooseVisibility = (mapLive: boolean | null, me: User | null | undefined, teenMap: TeenMap) =>
+  mapLive === true && !!me && (!notKnownAdult(me) || teenMap === 'on');
+
+/** Whether the map's teen rule (friends who follow each other only) applies to you. */
+export const onTeenMap = (me: User | null | undefined, teenMap: TeenMap) => !!me && notKnownAdult(me) && teenMap === 'on';
 
 /* ------------------------------------------------------------- the screen */
 

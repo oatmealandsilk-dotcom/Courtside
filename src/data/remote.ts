@@ -420,6 +420,14 @@ export interface UserState {
    * "Who can see you on the map?").
    */
   mapVisibility?: MapVisibility | null;
+  /**
+   * The map's teen rule (migration 78): undefined on a database without it.
+   * 'on': you may share with friends who follow you back (if you are not a
+   * known adult); 'under16': your birthday says under 16, so never on the map.
+   */
+  teenMap?: 'on' | 'under16';
+  /** Your own "up for a hit today" when it is kept privately (not a known adult; migration 78). */
+  ownOpenUntil?: string | null;
 }
 
 /* Courts, migration 60: players' facts, follows, right now, rings. */
@@ -496,7 +504,11 @@ interface MapPlayerRow { user_id: ID; lat: number; lng: number; place: MapPlace 
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
 interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints'] } | null; map_visibility?: string | null;
   /** Your own age group, readable only by you (migration 64). Absent before it. */
-  age_group?: string | null }
+  age_group?: string | null;
+  /** Your birthday, readable only by you (migration 13). */
+  birth_date?: string | null;
+  /** When you (not a known adult) answered who can see you on the map, and your private ring (migration 78). Absent before it. */
+  map_answered_at?: string | null; open_to_hit_until?: string | null }
 
 interface PollRow { question_id: string; options: string[]; counts: number[] | null }
 /** Each thread's poll, with the totals and your own vote, laid onto the threads. */
@@ -547,7 +559,18 @@ const toUserState = (r: UserStateRow): UserState => ({
   constraints: Array.isArray(r.private_profile?.constraints) ? r.private_profile!.constraints : undefined,
   // The key is there only once migration 63 has run; null means never chosen.
   mapVisibility: 'map_visibility' in r ? asVisibility(r.map_visibility) : undefined,
+  // The key is there only once migration 78 has run.
+  teenMap: 'map_answered_at' in r ? (under16(r.birth_date) ? 'under16' : 'on') : undefined,
+  ownOpenUntil: 'open_to_hit_until' in r ? r.open_to_hit_until ?? null : undefined,
 });
+/** A birthday (yyyy-mm-dd) less than 16 years ago. */
+function under16(dob: string | null | undefined): boolean {
+  if (!dob || !/^\d{4}-\d{2}-\d{2}/.test(dob)) return false;
+  const [y, m, d] = dob.slice(0, 10).split('-').map(Number);
+  const now = new Date();
+  const sixteenth = new Date(y + 16, m - 1, d);
+  return sixteenth.getTime() > new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+}
 const asVisibility = (v: unknown): MapVisibility | null => (v === 'nearby' || v === 'mutuals' || v === 'none' ? v : null);
 
 interface CoachApplicationRow {
@@ -853,7 +876,8 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   const agesOnProfiles = profileRows.some((row) => 'age_group' in row);
   return {
     agesOnProfiles,
-    users: profileRows.map((row) => toUser(row.id === me ? { ...row, age_group: ownAge } : row, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
+    // Your own "up for a hit" when it is kept privately (migration 78: not a known adult) comes from your settings row.
+    users: profileRows.map((row) => toUser(row.id === me ? { ...row, age_group: ownAge, open_to_hit_until: row.open_to_hit_until ?? ownState?.open_to_hit_until ?? null } : row, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
     posts: postRows.map(toPost),
     comments: [
       ...postRows.flatMap((row) => (row.comments ?? []).map(toComment)),
