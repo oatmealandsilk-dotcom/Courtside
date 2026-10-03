@@ -14,7 +14,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 /*
  * Groups (migration 67): the ones you are in, the ones you asked to join,
  * and a button that opens a short sheet to start one (group-form). Reached
- * from the "+" at the end of the Feed's top row, and from Profile. Someone
+ * from Profile, and from "Manage" in Find groups (the Feed's "+"). Someone
  * not known to be an adult sees one calm line instead of Start (groups are
  * adults-only for now; the server holds the same rule).
  */

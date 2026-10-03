@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 
 import { DragSheet } from '@/components/DragSheet';
 import { Section, SheetTitle, Submit, formBody } from '@/components/sheet/SheetForm';
-import { Field, SegmentedControl } from '@/components/ui';
+import { Field, SegmentedControl, Toggle } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { MAX_GROUPS, groupsOpenTo } from '@/store/feedGroups';
 import { colors, spacing, typography } from '@/theme';
@@ -13,16 +13,18 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 /*
  * Start a group, or (with ?id=) edit one you run: a sheet over the Groups
  * list or the group's page, so the form is only there when it is wanted.
- * Name, a line about it, and who can join. The green button waits until
- * there is a name. A new group opens its page once the sheet has gone.
+ * Name, a line about it, who can join, and whether it shows in Find groups
+ * (the window behind the Feed's "+", migration 70; on unless switched off,
+ * so a private crew can stay reachable only by its invite link). The green
+ * button waits until there is a name. A new group opens its page once the
+ * sheet has gone.
  */
 
 type JoinMode = 'open' | 'ask';
 
-const JOIN_HELP: Record<JoinMode, string> = {
-  open: 'Anyone with the invite link joins straight away.',
-  ask: 'You say yes to each person before they’re in.',
-};
+const joinHelp = (mode: JoinMode, listed: boolean) => (mode === 'ask'
+  ? 'You say yes to each person before they’re in.'
+  : listed ? 'Anyone who finds it joins straight away.' : 'Anyone with the invite link joins straight away.');
 
 export default function GroupForm() {
   const styles = useThemedStyles(styleDefinitions);
@@ -32,6 +34,7 @@ export default function GroupForm() {
   const [name, setName] = useState(editing?.name ?? '');
   const [about, setAbout] = useState(editing?.description ?? '');
   const [mode, setMode] = useState<JoinMode>(editing?.ask ? 'ask' : 'open');
+  const [listed, setListed] = useState(editing?.discoverable !== false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [closeSignal, setCloseSignal] = useState(0);
@@ -50,9 +53,9 @@ export default function GroupForm() {
     setError(null);
     try {
       if (editing) {
-        await actions.updateFeedGroup(editing.id, { name, description: about, ask: mode === 'ask' });
+        await actions.updateFeedGroup(editing.id, { name, description: about, ask: mode === 'ask', discoverable: listed });
       } else {
-        created.current = await actions.createFeedGroup({ name, description: about, ask: mode === 'ask' });
+        created.current = await actions.createFeedGroup({ name, description: about, ask: mode === 'ask', discoverable: listed });
       }
       dismiss();
     } catch (e) {
@@ -115,12 +118,19 @@ export default function GroupForm() {
               minHeight={72}
               soft
             />
-            <Section title="Who can join" hint={JOIN_HELP[mode]}>
+            <Section title="Who can join" hint={joinHelp(mode, listed)}>
               <SegmentedControl<JoinMode>
-                segments={[{ value: 'open', label: 'Anyone with the link' }, { value: 'ask', label: 'Ask to join' }]}
+                segments={[{ value: 'open', label: listed ? 'Anyone can join' : 'Anyone with the link' }, { value: 'ask', label: 'Ask to join' }]}
                 value={mode}
                 onChange={setMode}
               />
+            </Section>
+            <Section
+              title="Show in Find groups"
+              hint={listed ? 'People can find it from the + on the Feed.' : 'Hidden. Only people with the invite link can find it.'}
+              right={<Toggle value={listed} onChange={setListed} accessibilityLabel="Show in Find groups" haptic />}
+            >
+              {null}
             </Section>
             {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
             <View style={styles.submit}>

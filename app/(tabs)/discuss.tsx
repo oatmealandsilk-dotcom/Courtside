@@ -537,7 +537,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             <Ionicons name="add" size={22} color={colors.brandInk} />
           </Pressable>
           {/* Your chats, in the same corner as on Feed. Pulled out by its padding so the icons sit evenly spaced. */}
-          <InboxButton size={24} style={{ margin: -4 }} />
+          <InboxButton size={27} />
         </View>
       }
     >

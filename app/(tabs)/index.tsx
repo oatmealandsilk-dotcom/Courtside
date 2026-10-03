@@ -1358,10 +1358,6 @@ function Home({ scope, topRow, paused, onChrome }: {
                   // floating tab bar, so the caption and buttons under the card stay in view.
                   <View key={post.id} style={[styles.article, scopedBack && styles.articleScoped, !phone && styles.articleCentred, (topRow || !!scope?.groupId) && { paddingTop: insets.top + 64 }, barInset > 0 && post.session && hasSessionStats(post.session) && !post.imageUrl && !post.videoUrl ? { paddingBottom: barInset + 8 } : null]}>
                     <Wash height={300} strength={0.6} />
-                    {/* Inside one person's posts the feed label means nothing, and the back chevron wants the room. */}
-                    {scopedBack ? null : <Text style={styles.eyebrow}>
-                      {post.session?.activityId || (post.session?.sessionId && post.session.kind !== 'fitness') ? 'Tennis' : post.kind === 'match' ? 'Set play' : post.kind.charAt(0).toUpperCase() + post.kind.slice(1)} · {groupName ?? 'For you'}
-                    </Text>}
                     {strip}
                     <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: 'flex-start' }}>
                       <PostCard
@@ -1756,7 +1752,7 @@ function GroupedFeed() {
           groups={feedGroups}
           selected={groupId}
           onSelect={(next) => { if (next !== groupId) { haptics.tap(); setGroupId(next); } }}
-          onPlus={() => router.push('/groups')}
+          onPlus={() => router.push('/find-groups')}
           onPicture={chrome.picture}
           hidden={chrome.hidden}
           waiting={waiting}
