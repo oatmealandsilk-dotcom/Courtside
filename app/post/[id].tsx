@@ -6,6 +6,7 @@ import { goBack } from '@/lib/goBack';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { EmptyState, Screen } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
+import { publicRoute } from '@/features/share/publicRoute';
 
 /**
  * A post's own address, kept for links, notifications and shares — but there
@@ -14,7 +15,7 @@ import { useApp } from '@/store/AppContext';
  * An older post the app has not loaded yet is fetched first, so a link never
  * says "gone" about something that is still there.
  */
-export default function PostDetail() {
+function PostDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { posts, ready, actions, currentUserId } = useApp();
   const post = posts.find((p) => p.id === id);
@@ -37,3 +38,6 @@ export default function PostDetail() {
   }
   return <Redirect href={{ pathname: '/posts/[userId]', params: { userId: post.authorId, post: post.id, set: archivedMine ? 'archived' : 'own' } }} />;
 }
+
+// A link shared outside the app opens here for anyone; signed out, it shows the public look (see SharedPage).
+export default publicRoute('post', PostDetail);

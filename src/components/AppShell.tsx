@@ -19,6 +19,8 @@ import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { askForCommunityMap, isStartTab } from '@/features/navigation/startTab';
 import { launchSettle, useCurtainDown } from '@/features/feed/warmup';
 import { useApp } from '@/store/AppContext';
+import { isPublicPath } from '@/features/share/publicPaths';
+import { useShareLanding } from '@/features/share/useShareLanding';
 import { claimCarriedBirthDate, isDeviceBlocked, recallAnswered } from '@/features/age/ageCheck';
 import { auth as remoteAuth } from '@/data/remote';
 import { setCrashScreen } from '@/lib/crashReporting';
@@ -216,13 +218,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const settle = useAnimatedStyle(() => (!settleOn ? {} : {
     transform: [{ translateY: launchSettle.value * 10 }, { scale: 1 + launchSettle.value * 0.03 }],
   }));
-  // A shared link opened while signed out goes to sign-in, not to an empty page.
-  const mustSignIn = ready && authResolved && !currentUserId && !['/', '/index', '/sign-in', '/onboarding', '/birthday'].includes(pathname);
+  // A page opened while signed out goes to sign-in, not to an empty page. A
+  // shared link (a post, a profile, an open hit, a thread, a court, an
+  // invite) is the exception: it shows its public look (see publicRoute).
+  const mustSignIn = ready && authResolved && !currentUserId && !['/', '/index', '/sign-in', '/onboarding', '/birthday'].includes(pathname) && !isPublicPath(pathname);
   // The gates — sign in, birthday, terms — are reached by one replace each,
   // with the app left mounted underneath. Swapping the whole app for a
   // redirect unmounted the navigator; when it came back on the page it had
   // left, the gate fired again, and the two bounced until React gave up.
   const detour = mustSignIn ? '/sign-in' : needsBirthday ? '/birthday' : needsTerms ? '/agree' : null;
+  // Signed up from a shared link: once in, the app opens on what they were looking at.
+  useShareLanding({ pathname, held: !!detour });
   const sentTo = useRef<string | null>(null);
   useEffect(() => {
     if (!detour) { sentTo.current = null; return; }

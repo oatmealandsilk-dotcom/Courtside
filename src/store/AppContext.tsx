@@ -28,7 +28,7 @@ import { MAX_CHAT_PHOTOS, clearSendProgress, keepLocalCopy, setSendProgress } fr
 import { readReceiptPreference, saveReceiptPreference } from '@/features/messaging/preferences';
 import { connectProvider, disconnectProvider } from '@/lib/integrations';
 import { appleHealthAvailable, connectAppleHealth, readAppleHealth, readAppleNutrition } from '@/features/health/appleHealth';
-import { tennisFlags } from '@/features/activity/flags';
+import { isTracker, tennisFlags, TRACKERS } from '@/features/activity/flags';
 import { checkForTennis } from '@/features/activity/check';
 import { pickSource } from '@/features/activity/recent';
 import { MAX_SESSION_TAGS, REFUSALS, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
@@ -53,6 +53,7 @@ import { forgetPushToken } from '@/features/push/push';
 import { framesAt } from '@/features/compose/frames';
 import { noteStep, reportError } from '@/lib/crashReporting';
 import { emptyCourtLife, useCourtLife, type CourtLifeActions, type CourtLifeState } from '@/store/courtLife';
+import { emptyFeedGroups, useFeedGroups, type FeedGroupsActions, type FeedGroupsState } from '@/store/feedGroups';
 import type {
   DailyHealth,
   DetectedActivity,
@@ -96,7 +97,7 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId } from '@/data/types';
 
 interface NewStoryInput {
   imageUrl?: string;
@@ -108,6 +109,8 @@ interface NewStoryInput {
 
 interface NewPostInput {
   kind: PostKind;
+  /** Shared to one group you are in, not everyone (migration 67). */
+  groupId?: ID;
   /** Where it was, if they said. */
   location?: string;
   /** The court it was played on, picked from the map's courts. */
@@ -301,7 +304,7 @@ export interface Prefs {
 export type PrefKey = keyof Prefs;
 const DEFAULT_PREFS: Prefs = { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true, pushMapFriends: true, pushMapHits: true, pushMapPlayers: true, pushCourts: true };
 
-interface AppState extends Bootstrap, CourtLifeState {
+interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
   ready: boolean;
   /** Health came from this account's own connections, not the demo; a reload must keep it. */
   healthIsReal?: boolean;
@@ -414,7 +417,7 @@ interface AppState extends Bootstrap, CourtLifeState {
   detectedCoords: { lat: number; lng: number } | null;
 }
 
-interface AppActions extends CourtLifeActions {
+interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /* Location */
   setLocationEnabled: (enabled: boolean) => Promise<string | null>;
   /** "Who can see you on the map?": takes effect at once. Resolves false when it could not be saved. */
@@ -594,9 +597,9 @@ interface AppActions extends CourtLifeActions {
   checkForActivities: (force?: boolean) => Promise<void>;
   /** "Not tennis": hides a session you have not logged, and its notification. */
   dismissActivity: (id: ID) => void;
-  /** Asks the source for workouts (Apple Health's sheet, or WHOOP's sign-in again), then turns tennis sessions on for it. */
-  turnOnTennis: (provider: 'apple-health' | 'whoop') => Promise<void>;
-  turnOffTennis: (provider: 'apple-health' | 'whoop') => Promise<void>;
+  /** Asks the source for workouts (Apple Health's sheet, or WHOOP's, Fitbit's, Oura's or Polar's sign-in again), then turns tennis sessions on for it. */
+  turnOnTennis: (provider: 'apple-health' | 'whoop' | TrackerId) => Promise<void>;
+  turnOffTennis: (provider: 'apple-health' | 'whoop' | TrackerId) => Promise<void>;
   /** If this person arrived through an invite link, it is claimed now: the two follow each other. */
   claimPendingReferral: () => Promise<void>;
   countReferrals: () => Promise<number>;
@@ -951,10 +954,11 @@ const cleanTitle = (title?: string) => (title ?? '').replace(/\s+/g, ' ').trim()
 /** A group function's answer that is a refusal rather than the chat's id. */
 const isRefusal = (result: string): result is GroupRefusal | 'failed' => ['blocked', 'teen', 'full', 'not-admin', 'failed'].includes(result);
 
-// In a browser, WHOOP's tennis sign-in comes back in its own small window
-// (?whoop=pending): that window hands the address to the one that opened it,
-// which collects the sign-in (connectWhoop). Every other page load: nothing.
-if (Platform.OS === 'web' && typeof window !== 'undefined' && /[?&]whoop=pending/.test(window.location?.search ?? '')) {
+// In a browser, WHOOP's tennis sign-in (and Fitbit's, Oura's or Polar's) comes
+// back in its own small window (?whoop=pending, ?tracker=pending): that window
+// hands the address to the one that opened it, which collects the sign-in
+// (connectWhoop, connectTracker). Every other page load: nothing.
+if (Platform.OS === 'web' && typeof window !== 'undefined' && /[?&](whoop|tracker)=pending/.test(window.location?.search ?? '')) {
   try { WebBrowser.maybeCompleteAuthSession(); } catch { /* the opener has gone; trying again starts afresh */ }
 }
 
@@ -1403,6 +1407,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     mapVisibility: isSupabaseConfigured ? undefined : readDemoVisibility(),
     newOnCourtside: null,
     ...emptyCourtLife,
+    ...emptyFeedGroups,
     hitRequests: [],
     locationEnabled: readFlag('courtside-location'),
     locationAsked: readAsked('courtside-location'),
@@ -2187,7 +2192,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (isSupabaseConfigured) void forgetPushToken().finally(() => remoteAuth.signOut());
     // One account's health (its tracker sessions too) never carries over to the next one signed in.
     // Nor do its courts: who it follows, what it said, where it checked in.
-    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [], ...emptyCourtLife, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null, mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility }));
+    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [], ...emptyCourtLife, ...emptyFeedGroups, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null, mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility }));
   }, []);
 
   const patchCurrentUser = useCallback(
@@ -2788,7 +2793,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const celebration = {
         userId: me, targetId: post.id, targetKind: 'post' as const, preview: snippet(post.body || (post.kind === 'clip' ? 'Clip' : 'Post')),
         title: post.kind === 'clip' ? 'Clip posted' : 'Posted',
-        body: post.kind === 'clip' ? 'It is in the feed and on your profile.' : 'It is live in the feed.',
+        body: post.groupId ? 'It is in the group’s feed.' : post.kind === 'clip' ? 'It is in the feed and on your profile.' : 'It is live in the feed.',
         href: '/', icon: post.kind === 'clip' ? 'play' : 'checkmark',
       };
       const uploading = live(me) && (isLocalMedia(post.imageUrl) || isLocalMedia(post.videoUrl) || isLocalMedia(post.thumbnailUrl));
@@ -4569,6 +4574,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       users: prev.users.map((u) => (u.id === me ? { ...u, ageGroup: label, isPrivate: label === 'teen' && !u.ageGroup ? true : u.isPrivate } : u)),
     }));
     await rememberAnswered(me, label);
+    // An invite claimed before the age was on file made no follow; now it can.
+    if (label === 'adult') void followInviter();
     return label;
   }, [requireUser]);
 
@@ -5390,19 +5397,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!live(me)) return;
     const handle = await takeReferrer();
     if (!handle) return;
+    // Null when no follow was made: a teen, or someone whose age is not on
+    // file yet, is never made to follow the sharer (followInviter makes it
+    // once the birthday says adult).
     const who = await remote.claimReferral(handle);
     if (!who) return;
-    // You follow whoever invited you (or, if their account is private, ask
-    // to); they are never made to follow you back without saying so.
+    showInviterFollow(who, handle);
+  }, []);
+  // You follow whoever invited you (or, if their account is private, ask
+  // to); they are never made to follow you back without saying so.
+  const showInviterFollow = (who: ID, handle?: string) => {
+    const me = stateRef.current.currentUserId;
     const them = stateRef.current.users.find((u) => u.id === who);
     if (them?.isPrivate) {
       setState((prev) => ({ ...prev, followRequests: prev.followRequests.some((r) => r.fromId === me && r.toId === who) ? prev.followRequests : [...prev.followRequests, { fromId: me!, toId: who, createdAt: new Date().toISOString() }] }));
       showToast({ title: `Asked to follow @${them.handle}`, body: 'They invited you. Once they say yes, you will see their posts.', icon: 'people-outline' });
     } else {
       setState((prev) => ({ ...prev, followingIds: prev.followingIds.includes(who) ? prev.followingIds : [...prev.followingIds, who] }));
-      showToast({ title: `You're following @${them?.handle ?? handle}`, body: 'They invited you to CourtSide.', icon: 'people-outline' });
+      showToast({ title: them?.handle ?? handle ? `You're following @${them?.handle ?? handle}` : "You're following who invited you", body: 'They invited you to CourtSide.', icon: 'people-outline' });
     }
-  }, []);
+  };
+  const followInviter = async () => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me)) return;
+    const who = await remote.followMyInviter().catch(() => null);
+    if (who) showInviterFollow(who);
+  };
   useEffect(() => { if (live(state.currentUserId)) void claimPendingReferral(); }, [state.currentUserId, claimPendingReferral]);
   const countReferrals = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.countReferrals(me!) : 0; }, []);
 
@@ -5424,7 +5444,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return true;
     }
     if (provider === 'whoop') { await remote.whoop('sync'); return true; }
+    // Fitbit, Oura, Polar: "Sync now" looks back a week for tennis.
+    if (isTracker(provider)) { await remote.trackers('sync', { provider, days: 7 }); return true; }
     return false;
+  }, []);
+
+  /**
+   * Fitbit's, Oura's or Polar's sign-in, through the server's trackers
+   * function (migration 69), the same way as WHOOP's tennis sign-in: the
+   * server sends the browser to the tracker, the tracker sends it back, and
+   * the sign-in waits until this phone, signed in as you, collects it. So a
+   * sign-in link sent to someone else can never put their tracker on the
+   * sender's account. Connecting one turns its tennis sessions on.
+   */
+  const connectTracker = useCallback(async (provider: TrackerId) => {
+    const label = stateRef.current.integrations.find((i) => i.provider === provider)?.label ?? 'That tracker';
+    const back = Linking.createURL('health');
+    const start = await remote.trackers<{ on?: boolean; url?: string }>('start', { provider, back });
+    if (!start.on || !start.url) throw new Error(`${label} is coming soon.`);
+    const result = await WebBrowser.openAuthSessionAsync(start.url, back);
+    if (result.type !== 'success') throw new Error(`${label} was not connected.`);
+    const n = /[?&]n=([0-9a-f-]{36})/i.exec(result.url)?.[1];
+    if (!n) throw new Error(/tracker=expired/.test(result.url) ? 'That sign-in took too long. Try again.' : `${label} was not connected.`);
+    await remote.trackers('finish', { n });
   }, []);
 
   /**
@@ -5454,14 +5496,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const checkWith = useCallback(async (force: boolean, rows: Pick<Integration, 'provider' | 'connected' | 'readsWorkouts'>[]) => {
     const me = stateRef.current.currentUserId;
     if (!live(me) || !stateRef.current.remoteLoaded) return;
-    const apple = rows.find((i) => i.provider === 'apple-health');
-    const whoop = rows.find((i) => i.provider === 'whoop');
+    const on = (p: Integration['provider']) => rows.some((i) => i.provider === p && i.connected && i.readsWorkouts);
     // Nothing has tennis sessions on (always so on a database without
     // migration 58): no need to ask the server anything.
-    if (!(apple?.connected && apple.readsWorkouts) && !(whoop?.connected && whoop.readsWorkouts)) return;
+    if (!on('apple-health') && !on('whoop') && !TRACKERS.some(on)) return;
     const flags = await tennisFlags(me);
-    const src = { apple: !!(flags.apple && apple?.connected && apple.readsWorkouts), whoop: !!(flags.whoop && whoop?.connected && whoop.readsWorkouts) };
-    if (!src.apple && !src.whoop) return;
+    const src = { apple: flags.apple && on('apple-health'), whoop: flags.whoop && on('whoop'), trackers: TRACKERS.filter((p) => flags[p] && on(p)) };
+    if (!src.apple && !src.whoop && !src.trackers.length) return;
     const filed = await checkForTennis(me!, src, force);
     if (stateRef.current.currentUserId !== me) return;
     const list = await remote.fetchActivities(me!);
@@ -5521,7 +5562,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (live(me)) void remote.dismissActivity(id);
   }, []);
 
-  const turnOnTennis = useCallback(async (provider: 'apple-health' | 'whoop') => {
+  const turnOnTennis = useCallback(async (provider: 'apple-health' | 'whoop' | TrackerId) => {
     const me = stateRef.current.currentUserId;
     if (!live(me)) {
       // The demo: switched on at once.
@@ -5534,15 +5575,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await connectAppleHealth({ workouts: true });
       if (!stateRef.current.integrations.find((i) => i.provider === 'apple-health')?.connected) await pullFrom(me!, 'apple-health');
       await remote.setHealthConnection(me!, 'apple-health', true, { readsWorkouts: true });
-    } else {
+    } else if (provider === 'whoop') {
       await connectWhoop(true);
+    } else {
+      await connectTracker(provider);
     }
     haptics.commit();
     const got = await reloadHealth();
     void checkWith(true, got ? got.connections.map((c) => ({ ...c, connected: true })) : stateRef.current.integrations);
-  }, [connectWhoop, pullFrom, reloadHealth, checkWith]);
+  }, [connectWhoop, connectTracker, pullFrom, reloadHealth, checkWith]);
 
-  const turnOffTennis = useCallback(async (provider: 'apple-health' | 'whoop') => {
+  const turnOffTennis = useCallback(async (provider: 'apple-health' | 'whoop' | TrackerId) => {
     const me = stateRef.current.currentUserId;
     if (!live(me)) {
       setState((prev) => ({ ...prev, integrations: prev.integrations.map((i) => (i.provider === provider ? { ...i, readsWorkouts: false } : i)) }));
@@ -5560,11 +5603,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!current) return;
     if (!live(me)) {
       const updated = current.connected ? await disconnectProvider(current) : await connectProvider(current);
-      setState((prev) => ({ ...prev, integrations: prev.integrations.map((i) => (i.provider === provider ? updated : i)) }));
+      // A tracker connects for its tennis sessions, so in the demo they are on at once.
+      const shown = isTracker(provider) ? { ...updated, readsWorkouts: updated.connected } : updated;
+      setState((prev) => ({ ...prev, integrations: prev.integrations.map((i) => (i.provider === provider ? shown : i)) }));
       return;
     }
     if (current.connected) {
-      if (provider === 'whoop') await remote.whoop('disconnect'); else await remote.setHealthConnection(me!, provider, false);
+      if (provider === 'whoop') await remote.whoop('disconnect');
+      else if (isTracker(provider)) await remote.trackers('disconnect', { provider });
+      else await remote.setHealthConnection(me!, provider, false);
       haptics.untap();
       await reloadHealth();
       return;
@@ -5580,6 +5627,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } else if (provider === 'whoop') {
       tennis = opts.tennis === true && (await tennisFlags(me)).whoop;
       await connectWhoop(tennis);
+    } else if (isTracker(provider)) {
+      // Fitbit, Oura and Polar connect only for tennis sessions.
+      await connectTracker(provider);
+      tennis = true;
     } else if (provider === 'cronometer' || provider === 'myfitnesspal') {
       if (appleHealthAvailable()) await connectAppleHealth();
       if (!(await pullFrom(me!, provider))) return;
@@ -5587,7 +5638,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     haptics.commit();
     const got = await reloadHealth();
     if (tennis) void checkWith(true, got ? got.connections.map((c) => ({ ...c, connected: true })) : stateRef.current.integrations);
-  }, [pullFrom, reloadHealth, connectWhoop, checkWith]);
+  }, [pullFrom, reloadHealth, connectWhoop, connectTracker, checkWith]);
 
   const syncHealth = useCallback(async (provider: Integration['provider']) => {
     const me = stateRef.current.currentUserId;
@@ -5597,10 +5648,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // The courts' own state (migration 60): its actions are written in store/courtLife.
   const courtLife = useCourtLife(stateRef, setState, live);
+  // Groups with a feed of their own (migration 67): its actions are written in store/feedGroups.
+  const feedGroups = useFeedGroups(stateRef, setState, live);
 
   const actions = useMemo<AppActions>(
     () => ({
       ...courtLife,
+      ...feedGroups,
       addCoachResult,
       addCoachReview,
       bookCoach,
@@ -5779,6 +5833,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }),
     [
       courtLife,
+      feedGroups,
       addCoachResult,
       addCoachReview,
       bookCoach,

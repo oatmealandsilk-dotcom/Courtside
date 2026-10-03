@@ -16,7 +16,8 @@ import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { colors, font, radius, spacing, typography } from '@/theme';
-import { placeLink, shareLink } from '@/lib/shareLink';
+import { courtLink, shareLink } from '@/lib/shareLink';
+import { courtShareText, hitShareText, postShareText, profileShareText, questionShareText } from '@/features/share/shareText';
 import { isMapCourtId } from '@/features/places/courtName';
 
 /**
@@ -94,28 +95,30 @@ export default function ShareSheet() {
    */
   const sending = useMemo((): { item: ShareItem; label: string; icon: React.ReactNode; outside?: { title: string; url: string } } | null => {
     const glyph = (name: keyof typeof Ionicons.glyphMap) => <Ionicons name={name} size={20} color={colors.brand} />;
+    // Your handle rides on every link you share, so whoever joins through it is counted as yours.
+    const me = users.find((u) => u.id === currentUserId);
     if (kind === 'post') {
       const post = posts.find((p) => p.id === id);
       if (!post) return null;
       const label = post.body.trim() || (post.kind === 'clip' ? 'A clip' : 'A post');
-      return { item: { kind: 'post', id }, label, icon: glyph(post.kind === 'clip' ? 'play-circle-outline' : 'image-outline'), outside: { title: label, url: shareLink('post', id) } };
+      return { item: { kind: 'post', id }, label, icon: glyph(post.kind === 'clip' ? 'play-circle-outline' : 'image-outline'), outside: { title: postShareText(post, users.find((u) => u.id === post.authorId), currentUserId), url: shareLink('post', id, me?.handle) } };
     }
     if (kind === 'question') {
       const question = questions.find((q) => q.id === id);
       if (!question) return null;
-      return { item: { kind: 'question', id }, label: question.title, icon: glyph('chatbubbles-outline'), outside: { title: question.title, url: shareLink('question', id) } };
+      return { item: { kind: 'question', id }, label: question.title, icon: glyph('chatbubbles-outline'), outside: { title: questionShareText(question), url: shareLink('question', id, me?.handle) } };
     }
     if (kind === 'profile') {
       const user = users.find((u) => u.id === id);
       if (!user) return null;
-      return { item: { kind: 'profile', id }, label: `${user.name} · @${user.handle}`, icon: glyph('person-outline'), outside: { title: user.name, url: shareLink('profile', id) } };
+      return { item: { kind: 'profile', id }, label: `${user.name} · @${user.handle}`, icon: glyph('person-outline'), outside: { title: profileShareText(user, currentUserId), url: shareLink('profile', id, me?.handle) } };
     }
     if (kind === 'hit-request') {
       // A hit that was called off can't be sent on.
       const hit = hitRequests.find((h) => h.id === id && !h.cancelled);
       if (!hit) return null;
       const label = `Looking for a hit · ${hitWhen(hit.startsAt)} · ${hit.place.name}`;
-      return { item: { kind: 'hit-request', id }, label, icon: <HitGlyph size={20} color={colors.brand} />, outside: { title: label, url: shareLink('hit-request', id) } };
+      return { item: { kind: 'hit-request', id }, label, icon: <HitGlyph size={20} color={colors.brand} />, outside: { title: hitShareText(hit, users.find((u) => u.id === hit.authorId), currentUserId), url: shareLink('hit-request', id, me?.handle) } };
     }
     if (kind === 'court') {
       const name = params.name?.trim();
@@ -123,9 +126,9 @@ export default function ShareSheet() {
       const lng = Number(params.lng);
       if (!name || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
       // The court's map id travels with it when it has one, so the chat's card opens that court's page.
-      // The link for outside the app stays a maps link for now: someone signed out would land on sign-in and lose the page.
+      // Outside the app, a court the map knows is its own page (anyone can open it, signed in or not); any other spot is a maps link.
       const place = { id: isMapCourtId(id) ? id : undefined, name, lat, lng };
-      return { item: { kind: 'court', place }, label: name, icon: glyph('location-outline'), outside: { title: name, url: placeLink(place) } };
+      return { item: { kind: 'court', place }, label: name, icon: glyph('location-outline'), outside: { title: courtShareText(name), url: courtLink(place, me?.handle) } };
     }
     // A message, forwarded as it is. An event line ("Mira added Dev") is not one anyone sent,
     // and a voice note still only on this phone (its upload failed) can't be heard anywhere else.
@@ -141,7 +144,7 @@ export default function ShareSheet() {
       : message.kind === 'hit-request' ? 'Looking for a hit'
       : message.body;
     return { item: { kind: 'message', id }, label, icon: glyph('arrow-redo-outline') };
-  }, [kind, id, params.name, params.lat, params.lng, posts, questions, users, hitRequests, messages]);
+  }, [kind, id, params.name, params.lat, params.lng, posts, questions, users, hitRequests, messages, currentUserId]);
 
   const term = search.trim().replace(/^@/, '').toLowerCase();
 

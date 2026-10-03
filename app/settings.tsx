@@ -11,7 +11,7 @@ import { useApp } from '@/store/AppContext';
 import { askWhoSeesYou, canChooseVisibility } from '@/features/players/mapPrivacy';
 import { useTheme, themeList, themes, type ThemeName } from '@/theme/ThemeProvider';
 import { Wash } from '@/components/Wash';
-import { colors, radius, spacing, typography, lift } from '@/theme';
+import { colors, radius, spacing, typography } from '@/theme';
 import { leaveGently } from '@/components/SignOutCurtain';
 import { confirm } from '@/lib/confirm';
 import { replayTour } from '@/features/tour/tourStore';
@@ -64,8 +64,8 @@ export default function Settings() {
     {
       title: 'Account',
       rows: [
-        { icon: 'person-circle-outline', label: 'Account center', detail: 'Password, sign-in, payments and your data', onPress: () => router.push('/account') },
-        { icon: 'shield-checkmark-outline', label: 'Privacy center', detail: currentUser?.isPrivate ? 'Private account · blocked, muted and read receipts' : 'Private account, blocked, muted and read receipts', onPress: () => router.push('/privacy') },
+        { icon: 'person-circle-outline', label: 'Account center', detail: 'Password, sign-in and payments', onPress: () => router.push('/account') },
+        { icon: 'shield-checkmark-outline', label: 'Privacy center', onPress: () => router.push('/privacy') },
       ],
     },
     // Phone alerts only exist in the app on a phone; a browser can't receive them, so it doesn't offer switches for them.
@@ -73,24 +73,24 @@ export default function Settings() {
       title: 'Notifications',
       rows: [
         // Every chat, groups included; a single chat is muted from its own details page instead.
-        { icon: 'paper-plane-outline' as const, label: 'Messages', detail: 'To quiet just one chat, mute it from its details', toggle: { value: prefs.pushMessages, onChange: (v: boolean) => actions.setPref('pushMessages', v) } },
+        { icon: 'paper-plane-outline' as const, label: 'Messages', toggle: { value: prefs.pushMessages, onChange: (v: boolean) => actions.setPref('pushMessages', v) } },
         { icon: 'heart-outline' as const, label: 'Likes and comments', toggle: { value: prefs.pushLikes, onChange: (v: boolean) => actions.setPref('pushLikes', v) } },
         { icon: 'chatbubble-ellipses-outline' as const, label: 'Coach replies', toggle: { value: prefs.pushCoach, onChange: (v: boolean) => actions.setPref('pushCoach', v) } },
-        ...(tennis.whoop ? [{ icon: 'stopwatch-outline' as const, label: 'Tennis sessions', detail: 'An alert when WHOOP picks one up', toggle: { value: prefs.pushActivity, onChange: (v: boolean) => actions.setPref('pushActivity', v) } }] : []),
+        ...(tennis.whoop ? [{ icon: 'stopwatch-outline' as const, label: 'Tennis sessions', detail: 'From WHOOP', toggle: { value: prefs.pushActivity, onChange: (v: boolean) => actions.setPref('pushActivity', v) } }] : []),
       ],
     }]),
     // The map's own alerts, each with its own switch. On a computer too: they also land in your Notifications.
     // The first three only ever go to adults (the server's rule), so a teen sees just the courts one.
     ...(!mapAlerts ? [] : [{
       title: 'Map alerts',
-      note: mapAdult ? 'At most one a day from the map, and one a day from your courts.' : 'At most one a day.',
+      note: 'At most one a day each.',
       rows: [
         ...(mapAdult ? [
-          { icon: 'people-outline' as const, leading: <HitGlyph size={20} color={colors.textMuted} />, label: 'Friends up for a hit', detail: 'Someone you follow turns on Open to hit nearby', toggle: { value: prefs.pushMapFriends, onChange: (v: boolean) => actions.setPref('pushMapFriends', v) } },
-          { icon: 'navigate-outline' as const, label: 'New open hits', detail: 'A hit posted within 15 miles of you', toggle: { value: prefs.pushMapHits, onChange: (v: boolean) => actions.setPref('pushMapHits', v) } },
-          { icon: 'location-outline' as const, label: 'New players nearby', detail: 'A new player shares their spot near you', toggle: { value: prefs.pushMapPlayers, onChange: (v: boolean) => actions.setPref('pushMapPlayers', v) } },
+          { icon: 'people-outline' as const, leading: <HitGlyph size={20} color={colors.textMuted} />, label: 'Friends up for a hit', toggle: { value: prefs.pushMapFriends, onChange: (v: boolean) => actions.setPref('pushMapFriends', v) } },
+          { icon: 'navigate-outline' as const, label: 'New open hits', detail: 'Within 15 miles', toggle: { value: prefs.pushMapHits, onChange: (v: boolean) => actions.setPref('pushMapHits', v) } },
+          { icon: 'location-outline' as const, label: 'New players nearby', toggle: { value: prefs.pushMapPlayers, onChange: (v: boolean) => actions.setPref('pushMapPlayers', v) } },
         ] : []),
-        { icon: 'heart-outline' as const, label: 'Courts you follow', detail: 'A new hit or clip at one of your courts', toggle: { value: prefs.pushCourts, onChange: (v: boolean) => actions.setPref('pushCourts', v) } },
+        { icon: 'heart-outline' as const, label: 'Courts you follow', toggle: { value: prefs.pushCourts, onChange: (v: boolean) => actions.setPref('pushCourts', v) } },
       ],
     }]),
     {
@@ -225,7 +225,8 @@ const styleDefinitions = StyleSheet.create({
   sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm },
   sectionNote: { ...typography.small, color: colors.textFaint, paddingHorizontal: spacing.sm },
   // Borderless grouped list: the list is a shade off the page, rows are separated by hairlines that start past the icons.
-  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  // Flatter than the app's usual lift: a settings list should sit on the page, not float (Oct 2).
+  card: { boxShadow: '0px 1px 3px rgba(42, 36, 24, 0.05)', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'stretch', paddingLeft: spacing.lg },
   rowPressed: { backgroundColor: colors.surfaceAlt },
   lead: { width: 26, alignItems: 'center', justifyContent: 'center', marginRight: spacing.md },

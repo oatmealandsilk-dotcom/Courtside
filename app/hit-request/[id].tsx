@@ -8,9 +8,10 @@ import { EmptyState, Screen } from '@/components/ui';
 import { goBack } from '@/lib/goBack';
 import { useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
+import { publicRoute } from '@/features/share/publicRoute';
 
 /** One hit on its own page, for a notification ("Mira is in for your hit") to land on. */
-export default function HitRequestPage() {
+function HitRequestPage() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { hitRequests } = useApp();
   const hit = hitRequests.find((h) => h.id === id);
@@ -20,3 +21,6 @@ export default function HitRequestPage() {
     </Screen>
   );
 }
+
+// A link shared outside the app opens here for anyone; signed out, it shows the public look (see SharedPage).
+export default publicRoute('hit-request', HitRequestPage);

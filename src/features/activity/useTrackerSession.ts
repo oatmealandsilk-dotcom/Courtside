@@ -19,6 +19,8 @@ export interface LogInput {
   players?: SessionPlayer[];
   opponent?: string;
   note?: string;
+  /** The length in your log when it differs from the tracker's (a break taken off). Left out: the tracker's time. */
+  minutes?: number;
 }
 
 /**
@@ -77,7 +79,7 @@ export function useTrackerSession(activityId: ID | undefined) {
     try {
       const tagging = canTagKind(input.kind) ? input.players ?? [] : [];
       const id = await actions.logSession({
-        minutes: activity.minutes,
+        minutes: input.minutes && input.minutes > 0 ? input.minutes : activity.minutes,
         kind: input.kind,
         won: input.kind === 'match' ? input.won : undefined,
         opponent: canTagKind(input.kind) ? input.opponent ?? '' : '',

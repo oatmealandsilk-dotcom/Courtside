@@ -20,7 +20,7 @@ import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Story, Tip, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole } from './types';
+import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Story, Tip, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
 import { isMapCourtId } from '@/features/places/courtName';
@@ -101,6 +101,8 @@ interface ProfileRow {
   read_receipts?: boolean | null;
 }
 interface PostRow {
+  /** The group it is shared to, if any (migration 67). */
+  group_id?: string | null;
   id: string; author_id: string; kind: Post['kind']; body: string; media_label: string | null;
   image_url: string | null; video_url: string | null; thumbnail_url: string | null;
   match: Post['match'] | null; session: Post['session'] | null; tags: string[]; tagged_user_ids: string[];
@@ -209,6 +211,7 @@ const toPost = (row: PostRow): Post => ({
   featureOk: row.feature_ok === false ? false : undefined,
   isFirst: row.is_first || undefined,
   editedAt: row.edited_at ?? undefined,
+  groupId: row.group_id ?? undefined,
 });
 
 const toComment = (row: CommentRow): Comment => ({
@@ -925,6 +928,16 @@ const MIGRATION_FOR: Record<string, string> = {
 const missingColumnsNote = (cols: string[]) =>
   `[remote] The posts table has no "${cols.join('", "')}" column yet, so this post was saved without that edit (it still went up). To keep it next time, open Supabase → SQL Editor → New query, paste the file supabase/migrations/${MIGRATION_FOR[cols[0]] ?? '…'} and press Run. It is safe to run more than once.`;
 
+interface GroupRow { id: ID; name: string; description: string | null; ask: boolean; createdAt: string; members?: { id: ID; admin: boolean }[]; requests?: ID[] }
+const toGroup = (row: GroupRow): FeedGroup => ({
+  id: row.id, name: row.name, description: row.description ?? undefined, ask: !!row.ask, createdAt: row.createdAt,
+  members: row.members ?? [], requests: row.requests ?? [],
+});
+/** The server's word for why a group action said no (migration 67), or 'failed'. */
+const groupWord = (error: { code?: string; message: string }) =>
+  missingFunction(error) ? 'not_ready'
+    : /adults_only|their_age|group_limit|their_limit|not_admin|not_found|name_needed|slow_down/.exec(error.message)?.[0] ?? 'failed';
+
 export const remote = {
   /* ------------------------ discussions and coaching ------------------------ */
 
@@ -1605,6 +1618,13 @@ export const remote = {
     return (data as ID | null) ?? null;
   },
 
+  /** Once the birthday says adult: the follow an invite waited on (follow_my_inviter). Who was followed, or null when nothing was made. */
+  async followMyInviter(): Promise<ID | null> {
+    const { data, error } = await need().rpc('follow_my_inviter');
+    if (error) return null;
+    return (data as ID | null) ?? null;
+  },
+
   async countReferrals(me: ID): Promise<number> {
     const { count, error } = await need().from('profiles').select('id', { count: 'exact', head: true }).eq('referred_by', me);
     if (error) return 0;
@@ -2021,6 +2041,61 @@ export const remote = {
     if (ready === false) console.warn('[remote] Tagging players on sessions needs the session tags update. Open Supabase → SQL Editor → New query, paste the file supabase/migrations/20261002000062_session_tags.sql and press Run. It is safe to run more than once.');
     return ready;
   },
+  /* ---------------------------------------------------------- groups (67) */
+  /** Your groups and the groups you asked to join. Null on a database without groups (before migration 67). */
+  async myFeedGroups(): Promise<{ groups: FeedGroup[]; asked: { id: ID; name: string }[] } | null> {
+    const { data, error } = await need().rpc('my_feed_groups');
+    if (error) { if (!missingFunction(error)) fail('groups')(error); return null; }
+    const raw = (data ?? {}) as { groups?: GroupRow[]; asked?: { id: ID; name: string }[] };
+    return { groups: (raw.groups ?? []).map(toGroup), asked: raw.asked ?? [] };
+  },
+  /** Starts a group; its id. Throws with the server's word ('group_limit', 'name_needed', 'slow_down'). */
+  async createFeedGroup(name: string, description: string, ask: boolean): Promise<ID> {
+    const { data, error } = await need().rpc('create_feed_group', { p_name: name, p_description: description || null, p_ask: ask });
+    if (error) throw new Error(groupWord(error));
+    return data as string;
+  },
+  /** What an invite link shows. Null when there is no such group (or no groups yet). */
+  async feedGroupCard(id: ID): Promise<FeedGroupCard | null> {
+    if (!UUID_RE.test(id)) return null;
+    const { data, error } = await need().rpc('feed_group_card', { g: id });
+    if (error || !data) return null;
+    const c = data as { id: ID; name: string; description: string | null; ask: boolean; members: number; member: boolean; requested: boolean };
+    return { id: c.id, name: c.name, description: c.description ?? undefined, ask: c.ask, memberCount: Number(c.members) || 0, member: c.member, requested: c.requested };
+  },
+  /** Joins, or asks to. Throws with the server's word ('group_limit', 'not_found', 'slow_down'). */
+  async joinFeedGroup(id: ID): Promise<'joined' | 'requested' | 'already'> {
+    const { data, error } = await need().rpc('join_feed_group', { g: id });
+    if (error) throw new Error(groupWord(error));
+    return data as 'joined' | 'requested' | 'already';
+  },
+  async leaveFeedGroup(id: ID) {
+    const { error } = await need().rpc('leave_feed_group', { g: id });
+    if (error) throw new Error(groupWord(error));
+  },
+  async answerFeedGroupRequest(id: ID, who: ID, accept: boolean) {
+    const { error } = await need().rpc('answer_feed_group_request', { g: id, who, accept });
+    if (error) throw new Error(groupWord(error));
+  },
+  async removeFeedGroupMember(id: ID, who: ID) {
+    const { error } = await need().rpc('remove_feed_group_member', { g: id, who });
+    if (error) throw new Error(groupWord(error));
+  },
+  async updateFeedGroup(id: ID, name: string, description: string, ask: boolean) {
+    const { error } = await need().rpc('update_feed_group', { g: id, p_name: name, p_description: description || null, p_ask: ask });
+    if (error) throw new Error(groupWord(error));
+  },
+  /** A group's posts, newest first, a page at a time (older than `before`). */
+  async fetchFeedGroupPosts(id: ID, before?: string): Promise<{ posts: Post[]; comments: Comment[]; more: boolean } | null> {
+    if (!UUID_RE.test(id)) return null;
+    let q = need().from('posts').select(POST_SELECT).eq('group_id', id).eq('archived', false);
+    if (before) q = q.lt('created_at', before);
+    const { data, error } = await q.order('created_at', { ascending: false }).limit(POST_PAGE);
+    if (error) { fail('group posts')(error); return null; }
+    const rows = (data ?? []) as FullPostRow[];
+    return { ...toPosts(rows), more: rows.length === POST_PAGE };
+  },
+
   /** Every tag you made and every tag of you, newest first. Null when they could not be read. */
   async mySessionTags(): Promise<SessionTag[] | null> {
     const { data, error } = await need().rpc('my_session_tags');
@@ -2070,6 +2145,18 @@ export const remote = {
       })
       .subscribe((status) => { if (status === 'SUBSCRIBED') changed(); });
     return () => { void db.removeChannel(channel); };
+  },
+
+  /**
+   * The trackers function on the server (Fitbit, Oura, Polar; migration 69):
+   * status (which are set up), start (their sign-in page, or {on: false}),
+   * finish (this phone collects a sign-in), sync and disconnect.
+   */
+  async trackers<T = { url?: string; on?: boolean; ok?: boolean; fresh?: ID[] }>(path: 'status' | 'start' | 'finish' | 'sync' | 'disconnect', body: object = {}): Promise<T> {
+    const { data, error } = await need().functions.invoke<T & { error?: string }>(`trackers/${path}`, { body });
+    if (error) throw new Error('That tracker is not reachable right now.');
+    if (data && (data as { error?: string }).error) throw new Error((data as { error?: string }).error);
+    return data as T;
   },
 
   /* ------------------------------------------- tennis sessions (migration 58) */
@@ -2355,6 +2442,9 @@ export const remote = {
       tags: post.tags,
       tagged_user_ids: post.taggedUserIds ?? [],
       created_at: post.createdAt,
+      // A group post must never go up without its group (it would be public),
+      // so this is never dropped like the optional edits below.
+      ...(post.groupId ? { group_id: post.groupId } : {}),
     };
     // The edits a clip carries, only sent when set. Each column came with its
     // own migration; one the database does not know yet is dropped on its
@@ -2407,6 +2497,10 @@ export const remote = {
         dropped.push(...Object.keys(sending));
         for (const key of Object.keys(sending)) delete sending[key];
         continue;
+      }
+      if (post.groupId && /group_id|not_in_group/.test(error.message)) {
+        fail('group post insert')(error);
+        throw new Error(/not_in_group/.test(error.message) ? 'You are not in that group any more.' : 'Groups are not switched on yet. Share it with everyone instead.');
       }
       // Before saying it failed (and you post it again, as a second post): is it there after all?
       if (await landed()) return;
@@ -2951,7 +3045,8 @@ export const auth = {
       const base = (process.env.EXPO_BASE_URL ?? '').replace(/\/$/, '');
       const { error } = await client.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: `${window.location.origin}${base}/` },
+        // Always Google's account chooser, so someone with two Google accounts can pick.
+        options: { redirectTo: `${window.location.origin}${base}/`, queryParams: { prompt: 'select_account' } },
       });
       if (error) throw new Error(error.message);
       return null;
@@ -2959,7 +3054,7 @@ export const auth = {
     const redirectTo = nativeReturnAddress();
     const { data, error } = await client.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo, skipBrowserRedirect: true },
+      options: { redirectTo, skipBrowserRedirect: true, queryParams: { prompt: 'select_account' } },
     });
     if (error) throw new Error(error.message);
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);

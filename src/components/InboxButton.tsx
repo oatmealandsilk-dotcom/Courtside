@@ -1,0 +1,83 @@
+import React, { useEffect, useRef } from 'react';
+import { StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
+import { router } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import { Tappable } from '@/components/Tappable';
+import { useApp } from '@/store/AppContext';
+import { unreadChatCount } from '@/features/messages/groupRules';
+import { colors, typography } from '@/theme';
+import { useThemedStyles } from '@/theme/ThemeProvider';
+
+/**
+ * The little count in the corner of a header icon: a green pill, "9+" past
+ * nine, gone at nought. When the number goes up it gives one small pop, so a
+ * new message is noticed without anything flashing.
+ */
+export function UnreadBadge({ count, style }: { count: number; style?: StyleProp<ViewStyle> }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const scale = useSharedValue(1);
+  const last = useRef(count);
+  useEffect(() => {
+    if (count > last.current && count > 0) {
+      scale.value = withSequence(
+        withTiming(1.28, { duration: 130, easing: Easing.out(Easing.quad) }),
+        withSpring(1, { damping: 9, stiffness: 260 }),
+      );
+    }
+    last.current = count;
+  }, [count]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pop = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  if (count <= 0) return null;
+  return (
+    <Reanimated.View pointerEvents="none" style={[styles.badge, style, pop]}>
+      <Text style={styles.badgeText}>{count > 9 ? '9+' : count}</Text>
+    </Reanimated.View>
+  );
+}
+
+/**
+ * The paper plane that opens your chats, with the number of chats that have
+ * something new (Instagram's count; a muted chat never counts). The same
+ * button sits on Community, Feed and Profile.
+ *
+ * `plain` is the bare icon for a page header. `tile` puts it on the pale
+ * rounded square the Feed's mark and sound button wear, so it reads over a
+ * clip, a bright sky or a written post scrolling underneath.
+ */
+export function InboxButton({ variant = 'plain', size = 24, ink, style }: {
+  variant?: 'plain' | 'tile';
+  size?: number;
+  /** The icon's colour; the page's text colour unless given. */
+  ink?: string;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const styles = useThemedStyles(styleDefinitions);
+  const { conversations } = useApp();
+  const unread = unreadChatCount(conversations);
+  const tile = variant === 'tile';
+  // At least 44 points to aim at, however small the icon is drawn.
+  const box = tile ? 40 : size + 8;
+  const slop = Math.max(8, Math.ceil((44 - box) / 2));
+  return (
+    <Tappable
+      accessibilityRole="link"
+      accessibilityLabel={unread ? `Messages, ${unread} unread` : 'Messages'}
+      onPress={() => router.push('/messages')}
+      hitSlop={slop}
+      style={[tile ? styles.tile : styles.plain, style]}
+    >
+      <Ionicons name={unread ? 'paper-plane' : 'paper-plane-outline'} size={tile ? 21 : size} color={ink ?? colors.text} />
+      <UnreadBadge count={unread} style={tile ? styles.tileBadge : undefined} />
+    </Tappable>
+  );
+}
+
+const styleDefinitions = StyleSheet.create({
+  plain: { padding: 4 },
+  // The Feed's tile: nearly solid page colour with a hairline, so it holds on anything.
+  tile: { width: 40, height: 40, borderRadius: 12, backgroundColor: `${colors.bg}E6`, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  badge: { position: 'absolute', top: -1, right: -2, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bg },
+  tileBadge: { top: -6, right: -6 },
+  badgeText: { ...typography.caption, fontSize: 10, color: colors.brandInk },
+});

@@ -119,8 +119,18 @@ Deno.serve(async (req) => {
           catch (e) { if (!isMissing(e)) throw e; await forgetAccount(coach.id); account = null; }
         }
         if (mode === 'connect' && !account) {
+          // Stripe's current way to describe an Express account (it no longer
+          // recommends `type: 'express'`): CourtSide pays the Stripe fees and
+          // covers losses, Stripe collects the coach's details on its own
+          // pages, and the coach gets the light Express dashboard. This is the
+          // setup chosen in Stripe's Connect settings.
           const created = await stripe.accounts.create({
-            type: 'express',
+            controller: {
+              fees: { payer: 'application' },
+              losses: { payments: 'application' },
+              requirement_collection: 'stripe',
+              stripe_dashboard: { type: 'express' },
+            },
             country: 'US',
             email: user.email ?? undefined,
             capabilities: { card_payments: { requested: true }, transfers: { requested: true } },

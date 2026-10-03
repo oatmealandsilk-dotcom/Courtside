@@ -14,7 +14,8 @@ import { confirm } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
 import { money } from '@/lib/format';
 import * as haptics from '@/lib/haptics';
-import { isOpen, KIND_LABEL, SPECIALTY_LABEL, turnaround, usePayments } from '@/features/coaching/bookings';
+import { KIND_LABEL, SPECIALTY_LABEL, turnaround, usePayments } from '@/features/coaching/bookings';
+import { openBookingCount, studioSetup, waitingQuestionCount } from '@/features/coaching/studioSummary';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, radius, spacing, typography, lift } from '@/theme';
@@ -123,12 +124,13 @@ export default function CoachStudio() {
     );
   }
 
-  const offered = coach.services.filter((s) => (s as { active?: boolean }).active !== false);
+  const setup = studioSetup(coach);
+  const { offered } = setup;
   const steps: { done: boolean; title: string; body: string; section: Section }[] = [
-    { done: !!coach.headline.trim() && coach.specialties.length > 0, title: 'Your page', body: 'A headline and what you coach.', section: 'page' },
-    { done: offered.length > 0, title: 'Services', body: offered.length ? `${offered.length} on offer.` : 'At least one thing players can book.', section: 'services' },
+    { done: setup.page, title: 'Your page', body: 'A headline and what you coach.', section: 'page' },
+    { done: setup.services, title: 'Services', body: offered.length ? `${offered.length} on offer.` : 'At least one thing players can book.', section: 'services' },
     {
-      done: !!coach.payoutsReady,
+      done: setup.payouts,
       title: 'Payouts',
       body: coach.payoutsReady ? 'Stripe pays you out.' : payments.on === false ? 'Opens once payments are on.' : 'Connect a bank account through Stripe.',
       section: 'payouts',
@@ -136,7 +138,7 @@ export default function CoachStudio() {
   ];
   // Payouts are needed to take bookings, not to be listed: a coach can appear with “booking opens soon” first.
   const canList = steps[0].done && steps[1].done;
-  const doneCount = steps.filter((s) => s.done).length + (coach.listed ? 1 : 0);
+  const { doneCount } = setup;
 
   const run = async (key: string, work: () => Promise<unknown>) => {
     setBusy(key);
@@ -199,20 +201,22 @@ export default function CoachStudio() {
   };
   const errorFor = (key: string) => (error?.key === key ? <Text style={styles.error}>{error.message}</Text> : null);
 
-  const openCount = coachingRequests.filter((r) => (r.paidAt || !r.priceCents) && (r.coachId === coach.id || r.coachUserId === currentUserId) && isOpen(r)).length;
-  const waitingCount = coachQuestions.filter((q) => !q.resolved && q.replyIds.length === 0).length;
+  const openCount = openBookingCount(coach, coachingRequests, currentUserId);
+  const waitingCount = waitingQuestionCount(coachQuestions);
   // Opens on whatever is waiting; with nothing waiting, on the page itself.
   const shownTab = tab ?? (openCount ? 'bookings' : waitingCount ? 'questions' : 'page');
 
   // The service editor: in place of the card being edited, or under the list for a new one.
+  const editing = !!draft && coach.services.some((s) => s.id === draft.id);
   const editor = draft ? (
     <View style={styles.editor}>
+      <Text style={styles.editorTitle}>{editing ? 'Edit service' : 'New service'}</Text>
       <Text style={styles.label}>Kind</Text>
       <View style={styles.chips}>{KINDS.map((k) => <Chip key={k} label={KIND_LABEL[k]} selected={draft.kind === k} onPress={() => setDraft({ ...draft, kind: k })} />)}</View>
-      <Field label="Title" value={draft.title} onChangeText={(v) => setDraft({ ...draft, title: v })} />
-      <Field label="What the player gets" value={draft.description} onChangeText={(v) => setDraft({ ...draft, description: v })} multiline minHeight={80} />
+      <Field well label="Title" value={draft.title} onChangeText={(v) => setDraft({ ...draft, title: v })} />
+      <Field well label="What the player gets" value={draft.description} onChangeText={(v) => setDraft({ ...draft, description: v })} multiline minHeight={80} />
       <View style={styles.priceRow}>
-        <View style={styles.priceBox}><Field label="Price ($)" value={draft.price} onChangeText={(v) => setDraft({ ...draft, price: v })} keyboardType="decimal-pad" /></View>
+        <View style={styles.priceBox}><Field well label="Price ($)" value={draft.price} onChangeText={(v) => setDraft({ ...draft, price: v })} keyboardType="decimal-pad" /></View>
         {/* Nothing beside an empty Price box; once there is a number, the range check or the payout. */}
         <Text style={[styles.meta, styles.priceNote]}>
           {!priceCents ? 'Prices run from $5 to $1,000.'
@@ -233,7 +237,7 @@ export default function CoachStudio() {
       {errorFor('service')}
       <View style={styles.editorFoot}>
         <Pressable accessibilityRole="button" onPress={() => setDraft(null)} hitSlop={8}><Text style={styles.quiet}>Cancel</Text></Pressable>
-        {coach.services.some((s) => s.id === draft.id) ? <Pressable accessibilityRole="button" onPress={removeDraft} hitSlop={8}><Text style={[styles.quiet, { color: colors.danger }]}>Remove</Text></Pressable> : null}
+        {editing ? <Pressable accessibilityRole="button" onPress={removeDraft} hitSlop={8}><Text style={[styles.quiet, { color: colors.danger }]}>Remove</Text></Pressable> : null}
       </View>
     </View>
   ) : null;
@@ -302,29 +306,30 @@ export default function CoachStudio() {
         {/* ------------------------------------------------------ your page */}
         <View onLayout={mark('page')} style={styles.section}>
           <SectionHead title="Your page" caption="What players read before they book you." />
-          <Field soft label="Headline" placeholder="e.g. Serve mechanics and clay court patterns" value={headline} onChangeText={setHeadline} />
-          <Field soft label="Credentials" hint="One per line, up to eight." value={credentials} onChangeText={setCredentials} multiline minHeight={88} />
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>What you coach</Text>
-            <View style={styles.chips}>
-              {SPECIALTIES.map((s) => (
-                <Chip key={s} label={SPECIALTY_LABEL[s]} selected={specialties.includes(s)} onPress={() => setSpecialties((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]))} />
-              ))}
-            </View>
-          </View>
-          {/* Two short facts, each on a row of its own: nothing squeezed in beside anything else. */}
+          {/* One grouped card, the way a settings page reads: each part on its own row, hairlines between. */}
           <View style={styles.card}>
-            <View style={styles.detailRow}>
-              <View style={styles.rowWords}>
-                <Text style={styles.rowTitle}>Years coaching</Text>
-                <Text style={styles.meta}>Shown on your page.</Text>
-              </View>
-              <View style={styles.yearsBox}>
-                <Field accessibilityLabel="Years coaching" placeholder="0" value={years} onChangeText={(v) => setYears(v.replace(/[^0-9]/g, '').slice(0, 2))} keyboardType="number-pad" selectTextOnFocus />
+            <View style={styles.block}>
+              <Field well label="Headline" placeholder="e.g. Serve mechanics and clay court patterns" value={headline} onChangeText={setHeadline} />
+            </View>
+            <View style={[styles.block, styles.line]}>
+              <Field well label="Credentials" hint="One per line, up to eight." value={credentials} onChangeText={setCredentials} multiline minHeight={88} />
+            </View>
+            <View style={[styles.block, styles.line]}>
+              <Text style={styles.label}>What you coach</Text>
+              <View style={styles.chips}>
+                {SPECIALTIES.map((s) => (
+                  <Chip key={s} label={SPECIALTY_LABEL[s]} selected={specialties.includes(s)} onPress={() => setSpecialties((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]))} />
+                ))}
               </View>
             </View>
-            <View style={[styles.detailBlock, styles.line]}>
-              <Text style={styles.rowTitle}>You usually reply within</Text>
+            <View style={[styles.detailRow, styles.line]}>
+              <Text style={[styles.label, styles.rowWords]}>Years coaching</Text>
+              <View style={styles.yearsBox}>
+                <Field well accessibilityLabel="Years coaching" placeholder="0" value={years} onChangeText={(v) => setYears(v.replace(/[^0-9]/g, '').slice(0, 2))} keyboardType="number-pad" selectTextOnFocus />
+              </View>
+            </View>
+            <View style={[styles.block, styles.line]}>
+              <Text style={styles.label}>You usually reply within</Text>
               <Options value={reply} options={TURNAROUNDS} onChange={setReply} label="You usually reply within" />
             </View>
           </View>
@@ -335,42 +340,42 @@ export default function CoachStudio() {
         {/* ------------------------------------------------------- services */}
         <View onLayout={mark('services')} style={styles.section}>
           <SectionHead title="Services" caption={coach.services.length ? 'What players can book. Tap one to change it.' : 'What players can book.'} />
-          {coach.services.length ? (
-            <View style={styles.cards}>
-              {coach.services.map((s) => {
-                if (draft?.id === s.id) return <React.Fragment key={s.id}>{editor}</React.Fragment>;
-                const active = (s as { active?: boolean }).active !== false;
-                return (
-                  <Pressable
-                    key={s.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${s.title}, ${money(s.priceCents)}, ${KIND_LABEL[s.kind]}, within ${turnaround(s.turnaroundHours)}${active ? '' : ', paused'}. Edit`}
-                    onPress={() => setDraft({ id: s.id, kind: s.kind, title: s.title, description: s.description, price: String(s.priceCents / 100), turnaroundHours: s.turnaroundHours, active })}
-                    style={({ pressed }) => [styles.card, styles.service, pressed && styles.pressed]}
-                  >
-                    <View style={[styles.kindIcon, !active && styles.kindIconOff]}>
-                      <Ionicons name={KIND_ICON[s.kind]} size={19} color={active ? colors.brand : colors.textFaint} />
-                    </View>
-                    <View style={styles.rowWords}>
-                      <Text style={[styles.serviceTitle, !active && { color: colors.textFaint }]}>{s.title}</Text>
-                      <Text style={styles.meta}>{KIND_LABEL[s.kind]} · within {turnaround(s.turnaroundHours)}</Text>
-                    </View>
-                    <View style={styles.priceSide}>
-                      <Text style={[styles.price, !active && { color: colors.textFaint }]}>{money(s.priceCents)}</Text>
-                      {active ? null : <Text style={styles.paused}>Paused</Text>}
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-          ) : <Text style={styles.muted}>Nothing yet. Most coaches start with one video review and one written answer.</Text>}
-          {draft && !coach.services.some((s) => s.id === draft.id) ? editor : null}
-          {draft ? null : (
-            <Pressable accessibilityRole="button" onPress={() => setDraft(blank())} style={({ pressed }) => [styles.add, pressed && styles.pressed]}>
-              <Ionicons name="add" size={18} color={colors.brand} />
-              <Text style={styles.addText}>Add a service</Text>
-            </Pressable>
-          )}
+          {/* The services, then "Add a service", as rows of one card; the editor opens in place of the row it changes. */}
+          <View style={styles.card}>
+            {coach.services.map((s, index) => {
+              if (draft?.id === s.id) return <View key={s.id} style={index > 0 && styles.line}>{editor}</View>;
+              const active = (s as { active?: boolean }).active !== false;
+              return (
+                <Pressable
+                  key={s.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${s.title}, ${money(s.priceCents)}, ${KIND_LABEL[s.kind]}, within ${turnaround(s.turnaroundHours)}${active ? '' : ', paused'}. Edit`}
+                  onPress={() => setDraft({ id: s.id, kind: s.kind, title: s.title, description: s.description, price: String(s.priceCents / 100), turnaroundHours: s.turnaroundHours, active })}
+                  style={({ pressed }) => [styles.service, index > 0 && styles.line, pressed && styles.rowPressed]}
+                >
+                  <View style={[styles.kindIcon, !active && styles.kindIconOff]}>
+                    <Ionicons name={KIND_ICON[s.kind]} size={19} color={active ? colors.brand : colors.textFaint} />
+                  </View>
+                  <View style={styles.rowWords}>
+                    <Text style={[styles.serviceTitle, !active && { color: colors.textFaint }]}>{s.title}</Text>
+                    <Text style={styles.meta}>{KIND_LABEL[s.kind]} · within {turnaround(s.turnaroundHours)}</Text>
+                  </View>
+                  <View style={styles.priceSide}>
+                    <Text style={[styles.price, !active && { color: colors.textFaint }]}>{money(s.priceCents)}</Text>
+                    {active ? null : <Text style={styles.paused}>Paused</Text>}
+                  </View>
+                </Pressable>
+              );
+            })}
+            {coach.services.length ? null : <Text style={[styles.muted, styles.emptyRow]}>Nothing yet. Most coaches start with one video review and one written answer.</Text>}
+            {draft && !editing ? <View style={styles.line}>{editor}</View> : null}
+            {draft ? null : (
+              <Pressable accessibilityRole="button" onPress={() => setDraft(blank())} style={({ pressed }) => [styles.add, styles.line, pressed && styles.rowPressed]}>
+                <View style={styles.addIcon}><Ionicons name="add" size={20} color={colors.brand} /></View>
+                <Text style={styles.addText}>Add a service</Text>
+              </Pressable>
+            )}
+          </View>
           {draft ? null : errorFor('service')}
         </View>
 
@@ -382,7 +387,7 @@ export default function CoachStudio() {
               <View style={styles.kindIcon}>
                 <Ionicons name={payments.on === false ? 'time-outline' : coach.payoutsReady ? 'checkmark-circle-outline' : 'card-outline'} size={19} color={colors.brand} />
               </View>
-              <Text style={[styles.cardTitle, styles.rowWords]}>
+              <Text style={[styles.serviceTitle, styles.rowWords]}>
                 {payments.on === false ? 'Payouts open once payments are on'
                   : coach.payoutsReady ? 'Payouts are on'
                   : coach.payoutsStarted ? 'Finish setting up payouts'
@@ -524,15 +529,17 @@ const styleDefinitions = StyleSheet.create({
   rowTitle: { ...typography.body, ...font('500'), color: colors.text },
   meta: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
   // Sections
-  section: { marginTop: spacing.xxl, gap: spacing.lg },
-  sectionHead: { gap: 2 },
-  sectionTitle: { ...typography.title, color: colors.text },
+  // Each section: its name and one line on what it is for, then its card, all on the same spacing.
+  section: { marginTop: spacing.xxl, gap: spacing.md },
+  sectionHead: { gap: 2, paddingHorizontal: spacing.xs },
+  sectionTitle: { ...typography.heading, color: colors.text },
   label: { ...typography.smallStrong, color: colors.textMuted },
-  fieldGroup: { gap: spacing.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  // A row of the grouped card: a label over its control.
+  block: { gap: spacing.sm, padding: spacing.lg },
   detailRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
-  detailBlock: { gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.lg },
   yearsBox: { width: 76 },
+  rowPressed: { backgroundColor: colors.surfaceAlt },
   options: { flexDirection: 'row', gap: 4, padding: 4, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt },
   option: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: radius.pill },
   optionOn: { ...lift, backgroundColor: colors.surface },
@@ -544,7 +551,6 @@ const styleDefinitions = StyleSheet.create({
   saveInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   saveText: { ...typography.bodyStrong },
   // Services
-  cards: { gap: spacing.sm },
   service: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg },
   kindIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandDim },
   kindIconOff: { backgroundColor: colors.surfaceAlt },
@@ -552,9 +558,12 @@ const styleDefinitions = StyleSheet.create({
   priceSide: { alignItems: 'flex-end', gap: 2 },
   price: { ...typography.heading, color: colors.text, fontVariant: ['tabular-nums'] },
   paused: { ...typography.caption, color: colors.textFaint },
-  add: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 52, borderRadius: 20, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.borderStrong },
+  add: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, minHeight: 64 },
+  addIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.borderStrong },
   addText: { ...typography.bodyStrong, color: colors.brand },
-  editor: { gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.border },
+  emptyRow: { padding: spacing.lg },
+  editor: { gap: spacing.md, padding: spacing.lg },
+  editorTitle: { ...typography.bodyStrong, color: colors.text },
   editorFoot: { flexDirection: 'row', justifyContent: 'space-between' },
   priceRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.md },
   priceBox: { width: 112 },
@@ -563,7 +572,7 @@ const styleDefinitions = StyleSheet.create({
   // Payouts
   payout: { padding: spacing.lg, gap: spacing.md },
   payoutHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  body: { ...typography.body, color: colors.text, lineHeight: 22 },
+  body: { ...typography.body, color: colors.textMuted, lineHeight: 22 },
   muted: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   quiet: { ...typography.smallStrong, color: colors.textMuted },
   error: { ...typography.small, color: colors.danger, marginTop: spacing.sm },

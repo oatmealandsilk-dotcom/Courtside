@@ -36,10 +36,6 @@ const CSS = `
 [data-msg-settling] [data-msg-mine],[data-msg-settling] [data-msg-theirs]{transition:transform ${SETTLE_MS}ms ${EASE}}
 [data-msg-settling] [data-msg-time]{transition:transform ${SETTLE_MS}ms ${EASE},opacity ${Math.round(SETTLE_MS * 0.7)}ms ease-out}
 [data-msg-beside]{opacity:0;transition:opacity 140ms ease-out}
-@media (hover:hover) and (pointer:fine){
-[data-msg-swipe]:not([data-msg-active]) [data-msg-mine]:hover [data-msg-beside],
-[data-msg-swipe]:not([data-msg-active]) [data-msg-theirs]:hover [data-msg-beside]{opacity:1;transition-delay:250ms}
-}
 @media (prefers-reduced-motion:reduce){
 [data-msg-active] [data-msg-mine],[data-msg-active] [data-msg-theirs],[data-msg-active] [data-msg-time]{transform:none;will-change:auto}
 [data-msg-time]{visibility:hidden}
@@ -291,7 +287,7 @@ function TimedRow({ time, mine, style, children }: { time: string; mine: boolean
 /**
  * The box a message's bubble (or photos, or card) sits in. It tells its row
  * where it is, so the time lines up with it, and holds the time shown beside
- * it on a pointer's hover (and, under Reduce Motion, while sliding).
+ * it under Reduce Motion while sliding. (No time on hover: the swipe shows them, Oct 2.)
  */
 export function TimeAnchor({ ref, style, children }: { ref?: React.Ref<View>; style?: StyleProp<ViewStyle>; children: React.ReactNode }) {
   const styles = useThemedStyles(styleDefinitions);

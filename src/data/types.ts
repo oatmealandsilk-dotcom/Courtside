@@ -210,7 +210,7 @@ export interface SessionPlayer {
 export interface DetectedActivity {
   id: ID;
   userId: ID;
-  source: 'whoop' | 'apple-health' | 'health-connect';
+  source: 'whoop' | 'apple-health' | 'health-connect' | TrackerId;
   sport: 'tennis';
   startedAt: string;
   endedAt: string;
@@ -222,7 +222,7 @@ export interface DetectedActivity {
   kcal?: number;
   /** WHOOP's own 0–21 score. Only from WHOOP, always called Strain, shown privately only. */
   strain?: number;
-  /** 'WHOOP', or the Apple device that saved it, such as 'Watch7,1'. */
+  /** 'WHOOP', the Apple device that saved it (such as 'Watch7,1'), or the tracker's own name for itself ('Charge 6'). */
   device?: string;
   /**
    * Minutes in each heart-rate zone, easiest first: [zone 1 Easy, 2 Light,
@@ -237,7 +237,10 @@ export interface DetectedActivity {
 }
 
 /** Where a post's session numbers came from, for its label. */
-export type StatsSource = 'whoop' | 'apple-watch' | 'apple-health' | 'health-connect';
+export type StatsSource = 'whoop' | 'apple-watch' | 'apple-health' | 'health-connect' | TrackerId;
+
+/** The trackers the server's trackers function signs in to (migration 69): tennis sessions only. */
+export type TrackerId = 'fitbit' | 'oura' | 'polar';
 
 export interface PlayerStats {
   sessionsLogged: number;
@@ -370,6 +373,48 @@ export interface Post {
   isFirst?: boolean;
   /** When the author last changed it; shown as "Edited". */
   editedAt?: string;
+  /**
+   * Shared to one group only (migration 67): just that group's members can
+   * open it, it shows in that group's feed, and never in For you. Fixed once posted.
+   */
+  groupId?: ID;
+}
+
+/* --------------------------------- Groups -------------------------------- */
+
+/** A member of a group, and whether they are its admin. */
+export interface FeedGroupMember {
+  id: ID;
+  admin: boolean;
+}
+
+/**
+ * A group with a feed of its own (migration 67). Anyone can start one; its
+ * starter is the admin, who says yes to requests and can remove people.
+ * Nobody is in more than MAX_GROUPS.
+ */
+export interface FeedGroup {
+  id: ID;
+  name: string;
+  description?: string;
+  /** Ask to join: an admin says yes first. Otherwise anyone with the link is straight in. */
+  ask: boolean;
+  createdAt: string;
+  /** Everyone in it you can see (someone you are blocked with is left out), oldest first. */
+  members: FeedGroupMember[];
+  /** People asking to join; only filled in for its admins. */
+  requests: ID[];
+}
+
+/** What a group's invite link shows before you are in it. */
+export interface FeedGroupCard {
+  id: ID;
+  name: string;
+  description?: string;
+  ask: boolean;
+  memberCount: number;
+  member: boolean;
+  requested: boolean;
 }
 
 /* --------------------------------- Stories ------------------------------- */
@@ -576,6 +621,7 @@ export type IntegrationProvider =
   | 'myfitnesspal'
   | 'apple-health'
   | 'whoop'
+  | TrackerId
   | 'garmin'
   | 'strava';
 
@@ -1111,6 +1157,45 @@ export interface HitRequest {
   cancelled?: boolean;
   createdAt: string;
   joinedIds: ID[];
+}
+
+/* ------------------------------ Shared links ----------------------------- */
+
+/** What a link shared outside the app can point at. */
+export type ShareKind = 'post' | 'profile' | 'hit-request' | 'question' | 'court' | 'group';
+
+/** The few things a stranger sees about a person on a shared link (migration 68). */
+export interface SharePerson { id: ID; name: string; handle: string; avatarUrl?: string; location?: string; isCoach?: boolean }
+
+/** One post as a small picture tile on a shared profile or court. */
+export interface ShareTile { id: ID; kind: PostKind; body?: string; imageUrl?: string; thumbnailUrl?: string }
+
+/**
+ * The read-only look a shared link gives someone with no account
+ * (share_preview, migration 68). `open: false` says nothing else: a private
+ * account, a teen, something taken down or never there all read the same.
+ * `gone` is a hit that is over or called off.
+ */
+export interface SharePreview {
+  kind: ShareKind;
+  open: boolean;
+  gone?: boolean;
+  author?: SharePerson;
+  post?: {
+    id: ID; kind: PostKind; body: string; createdAt: string;
+    imageUrl?: string; videoUrl?: string; thumbnailUrl?: string; orientation?: 'portrait' | 'landscape';
+    /** Demo posts carry a court card instead of a picture. */
+    mediaLabel?: string;
+    likes: number; comments: number; courtName?: string; courtId?: string; location?: string;
+    session?: { minutes?: number; focus?: string; kind?: PracticeSession['kind'] };
+  };
+  profile?: { bio?: string; followers: number; posts: number; skillSystem?: SkillSystem; rating?: number; openHits: number; recent: ShareTile[] };
+  hit?: {
+    id: ID; startsAt: string; format: HitRequest['format']; spots: number; spotsLeft: number;
+    levelMin?: number; levelMax?: number; note?: string; place: { id?: string; name: string; lat?: number; lng?: number };
+  };
+  question?: { id: ID; title: string; body: string; createdAt: string; answers: number };
+  court?: { name?: string; openHits: number; posts: number; players: number; recent: ShareTile[] };
 }
 
 export interface Notification {

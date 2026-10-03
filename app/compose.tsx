@@ -13,7 +13,8 @@ import { MediaEditor, type EditedMedia } from '@/components/MediaEditor';
 import { takePendingShot } from '@/features/compose/pendingShot';
 import { registerCreateClose } from '@/features/compose/createMenu';
 import { SheetBackdrop } from '@/components/SheetBackdrop';
-import { Button, Field, Screen, Toggle } from '@/components/ui';
+import { Button, Chip, Field, Screen, Toggle } from '@/components/ui';
+import { openGroupFeed } from '@/features/groups/openGroupFeed';
 import { FormRow } from '@/components/FormRow';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { openPlacePicker } from '@/features/places/picker';
@@ -25,7 +26,9 @@ import { openSessionPicker } from '@/features/activity/sessionPicker';
 import { isActive, tagsOnSession } from '@/features/activity/sessionTags';
 import { addToBank, getBank } from '@/features/compose/mediaBank';
 import { Avatar } from '@/components/ui';
-import { Chips } from '@/components/sheet/SheetForm';
+import { Chips, Tiles } from '@/components/sheet/SheetForm';
+import { lengthsFor, trackerName } from '@/features/activity/lengths';
+import { duration as lengthWords } from '@/lib/format';
 import { LogComposerTop, LogDock, DOCK_ROOM } from '@/components/session/LogComposer';
 import { ZoneGlyph } from '@/components/session/ZoneGlyph';
 import type { CardPerson } from '@/components/session/SessionCard';
@@ -101,13 +104,29 @@ type Stage = 'choose' | 'library' | 'edit' | 'form';
  */
 export default function Compose() {
   const styles = useThemedStyles(styleDefinitions);
-  const { actions, posts, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions, sessionTags, users, hitRequests, blockedIds } = useApp();
+  const { actions, posts, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions, sessionTags, users, hitRequests, blockedIds, feedGroups, feedGroupsOn } = useApp();
 
   // The story rail opens this straight at the library with ?mode=story.
-  const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string; activity?: string; session?: string; hit?: string }>();
+  const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string; activity?: string; session?: string; hit?: string; group?: string }>();
   // A tracker's session (?activity=, from "Log it"): found among yours, or
   // waited for when the app was opened cold from an alert (useTrackerSession).
   const tracker = useTrackerSession(params.activity);
+  // Share to: everyone (the default) or one group you are in (migration 67). A group's feed opens this with ?group=<id>.
+  const [shareTo, setShareTo] = useState<string | null>(params.group ?? null);
+  // Never falls back to Everyone on its own: a group that is not (or no
+  // longer) yours stops Share instead, so nothing goes public by accident.
+  // Opened from a group's feed, the groups are read first.
+  const [groupsRead, setGroupsRead] = useState(feedGroupsOn !== null);
+  useEffect(() => {
+    if (!params.group || groupsRead) return;
+    let on = true;
+    void actions.loadFeedGroups().catch(() => undefined).finally(() => { if (on) setGroupsRead(true); });
+    return () => { on = false; };
+  }, [params.group]); // eslint-disable-line react-hooks/exhaustive-deps
+  const groupWaiting = !!shareTo && !groupsRead;
+  const groupGone = !!shareTo && groupsRead && !feedGroups.some((g) => g.id === shareTo);
+  // A group post stays out of everything public: no map court, never offered for CourtSide's Instagram.
+  const groupPost = !!shareTo;
   // The session being posted, held from the moment it is known so a
   // refresh of your sessions in the meantime cannot change what is posted.
   const [opened, setOpened] = useState<SessionPick | undefined>(() => {
@@ -342,6 +361,11 @@ export default function Compose() {
   const openedLog = opened?.type === 'tracker' ? opened.session : undefined;
   const [kind, setKind] = useState<PracticeSession['kind']>(fromHit?.kind ?? 'practice');
   const [won, setWon] = useState<'won' | 'lost' | null>(null);
+  // How long, in your log (Oct 3): simply the tracker's time, shown as one
+  // line; a small Edit opens the usual lengths, for a break taken off.
+  // The post keeps the tracker's own time (the server writes it, migration 65).
+  const [logMinutes, setLogMinutes] = useState<number | null>(null);
+  const [editLength, setEditLength] = useState(false);
   const [players, setPlayers] = useState<SessionPlayer[]>([]);
   const [opponentText, setOpponentText] = useState('');
   const [busy, setBusy] = useState<null | 'log' | 'share'>(null);
@@ -382,6 +406,7 @@ export default function Compose() {
     // From a hit with nobody tagged and nothing typed, its people's names are kept as private words, as before.
     opponent: canTagKind(kind) ? (opponentText.trim() || (fromHit && !players.length ? fromHit.who : '')) : '',
     note: fromHit ? `At ${fromHit.place}` : undefined,
+    ...(opened?.type === 'tracker' && logMinutes && logMinutes !== opened.activity.minutes ? { minutes: logMinutes } : {}),
   });
   // "Mira +1" with Mira's face; a clock while she has not accepted yet.
   const whoFirst = players.length ? users.find((u) => u.id === players[0].id) : undefined;
@@ -427,7 +452,7 @@ export default function Compose() {
       setTimeout(() => {
         haptics.reward();
         closeMenu();
-        showLogged(activity.minutes, { kind: input.kind, won: input.won }, streak);
+        showLogged(input.minutes ?? activity.minutes, { kind: input.kind, won: input.won }, streak);
       }, 300);
     } catch {
       acting.current = false;
@@ -458,7 +483,7 @@ export default function Compose() {
   // A quick second tap on Share would post it twice.
   const sent = useRef(false);
   const submit = () => {
-    if (!canSubmit || sent.current) return;
+    if (!canSubmit || groupWaiting || groupGone || sent.current) return;
     sent.current = true;
 
     if (mode === 'story' || mode === 'hit') {
@@ -490,8 +515,9 @@ export default function Compose() {
         tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
         taggedUserIds: tagged.length ? tagged : undefined,
         location: location.trim() || undefined,
-        court: location.trim() && court ? court : undefined,
-        featureOk: stats ? false : featureOk ? undefined : false,
+        court: location.trim() && court && !groupPost ? court : undefined,
+        featureOk: stats || groupPost ? false : featureOk ? undefined : false,
+        groupId: shareTo ?? undefined,
         imageUrl: media?.kind === 'photo' ? media.uri : undefined,
         videoUrl: media?.kind === 'video' ? media.uri : undefined,
         mediaLabel: media?.label,
@@ -499,7 +525,7 @@ export default function Compose() {
         session: stats ? statsOf(opened, showHr, adult) : undefined,
       });
       const firstPost = !posts.some((p) => p.authorId === currentUserId);
-      landOnFeed();
+      if (shareTo) openGroupFeed(shareTo); else landOnFeed();
       if (firstPost) setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800);
       return;
     }
@@ -518,8 +544,9 @@ export default function Compose() {
       tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
       taggedUserIds: tagged.length ? tagged : undefined,
       location: location.trim() || undefined,
-      court: location.trim() && court ? court : undefined,
-      featureOk: stats ? false : featureOk ? undefined : false,
+      court: location.trim() && court && !groupPost ? court : undefined,
+      featureOk: stats || groupPost ? false : featureOk ? undefined : false,
+      groupId: shareTo ?? undefined,
       imageUrl: media?.kind === 'photo' ? media.uri : undefined,
       videoUrl: media?.kind === 'video' ? media.uri : undefined,
       mediaLabel: media?.label,
@@ -532,7 +559,7 @@ export default function Compose() {
     // The first post is the moment to ask who they hit with, but only after
     // they have seen it go up: a light nudge on the feed, not a whole screen.
     const firstPost = !posts.some((p) => p.authorId === currentUserId);
-    landOnFeed();
+    if (shareTo) openGroupFeed(shareTo); else landOnFeed();
     if (firstPost) setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800);
   };
 
@@ -859,6 +886,24 @@ export default function Compose() {
                 ) : null}
               </Reanimated.View>
             )}
+            {opened?.type === 'tracker' && !openedLog ? (
+              <Reanimated.View layout={LinearTransition.duration(220)} style={styles.lengthBox}>
+                {editLength ? (
+                  <Reanimated.View entering={FadeInDown.duration(220).easing(Easing.bezier(0.32, 0.72, 0, 1))} style={styles.lengthTiles}>
+                    <Tiles value={logMinutes ?? opened.activity.minutes} onChange={(m) => setLogMinutes(m)} options={lengthsFor(opened.activity)} />
+                    <Text style={styles.lengthHint}>Change the length if you took a break. Your post keeps {trackerName(opened.activity)}’s time.</Text>
+                  </Reanimated.View>
+                ) : (
+                  <View style={styles.trackedRow}>
+                    <Text style={styles.trackedTime}>{lengthWords(logMinutes ?? opened.activity.minutes)}</Text>
+                    <Text style={styles.trackedFrom}>{!logMinutes || logMinutes === opened.activity.minutes ? `from ${trackerName(opened.activity)}` : 'edited'}</Text>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Edit how long" hitSlop={10} onPress={() => setEditLength(true)} style={({ pressed }) => [styles.trackedEdit, pressed && { opacity: 0.6 }]}>
+                      <Text style={styles.trackedEditText}>Edit</Text>
+                    </Pressable>
+                  </View>
+                )}
+              </Reanimated.View>
+            ) : null}
             <Reanimated.View layout={LinearTransition.duration(220)} style={styles.logRows}>
               {!openedLog && canTagKind(kind) ? (
                 <FormRow icon="people-outline" label="Who you played" value={whoAccessory ? undefined : whoValue} accessory={whoAccessory} accessibilityLabel={whoValue ? `Who you played, ${whoValue}${players.length ? ', waiting to accept' : ''}` : 'Who you played'} chevron onPress={pickWho} />
@@ -902,7 +947,7 @@ export default function Compose() {
           title={mode === 'clip' || openedClip ? 'New clip' : mode === 'post' ? 'New post' : mode === 'story' ? 'New story' : 'New instant'}
           compactTitle
           onBack={() => (mode === 'hit' ? router.navigate('/hit') : opened && !media ? goBackNow() : setStage('edit'))}
-          right={<Button label={mode === 'story' || mode === 'hit' ? 'Post instant' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit} />}
+          right={<Button label={mode === 'story' || mode === 'hit' ? 'Post instant' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit || groupWaiting || groupGone} />}
         >
           <View style={mode === 'story' || mode === 'hit' ? styles.form : null}>
             {/* Opened for a tracker's session that never came (hidden, gone after 30 days): a plain new post. */}
@@ -971,6 +1016,19 @@ export default function Compose() {
                     <Text style={styles.challengeChipText}>Entering {challenge.title}</Text>
                   </View>
                 ) : null}
+                {/* Share to: shown once you are in a group. Everyone is the default. */}
+                {(feedGroups.length || shareTo) && !inChallenge ? (
+                  <View style={styles.shareTo} accessibilityRole="radiogroup" accessibilityLabel="Share to">
+                    <Text style={styles.shareToLabel}>Share to</Text>
+                    <View style={styles.shareToChips}>
+                      <Chip label="Everyone" selected={!shareTo} onPress={() => setShareTo(null)} />
+                      {feedGroups.map((g) => <Chip key={g.id} label={g.name} selected={shareTo === g.id} onPress={() => setShareTo(g.id)} />)}
+                    </View>
+                    {groupWaiting ? <Text style={styles.shareToNote}>Checking your groups…</Text>
+                      : groupGone ? <Text style={styles.shareToNote}>You're not in that group any more. Pick Everyone or one of your groups to share.</Text>
+                      : shareTo ? <Text style={styles.shareToNote}>Only people in {feedGroups.find((g) => g.id === shareTo)?.name ?? 'the group'} will see this.</Text> : null}
+                  </View>
+                ) : null}
                 {/* One list of rows, the Settings rows' size without their card. */}
                 <View style={styles.rows}>
                   <TagPlayers variant="row" tagged={tagged} onChange={setTagged} fromSession={fromSession} />
@@ -1022,7 +1080,7 @@ export default function Compose() {
                     }
                   />}
                   {/* A post with session stats is never offered for CourtSide's Instagram. */}
-                  {(opened && withStats) || (statsRow && statsPick) ? null : <FormRow
+                  {(opened && withStats) || (statsRow && statsPick) || groupPost ? null : <FormRow
                     line
                     icon="megaphone-outline"
                     label="Feature on CourtSide's Instagram"
@@ -1081,6 +1139,10 @@ const styleDefinitions = StyleSheet.create({
   // A clip or post: the caption 24 under the preview, the challenge chip 8
   // under that, and the rows 16 under whichever is last.
   caption: { marginTop: spacing.xl },
+  shareTo: { gap: spacing.sm, marginTop: spacing.md },
+  shareToLabel: { ...typography.smallStrong, color: colors.textMuted },
+  shareToChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  shareToNote: { ...typography.small, color: colors.textMuted },
   challengeChip: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, marginTop: spacing.sm, paddingVertical: 5, paddingHorizontal: 10, borderRadius: radius.pill, backgroundColor: colors.brandDim },
   challengeChipText: { ...typography.smallStrong, color: colors.brand },
   rows: { marginTop: spacing.lg },
@@ -1105,6 +1167,15 @@ const styleDefinitions = StyleSheet.create({
   who: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 170 },
   whoName: { ...font('600'), fontSize: 15, color: colors.text, flexShrink: 1 },
   logRows: { marginTop: spacing.md },
+  // How long: the tracker's time on one line, with a small Edit (as Log your tennis has it).
+  lengthBox: { marginTop: spacing.lg },
+  lengthTiles: { gap: spacing.sm },
+  lengthHint: { ...typography.small, color: colors.textFaint },
+  trackedRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
+  trackedTime: { ...typography.title, color: colors.text, fontVariant: ['tabular-nums'] },
+  trackedFrom: { ...typography.small, color: colors.textMuted, flex: 1 },
+  trackedEdit: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: colors.surfaceAlt },
+  trackedEditText: { ...typography.smallStrong, color: colors.text },
   hideIt: { alignSelf: 'center', paddingVertical: spacing.lg },
   hideItText: { ...font('600'), fontSize: 13, color: colors.textMuted },
   hitFrame: { width: '100%', aspectRatio: 4 / 3, maxHeight: 520, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000', alignSelf: 'center' },

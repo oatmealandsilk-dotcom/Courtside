@@ -49,6 +49,8 @@ interface Props {
   compact?: boolean;
   /** No box at all: the words on the page, beside an avatar (a session's caption). */
   bare?: boolean;
+  /** A quiet filled box with no outline, for a field sitting inside a card's grouped list (a settings page). */
+  well?: boolean;
 }
 
 /**
@@ -81,6 +83,7 @@ export function Field({
   soft = false,
   compact = false,
   bare = false,
+  well = false,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const submits = Boolean(onSubmitEditing) && (submitOnEnter || !multiline);
@@ -158,6 +161,8 @@ export function Field({
           styles.input,
           focused && styles.inputFocused,
           soft && (multiline ? styles.softArea : styles.softLine),
+          well && styles.well,
+          well && focused && styles.inputFocused,
           multiline && { minHeight: minHeight ?? 110, textAlignVertical: 'top' },
           compact && styles.compact,
           flush && { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
@@ -191,5 +196,6 @@ const styleDefinitions = StyleSheet.create({
   hint: { ...typography.small, color: colors.textFaint },
   softLine: { ...lift, borderWidth: 0, borderRadius: radius.pill, minHeight: 52, paddingVertical: 14, fontSize: 16 },
   softArea: { ...lift, borderWidth: 0, borderRadius: 20, paddingVertical: 14, fontSize: 16, lineHeight: 22 },
+  well: { backgroundColor: colors.surfaceAlt, borderColor: 'transparent', borderRadius: 14 },
   compact: { minHeight: 44, maxHeight: 120, borderRadius: 22, paddingTop: 11, paddingBottom: 11, paddingHorizontal: 16, fontSize: 16, lineHeight: 22 },
 });

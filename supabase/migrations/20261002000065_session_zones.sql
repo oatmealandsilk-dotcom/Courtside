@@ -56,28 +56,31 @@
 -- profile), run before or after it: it never reads the age itself, only
 -- known_adult(), which 60 added and 64 keeps, and it does not change any of
 -- the functions 64 checks before it runs. Replaces put_session_with (62),
--- record_activity and report_activity (58), as they are live (checked
--- against the live database on Oct 2), and stops without changing anything
--- if any of them, or fill_post_session_stats (which it relies on), was
--- changed since. After this has run, do not run 58 or 62 again (they would
--- put the older versions back); if one ever is, run this again.
+-- record_activity (69) and report_activity (58), as they are live (checked
+-- against the live database on Oct 3, with migrations through 69 run; 64,
+-- 65 and 66 not yet), and stops without changing anything if any of them,
+-- or fill_post_session_stats (which it relies on), was changed since. Its
+-- record_activity is 69's exactly (Fitbit, Oura and Polar taken as before),
+-- plus the zone times. After this has run, do not run 58, 62 or 69 again
+-- (they would put the older versions back); if one ever is, run this again.
 --
 -- The whoop function sends the zone times once it is deployed again (either
 -- order works: until then nothing sends them, and a function deployed first
 -- sends a number this database ignores).
 --
--- Needs 39, 58, 60, 62 (all live). Safe to run more than once.
+-- Needs 39, 58, 60, 62 and 69 (all live). Safe to run more than once.
 
 begin;
 
 -- ------------------------------------------------------------------ 0. check
--- md5 of each function's body: as it is live (Oct 2), or as this file leaves it.
+-- md5 of each function's body: as it is live (Oct 3), or as this file leaves it.
 do $$
 declare
   expected constant text[][] := array[
-    -- name, live (Oct 2), as 65 leaves it
+    -- name, live (Oct 3), as 65 leaves it
     ['put_session_with', '170963d37883ee996632a575e92b6f92', 'fc74fda3439af054974aaaa22c504ed8'],
-    ['record_activity', 'e33c62eb9c3517677017873cdd430600', 'fe7103ee3898a8fc7f04ae01b9e1f6e0'],
+    -- 69's (Fitbit, Oura, Polar), live since Oct 3.
+    ['record_activity', '53d9948890654d1d8cd269f490d117be', 'e872943428d16808ef64dfb4f2f997cf'],
     ['report_activity', 'a9d9ad70a9c084c6b59f35027a9ea226', '1da946533886a6c87cf3a2812a383140'],
     -- Not replaced, but relied on: 63's (live) or 64's.
     ['fill_post_session_stats', 'e8312c41b2f36aa72ffa714a1857ede6', '29ce26bf1b7ed4b7b6dfe37472dc8cfd']
@@ -89,6 +92,9 @@ begin
   if to_regprocedure('public.known_adult(uuid)') is null or to_regprocedure('public.post_session_ref(jsonb, uuid)') is null
      or to_regprocedure('public.refresh_session_posts(uuid, uuid)') is null then
     raise exception 'Migration 65 stopped before changing anything: migrations 60 and 62 have to run first.';
+  end if;
+  if to_regclass('public.tracker_tokens') is null then
+    raise exception 'Migration 65 stopped before changing anything: migration 69 has to run first.';
   end if;
   for i in 1 .. array_length(expected, 1) loop
     select md5(p.prosrc) into now_is from pg_proc p
@@ -167,8 +173,9 @@ exception when others then
 end $$;
 
 -- ------------------------------------------- 3. a tracker's session comes in
--- Migration 58's, plus the zone times (WHOOP only: report_activity drops
--- them), kept under the same rule as heart rate.
+-- Migration 69's (58's, taking Fitbit, Oura and Polar too), plus the zone
+-- times (only WHOOP sends them: report_activity drops them, and the trackers
+-- function never sends any), kept under the same rule as heart rate.
 create or replace function public.record_activity(u uuid, src text, ext text, p jsonb, quiet boolean default false)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -182,7 +189,7 @@ declare
   v_note text;
   v_status text;
 begin
-  if u is null or src not in ('whoop', 'apple-health', 'health-connect') or coalesce(char_length(ext), 0) not between 1 and 100
+  if u is null or src not in ('whoop', 'apple-health', 'health-connect', 'fitbit', 'oura', 'polar') or coalesce(char_length(ext), 0) not between 1 and 100
      or coalesce(p->>'sport', 'tennis') <> 'tennis' or not public.tennis_allowed(u, src) then
     return null;
   end if;
@@ -227,7 +234,7 @@ begin
     score_state = coalesce(excluded.score_state, d.score_state),
     device = coalesce(excluded.device, d.device),
     hr_zones = case when hr_ok then coalesce(excluded.hr_zones, d.hr_zones) end,
-    -- WHOOP took it back and then sent it again: it is news once more.
+    -- The tracker took it back and then sent it again: it is news once more.
     status = case when d.status = 'withdrawn' then 'new' else d.status end,
     updated_at = now()
   returning d.id into v_id;
