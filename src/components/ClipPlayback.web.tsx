@@ -1,7 +1,7 @@
 import { useTheme } from '@/theme/ThemeProvider';
 import { useSoundMuted } from '@/features/feed/sound';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import React, { useEffect, useRef, useState, memo } from 'react';
+import React, { useContext, useEffect, useRef, useState, memo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@/theme';
 import { onSpaceBar } from '@/features/feed/keyboard';
@@ -12,6 +12,7 @@ import { cropCss } from '@/lib/crop';
 import type { MediaCrop } from '@/data/types';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { forgetLeft, noteLeft, takeLeft } from '@/features/feed/clipResume';
+import { TopBandContext } from '@/features/feed/topBand';
 
 /** The feed's top shade (see TOP_SHADE) as a browser gradient. */
 const TOP_SHADE_CSS = `linear-gradient(${TOP_SHADE.colors.map((c, i) => `${c} ${TOP_SHADE.locations[i] * 100}%`).join(', ')})`;
@@ -56,6 +57,8 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
   const onTop = useIsFocused() || held;
   const active = wanted && onTop;
   const insets = useSafeAreaInsets();
+  // Under the Feed's top row the disc steps down out of its band (features/feed/topBand).
+  const drop = useContext(TopBandContext);
   const video = useRef<HTMLVideoElement>(null);
   const bar = useRef<HTMLDivElement>(null);
   const lastTap = useRef(0);
@@ -229,15 +232,15 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
       // In the feed: the phone's tile, the same rounded square as the mark's at the other corner, centred level with it,
       // nearly solid so its icon stays crisp, with a hairline so it holds on a white sky. Elsewhere: a small dark disc.
       ...(discInk
-        ? { top: insets.top + 27, width: 40, height: 40, borderRadius: 12, background: `${colors.bg}E6`, border: `0.5px solid ${colors.border}` }
-        : { top: insets.top + 22, width: 30, height: 30, borderRadius: 15, background: 'rgba(0,0,0,0.55)', border: 0 }),
+        ? { top: insets.top + drop + 27, width: 40, height: 40, borderRadius: 12, background: `${colors.bg}E6`, border: `0.5px solid ${colors.border}` }
+        : { top: insets.top + drop + 22, width: 30, height: 30, borderRadius: 15, background: 'rgba(0,0,0,0.55)', border: 0 }),
       opacity: discOn ? 1 : 0, transform: discOn ? 'scale(1)' : 'scale(0.86)', transition: discOn ? 'opacity 160ms ease-out, transform 160ms ease-out' : 'opacity 140ms ease-in, transform 140ms ease-in',
     }}><Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={discInk ? 19 : 17} color={discInk ?? 'white'} /></button></div>}
     {bare ? null : <div aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, background: 'rgba(255,255,255,0.25)' }}>
       <div ref={bar} style={{ height: 2, width: '0%', background: 'rgba(255,255,255,0.9)' }} />
     </div>}
     {!ready && active ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><CourtSpinner ink={discInk ?? 'white'} /></div> : null}
-    {fast ? <div aria-live="polite" style={{ position: 'absolute', left: 0, right: 0, top: insets.top + 24, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+    {fast ? <div aria-live="polite" style={{ position: 'absolute', left: 0, right: 0, top: insets.top + drop + 24, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
       <span style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 999, background: 'rgba(0,0,0,0.55)', color: 'white', font: '700 14px Inter_700Bold, system-ui, sans-serif' }}><Ionicons name="play-forward" size={13} color="white" />2×</span>
     </div> : null}
   </div>;

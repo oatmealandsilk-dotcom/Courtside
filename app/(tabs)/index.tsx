@@ -9,6 +9,11 @@ import { Image as ExpoImage } from 'expo-image';
 import { router, useFocusEffect, useIsFocused as useRouteFocused, useNavigation } from 'expo-router';
 import { FeedTopRow } from '@/features/groups/FeedTopRow';
 import { onOpenGroupFeed, tookGroupFeed } from '@/features/groups/openGroupFeed';
+import { GroupTile } from '@/features/groups/GroupTile';
+import { TOP_BAND_DROP, TOP_BAND_HEIGHT, TOP_BAND_TOP, TopBandContext } from '@/features/feed/topBand';
+import { shareLink } from '@/lib/shareLink';
+import { shareOutside } from '@/lib/shareOutside';
+import { show as showToast } from '@/lib/toast';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { goBack } from '@/lib/goBack';
@@ -1137,14 +1142,37 @@ function Home({ scope, topRow, paused, onChrome }: {
     </View>
   );
 
+  // A feed with the For you / groups row keeps its band clear; the empty page centres in what is left, above the floating bar.
+  const banded = !!topRow || !!scope?.groupId;
+  const inviteToGroup = async (groupId: string, name: string) => {
+    const link = shareLink('group', groupId);
+    try { const said = await shareOutside(`Join ${name} on CourtSide`, link); if (said) showToast({ title: said, icon: 'link-outline' }); } catch { showToast({ title: `Share this link: ${link}`, icon: 'link-outline' }); }
+  };
+
   return (
+    <TopBandContext.Provider value={banded ? TOP_BAND_DROP : 0}>
     <View style={styles.root}>
       {!ready || !feed.length ? (
-        <EmptyState
-          title={scope?.groupId ? `Nothing in ${groupName ?? 'this group'} yet` : scope ? 'Nothing here yet' : ready ? 'Your court is quiet' : 'Loading your clips'}
-          body={scope?.groupId ? 'Only people in the group see what is shared here.' : scope ? undefined : 'Be the first on it: a clip, a photo, or an instant after you play.'}
-          action={scope?.groupId ? { label: 'Share to the group', onPress: () => router.push({ pathname: '/compose', params: { group: scope.groupId } }) } : !scope && ready ? { label: 'Share something', onPress: () => router.push('/compose') } : undefined}
-        />
+        <View style={[styles.emptyWrap, { paddingTop: banded ? insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT : insets.top, paddingBottom: barInset }]}>
+          {scope?.groupId && ready ? (
+            // An empty group: its face, one line, and the two things to do about it.
+            <View style={styles.groupEmpty}>
+              <GroupTile name={groupName ?? 'Group'} size={72} />
+              <Text style={styles.groupEmptyTitle}>{`Nothing in ${groupName ?? 'this group'} yet`}</Text>
+              <Text style={styles.groupEmptyBody}>Only people in the group see what’s shared here.</Text>
+              <View style={styles.groupEmptyActions}>
+                <Button label={`Post to ${groupName ?? 'the group'}`} onPress={() => router.push({ pathname: '/compose', params: { group: scope.groupId } })} full />
+                <Button label="Invite people" variant="secondary" onPress={() => { void inviteToGroup(scope.groupId, groupName ?? 'my group'); }} full />
+              </View>
+            </View>
+          ) : (
+            <EmptyState
+              title={scope?.groupId ? 'Loading the group' : scope ? 'Nothing here yet' : ready ? 'Your court is quiet' : 'Loading your clips'}
+              body={scope ? undefined : 'Be the first on it: a clip, a photo, or an instant after you play.'}
+              action={!scope && ready ? { label: 'Share something', onPress: () => router.push('/compose') } : undefined}
+            />
+          )}
+        </View>
       ) : (
         // While a page is on the comments stage, TalkBack reads the comments only, not the feed behind them.
         <View ref={viewer} style={styles.viewer} importantForAccessibility={myStage?.mode === 'stage' ? 'no-hide-descendants' : 'auto'}>
@@ -1542,17 +1570,25 @@ function Home({ scope, topRow, paused, onChrome }: {
           ) : null}
           {/* Over a clip or an Instant the phone's clock and battery turn white, as on TikTok, Reels and Shorts:
               the theme's dark clock sank into a dark court, and the top shade keeps a white one clear of a bright sky.
-              Only once the picture is in (the cover before it is the page's own ground), and only while this page is in front. */}
-          {focused && activeOnPicture && showing && (showing.type === 'hit' ? inNow(showing.story.id) : showing.type === 'post' && inNow(showing.post.id)) ? <StatusBar style="light" animated /> : null}
+              Only once the picture is in (the cover before it is the page's own ground), and only while this page is in front:
+              For you held still under a group's feed keeps quiet, or its white clock vanished on the group's light page. */}
+          {focused && !paused && activeOnPicture && showing && (showing.type === 'hit' ? inNow(showing.story.id) : showing.type === 'post' && inNow(showing.post.id)) ? <StatusBar style="light" animated /> : null}
         </View>
       )}
     </View>
+    </TopBandContext.Provider>
   );
 }
 
 /** "INSTANT · 22h left", ticking once a minute so it never reads stale. */
 const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, alignItems: 'center' },
+  // An empty feed: centred in the room between the top row's band and the floating bar, on the page's own ground.
+  emptyWrap: { flex: 1, alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg },
+  groupEmpty: { alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.xl, width: '100%', maxWidth: 360 },
+  groupEmptyTitle: { ...typography.title, color: colors.text, textAlign: 'center', marginTop: spacing.md },
+  groupEmptyBody: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
+  groupEmptyActions: { alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.lg },
   scopeBack: { position: 'absolute', left: 12, padding: 6, zIndex: 6 },
   // Its own layer over the feed, so it can fade as a clip goes onto the comments stage.
   scopeBackLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 6 },

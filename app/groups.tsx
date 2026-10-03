@@ -1,141 +1,165 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { Button, Field, Screen, SegmentedControl } from '@/components/ui';
+import { Button, Screen } from '@/components/ui';
+import { GroupTile } from '@/features/groups/GroupTile';
 import { goBack } from '@/lib/goBack';
 import { useApp } from '@/store/AppContext';
 import { GROUPS_AGE_LINE, MAX_GROUPS, groupsOpenTo } from '@/store/feedGroups';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
 /*
  * Groups (migration 67): the ones you are in, the ones you asked to join,
- * and a short form to start one. Reached from the "+" at the end of the
- * Feed's top row, and from Profile. Someone not known to be an adult sees
- * one calm line instead of Start (groups are adults-only for now; the
- * server holds the same rule).
+ * and a button that opens a short sheet to start one (group-form). Reached
+ * from the "+" at the end of the Feed's top row, and from Profile. Someone
+ * not known to be an adult sees one calm line instead of Start (groups are
+ * adults-only for now; the server holds the same rule).
  */
-
-type JoinMode = 'open' | 'ask';
 
 export default function Groups() {
   const styles = useThemedStyles(styleDefinitions);
   const { feedGroups, feedGroupsAsked, feedGroupsOn, currentUserId, currentUser, actions } = useApp();
   const open = groupsOpenTo(currentUser);
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [mode, setMode] = useState<JoinMode>('open');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   useEffect(() => { if (currentUserId) void actions.loadFeedGroups(); }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const full = feedGroups.length >= MAX_GROUPS;
-  const create = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const id = await actions.createFeedGroup({ name, description, ask: mode === 'ask' });
-      setName(''); setDescription(''); setMode('open');
-      router.push({ pathname: '/g/[id]', params: { id } });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'That didn’t go through.');
-    } finally {
-      setBusy(false);
-    }
-  };
+  const count = feedGroups.length;
+  const full = count >= MAX_GROUPS;
+  const off = feedGroupsOn === false;
 
   return (
     <Screen title="Groups" compactTitle onBack={() => goBack()}>
-      <Text style={styles.note}>
-        A group has a feed of its own. What you share there, only the group sees. You can be in up to {MAX_GROUPS} groups.
-      </Text>
+      <Text style={styles.intro}>A feed of your own, only the group sees it.</Text>
 
-      {feedGroupsOn === false ? (
-        <Text style={styles.note}>Groups aren’t switched on yet. Check back soon.</Text>
+      {off ? <Text style={styles.notice}>Groups aren’t switched on yet. Check back soon.</Text> : null}
+
+      {!open ? (
+        <View style={[styles.card, styles.ageCard]}>
+          <View style={styles.ageIcon}><Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} /></View>
+          <Text style={styles.ageLine}>{GROUPS_AGE_LINE}</Text>
+        </View>
       ) : null}
 
-      {!open ? <Text style={styles.ageLine}>{GROUPS_AGE_LINE}</Text> : null}
-
-      {open || feedGroups.length ? <Text style={styles.section}>Your groups</Text> : null}
-      {!open && feedGroups.length === 0 ? null : feedGroups.length === 0 ? (
-        <Text style={styles.empty}>You’re not in a group yet. Start one below, or open a group’s invite link.</Text>
-      ) : (
-        <View style={styles.list}>
-          {feedGroups.map((g, i) => {
-            const admin = g.members.some((m) => m.id === currentUserId && m.admin);
-            return (
-              <Pressable
-                key={g.id}
-                accessibilityRole="link"
-                accessibilityLabel={`${g.name}, ${g.members.length} ${g.members.length === 1 ? 'member' : 'members'}${admin && g.requests.length ? `, ${g.requests.length} asking to join` : ''}`}
-                onPress={() => router.push({ pathname: '/g/[id]', params: { id: g.id } })}
-                style={({ pressed }) => [styles.row, i > 0 && styles.rowLine, pressed && styles.pressed]}
-              >
-                <View style={styles.tile}><Ionicons name="people" size={18} color={colors.brand} /></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.name} numberOfLines={1}>{g.name}</Text>
-                  <Text style={styles.meta}>{g.members.length} {g.members.length === 1 ? 'member' : 'members'}{admin ? ' · You’re the admin' : ''}</Text>
-                </View>
-                {admin && g.requests.length ? <View style={styles.badge}><Text style={styles.badgeText}>{g.requests.length} asking</Text></View> : null}
-                <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
-              </Pressable>
-            );
-          })}
-        </View>
-      )}
+      {open || count ? (
+        <>
+          <View style={styles.sectionRow}>
+            <Text style={styles.section}>Your groups</Text>
+          </View>
+          {count === 0 ? (
+            <View style={[styles.card, styles.emptyCard]}>
+              <Ionicons name="people-outline" size={22} color={colors.textFaint} />
+              <Text style={styles.emptyTitle}>You’re not in a group yet</Text>
+              <Text style={styles.emptyBody}>Start one below, or open a group’s invite link.</Text>
+            </View>
+          ) : (
+            <View style={styles.card}>
+              {feedGroups.map((g, i) => {
+                const admin = g.members.some((m) => m.id === currentUserId && m.admin);
+                const asking = admin ? g.requests.length : 0;
+                const members = `${g.members.length} ${g.members.length === 1 ? 'member' : 'members'}`;
+                return (
+                  <Pressable
+                    key={g.id}
+                    accessibilityRole="link"
+                    accessibilityLabel={`${g.name}, ${members}${admin ? ', you’re the admin' : ''}${asking ? `, ${asking} asking to join` : ''}`}
+                    onPress={() => router.push({ pathname: '/g/[id]', params: { id: g.id } })}
+                    style={({ pressed }) => [styles.row, i > 0 && styles.line, pressed && styles.pressed]}
+                  >
+                    <GroupTile name={g.name} size={48} />
+                    <View style={styles.words}>
+                      <View style={styles.nameRow}>
+                        <Text style={styles.name} numberOfLines={1}>{g.name}</Text>
+                        {admin ? <View style={styles.chip}><Text style={styles.chipText}>Admin</Text></View> : null}
+                      </View>
+                      <Text style={styles.meta} numberOfLines={1}>
+                        {members}
+                        {asking ? <Text style={styles.metaOn}>{` · ${asking} asking to join`}</Text> : g.description ? ` · ${g.description}` : null}
+                      </Text>
+                    </View>
+                    {asking ? <View style={styles.dot} /> : null}
+                    <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+          {open ? <Text style={styles.footnote}>You can be in up to {MAX_GROUPS} groups · {count} of {MAX_GROUPS}</Text> : null}
+        </>
+      ) : null}
 
       {feedGroupsAsked.length ? (
         <>
-          <Text style={styles.section}>Waiting for a yes</Text>
-          <View style={styles.list}>
+          <Text style={[styles.section, styles.sectionAlone]}>Waiting for a yes</Text>
+          <View style={styles.card}>
             {feedGroupsAsked.map((a, i) => (
-              <View key={a.id} style={[styles.row, i > 0 && styles.rowLine]}>
-                <View style={styles.tile}><Ionicons name="time-outline" size={18} color={colors.textMuted} /></View>
-                <Text style={[styles.name, { flex: 1 }]} numberOfLines={1}>{a.name}</Text>
-                <Button label="Cancel" variant="ghost" onPress={() => { void actions.leaveFeedGroup(a.id).catch(() => undefined); }} />
+              <View key={a.id} style={[styles.row, i > 0 && styles.line]}>
+                <GroupTile name={a.name} size={40} />
+                <View style={styles.words}>
+                  <Text style={styles.name} numberOfLines={1}>{a.name}</Text>
+                  <Text style={styles.meta}>Asked to join</Text>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Cancel your request to join ${a.name}`}
+                  hitSlop={8}
+                  onPress={() => { void actions.leaveFeedGroup(a.id).catch(() => undefined); }}
+                  style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}
+                >
+                  <Text style={styles.pillText}>Cancel</Text>
+                </Pressable>
               </View>
             ))}
           </View>
         </>
       ) : null}
 
-      {!open ? null : <Text style={styles.section}>Start a group</Text>}
-      {!open ? null : full ? (
-        <Text style={styles.empty}>You’re in {MAX_GROUPS} groups, the most anyone can be in. Leave one to start another.</Text>
-      ) : (
-        <View style={styles.form}>
-          <Field label="Name" value={name} onChangeText={(t) => setName(t.slice(0, 40))} placeholder="Wakefield crew" autoCapitalize="words" />
-          <Field label="About (optional)" value={description} onChangeText={(t) => setDescription(t.slice(0, 140))} placeholder="Saturday doubles, then coffee" multiline minHeight={64} />
-          <View style={{ gap: spacing.xs }}>
-            <Text style={styles.label}>Who can join</Text>
-            <SegmentedControl<JoinMode> segments={[{ value: 'open', label: 'Anyone with the link' }, { value: 'ask', label: 'Ask to join' }]} value={mode} onChange={setMode} />
-            <Text style={styles.meta}>{mode === 'open' ? 'Anyone with the invite link joins straight away.' : 'You say yes to each person first.'}</Text>
-          </View>
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-          <Button label="Start group" onPress={create} disabled={!name.trim() || busy || feedGroupsOn === false} loading={busy} full />
+      {open ? (
+        <View style={styles.start}>
+          <Button
+            label="Start a group"
+            onPress={() => router.push('/group-form')}
+            disabled={full || off}
+            full
+          />
+          {full ? <Text style={styles.startWhy}>You’re in {MAX_GROUPS} groups, the most anyone can be in. Leave one to start another.</Text> : null}
         </View>
-      )}
+      ) : null}
     </Screen>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
-  note: { ...typography.small, color: colors.textMuted, lineHeight: 20, paddingBottom: spacing.md },
-  ageLine: { ...typography.body, color: colors.text, paddingVertical: spacing.sm },
-  section: { ...typography.smallStrong, color: colors.textMuted, marginTop: spacing.lg, marginBottom: spacing.sm },
-  empty: { ...typography.small, color: colors.textMuted, lineHeight: 20 },
-  list: { borderRadius: radius.lg, backgroundColor: colors.surface, overflow: 'hidden' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.md },
-  rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  intro: { ...typography.body, color: colors.textMuted, paddingHorizontal: spacing.xs },
+  notice: { ...typography.small, color: colors.textMuted, lineHeight: 19, paddingHorizontal: spacing.xs, paddingTop: spacing.md },
+  sectionRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: spacing.xs, paddingTop: spacing.xl, paddingBottom: spacing.sm },
+  section: { ...typography.smallStrong, color: colors.textMuted },
+  sectionAlone: { paddingHorizontal: spacing.xs, paddingTop: spacing.xl, paddingBottom: spacing.sm },
+  // The grouped list of Settings: a shade off the page, rows on hairlines.
+  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, minHeight: 72 },
+  line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   pressed: { backgroundColor: colors.surfaceAlt },
-  tile: { width: 36, height: 36, borderRadius: radius.md, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
-  name: { ...typography.bodyStrong, color: colors.text },
+  words: { flex: 1, minWidth: 0, gap: 2 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  name: { ...typography.body, ...font('600'), color: colors.text, flexShrink: 1 },
   meta: { ...typography.small, color: colors.textMuted },
-  label: { ...typography.smallStrong, color: colors.text },
-  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.brand },
-  badgeText: { ...typography.smallStrong, fontSize: 12, color: colors.brandInk },
-  form: { gap: spacing.md },
-  error: { ...typography.small, color: colors.danger },
+  metaOn: { color: colors.brand, ...font('600') },
+  chip: { paddingHorizontal: 7, height: 20, borderRadius: radius.pill, backgroundColor: colors.brandDim, justifyContent: 'center' },
+  chipText: { ...typography.caption, letterSpacing: 0.2, color: colors.brand },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.brand },
+  footnote: { ...typography.small, color: colors.textFaint, paddingHorizontal: spacing.xs, paddingTop: spacing.sm },
+  emptyCard: { alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.xl, paddingHorizontal: spacing.lg },
+  emptyTitle: { ...typography.bodyStrong, color: colors.text, marginTop: spacing.xs },
+  emptyBody: { ...typography.small, color: colors.textMuted, textAlign: 'center' },
+  ageCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, marginTop: spacing.lg },
+  ageIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  ageLine: { ...typography.body, color: colors.text, flex: 1 },
+  // Cancel, beside a request: plain words in a soft pill, the way Remove is on a chat group.
+  pill: { paddingHorizontal: 12, height: 30, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  pillPressed: { opacity: 0.6 },
+  pillText: { ...typography.smallStrong, color: colors.text },
+  start: { marginTop: spacing.xl, gap: spacing.sm },
+  startWhy: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 19, paddingHorizontal: spacing.lg },
 });
