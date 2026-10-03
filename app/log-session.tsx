@@ -33,9 +33,14 @@ const lengthLabel = (m: number) => (m < 60 ? `${m} min` : m % 60 ? `${Math.floor
 const lengthTile = (m: number) => ({ value: m, top: m < 60 ? 'min' : m === 60 ? 'hour' : 'hours', main: m < 60 ? String(m) : m % 60 ? `${Math.floor(m / 60)}½` : String(m / 60), label: lengthLabel(m) });
 
 /** The usual lengths, with the nearest one swapped for the tracker's own minutes, so it sits where it belongs and is picked already. */
+/** The tracker's short name, as on its length tile. */
+function trackerName(a: DetectedActivity) {
+  return ({ whoop: 'WHOOP', 'apple-watch': 'Watch', fitbit: 'Fitbit', oura: 'Oura', polar: 'Polar' } as Partial<Record<ReturnType<typeof statsSourceOf>, string>>)[statsSourceOf(a)] ?? 'Health';
+}
+
 function lengthsFor(a: DetectedActivity) {
   const nearest = LENGTHS.reduce((best, m, i) => (Math.abs(m - a.minutes) < Math.abs(LENGTHS[best] - a.minutes) ? i : best), 0);
-  const top = ({ whoop: 'WHOOP', 'apple-watch': 'Watch', fitbit: 'Fitbit', oura: 'Oura', polar: 'Polar' } as Partial<Record<ReturnType<typeof statsSourceOf>, string>>)[statsSourceOf(a)] ?? 'Health';
+  const top = trackerName(a);
   return LENGTHS.map((m, i) => (i === nearest ? { value: a.minutes, top, main: duration(a.minutes), label: duration(a.minutes) } : lengthTile(m)));
 }
 
@@ -123,6 +128,7 @@ export default function LogSession() {
 
   const [kind, setKind] = useState<PracticeSession['kind']>(fromHit?.kind ?? 'practice');
   const [minutes, setMinutes] = useState<number | null>(fresh ? fresh.minutes : fromHit ? fromHit.minutes : null);
+  const [editLength, setEditLength] = useState(false);
   // A session that arrives after the sheet opened starts on its own length too.
   const [preset, setPreset] = useState(fresh?.id);
   if (fresh && preset !== fresh.id) { setPreset(fresh.id); setMinutes(fresh.minutes); }
@@ -331,8 +337,21 @@ export default function LogSession() {
             <Chips value={kind} onChange={(k) => { if (k) setKind(k); }} options={KINDS} />
           </Section>
           <Section title="How long">
-            <Tiles value={minutes ?? 0} onChange={(m) => setMinutes(m)} options={fresh ? lengthsFor(fresh) : LENGTHS.map(lengthTile)} />
-            {fresh ? <Text style={styles.hint}>Change the length if you took a break.</Text> : null}
+            {/* From a tracker the length is simply the tracker's (Oct 3): one line, with a small Edit for a break. */}
+            {fresh && !editLength ? (
+              <View style={styles.trackedRow}>
+                <Text style={styles.trackedTime}>{duration(minutes ?? fresh.minutes)}</Text>
+                <Text style={styles.trackedFrom}>{minutes === fresh.minutes ? `from ${trackerName(fresh)}` : 'edited'}</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel="Edit how long" hitSlop={10} onPress={() => setEditLength(true)} style={({ pressed }) => [styles.trackedEdit, pressed && { opacity: 0.6 }]}>
+                  <Text style={styles.trackedEditText}>Edit</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <>
+                <Tiles value={minutes ?? 0} onChange={(m) => setMinutes(m)} options={fresh ? lengthsFor(fresh) : LENGTHS.map(lengthTile)} />
+                {fresh ? <Text style={styles.hint}>Change the length if you took a break.</Text> : null}
+              </>
+            )}
           </Section>
           {kind === 'match' ? (
             <Section title="Result">
@@ -391,6 +410,11 @@ const styleDefinitions = StyleSheet.create({
   notice: { ...typography.smallStrong, color: colors.text },
   numbers: { ...typography.caption, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   hint: { ...typography.small, color: colors.textFaint },
+  trackedRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
+  trackedTime: { ...typography.title, color: colors.text, fontVariant: ['tabular-nums'] },
+  trackedFrom: { ...typography.small, color: colors.textMuted, flex: 1 },
+  trackedEdit: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: colors.surfaceAlt },
+  trackedEditText: { ...typography.smallStrong, color: colors.text },
   hide: { alignSelf: 'center', paddingVertical: spacing.xs },
   hideText: { ...typography.smallStrong, color: colors.textMuted },
   // The quieter of the two buttons: Save's size and shape, outlined rather than filled.
