@@ -51,6 +51,8 @@ interface Props {
   children: ReactNode;
   title?: string;
   subtitle?: string;
+  /** The subtitle runs the full width under the title and the buttons, for a header whose buttons would squeeze it onto two lines. */
+  subtitleBelow?: boolean;
   scroll?: boolean;
   right?: ReactNode;
   padded?: boolean;
@@ -95,6 +97,7 @@ export function Screen({
   children,
   title,
   subtitle,
+  subtitleBelow = false,
   scroll = true,
   right,
   padded = true,
@@ -452,7 +455,7 @@ export function Screen({
   const header =
     title || onBack ? (
       constrain(
-        <View style={[styles.header, !isPhone && styles.headerWide]}>
+        <View style={[styles.header, !isPhone && styles.headerWide, subtitle && subtitleBelow ? styles.headerStacked : null]}>
           {onBack ? (
             <Pressable
               onPress={onBack}
@@ -465,9 +468,10 @@ export function Screen({
           ) : null}
           <View style={styles.headerText}>
             <Text style={compactTitle || !isPhone ? styles.titleCompact : styles.title}>{title}</Text>
-            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+            {subtitle && !subtitleBelow ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
           </View>
           {right}
+          {subtitle && subtitleBelow ? <Text style={[styles.subtitle, styles.subtitleBelow]}>{subtitle}</Text> : null}
         </View>,
       )
     ) : null;
@@ -586,6 +590,9 @@ const styleDefinitions = StyleSheet.create({
     gap: spacing.md,
   },
   headerWide: { paddingTop: spacing.xxl, paddingBottom: spacing.xl },
+  // The subtitle wraps onto its own full-width line, 4 under the title as it sits beside the buttons otherwise.
+  headerStacked: { flexWrap: 'wrap', rowGap: 4 },
+  subtitleBelow: { width: '100%' },
   headerText: { flex: 1, gap: 4 },
   title: { ...typography.display, color: colors.text },
   titleCompact: { ...typography.title, color: colors.text },

@@ -16,7 +16,7 @@ import { Tappable } from '@/components/Tappable';
 import { reportSection, requestSection, subscribeSectionRequest, swipeDestination } from '@/features/navigation/swipeOrder';
 import { LevelPill } from '@/components/LevelPill';
 import { useApp } from '@/store/AppContext';
-import { unreadChatCount } from '@/features/messages/groupRules';
+import { InboxButton, UnreadBadge } from '@/components/InboxButton';
 import { playStyleLabel, surfaceLabel } from '@/lib/badges';
 import { compactNumber } from '@/lib/format';
 import { TileViews } from '@/components/TileViews';
@@ -30,7 +30,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  // December to mid-January: the year's recap sits at the top of your links.
  const wrapped = wrappedYear();
   const styles = useThemedStyles(styleDefinitions);
- const { currentUser: user, posts, questions, answers, saved, conversations, notifications, currentUserId, savedAccounts, actions } = useApp();
+ const { currentUser: user, posts, questions, answers, saved, notifications, currentUserId, savedAccounts, actions } = useApp();
  // Nothing posted, asked or answered yet: the profile offers the first move.
  const hasMoved = !currentUserId || posts.some((p) => p.authorId === currentUserId) || questions.some((q) => q.authorId === currentUserId) || answers.some((a) => a.authorId === currentUserId);
  // Your own posts, however far back they go: the grid and the counts are
@@ -67,8 +67,6 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    Clips: own.filter(p => p.kind === 'clip').length,
    Tagged: user ? posts.filter(p => isTaggedIn(p, user.id) && !p.archived).length : 0,
  };
- // Chats with something new, not messages (Instagram's count); a muted chat never counts.
- const unread = unreadChatCount(conversations);
  const unseen = notifications.filter(n => n.userId === currentUserId && !n.read).length;
  const savedCount = saved.postIds.length + saved.questionIds.length;
  const swipe = (direction: 1 | -1) => {
@@ -182,12 +180,9 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    <View ref={tourInbox} collapsable={false} style={styles.headerActions}>
      <Tappable accessibilityRole="link" accessibilityLabel={unseen ? `Notifications, ${unseen} new` : 'Notifications'} onPress={() => router.push('/notifications')} hitSlop={10} style={styles.headerButton}>
        <Ionicons name={unseen ? 'notifications' : 'notifications-outline'} size={27} color={colors.text}/>
-       {unseen > 0 && <View style={styles.headerBadge}><Text style={styles.headerBadgeText}>{unseen > 9 ? '9+' : unseen}</Text></View>}
+       <UnreadBadge count={unseen} />
      </Tappable>
-     <Tappable accessibilityRole="link" accessibilityLabel={unread ? `Messages, ${unread} unread` : 'Messages'} onPress={() => router.push('/messages')} hitSlop={10} style={styles.headerButton}>
-       <Ionicons name={unread ? 'paper-plane' : 'paper-plane-outline'} size={27} color={colors.text}/>
-       {unread > 0 && <View style={styles.headerBadge}><Text style={styles.headerBadgeText}>{unread > 9 ? '9+' : unread}</Text></View>}
-     </Tappable>
+     <InboxButton size={27} />
    </View>
    <Tappable accessibilityRole="link" accessibilityLabel="Settings" onPress={() => router.push('/settings')} hitSlop={10} style={styles.headerButton}>
      <Ionicons name="menu-outline" size={30} color={colors.text}/>
@@ -236,7 +231,7 @@ const styleDefinitions = StyleSheet.create({
  setup:{marginTop:16,marginHorizontal:0,padding:14,borderRadius:16,backgroundColor:colors.brandDim,flexDirection:'row',alignItems:'center',gap:12},setupTitle:{...typography.smallStrong,fontSize:14,color:colors.text},identity:{gap:12,paddingTop:16,paddingBottom:20,alignItems:'stretch'},identityRow:{flexDirection:'row',alignItems:'center',gap:16},identityWords:{flex:1,gap:6,minWidth:0},meta:{fontSize:12,color:colors.textMuted,lineHeight:19},nameRow:{flexDirection:'row',gap:10,alignItems:'center',flexWrap:'wrap'},name:{...typography.title,fontSize:22,color:colors.text},bio:{...typography.body,lineHeight:22,color:colors.text},followRow:{flexDirection:'row',alignItems:'center',gap:10},follow:{flexDirection:'row',alignItems:'baseline'},followCount:{...typography.bodyStrong,color:colors.text},followDot:{color:colors.textFaint,fontSize:14},tabCount:{...typography.smallStrong,fontSize:12,color:colors.textFaint},injury:{...typography.small,color:colors.danger},buttons:{flexDirection:'row',gap:8,alignSelf:'stretch',marginTop:6},settings:{borderWidth:1,borderColor:colors.border,borderRadius:10,padding:10,justifyContent:'center'},streak:{flexDirection:'row',alignItems:'center',gap:3,paddingHorizontal:8,paddingVertical:2,borderRadius:999,backgroundColor:colors.bgElevated},streakText:{...typography.caption,letterSpacing:0,fontWeight:'600',color:colors.clay},
  // "Log" beside the streak: the streak pill's size, in plain ink, so the streak stays the louder of the two.
  logPill:{flexDirection:'row',alignItems:'center',gap:2,paddingLeft:6,paddingRight:9,paddingVertical:2,borderRadius:999,borderWidth:StyleSheet.hairlineWidth,borderColor:colors.borderStrong},logPillText:{...typography.caption,letterSpacing:0,fontWeight:'600',color:colors.textMuted},pillPressed:{opacity:0.6},
- tennis:{...lift,padding:16,borderRadius:20,backgroundColor:colors.surface,gap:10},eyebrowRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},eyebrow:{...typography.smallStrong,color:colors.textMuted},links:{...lift,marginTop:12,borderRadius:20,backgroundColor:colors.surface,overflow:'hidden'},linkRow:{flexDirection:'row',alignItems:'center',gap:12,minHeight:52,paddingVertical:11,paddingHorizontal:16},linkLine:{borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:colors.border},linkPressed:{backgroundColor:colors.surfaceAlt},linkText:{...typography.body,color:colors.text,flex:1},linkValue:{...typography.body,color:colors.textMuted},details:{flexDirection:'row',flexWrap:'wrap',gap:8},detail:{width:'46%',gap:2},value:{fontSize:13,color:colors.text,lineHeight:19},health:{padding:15,marginTop:12,borderWidth:1,borderColor:colors.border,borderRadius:12,flexDirection:'row',alignItems:'center',gap:10},headerActions:{flexDirection:'row',alignItems:'center',gap:14},headerButton:{padding:4},headerBadge:{position:'absolute',top:-1,right:-2,minWidth:18,height:18,borderRadius:9,paddingHorizontal:5,backgroundColor:colors.danger,alignItems:'center',justifyContent:'center',borderWidth:2,borderColor:colors.bg},headerBadgeText:{...typography.caption,fontSize:10,color:'white'},tabs:{flexDirection:'row',marginTop:16,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},tab:{flex:1,alignItems:'center',paddingVertical:18},tabIndicator:{position:'absolute',left:0,bottom:-2,height:2,backgroundColor:colors.brand,borderRadius:1},grid:{flexDirection:'row',flexWrap:'wrap',marginHorizontal:0},
+ tennis:{...lift,padding:16,borderRadius:20,backgroundColor:colors.surface,gap:10},eyebrowRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},eyebrow:{...typography.smallStrong,color:colors.textMuted},links:{...lift,marginTop:12,borderRadius:20,backgroundColor:colors.surface,overflow:'hidden'},linkRow:{flexDirection:'row',alignItems:'center',gap:12,minHeight:52,paddingVertical:11,paddingHorizontal:16},linkLine:{borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:colors.border},linkPressed:{backgroundColor:colors.surfaceAlt},linkText:{...typography.body,color:colors.text,flex:1},linkValue:{...typography.body,color:colors.textMuted},details:{flexDirection:'row',flexWrap:'wrap',gap:8},detail:{width:'46%',gap:2},value:{fontSize:13,color:colors.text,lineHeight:19},health:{padding:15,marginTop:12,borderWidth:1,borderColor:colors.border,borderRadius:12,flexDirection:'row',alignItems:'center',gap:10},headerActions:{flexDirection:'row',alignItems:'center',gap:14},headerButton:{padding:4},tabs:{flexDirection:'row',marginTop:16,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},tab:{flex:1,alignItems:'center',paddingVertical:18},tabIndicator:{position:'absolute',left:0,bottom:-2,height:2,backgroundColor:colors.brand,borderRadius:1},grid:{flexDirection:'row',flexWrap:'wrap',marginHorizontal:0},
  // Instagram's grid: tall tiles, the thumbnail and nothing else on it.
  tile:{borderWidth:1,borderColor:colors.bg,backgroundColor:colors.surfaceAlt,overflow:'hidden'},
  tileBlank:{padding:10,justifyContent:'center'},

@@ -16,7 +16,7 @@ import { forgetLeft, noteLeft, takeLeft } from '@/features/feed/clipResume';
 /** The feed's top shade (see TOP_SHADE) as a browser gradient. */
 const TOP_SHADE_CSS = `linear-gradient(${TOP_SHADE.colors.map((c, i) => `${c} ${TOP_SHADE.locations[i] * 100}%`).join(', ')})`;
 
-function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmOnly = false, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop, held = false, onStage = false }: {
+function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmOnly = false, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, besideInbox = false, letterbox = false, onReady, crop, held = false, onStage = false }: {
   uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void; fit?: 'cover' | 'contain'; trimStart?: number; trimEnd?: number; silent?: boolean;
   /** Built ahead on a page not opened yet (the Feed warming up out of sight): fetch only the clip's opening, not the whole file. */
   warmOnly?: boolean;
@@ -33,6 +33,8 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
   discInk?: string;
   /** Keep the sound disc showing instead of fading it — the very first reel, so it is found. */
   discPinned?: boolean;
+  /** The Feed's inbox tile holds the top right corner: the sound button sits one place in, beside it. */
+  besideInbox?: boolean;
   /** A landscape clip: the picture sits in a wide box mid-screen with black around; the disc and line keep to the screen's edges. */
   letterbox?: boolean;
   /**
@@ -225,7 +227,7 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
     </button>
     {/* A feed disc fades with the words as its page goes onto the comments stage (data-stage-chrome, see useStageMotion.web). */}
     {silent || bare ? null : <div data-stage-chrome={discInk ? '' : undefined}><button aria-label={muted ? 'Unmute clip' : 'Mute clip'} onClick={() => { setMuted((v) => !v); if (!discPinned) showDisc(); }} style={{
-      position: 'absolute', right: 18, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxSizing: 'border-box',
+      position: 'absolute', right: besideInbox ? 68 : 18, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxSizing: 'border-box',
       // In the feed: the phone's tile, the same rounded square as the mark's at the other corner, centred level with it,
       // nearly solid so its icon stays crisp, with a hairline so it holds on a white sky. Elsewhere: a small dark disc.
       ...(discInk

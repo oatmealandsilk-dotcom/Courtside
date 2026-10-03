@@ -11,6 +11,7 @@ import { useIsFocused } from '@/lib/useIsFocused';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { InboxButton } from '@/components/InboxButton';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { PinchZone } from '@/components/PinchZone';
@@ -336,6 +337,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
   const myStage = useMemo(() => (stageLine ? getStage() : null), [stageLine]);
   // A scoped feed's back tile fades with the words when this feed's page goes onto the stage.
   const scopeBackFade = useStageMotion('chrome', { owner });
+  const inboxFade = useStageMotion('chrome', { owner });
   // Whether this Home is the page on show, for a stage's checks that run later (a timer).
   const focusedNow = useRef(focused);
   focusedNow.current = focused;
@@ -1180,7 +1182,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                     <View accessibilityLabel={`${author.name}'s instant`} style={styles.clipFrame}>
                       <View style={phone ? StyleSheet.absoluteFill : styles.clipPortrait}>
                         {story.videoUrl ? (
-                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
+                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} besideInbox={!scope && phone} onReady={(ok) => markReady(story.id, ok)} />
                         ) : (
                           // Two quick taps like a hit, the way they like a clip.
                           <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s instant`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
@@ -1352,7 +1354,7 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
                           silent={post.muted}
                           bare={immersive}
                           discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand}
-                          discPinned={index === 0 && !scope}
+                          discPinned={index === 0 && !scope} besideInbox={!scope && phone}
                           onReady={(ok) => markReady(post.id, ok)}
                           held={held && myStage?.key === `p:${post.id}`}
                           onStage={myStage?.key === `p:${post.id}`}
@@ -1509,6 +1511,14 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
               </Pressable>
             </Reanimated.View>
           ) : null}
+          {!scope && phone && currentUser ? (
+            // Your chats, top right as on Instagram's home: the paper plane and the number of chats with
+            // something new. It wears the sound button's pale tile so it reads over a clip, a bright sky or a
+            // written post, and fades with the words when a clip goes onto the comments or is pinched full.
+            <Reanimated.View ref={inboxFade.ref as never} pointerEvents="box-none" style={[styles.scopeBackLayer, inboxFade.style]}>
+              {immersive ? null : <InboxButton variant="tile" ink={theme === 'us-open' ? colors.text : colors.brand} style={[styles.inbox, { top: insets.top + 27 }]} />}
+            </Reanimated.View>
+          ) : null}
           {/* Over a clip or an Instant the phone's clock and battery turn white, as on TikTok, Reels and Shorts:
               the theme's dark clock sank into a dark court, and the top shade keeps a white one clear of a bright sky.
               Only once the picture is in (the cover before it is the page's own ground), and only while this page is in front. */}
@@ -1523,6 +1533,8 @@ function Home({ scope }: { previewSection?: string; scope?: FeedScope } = {}) {
 const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, alignItems: 'center' },
   scopeBack: { position: 'absolute', left: 12, padding: 6, zIndex: 6 },
+  // The inbox tile, level with the mark's tile at the other corner; clips move their sound button in beside it.
+  inbox: { position: 'absolute', right: 18 },
   // Its own layer over the feed, so it can fade as a clip goes onto the comments stage.
   scopeBackLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 6 },
   // Over a picture: the mark's tile, 40 square (the sound disc's size), the chevron nudged right of centre to sit centred by eye.
