@@ -40,6 +40,9 @@ export function WarmCurtain() {
   const drawn = useStartDrawn();
   const still = useReducedMotion();
   const [shown, setShown] = useState(!warm);
+  // Once the lift has begun it never takes touches again, even if a map on the
+  // page asks it to wait a moment longer while it fades (see useStartMapHold).
+  const [lifting, setLifting] = useState(false);
   // 1 while the curtain covers everything, 0 once it has gone.
   const fade = useSharedValue(1);
   const style = useAnimatedStyle(() => ({ opacity: fade.value }));
@@ -55,6 +58,7 @@ export function WarmCurtain() {
   }, [shown, still]);
   useEffect(() => {
     if (!warm || !shown) return;
+    setLifting(true);
     const timing = { duration: still ? 320 : LIFT_MS, easing: LIFT_EASE };
     launchSettle.value = still ? 0 : withTiming(0, timing);
     fade.value = withTiming(0, timing, (finished) => { if (finished) { runOnJS(setShown)(false); runOnJS(setCurtainDown)(); } });
@@ -74,7 +78,7 @@ export function WarmCurtain() {
   }, [warm, drawn]);
   if (!shown) return null;
   return (
-    <Animated.View pointerEvents={warm ? 'none' : 'auto'} style={[styles.curtain, style]}>
+    <Animated.View pointerEvents={warm || lifting ? 'none' : 'auto'} style={[styles.curtain, style]}>
       <Animated.View style={[styles.brand, brandStyle]}>
         <BrandMark size={84} />
         <Text style={styles.wordmark}>CourtSide</Text>

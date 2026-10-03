@@ -140,9 +140,10 @@ export default function CoachStudio() {
   };
   const dirty = filled.current && (
     pagePatch.headline !== coach.headline.trim()
-    || pagePatch.credentials.join('\n') !== coach.credentials.join('\n')
+    // The saved list read the same way the form is, so stray blank lines in it never count as a change.
+    || pagePatch.credentials.join('\n') !== credentialList(coach.credentials.join('\n')).join('\n')
     || [...specialties].sort().join() !== [...coach.specialties].sort().join()
-    || pagePatch.yearsCoaching !== (coach.yearsCoaching || 0)
+    || pagePatch.yearsCoaching !== yearsNumber(String(coach.yearsCoaching))
     || reply !== coach.responseTimeHours
   );
   const saveState: SaveState = pageSave === 'saving' ? 'saving' : pageSave === 'done' && !dirty ? 'done' : dirty ? 'dirty' : 'clean';
