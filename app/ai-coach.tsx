@@ -14,7 +14,7 @@ import { generatePlan } from '@/features/aiCoach/planGenerator';
 import { useAiCoachLive, useAiCoachOn } from '@/features/aiCoach/switch';
 import { planRemindersSupported, readPlanReminders, schedulePlanReminders, setPlanReminders } from '@/features/aiCoach/planReminder';
 import { show as showToast } from '@/lib/toast';
-import { duration, formatDate, experienceLabel } from '@/lib/format';
+import { duration, formatDate, experienceLabel, hoursAndMinutes } from '@/lib/format';
 import { healthSignal, withoutSource } from '@/lib/integrations';
 import { useApp } from '@/store/AppContext';
 import type { AiMessage, PlayerProfile, TrainingBlockKind, TrainingPlan } from '@/data/types';
@@ -53,7 +53,7 @@ function fingerprint(text: string) {
 
 /** The health line the coach is told: recovery, sleep and HRV, whichever another source than WHOOP gave. */
 function healthLine(signal: ReturnType<typeof healthSignal>, whoop: boolean) {
-  const sleep = signal.sleepHours !== undefined ? `sleep ${signal.sleepHours}h` : null;
+  const sleep = signal.sleepHours !== undefined ? `sleep ${hoursAndMinutes(signal.sleepHours)}` : null;
   const hrv = signal.hrvMs !== undefined ? `HRV ${signal.hrvMs}ms` : null;
   if (signal.recovery !== undefined) return `Recovery ${signal.recovery}% (3-day avg)${sleep ? `, ${sleep}` : ''}${hrv ? `, ${hrv}` : ''}.`;
   if (sleep || hrv) { const s = [sleep, hrv].filter(Boolean).join(', '); return `${s[0].toUpperCase()}${s.slice(1)} (3-day avg).`; }
