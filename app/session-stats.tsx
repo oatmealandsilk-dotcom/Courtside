@@ -75,7 +75,7 @@ export default function SessionStatsSheet() {
   }, [post, id, actions]);
   // Editing goes to the log's own sheet; this one steps out of the way first.
   const edit = (sessionId: string) => { router.push({ pathname: '/log-session', params: { edit: sessionId } }); };
-  const sparse = !post?.session?.maxHr;
+  const sparse = !post?.session || (!post.session.maxHr && !postZones(post.session) && post.session.strain == null && !post.session.kcal);
   // No zone rows and no "Only you" box: a short sheet, opened only as tall as it needs.
   const ownTracker = !!post?.session?.activityId && post.authorId === currentUserId && detectedActivities.some((a) => a.id === post.session?.activityId);
   const short = !!post?.session && !postZones(post.session) && !ownTracker;

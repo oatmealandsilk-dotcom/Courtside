@@ -49,11 +49,11 @@ export function SessionSheetHeader({ post, onClose }: { post: Post; onClose: () 
  * A session's stats, raised from a clip's pill (the clip still playing above)
  * or from a post's card or strip. Everyone sees what the post shares: the
  * time and the result, who it was against (only players who accepted), the
- * court the author tagged, and heart rate and its zones only when the author
- * switched them on (and is a known adult: the server sees to that). The
- * author also sees, in a box marked "Only you", what never goes on a post:
- * Strain, calories, the start time, and their heart rate when it is not
- * shared, read from their own tracker's record while it is still kept.
+ * court the author tagged, and the health numbers the author chose to share
+ * (heart rate, its zones, Strain, calories: "Share health data", migration
+ * 72). The author also sees, in a box marked "Only you", what is not on the
+ * post: the start time, and any of those numbers they did not share, read
+ * from their own tracker's record while it is still kept.
  */
 export function SessionSheet({ post, me, users, sessions, sessionTags, activities, hidden, play = true, onEdit }: {
   post: Post;
@@ -76,6 +76,9 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
   const result = resultWord(s);
   const hr = s.maxHr != null;
   const zones = postZones(s);
+  // Shared on the post (migration 72); Strain is WHOOP's alone.
+  const strain = s.strain != null ? s.strain : null;
+  const kcal = s.kcal ? s.kcal : null;
   const over = mine ? overUsual(sessions, me, s.minutes, { exclude: log?.id }) : null;
 
   // Who played: those who accepted, for everyone; to the author, those still waiting too, faded.
@@ -94,14 +97,14 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
   const shown = people.slice(0, 3);
   const court = post.court;
   const tracker = !!s.activityId;
-  const sparse = !hr;
+  const sparse = !hr && !zones && strain == null && !kcal;
 
-  // The author's own numbers: never on a post.
+  // The author's own numbers that are not on the post.
   const privateHr = activity && !hr && activity.maxHr ? activity : undefined;
   const ownZones = activity && !zones ? cleanZones(activity.zones) : null;
   const owner = activity ? [
-    activity.source === 'whoop' && activity.strain != null ? { key: 'strain', value: activity.strain, unit: '', label: 'STRAIN', dec: true } : null,
-    activity.kcal ? { key: 'kcal', value: activity.kcal, unit: '', label: 'CALORIES', dec: false } : null,
+    strain == null && activity.source === 'whoop' && activity.strain != null ? { key: 'strain', value: activity.strain, unit: '', label: 'STRAIN', dec: true } : null,
+    !kcal && activity.kcal ? { key: 'kcal', value: activity.kcal, unit: '', label: 'CALORIES', dec: false } : null,
   ].filter((x): x is { key: string; value: number; unit: string; label: string; dec: boolean } => !!x) : [];
   const started = activity ? clockParts(activity.startedAt) : null;
 
@@ -148,14 +151,22 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
         <FormRow lead={<CourtGlyph size={16} color={colors.brand} />} label={court.name} chevron onPress={() => openCourt(court)} accessibilityLabel={`${court.name}, see posts from here`} />
       ) : null}
 
-      {hr ? (
+      {!sparse ? (
         <>
           <View style={styles.rule} />
-          <View style={styles.columns}>
-            {s.avgHr ? <Column label="AVG HEART RATE"><Figure value={s.avgHr} unit="bpm" size={34} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} /></Column> : null}
-            <Column label="MAX"><Figure value={s.maxHr!} unit="bpm" size={34} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} /></Column>
-            {zones ? <Column label="ZONES 4–5"><Figure value={hardMinutes(zones)} unit="min" size={34} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} /></Column> : null}
-          </View>
+          {hr || zones ? (
+            <View style={styles.columns}>
+              {hr && s.avgHr ? <Column label="AVG HEART RATE"><Figure value={s.avgHr} unit="bpm" size={34} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} /></Column> : null}
+              {hr ? <Column label="MAX"><Figure value={s.maxHr!} unit="bpm" size={34} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} /></Column> : null}
+              {zones ? <Column label="ZONES 4–5"><Figure value={hardMinutes(zones)} unit="min" size={34} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} /></Column> : null}
+            </View>
+          ) : null}
+          {strain != null || kcal ? (
+            <View style={styles.columns}>
+              {strain != null ? <Column label="STRAIN"><Figure value={strain} part="dec1" size={34} color={colors.text} unitColor={colors.textMuted} play={play} delay={260} /></Column> : null}
+              {kcal ? <Column label="CALORIES"><Figure value={kcal} size={34} color={colors.text} unitColor={colors.textMuted} play={play} delay={260} /></Column> : null}
+            </View>
+          ) : null}
         </>
       ) : null}
       {zones ? (

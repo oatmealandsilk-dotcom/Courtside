@@ -78,6 +78,15 @@ export const LANE_INSET = 28;
  * a narrow window.
  */
 export const laneInsetFor = (columnWidth: number) => (desktopWeb && columnWidth >= 520 + LANE_INSET * 2 ? LANE_INSET : 0);
+/**
+ * The shape a post's picture is drawn at (width over height): a wide clip at
+ * its own shape (16:9 until it is known), a photo at its own (exactly what
+ * its author cut in the editor), a tall clip 4:5. The composer's preview
+ * draws the post being written at the same shape.
+ */
+export const feedFrameRatio = (landscape: boolean, video: boolean, shape: number | null) => (landscape ? (shape ?? 16 / 9) : (!video && shape ? shape : 4 / 5));
+/** A picture's measured shape, kept within what the feed draws. */
+export const feedShape = (landscape: boolean, w: number, h: number) => (landscape ? Math.max(1.2, Math.min(2.6, w / h)) : Math.max(0.5, Math.min(1.3, w / h)));
 /** The narrowest the words and buttons under a post get, so a tall picture never squeezes them. */
 const LANE_MIN = 400;
 /** The buttons' one size: like, comment, send, save and more all read as a set. */
@@ -155,7 +164,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
     let live = true;
     Image.getSize(cover, (w, h) => {
       if (!live || w <= 0 || h <= 0) return;
-      setShape(landscape ? Math.max(1.2, Math.min(2.6, w / h)) : Math.max(0.5, Math.min(1.3, w / h)));
+      setShape(feedShape(landscape, w, h));
     }, () => undefined);
     return () => { live = false; };
   }, [landscape, post.thumbnailUrl, post.imageUrl, sized]);
@@ -187,7 +196,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
   const inset = room ? laneInsetFor(room.w) : 0;
   const frameSize = (() => {
     if (!room) return null;
-    const ratio = landscape ? (shape ?? 16 / 9) : (!post.videoUrl && shape ? shape : 4 / 5);
+    const ratio = feedFrameRatio(landscape, !!post.videoUrl, shape);
     // Until the words have measured, the old share of the page; after, the
     // page less its words (and a comment's worth of room when there are some),
     // never under 40% of it, so a long caption cannot shrink the picture away.

@@ -1,9 +1,9 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Reanimated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import Reanimated, { FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
@@ -12,6 +12,7 @@ import type { ID, SessionDetail } from '@/data/types';
 import { colors, font, lift, spacing, withAlpha } from '@/theme';
 import { SessionCard, type CardPerson } from './SessionCard';
 import { DrawnTick } from './DrawnTick';
+import { PostPreview, type PreviewMedia } from './PostPreview';
 
 /** The composer's card: the feed's 358-wide card at about two thirds. */
 export const CARD_W = 236;
@@ -32,20 +33,20 @@ export function useLogSizes() {
 }
 
 /**
- * The top of the composer opened from a session ("Log it"): the session's
- * card with Photo and Clip beside it. Once a photo or clip is picked the page
- * keeps this same look (owner, Oct 3): the card stays the main thing, and the
- * picture takes the tiles' place beside it, the full height of the card. A
- * tap on it opens the editor (trim, crop, cover); its × takes it off. While
- * the session is still on its way (opened cold from an alert), a waiting
- * card stands in, and the tiles wait.
+ * The top of the composer opened from a session ("Log it"). With no photo or
+ * clip yet: the session's card (what a post with only the stats looks like)
+ * with Photo and Clip beside it. Once one is picked (owner, Oct 3): a
+ * preview of the post as the feed will show it (PostPreview), the picture
+ * large with the session's stats strip and the caption under it, changing as
+ * you write. While the session is still on its way (opened cold from an
+ * alert), a waiting card stands in, and the tiles wait.
  */
-export function LogComposerTop({ session, people, hidden, waiting, media, preparing, prepDone, onPhoto, onClip, onEdit, onRemove, error }: {
+export function LogComposerTop({ session, people, hidden, waiting, media, preparing, prepDone, onPhoto, onClip, onEdit, onRemove, error, preview }: {
   session: SessionDetail | null;
   people?: CardPerson[];
   hidden: ID[];
   waiting: boolean;
-  media: { kind: 'photo' | 'video'; uri?: string; thumbnailUrl?: string; label: string } | null;
+  media: PreviewMedia | null;
   preparing: null | 'video' | 'all';
   prepDone: boolean;
   onPhoto: () => void;
@@ -53,6 +54,8 @@ export function LogComposerTop({ session, people, hidden, waiting, media, prepar
   onEdit: () => void;
   onRemove: () => void;
   error?: string;
+  /** What the preview needs besides the picture and the stats. */
+  preview: Omit<React.ComponentProps<typeof PostPreview>, 'media' | 'session' | 'hidden' | 'onEdit' | 'onRemove'>;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const size = useLogSizes();
@@ -60,6 +63,14 @@ export function LogComposerTop({ session, people, hidden, waiting, media, prepar
   const [play, setPlay] = useState(false);
   useEffect(() => { if (session && !play) setPlay(true); }, [!!session]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  if (media) {
+    return (
+      <View>
+        <PostPreview media={media} session={session} hidden={hidden} onEdit={onEdit} onRemove={onRemove} {...preview} />
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+      </View>
+    );
+  }
   return (
     <View>
       <View style={styles.top}>
@@ -71,52 +82,12 @@ export function LogComposerTop({ session, people, hidden, waiting, media, prepar
           </View>
         )}
         <View style={[styles.tiles, { width: size.tileW }]}>
-          {media ? (
-            <MediaTile media={media} height={size.cardH} onEdit={onEdit} onRemove={onRemove} />
-          ) : (
-            <>
-              <Tile icon="images-outline" label="Photo" height={size.tileH} busy={preparing === 'all'} done={prepDone} disabled={!session} onPress={onPhoto} />
-              <Tile icon="videocam-outline" label="Clip" height={size.tileH} busy={preparing === 'video'} done={prepDone} disabled={!session} onPress={onClip} />
-            </>
-          )}
+          <Tile icon="images-outline" label="Photo" height={size.tileH} busy={preparing === 'all'} done={prepDone} disabled={!session} onPress={onPhoto} />
+          <Tile icon="videocam-outline" label="Clip" height={size.tileH} busy={preparing === 'video'} done={prepDone} disabled={!session} onPress={onClip} />
         </View>
       </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </View>
-  );
-}
-
-/** The picked photo or clip in the tiles' place: tap to edit it, × to take it off. */
-function MediaTile({ media, height, onEdit, onRemove }: {
-  media: { kind: 'photo' | 'video'; uri?: string; thumbnailUrl?: string; label: string };
-  height: number;
-  onEdit: () => void;
-  onRemove: () => void;
-}) {
-  const styles = useThemedStyles(styleDefinitions);
-  const video = media.kind === 'video';
-  const clock = /·\s*(\d+:\d\d)\s*$/.exec(media.label)?.[1];
-  const what = video ? 'clip' : 'photo';
-  return (
-    <Reanimated.View entering={FadeIn.duration(220)} style={{ height }}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Your ${what}. Edit it`} onPress={onEdit} style={({ pressed }) => [styles.media, { height }, pressed && styles.pressed]}>
-        {media.thumbnailUrl || (!video && media.uri) ? (
-          <Image accessibilityIgnoresInvertColors source={{ uri: media.thumbnailUrl ?? media.uri }} resizeMode="cover" style={StyleSheet.absoluteFill} />
-        ) : (
-          <View style={[StyleSheet.absoluteFill, styles.blank]}><Ionicons name="videocam" size={24} color={colors.textMuted} /></View>
-        )}
-        {video ? (
-          <View style={styles.badge}>
-            <Ionicons name="play" size={10} color="white" />
-            {clock ? <Text style={styles.badgeText}>{clock}</Text> : null}
-          </View>
-        ) : null}
-        <View style={styles.editMark}><Ionicons name="cut-outline" size={14} color="white" /></View>
-      </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Remove the ${what}`} hitSlop={10} onPress={onRemove} style={({ pressed }) => [styles.remove, pressed && styles.pressed]}>
-        <Ionicons name="close" size={14} color="white" />
-      </Pressable>
-    </Reanimated.View>
   );
 }
 
@@ -207,13 +178,6 @@ const styleDefinitions = StyleSheet.create({
   off: { opacity: 0.45 },
   pressed: { opacity: 0.7 },
   error: { ...font('500'), fontSize: 13, color: colors.danger, marginTop: spacing.sm },
-  // The picked photo or clip, in the tiles' place: rounded like them, the × on its corner.
-  media: { borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border },
-  blank: { alignItems: 'center', justifyContent: 'center' },
-  badge: { position: 'absolute', left: 6, bottom: 6, flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: 'rgba(0, 0, 0, 0.5)' },
-  badgeText: { ...font('600'), fontSize: 11, color: 'white', fontVariant: ['tabular-nums'] },
-  editMark: { position: 'absolute', right: 6, bottom: 6, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)' },
-  remove: { position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.55)' },
   dock: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: 26, paddingHorizontal: 16 },
   dockError: { ...font('500'), fontSize: 13, color: colors.danger, textAlign: 'center', marginBottom: 8 },
   dockRow: { flexDirection: 'row', gap: 10 },

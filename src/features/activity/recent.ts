@@ -1,4 +1,4 @@
-import type { DetectedActivity, ID, Post, PracticeSession, SessionDetail } from '@/data/types';
+import type { DetectedActivity, HealthShareKey, ID, Post, PracticeSession, SessionDetail } from '@/data/types';
 import { localDay } from '@/features/practice/stats';
 import { duration } from '@/lib/format';
 import type { TennisFlags } from './flags';
@@ -80,9 +80,9 @@ export function recentSessions({ me, sessions, activities, flags, days = ATTACH_
   return picks.sort((x, y) => startOf(y) - startOf(x));
 }
 
-/** What the post will carry. Heart rate only from a tracker, only when switched on, only for adults. */
-export function statsOf(pick: SessionPick, showHr: boolean, adult: boolean): SessionDetail {
-  return pick.type === 'tracker' ? sessionFromActivity(pick.activity, showHr, adult) : sessionFromLogged(pick.session);
+/** What the post will carry. Health numbers only from a tracker, only those chosen ("Share health data"). */
+export function statsOf(pick: SessionPick, share: HealthShareKey[]): SessionDetail {
+  return pick.type === 'tracker' ? sessionFromActivity(pick.activity, share) : sessionFromLogged(pick.session);
 }
 
 /** "Tennis" (what the tracker called it), "Match · Won". */

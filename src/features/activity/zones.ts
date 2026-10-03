@@ -26,12 +26,13 @@ export function cleanZones(z: unknown): number[] | null {
 }
 
 /**
- * The zones a post may show: only from a tracker, only with its heart rate
- * shown (so only an adult who switched it on), and only five clean numbers.
- * A hand-logged post never has any, whatever it carries.
+ * The zones a post may show: only from a tracker, only when the author chose
+ * to share them (the server writes them only then, migrations 65 and 72),
+ * and only five clean numbers. A hand-logged post never has any, whatever it
+ * carries.
  */
 export function postZones(s: SessionDetail | undefined): number[] | null {
-  if (!s || !s.activityId || s.maxHr == null) return null;
+  if (!s || !s.activityId) return null;
   return cleanZones(s.zones);
 }
 

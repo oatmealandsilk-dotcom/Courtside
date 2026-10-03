@@ -4,8 +4,9 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { FormRow } from '@/components/FormRow';
 import { SessionStats } from '@/components/SessionStats';
-import { Toggle } from '@/components/ui';
+import { HealthShareRow } from '@/components/session/HealthShareRow';
 import { fromWho } from '@/features/activity/format';
+import { availableShare, chosenShare, type HealthChoice } from '@/features/activity/healthShare';
 import { statsOf, type SessionPick } from '@/features/activity/recent';
 import { pendingNote, tagsOnSession, withOnNewPost } from '@/features/activity/sessionTags';
 import { useApp } from '@/store/AppContext';
@@ -14,11 +15,10 @@ import { colors, spacing, typography } from '@/theme';
 
 /**
  * A session's stats on a new post: the stats exactly as the post will show
- * them, an × to post without them, and for confirmed adults whose tracker
- * read a heart rate, a "Show heart rate" switch. Heart rate starts off; a
- * teen account, or one with no age on file, never gets the switch (the
- * server enforces the same, migration 58). A session you logged by hand
- * shows how long and what it was, and never a heart rate.
+ * them, an × to post without them, and, when the tracker read any health
+ * numbers, "Share health data" with its Choose sheet (HealthShareRow), the
+ * same for every age (migration 72). A session you logged by hand shows how
+ * long and what it was, and never a heart rate.
  *
  * Opened from a session ("Save and post", "Post it") it sits at the top of
  * the post, and × leaves a row to put the stats back (none once it is
@@ -30,13 +30,13 @@ import { colors, spacing, typography } from '@/theme';
  * ("Mira’s name shows once they accept."): their name joins the post by
  * itself the moment they do (migration 62).
  */
-export function AttachSessionStats({ pick, attached, onAttach, adult, showHr, onShowHr, posted, loggedMinutes, onChange, justLogged }: {
+export function AttachSessionStats({ pick, attached, onAttach, health, onHealth, posted, loggedMinutes, onChange, justLogged }: {
   pick: SessionPick;
   attached: boolean;
   onAttach: (on: boolean) => void;
-  adult: boolean;
-  showHr: boolean;
-  onShowHr: (on: boolean) => void;
+  /** "Share health data": the switch and the ticks. */
+  health: HealthChoice;
+  onHealth: (next: HealthChoice) => void;
   /** This session is already on one of your posts. */
   posted: boolean;
   /** The length you logged it as, when you logged it. */
@@ -51,18 +51,14 @@ export function AttachSessionStats({ pick, attached, onAttach, adult, showHr, on
   const activity = pick.type === 'tracker' ? pick.activity : undefined;
   // The session from your log this is (a tracker's, once logged), and who on it is still to answer.
   const logged = pick.session;
-  const stats = currentUserId ? withOnNewPost(statsOf(pick, showHr, adult), currentUserId, sessions, sessionTags, users) ?? statsOf(pick, showHr, adult) : statsOf(pick, showHr, adult);
+  const share = chosenShare(health, availableShare(activity));
+  const stats = currentUserId ? withOnNewPost(statsOf(pick, share), currentUserId, sessions, sessionTags, users) ?? statsOf(pick, share) : statsOf(pick, share);
   const waitingOn = logged ? tagsOnSession(sessionTags, logged.id, currentUserId)
     .filter((t) => t.status === 'pending')
     .map((t) => users.find((u) => u.id === t.taggedId)?.name.trim().split(/\s+/)[0])
     .filter((n): n is string => !!n) : [];
   const waitingNote = pendingNote(waitingOn);
-  const canShowHr = adult && !!activity?.maxHr;
-  const hint = !activity
-    ? 'Shows on the post. The rest of your log stays private.'
-    : canShowHr
-      ? showHr ? 'Time on court and heart rate show on the post.' : 'Time on court shows on the post. Heart rate stays private unless you switch it on.'
-      : activity.maxHr ? 'Time on court shows on the post. Heart rate stays private.' : 'Time on court shows on the post.';
+  const hint = !activity ? 'Shows on the post. The rest of your log stays private.' : 'Time on court shows on the post.';
 
   return (
     <View style={styles.wrap}>
@@ -81,19 +77,8 @@ export function AttachSessionStats({ pick, attached, onAttach, adult, showHr, on
             </Pressable>
           </View>
           <SessionStats session={stats} />
-          {canShowHr ? (
-            <FormRow
-              icon="heart-outline"
-              label="Show heart rate"
-              accessibilityRole="switch"
-              accessibilityState={{ checked: showHr }}
-              accessibilityLabel="Show heart rate on this post"
-              onPress={() => onShowHr(!showHr)}
-              // The row is the switch: the toggle only shows its state, so one tap flips it once.
-              accessory={<View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><Toggle value={showHr} onChange={onShowHr} /></View>}
-            />
-          ) : null}
           <Text style={styles.note}>{hint}</Text>
+          {activity ? <HealthShareRow activity={activity} choice={health} onChoice={onHealth} /> : null}
           {waitingNote ? (
             <View style={styles.waiting}>
               <Ionicons name="time-outline" size={13} color={colors.textFaint} />

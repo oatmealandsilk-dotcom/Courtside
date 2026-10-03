@@ -2,7 +2,6 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { show as showToast } from '@/lib/toast';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
@@ -32,6 +31,9 @@ import { trackerName } from '@/features/activity/lengths';
 import { TrackedLength } from '@/components/session/TrackedLength';
 import { LogComposerTop, LogDock, DOCK_ROOM } from '@/components/session/LogComposer';
 import { ZoneGlyph } from '@/components/session/ZoneGlyph';
+import { HealthShareRow } from '@/components/session/HealthShareRow';
+import { availableShare, chosenShare } from '@/features/activity/healthShare';
+import { useHealthChoice } from '@/features/activity/useHealthChoice';
 import type { CardPerson } from '@/components/session/SessionCard';
 import { KIND_LABEL, activityDay, loggedLabel } from '@/features/activity/format';
 import { canTagKind } from '@/features/activity/sessionTags';
@@ -81,12 +83,6 @@ const landOnFeed = () => { if (router.canDismiss()) goHome(); else router.replac
 const goBackNow = () => { if (router.canGoBack()) router.back(); else landOnFeed(); };
 /** Each choice in the Create box arrives a moment after the one above it. */
 const arrive = (index: number) => FadeInDown.delay(90 + index * 55).duration(260).easing(Easing.out(Easing.cubic));
-/**
- * "Show heart rate" is remembered on this phone for the next session posted,
- * one choice per account: switching accounts on a shared phone must not
- * switch someone else's heart rate on for them.
- */
-const showHrKey = (userId: string) => `courtside-activity-show-hr:${userId}`;
 /** choose → library → form, with back always stepping one page left. */
 type Stage = 'choose' | 'library' | 'edit' | 'form';
 
@@ -145,8 +141,9 @@ export default function Compose() {
     setOpened({ type: 'tracker', activity, session: sessions.find((x) => x.activityId === activity.id) });
     setAttached(true);
   }, [tracker.activity?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Heart rate only ever goes on a confirmed adult's post.
-  const adult = currentUser?.ageGroup === 'adult';
+  // "Share health data" starts on for someone known to be an adult, off for
+  // everyone else; anyone can switch it on (owner, Oct 3; migration 72).
+  const adult = !!currentUser && !notKnownAdult(currentUser);
   const [attached, setAttached] = useState(!!opened);
   // One session, one post: whether this one is on a post of yours already.
   // The app may hold only the newest few of your posts, so they are asked
@@ -166,23 +163,10 @@ export default function Compose() {
   const [statsPick, setStatsPick] = useState<SessionPick | null>(null);
   // Attaching it logged it on the way (a tracker's session nobody had logged).
   const [justLogged, setJustLogged] = useState(false);
-  const [showHr, setShowHr] = useState(false);
-  const hrTouched = useRef(false);
-  // Read once the page opens, whichever way a tracker's session gets attached.
-  useEffect(() => {
-    if (!currentUserId) return;
-    let live = true;
-    try {
-      void AsyncStorage.getItem(showHrKey(currentUserId)).then((v) => { if (live && !hrTouched.current) setShowHr(v === '1'); }).catch(() => undefined);
-    } catch { /* storage unavailable: it starts off */ }
-    return () => { live = false; };
-  }, [currentUserId]);
-  const flipHr = (on: boolean) => {
-    hrTouched.current = true;
-    setShowHr(on);
-    if (!currentUserId) return;
-    try { void AsyncStorage.setItem(showHrKey(currentUserId), on ? '1' : '0').catch(() => undefined); } catch { /* not remembered, still applied */ }
-  };
+  // "Share health data": remembered on this phone for the next post, one choice per account.
+  const [health, setHealth] = useHealthChoice(currentUserId, adult);
+  // The numbers a session's post shares: only a tracker's, only those chosen that it has.
+  const shareFor = (pick: SessionPick) => (pick.type === 'tracker' ? chosenShare(health, availableShare(pick.activity)) : []);
   // Opened from the weekly challenge: its tag starts the caption, which is what makes the clip an entry.
   // A challenge takes a clip and nothing else: no Post, Instant or Thread here,
   // the phone's videos open straight away, and a photo is never taken.
@@ -378,7 +362,7 @@ export default function Compose() {
   const shownKind = openedLog?.kind ?? kind;
   const shownWon = openedLog ? (openedLog.kind === 'match' ? openedLog.won : undefined) : kind === 'match' && won ? won === 'won' : undefined;
   const sessionFor = (logId?: string): SessionDetail | null => (opened?.type === 'tracker' ? {
-    ...statsOf(opened, showHr, adult),
+    ...statsOf(opened, shareFor(opened)),
     kind: shownKind,
     focus: loggedLabel({ kind: shownKind, won: shownWon }),
     ...(shownWon !== undefined ? { won: shownWon } : {}),
@@ -524,7 +508,7 @@ export default function Compose() {
         videoUrl: media?.kind === 'video' ? media.uri : undefined,
         mediaLabel: media?.label,
         thumbnailUrl: media?.thumbnailUrl ?? (media?.kind === 'photo' ? media.uri : undefined),
-        session: stats ? statsOf(opened, showHr, adult) : undefined,
+        session: stats ? statsOf(opened, shareFor(opened)) : undefined,
       });
       const firstPost = !posts.some((p) => p.authorId === currentUserId);
       if (shareTo) openGroupFeed(shareTo); else landOnFeed();
@@ -536,7 +520,7 @@ export default function Compose() {
     // A session from "Add session stats" rides on the Post or Clip, which stays
     // a Post or a Clip (and lands under Posts or Clips on the profile). Like a
     // post made from a session, it is never offered for CourtSide's Instagram.
-    const stats = statsRow && statsPick ? statsOf(statsPick, showHr, adult) : undefined;
+    const stats = statsRow && statsPick ? statsOf(statsPick, shareFor(statsPick)) : undefined;
     actions.addPost({
       kind: mode === 'clip' ? 'clip' : 'note',
       orientation,
@@ -845,7 +829,6 @@ export default function Compose() {
   }
 
   if (logMode) {
-    const hrRow = adult && opened?.type === 'tracker' && !!opened.activity.maxHr;
     const logFromSession = openedLog ? fromSession : players.map((p) => ({ id: p.id, accepted: false }));
     return (
       <View style={styles.backdrop}>
@@ -874,6 +857,8 @@ export default function Compose() {
                 onEdit={() => setStage('edit')}
                 onRemove={() => { setMedia(null); setPicked(null); setEdit({}); }}
                 error={pickError}
+                // With a photo or clip, the top is the post as the feed will show it, caption and all.
+                preview={{ orientation, edit, author: currentUser ?? undefined, caption: body.trim() || logCaption, captionIsDefault: !body.trim(), location: location.trim() || undefined }}
               />
             </View>
             <View style={styles.logCaption}>
@@ -909,17 +894,8 @@ export default function Compose() {
               {!openedLog && canTagKind(kind) ? (
                 <FormRow icon="people-outline" label="Who you played" value={whoAccessory ? undefined : whoValue} accessory={whoAccessory} accessibilityLabel={whoValue ? `Who you played, ${whoValue}${players.length ? ', waiting to accept' : ''}` : 'Who you played'} chevron onPress={pickWho} />
               ) : null}
-              {hrRow ? (
-                <FormRow
-                  line={!openedLog && canTagKind(kind)}
-                  icon="heart-outline"
-                  label="Show heart rate"
-                  accessibilityRole="switch"
-                  accessibilityState={{ checked: showHr }}
-                  accessibilityLabel="Show heart rate on this post"
-                  onPress={() => flipHr(!showHr)}
-                  accessory={<View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><Toggle value={showHr} onChange={flipHr} /></View>}
-                />
+              {opened?.type === 'tracker' ? (
+                <HealthShareRow line={!openedLog && canTagKind(kind)} activity={opened.activity} choice={health} onChoice={setHealth} />
               ) : null}
               {placeRows}
               {/* With a photo or a clip there is someone to tag in it; without, "Who you played" is the only people row. */}
@@ -958,9 +934,8 @@ export default function Compose() {
                 pick={opened}
                 attached={withStats}
                 onAttach={setAttached}
-                adult={adult}
-                showHr={showHr}
-                onShowHr={flipHr}
+                health={health}
+                onHealth={setHealth}
                 posted={openedPosted}
                 loggedMinutes={opened.type === 'tracker' ? sessions.find((x) => x.activityId === opened.activity.id)?.minutes : undefined}
               />
@@ -1047,9 +1022,8 @@ export default function Compose() {
                         attached
                         onAttach={(on) => { if (!on) { setStatsPick(null); setJustLogged(false); } }}
                         onChange={pickStats}
-                        adult={adult}
-                        showHr={showHr}
-                        onShowHr={flipHr}
+                        health={health}
+                        onHealth={setHealth}
                         posted={false}
                         loggedMinutes={statsPick.type === 'tracker' ? statsPick.session?.minutes : undefined}
                         justLogged={justLogged}
