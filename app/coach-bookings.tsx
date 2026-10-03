@@ -38,12 +38,12 @@ export function BookingsPanel() {
   const open = mine.filter(isOpen).sort((a, b) => Date.parse(a.dueAt ?? a.createdAt) - Date.parse(b.dueAt ?? b.createdAt));
   const done = mine.filter((r) => !isOpen(r)).sort((a, b) => Date.parse(b.respondedAt ?? b.refundedAt ?? b.createdAt) - Date.parse(a.respondedAt ?? a.refundedAt ?? a.createdAt));
   const list = tab === 'open' ? open : done;
-  const earned = mine.filter((r) => r.status === 'answered').reduce((sum, r) => sum + (r.priceCents ?? 0) - (r.feeCents ?? 0), 0);
+  const earned = mine.filter((r) => r.status === 'answered' && !r.refundedAt).reduce((sum, r) => sum + (r.priceCents ?? 0) - (r.feeCents ?? 0), 0);
 
   return (
     <>
       <SegmentedControl segments={[{ value: 'open', label: open.length ? `Open · ${open.length}` : 'Open' }, { value: 'done', label: 'Done' }]} value={tab} onChange={setTab} />
-      {earned ? <Text style={styles.earned}>{money(earned)} earned from answered bookings, before Stripe’s card fee.</Text> : null}
+      {earned ? <Text style={styles.earned}>{money(earned)} earned from answered bookings.</Text> : null}
       {list.length === 0 ? (
         <EmptyState icon="file-tray-outline" title={tab === 'open' ? 'Nothing waiting' : 'Nothing here yet'} body={tab === 'open' ? 'New bookings arrive here, with a notification.' : 'Answered and refunded bookings collect here.'} />
       ) : (

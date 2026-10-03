@@ -36,8 +36,8 @@ function clock(at: Date): { time: string; mark: string } {
   return m ? { time: m[1], mark: m[2].replace(/[.]/g, '').toLowerCase() } : { time: s, mark: '' };
 }
 
-/** "Today, 6:12–7:36 pm", "Yesterday, …" or "Mon Sep 29, …". */
-export function activityWhen(a: DetectedActivity, now = new Date()): string {
+/** "Today, 6:12–7:36 pm", "Yesterday, …" or "Mon Sep 29, …". `sep` goes between the day and the times. */
+export function activityWhen(a: DetectedActivity, now = new Date(), sep = ', '): string {
   const start = new Date(a.startedAt);
   const from = clock(start);
   const to = clock(new Date(a.endedAt));
@@ -49,7 +49,7 @@ export function activityWhen(a: DetectedActivity, now = new Date()): string {
     : day === localDay(now.getTime() - 86_400_000) ? 'Yesterday'
     // The locale's own order, without its commas, so the one comma left is the one before the times.
     : start.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }).replace(/,/g, '');
-  return `${label}, ${range}`;
+  return `${label}${sep}${range}`;
 }
 
 /** Which label a session's numbers carry: an Apple Watch only when the workout says it was saved by one. */

@@ -6,7 +6,8 @@ import * as WebBrowser from 'expo-web-browser';
  * changes in a way people should see, and everyone is asked again the next
  * time they open the app — accounts made before the change included.
  */
-export const TERMS_VERSION = '2026-09-21';
+// 2026-09-26: the paid-coaching section (fees, refunds, Stripe's terms for coaches).
+export const TERMS_VERSION = '2026-09-26';
 
 /** Where a legal page lives: next to the site on the web, on the published site from the app. */
 export function legalUrl(page: 'terms' | 'privacy'): string {

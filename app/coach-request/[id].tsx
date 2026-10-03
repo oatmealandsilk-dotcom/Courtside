@@ -23,7 +23,7 @@ import { colors, font, radius, spacing, typography } from '@/theme';
 export default function Booking() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { coachingRequests, coaches, users, currentUserId, ready, actions } = useApp();
+  const { coachingRequests, coaches, users, currentUserId, currentUser, ready, actions } = useApp();
   const [looked, setLooked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -58,14 +58,17 @@ export default function Booking() {
   const otherFirst = other?.name.split(' ')[0] ?? (asCoach ? 'The player' : 'Your coach');
   const overdue = isOverdue(request);
   const open = isOpen(request);
+  // Support: an admin (not the coach or the player) can refund any paid booking, answered ones included.
+  const asSupport = !!currentUser?.isAdmin && !asCoach && request.userId !== currentUserId && !!request.paidAt && !request.refundedAt;
 
   const refund = () => {
     confirm({
-      title: asCoach ? 'Decline and refund?' : 'Get your money back?',
-      message: asCoach ? `${otherFirst} gets the full price back and the booking closes.` : 'The full price goes back to your card and the booking closes.',
+      title: asSupport ? 'Refund this booking?' : asCoach ? 'Decline and refund?' : 'Get your money back?',
+      message: asSupport ? 'The player gets the full price back, the coach’s share is taken back from them, and the booking closes. This can’t be undone.'
+        : asCoach ? `${otherFirst} gets the full price back and the booking closes.` : 'The full price goes back to your card and the booking closes.',
       confirmLabel: asCoach ? 'Decline' : 'Refund',
       // The coach turning a booking down is red; a player getting their money back is not.
-      destructive: asCoach,
+      destructive: asCoach || asSupport,
       onConfirm: async () => {
         setBusy(true);
         setError('');
@@ -136,6 +139,11 @@ export default function Booking() {
           {overdue ? <Button label="Get your money back" variant="secondary" onPress={refund} loading={busy} full /> : null}
         </View>
       )}
+      {asSupport ? (
+        <Pressable accessibilityRole="button" onPress={refund} disabled={busy} hitSlop={6} style={styles.quiet}>
+          <Text style={styles.quietText}>Admin: refund this booking</Text>
+        </Pressable>
+      ) : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {!asCoach && request.status === 'answered' && coach ? (
         <Button label={`Review ${otherFirst}`} variant="secondary" onPress={() => router.push(`/coach/${coach.id}`)} full />

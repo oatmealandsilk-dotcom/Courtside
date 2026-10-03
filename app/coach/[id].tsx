@@ -10,6 +10,7 @@ import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
 import { pickFromDevice, type PickedMedia } from '@/components/MediaPicker';
 import { KIND_LABEL, SPECIALTY_LABEL, statusLabel, turnaround, usePayments } from '@/features/coaching/bookings';
 import { money, relativeTime } from '@/lib/format';
+import { openLegal } from '@/lib/legal';
 import { useApp } from '@/store/AppContext';
 import { colors, font, radius, spacing, typography, lift } from '@/theme';
 
@@ -206,7 +207,8 @@ export default function CoachDetail() {
             full
           />
           <Text style={styles.fine}>
-            You pay through Stripe; CourtSide never sees your card. If {first} has not answered within {turnaround(service.turnaroundHours)}, you can have your money back.
+            You pay through Stripe; CourtSide never sees your card. If {first} has not answered within {turnaround(service.turnaroundHours)}, you can have your money back. Once {first} answers, the booking is complete; for any problem after that, write to support@courtsidebase.com. By paying you agree to the{' '}
+            <Text accessibilityRole="link" onPress={() => openLegal('terms')} style={styles.fineLink}>Terms of Use</Text>.
           </Text>
         </View>
       ) : null}
@@ -349,6 +351,7 @@ const styleDefinitions = StyleSheet.create({
   attachedText: { flex: 1, ...typography.smallStrong, color: colors.text },
   error: { ...typography.small, color: colors.danger },
   fine: { ...typography.caption, color: colors.textFaint, lineHeight: 17, letterSpacing: 0 },
+  fineLink: { color: colors.textMuted, textDecorationLine: 'underline' },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
   rowWords: { flex: 1, gap: 3, minWidth: 0 },
   rowTitle: { ...typography.body, ...font('500'), color: colors.text, lineHeight: 21 },

@@ -24,7 +24,11 @@ function load(): VideoCompressor | null {
   return compressor;
 }
 
-/** True when videos are shrunk here, on upload — so the picker can hand them over untouched and quickly. */
+/**
+ * True when videos are shrunk here, on upload. The picker still converts a
+ * video to 1080p H.264 first (see MediaPicker): this compressor keeps a
+ * clip's HDR colour labels, and HDR clips show black in browsers.
+ */
 export const canShrinkVideo = () => !!load();
 
 /**

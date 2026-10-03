@@ -17,7 +17,7 @@ import { useResponsive } from '@/lib/useResponsive';
 import { getPendingTab, setPendingTab, subscribePendingTab } from '@/features/navigation/pendingTab';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { askForCommunityMap, isStartTab } from '@/features/navigation/startTab';
-import { useCurtainDown } from '@/features/feed/warmup';
+import { launchSettle, useCurtainDown } from '@/features/feed/warmup';
 import { useApp } from '@/store/AppContext';
 import { claimCarriedBirthDate, isDeviceBlocked, recallAnswered } from '@/features/age/ageCheck';
 import { auth as remoteAuth } from '@/data/remote';
@@ -28,7 +28,7 @@ import { TERMS_VERSION } from '@/lib/legal';
 import { colors } from '@/theme';
 import { stageKeyOf, useStageSelect } from '@/features/feed/commentStage';
 import { useStageMotion } from '@/features/feed/useStageMotion';
-import Reanimated from 'react-native-reanimated';
+import Reanimated, { useAnimatedStyle } from 'react-native-reanimated';
 
 /**
  * The four tabs in the strip's order, left to right: Community, Home,
@@ -207,6 +207,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => { if (Platform.OS === 'web' && navLayer.current) navLayer.current.inert = barOnStage; }, [barOnStage]);
   const showNav = !!currentUserId && !hideEverywhere && !onSplash && (!(isPhone && phoneOnlyHide) || barOnStage);
   const curtainDown = useCurtainDown();
+  // As the opening curtain lifts, the page under it settles from a touch large
+  // and low into place, on the curtain's own curve (see WarmCurtain), so the
+  // logo leaving and the app arriving are one motion. On the phone only: in a
+  // browser a transform round the whole app would trap everything that floats
+  // over the bar beneath it, and there the curtain's own lift carries it.
+  const settleOn = Platform.OS !== 'web';
+  const settle = useAnimatedStyle(() => (!settleOn ? {} : {
+    transform: [{ translateY: launchSettle.value * 10 }, { scale: 1 + launchSettle.value * 0.03 }],
+  }));
   // A shared link opened while signed out goes to sign-in, not to an empty page.
   const mustSignIn = ready && authResolved && !currentUserId && !['/', '/index', '/sign-in', '/onboarding', '/birthday'].includes(pathname);
   // The gates — sign in, birthday, terms — are reached by one replace each,
@@ -260,7 +269,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return <View style={{ flex: 1, minHeight: 0, backgroundColor: colors.bg, flexDirection: isPhone ? 'column' : 'row' }}>
     {showNav && !isPhone && nav}
     {/* While the tour is up, TalkBack reads only the tour, not the page under the dim. */}
-    <View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={{ flex: 1, minWidth: 0, minHeight: 0 }}><RouteTransition>{children}</RouteTransition><Toast /><UploadBar /></View>
+    <Reanimated.View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={[{ flex: 1, minWidth: 0, minHeight: 0 }, settle]}><RouteTransition>{children}</RouteTransition><Toast /><UploadBar /></Reanimated.View>
     {showNav && isPhone ? (
       <Reanimated.View ref={((node: unknown) => { navLayer.current = node as HTMLElement | null; navFade.ref?.(node); }) as never} pointerEvents={barOnStage ? 'none' : 'box-none'} style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, barOnStage && { overflow: 'hidden' }, navFade.style]}>
         <Reanimated.View ref={navHold.ref as never} pointerEvents="box-none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, navHold.style]}>{nav}</Reanimated.View>
