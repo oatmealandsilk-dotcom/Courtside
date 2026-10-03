@@ -53,6 +53,7 @@
     "expo-web-browser": "~57.0.3",
     "leaflet": "^1.9.4",
     "maplibre-gl": "^6.9.1",
+    "mediabunny": "^1.61.0",
     "qrcode-generator": "^2.0.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
