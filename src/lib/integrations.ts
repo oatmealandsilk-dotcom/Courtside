@@ -41,11 +41,29 @@ export const providerSetup: Record<IntegrationProvider, ProviderSetup> = {
     docsUrl: 'https://developer.whoop.com/',
     todo: 'OAuth2 + webhook subscription for recovery, cycle and sleep events.',
   },
+  fitbit: {
+    provider: 'fitbit',
+    authMethod: 'oauth2',
+    docsUrl: 'https://dev.fitbit.com/build/reference/web-api/',
+    todo: 'Live through the trackers function (migration 69) once its keys are set: tennis sessions only.',
+  },
+  oura: {
+    provider: 'oura',
+    authMethod: 'oauth2',
+    docsUrl: 'https://cloud.ouraring.com/v2/docs',
+    todo: 'Live through the trackers function (migration 69) once its keys are set: tennis sessions only.',
+  },
+  polar: {
+    provider: 'polar',
+    authMethod: 'oauth2',
+    docsUrl: 'https://www.polar.com/accesslink-api/',
+    todo: 'Live through the trackers function (migration 69) once its keys are set: tennis sessions only.',
+  },
   garmin: {
     provider: 'garmin',
     authMethod: 'oauth2',
     docsUrl: 'https://developer.garmin.com/gc-developer-program/health-api/',
-    todo: 'Health API program approval, then push-based daily summaries.',
+    todo: 'Through Apple Health on iPhone (Garmin Connect writes workouts there). Garmin\'s own API needs a business application.',
   },
   strava: {
     provider: 'strava',

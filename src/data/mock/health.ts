@@ -19,6 +19,37 @@ export const integrations: Integration[] = [
     provides: ['Recovery', 'HRV', 'Resting heart rate', 'Sleep', 'Strain'],
     readsWorkouts: true,
   },
+  // Tennis sessions only (migration 69), so 'activity' rather than 'wearable':
+  // the coach's recovery numbers never come from these.
+  {
+    provider: 'fitbit',
+    label: 'Fitbit',
+    category: 'activity',
+    connected: false,
+    provides: ['Tennis sessions', 'Heart rate'],
+  },
+  {
+    provider: 'oura',
+    label: 'Oura',
+    category: 'activity',
+    connected: false,
+    provides: ['Tennis sessions', 'Heart rate'],
+  },
+  {
+    provider: 'polar',
+    label: 'Polar',
+    category: 'activity',
+    connected: false,
+    provides: ['Tennis sessions', 'Heart rate'],
+  },
+  // No connection of its own: on an iPhone it comes in through Apple Health.
+  {
+    provider: 'garmin',
+    label: 'Garmin',
+    category: 'activity',
+    connected: false,
+    provides: ['Tennis sessions'],
+  },
   {
     provider: 'cronometer',
     label: 'Cronometer',

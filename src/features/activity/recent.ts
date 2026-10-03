@@ -102,6 +102,9 @@ export function pickSource(pick: SessionPick): string {
     case 'whoop': return 'WHOOP';
     case 'apple-watch': return 'Apple Watch';
     case 'apple-health': return 'Apple Health';
+    case 'fitbit': return 'Fitbit';
+    case 'oura': return 'Oura';
+    case 'polar': return 'Polar';
     default: return 'Health Connect';
   }
 }

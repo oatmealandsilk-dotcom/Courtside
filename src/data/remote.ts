@@ -2144,6 +2144,18 @@ export const remote = {
     return () => { void db.removeChannel(channel); };
   },
 
+  /**
+   * The trackers function on the server (Fitbit, Oura, Polar; migration 69):
+   * status (which are set up), start (their sign-in page, or {on: false}),
+   * finish (this phone collects a sign-in), sync and disconnect.
+   */
+  async trackers<T = { url?: string; on?: boolean; ok?: boolean; fresh?: ID[] }>(path: 'status' | 'start' | 'finish' | 'sync' | 'disconnect', body: object = {}): Promise<T> {
+    const { data, error } = await need().functions.invoke<T & { error?: string }>(`trackers/${path}`, { body });
+    if (error) throw new Error('That tracker is not reachable right now.');
+    if (data && (data as { error?: string }).error) throw new Error((data as { error?: string }).error);
+    return data as T;
+  },
+
   /* ------------------------------------------- tennis sessions (migration 58) */
 
   /** Which server switches are on for you, by name ('tennis-apple', 'tennis-whoop'). Empty on a database without them. */
