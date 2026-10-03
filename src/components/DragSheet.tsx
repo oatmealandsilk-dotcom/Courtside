@@ -52,6 +52,13 @@ export function DragSheet(props: {
   closeSignal?: number;
   /** On a computer the sheet is a box sized to its contents (see the .web twin); a phone ignores it. */
   fitContent?: boolean;
+  /**
+   * How tall its contents are, once known (a ScrollView's content height): a
+   * phone's sheet then opens only as tall as its header and that need, never
+   * taller than `peekFraction`, so a short sheet has no empty half. The stage
+   * ignores it.
+   */
+  contentHeight?: number;
   /** On a wide computer screen the sheet docks to the right (see the .web twin); a phone ignores it. */
   side?: boolean;
   /** The sheet has come to rest where it was going (first: it has finished opening). */
@@ -73,6 +80,7 @@ function PlainSheet({
   peekFraction = 0.66,
   closeSignal = 0,
   onSettled,
+  contentHeight,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -80,6 +88,7 @@ function PlainSheet({
   peekFraction?: number;
   closeSignal?: number;
   onSettled?: () => void;
+  contentHeight?: number;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { height: windowHeight } = useWindowDimensions();
@@ -88,7 +97,12 @@ function PlainSheet({
   // cue Apple's own card sheets use instead of ever truly covering the screen.
   const fullHeight = Math.max(1, windowHeight - insets.top - 20);
   const peekHeight = Math.min(fullHeight, Math.round(windowHeight * peekFraction));
-  const openOffset = fullHeight - peekHeight;
+  // Fitted to a short sheet's contents once they are measured (contentHeight).
+  const [headH, setHeadH] = useState(0);
+  const fitted = contentHeight && headH ? Math.min(peekHeight, Math.round(headH + contentHeight + insets.bottom)) : peekHeight;
+  const openOffset = fullHeight - fitted;
+  // Once a finger (or the keyboard) has moved it, the sheet stays where it was put.
+  const touched = useRef(false);
 
   // Distance the sheet's TOP edge sits below where "fully open" would put it:
   // 0 = open all the way, openOffset = the height it starts at, fullHeight = gone.
@@ -111,6 +125,12 @@ function PlainSheet({
     // fight a drag in progress.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // The contents measured after the opening began: it settles at their height instead.
+  useEffect(() => {
+    if (touched.current || dismissedRef.current || fitted === peekHeight) return;
+    translateY.value = withSpring(openOffset, SPRING);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitted]);
 
   const finish = () => {
     if (dismissedRef.current) return;
@@ -127,10 +147,12 @@ function PlainSheet({
     backdropOpacity.value = withTiming(0, { duration: 210, easing: EASE });
   };
   const openFull = () => {
+    touched.current = true;
     translateY.value = withSpring(0, SPRING);
     backdropOpacity.value = withTiming(1, { duration: 240, easing: EASE });
   };
   const returnTo = (origin: number) => {
+    touched.current = true;
     translateY.value = withSpring(origin, SPRING);
     backdropOpacity.value = withTiming(1 - origin / fullHeight, { duration: 220, easing: EASE });
   };
@@ -154,10 +176,12 @@ function PlainSheet({
   }, [closeSignal]);
 
   const startY = useSharedValue(0);
+  const markTouched = () => { touched.current = true; };
   const pan = Gesture.Pan()
     .onStart(() => {
       'worklet';
       startY.value = translateY.value;
+      runOnJS(markTouched)();
     })
     .onUpdate((e) => {
       'worklet';
@@ -191,7 +215,7 @@ function PlainSheet({
         {/* The same warm glow the pages open with, so a sheet reads as part of the app. */}
         <Wash height={300} strength={0.85} />
         <GestureDetector gesture={pan}>
-          <View style={styles.handle}>
+          <View style={styles.handle} onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); if (h !== headH) setHeadH(h); }}>
             <View style={styles.grabber} />
             {header}
           </View>

@@ -4,6 +4,8 @@ import { router, usePathname } from 'expo-router';
 
 import type { HitRequest, ID } from '@/data/types';
 import { tennisFlags, type TennisFlags } from '@/features/activity/flags';
+import { pickSource } from '@/features/activity/recent';
+import { duration } from '@/lib/format';
 import { useCurtainDown } from '@/features/feed/warmup';
 import { dueHits, keepHitPrefill, markAsked, nextHitEnd, prefillFor, readAsked, shortPlace, trackerFor } from '@/features/hits/followUp';
 import { useTourBusy } from '@/features/tour/tourStore';
@@ -12,7 +14,7 @@ import { useAnyUploading } from '@/lib/uploads';
 import { useApp } from '@/store/AppContext';
 
 /** Pages where someone is writing or posting: the question waits until they are done. */
-const BUSY = new Set(['/compose', '/edit-post', '/ask', '/ask-coach', '/log-session', '/pick-session', '/session-tag', '/pick-location', '/court-report', '/court-now', '/map-visibility', '/hit-request/new', '/hit', '/comments']);
+const BUSY = new Set(['/compose', '/edit-post', '/ask', '/ask-coach', '/log-session', '/pick-session', '/session-tag', '/pick-location', '/court-report', '/court-now', '/map-visibility', '/hit-request/new', '/hit', '/comments', '/session-stats', '/who-played']);
 /** A moment after the way is clear, so it never lands on the app's own opening notes. */
 const SETTLE_MS = 2500;
 /** It stays up this long (a flick or a tap puts it away sooner): long enough to be noticed on a page you are looking at. */
@@ -110,11 +112,17 @@ export function HitFollowUp({ enabled }: { enabled: boolean }) {
       // Your tracker's copy of the same game, waiting to be logged: that is the one logged, filled in from the hit.
       const tracked = trackerFor(first, { me: currentUserId, activities: detectedActivities, flags });
       const params = tracked ? { activity: tracked.id, hit: first.id } : { hit: first.id };
-      const open = () => router.push({ pathname: '/log-session', params });
+      // With your tracker's copy, the composer (post it, or just log it); without, the log sheet.
+      const open = () => router.push({ pathname: tracked ? '/compose' : '/log-session', params });
       toastId.current = showToast({
         title: `How was the hit at ${shortPlace(prefill.place)}?`,
-        icon: 'hit',
-        href: tracked ? `/log-session?activity=${tracked.id}&hit=${first.id}` : `/log-session?hit=${first.id}`,
+        // With your tracker's copy it carries what "Tennis detected" would have
+        // said (the two arrive together, and this one takes its place): the
+        // session's mark and its numbers, yours alone.
+        ...(tracked
+          ? { glyph: 'session' as const, body: [duration(tracked.minutes), tracked.maxHr ? `${tracked.maxHr} max bpm` : null, pickSource({ type: 'tracker', activity: tracked })].filter(Boolean).join(' · ') }
+          : { icon: 'hit' as const }),
+        href: tracked ? `/compose?activity=${tracked.id}&hit=${first.id}` : `/log-session?hit=${first.id}`,
         action: { label: 'Log it', onPress: open },
         holdMs: HOLD_MS,
         onClosed: (how, upMs) => {

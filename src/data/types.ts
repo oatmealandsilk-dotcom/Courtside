@@ -224,6 +224,12 @@ export interface DetectedActivity {
   strain?: number;
   /** 'WHOOP', or the Apple device that saved it, such as 'Watch7,1'. */
   device?: string;
+  /**
+   * Minutes in each heart-rate zone, easiest first: [zone 1 Easy, 2 Light,
+   * 3 Moderate, 4 Hard, 5 Peak]. WHOOP only (migration 65), and only when the
+   * strap was on for at least half the session. Private, like the rest.
+   */
+  zones?: number[];
   status: 'new' | 'logged' | 'dismissed' | 'duplicate' | 'withdrawn';
   duplicateOf?: ID;
   sessionId?: ID;
@@ -299,6 +305,15 @@ export interface SessionDetail {
    * declined names never appear here.
    */
   with?: SessionWith[];
+  /**
+   * Minutes in each heart-rate zone, easiest first (as DetectedActivity's).
+   * Only when the post shows heart rate (and so only for adults who switched
+   * it on), and only from a tracker that recorded them. Written by the server
+   * (migration 65); "Zones 4–5" is zones[3] + zones[4].
+   */
+  zones?: number[];
+  /** The day it was played, 'YYYY-MM-DD', date only: never the start time. */
+  day?: string;
 }
 
 /** scale ≥ 1; x and y are the picture's centre offset as fractions of the frame's width and height. */

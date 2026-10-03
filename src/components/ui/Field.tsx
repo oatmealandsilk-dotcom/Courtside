@@ -47,6 +47,8 @@ interface Props {
   soft?: boolean;
   /** A slim one-line pill that grows as you type (a comment box, a message box). */
   compact?: boolean;
+  /** No box at all: the words on the page, beside an avatar (a session's caption). */
+  bare?: boolean;
 }
 
 /**
@@ -78,6 +80,7 @@ export function Field({
   mentions = false,
   soft = false,
   compact = false,
+  bare = false,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const submits = Boolean(onSubmitEditing) && (submitOnEnter || !multiline);
@@ -158,6 +161,7 @@ export function Field({
           multiline && { minHeight: minHeight ?? 110, textAlignVertical: 'top' },
           compact && styles.compact,
           flush && { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
+          bare && styles.bare,
         ]}
       />
       {mention && candidates.length ? <MentionSuggestions candidates={candidates} onPick={pick} maxHeight={listHeight} /> : null}
@@ -183,6 +187,7 @@ const styleDefinitions = StyleSheet.create({
     ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}),
   },
   inputFocused: { borderColor: colors.borderStrong },
+  bare: { backgroundColor: 'transparent', borderWidth: 0, paddingHorizontal: 0, paddingVertical: 6, fontSize: 16, lineHeight: 22 },
   hint: { ...typography.small, color: colors.textFaint },
   softLine: { ...lift, borderWidth: 0, borderRadius: radius.pill, minHeight: 52, paddingVertical: 14, fontSize: 16 },
   softArea: { ...lift, borderWidth: 0, borderRadius: 20, paddingVertical: 14, fontSize: 16, lineHeight: 22 },

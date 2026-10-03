@@ -218,7 +218,7 @@ function Waiting({ activity, line }: { activity: DetectedActivity; line: boolean
         <Text style={styles.title} numberOfLines={1}>{activityTitle(activity)}</Text>
         <Text style={styles.sub}>{activityWhen(activity)} · {duration(activity.minutes)} · {source}</Text>
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Log it: ${activityTitle(activity)}`} hitSlop={8} onPress={() => router.push({ pathname: '/log-session', params: { activity: activity.id } })} style={({ pressed }) => [styles.action, styles.actionOn, pressed && styles.pressed]}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Log it: ${activityTitle(activity)}`} hitSlop={8} onPress={() => router.push({ pathname: '/compose', params: { activity: activity.id } })} style={({ pressed }) => [styles.action, styles.actionOn, pressed && styles.pressed]}>
         <Text style={[styles.actionText, styles.actionTextOn]}>Log it</Text>
       </Pressable>
     </View>

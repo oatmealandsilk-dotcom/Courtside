@@ -9,6 +9,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { LevelPill } from '@/components/LevelPill';
 import { SectionPager } from '@/components/SectionPager';
 import { TileCover } from '@/components/TileCover';
+import { SessionTile } from '@/components/session/SessionTile';
+import { hasSessionStats } from '@/features/activity/format';
 import { PlayerName } from '@/components/PlayerName';
 import { Tappable } from '@/components/Tappable';
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
@@ -82,7 +84,7 @@ export default function UserProfile() {
               {itemsFor(section).map((p) => (
                 <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.pinned && section !== 'Tagged' ? 'pinned ' : ''}${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: section === 'Clips' ? 'clips' : section === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
                   <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
-                  {p.thumbnailUrl ? <TileCover accessibilityIgnoresInvertColors uri={p.thumbnailUrl} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120} /> : null}
+                  {p.thumbnailUrl ? <TileCover accessibilityIgnoresInvertColors uri={p.thumbnailUrl} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120} /> : p.session && hasSessionStats(p.session) && !p.imageUrl && !p.videoUrl ? <SessionTile session={p.session} width={tileW} /> : null}
                   {p.kind === 'clip' && <Ionicons name="play" size={14} color="#FFFFFF" style={styles.tilePlay} />}
                   {(p.videoUrl || p.kind === 'clip') && (p.views ?? 0) > 0 ? <TileViews views={p.views ?? 0} /> : null}
                   {/* Pinned, top left; the tile's own label says "pinned" to a screen reader. */}

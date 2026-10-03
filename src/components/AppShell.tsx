@@ -45,6 +45,8 @@ const routes = Object.keys(paths).map(name => ({ key: name, name }));
  */
 const SHEETS = new Set(['/compose', '/share', '/pick-group', '/pick-court', '/ask', '/post-menu', '/edit-post', '/messages/new', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility']);
 const TAB_ORDER: string[] = Object.values(paths);
+/** The pages that can take a clip's stage (see commentStage): its comments, and its session stats. */
+const STAGE_ROUTES = new Set(['/comments', '/session-stats']);
 export function AppShell({ children }: { children: React.ReactNode }) {
   useTheme();
   const pathname = usePathname();
@@ -173,7 +175,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // menu sits at the side, out of their way, so it stays, the way
   // Instagram's does behind its Create box. Sign-in, setup and the camera
   // hide it everywhere.
-  const phoneOnlyHide = ['/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/invite', '/comments', '/share', '/pick-group', '/likes', '/post-menu', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/wrapped'].includes(pathname) || pathname.startsWith('/messages/');
+  const phoneOnlyHide = ['/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/invite', '/comments', '/session-stats', '/who-played', '/share', '/pick-group', '/likes', '/post-menu', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/wrapped'].includes(pathname) || pathname.startsWith('/messages/');
   // Arriving from the password-reset email is its own calm page, with no app around it yet.
   // (The comments' own address says which clip they are about, for the stage below.)
   const { reset, kind: routeKind, id: routeId, stage: routeStage } = useGlobalSearchParams<{ reset?: string; kind?: string; id?: string; stage?: string }>();
@@ -191,8 +193,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // and as the page grows back if the comments went without their own close.
   const stageBar = useStageSelect((s) => (s && s.mode === 'stage' && !s.covered ? `${s.key}|${s.mounted && !s.ending ? 'up' : 'moving'}` : ''));
   const [barKey, barPhase] = stageBar.split('|');
-  const commentsOnStage = pathname === '/comments' && routeStage === '1' && stageKeyOf(routeKind === 'hit' ? 'hit' : 'post', routeId ?? '') === barKey;
-  const barOnStage = isPhone && !!stageBar && (commentsOnStage || (barPhase === 'moving' && pathname !== '/comments'));
+  // The comments and a clip's stats (session-stats) both take the stage.
+  const commentsOnStage = STAGE_ROUTES.has(pathname) && routeStage === '1' && stageKeyOf(routeKind === 'hit' ? 'hit' : 'post', routeId ?? '') === barKey;
+  const barOnStage = isPhone && !!stageBar && (commentsOnStage || (barPhase === 'moving' && !STAGE_ROUTES.has(pathname)));
   // The bar is cut off at the sheet's top as it rises (navInner holds the bar
   // still inside the cut): the sheet comes up over it, never under it.
   const navFade = useStageMotion('nav', { enabled: barOnStage });

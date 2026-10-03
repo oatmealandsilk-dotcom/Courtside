@@ -6,7 +6,10 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { DragSheet } from '@/components/DragSheet';
 import { Chips, Section, SheetTitle, Submit, Tiles, formBody } from '@/components/sheet/SheetForm';
 import { WhoYouPlayed } from '@/components/WhoYouPlayed';
-import { activityDay, activityWhen, dayWords, fromWho, loggedLabel, privateLine, statsSourceOf } from '@/features/activity/format';
+import { activityDay, activityWhen, dayWords, fromWho, loggedLabel, privateLine, sessionEyebrow, statsSourceOf } from '@/features/activity/format';
+import { showLogged } from '@/features/activity/useTrackerSession';
+import { Duration, Figure } from '@/components/session/Duration';
+import { computeStats } from '@/features/practice/stats';
 import { andList, canTagKind, firstName as firstOfName, isActive, tagsOnSession } from '@/features/activity/sessionTags';
 import { postOf, postedIndex } from '@/features/activity/recent';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
@@ -20,7 +23,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, font, radius, spacing, typography } from '@/theme';
 
 const KINDS: { value: PracticeSession['kind']; label: string }[] = [
   { value: 'practice', label: 'Practice' },
@@ -30,7 +33,13 @@ const KINDS: { value: PracticeSession['kind']; label: string }[] = [
 ];
 const LENGTHS = [30, 60, 90, 120];
 const lengthLabel = (m: number) => (m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)}½ hr` : `${m / 60} hr`);
-const lengthTile = (m: number) => ({ value: m, top: m < 60 ? 'min' : m === 60 ? 'hour' : 'hours', main: m < 60 ? String(m) : m % 60 ? `${Math.floor(m / 60)}½` : String(m / 60), label: lengthLabel(m) });
+/** A length as the rest of the app writes it: "30m", "1h", "1h 30m", "2h", big figures with small units. */
+const lengthTile = (m: number) => ({
+  value: m, top: '', main: duration(m), label: lengthLabel(m),
+  draw: (on: boolean) => (m >= 60 && m % 60
+    ? <Duration minutes={m} size={22} color={on ? colors.bg : colors.text} unitColor={on ? colors.bg : colors.textMuted} />
+    : <Figure value={m < 60 ? m : m / 60} unit={m < 60 ? 'm' : 'h'} size={22} unitScale={0.4} color={on ? colors.bg : colors.text} unitColor={on ? colors.bg : colors.textMuted} />),
+});
 
 /** The usual lengths, with the nearest one swapped for the tracker's own minutes, so it sits where it belongs and is picked already. */
 function lengthsFor(a: DetectedActivity) {
@@ -66,10 +75,33 @@ function lengthsFor(a: DetectedActivity) {
  * people can be tagged after the fact. A copy of someone else's session
  * (from their tag) is theirs to tag, so it says so instead.
  */
-export default function LogSession() {
+export default function LogSessionRoute() {
+  const { activity, hit, edit } = useLocalSearchParams<{ activity?: string; hit?: string; edit?: string }>();
+  // A tracker's session is logged from the composer now (Oct 2): "Log it"
+  // opens a new post with the session on it, with "Just log it" beside Share.
+  // This page still opens from the lock screen's alert and older alert rows
+  // (the server's link says /log-session?activity=), so it hands those on.
+  if (activity && !edit) return <ToComposer activity={activity} hit={hit} />;
+  return <LogSession />;
+}
+
+function ToComposer({ activity, hit }: { activity: string; hit?: string }) {
+  useEffect(() => { router.replace({ pathname: '/compose', params: { activity, ...(hit ? { hit } : {}) } }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+/*
+ * Logging by hand (Your sessions, the + menu, a hit with no tracker copy) and
+ * editing a log (?edit=). Since Oct 2 a tracker's session (?activity=) never
+ * reaches here: LogSessionRoute hands it to the composer. The tracker parts
+ * below (`fresh`, "Save and post", "Post it") are only kept for an address
+ * carrying both ?edit= and ?activity=, which nothing in the app sends; they
+ * can go once the old lock-screen links have aged out (30 days).
+ */
+function LogSession() {
   const styles = useThemedStyles(styleDefinitions);
   const { activity, hit, edit } = useLocalSearchParams<{ activity?: string; hit?: string; edit?: string }>();
-  const { actions, detectedActivities, remoteLoaded, ready, hitRequests, currentUserId, users, posts, sessions, sessionTags, sessionTagsReady } = useApp();
+  const { actions, detectedActivities, remoteLoaded, ready, hitRequests, currentUserId, users, posts, stories, sessions, sessionTags, sessionTagsReady } = useApp();
   // The box you type in stays above a phone's keyboard, and so do the names listed under it.
   const { scroller, onScroll, reveal } = useKeyboardReveal();
   // The hit it was opened for: the prompt's words, or the hit itself if the app was reloaded on the way.
@@ -228,7 +260,12 @@ export default function LogSession() {
       // save went through, and says "Posted" when shared. A toast there would
       // sit over its Share button for a few seconds.
       if (post && fresh) next.current = fresh.id;
-      else showToast({ title: 'Session logged', body: asked ? `${asked} will be asked to accept.` : 'Your streak and numbers are up to date.', icon: 'checkmark-circle-outline' });
+      else if (asked) showToast({ title: 'Logged', body: `${asked} will be asked to accept.`, glyph: 'logged' });
+      else {
+        // "Logged · 1h 30m · Match · Won", and the streak once it is two days or more.
+        const streak = currentUserId ? computeStats(currentUserId, [{ id: id, userId: currentUserId, day, minutes, kind, createdAt: new Date().toISOString() }, ...sessions], posts, stories).currentStreakDays : 0;
+        showLogged(minutes, { kind, won: kind === 'match' && won ? won === 'won' : undefined }, streak);
+      }
       close();
     } catch (e) {
       setFrozen(null);
@@ -240,6 +277,7 @@ export default function LogSession() {
     }
   };
 
+  const heroDay = when === 'today' ? localDay(new Date()) : localDay(Date.now() - 86_400_000);
   const hide = (x: DetectedActivity) => confirm({
     title: 'Hide this session?',
     message: 'It won’t count toward your streak.',
@@ -327,6 +365,20 @@ export default function LogSession() {
         <ScrollView ref={scroller} onScroll={onScroll} scrollEventThrottle={32} contentContainerStyle={formBody} keyboardShouldPersistTaps="handled">
           {gone ? <Text style={styles.notice}>That session is no longer here.</Text> : null}
           {numbers ? <Text style={styles.numbers}>{numbers}</Text> : null}
+          {/* The session as it will go in your log, in the sessions' own look: what and when, then the time, big. */}
+          {minutes && !fresh ? (
+            <View style={styles.hero} accessible accessibilityLabel={`${sessionEyebrow({ kind, day: heroDay }).toLowerCase()}, ${duration(minutes)}`}>
+              <Text style={styles.heroEyebrow}>{sessionEyebrow({ kind, day: heroDay })}</Text>
+              <View style={styles.heroRow}>
+                <Duration minutes={minutes} size={56} color={colors.text} unitColor={colors.textMuted} />
+                {kind === 'match' && won ? (
+                  <View style={[styles.result, won === 'won' ? styles.resultWon : styles.resultLost]}>
+                    <Text style={[styles.resultText, { color: won === 'won' ? colors.brandInk : colors.textMuted }]}>{won === 'won' ? 'Won' : 'Lost'}</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
           <Section title="What was it">
             <Chips value={kind} onChange={(k) => { if (k) setKind(k); }} options={KINDS} />
           </Section>
@@ -387,6 +439,13 @@ export default function LogSession() {
 
 const styleDefinitions = StyleSheet.create({
   error: { ...typography.small, color: colors.danger },
+  hero: { gap: 4 },
+  heroEyebrow: { ...font('600'), fontSize: 11, letterSpacing: 0.88, color: colors.textMuted },
+  heroRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  result: { height: 30, paddingHorizontal: 12, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  resultWon: { backgroundColor: colors.brand },
+  resultLost: { borderWidth: 1, borderColor: colors.borderStrong },
+  resultText: { ...font('700'), fontSize: 14 },
   wait: { alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.xxl },
   notice: { ...typography.smallStrong, color: colors.text },
   numbers: { ...typography.caption, color: colors.textMuted, fontVariant: ['tabular-nums'] },

@@ -4,16 +4,20 @@ import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from '
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
+import { useReducedMotion } from '@/lib/useReducedMotion';
+import { STAGE_EASING } from '@/features/feed/commentStage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Glass } from '@/components/ui/Glass';
 import { HitGlyph } from '@/components/HitGlyph';
+import { ZoneGlyph } from '@/components/session/ZoneGlyph';
+import { DrawnTick } from '@/components/session/DrawnTick';
 import { useBelowBanner } from '@/features/messages/bannerSpace';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { goHome } from '@/lib/goBack';
 import { onWithdraw, useToast, type ToastClosed, type ToastMessage } from '@/lib/toast';
-import { colors, spacing, typography } from '@/theme';
+import { colors, font, spacing, typography } from '@/theme';
 
 const SHOW_MS = 2800;
 // A toast with a button ("Undo") waits longer: long enough to read it,
@@ -138,8 +142,8 @@ export function Toast() {
                 }}
                 style={[styles.info, action && styles.infoBeforeAction]}
               >
-                {/* 'hit' is the app's own hit mark, as on the map and the hit cards. */}
-                {icon === 'hit'
+                {/* 'hit' is the app's own hit mark, as on the map and the hit cards; a session's marks sit in a brand disc. */}
+                {toast.glyph ? <Disc glyph={toast.glyph} token={toast.id} /> : icon === 'hit'
                   ? <HitGlyph size={17} color={colors.text} />
                   : <Ionicons name={icon as keyof typeof Ionicons.glyphMap} size={16} color={colors.text} />}
                 <View style={styles.words}>
@@ -148,6 +152,7 @@ export function Toast() {
                   {toast.body ? <Text style={styles.body} numberOfLines={toast.long ? 4 : 1}>{toast.body}</Text> : null}
                 </View>
               </Pressable>
+              {toast.stat ? <Stat value={toast.stat.value} label={toast.stat.label} token={toast.id} /> : null}
               {/* Its own button beside the words, not part of them, so a tap on
                   the words still only opens what the toast is about. */}
               {action ? (
@@ -169,7 +174,50 @@ export function Toast() {
   );
 }
 
+/**
+ * A session's mark in a brand disc: the zone bars ("Tennis detected"), or a
+ * tick that draws itself in from the left a moment after the toast lands
+ * ("Logged"), with a light buzz as it finishes.
+ */
+function Disc({ glyph, token }: { glyph: 'session' | 'logged'; token: number }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={[styles.disc, { backgroundColor: colors.brand }]}>
+      {glyph === 'session' ? <ZoneGlyph size={15} color={colors.brandInk} /> : <DrawnTick size={16} color={colors.brandInk} delay={250} duration={320} token={token} />}
+    </View>
+  );
+}
+
+/** "10 / day streak" beside the words, behind a thin rule; it rolls up from 9 to 10 once the toast has settled. */
+function Stat({ value, label, token }: { value: number; label: string; token: number }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const reduced = useReducedMotion();
+  const roll = useSharedValue(reduced ? 1 : 0);
+  useEffect(() => {
+    if (reduced) { roll.value = 1; return; }
+    roll.value = 0;
+    roll.value = withDelay(600, withTiming(1, { duration: 420, easing: STAGE_EASING }));
+  }, [token, reduced, roll]);
+  const rolling = useAnimatedStyle(() => ({ transform: [{ translateY: -26 * roll.value }] }));
+  return (
+    <View style={styles.stat} accessible accessibilityLabel={`${value} ${label}`}>
+      <View style={styles.statWindow}>
+        <Animated.View style={rolling}>
+          <Text style={styles.statValue}>{Math.max(0, value - 1)}</Text>
+          <Text style={styles.statValue}>{value}</Text>
+        </Animated.View>
+      </View>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
 const styleDefinitions = StyleSheet.create({
+  disc: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  stat: { alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14, marginLeft: 4, borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.borderStrong, minWidth: 64 },
+  statWindow: { height: 26, overflow: 'hidden' },
+  statValue: { fontSize: 24, lineHeight: 26, ...font('600'), letterSpacing: -0.8, color: colors.text, textAlign: 'center', fontVariant: ['tabular-nums'] },
+  statLabel: { fontSize: 10, ...font('600'), color: colors.textMuted, marginTop: 1 },
   wrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, zIndex: 50, alignItems: 'center' },
   // The shadow on a rounded layer of its own, so it follows the capsule's corners.
   shadow: { maxWidth: 340, borderRadius: 22, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 6 },

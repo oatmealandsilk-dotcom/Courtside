@@ -79,6 +79,10 @@ export default function RootLayout() {
           <Stack.Screen name="compose" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="ask" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="comments" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+          {/* A session's stats: the comments' stage from a clip's pill, the plain sheet from a post (session-stats.tsx). */}
+          <Stack.Screen name="session-stats" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+          {/* "Who you played", from the composer of a session's post: a sheet over it. */}
+          <Stack.Screen name="who-played" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="post-menu" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="invite" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="log-session" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />

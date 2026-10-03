@@ -14,8 +14,8 @@ import { isNewHere } from '@/features/feed/newHere';
 import { RichText } from '@/components/RichText';
 import type { Post, User } from '@/data/types';
 import { openCourt } from '@/features/players/courtLink';
-import { hasSessionStats, reelStatsChunks } from '@/features/activity/format';
-import { StatsWords } from '@/components/SessionStats';
+import { hasSessionStats } from '@/features/activity/format';
+import { StatsPill } from '@/components/session/StatsPill';
 import { compactNumber, relativeTime, timeLeft } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useTourBusy } from '@/features/tour/tourStore';
@@ -92,7 +92,7 @@ export const railCount = (n: number) => (n > 0 ? compactNumber(n) : ' ');
  * top and the clip still playing above them, as Instagram does since Dec
  * 2025. The name, the place, "with" and each #tag keep their own taps.
  */
-export function ReelCaption({ post, author, onAuthor, onOpenComments }: { post: Post; author: User; onAuthor: () => void; onOpenComments?: (from?: unknown) => void }) {
+export function ReelCaption({ post, author, onAuthor, onOpenComments, onOpenStats, active = false }: { post: Post; author: User; onAuthor: () => void; onOpenComments?: (from?: unknown) => void; onOpenStats?: () => void; active?: boolean }) {
   const { users, blockedIds } = useApp();
   const touring = useTourBusy();
   const timeButton = useRef<View>(null);
@@ -150,21 +150,11 @@ export function ReelCaption({ post, author, onAuthor, onOpenComments }: { post: 
           </Pressable>
         ) : null}
       </View>
-      {/* A clip with a session attached: its stats on one more quiet line ("1h 24m · Data by WHOOP",
-          "Match · Won · 1h 15m · vs @miraplays +2"). What it was, the result and the time lead, so a
-          doubles match never cuts them off; the first player's handle opens them, "+2" everyone who played. */}
+      {/* A clip with a session attached: one glass pill under the small line, "1h 24m · Won · 171 bpm | See stats".
+          A tap raises the stats with the clip still playing above them (session-stats); the names are in there, not here. */}
       {post.session && hasSessionStats(post.session) ? (
-        <View style={styles.metaItem}>
-          <Ionicons name="stopwatch-outline" size={12} color={META_INK} style={EDGE_SMALL} />
-          <StatsWords
-            chunks={reelStatsChunks(post.session, blockedIds)}
-            style={styles.metaText}
-            handleStyle={styles.metaHandle}
-            numberOfLines={1}
-            maxFontSizeMultiplier={MAX_GROW}
-            onMore={() => router.push({ pathname: '/likes', params: { id: post.id, set: 'played' } })}
-            moreLabel="Everyone who played"
-          />
+        <View style={styles.pill}>
+          <StatsPill session={post.session} hidden={blockedIds} onPress={onOpenStats} active={active} />
         </View>
       ) : null}
     </View>
@@ -455,6 +445,8 @@ const styles = StyleSheet.create({
   metaText: { color: META_INK, fontSize: 13, lineHeight: 16, ...font('500'), letterSpacing: 0.1, fontVariant: ['tabular-nums'], flexShrink: 1, ...EDGE_SMALL },
   // A player's handle in the stats line: the line's own ink, a step bolder, so it reads as a name to tap.
   metaHandle: { color: META_INK, ...font('600') },
+  // The session's pill: 10 under the small line.
+  pill: { marginTop: 10 },
   // Out of the words' layout, 10 above the name, in the words' column (16 in from the left, clear of the rail).
   hint: { position: 'absolute', left: 16, right: 72, bottom: '100%', marginBottom: 10, color: 'rgba(255,255,255,0.8)', fontSize: 12, lineHeight: 15, ...font('500'), letterSpacing: 0.1, ...EDGE_SMALL },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0 },

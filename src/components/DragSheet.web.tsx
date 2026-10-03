@@ -62,6 +62,7 @@ export function DragSheet({
   peekFraction = 0.66,
   closeSignal = 0,
   fitContent = false,
+  contentHeight,
   side = false,
   onSettled,
   stage,
@@ -78,6 +79,8 @@ export function DragSheet({
   closeSignal?: number;
   /** On a computer, size the box to its contents (a short form) rather than a fixed height (a list). */
   fitContent?: boolean;
+  /** How tall its contents are, once known: a phone's sheet opens only as tall as its header and that need (see the native twin). */
+  contentHeight?: number;
   /** On a wide computer screen, dock to the right instead of covering the middle, so what it is about stays in view. */
   side?: boolean;
   /** The sheet has come to rest where it was going (first: it has finished opening). */
@@ -93,7 +96,7 @@ export function DragSheet({
   if (dialog && side && window.innerWidth >= SIDE_MIN_WINDOW) return <SidePanel header={header} onDismissed={onDismissed} closeSignal={closeSignal} onSettled={onSettled} active={active}>{children}</SidePanel>;
   if (dialog) return <DialogBox header={header} onDismissed={onDismissed} closeSignal={closeSignal} fitContent={fitContent} onSettled={onSettled} active={active}>{children}</DialogBox>;
   if (stage) return <StageSheet header={header} onDismissed={onDismissed} closeSignal={closeSignal} onSettled={onSettled} geo={stage} stageOverlay={stageOverlay} active={active}>{children}</StageSheet>;
-  return <Sheet header={header} onDismissed={onDismissed} peekFraction={peekFraction} closeSignal={closeSignal} onSettled={onSettled} active={active}>{children}</Sheet>;
+  return <Sheet header={header} onDismissed={onDismissed} peekFraction={peekFraction} closeSignal={closeSignal} onSettled={onSettled} active={active} contentHeight={contentHeight}>{children}</Sheet>;
 }
 
 const SIDE_WIDTH = 420;
@@ -221,6 +224,7 @@ function Sheet({
   closeSignal = 0,
   onSettled,
   active,
+  contentHeight,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -229,11 +233,17 @@ function Sheet({
   closeSignal?: number;
   onSettled?: () => void;
   active: boolean;
+  contentHeight?: number;
 }) {
   // Hears a theme change, so its own colours never lag the page's.
   useTheme();
   const insets = useSafeAreaInsets();
   const area = useRef<HTMLDivElement>(null);
+  const head = useRef<HTMLDivElement>(null);
+  // Fitted to a short sheet's contents once measured; a drag or the keyboard ends that.
+  const fit = useRef(contentHeight ?? 0);
+  fit.current = contentHeight ?? 0;
+  const touched = useRef(false);
   const sheet = useRef<HTMLDivElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
   const dismissed = useRef(false);
@@ -268,9 +278,12 @@ function Sheet({
       // A sliver of the page behind stays visible even fully open — the
       // depth cue Apple's own card sheets use instead of ever truly covering the screen.
       const fullHeight = Math.max(1, vh - insets.top - 20);
-      const peekHeight = Math.min(fullHeight, Math.round(vh * peekFraction));
+      const peek = Math.min(fullHeight, Math.round(vh * peekFraction));
+      const headH = head.current?.offsetHeight ?? 0;
+      const peekHeight = fit.current && headH ? Math.min(peek, Math.round(headH + fit.current + insets.bottom)) : peek;
       geometry.current = { fullHeight, openOffset: fullHeight - peekHeight };
     };
+    measureRef.current = measure;
     measure();
     place(geometry.current.fullHeight, 0);
     // One frame so the opening slide is seen rather than starting already open.
@@ -279,11 +292,20 @@ function Sheet({
     window.addEventListener('resize', measure);
     // A phone's keyboard shrinks the visible area without a window resize; the sheet re-measures and keeps its box above it.
     const vv = window.visualViewport;
-    const onViewport = () => { measure(); place(0, 160); };
+    const onViewport = () => { measure(); touched.current = true; place(0, 160); };
     vv?.addEventListener('resize', onViewport);
     return () => { cancelAnimationFrame(frame); clearTimeout(settled); window.removeEventListener('resize', measure); vv?.removeEventListener('resize', onViewport); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The contents measured after the opening began: it settles at their height instead.
+  const measureRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    if (!contentHeight || touched.current || dismissed.current) return;
+    measureRef.current();
+    place(geometry.current.openOffset, OPEN_MS);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contentHeight]);
 
   const finish = () => {
     if (dismissed.current) return;
@@ -291,6 +313,7 @@ function Sheet({
     onDismissed();
   };
   const close = () => {
+    touched.current = true;
     place(geometry.current.fullHeight, SETTLE_MS, 'cubic-bezier(.4,0,1,1)');
     window.setTimeout(finish, SETTLE_MS + 20);
   };
@@ -308,6 +331,7 @@ function Sheet({
   const onPointerDown = (event: React.PointerEvent) => {
     if (!event.isPrimary || event.button !== 0) return;
     drag.current = { startY: event.clientY, originY: current.current, lastY: event.clientY, lastT: performance.now(), velocity: 0, moved: false };
+    touched.current = true;
   };
   const onPointerMove = (event: React.PointerEvent) => {
     const d = drag.current;
@@ -360,6 +384,7 @@ function Sheet({
       >
         <Wash height={300} strength={0.85} />
         <div
+          ref={head}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}

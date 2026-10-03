@@ -107,7 +107,9 @@ export function sessionFromActivity(a: DetectedActivity, showHr: boolean, adult:
     drills: [],
     activityId: a.id,
     source: statsSourceOf(a),
-    ...(showHr && adult && a.maxHr ? { maxHr: a.maxHr, ...(a.avgHr ? { avgHr: a.avgHr } : {}) } : {}),
+    // The day it was played where it was played (never the time), as the server writes it (migration 65).
+    ...(a.tzOffsetMin != null ? { day: activityDay(a) } : {}),
+    ...(showHr && adult && a.maxHr ? { maxHr: a.maxHr, ...(a.avgHr ? { avgHr: a.avgHr } : {}), ...(a.zones ? { zones: a.zones } : {}) } : {}),
   };
 }
 
@@ -249,6 +251,60 @@ export function sessionFromLogged(s: PracticeSession): SessionDetail {
     drills: [],
     sessionId: s.id,
     kind: s.kind,
+    day: s.day,
     ...(s.kind === 'match' && s.won !== undefined ? { won: s.won } : {}),
+  };
+}
+
+/* ------------------------------------------- the session's own look (Oct 2) */
+
+/** A duration as figures and units, for big numbers with small units: 42 → 42 m; 84 → 1 h 24 m; 65 → 1 h 05 m. */
+export function durationParts(min: number): { n: string; u: string }[] {
+  const m = Math.max(0, Math.round(min));
+  if (m < 60) return [{ n: String(m), u: 'm' }];
+  return [{ n: String(Math.floor(m / 60)), u: 'h' }, { n: String(m % 60).padStart(2, '0'), u: 'm' }];
+}
+
+/** "1 hour 24 minutes", for a screen reader. */
+export function spokenDuration(min: number): string {
+  const m = Math.max(0, Math.round(min));
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  const hours = h ? `${h} ${h === 1 ? 'hour' : 'hours'}` : '';
+  const mins = r || !h ? `${r} ${r === 1 ? 'minute' : 'minutes'}` : '';
+  return [hours, mins].filter(Boolean).join(' ');
+}
+
+/** What it was in a word: "Match", "Practice", or "Tennis" when the post does not say (a tracker's session not logged, a post from before migration 65). */
+export const kindWord = (s: Pick<SessionDetail, 'kind'>) => (s.kind ? KIND_LABEL[s.kind] : 'Tennis');
+
+/** "Won", "Lost", or null when it was not a match with a result. */
+export const resultWord = (s: Pick<SessionDetail, 'kind' | 'won'>) => (s.kind === 'match' && s.won !== undefined ? (s.won ? 'Won' : 'Lost') : null);
+
+/**
+ * The small line over a session's numbers: "MATCH · FRI OCT 2", "PRACTICE ·
+ * TODAY". Just "TENNIS" when the post says neither what it was nor which day.
+ */
+export function sessionEyebrow(s: Pick<SessionDetail, 'kind' | 'day'>, now = new Date()): string {
+  const kind = kindWord(s);
+  return (s.day ? `${kind} · ${dayWords(s.day, now)}` : kind).toUpperCase();
+}
+
+/** "on court", or "active" for a gym session. */
+export const onCourtWord = (s: Pick<SessionDetail, 'kind'>) => (s.kind === 'fitness' ? 'active' : 'on court');
+
+/**
+ * What the pill over a clip says, in the order it gives way: the time never,
+ * then the third piece (heart rate, or the first player when there is no
+ * heart rate), then the result (or what it was).
+ */
+export function pillPieces(s: SessionDetail, hidden: ID[] = []): { time: string; result: string; third: string | null } {
+  const { opponents, partners } = sessionPeople(s, hidden);
+  const lead = opponents[0] ?? partners[0];
+  const first = lead ? (lead.name?.trim().split(/\s+/)[0] || `@${lead.handle}`) : '';
+  return {
+    time: duration(s.minutes),
+    result: resultWord(s) ?? kindWord(s),
+    third: s.maxHr ? `${s.maxHr} bpm` : lead ? `${opponents.length ? 'vs' : 'with'} ${first}` : null,
   };
 }

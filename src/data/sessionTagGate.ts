@@ -28,10 +28,14 @@ export function trustedSession(session: Post['session'] | null | undefined): Pos
   return rest;
 }
 
-/** A post's session stats as they are sent: the names are the server's to write, never this phone's. */
+/**
+ * A post's session stats as they are sent: the names and the heart-rate
+ * zones are the server's to write (migrations 62 and 65), never this phone's.
+ * The copy shown here straight away may carry them; the sent one does not.
+ */
 export function sessionToSend(session: Post['session'] | null | undefined): Post['session'] | null {
   if (!session) return null;
-  const { with: _shown, ...rest } = session;
+  const { with: _shown, zones: _zones, ...rest } = session;
   return rest;
 }
 

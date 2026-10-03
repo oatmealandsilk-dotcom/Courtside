@@ -10,6 +10,7 @@ import React, {
 } from 'react';
 import { AppState as DeviceState, Platform } from 'react-native';
 import { randomUUID } from 'expo-crypto';
+import { router } from 'expo-router';
 import { computeStats, localDay, streakAtRisk } from '@/features/practice/stats';
 import { planStreakReminder } from '@/features/practice/reminder';
 import { TERMS_VERSION } from '@/lib/legal';
@@ -29,7 +30,7 @@ import { connectProvider, disconnectProvider } from '@/lib/integrations';
 import { appleHealthAvailable, connectAppleHealth, readAppleHealth, readAppleNutrition } from '@/features/health/appleHealth';
 import { tennisFlags } from '@/features/activity/flags';
 import { checkForTennis } from '@/features/activity/check';
-import { fromWho } from '@/features/activity/format';
+import { pickSource } from '@/features/activity/recent';
 import { MAX_SESSION_TAGS, REFUSALS, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
 import { duration } from '@/lib/format';
 import { takeReferrer } from '@/features/invite/referral';
@@ -1306,6 +1307,35 @@ function addLiveComments(prev: AppState, got: Comment[], kind: 'post' | 'hit'): 
   return { ...prev, comments: [...prev.comments, ...fresh], posts, stories };
 }
 
+/**
+ * Your posts carrying a tracker's session, kept in step with its log, as the
+ * server keeps them (migration 65): once logged (`activityId`, `log`) a post
+ * says what the log says, its time staying the tracker's; once the log is
+ * deleted (`deletedId`) a tracker's post goes back to "Tennis", with no names. A post from
+ * a session logged by hand keeps what it said.
+ */
+function postsFollowLog(posts: Post[], me: ID, activityId: ID | null, log: PracticeSession | null, deletedId?: ID): Post[] {
+  let changed = false;
+  const next = posts.map((p) => {
+    const s = p.session;
+    if (p.authorId !== me || !s || !s.activityId) return p;
+    if (log && s.activityId === activityId) {
+      changed = true;
+      const won = log.kind === 'match' && log.won !== undefined ? log.won : undefined;
+      const { won: _w, ...rest } = s;
+      return { ...p, session: { ...rest, kind: log.kind, focus: log.kind === 'match' && won !== undefined ? `Match · ${won ? 'Won' : 'Lost'}` : log.kind.charAt(0).toUpperCase() + log.kind.slice(1), sessionId: log.id, day: log.day, ...(won !== undefined ? { won } : {}) } };
+    }
+    if (deletedId && s.sessionId === deletedId) {
+      changed = true;
+      // The names go with the log too, as the server takes them off.
+      const { kind: _k, won: _w, sessionId: _s, with: _with, ...rest } = s;
+      return { ...p, session: { ...rest, focus: 'Tennis' } };
+    }
+    return p;
+  });
+  return changed ? next : posts;
+}
+
 /** A comment deleted elsewhere: gone here too, with its replies (the database removes them with it). */
 function dropComment(prev: AppState, commentId: ID): AppState {
   if (!prev.comments.some((c) => c.id === commentId)) return prev;
@@ -1327,6 +1357,12 @@ const demoHandle: string | null = (() => {
     if (asked) { window.sessionStorage.setItem('courtside-demo-as', asked); return asked; }
     return window.sessionStorage.getItem('courtside-demo-as');
   } catch { return null; }
+})();
+
+/** Demo build in a browser: `?toast=tennis` puts up the "Tennis detected" note for your waiting session, so the Log it flow can be seen. */
+const demoTennisToast: boolean = (() => {
+  if (isSupabaseConfigured || Platform.OS !== 'web') return false;
+  try { return new URLSearchParams(window.location.search).get('toast') === 'tennis'; } catch { return false; }
 })();
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -2261,10 +2297,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const markActivity = (prev: AppState, patch: Pick<DetectedActivity, 'status' | 'sessionId'>) =>
       (had ? prev.detectedActivities.map((a) => (a.id === had.id ? { ...a, ...patch } : a)) : prev.detectedActivities);
     haptics.commit();
-    setState((prev) => ({ ...prev, sessions: [session, ...prev.sessions], detectedActivities: markActivity(prev, { status: 'logged', sessionId: session.id }) }));
+    // A tracker's session already on a post of yours: the post now says what the log says
+    // (the server does the same, migration 65; this is the copy on this phone meanwhile).
+    const before = stateRef.current.posts;
+    setState((prev) => ({ ...prev, sessions: [session, ...prev.sessions], detectedActivities: markActivity(prev, { status: 'logged', sessionId: session.id }), posts: input.activityId ? postsFollowLog(prev.posts, me, input.activityId, session) : prev.posts }));
     if (!live(me)) return session.id;
     try { await remote.insertSession(session); } catch (e) {
-      setState((prev) => ({ ...prev, sessions: prev.sessions.filter((x) => x.id !== session.id), detectedActivities: markActivity(prev, { status: had?.status ?? 'new', sessionId: had?.sessionId }) }));
+      setState((prev) => ({ ...prev, sessions: prev.sessions.filter((x) => x.id !== session.id), detectedActivities: markActivity(prev, { status: had?.status ?? 'new', sessionId: had?.sessionId }), posts: prev.posts.map((p) => (input.activityId && p.authorId === me && p.session?.activityId === input.activityId ? before.find((b) => b.id === p.id) ?? p : p)) }));
       throw e;
     }
     return session.id;
@@ -2275,6 +2314,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({
       ...prev,
       sessions: prev.sessions.filter((x) => x.id !== id),
+      // A tracker's post goes back to "Tennis"; one logged by hand keeps what it said (migration 65).
+      posts: me ? postsFollowLog(prev.posts, me, null, null, id) : prev.posts,
       // A tracker session it was logged from is waiting to be logged again, as the database puts it back (migration 58).
       detectedActivities: prev.detectedActivities.map((a) => (a.sessionId === id && a.status === 'logged' ? { ...a, status: 'new', sessionId: undefined } : a)),
       // Its tags go with it (the database deletes them too, migration 62); a copy of someone else's session only loses its link.
@@ -5413,9 +5454,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (notes.length) setState((prev) => ({ ...prev, notifications: [...notes.filter((n) => !prev.notifications.some((x) => x.id === n.id)), ...prev.notifications] }));
     // The newest one gets a banner; the rest wait in Notifications.
     const a = (list ?? stateRef.current.detectedActivities).filter((x) => filed.includes(x.id)).sort((x, y) => (x.startedAt < y.startedAt ? 1 : -1))[0];
-    if (a) showToast({ title: 'Tennis detected', body: `${duration(a.minutes)} from ${fromWho(a)}. Tap to log it.`, icon: 'stopwatch-outline', href: `/log-session?activity=${a.id}` });
+    // Your own numbers, for you only: the lock-screen push never carries them (migration 58).
+    // "Log it" opens the composer with the session on it (Oct 2): post it, or just log it.
+    if (a) {
+      const href = `/compose?activity=${a.id}`;
+      showToast({
+        title: 'Tennis detected',
+        body: [duration(a.minutes), a.maxHr ? `${a.maxHr} max bpm` : null, pickSource({ type: 'tracker', activity: a })].filter(Boolean).join(' · '),
+        glyph: 'session',
+        href,
+        action: { label: 'Log it', onPress: () => router.push(href as never) },
+      });
+    }
   }, []);
   const checkForActivities = useCallback((force = false) => checkWith(force, stateRef.current.integrations), [checkWith]);
+  // The demo's own "Tennis detected" (see demoTennisToast), once the app is up.
+  const demoToastShown = useRef(false);
+  useEffect(() => {
+    if (!demoTennisToast || demoToastShown.current || !state.ready || !state.currentUserId) return undefined;
+    const a = state.detectedActivities.find((x) => x.userId === state.currentUserId && x.status === 'new');
+    if (!a) return undefined;
+    const t = setTimeout(() => {
+      demoToastShown.current = true;
+      const href = `/compose?activity=${a.id}`;
+      showToast({ title: 'Tennis detected', body: [duration(a.minutes), a.maxHr ? `${a.maxHr} max bpm` : null, pickSource({ type: 'tracker', activity: a })].filter(Boolean).join(' · '), glyph: 'session', href, action: { label: 'Log it', onPress: () => router.push(href as never) }, holdMs: 12000 });
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [state.ready, state.currentUserId, state.detectedActivities]);
 
   const refreshActivities = useCallback(async () => {
     const me = stateRef.current.currentUserId;
