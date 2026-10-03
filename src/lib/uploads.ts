@@ -36,10 +36,27 @@ export function startUpload(id: string, label: string, thumb?: string, tags?: st
   emit();
 }
 
+/**
+ * Progress comes in very fast while a video shrinks (the phone's own code
+ * reports many times a second). Each report used to redraw the strip at
+ * once, and a 28 MB clip sent enough of them in a row to crash the app
+ * ("Maximum update depth", Oct 3). Now a report only counts when it moves
+ * the bar by at least half a percent, and the strip hears about it at most
+ * once a frame.
+ */
+let progressFrame: ReturnType<typeof setTimeout> | null = null;
 export function setUploadProgress(id: string, fraction: number) {
   const clamped = Math.max(0, Math.min(1, fraction));
-  jobs = jobs.map((j) => (j.id === id && j.state === 'uploading' && clamped > j.fraction ? { ...j, fraction: clamped } : j));
-  emit();
+  let moved = false;
+  const next = jobs.map((j) => {
+    if (j.id !== id || j.state !== 'uploading' || clamped < j.fraction + 0.005) return j;
+    moved = true;
+    return { ...j, fraction: clamped };
+  });
+  if (!moved) return;
+  jobs = next;
+  if (progressFrame) return;
+  progressFrame = setTimeout(() => { progressFrame = null; emit(); }, 16);
 }
 
 /** Marks the job finished; it leaves the strip on its own a moment later. */
