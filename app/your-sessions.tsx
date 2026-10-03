@@ -21,6 +21,9 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
 
 /** Weeks shown at first; "Show earlier weeks" adds as many again. */
 const WEEKS = 8;
+/** A session row's top and bottom padding, and the height of its first line (the big number, and the button beside it). */
+const ROW_PAD = 14;
+const HERO_LINE = 32;
 
 /** The Monday a day's week starts on, as a day ("2026-09-28"). */
 function weekOf(day: string): string {
@@ -207,20 +210,46 @@ export default function YourSessions() {
   );
 }
 
-/** A tracker's session nobody has logged: when, how long, from where, and Log it. */
+/**
+ * The tracker or the log a session came from ("WHOOP", "Apple Watch", "By
+ * hand", "Mira’s tag"), as a small quiet tag beside how long it was: worth
+ * knowing, never worth reading first.
+ */
+function SourceTag({ label }: { label: string }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={styles.tag}>
+      <Text style={styles.tagText} numberOfLines={1}>{label}</Text>
+    </View>
+  );
+}
+
+/**
+ * A tracker's session nobody has logged: how long first and big, then what
+ * it was, then the day and the times on a short line of their own, with its
+ * source as a small tag. Log it sits beside the big number, clear of the words.
+ */
 function Waiting({ activity, line }: { activity: DetectedActivity; line: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const source = pickSource({ type: 'tracker', activity });
   return (
     <View style={[styles.row, line && styles.line]}>
-      <View style={styles.icon}><Ionicons name="stopwatch-outline" size={17} color={colors.court} /></View>
-      <View style={styles.words}>
-        <Text style={styles.title} numberOfLines={1}>{activityTitle(activity)}</Text>
-        <Text style={styles.sub}>{activityWhen(activity)} · {duration(activity.minutes)} · {source}</Text>
+      <View style={styles.rowMain}>
+        <View style={styles.icon}><Ionicons name="stopwatch-outline" size={18} color={colors.court} /></View>
+        <View style={styles.words}>
+          <View style={styles.heroLine}>
+            <Text style={styles.hero}>{duration(activity.minutes)}</Text>
+            <SourceTag label={source} />
+          </View>
+          <Text style={styles.title} numberOfLines={2}>{activityTitle(activity)}</Text>
+          <Text style={styles.when}>{activityWhen(activity, new Date(), ' · ')}</Text>
+        </View>
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Log it: ${activityTitle(activity)}`} hitSlop={8} onPress={() => router.push({ pathname: '/log-session', params: { activity: activity.id } })} style={({ pressed }) => [styles.action, styles.actionOn, pressed && styles.pressed]}>
-        <Text style={[styles.actionText, styles.actionTextOn]}>Log it</Text>
-      </Pressable>
+      <View style={styles.actionSpot}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Log it: ${activityTitle(activity)}, ${duration(activity.minutes)}`} hitSlop={8} onPress={() => router.push({ pathname: '/log-session', params: { activity: activity.id } })} style={({ pressed }) => [styles.action, styles.actionOn, pressed && styles.pressed]}>
+          <Text style={[styles.actionText, styles.actionTextOn]}>Log it</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -259,7 +288,7 @@ function TaggedYou({ tag, tagger, line }: { tag: SessionTag; tagger: User; line:
       >
         <Avatar name={tagger.name} seed={tagger.avatarSeed} uri={tagger.avatarUrl} size={40} />
         <View style={styles.words}>
-          <Text style={styles.title} numberOfLines={1}>{first} tagged you</Text>
+          <Text style={styles.tagTitle} numberOfLines={1}>{first} tagged you</Text>
           <Text style={styles.sub} numberOfLines={1}>{what} · {dayWords(tag.day)} · {duration(tag.minutes)}</Text>
         </View>
       </Pressable>
@@ -288,42 +317,62 @@ function Logged({ session: s, people, onOpen, hideNote = false, source, postId, 
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const title = `${loggedLabel(s)}${people ? ` ${peopleText(people)}` : ''}`;
+  const shownNote = s.note && !hideNote ? s.note : '';
+  const place = shownNote.startsWith('At ') ? shownNote.slice(3) : '';
+  const note = place ? '' : shownNote;
+  // Short enough to share the day's line without wrapping on a phone.
+  const shortPlace = place.length <= 18;
   return (
     <View style={[styles.row, line && styles.line]}>
       {/* The row itself, beside its button rather than around it: a button inside a button is not allowed in a browser. */}
       <Pressable
         accessibilityRole={onOpen ? 'button' : undefined}
-        accessibilityLabel={onOpen ? `${title}. ${s.fromSessionId ? 'Open the tag' : 'Who you played'}` : undefined}
+        accessibilityLabel={onOpen ? `${title}, ${duration(s.minutes)}, ${dayWords(s.day)}. ${s.fromSessionId ? 'Open the tag' : 'Who you played'}` : undefined}
         disabled={!onOpen}
         onPress={onOpen}
         style={({ pressed }) => [styles.rowMain, pressed && onOpen && styles.pressed]}
       >
         <View style={styles.icon}>
-          {s.kind === 'match' ? <Ionicons name="trophy-outline" size={17} color={colors.textMuted} />
-            : s.kind === 'fitness' ? <Ionicons name="barbell-outline" size={17} color={colors.textMuted} />
-            : <CourtGlyph size={14} color={colors.textMuted} />}
+          {s.kind === 'match' ? <Ionicons name="trophy-outline" size={18} color={colors.textMuted} />
+            : s.kind === 'fitness' ? <Ionicons name="barbell-outline" size={18} color={colors.textMuted} />
+            : <CourtGlyph size={15} color={colors.textMuted} />}
         </View>
         <View style={styles.words}>
+          {/* How long, big: the number you scan a week of sessions for. Where it came from, small beside it. */}
+          <View style={styles.heroLine}>
+            <Text style={styles.hero}>{duration(s.minutes)}</Text>
+            <SourceTag label={source} />
+          </View>
           <LoggedTitle label={loggedLabel(s)} people={people} style={styles.title} faint={styles.waiting} numberOfLines={2} />
-          <Text style={styles.sub}>{dayWords(s.day)} · {duration(s.minutes)} · {source}</Text>
-          {/* Where it was, for a session logged from a hit ("At Alder Park"); any other note as it was written. */}
-          {s.note && !hideNote ? (
-            <View style={styles.noteRow}>
-              {s.note.startsWith('At ') ? <Ionicons name="location-outline" size={12} color={colors.textFaint} /> : null}
-              <Text style={styles.note} numberOfLines={1}>{s.note.startsWith('At ') ? s.note.slice(3) : s.note}</Text>
+          {/* The day, and where, for a session logged from a hit ("At Alder Park"): "Yesterday · Alder Park" when that fits on the line, the place on its own line when it is long. */}
+          <Text style={styles.when}>
+            {dayWords(s.day)}
+            {place && shortPlace ? <>{' · '}<Ionicons name="location-outline" size={13} color={colors.textFaint} />{` ${place}`}</> : null}
+          </Text>
+          {place && !shortPlace ? (
+            <View style={styles.placeRow}>
+              <Ionicons name="location-outline" size={13} color={colors.textFaint} />
+              <Text style={styles.note} numberOfLines={2}>{place}</Text>
             </View>
           ) : null}
+          {/* Any other note, as it was written. */}
+          {note ? <Text style={styles.note} numberOfLines={2}>{note}</Text> : null}
         </View>
       </Pressable>
-      {postId ? (
-        <Pressable accessibilityRole="link" accessibilityLabel={`Posted. Open the post: ${title}`} hitSlop={8} onPress={() => router.push(`/post/${postId}`)} style={({ pressed }) => [styles.posted, pressed && styles.pressed]}>
-          <Ionicons name="checkmark" size={13} color={colors.textMuted} />
-          <Text style={styles.postedText}>Posted</Text>
-        </Pressable>
-      ) : postable ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={`Post it: ${title}`} hitSlop={8} onPress={onPost} style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
-          <Text style={styles.actionText}>Post it</Text>
-        </Pressable>
+      {/* Beside the big number, outside the row's own button: a button inside a button is not allowed in a browser. */}
+      {postId || postable ? (
+        <View style={styles.actionSpot}>
+          {postId ? (
+            <Pressable accessibilityRole="link" accessibilityLabel={`Posted. Open the post: ${title}`} hitSlop={8} onPress={() => router.push(`/post/${postId}`)} style={({ pressed }) => [styles.posted, pressed && styles.pressed]}>
+              <Ionicons name="checkmark" size={14} color={colors.textMuted} />
+              <Text style={styles.postedText}>Posted</Text>
+            </Pressable>
+          ) : (
+            <Pressable accessibilityRole="button" accessibilityLabel={`Post it: ${title}`} hitSlop={8} onPress={onPost} style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
+              <Text style={styles.actionText}>Post it</Text>
+            </Pressable>
+          )}
+        </View>
       ) : null}
     </View>
   );
@@ -336,22 +385,32 @@ const styleDefinitions = StyleSheet.create({
   weekHead: { flexDirection: 'row', alignItems: 'flex-end' },
   weekName: { flex: 1 },
   weekHours: { ...typography.small, color: colors.textMuted, fontVariant: ['tabular-nums'], paddingHorizontal: spacing.sm, paddingBottom: spacing.sm },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 60, paddingVertical: 11 },
-  rowMain: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  // A session: how long (big) with its source beside it, what it was, then when. The button rides the big number's line, top right.
+  row: { paddingVertical: ROW_PAD },
+  rowMain: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   tagRow: { gap: spacing.sm, paddingVertical: 12 },
   // Under the words, lined up with them (past the 40 of the face and the row's gap).
   answers: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingLeft: 40 + spacing.md },
   answer: { minWidth: 92, height: 34, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong },
   waiting: { ...typography.small, ...font('500'), color: colors.textFaint },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  icon: { width: 22, alignItems: 'center' },
-  words: { flex: 1, minWidth: 0, gap: 2 },
-  title: { ...typography.body, ...font('600'), color: colors.text },
+  // Centred on the big number's line.
+  icon: { width: 22, height: HERO_LINE, alignItems: 'center', justifyContent: 'center' },
+  words: { flex: 1, minWidth: 0, gap: 3 },
+  // As tall as the button beside it, so the words under it run the full width without meeting it; kept clear of the button on the right.
+  heroLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: HERO_LINE, paddingRight: 96 },
+  hero: { fontSize: 21, lineHeight: 26, ...font('600'), letterSpacing: -0.5, color: colors.text, fontVariant: ['tabular-nums'] },
+  tag: { flexShrink: 1, paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt },
+  tagText: { fontSize: 11, lineHeight: 15, ...font('600'), letterSpacing: 0.2, color: colors.textMuted },
+  title: { fontSize: 15, lineHeight: 20, ...font('500'), color: colors.text },
+  when: { fontSize: 14, lineHeight: 19, color: colors.textMuted, fontVariant: ['tabular-nums'] },
+  tagTitle: { ...typography.body, ...font('600'), color: colors.text },
   sub: { ...typography.small, color: colors.textMuted },
-  noteRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  note: { ...typography.small, color: colors.textFaint, flexShrink: 1 },
+  placeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  note: { fontSize: 14, lineHeight: 19, color: colors.textFaint, flexShrink: 1 },
+  actionSpot: { position: 'absolute', right: 0, top: ROW_PAD, height: HERO_LINE, justifyContent: 'center' },
   // Post it: a small outlined pill, quieter than Log it (the one thing waiting on you).
-  action: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong },
+  action: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong },
   actionOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   actionText: { ...typography.smallStrong, color: colors.text },
   actionTextOn: { color: colors.brandInk },
