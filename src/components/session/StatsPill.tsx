@@ -11,7 +11,9 @@ import { pillPieces, resultWord, spokenDuration } from '@/features/activity/form
 import { localDay } from '@/features/practice/stats';
 import * as haptics from '@/lib/haptics';
 import { useReducedMotion } from '@/lib/useReducedMotion';
-import { font } from '@/theme';
+import { BrandWash } from '@/components/ui';
+import { colors, font, pageIsDark } from '@/theme';
+import { useTheme } from '@/theme/ThemeProvider';
 import { ZoneGlyph } from './ZoneGlyph';
 
 /** Small words over video wear a crisp dark edge (see ReelCaption); white over media is the one exception to the theme's colours. */
@@ -37,6 +39,8 @@ export function StatsPill({ session, hidden = [], onPress, scale = 1, active = f
   active?: boolean;
 }) {
   const k = scale;
+  useTheme(); // repaint when the theme changes
+  const isDark = pageIsDark();
   const p = pillPieces(session, hidden);
   const result = resultWord(session);
   const spoken = `Session stats: ${[spokenDuration(session.minutes), result?.toLowerCase(), session.maxHr ? `max heart rate ${session.maxHr}` : p.third].filter(Boolean).join(', ')}`;
@@ -98,9 +102,13 @@ export function StatsPill({ session, hidden = [], onPress, scale = 1, active = f
     </View>
   ) : null;
   const shell = [styles.pill, { borderRadius: 16 * k }];
-  const glass = Platform.OS === 'ios'
-    ? <BlurView intensity={30} tint="dark" style={[shell, styles.iosFill]}>{inner}</BlurView>
-    : <View style={[shell, styles.flatFill]}>{inner}</View>;
+  // The workout card's own colour (Oct 3): the theme's brand with the same wash,
+  // so a clip's stats read as the same thing as a stats post. Dark themes keep the glass.
+  const glass = !isDark
+    ? <View style={[shell, styles.brandFill, { backgroundColor: colors.brand }]}><BrandWash radius={16 * k} />{inner}</View>
+    : Platform.OS === 'ios'
+      ? <BlurView intensity={30} tint="dark" style={[shell, styles.iosFill]}>{inner}</BlurView>
+      : <View style={[shell, styles.flatFill]}>{inner}</View>;
   const measure = (node: React.ReactNode) => (
     <View style={styles.room} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w !== room) setRoom(w); }}>{rulers}{node}</View>
   );
@@ -127,6 +135,7 @@ const styles = StyleSheet.create({
   pill: { overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255, 255, 255, 0.28)' },
   iosFill: { backgroundColor: 'rgba(18, 22, 20, 0.34)' },
   flatFill: { backgroundColor: 'rgba(18, 22, 20, 0.46)' },
+  brandFill: { borderColor: 'rgba(255, 255, 255, 0.22)' },
   row: { flexDirection: 'row', alignItems: 'center' },
   shrink: { flexShrink: 1, minWidth: 0 },
   divider: { width: 1, backgroundColor: 'rgba(255, 255, 255, 0.35)' },
