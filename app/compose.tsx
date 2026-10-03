@@ -14,6 +14,7 @@ import { takePendingShot } from '@/features/compose/pendingShot';
 import { registerCreateClose } from '@/features/compose/createMenu';
 import { SheetBackdrop } from '@/components/SheetBackdrop';
 import { Button, Chip, Field, Screen, Toggle } from '@/components/ui';
+import { alsoShowsIn } from '@/features/groups/groupFeed';
 import { openGroupFeed } from '@/features/groups/openGroupFeed';
 import { FormRow } from '@/components/FormRow';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
@@ -111,7 +112,9 @@ export default function Compose() {
   // A tracker's session (?activity=, from "Log it"): found among yours, or
   // waited for when the app was opened cold from an alert (useTrackerSession).
   const tracker = useTrackerSession(params.activity);
-  // Share to: everyone (the default) or one group you are in (migration 67). A group's feed opens this with ?group=<id>.
+  // Share to: everyone (the default, which also shows in each of your groups'
+  // feeds, migration 74) or one group only (migration 67). Opened with
+  // ?group=<id>, that group only is picked to start with.
   const [shareTo, setShareTo] = useState<string | null>(params.group ?? null);
   // Never falls back to Everyone on its own: a group that is not (or no
   // longer) yours stops Share instead, so nothing goes public by accident.
@@ -1014,17 +1017,18 @@ export default function Compose() {
                     <Text style={styles.challengeChipText}>Entering {challenge.title}</Text>
                   </View>
                 ) : null}
-                {/* Share to: shown once you are in a group. Everyone is the default. */}
+                {/* Share to: shown once you are in a group. Everyone is the default, and it reaches your groups too; "Only <group>" is the private choice. */}
                 {(feedGroups.length || shareTo) && !inChallenge ? (
                   <View style={styles.shareTo} accessibilityRole="radiogroup" accessibilityLabel="Share to">
                     <Text style={styles.shareToLabel}>Share to</Text>
                     <View style={styles.shareToChips}>
                       <Chip label="Everyone" selected={!shareTo} onPress={() => setShareTo(null)} />
-                      {feedGroups.map((g) => <Chip key={g.id} label={g.name} selected={shareTo === g.id} onPress={() => setShareTo(g.id)} />)}
+                      {feedGroups.map((g) => <Chip key={g.id} label={`Only ${g.name}`} selected={shareTo === g.id} onPress={() => setShareTo(g.id)} />)}
                     </View>
                     {groupWaiting ? <Text style={styles.shareToNote}>Checking your groups…</Text>
                       : groupGone ? <Text style={styles.shareToNote}>You're not in that group any more. Pick Everyone or one of your groups to share.</Text>
-                      : shareTo ? <Text style={styles.shareToNote}>Only people in {feedGroups.find((g) => g.id === shareTo)?.name ?? 'the group'} will see this.</Text> : null}
+                      : shareTo ? <Text style={styles.shareToNote}>Only people in {feedGroups.find((g) => g.id === shareTo)?.name ?? 'the group'} will see this.</Text>
+                      : feedGroups.length ? <Text style={styles.shareToNote}>{`Everyone · also shows in ${alsoShowsIn(feedGroups)}`}</Text> : null}
                   </View>
                 ) : null}
                 {/* One list of rows, the Settings rows' size without their card. */}

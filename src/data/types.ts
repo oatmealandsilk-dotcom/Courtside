@@ -389,7 +389,8 @@ export interface FeedGroupMember {
 }
 
 /**
- * A group with a feed of its own (migration 67). Anyone can start one; its
+ * A group with a feed of its own (migration 67): everything its members post,
+ * plus what was shared to it only (migration 74). Anyone can start one; its
  * starter is the admin, who says yes to requests and can remove people.
  * Nobody is in more than MAX_GROUPS.
  */

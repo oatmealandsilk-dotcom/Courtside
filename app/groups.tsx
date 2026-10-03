@@ -31,7 +31,7 @@ export default function Groups() {
 
   return (
     <Screen title="Groups" compactTitle onBack={() => goBack()}>
-      <Text style={styles.intro}>A feed of your own, only the group sees it.</Text>
+      <Text style={styles.intro}>A group’s feed shows everything its members post.</Text>
 
       {off ? <Text style={styles.notice}>Groups aren’t switched on yet. Check back soon.</Text> : null}
 
