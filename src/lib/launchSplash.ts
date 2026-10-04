@@ -8,7 +8,6 @@ import * as SplashScreen from 'expo-splash-screen';
  * showed a bare screen with no logo. Builds before 12 carry no splash module,
  * and the calls below quietly do nothing there.
  */
-const NEEDED = new Set(['cover']);
 let done = false;
 
 export function hideLaunch() {
@@ -17,11 +16,6 @@ export function hideLaunch() {
   SplashScreen.hideAsync().catch(() => undefined);
 }
 
-/** One of the first screen's pictures has drawn; when both have, the phone's picture goes. */
-export function launchPartReady(part: 'cover') {
-  NEEDED.delete(part);
-  if (!NEEDED.size) hideLaunch();
-}
 
 if (Platform.OS !== 'web') {
   SplashScreen.preventAutoHideAsync().catch(() => undefined);
