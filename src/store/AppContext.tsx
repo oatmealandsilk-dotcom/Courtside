@@ -346,6 +346,8 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
   followRequests: { fromId: ID; toId: ID; createdAt: string }[];
   /** People whose posts you have muted — still followed, just quiet. */
   mutedIds: ID[];
+  /** Posts and hits you have reported: gone from everything you see (Oct 3). */
+  reportedIds: ID[];
   /** People you have blocked. Their posts and messages are hidden. */
   blockedIds: ID[];
   /** People whose new posts you have asked to be told about. */
@@ -1445,6 +1447,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     termsVersion: undefined,
     savedAccounts: [],
     mutedIds: [],
+    reportedIds: [],
     blockedIds: [],
     alertIds: [],
     paymentMethods: STARTER_PAYMENTS,
@@ -1789,6 +1792,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Then, without holding up the open: whom the people you follow follow,
       // so search can say "2 mutual" without the app downloading every follow.
       void remote.fetchFollowEdges(data.followingIds, false).then(mergeFollowEdges);
+      // What you have reported stays out of sight on every device.
+      void remote.fetchMyReported().then((ids) => { if (ids.length) setState((prev) => ({ ...prev, reportedIds: [...new Set([...prev.reportedIds, ...ids])] })); }).catch(() => undefined);
       // Now the profile is known, the saved login gets its name and picture.
       const who = data.users.find((u) => u.id === me);
       if (who) rememberAccount({ id: me, handle: who.handle, name: who.name, avatarUrl: who.avatarUrl }).then((savedAccounts) => setState(withAccounts(savedAccounts)));
@@ -5519,6 +5524,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const reportUser = useCallback((userId: ID, reason: string) => {
     haptics.commit();
+    // A reported post or hit leaves your screens at once.
+    const target = /^(?:post|hit):(.+)$/.exec(reason)?.[1];
+    if (target) setState((prev) => (prev.reportedIds.includes(target) ? prev : { ...prev, reportedIds: [...prev.reportedIds, target] }));
     const me = stateRef.current.currentUserId;
     if (me && live(me)) void remote.insertReport(me, UUID.test(userId) ? userId : null, reason, '');
   }, []);
@@ -6246,9 +6254,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ],
   );
 
+  // Reported posts and hits are left out of everything the screens read.
+  const unreported = useMemo(() => {
+    if (!state.reportedIds.length) return null;
+    const out = new Set(state.reportedIds);
+    return { posts: state.posts.filter((p) => !out.has(p.id)), hitRequests: state.hitRequests.filter((h) => !out.has(h.id)) };
+  }, [state.reportedIds, state.posts, state.hitRequests]);
   const value = useMemo<AppContextValue>(
-    () => ({ ...state, ready: state.ready && state.authResolved, currentUser, actions, seeing, shownAtCourt, ageSaysAdult }),
-    [state, currentUser, actions, seeing, shownAtCourt, ageSaysAdult],
+    () => ({ ...state, ...unreported, ready: state.ready && state.authResolved, currentUser, actions, seeing, shownAtCourt, ageSaysAdult }),
+    [state, unreported, currentUser, actions, seeing, shownAtCourt, ageSaysAdult],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

@@ -2105,6 +2105,12 @@ export const remote = {
   },
 
   /** Open hits from an hour ago on, with who is in: the list the app loads at the start. Null when it could not be asked. */
+  /** The posts and hits you have reported (migration 81); none on a database without it. */
+  async fetchMyReported(): Promise<ID[]> {
+    const { data, error } = await need().rpc('my_reported_targets');
+    if (error || !Array.isArray(data)) return [];
+    return (data as unknown[]).map((t) => /^(?:post|hit):(.+)$/.exec(String(t))?.[1]).filter((id): id is string => !!id);
+  },
   async fetchHits(): Promise<HitRequest[] | null> {
     const { data, error } = await need().from('hit_requests').select('*, hit_joins(user_id)').eq('cancelled', false)
       .gte('starts_at', new Date(Date.now() - 3_600_000).toISOString()).order('starts_at', { ascending: true }).limit(100);
