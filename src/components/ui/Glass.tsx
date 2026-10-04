@@ -16,9 +16,9 @@ export function Glass({ children, style, radius = 999, interactive = false, tint
   const { night } = useTheme();
   const rounded = { borderRadius: radius, overflow: 'hidden' as const };
   // Read at draw time, so the veil is the court you are on, not the one the file loaded with.
-  const veil = { backgroundColor: `${(tint ?? colors.surface).slice(0, 7)}${clear ? '80' : 'CC'}` };
+  const veil = { backgroundColor: `${(tint ?? colors.surface).slice(0, 7)}${clear ? 'B3' : 'CC'}` };
   if (Platform.OS === 'ios' && isLiquidGlassAvailable()) {
-    return <GlassView glassEffectStyle={clear ? 'clear' : 'regular'} isInteractive={interactive} tintColor={clear && tint ? `${tint.slice(0, 7)}59` : tint} colorScheme={night ? 'dark' : 'light'} style={[rounded, style]}>{children}</GlassView>;
+    return <GlassView glassEffectStyle={clear ? 'clear' : 'regular'} isInteractive={interactive} tintColor={clear && tint ? `${tint.slice(0, 7)}99` : tint} colorScheme={night ? 'dark' : 'light'} style={[rounded, style]}>{children}</GlassView>;
   }
   if (Platform.OS === 'ios' || Platform.OS === 'android') {
     return <BlurView intensity={clear ? 80 : 55} tint={night ? 'dark' : 'light'} experimentalBlurMethod="dimezisBlurView" style={[rounded, veil, style]}>{children}</BlurView>;
