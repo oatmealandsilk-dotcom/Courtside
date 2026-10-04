@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { Platform, StyleSheet, Text } from 'react-native';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { BrandMark } from '@/components/BrandMark';
@@ -79,19 +79,28 @@ export function WarmCurtain() {
   if (!shown) return null;
   return (
     <Animated.View pointerEvents={warm || lifting ? 'none' : 'auto'} style={[styles.curtain, style]}>
-      <Animated.View style={[styles.brand, brandStyle]}>
-        <BrandMark size={84} />
-        <Text style={styles.wordmark}>CourtSide</Text>
-      </Animated.View>
-      <Text style={styles.tagline}>Growing the game</Text>
+      {Platform.OS !== 'web' ? (
+        // On a phone: the launch picture itself, exactly as the phone drew it, so opening is one
+        // unbroken picture that then lifts into the app (Oct 4, owner: no blip on any device).
+        <Animated.Image source={require('../../assets/splash.png')} resizeMode="cover" style={[StyleSheet.absoluteFill, styles.launchPicture, brandStyle]} />
+      ) : (
+        <>
+          <Animated.View style={[styles.brand, brandStyle]}>
+            <BrandMark size={76} />
+            <Text style={styles.wordmark}>CourtSide</Text>
+          </Animated.View>
+          <Text style={styles.tagline}>Growing the game</Text>
+        </>
+      )}
     </Animated.View>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
   curtain: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', zIndex: 60 },
-  brand: { alignItems: 'center', gap: spacing.md },
-  wordmark: { fontSize: 34, ...font('700'), color: colors.brand, letterSpacing: -1 },
+  brand: { alignItems: 'center', gap: 22 },
+  launchPicture: { backgroundColor: '#F8F7F2' },
+  wordmark: { fontSize: 30, ...font('700'), color: colors.brand, letterSpacing: -0.9 },
   // 96 points up, the same place the launch image draws it, so nothing jumps when one hands over to the other.
-  tagline: { position: 'absolute', bottom: 96, fontSize: 12, ...font('600'), letterSpacing: 1.4, color: colors.textFaint, textTransform: 'uppercase' },
+  tagline: { position: 'absolute', bottom: 91, fontSize: 12, ...font('600'), letterSpacing: 1.4, color: colors.textFaint, textTransform: 'uppercase' },
 });

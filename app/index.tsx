@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
+import { Image, Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Redirect, useNavigation } from 'expo-router';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -60,7 +60,9 @@ export default function Index() {
     // A beat on the cream first, then a slow, even fade: it reads as the app
     // settling into your colours rather than a cut (Oct 2, William: "wait a
     // bit before fading, don't have to do it super fast").
-    Animated.timing(cover, { toValue: 0, duration: 700, delay: 350, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }).start(() => setLaunchCover(false));
+    // Oct 4 (owner: "no blip on any device, in any circumstance"): the launch
+    // picture now stays, unchanged, until the app opens; the shell's curtain
+    // (the same picture) then fades straight into the app. No themed copy in between.
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Opened on top of the app that is already running: something went to '/'
@@ -109,7 +111,7 @@ export default function Index() {
   useEffect(() => {
     // On a phone the loading screen stays until the cream has finished fading,
     // so the fade is never cut short by the app opening over it.
-    if (!settled || !held || gone || launchUpdate.holding || launchCover) return;
+    if (!settled || !held || gone || launchUpdate.holding) return;
     // Into the app: no fade here. The page it opens on is built behind the
     // shell's curtain — the same mark and name — and that curtain does the
     // one fade, once the page has drawn (see warmup). Fading here too showed
@@ -151,19 +153,16 @@ export default function Index() {
 
   return (
     <Animated.View style={[styles.splash, { opacity }]}>
-      <Animated.View style={[styles.brand, { opacity: rise, transform: [{ scale: rise.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] }) }] }]}>
-        <BrandMark size={84} />
+      <Animated.View style={[styles.brand, { opacity: rise, transform: [{ scale: rise.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) }] }]}>
+        <BrandMark size={76} />
         <Text style={styles.wordmark}>CourtSide</Text>
       </Animated.View>
       <Text style={styles.tagline}>{launchUpdate.downloading ? 'Getting the newest version' : 'Growing the game'}</Text>
       {launchCover ? (
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.splash, launchStyles.launch, { opacity: cover }]}>
           <StatusBar style="dark" />
-          <View style={styles.brand}>
-            <BrandMark size={84} color={lightColors.brand} />
-            <Text style={[styles.wordmark, launchStyles.wordmark]}>CourtSide</Text>
-          </View>
-          <Text style={[styles.tagline, launchStyles.tagline]}>Growing the game</Text>
+          {/* The phone's own launch picture, drawn the same way (cover), so the hand-over is invisible (Oct 4, owner: "smooth like Instagram"). */}
+          <Image source={require('../assets/splash.png')} resizeMode="cover" style={StyleSheet.absoluteFill} />
         </Animated.View>
       ) : null}
     </Animated.View>
@@ -177,13 +176,14 @@ const styleDefinitions = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  brand: { alignItems: 'center', gap: spacing.md },
+  // Sized and spaced as the launch picture draws them (mark 55 pt tall, name 30 pt, 29 pt apart), so the cross-fade does not jump.
+  brand: { alignItems: 'center', gap: 22 },
   failTitle: { ...typography.title, color: colors.text, textAlign: 'center' },
   failBody: { ...typography.body, color: colors.textMuted, textAlign: 'center', maxWidth: 320 },
-  wordmark: { fontSize: 34, ...font('700'), color: colors.brand, letterSpacing: -1 },
+  wordmark: { fontSize: 30, ...font('700'), color: colors.brand, letterSpacing: -0.9 },
   tagline: {
     position: 'absolute',
-    bottom: 96, // where the launch image draws it too
+    bottom: 91, // where the launch image draws it too
     fontSize: 12,
     ...font('600'),
     letterSpacing: 1.4,
