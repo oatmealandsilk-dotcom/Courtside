@@ -115,7 +115,8 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
   const hr = session.maxHr != null;
   const zones = postZones(session);
   // Strain and calories, when the author shared them (migration 72).
-  const strain = session.strain != null ? session.strain : null;
+  // Strain is WHOOP's own number: posts show only what every tracker gives (Oct 3, owner).
+  const strain = null as number | null;
   const kcal = session.kcal ? session.kcal : null;
   const health = hr || !!zones || strain != null || !!kcal;
   const result = resultWord(session);

@@ -43,7 +43,7 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   const vs = lead ? (opponents.length ? 'vs' : 'with') : '';
   const tracker = !!session.activityId;
   const source = tracker ? sourceLabel(session.source ?? 'apple-health') : null;
-  const spoken = [`${spokenDuration(session.minutes)}, ${what.toLowerCase()}`, hr && session.avgHr ? `average heart rate ${session.avgHr}` : null, hr ? `max ${session.maxHr}` : null, strain != null ? `Strain ${strain.toFixed(1)}` : null, kcal ? `${kcal} calories` : null, lead ? `${vs} @${lead.handle}` : null, source].filter(Boolean).join(', ');
+  const spoken = [`${spokenDuration(session.minutes)}, ${what.toLowerCase()}`, hr && session.avgHr ? `average heart rate ${session.avgHr}` : null, hr ? `max ${session.maxHr}` : null, kcal ? `${kcal} calories` : null, lead ? `${vs} @${lead.handle}` : null, source].filter(Boolean).join(', ');
   const small = { fontSize: 13 * k, lineHeight: Math.round(17 * k) };
   // Who it was against: beside a single shared number, or on its own line.
   const who = lead ? (
@@ -70,8 +70,8 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
       onPress={onPress}
       style={({ pressed }) => [{ gap: 6 * k }, pressed && onPress ? styles.pressed : null]}
     >
-      <View style={[styles.row, { gap: 10 * k }]}>
-        <Duration minutes={session.minutes} size={22 * k} unitScale={0.64} color={colors.text} unitColor={colors.textMuted} play={play} delay={120} duration={600} />
+      {/* What it was and where the numbers came from, one quiet line. */}
+      <View style={[styles.row, { gap: 8 * k }]}>
         <View style={[styles.chip, { paddingHorizontal: 8 * k, paddingVertical: 3 * k, borderRadius: 999 }]}>
           <Text style={[styles.chipText, { fontSize: 12 * k }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{what}</Text>
         </View>
@@ -79,31 +79,33 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
         {source ? <Text style={[styles.source, { fontSize: 11 * k }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{source}</Text> : null}
         {onPress ? <Ionicons name="chevron-up" size={15 * k} color={colors.textFaint} /> : null}
       </View>
-      {shared ? (
-        <View style={[styles.row, styles.wrap, { columnGap: 14 * k, rowGap: 6 * k }]}>
-          {hr ? (
-            <View style={[styles.row, { gap: 10 * k }]}>
-              <Ionicons name="heart-outline" size={13 * k} color={colors.textMuted} />
-              {session.avgHr ? <Figure value={session.avgHr} unit="avg" baseline unitScale={0.8} size={15 * k} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} duration={600} /> : null}
-              <Figure value={session.maxHr!} unit="max bpm" baseline unitScale={0.8} size={15 * k} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} duration={600} />
-            </View>
-          ) : null}
-          {strain != null ? (
-            <View style={[styles.row, { gap: 6 * k }]}>
-              <Ionicons name="flash-outline" size={13 * k} color={colors.textMuted} />
-              <Figure value={strain} part="dec1" unit="Strain" baseline unitScale={0.8} size={15 * k} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} duration={600} />
-            </View>
-          ) : null}
-          {kcal != null ? (
-            <View style={[styles.row, { gap: 6 * k }]}>
-              <Ionicons name="flame-outline" size={13 * k} color={colors.textMuted} />
-              <Figure value={kcal} unit="cal" baseline unitScale={0.8} size={15 * k} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} duration={600} />
-            </View>
-          ) : null}
-          {shared === 1 ? who : null}
+      {/* Strava's row: label over number. Only what every tracker gives (time, calories, heart rate),
+          so a WHOOP post and an Apple Watch post read the same (Oct 3, owner). Strain stays in the stats sheet. */}
+      <View style={[styles.row, { gap: 26 * k, alignItems: 'flex-start' }]}>
+        <View style={{ gap: 2 * k }}>
+          <Text style={[styles.label, { fontSize: 11 * k }]} maxFontSizeMultiplier={1.2}>Time</Text>
+          <Duration minutes={session.minutes} size={19 * k} unitScale={0.64} color={colors.text} unitColor={colors.textMuted} play={play} delay={120} duration={600} />
         </View>
-      ) : null}
-      {shared !== 1 && who ? <View style={styles.row}>{who}</View> : null}
+        {kcal != null ? (
+          <View style={{ gap: 2 * k }}>
+            <Text style={[styles.label, { fontSize: 11 * k }]} maxFontSizeMultiplier={1.2}>Calories</Text>
+            <Figure value={kcal} baseline size={19 * k} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} duration={600} />
+          </View>
+        ) : null}
+        {hr && session.avgHr ? (
+          <View style={{ gap: 2 * k }}>
+            <Text style={[styles.label, { fontSize: 11 * k }]} maxFontSizeMultiplier={1.2}>Avg HR</Text>
+            <Figure value={session.avgHr} unit="bpm" baseline unitScale={0.7} size={19 * k} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} duration={600} />
+          </View>
+        ) : null}
+        {hr ? (
+          <View style={{ gap: 2 * k }}>
+            <Text style={[styles.label, { fontSize: 11 * k }]} maxFontSizeMultiplier={1.2}>Max HR</Text>
+            <Figure value={session.maxHr!} unit="bpm" baseline unitScale={0.7} size={19 * k} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} duration={600} />
+          </View>
+        ) : null}
+      </View>
+      {who ? <View style={styles.row}>{who}</View> : null}
     </Pressable>
   );
 }
@@ -118,6 +120,7 @@ const styleDefinitions = StyleSheet.create({
   // Where the numbers came from: always shown, in the faintest ink, and never cut short.
   source: { ...font('600'), color: colors.textFaint, letterSpacing: 0.1, flexShrink: 0 },
   flex: { flex: 1 },
+  label: { ...font('500'), color: colors.textMuted, letterSpacing: 0.1 },
   who: { flex: 1, flexDirection: 'row', alignItems: 'center', minWidth: 0 },
   whoText: { ...font('500'), color: colors.textMuted, flexShrink: 1 },
   handle: { ...font('600'), color: colors.text },
