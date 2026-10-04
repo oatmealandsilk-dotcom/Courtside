@@ -398,6 +398,11 @@
   .spot-place small { display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--faint); margin-bottom: 2px; }
   .spot-place b { display: block; font-size: 42px; line-height: 1; font-weight: 500; letter-spacing: -0.04em; color: var(--brand); font-variant-numeric: tabular-nums; }
   .spot-place b i { font-style: normal; font-size: 22px; color: var(--faint); vertical-align: 12px; margin-right: 1px; }
+  /* The beta, straight away (Oct 4): the one thing to do after joining. */
+  .spot-beta { display: grid; gap: 8px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .spot-beta .btn-beta { justify-self: stretch; text-align: center; text-decoration: none; }
+  .spot-beta p { margin: 0; font-size: 13px; color: var(--muted, inherit); }
+  .done .btn-beta { display: inline-flex; margin-top: 12px; text-decoration: none; }
   .spot-share { display: grid; gap: 10px; padding-top: 16px; border-top: 1px solid var(--border); }
   .spot-share p { margin: 0; font-size: 15px; font-weight: 500; letter-spacing: -0.01em; }
   .share-row { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -825,7 +830,7 @@
     const box = document.createElement('div');
     box.className = 'done';
     box.setAttribute('role', 'status');
-    box.innerHTML = '<svg aria-hidden="true"><use href="#check-circle"/></svg><div><strong></strong><span></span></div>';
+    box.innerHTML = '<svg aria-hidden="true"><use href="#check-circle"/></svg><div><strong></strong><span></span><a class="btn btn-primary btn-beta" href="https://testflight.apple.com/join/21UJPuny" target="_blank" rel="noopener">Get the iPhone beta</a></div>';
     box.querySelector('strong').textContent = title;
     box.querySelector('span').textContent = detail;
     form.replaceWith(box);
@@ -846,6 +851,10 @@
         <div class="spot-words"><strong></strong><span></span></div>
         <div class="spot-place"><small>Your place</small><b><i>#</i><span data-place>0</span></b></div>
       </div>
+      <div class="spot-beta">
+        <a class="btn btn-primary btn-beta" href="https://testflight.apple.com/join/21UJPuny" target="_blank" rel="noopener">Get the iPhone beta</a>
+        <p>Opens Apple’s TestFlight: install it, then CourtSide. On Android? <a href="https://app.courtsidebase.com">Use CourtSide on the web</a>.</p>
+      </div>
       <div class="spot-share">
         <p>Every friend who joins with your link moves you up the list.</p>
         <div class="share-row">
@@ -855,8 +864,8 @@
         </div>
         <p class="msg" role="status" aria-live="polite"></p>
       </div>`;
-    card.querySelector('strong').textContent = result.kind === 'already' ? 'You’re already on the list.' : 'You’re on the list.';
-    card.querySelector('.spot-words span').textContent = `We’ll email ${email} when your invite to the iPhone app is ready.`;
+    card.querySelector('strong').textContent = result.kind === 'already' ? 'You’re already in.' : 'You’re in.';
+    card.querySelector('.spot-words span').textContent = 'The beta is open. Get CourtSide on your iPhone now.';
     card.querySelector('.share-link').value = link;
     const note = card.querySelector('.msg');
     card.querySelector('[data-copy]').addEventListener('click', async () => {
@@ -920,7 +929,7 @@
         // The welcome email goes out now. The server checks this person is on the list and has not had it yet.
         if (result.kind === 'ok') fetch(`${SUPABASE_URL}/functions/v1/waitlist-welcome`, { method: 'POST', headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ email }), keepalive: true }).catch(() => {});
         if (result.code) showSpot(form, result, email);
-        else confirmIn(form, result.kind === 'ok' ? 'You’re on the list.' : 'You’re already on the list.', `We’ll email ${email} when your invite to the iPhone app is ready.`);
+        else confirmIn(form, result.kind === 'ok' ? 'You’re in.' : 'You’re already in.', 'The beta is open. Get CourtSide on your iPhone now.');
         return;
       }
       msg.className = 'msg error';
