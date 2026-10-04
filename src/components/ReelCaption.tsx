@@ -165,6 +165,10 @@ function spokenWhen(iso: string): string {
  * has the whole width under the handle and only shortens at its very end.
  */
 function Who({ author, onAuthor, newHere = false, place = '', court }: { author: User; onAuthor: () => void; newHere?: boolean; place?: string; court?: Post['court'] }) {
+  const { currentUserId, followingIds, followRequests, actions } = useApp();
+  // Instagram's Follow beside the name, for someone you do not follow yet (Oct 4); asked once, it steps away.
+  const canFollow = !!currentUserId && author.id !== currentUserId && !followingIds.includes(author.id)
+    && !followRequests.some((r) => r.fromId === currentUserId && r.toId === author.id);
   // Unknown until measured, and the tag stays out of sight until then, so it never flashes in the wrong place.
   // The copy lays itself out again whenever the handle or the width changes, so the answer stays current.
   const [tagFits, setTagFits] = useState<boolean | null>(null);
@@ -180,6 +184,11 @@ function Who({ author, onAuthor, newHere = false, place = '', court }: { author:
             <Text style={styles.handle} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{author.handle}</Text>
             <LevelPill profile={author.profile} small onMedia style={styles.badge} />
             {newHere && tagFits ? <View style={styles.badge}><NewHereTag onMedia short /></View> : null}
+            {canFollow ? (
+              <Pressable accessibilityRole="button" accessibilityLabel={`Follow ${author.handle}`} hitSlop={8} onPress={(e) => { e?.stopPropagation?.(); actions.toggleFollow(author.id); }} style={({ pressed }) => [styles.follow, pressed && styles.pressed]}>
+                <Text style={styles.followText} maxFontSizeMultiplier={MAX_GROW}>Follow</Text>
+              </Pressable>
+            ) : null}
           </Pressable>
           {place ? (
             <Pressable
@@ -190,7 +199,7 @@ function Who({ author, onAuthor, newHere = false, place = '', court }: { author:
               onPress={(e) => { e?.stopPropagation?.(); if (court) openCourt(court); }}
               style={({ pressed }) => [styles.placeRow, pressed && styles.pressed]}
             >
-              <Ionicons name="location-sharp" size={11} color={META_INK} style={EDGE_SMALL} />
+              <Ionicons name="location-sharp" size={10} color={META_INK} style={EDGE_SMALL} />
               <Text style={styles.placeText} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{place}</Text>
             </Pressable>
           ) : null}
@@ -445,7 +454,10 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', maxWidth: '100%' },
   // Instagram's location line: small, the whole width under the handle, shortening only at its end.
   placeRow: { flexDirection: 'row', alignItems: 'center', gap: 3, alignSelf: 'flex-start', maxWidth: '100%' },
-  placeText: { color: META_INK, fontSize: 13, lineHeight: 16, ...font('500'), letterSpacing: 0.1, flexShrink: 1, ...EDGE_SMALL },
+  placeText: { color: META_INK, fontSize: 12.5, lineHeight: 16, ...font('500'), letterSpacing: 0, opacity: 0.9, flexShrink: 1, ...EDGE_SMALL },
+  // Instagram's outlined Follow: white hairline, white words, no fill.
+  follow: { height: 24, paddingHorizontal: 11, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.75)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  followText: { color: '#fff', fontSize: 13, ...font('600'), letterSpacing: -0.1, ...EDGE_SMALL },
   // The time under an opened caption, 4 below its last line.
   when: { marginTop: 4 },
   // Who with: its own small line under the caption, only as wide as its words.
@@ -460,7 +472,7 @@ const styles = StyleSheet.create({
   // A copy of the who-line that may wrap: one line tall means "New" fits beside the level.
   whoMeasure: { position: 'absolute', left: 0, right: 0, top: 0, opacity: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
   keep: { flexShrink: 0 },
-  handle: { color: '#fff', fontSize: 16, lineHeight: 20, ...font('600'), letterSpacing: -0.2, flexShrink: 1, ...EDGE },
+  handle: { color: '#fff', fontSize: 15.5, lineHeight: 20, ...font('600'), letterSpacing: -0.25, flexShrink: 1, ...EDGE },
   caption: { color: '#fff', fontSize: 15, lineHeight: LINE, ...font('400'), ...EDGE },
   tag: { color: '#fff', ...font('600') },
   // The one tappable word in the caption: as white as the rest, set in the name's weight.

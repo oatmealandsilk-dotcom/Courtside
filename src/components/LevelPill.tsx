@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { GlassFill, liquidGlass } from '@/components/ui/Glass';
 
 import { levelBadge } from '@/lib/badges';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -41,8 +42,9 @@ export function LevelPill({ profile, small = false, onMedia = false, style }: { 
     <View
       accessible
       accessibilityLabel={badge.label}
-      style={[styles.pill, small && styles.small, onMedia ? [styles.frost, { borderColor: edge(tone) }] : { backgroundColor: tintFill(tone) }, style]}
+      style={[styles.pill, small && styles.small, onMedia ? [styles.frost, liquidGlass && styles.frostLiquid] : { backgroundColor: tintFill(tone) }, style]}
     >
+      {onMedia ? <GlassFill radius={10} tint={tone} strength={0.18} /> : null}
       {system ? <Text style={[styles.system, small && styles.systemSmall, { color: onMedia ? tone : ink }, onMedia && styles.systemOnMedia]}>{system}</Text> : null}
       <Text style={[styles.value, small && styles.valueSmall, { color: ink }]}>{value}</Text>
     </View>
@@ -71,7 +73,9 @@ const styles = StyleSheet.create({
   },
   small: { height: 19, paddingHorizontal: 7 },
   // Dark enough to hold its colours on any frame, a blue court or green grass included.
-  frost: { backgroundColor: 'rgba(10, 12, 10, 0.55)', borderWidth: 1 },
+  // The sound button's glass (Oct 4): dark frost, a white hairline, the system's colour only in its letters.
+  frost: { backgroundColor: 'rgba(16, 18, 17, 0.38)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255, 255, 255, 0.3)', overflow: 'hidden' },
+  frostLiquid: { backgroundColor: 'transparent' },
   system: { ...font('600'), fontSize: 10.5, letterSpacing: 0.3, opacity: 0.8 },
   systemSmall: { fontSize: 10 },
   systemOnMedia: { opacity: 1 },
