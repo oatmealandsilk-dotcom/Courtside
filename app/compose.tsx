@@ -158,6 +158,14 @@ export default function Compose() {
   const openedPosted = !!opened && posts.some((p) => p.authorId === currentUserId && (opened.type === 'tracker' ? p.session?.activityId === opened.activity.id : p.session?.sessionId === opened.session.id));
   // Already posted: the stats come off, and this can only be a plain post.
   useEffect(() => { if (openedPosted) setAttached(false); }, [openedPosted]);
+  // Opened on a session that is already posted (an old notification, a second tap): show that post
+  // rather than a blank composer (Oct 3, owner). Not after Share here, which posts it on purpose.
+  const postedId = openedPosted && opened ? posts.find((p) => p.authorId === currentUserId && (opened.type === 'tracker' ? p.session?.activityId === opened.activity.id : p.session?.sessionId === opened.session.id))?.id : undefined;
+  useEffect(() => {
+    if (!params.activity || !postedId || sent.current) return;
+    showToast({ title: 'You already posted this session', icon: 'checkmark-circle-outline' });
+    router.replace(`/post/${postedId}`);
+  }, [postedId]); // eslint-disable-line react-hooks/exhaustive-deps
   const withStats = attached && !openedPosted;
   // A session attached to a normal Post or Clip from "Add session stats".
   const [statsPick, setStatsPick] = useState<SessionPick | null>(null);
