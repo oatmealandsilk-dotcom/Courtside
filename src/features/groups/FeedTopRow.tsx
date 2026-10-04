@@ -9,7 +9,7 @@ import { colors, font } from '@/theme';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 
 /*
- * The words across the top of the Feed, the way Reels has them: "For you",
+ * The words across the top of the Feed, the way Reels has them: "Activities", "For you",
  * then each group you are in, then a "+" that opens Find groups (a sheet:
  * join a group, or start one). Plain words, no
  * pills: the one you are on is bold and full strength, the rest are dimmer.
@@ -41,7 +41,8 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   // Over a picture: white, as Reels does. The New York ground is navy, so its ink is white too.
   const ink = onPicture || theme === 'us-open' ? '#FFFFFF' : colors.text;
   const edge = onPicture ? GLYPH_EDGE : null;
-  const words = [{ id: null as string | null, name: 'For you' }, ...groups];
+  // Activities sits left of For you (Oct 4): sessions with stats, as Strava's feed.
+  const words = [{ id: 'activities' as string | null, name: 'Activities' }, { id: null as string | null, name: 'For you' }, ...groups];
   // With three groups the row is wider than a phone: the one on show is slid
   // into the middle (a group just started, say, lands in view, "+" beside it).
   const scroller = useRef<ScrollView>(null);
@@ -64,7 +65,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
               <Pressable
                 accessibilityRole="tab"
                 accessibilityState={{ selected: on }}
-                accessibilityLabel={w.id ? `${w.name}, group feed` : 'For you'}
+                accessibilityLabel={w.id === 'activities' ? 'Activities' : w.id ? `${w.name}, group feed` : 'For you'}
                 hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
                 onPress={() => onSelect(w.id)}
                 onLayout={(e) => {

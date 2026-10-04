@@ -158,10 +158,12 @@ function LikeBurst({ token }: { token: number }) {
  * in that order (a court's).
  */
 export type FeedScope =
-  | { userId: string; set: 'own' | 'clips' | 'tagged' | 'archived'; start?: string; ids?: undefined; groupId?: undefined }
-  | { ids: string[]; start?: string; userId?: undefined; set?: undefined; groupId?: undefined }
+  | { userId: string; set: 'own' | 'clips' | 'tagged' | 'archived'; start?: string; ids?: undefined; groupId?: undefined; activities?: undefined }
+  | { ids: string[]; start?: string; userId?: undefined; set?: undefined; groupId?: undefined; activities?: undefined }
+  // Activities (Oct 4): posts with a session's stats on them, yours and the people you follow, newest first, as Strava's feed.
+  | { activities: true; start?: undefined; ids?: undefined; userId?: undefined; set?: undefined; groupId?: undefined }
   // A group's own feed (migrations 67 and 74): everything its members post, and what was shared to it only, newest first, under the Feed's top row.
-  | { groupId: string; start?: undefined; ids?: undefined; userId?: undefined; set?: undefined };
+  | { groupId: string; start?: undefined; ids?: undefined; userId?: undefined; set?: undefined; activities?: undefined };
 
 /** What the Feed's top row needs to know from the feed under it: whether a picture fills the top, and whether the chrome is put away. */
 export interface FeedChrome { picture: boolean; hidden: boolean }
@@ -425,6 +427,16 @@ function Home({ scope, topRow, paused, onChrome }: {
         // One person's things, newest first, opened on the one that was tapped;
         // or a court's posts, in exactly the order its grid shows them.
         const { ids, userId, set, groupId } = scope;
+        if (scope.activities) {
+          const follows = new Set(data.followingIds);
+          const acts = data.posts
+            .filter((p) => !p.archived && !p.groupId && reachable(p) && !!p.session && hasSessionStats(p.session) && (p.authorId === data.currentUserId || follows.has(p.authorId)))
+            .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+          setOrder(acts.map((p) => `p:${p.id}`));
+          setActive(0);
+          setVisit((v) => v + 1);
+          return;
+        }
         const byId = ids ? new Map(data.posts.map((p) => [p.id, p])) : null;
         const group = groupId ? data.feedGroups.find((g) => g.id === groupId) : undefined;
         const mine = groupId
@@ -491,7 +503,7 @@ function Home({ scope, topRow, paused, onChrome }: {
       setOrder(final);
       setActive(0);
       if (remount) setVisit((v) => v + 1);
-  }, [scope?.userId, scope?.set, scope?.start, scope?.ids?.join(','), scope?.groupId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [scope?.userId, scope?.set, scope?.start, scope?.ids?.join(','), scope?.groupId, scope?.activities]); // eslint-disable-line react-hooks/exhaustive-deps
   // Something of yours has just landed (saved, its picture or video hosted),
   // or "Posted — tap to see it" on the strip: its page goes to the very top
   // and the feed is taken there. Only that page moves; nothing else is dealt
@@ -513,11 +525,11 @@ function Home({ scope, topRow, paused, onChrome }: {
     offStage(() => { if (key) liftToTop(key); else rerank(); });
   }), [scope, rerank, liftToTop]); // eslint-disable-line react-hooks/exhaustive-deps
   const dealOnce = useCallback(() => {
-    const stamp = `${ready}:${currentUserId}:${scope?.userId ?? ''}:${scope?.set ?? ''}:${scope?.ids?.join(',') ?? ''}:${scope?.groupId ?? ''}`;
+    const stamp = `${ready}:${currentUserId}:${scope?.userId ?? ''}:${scope?.set ?? ''}:${scope?.ids?.join(',') ?? ''}:${scope?.groupId ?? ''}:${scope?.activities ? 'a' : ''}`;
     if (rankedFor.current === stamp) return;
     rankedFor.current = stamp;
     rerank();
-  }, [ready, currentUserId, scope?.userId, scope?.set, scope?.ids?.join(','), scope?.groupId, rerank]);
+  }, [ready, currentUserId, scope?.userId, scope?.set, scope?.ids?.join(','), scope?.groupId, scope?.activities, rerank]);
   // A group's feed takes its posts as they arrive: the first page from the
   // server deals it; after that, an older page goes on the end and anything
   // newer goes in just after the page on screen, so nothing moves under you.
@@ -1153,7 +1165,9 @@ function Home({ scope, topRow, paused, onChrome }: {
   useEffect(() => { onChrome?.({ picture: topOnPicture, hidden: chromeHidden }); }, [onChrome, topOnPicture, chromeHidden]);
   // A group's feed calls its posts after the group, where For you's say "For you".
   const groupName = scope?.groupId ? app.feedGroups.find((g) => g.id === scope.groupId)?.name : undefined;
-  const scopedBack = !!scope && !scope.groupId;
+  // A group's feed and Activities sit under the Feed's top row; any other scope has a back button.
+  const rowed = !!scope?.groupId || !!scope?.activities;
+  const scopedBack = !!scope && !rowed;
   useEffect(() => {
     if (!focused || !showing) return;
     // A hit counts as watched through the story viewer, not here.
@@ -1186,7 +1200,7 @@ function Home({ scope, topRow, paused, onChrome }: {
   );
 
   // A feed with the For you / groups row keeps its band clear; the empty page centres in what is left, above the floating bar.
-  const banded = !!topRow || !!scope?.groupId;
+  const banded = !!topRow || rowed;
 
   return (
     <TopBandContext.Provider value={banded ? TOP_BAND_DROP : 0}>
@@ -1207,9 +1221,9 @@ function Home({ scope, topRow, paused, onChrome }: {
             </View>
           ) : (
             <EmptyState
-              title={scope?.groupId ? 'Loading the group' : scope ? 'Nothing here yet' : ready ? 'Your court is quiet' : 'Loading your clips'}
-              body={scope ? undefined : 'Be the first on it: a clip, a photo, or an instant after you play.'}
-              action={!scope && ready ? { label: 'Share something', onPress: () => router.push('/compose') } : undefined}
+              title={scope?.groupId ? 'Loading the group' : scope?.activities ? (ready ? 'No activities yet' : 'Loading activities') : scope ? 'Nothing here yet' : ready ? 'Your court is quiet' : 'Loading your clips'}
+              body={scope?.activities ? 'Log a session after you play, or follow players, and their sessions show up here.' : scope ? undefined : 'Be the first on it: a clip, a photo, or an instant after you play.'}
+              action={(!scope || scope.activities) && ready ? { label: scope?.activities ? 'Log a session' : 'Share something', onPress: () => router.push('/compose') } : undefined}
             />
           )}
         </View>
@@ -1391,7 +1405,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                 return (
                   // A session posted with no photo is its card: the page keeps clear of the
                   // floating tab bar, so the caption and buttons under the card stay in view.
-                  <View key={post.id} style={[styles.article, scopedBack && styles.articleScoped, !phone && styles.articleCentred, (topRow || !!scope?.groupId) && { paddingTop: insets.top + 64 }, barInset > 0 && post.session && hasSessionStats(post.session) && !post.imageUrl && !post.videoUrl ? { paddingBottom: barInset + 8 } : null]}>
+                  <View key={post.id} style={[styles.article, scopedBack && styles.articleScoped, !phone && styles.articleCentred, (topRow || rowed) && { paddingTop: insets.top + 64 }, barInset > 0 && post.session && hasSessionStats(post.session) && !post.imageUrl && !post.videoUrl ? { paddingBottom: barInset + 8 } : null]}>
                     <Wash height={300} strength={0.6} />
                     {strip}
                     <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: 'flex-start' }}>
@@ -1760,6 +1774,9 @@ function FeedTab({ scope, previewSection }: { previewSection?: string; scope?: F
   return <GroupedFeed />;
 }
 
+/** The top row's "Activities" word, held where a group's id would be. */
+const ACTIVITIES = 'activities';
+
 function GroupedFeed() {
   const app = useApp();
   const { feedGroups, currentUserId, actions } = app;
@@ -1767,7 +1784,7 @@ function GroupedFeed() {
   const [chrome, setChrome] = useState<FeedChrome>({ picture: false, hidden: false });
   useEffect(() => { if (currentUserId) void actions.loadFeedGroups(); }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
   // A group you left (or were taken out of) goes back to For you.
-  useEffect(() => { if (groupId && !feedGroups.some((g) => g.id === groupId)) setGroupId(null); }, [feedGroups, groupId]);
+  useEffect(() => { if (groupId && groupId !== ACTIVITIES && !feedGroups.some((g) => g.id === groupId)) setGroupId(null); }, [feedGroups, groupId]);
   // Opened from a group's page ("See the feed").
   useEffect(() => onOpenGroupFeed((id) => { tookGroupFeed(); setGroupId(id); }), []);
   const forYouChrome = useCallback((c: FeedChrome) => { if (!groupId) setChrome(c); }, [groupId]);
@@ -1778,7 +1795,7 @@ function GroupedFeed() {
       <Home topRow paused={!!groupId} onChrome={forYouChrome} />
       {groupId ? (
         <View style={StyleSheet.absoluteFill}>
-          <Home key={groupId} scope={{ groupId }} onChrome={groupChrome} />
+          <Home key={groupId} scope={groupId === ACTIVITIES ? { activities: true } : { groupId }} onChrome={groupChrome} />
         </View>
       ) : null}
       {currentUserId ? (
