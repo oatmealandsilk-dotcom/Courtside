@@ -9,12 +9,13 @@ import { duration } from '@/lib/format';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /** The shortest and longest a session can be logged at. */
-const MIN = 5;
+const MIN = 1;
 const MAX = 10 * 60;
 const clamp = (m: number) => Math.max(MIN, Math.min(MAX, m));
 /** The next or previous whole five minutes: 157 goes up to 160, down to 155. */
-const upFive = (m: number) => clamp(Math.floor(m / 5) * 5 + 5);
-const downFive = (m: number) => clamp(Math.ceil(m / 5) * 5 - 5);
+// One minute a tap (Oct 3, owner).
+const upOne = (m: number) => clamp(m + 1);
+const downOne = (m: number) => clamp(m - 1);
 
 /**
  * How long a tracker's session was, in your log (Oct 3): the tracker's time
@@ -70,8 +71,8 @@ export function TrackedLength({ minutes, trackerMinutes, tracker, open, onOpen, 
               label="Minutes"
               value={String(mins).padStart(2, '0')}
               unit="m"
-              onMinus={() => set(downFive(minutes))}
-              onPlus={() => set(upFive(minutes))}
+              onMinus={() => set(downOne(minutes))}
+              onPlus={() => set(upOne(minutes))}
               minusOff={minutes <= MIN}
               plusOff={minutes >= MAX}
             />

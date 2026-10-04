@@ -281,7 +281,6 @@ export function WhoYouPlayed({ kind, players, onPlayers, text, onText, search, s
       ) : null}
 
       {note ? <Text style={styles.note}>{note}</Text>
-        : players.some((p) => status[p.id] !== 'accepted') ? <Text style={styles.hint}>Everyone here is asked to accept. Their name shows on the post once they do.</Text>
         : null}
     </View>
   );

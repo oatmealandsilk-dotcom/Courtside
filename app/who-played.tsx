@@ -35,7 +35,7 @@ export default function WhoPlayedSheet() {
           {request ? (
             <>
               <WhoYouPlayed kind={request.kind} players={players} onPlayers={setPlayers} text={text} onText={setText} search={sessionTagsReady} suggested={request.suggested} status={request.status} declined={request.declined} closed={request.closed} />
-              <Submit label="Done" onPress={done} />
+              <Submit label={players.length ? (players.length === 1 ? 'Invite 1 player' : `Invite ${players.length} players`) : 'Done'} onPress={done} />
             </>
           ) : (
             <Submit label="Close" onPress={close} />
