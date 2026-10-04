@@ -102,7 +102,7 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt, TrackerId } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee } from '@/data/types';
 
 interface NewStoryInput {
   imageUrl?: string;
@@ -624,6 +624,7 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /** If this person arrived through an invite link, it is claimed now: the two follow each other. */
   claimPendingReferral: () => Promise<void>;
   countReferrals: () => Promise<number>;
+  fetchMyInvitees: () => Promise<Invitee[] | null>;
   /** Who invited me (after any invite link has been claimed), or null offline / in the demo. */
   myInviter: () => Promise<MyInviter | null>;
   /** "Invited by?" at setup: the inviter's @handle. Set once, never changed. */
@@ -5663,6 +5664,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
   useEffect(() => { if (live(state.currentUserId)) void claimPendingReferral(); }, [state.currentUserId, claimPendingReferral]);
   const countReferrals = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.countReferrals(me!) : 0; }, []);
+  const fetchMyInvitees = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.fetchMyInvitees() : []; }, []);
 
   const pullFrom = useCallback(async (me: ID, provider: Integration['provider']): Promise<boolean> => {
     if (provider === 'apple-health') {
@@ -6000,6 +6002,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       turnOffTennis,
       claimPendingReferral,
       countReferrals,
+      fetchMyInvitees,
       myInviter,
       claimInviteCode,
       askCoach,
@@ -6180,6 +6183,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       turnOffTennis,
       claimPendingReferral,
       countReferrals,
+      fetchMyInvitees,
       myInviter,
       claimInviteCode,
       askCoach,

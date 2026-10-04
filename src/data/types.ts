@@ -1301,3 +1301,19 @@ export interface Session {
   userId: ID;
   onboardingComplete: boolean;
 }
+
+/** What a player who joined through someone's link still has to do before they count (migration 85). */
+export type InviteeMissing = 'setup' | 'verify' | 'come-back' | 'do-thing' | 'expired' | 'blocked';
+
+/** Someone who joined through my link or code, as I see them on the Invite screen. */
+export interface Invitee {
+  id: ID;
+  handle: string;
+  name?: string;
+  avatarUrl?: string;
+  joinedAt: string;
+  /** Set once they counted ($1). */
+  countedAt?: string;
+  /** For those not counted yet, in the order they meet them. */
+  missing?: InviteeMissing[];
+}
