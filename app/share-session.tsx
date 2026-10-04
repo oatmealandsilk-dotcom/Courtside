@@ -199,14 +199,14 @@ export default function ShareSession() {
               })}
             </View>
 
-            {/* A match can carry its score on the picture (Oct 4, owner); typed here, never saved. */}
-            {story.session.kind === 'match' ? (
+                        {/* Any session can carry a score (Oct 4): practice sets and tiebreaks are scored too. */}
+            {true ? (
               <View style={styles.scoreRow}>
                 <Text style={styles.scoreLabel}>Score</Text>
                 <TextInput
                   value={score}
                   onChangeText={(t) => setScore(t.slice(0, 24))}
-                  placeholder="6-4 6-3"
+                  placeholder="Optional, e.g. 6-4 6-3"
                   placeholderTextColor={colors.textFaint}
                   style={styles.scoreInput}
                   returnKeyType="done"
