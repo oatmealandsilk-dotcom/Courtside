@@ -34,6 +34,8 @@ module.exports = {
       infoPlist: {
         // No custom encryption: skips the export-compliance question on every upload.
         ITSAppUsesNonExemptEncryption: false,
+        // Instagram Stories straight from Share (build 13, Facebook App ID in storyImage.ts).
+        LSApplicationQueriesSchemes: ['instagram-stories', 'instagram'],
         NSCameraUsageDescription: 'CourtSide uses the camera to take an instant — one photo right after your session.',
         NSPhotoLibraryUsageDescription: 'CourtSide needs your photo library to choose clips and photos to post.',
         NSLocationWhenInUseUsageDescription: 'CourtSide uses your location while the app is open to show courts and players near you. You choose who can see you.',

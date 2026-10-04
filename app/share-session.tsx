@@ -116,7 +116,7 @@ export default function ShareSession() {
       if (design === 'photo') {
         for (let t = 0; t < 50 && waitFor.current === 'loading'; t += 1) await new Promise((r) => setTimeout(r, 100));
       }
-      const said = await exportStory(stage.current, action, 'My session on CourtSide');
+      const said = await exportStory(stage.current, action, 'My session on CourtSide', { sticker: design === 'sticker' || design === 'overlay', top: colors.brand.slice(0, 7), bottom: colors.bg.slice(0, 7) });
       if (said) setNote(said);
       else haptics.commit();
     } catch (error) {

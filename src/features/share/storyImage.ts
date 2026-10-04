@@ -1,4 +1,4 @@
-import { Linking, PixelRatio, Platform, Share, type View } from 'react-native';
+import { Linking, PixelRatio, Platform, Share, TurboModuleRegistry, type View } from 'react-native';
 import Constants from 'expo-constants';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
@@ -49,7 +49,35 @@ export const COPIED_NOTE = 'Copied. In Instagram, pick your photo or video for t
  * The hidden copy photographed and handed on. Says nothing back when the
  * sheet opened; a sentence when it could not.
  */
-export async function exportStory(view: View | null, action: StoryAction, title: string): Promise<string | null> {
+/** CourtSide's app at Meta (Oct 4): Instagram's own "Share to Stories" handoff needs it. Public, not a secret. */
+const FACEBOOK_APP_ID = '1407829631564079';
+
+/**
+ * Strava's way (build 13 on): Instagram opens on its story editor with the
+ * picture already there, a sticker over the theme's colours or a whole
+ * background. Only where the phone's app carries react-native-share; on older
+ * builds it is never loaded (loading it there would close the app).
+ */
+async function straightToStories(b64: string, look: StoryLook): Promise<boolean> {
+  if (Platform.OS !== 'ios' || !TurboModuleRegistry.get('RNShare')) return false;
+  try {
+    const Share_ = (require('react-native-share') as typeof import('react-native-share')).default;
+    const image = `data:image/png;base64,${b64}`;
+    await Share_.shareSingle({
+      social: 'instagramstories' as never,
+      appId: FACEBOOK_APP_ID,
+      ...(look.sticker ? { stickerImage: image, backgroundTopColor: look.top, backgroundBottomColor: look.bottom } : { backgroundImage: image }),
+    } as never);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** How the picture goes into a story: as a sticker over two colours, or as the whole background. */
+export interface StoryLook { sticker: boolean; top: string; bottom: string }
+
+export async function exportStory(view: View | null, action: StoryAction, title: string, look?: StoryLook): Promise<string | null> {
   if (!view) return 'The picture is not ready yet. Try again in a moment.';
   const size = Platform.OS === 'android' ? STORY_PX : stageSize();
   if (action === 'copy') {
@@ -62,6 +90,7 @@ export async function exportStory(view: View | null, action: StoryAction, title:
     // Straight into Instagram (Oct 4): the picture on the clipboard, then its
     // story camera, where it pastes. Build 12 hands it over with no paste.
     const b64 = await captureRef(view, { format: 'png', quality: 1, result: 'base64', ...size });
+    if (look && (await straightToStories(b64, look))) return null;
     await Clipboard.setImageAsync(b64);
     try {
       await Linking.openURL('instagram://story-camera');

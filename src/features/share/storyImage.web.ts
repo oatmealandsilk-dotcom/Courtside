@@ -54,7 +54,10 @@ function download(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(link.href), 4000);
 }
 
-export async function exportStory(view: View | null, action: StoryAction, title: string): Promise<string | null> {
+/** How the picture goes into a story (phones only; the browser shares a file). */
+export interface StoryLook { sticker: boolean; top: string; bottom: string }
+
+export async function exportStory(view: View | null, action: StoryAction, title: string, _look?: StoryLook): Promise<string | null> {
   const made = await storyBlob(view);
   if (typeof made === 'string') return made;
   if (action === 'copy') {
