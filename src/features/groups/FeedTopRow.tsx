@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -43,55 +44,62 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   const edge = onPicture ? GLYPH_EDGE : null;
   // Activities sits left of For you (Oct 4): sessions with stats, as Strava's feed.
   const words = [{ id: 'activities' as string | null, name: 'Activities' }, { id: null as string | null, name: 'For you' }, ...groups];
-  // With three groups the row is wider than a phone: the one on show is slid
-  // into the middle (a group just started, say, lands in view, "+" beside it).
-  const scroller = useRef<ScrollView>(null);
+  // The camera's mode picker (Oct 4, owner): the word on show always sits in
+  // the middle of the screen, and a tap slides the row so the new one glides
+  // there, the others passing left or right. "+" rides at the row's end.
   const spots = useRef(new Map<string, { x: number; w: number }>());
-  const viewW = useRef(0);
-  const reveal = (animated: boolean) => {
+  const [viewW, setViewW] = useState(0);
+  const [measured, setMeasured] = useState(0);
+  const shift = useSharedValue(0);
+  const placed = useRef(false);
+  useEffect(() => {
     const at = spots.current.get(selected ?? 'for-you');
-    if (!at || !viewW.current) return;
-    scroller.current?.scrollTo({ x: Math.max(0, at.x + at.w / 2 - viewW.current / 2), animated });
-  };
-  useEffect(() => { reveal(true); }, [selected]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!at || !viewW) return;
+    const to = viewW / 2 - (at.x + at.w / 2);
+    if (!placed.current) { placed.current = true; shift.value = to; return; }
+    shift.value = withSpring(to, { damping: 22, stiffness: 220, mass: 0.8 });
+  }, [selected, viewW, measured, shift]);
+  const slide = useAnimatedStyle(() => ({ transform: [{ translateX: shift.value }] }));
   return (
     <View pointerEvents={hidden ? 'none' : 'box-none'} style={[styles.layer, { top: insets.top + TOP_BAND_TOP, opacity: hidden ? 0 : 1 }]}>
-      <ScrollView ref={scroller} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row} style={styles.scroller} onLayout={(e) => { viewW.current = e.nativeEvent.layout.width; }}>
-        {words.map((w, i) => {
-          const on = w.id === selected;
-          return (
-            <React.Fragment key={w.id ?? 'for-you'}>
-              {i > 0 ? <Text style={[styles.dot, { color: ink }, edge]}>·</Text> : null}
-              <Pressable
-                accessibilityRole="tab"
-                accessibilityState={{ selected: on }}
-                accessibilityLabel={w.id === 'activities' ? 'Activities' : w.id ? `${w.name}, group feed` : 'For you'}
-                hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
-                onPress={() => onSelect(w.id)}
-                onLayout={(e) => {
-                  spots.current.set(w.id ?? 'for-you', { x: e.nativeEvent.layout.x, w: e.nativeEvent.layout.width });
-                  if (on) reveal(false);
-                }}
-              >
-                <Text numberOfLines={1} style={[styles.word, on && styles.wordOn, { color: ink, opacity: on ? 1 : 0.62 }, edge]}>{w.name}</Text>
-              </Pressable>
-            </React.Fragment>
-          );
-        })}
-        <Pressable accessibilityRole="button" accessibilityLabel={waiting ? 'Find or start a group, someone is asking to join yours' : 'Find or start a group'} hitSlop={10} onPress={onPlus} style={styles.plus}>
-          <Ionicons name="add" size={22} color={ink} style={[{ opacity: 0.85 }, edge]} />
-          {waiting ? <View style={styles.waiting} /> : null}
-        </Pressable>
-      </ScrollView>
+      <View style={styles.clip} onLayout={(e) => setViewW(e.nativeEvent.layout.width)} pointerEvents="box-none">
+        <Animated.View style={[styles.row, slide, { opacity: viewW && measured ? 1 : 0 }]}>
+          {words.map((w, i) => {
+            const on = w.id === selected;
+            return (
+              <React.Fragment key={w.id ?? 'for-you'}>
+                {i > 0 ? <Text style={[styles.dot, { color: ink }, edge]}>·</Text> : null}
+                <Pressable
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={w.id === 'activities' ? 'Activities' : w.id ? `${w.name}, group feed` : 'For you'}
+                  hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
+                  onPress={() => onSelect(w.id)}
+                  onLayout={(e) => {
+                    spots.current.set(w.id ?? 'for-you', { x: e.nativeEvent.layout.x, w: e.nativeEvent.layout.width });
+                    if (spots.current.size >= words.length) setMeasured((n) => n + 1);
+                  }}
+                >
+                  <Text numberOfLines={1} style={[styles.word, on && styles.wordOn, { color: ink, opacity: on ? 1 : 0.6 }, edge]}>{w.name}</Text>
+                </Pressable>
+              </React.Fragment>
+            );
+          })}
+          <Pressable accessibilityRole="button" accessibilityLabel={waiting ? 'Find or start a group, someone is asking to join yours' : 'Find or start a group'} hitSlop={10} onPress={onPlus} style={styles.plus}>
+            <Ionicons name="add" size={22} color={ink} style={[{ opacity: 0.85 }, edge]} />
+            {waiting ? <View style={styles.waiting} /> : null}
+          </Pressable>
+        </Animated.View>
+      </View>
     </View>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
   layer: { position: 'absolute', left: 0, right: 0, height: TOP_BAND_HEIGHT, zIndex: 8, alignItems: 'center', justifyContent: 'center' },
-  scroller: { flexGrow: 0, maxWidth: '100%' },
-  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 8, height: TOP_BAND_HEIGHT },
-  word: { fontSize: 16, lineHeight: 22, ...font('500'), letterSpacing: -0.2, maxWidth: 150, paddingVertical: 2 },
+  clip: { alignSelf: 'stretch', overflow: 'hidden', height: TOP_BAND_HEIGHT },
+  row: { position: 'absolute', left: 0, top: 0, flexDirection: 'row', alignItems: 'center', gap: 9, height: TOP_BAND_HEIGHT },
+  word: { fontSize: 16.5, lineHeight: 22, ...font('500'), letterSpacing: -0.25, maxWidth: 150, paddingVertical: 2 },
   wordOn: { ...font('700') },
   dot: { fontSize: 16, lineHeight: 22, opacity: 0.5 },
   plus: { marginLeft: 6, width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
