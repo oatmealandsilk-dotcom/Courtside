@@ -472,7 +472,7 @@ const styles = StyleSheet.create({
   // A copy of the who-line that may wrap: one line tall means "New" fits beside the level.
   whoMeasure: { position: 'absolute', left: 0, right: 0, top: 0, opacity: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
   keep: { flexShrink: 0 },
-  handle: { color: '#fff', fontSize: 15.5, lineHeight: 20, ...font('600'), letterSpacing: -0.25, flexShrink: 1, ...EDGE },
+  handle: { color: '#fff', fontSize: 16, lineHeight: 20, ...font('600'), letterSpacing: -0.2, flexShrink: 1, ...EDGE },
   caption: { color: '#fff', fontSize: 15, lineHeight: LINE, ...font('400'), ...EDGE },
   tag: { color: '#fff', ...font('600') },
   // The one tappable word in the caption: as white as the rest, set in the name's weight.

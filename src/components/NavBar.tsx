@@ -161,8 +161,6 @@ export function NavBar({ state, navigation }: NavBarProps) {
                   accessibilityLabel={item.label}
                   style={styles.bottomItem}
                 >
-                  {/* Instagram's soft lozenge behind the tab you are on, in the theme's own colour (Oct 4). */}
-                  {active ? <View pointerEvents="none" style={[styles.activeBubble, { backgroundColor: withAlpha(item.route === 'coaches' ? colors.info : item.route === 'discuss' ? colors.warning : colors.brand, 0.14) }]} /> : null}
                   <Animated.View style={[styles.bottomInner, settle]}>
                   <View>
                     <Ionicons
@@ -337,7 +335,6 @@ const styleDefinitions = StyleSheet.create({
   pillShadow: { borderRadius: TAB_BAR_H / 2, shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
   pill: { height: TAB_BAR_H, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255, 255, 255, 0.45)' },
   bottomItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  activeBubble: { position: 'absolute', left: 2, right: 2, top: 6, bottom: 6, borderRadius: 999 },
   bottomInner: { alignItems: 'center', justifyContent: 'center', gap: 3 },
   // Sits off the icon's shoulder rather than on top of it, so it needs no
   // ring to stand apart, and the number has room to breathe.
@@ -347,7 +344,7 @@ const styleDefinitions = StyleSheet.create({
     backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center',
   },
   bottomBadgeText: { color: 'white', fontSize: 11, lineHeight: 13, ...font('700'), fontVariant: ['tabular-nums'], includeFontPadding: false, textAlign: 'center' },
-  bottomLabel: { ...typography.smallStrong, fontSize: 10.5, color: colors.textFaint, letterSpacing: 0 },
+  bottomLabel: { ...typography.smallStrong, fontSize: 11, color: colors.textFaint, letterSpacing: 0.15 },
 
   sidebar: {
     backgroundColor: colors.bg,

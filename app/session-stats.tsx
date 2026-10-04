@@ -8,7 +8,6 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { DragSheet } from '@/components/DragSheet';
 import { SessionSheet, SessionSheetHeader } from '@/components/session/SessionSheet';
 import { StageRail } from '@/components/StageRail';
-import { Wash } from '@/components/Wash';
 import { getStage, markGone, markMounted, setCovered, stageKeyOf, useStageSelect } from '@/features/feed/commentStage';
 import { useApp } from '@/store/AppContext';
 import { postZones } from '@/features/activity/zones';
@@ -97,7 +96,6 @@ export default function SessionStatsSheet() {
         header={post ? <SessionSheetHeader post={post} onClose={close} /> : <View style={styles.headPad} />}
       >
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} onAccessibilityEscape={close} onContentSizeChange={(_, h) => { const r = Math.ceil(h); if (r !== contentH) setContentH(r); }}>
-          <Wash height={220} strength={0.45} />
           {post?.session ? (
             <SessionSheet
               post={post}

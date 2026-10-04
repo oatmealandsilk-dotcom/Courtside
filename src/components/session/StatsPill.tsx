@@ -112,10 +112,10 @@ export function StatsPill({ session, hidden = [], onPress, scale = 1, active = f
     // Frosted glass tinted the theme's colour, its wash faint over it, no shine (Oct 4, owner: option A in the theme's colour).
     ? liquidGlass
       // iOS 26: Apple's glass carrying the theme's colour, the wash faint inside it.
-      ? <View style={[shell, styles.tintEdge]}><GlassFill radius={15 * k} tint={colors.brand} strength={0.62} /><View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} /></View>{inner}</View>
+      ? <View style={[shell, styles.tintEdge]}><GlassFill radius={15 * k} tint={colors.brand} strength={0.4} /><View style={[StyleSheet.absoluteFill, styles.calm]} /><View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} /></View>{inner}</View>
       : Platform.OS === 'ios'
-      ? <BlurView intensity={30} tint="dark" style={[shell, styles.tintEdge, { backgroundColor: withAlpha(colors.brand, 0.6) }]}><View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} /></View>{inner}</BlurView>
-      : <View style={[shell, styles.tintEdge, styles.webGlass, { backgroundColor: withAlpha(colors.brand, Platform.OS === 'web' ? 0.68 : 0.74) }]}><View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} /></View>{inner}</View>
+      ? <BlurView intensity={30} tint="dark" style={[shell, styles.tintEdge, { backgroundColor: withAlpha(colors.brand, 0.4) }]}><View style={[StyleSheet.absoluteFill, styles.calm]} /><View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} /></View>{inner}</BlurView>
+      : <View style={[shell, styles.tintEdge, styles.webGlass, { backgroundColor: withAlpha(colors.brand, Platform.OS === 'web' ? 0.46 : 0.5) }]}><View style={[StyleSheet.absoluteFill, styles.calm]} /><View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} /></View>{inner}</View>
     : Platform.OS === 'ios'
       ? <BlurView intensity={30} tint="dark" style={[shell, styles.iosFill]}>{inner}</BlurView>
       : <View style={[shell, styles.flatFill]}>{inner}</View>;
@@ -146,6 +146,8 @@ const styles = StyleSheet.create({
   iosFill: { backgroundColor: 'rgba(18, 22, 20, 0.34)' },
   flatFill: { backgroundColor: 'rgba(18, 22, 20, 0.46)' },
   tintEdge: { borderColor: 'rgba(255, 255, 255, 0.3)' },
+  // A neutral dark veil over the theme's tint: calmer colour, still not very see-through (Oct 4).
+  calm: { backgroundColor: 'rgba(16, 18, 17, 0.28)' },
   faintWash: { opacity: 0.35 },
   webGlass: { backdropFilter: 'blur(14px) saturate(1.3)', WebkitBackdropFilter: 'blur(14px) saturate(1.3)' } as object,
   row: { flexDirection: 'row', alignItems: 'center' },
