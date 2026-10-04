@@ -3,7 +3,6 @@ import { Platform, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
 import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming } from 'react-native-reanimated';
 
 import { Tappable } from '@/components/Tappable';
@@ -13,7 +12,7 @@ import { localDay } from '@/features/practice/stats';
 import * as haptics from '@/lib/haptics';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { BrandWash } from '@/components/ui';
-import { colors, font, pageIsDark } from '@/theme';
+import { colors, font, pageIsDark, withAlpha } from '@/theme';
 import { useTheme } from '@/theme/ThemeProvider';
 import { ZoneGlyph } from './ZoneGlyph';
 
@@ -80,7 +79,7 @@ export function StatsPill({ session, hidden = [], onPress, scale = 1, active = f
   // On the solid colour the words need no shadow (it only muddied them); on the dark glass they keep one.
   const text = { ...font('500'), fontSize: 13 * k, letterSpacing: -0.15 * k, color: '#FFFFFF', fontVariant: ['tabular-nums' as const], ...(isDark ? EDGE_SMALL : null) };
   const row = (words: string, still = false) => (
-    // Instagram's "Made with Edits" pill (Oct 4): slim, fully round, one line, a dot before See stats, a small arrow.
+    // Instagram's "Made with Edits" pill (Oct 4): slim, fully round, one line, a hairline before See stats, a small arrow.
     <View style={[styles.row, { height: 30 * k, paddingLeft: 11 * k, paddingRight: 9 * k, gap: 7 * k }]}>
       <ZoneGlyph size={13 * k} color="#FFFFFF" />
       {/* The time and the rest sit together with no gap between them, so the
@@ -89,7 +88,7 @@ export function StatsPill({ session, hidden = [], onPress, scale = 1, active = f
         <Text style={[text, font('700'), { letterSpacing: -0.3 * k }, styles.keep]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{p.time}</Text>
         {words ? <Text style={[text, { color: 'rgba(255, 255, 255, 0.8)' }, still ? styles.keep : styles.shrink]} numberOfLines={1} ellipsizeMode="clip" maxFontSizeMultiplier={1.2}>{`\u00A0· ${words}`}</Text> : null}
       </View>
-      <View style={[styles.dotSep, { width: 3 * k, height: 3 * k, borderRadius: 2 * k }]} />
+      <View style={[styles.divider, { height: 14 * k }]} />
       <Text style={[text, font('600'), styles.keep, { fontSize: 12.5 * k }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>See stats</Text>
       {still ? <Ionicons name="chevron-forward" size={12 * k} color="rgba(255, 255, 255, 0.85)" /> : <Reanimated.View style={chevron}><Ionicons name="chevron-forward" size={12 * k} color="rgba(255, 255, 255, 0.85)" style={EDGE_SMALL} /></Reanimated.View>}
     </View>
@@ -109,8 +108,10 @@ export function StatsPill({ session, hidden = [], onPress, scale = 1, active = f
   // The workout card's own colour (Oct 3): the theme's brand with the same wash,
   // so a clip's stats read as the same thing as a stats post. Dark themes keep the glass.
   const glass = !isDark
-    // A clean gradient in the theme's colour, a soft light along the top, no outline (Oct 4: Instagram's Edits pill).
-    ? <View style={[shell, styles.brandFill, { backgroundColor: colors.brand }]}><LinearGradient colors={['rgba(255,255,255,0.20)', 'rgba(255,255,255,0)', 'rgba(0,0,0,0.10)']} locations={[0, 0.55, 1]} style={StyleSheet.absoluteFill} />{inner}</View>
+    // Frosted glass tinted the theme's colour, its wash faint over it, no shine (Oct 4, owner: option A in the theme's colour).
+    ? Platform.OS === 'ios'
+      ? <BlurView intensity={30} tint="dark" style={[shell, styles.tintEdge, { backgroundColor: withAlpha(colors.brand, 0.6) }]}><View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} /></View>{inner}</BlurView>
+      : <View style={[shell, styles.tintEdge, styles.webGlass, { backgroundColor: withAlpha(colors.brand, Platform.OS === 'web' ? 0.68 : 0.74) }]}><View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} /></View>{inner}</View>
     : Platform.OS === 'ios'
       ? <BlurView intensity={30} tint="dark" style={[shell, styles.iosFill]}>{inner}</BlurView>
       : <View style={[shell, styles.flatFill]}>{inner}</View>;
@@ -140,8 +141,9 @@ const styles = StyleSheet.create({
   pill: { overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255, 255, 255, 0.28)' },
   iosFill: { backgroundColor: 'rgba(18, 22, 20, 0.34)' },
   flatFill: { backgroundColor: 'rgba(18, 22, 20, 0.46)' },
-  brandFill: { borderWidth: 0, boxShadow: '0px 2px 10px rgba(0, 0, 0, 0.16)' },
-  dotSep: { backgroundColor: 'rgba(255, 255, 255, 0.55)' },
+  tintEdge: { borderColor: 'rgba(255, 255, 255, 0.3)' },
+  faintWash: { opacity: 0.35 },
+  webGlass: { backdropFilter: 'blur(14px) saturate(1.3)', WebkitBackdropFilter: 'blur(14px) saturate(1.3)' } as object,
   row: { flexDirection: 'row', alignItems: 'center' },
   shrink: { flexShrink: 1, minWidth: 0 },
   divider: { width: 1, backgroundColor: 'rgba(255, 255, 255, 0.35)' },
