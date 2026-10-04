@@ -20,7 +20,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { PinchZone } from '@/components/PinchZone';
-import Reanimated, { ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
+import Reanimated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
 import * as haptics from '@/lib/haptics';
 
 import { Avatar, Button, EmptyState } from '@/components/ui';
@@ -1781,6 +1781,14 @@ function FeedTab({ scope, previewSection }: { previewSection?: string; scope?: F
   return <GroupedFeed />;
 }
 
+/** One kept feed over For you: fades in when chosen, out (and untouchable) when not. */
+function FeedLayer({ shown, children }: { shown: boolean; children: React.ReactNode }) {
+  const o = useSharedValue(0);
+  useEffect(() => { o.value = withTiming(shown ? 1 : 0, { duration: 220, easing: Easing.out(Easing.quad) }); }, [shown, o]);
+  const fade = useAnimatedStyle(() => ({ opacity: o.value }));
+  return <Reanimated.View pointerEvents={shown ? 'auto' : 'none'} style={[StyleSheet.absoluteFill, fade]}>{children}</Reanimated.View>;
+}
+
 /** The top row's "Activities" word, held where a group's id would be. */
 const ACTIVITIES = 'activities';
 
@@ -1794,17 +1802,23 @@ function GroupedFeed() {
   useEffect(() => { if (groupId && groupId !== ACTIVITIES && !feedGroups.some((g) => g.id === groupId)) setGroupId(null); }, [feedGroups, groupId]);
   // Opened from a group's page ("See the feed").
   useEffect(() => onOpenGroupFeed((id) => { tookGroupFeed(); setGroupId(id); }), []);
+  // The last three feeds opened, kept built.
+  const [kept, setKept] = useState<string[]>([]);
+  useEffect(() => { if (groupId) setKept((k) => (k.includes(groupId) ? k : [...k.slice(-2), groupId])); }, [groupId]);
+  useEffect(() => { setKept((k) => k.filter((key) => key === ACTIVITIES || feedGroups.some((g) => g.id === key))); }, [feedGroups]);
   const forYouChrome = useCallback((c: FeedChrome) => { if (!groupId) setChrome(c); }, [groupId]);
   const groupChrome = useCallback((c: FeedChrome) => setChrome(c), []);
   const waiting = feedGroups.some((g) => g.requests.length > 0 && g.members.some((m) => m.id === currentUserId && m.admin));
   return (
     <View style={{ flex: 1, alignSelf: 'stretch' }}>
       <Home topRow paused={!!groupId} onChrome={forYouChrome} />
-      {groupId ? (
-        <View style={StyleSheet.absoluteFill}>
-          <Home key={groupId} scope={groupId === ACTIVITIES ? { activities: true } : { groupId }} onChrome={groupChrome} />
-        </View>
-      ) : null}
+      {/* Feeds already opened stay built (paused, see-through) and cross-fade in, so a switch
+          is a fade rather than building a whole feed on the spot (Oct 4, owner: "way smoother"). */}
+      {kept.map((key) => (
+        <FeedLayer key={key} shown={key === groupId}>
+          <Home scope={key === ACTIVITIES ? { activities: true } : { groupId: key }} paused={key !== groupId} onChrome={key === groupId ? groupChrome : undefined} />
+        </FeedLayer>
+      ))}
       {currentUserId ? (
         <FeedTopRow
           groups={feedGroups}
