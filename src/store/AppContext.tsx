@@ -17,7 +17,7 @@ import { TERMS_VERSION } from '@/lib/legal';
 
 import { fetchBootstrap, searchPosts as apiSearchPosts, signIn as apiSignIn, type Bootstrap } from '@/data/api';
 import * as demoApi from '@/data/api';
-import { CHAT_PHOTO_UNREADABLE, auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ReportedChat, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type RemoteData } from '@/data/remote';
+import { CHAT_PHOTO_UNREADABLE, auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ReportedChat, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
@@ -621,6 +621,10 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /** If this person arrived through an invite link, it is claimed now: the two follow each other. */
   claimPendingReferral: () => Promise<void>;
   countReferrals: () => Promise<number>;
+  /** Who invited me (after any invite link has been claimed), or null offline / in the demo. */
+  myInviter: () => Promise<MyInviter | null>;
+  /** "Invited by?" at setup: the inviter's @handle. Set once, never changed. */
+  claimInviteCode: (code: string) => Promise<InviteCodeResult>;
 
   /* Ask a coach */
   askCoach: (input: NewCoachQuestionInput) => ID;
@@ -5597,17 +5601,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [applyHealth]);
   useEffect(() => { if (live(state.currentUserId)) void reloadHealth(); }, [state.currentUserId, reloadHealth]);
 
+  // The claim in flight, so "who invited me" waits for a link's claim to land.
+  const referralClaim = useRef<Promise<void> | null>(null);
   const claimPendingReferral = useCallback(async () => {
     const me = stateRef.current.currentUserId;
     if (!live(me)) return;
-    const handle = await takeReferrer();
-    if (!handle) return;
-    // Null when no follow was made: a teen, or someone whose age is not on
-    // file yet, is never made to follow the sharer (followInviter makes it
-    // once the birthday says adult).
-    const who = await remote.claimReferral(handle);
-    if (!who) return;
-    showInviterFollow(who, handle);
+    const run = (async () => {
+      const handle = await takeReferrer();
+      if (!handle) return;
+      // Null when no follow was made: a teen, or someone whose age is not on
+      // file yet, is never made to follow the sharer (followInviter makes it
+      // once the birthday says adult).
+      const who = await remote.claimReferral(handle);
+      if (!who) return;
+      showInviterFollow(who, handle);
+    })();
+    referralClaim.current = run;
+    try { await run; } finally { if (referralClaim.current === run) referralClaim.current = null; }
+  }, []);
+  const myInviter = useCallback(async (): Promise<MyInviter | null> => {
+    if (!live(stateRef.current.currentUserId)) return null;
+    await referralClaim.current?.catch(() => undefined);
+    return remote.myInviter().catch(() => null);
+  }, []);
+  const claimInviteCode = useCallback(async (code: string): Promise<InviteCodeResult> => {
+    if (!live(stateRef.current.currentUserId)) return { error: 'offline' };
+    const r = await remote.claimInviteCode(code).catch((): InviteCodeResult => ({ error: 'offline' }));
+    if (r.ok && r.followed) showInviterFollow(r.id, r.handle);
+    return r;
   }, []);
   // You follow whoever invited you (or, if their account is private, ask
   // to); they are never made to follow you back without saying so.
@@ -5967,6 +5988,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       turnOffTennis,
       claimPendingReferral,
       countReferrals,
+      myInviter,
+      claimInviteCode,
       askCoach,
       replyToCoachQuestion,
       toggleReplyHelpful,
@@ -6145,6 +6168,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       turnOffTennis,
       claimPendingReferral,
       countReferrals,
+      myInviter,
+      claimInviteCode,
       askCoach,
       replyToCoachQuestion,
       toggleReplyHelpful,

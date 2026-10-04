@@ -10,6 +10,7 @@ import { Button, Collapse, Field, SegmentedControl, Toggle } from '@/components/
 import { writeSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
 import { replaceWithStart } from '@/features/navigation/startTab';
 import { peekShareTarget } from '@/features/invite/referral';
+import type { InviteCodeResult, MyInviter } from '@/data/remote';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { useGateSpace } from '@/lib/useGateSpace';
@@ -172,6 +173,42 @@ export default function Onboarding() {
   const savedTournament = existing?.tournaments[0];
   const [tournamentDays, setTournamentDays] = useState(savedTournament ? Math.max(1, Math.round((Date.parse(savedTournament.startsAt) - Date.now()) / 86_400_000)) : 30);
 
+  // "Invited by?": only while joining, and only while no invite link has set it.
+  const asksInviter = !editing && !forCoach;
+  const [inviter, setInviter] = useState<MyInviter | null>(null);
+  const [inviteCode, setInviteCode] = useState('');
+  const [inviteNote, setInviteNote] = useState<string | undefined>();
+  const [claiming, setClaiming] = useState(false);
+  useEffect(() => {
+    if (!asksInviter) return;
+    let live = true;
+    void actions.myInviter().then((r) => { if (live) setInviter(r); });
+    return () => { live = false; };
+  }, [asksInviter, actions]);
+  const INVITE_ERRORS: Record<Exclude<InviteCodeResult['error'], undefined>, string> = {
+    'not-found': 'No player with that handle. Check the spelling.',
+    self: "That's you. Enter the handle of whoever invited you.",
+    already: 'Someone is already saved as your inviter.',
+    'too-late': 'Codes can only be added on the day you join.',
+    offline: 'Could not check that code. Try again.',
+  };
+  /** Claims a typed code. True when there is nothing left to claim (so setup may go on). */
+  const claimCode = async (): Promise<boolean> => {
+    const code = inviteCode.trim().replace(/^@+/, '');
+    if (!code || !inviter?.canSet || inviter.handle) return true;
+    setClaiming(true);
+    const r = await actions.claimInviteCode(code);
+    setClaiming(false);
+    if (r.ok) { haptics.commit(); setInviter({ id: r.id, handle: r.handle, canSet: false }); setInviteNote(undefined); return true; }
+    if (r.error === 'already' || r.error === 'too-late') {
+      setInviter(r.handle ? { handle: r.handle, canSet: false } : { canSet: false });
+      setInviteCode('');
+      return true;
+    }
+    setInviteNote(INVITE_ERRORS[r.error]);
+    return false;
+  };
+
   const scale = SCALES[skillSystem];
   const band = scale.bands.find((b) => rating <= b.upTo) ?? scale.bands[scale.bands.length - 1];
   const parsed = Number(ratingText.replace(',', '.'));
@@ -271,7 +308,8 @@ export default function Onboarding() {
     if (key) skipped.current.add(key);
     setStep((s) => s + 1);
   };
-  const next = () => {
+  const next = async () => {
+    if (step === 0 && asksInviter && !(await claimCode())) return;
     const key = STEPS[step].skip;
     if (key) skipped.current.delete(key);
     setStep(order[position + 1] ?? step + 1);
@@ -279,7 +317,7 @@ export default function Onboarding() {
   const back = () => setStep(order[position - 1] ?? step - 1);
 
   const last = position === order.length - 1;
-  const canContinue = step === 0 ? name.trim().length > 0 && ratingValid : true;
+  const canContinue = step === 0 ? name.trim().length > 0 && ratingValid && !claiming : true;
 
   return (
     <View style={[styles.root, { paddingTop: space.header }]}>
@@ -339,6 +377,20 @@ export default function Onboarding() {
                   segments={YEARS.map((y) => ({ value: String(y.value), label: y.label }))}
                 />
               </Group>
+              {asksInviter && inviter?.handle ? (
+                <Text style={styles.note} accessibilityLabel={`Invited by @${inviter.handle}`}>Invited by @{inviter.handle}</Text>
+              ) : asksInviter && inviter?.canSet ? (
+                <Field
+                  label="Invited by?"
+                  placeholder="Enter a code: their @handle"
+                  value={inviteCode}
+                  onChangeText={(t) => { setInviteCode(t); setInviteNote(undefined); }}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  hint={inviteNote ?? 'Optional. Can only be set once.'}
+                  onSubmitEditing={() => void claimCode()}
+                />
+              ) : null}
             </>
           ) : null}
 
@@ -470,7 +522,7 @@ export default function Onboarding() {
           {editing ? (
             <>
               {!last ? (
-                <Pressable accessibilityRole="button" accessibilityLabel="Next step" onPress={next} style={styles.skip}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Next step" onPress={() => void next()} style={styles.skip}>
                   <Text style={styles.skipText}>Next</Text>
                 </Pressable>
               ) : null}
@@ -481,7 +533,7 @@ export default function Onboarding() {
               <Text style={styles.skipText}>Skip</Text>
             </Pressable>
           ) : null}
-          {editing ? null : <Button label={last ? 'Finish' : 'Continue'} disabled={!canContinue} onPress={() => (last ? finish() : next())} />}
+          {editing ? null : <Button label={last ? 'Finish' : 'Continue'} disabled={!canContinue} onPress={() => (last ? finish() : void next())} />}
         </View>
       </View>
     </View>

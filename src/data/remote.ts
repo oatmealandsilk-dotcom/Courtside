@@ -35,14 +35,21 @@ export type FirstMove = 'post' | 'instant' | 'answer' | 'ask' | 'later';
 /** One person who has invited anyone, as the admin Invites page shows them (migration 71). */
 export interface InviteSummaryRow {
   id: ID; name: string; handle: string; avatarUrl?: string; suspended?: boolean;
+  /** Worth a look (migration 80): their people share phones, >10 joined in an hour, or >20 counted in a day. Only a flag. */
+  suspicious?: boolean;
   /** Signed up through their link (not deleted, not suspended, never themselves). */
   invited: number;
   /** Of those, finished setting up. */
   setUp: number;
-  /** Set up and seen again on a later day: what is paid for. */
+  /** A real player (migration 80's test): what is paid for. */
   qualified: number;
   paid: number; paidCents: number; owed: number; owedCents: number; lastPaidAt?: string;
 }
+/** Who invited me: their id and @handle once set; canSet while a code may still be typed (inside a day of joining). */
+export interface MyInviter { id?: ID; handle?: string; name?: string; canSet: boolean }
+export type InviteCodeResult =
+  | { ok: true; id: ID; handle: string; followed: boolean; error?: undefined }
+  | { ok?: undefined; error: 'not-found' | 'self' | 'already' | 'too-late' | 'offline'; handle?: string };
 /** Someone one person brought: only their name, @handle and dates. */
 export interface InviteeRow { id: ID; name: string; handle: string; avatarUrl?: string; joinedAt: string; setUp: boolean; qualifiedAt?: string }
 export interface FirstDayStats { new30: number; moved30: number; cohort: number; movers: number; moversBack: number; othersBack: number; picked: Record<FirstMove, number> }
@@ -1732,6 +1739,20 @@ export const remote = {
     const { data, error } = await need().rpc('claim_referral', { p_handle: handle });
     if (error) return null;
     return (data as ID | null) ?? null;
+  },
+
+  /** Who invited me (migration 80), and whether a code may still be typed. Null when unknown. */
+  async myInviter(): Promise<MyInviter | null> {
+    const { data, error } = await need().rpc('my_inviter');
+    if (error || !data) return null;
+    return data as MyInviter;
+  },
+
+  /** "Invited by?" at setup: the inviter's @handle, claimed as an invite link would be (once, never changed). */
+  async claimInviteCode(code: string): Promise<InviteCodeResult> {
+    const { data, error } = await need().rpc('claim_invite_code', { p_code: code });
+    if (error) return { error: 'offline' };
+    return (data ?? { error: 'not-found' }) as InviteCodeResult;
   },
 
   /** Once the birthday says adult: the follow an invite waited on (follow_my_inviter). Who was followed, or null when nothing was made. */

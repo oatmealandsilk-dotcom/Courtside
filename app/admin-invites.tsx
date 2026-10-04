@@ -122,7 +122,7 @@ export default function AdminInvites() {
   return (
     <Screen title="Invites" compactTitle onBack={() => goBack()} onRefresh={load}>
       <Text style={styles.lead}>
-        $1 for each player someone brings who joins through their link, sets up, and comes back on a later day. {rows?.length ? (owedTotal ? `${dollars(owedTotal)} owed in all.` : 'Nothing owed right now.') : ''}
+        $1 for each real player someone brings: joined through their link or code, set up, has a confirmed email (or Apple or Google), came back on a later day within 2 weeks, did something (followed, posted, messaged, joined a hit or logged a session), and never signed in on the inviter's phone. "Suspicious" means their people share phones, more than 10 joined in an hour, or over 20 counted in a day; nothing is held back. {rows?.length ? (owedTotal ? `${dollars(owedTotal)} owed in all.` : 'Nothing owed right now.') : ''}
       </Text>
       {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
       {rows === null ? (
@@ -135,7 +135,7 @@ export default function AdminInvites() {
             <Pressable
               key={row.id}
               accessibilityRole="button"
-              accessibilityLabel={`${row.name}: ${row.qualified} qualified, ${row.paid} paid, ${dollars(row.owedCents)} owed. Shows their people.`}
+              accessibilityLabel={`${row.name}${row.suspicious ? ' (suspicious)' : ''}: ${row.qualified} qualified, ${row.paid} paid, ${dollars(row.owedCents)} owed. Shows their people.`}
               onPress={() => void openRow(row)}
               style={({ pressed }) => [styles.block, index > 0 && styles.rowLine, pressed && { backgroundColor: colors.surfaceAlt }]}
             >
@@ -144,6 +144,12 @@ export default function AdminInvites() {
                 <View style={styles.words}>
                   <Text style={styles.name} numberOfLines={1}>{row.name}</Text>
                   <Text style={styles.meta} numberOfLines={1}>@{row.handle}{row.suspended ? ' · suspended' : ''}</Text>
+                  {row.suspicious ? (
+                    <View style={styles.flag} accessibilityLabel="Suspicious: shared phones, a burst of sign-ups, or over 20 in a day. Nothing is held back.">
+                      <Ionicons name="alert-circle-outline" size={12} color={colors.warning} />
+                      <Text style={styles.flagText}>Suspicious</Text>
+                    </View>
+                  ) : null}
                 </View>
                 <Pressable accessibilityRole="button" accessibilityLabel={`Copy @${row.handle}'s invite link`} hitSlop={8} onPress={() => void copyLink(row)} style={styles.copy}>
                   <Ionicons name="link-outline" size={14} color={colors.text} />
@@ -192,6 +198,8 @@ const styleDefinitions = StyleSheet.create({
   words: { flex: 1, gap: 1, minWidth: 0 },
   name: { ...typography.bodyStrong, color: colors.text },
   meta: { ...typography.small, color: colors.textMuted },
+  flag: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', marginTop: 2 },
+  flagText: { ...typography.small, color: colors.warning, fontWeight: '600' },
   copy: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 30, paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.surfaceAlt },
   copyText: { ...typography.smallStrong, color: colors.text },
   numbers: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingLeft: 40 + spacing.md },
