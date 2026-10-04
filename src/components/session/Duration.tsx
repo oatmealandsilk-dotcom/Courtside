@@ -75,7 +75,8 @@ export function Figure({ value, unit, size, color, unitColor, play = false, dela
   /** The unit on the figure's baseline, rather than the headline's small raised-off-the-floor unit. */
   baseline?: boolean;
 }) {
-  const u = Math.max(10, Math.round(size * unitScale));
+  // A floor so a unit stays readable, but never bigger than its number on a small card (Oct 4: "333 cal" on the story's corner card).
+  const u = Math.round(Math.max(Math.min(10, size * 0.6), size * unitScale));
   const line = Math.round(size * 1.1);
   const uLine = Math.round(u * 1.25);
   return (
