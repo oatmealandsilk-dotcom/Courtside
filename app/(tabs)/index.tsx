@@ -1809,7 +1809,7 @@ function GroupedFeed() {
         <FeedTopRow
           groups={feedGroups}
           selected={groupId}
-          onSelect={(next) => { if (next !== groupId) { haptics.tap(); setGroupId(next); } }}
+          onSelect={(next) => { if (next !== groupId) setGroupId(next); }}
           onPlus={() => router.push('/find-groups')}
           onPicture={chrome.picture}
           hidden={chrome.hidden}

@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GLYPH_EDGE } from '@/components/ReelCaption';
+import * as haptics from '@/lib/haptics';
 import { TOP_BAND_HEIGHT, TOP_BAND_TOP } from '@/features/feed/topBand';
 import { colors, font } from '@/theme';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
@@ -66,11 +67,13 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   }, [selected, viewW, measured, shift]);
   // The glide starts on the tap itself; the feed underneath switches a frame later,
   // so its heavy first draw never holds the row back.
-  const glideTo = (key: string) => {
+  // The feed underneath is switched only once the glide has landed: building a
+  // whole new feed mid-glide froze the screen for a few frames (Oct 4, owner: "smoother, by a lot").
+  const glideTo = (key: string, then: () => void) => {
     const at = spots.current.get(key);
-    if (!at || !viewW) return;
+    if (!at || !viewW) { then(); return; }
     target.current = viewW / 2 - (at.x + at.w / 2);
-    shift.value = withTiming(target.current, { duration: 380, easing: Easing.bezier(0.22, 1, 0.36, 1) });
+    shift.value = withTiming(target.current, { duration: 320, easing: Easing.bezier(0.22, 1, 0.36, 1) }, (done) => { if (done) runOnJS(then)(); });
   };
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: shift.value }] }));
   return (
@@ -87,7 +90,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
                   accessibilityState={{ selected: on }}
                   accessibilityLabel={w.id === 'activities' ? 'Activities' : w.id ? `${w.name}, group feed` : 'For you'}
                   hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
-                  onPress={() => { if (on) return; glideTo(w.id ?? 'for-you'); requestAnimationFrame(() => onSelect(w.id)); }}
+                  onPress={() => { if (on) return; haptics.tap(); const id = w.id; glideTo(id ?? 'for-you', () => onSelect(id)); }}
                   onLayout={(e) => {
                     spots.current.set(w.id ?? 'for-you', { x: e.nativeEvent.layout.x, w: e.nativeEvent.layout.width });
                     if (spots.current.size >= words.length) setMeasured((n) => n + 1);
@@ -103,6 +106,8 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
             {waiting ? <View style={styles.waiting} /> : null}
           </Pressable>
         </Animated.View>
+        {/* The camera's marker: a short bar that stays in the middle while the words pass over it. */}
+        <View pointerEvents="none" style={[styles.marker, { backgroundColor: ink, left: viewW / 2 - 8 }, edge ? styles.markerEdge : null]} />
       </View>
     </View>
   );
@@ -120,7 +125,7 @@ function Word({ name, spotKey, spots, shift, viewW, style }: { name: string; spo
   useEffect(() => { if (at) centre.value = at.x + at.w / 2; });
   const look = useAnimatedStyle(() => {
     const away = Math.abs(shift.value + centre.value - viewW / 2);
-    return { opacity: interpolate(away, [0, 70], [1, 0.55], 'clamp'), transform: [{ scale: interpolate(away, [0, 70], [1, 0.94], 'clamp') }] };
+    return { opacity: interpolate(away, [0, 60], [1, 0.5], 'clamp'), transform: [{ scale: interpolate(away, [0, 60], [1, 0.92], 'clamp') }] };
   });
   return <Animated.Text numberOfLines={1} style={[style, look]}>{name}</Animated.Text>;
 }
@@ -129,9 +134,11 @@ const styleDefinitions = StyleSheet.create({
   layer: { position: 'absolute', left: 0, right: 0, height: TOP_BAND_HEIGHT, zIndex: 8, alignItems: 'center', justifyContent: 'center' },
   clip: { alignSelf: 'stretch', overflow: 'hidden', height: TOP_BAND_HEIGHT },
   row: { position: 'absolute', left: 0, top: 0, flexDirection: 'row', alignItems: 'center', gap: 9, height: TOP_BAND_HEIGHT },
-  word: { fontSize: 17, lineHeight: 22, ...font('600'), letterSpacing: -0.3, maxWidth: 150, paddingVertical: 2 },
+  word: { fontSize: 16, lineHeight: 22, ...font('600'), letterSpacing: -0.2, maxWidth: 150, paddingVertical: 2 },
+  marker: { position: 'absolute', bottom: 3, width: 16, height: 2.5, borderRadius: 2 },
+  markerEdge: { boxShadow: '0px 1px 3px rgba(0, 0, 0, 0.35)' },
   wordOn: { ...font('700') },
-  dot: { fontSize: 15, lineHeight: 22, opacity: 0.35 },
+  dot: { fontSize: 14, lineHeight: 22, opacity: 0.3 },
   plus: { marginLeft: 6, width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   waiting: { position: 'absolute', top: 2, right: 2, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.brand, borderWidth: 1.5, borderColor: colors.bg },
 });
