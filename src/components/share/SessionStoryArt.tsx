@@ -1,19 +1,22 @@
 import React, { useMemo } from 'react';
-import { Image, StyleSheet, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
+import { BrandMark } from '@/components/BrandMark';
 import { SessionCard } from '@/components/session/SessionCard';
+import { duration } from '@/lib/format';
 import type { ID } from '@/data/types';
 import type { SessionStory } from '@/features/share/sessionStory';
 import { useTheme } from '@/theme/ThemeProvider';
-import { colors } from '@/theme';
+import { colors, font } from '@/theme';
 
 /** The three pictures a session can be shared as, in the order they are offered. */
-export type StoryDesign = 'photo' | 'card' | 'sticker';
+export type StoryDesign = 'photo' | 'card' | 'sticker' | 'overlay';
 export const STORY_DESIGNS: { key: StoryDesign; label: string }[] = [
   { key: 'photo', label: 'Photo' },
   { key: 'card', label: 'Card' },
   { key: 'sticker', label: 'Sticker' },
+  { key: 'overlay', label: 'Overlay' },
 ];
 
 /**
@@ -56,6 +59,32 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
     );
   }
 
+  if (design === 'overlay') {
+    // Strava's overlay (Oct 4): just the numbers and the mark in white on nothing, to lay over any story.
+    const s = story.session;
+    const stats = [
+      { label: 'Time', value: duration(s.minutes) },
+      s.kcal ? { label: 'Calories', value: `${s.kcal}` } : null,
+      s.maxHr != null && s.avgHr ? { label: 'Avg HR', value: `${s.avgHr} bpm` } : null,
+      s.maxHr != null ? { label: 'Max HR', value: `${s.maxHr} bpm` } : null,
+    ].filter((x): x is { label: string; value: string } => !!x);
+    const u = width / 360;
+    return (
+      <View collapsable={false} style={[styles.centre, { width, height, gap: 14 * u }]}>
+        {stats.map((st) => (
+          <View key={st.label} style={styles.centre}>
+            <Text style={[styles.overLabel, { fontSize: 15 * u, lineHeight: 20 * u }]}>{st.label}</Text>
+            <Text style={[styles.overValue, { fontSize: 36 * u, lineHeight: 42 * u }]}>{st.value}</Text>
+          </View>
+        ))}
+        <View style={[styles.overBrand, { gap: 6 * u, marginTop: 10 * u }]}>
+          <BrandMark size={22 * u} color="#FFFFFF" />
+          <Text style={[styles.overWord, { fontSize: 20 * u, lineHeight: 26 * u }]}>CourtSide</Text>
+        </View>
+      </View>
+    );
+  }
+
   if (design === 'sticker') {
     // Small, so it sits on someone's own story without taking it over (Oct 3).
     const cardW = Math.round(width * 0.52);
@@ -86,6 +115,10 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
 
 const styles = StyleSheet.create({
   centre: { alignItems: 'center', justifyContent: 'center' },
+  overLabel: { color: '#FFFFFF', ...font('600'), textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 6 },
+  overValue: { color: '#FFFFFF', ...font('700'), letterSpacing: -0.5, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 8 },
+  overBrand: { flexDirection: 'row', alignItems: 'center' },
+  overWord: { color: '#FFFFFF', ...font('700'), letterSpacing: -0.4, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 6 },
   shade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   sticker: { position: 'absolute', boxShadow: '0px 6px 22px rgba(0, 0, 0, 0.32)' },
 });

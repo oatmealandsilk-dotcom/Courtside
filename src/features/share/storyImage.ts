@@ -2,6 +2,7 @@ import { PixelRatio, Platform, Share, type View } from 'react-native';
 import Constants from 'expo-constants';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
+import * as Clipboard from 'expo-clipboard';
 
 /*
  * A session's share picture (Share → Instagram) made into a file and handed
@@ -36,7 +37,10 @@ export function canSaveStory(): boolean {
   return Platform.OS === 'ios' && Number(Constants.platform?.ios?.buildNumber ?? 0) >= 11;
 }
 
-export type StoryAction = 'instagram' | 'save' | 'more';
+export type StoryAction = 'instagram' | 'save' | 'more' | 'copy';
+
+/** What Copy says once the picture is on the clipboard: Instagram pastes it as a sticker. */
+export const COPIED_NOTE = 'Copied. In Instagram, open your story, tap and hold, then Paste.';
 
 /**
  * The hidden copy photographed and handed on. Says nothing back when the
@@ -45,6 +49,12 @@ export type StoryAction = 'instagram' | 'save' | 'more';
 export async function exportStory(view: View | null, action: StoryAction, title: string): Promise<string | null> {
   if (!view) return 'The picture is not ready yet. Try again in a moment.';
   const size = Platform.OS === 'android' ? STORY_PX : stageSize();
+  if (action === 'copy') {
+    // On the clipboard as a picture, so a story pastes it as a sticker, the way Strava's overlay goes on.
+    const b64 = await captureRef(view, { format: 'png', quality: 1, result: 'base64', ...size });
+    await Clipboard.setImageAsync(b64);
+    return COPIED_NOTE;
+  }
   const uri = await captureRef(view, { format: 'png', quality: 1, result: 'tmpfile', ...size });
   if (action === 'save') {
     // The plain share sheet, which carries Save Image from build 11 (see canSaveStory).

@@ -20,7 +20,10 @@ export function warmStory() { void loadDrawing().catch(() => undefined); }
 /** A browser always saves to its downloads. */
 export function canSaveStory(): boolean { return true; }
 
-export type StoryAction = 'instagram' | 'save' | 'more';
+export type StoryAction = 'instagram' | 'save' | 'more' | 'copy';
+
+/** What Copy says once the picture is on the clipboard: Instagram pastes it as a sticker. */
+export const COPIED_NOTE = 'Copied. In Instagram, open your story, tap and hold, then Paste.';
 
 /** The picture as a PNG file, ready to share or save. Exported for the demo's own check. */
 export async function storyBlob(view: View | null): Promise<Blob | string> {
@@ -54,6 +57,14 @@ function download(blob: Blob, name: string) {
 export async function exportStory(view: View | null, action: StoryAction, title: string): Promise<string | null> {
   const made = await storyBlob(view);
   if (typeof made === 'string') return made;
+  if (action === 'copy') {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': made })]);
+      return COPIED_NOTE;
+    } catch {
+      // A browser without picture copying: the file instead.
+    }
+  }
   const name = 'courtside-story.png';
   const file = new File([made], name, { type: 'image/png' });
   const nav = navigator as Navigator & { canShare?: (data: { files: File[] }) => boolean };

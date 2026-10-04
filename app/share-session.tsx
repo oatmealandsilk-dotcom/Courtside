@@ -164,7 +164,7 @@ export default function ShareSession() {
                   <View key={d.key} style={[styles.pageSlot, { width: pageW, height: cardH + SHADOW_ROOM * 2 }]}>
                     <View style={[styles.frame, { width: cardW, height: cardH }]} accessible accessibilityLabel={`${d.label} design`}>
                       {/* A see-through sticker is shown over a quiet backdrop, the way it will sit over a story. */}
-                      {d.key === 'sticker' ? <LinearGradient colors={[withAlpha(colors.text, 0.16), withAlpha(colors.text, 0.38)]} style={StyleSheet.absoluteFill} /> : null}
+                      {d.key === 'sticker' || d.key === 'overlay' ? <LinearGradient colors={[withAlpha(colors.text, 0.16), withAlpha(colors.text, 0.38)]} style={StyleSheet.absoluteFill} /> : null}
                       <SessionStoryArt design={d.key} story={story} width={cardW} photo={photo} hidden={blockedIds} />
                       {d.key === 'photo' ? (
                         <Pressable accessibilityRole="button" accessibilityLabel={photo ? 'Change photo' : 'Choose a photo'} onPress={() => { void choosePhoto(); }} style={({ pressed }) => [styles.photoButton, pressed && styles.pressed]}>
@@ -192,11 +192,14 @@ export default function ShareSession() {
             <View style={styles.buttons}>
               <Button label="Instagram Stories" onPress={() => { void run('instagram'); }} loading={busy === 'instagram'} disabled={!!busy && busy !== 'instagram'} full />
               <View style={styles.row}>
+                <View style={styles.half}><Button label="Copy" variant="secondary" onPress={() => { void run('copy'); }} loading={busy === 'copy'} disabled={!!busy && busy !== 'copy'} full /></View>
                 {save ? <View style={styles.half}><Button label="Save image" variant="secondary" onPress={() => { void run('save'); }} loading={busy === 'save'} disabled={!!busy && busy !== 'save'} full /></View> : null}
                 <View style={styles.half}><Button label="More…" variant="secondary" onPress={() => { void run('more'); }} loading={busy === 'more'} disabled={!!busy && busy !== 'more'} full /></View>
               </View>
               <Text style={note ? styles.note : styles.fine}>
-                {note || (design === 'sticker'
+                {note || (design === 'overlay'
+                  ? 'See-through numbers: tap Copy, then paste them onto any Instagram story.'
+                  : design === 'sticker'
                   ? 'A see-through sticker: save it, then add it over your own story.'
                   : 'Pick Instagram, then Stories. Health numbers show only if your post shares them.')}
               </Text>
