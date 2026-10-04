@@ -12,6 +12,7 @@ import { onOpenGroupFeed, tookGroupFeed } from '@/features/groups/openGroupFeed'
 import { GroupTile } from '@/features/groups/GroupTile';
 import { inGroupFeed } from '@/features/groups/groupFeed';
 import { TOP_BAND_DROP, TOP_BAND_HEIGHT, TOP_BAND_TOP, TopBandContext } from '@/features/feed/topBand';
+import { GlassFill, liquidGlass } from '@/components/ui/Glass';
 import { PULL_DISC } from '@/lib/pullRefresh';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { useTourOpen } from '@/features/tour/tourStore';
@@ -1612,7 +1613,8 @@ function Home({ scope, topRow, paused, onChrome }: {
             // The same plain chevron every other page has. Over a picture it sits on the mark's tile, in
             // the mark's ink: a bare white arrow vanished on a bright sky or a white ceiling.
             <Reanimated.View ref={scopeBackFade.ref as never} pointerEvents="box-none" style={[styles.scopeBackLayer, scopeBackFade.style]}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Go back" hitSlop={10} onPress={() => goBack()} style={[styles.scopeBack, activeOnPicture && styles.scopeBackTile, { top: insets.top + (activeOnPicture ? 8 : 10) }]}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Go back" hitSlop={10} onPress={() => goBack()} style={[styles.scopeBack, activeOnPicture && styles.scopeBackTile, activeOnPicture && liquidGlass && styles.scopeBackLiquid, { top: insets.top + (activeOnPicture ? 8 : 10) }]}>
+                {activeOnPicture ? <GlassFill radius={19} tint={colors.brand} strength={0.22} /> : null}
                 <Ionicons name="chevron-back" size={21} color={activeOnPicture ? '#FFFFFF' : colors.text} />
               </Pressable>
             </Reanimated.View>
@@ -1640,6 +1642,7 @@ const styleDefinitions = StyleSheet.create({
   groupEmptyActions: { alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.lg },
   scopeBack: { position: 'absolute', left: 16, padding: 6, zIndex: 6 },
   // Its own layer over the feed, so it can fade as a clip goes onto the comments stage.
+  scopeBackLiquid: { backgroundColor: 'transparent' },
   scopeBackLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 6 },
   // Over a picture: the mark's tile, 40 square (the sound disc's size), the chevron nudged right of centre to sit centred by eye.
   // Over a picture: the sound button's frosted dark disc with a white chevron, no shadow (Oct 4), nudged right of centre to sit centred by eye.

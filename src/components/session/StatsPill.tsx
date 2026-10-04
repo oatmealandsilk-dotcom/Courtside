@@ -11,6 +11,7 @@ import { pillPieces, resultWord, spokenDuration } from '@/features/activity/form
 import { localDay } from '@/features/practice/stats';
 import * as haptics from '@/lib/haptics';
 import { useReducedMotion } from '@/lib/useReducedMotion';
+import { GlassFill, liquidGlass } from '@/components/ui/Glass';
 import { BrandWash } from '@/components/ui';
 import { colors, font, pageIsDark, withAlpha } from '@/theme';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -109,7 +110,10 @@ export function StatsPill({ session, hidden = [], onPress, scale = 1, active = f
   // so a clip's stats read as the same thing as a stats post. Dark themes keep the glass.
   const glass = !isDark
     // Frosted glass tinted the theme's colour, its wash faint over it, no shine (Oct 4, owner: option A in the theme's colour).
-    ? Platform.OS === 'ios'
+    ? liquidGlass
+      // iOS 26: Apple's glass carrying the theme's colour, the wash faint inside it.
+      ? <View style={[shell, styles.tintEdge]}><GlassFill radius={15 * k} tint={colors.brand} strength={0.62} /><View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} /></View>{inner}</View>
+      : Platform.OS === 'ios'
       ? <BlurView intensity={30} tint="dark" style={[shell, styles.tintEdge, { backgroundColor: withAlpha(colors.brand, 0.6) }]}><View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} /></View>{inner}</BlurView>
       : <View style={[shell, styles.tintEdge, styles.webGlass, { backgroundColor: withAlpha(colors.brand, Platform.OS === 'web' ? 0.68 : 0.74) }]}><View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} /></View>{inner}</View>
     : Platform.OS === 'ios'

@@ -5,6 +5,7 @@ import * as haptics from '@/lib/haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { GlassFill, liquidGlass } from '@/components/ui/Glass';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { ClipVideo } from './ClipVideo';
@@ -179,7 +180,8 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
       </Pressable>
       {silent || bare ? null : (
         <Pressable accessibilityRole="button" accessibilityLabel={muted ? 'Unmute clip' : 'Mute clip'} hitSlop={12} onPress={() => { setMuted((v) => !v); if (!discPinned) showDisc(); }} style={[styles.soundHit, { top: insets.top + drop + (discInk ? 25 : 22) }]}>
-          <Animated.View style={[styles.sound, discInk ? styles.soundThemed : null, discStyle]}>
+          <Animated.View style={[styles.sound, discInk ? styles.soundThemed : null, discInk && liquidGlass ? styles.soundLiquid : null, discStyle]}>
+            {discInk ? <GlassFill radius={18} tint={colors.brand} strength={0.22} /> : null}
             <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={17} color="white" />
           </Animated.View>
         </Pressable>
@@ -208,6 +210,8 @@ const styleDefinitions = StyleSheet.create({
   // (Its fade-in sets its opacity, so none is set here.)
   // A small frosted dark disc with a white icon, Instagram-style, on any picture (Oct 3).
   soundThemed: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(16,18,17,0.34)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.28)', boxShadow: '0px 2px 10px rgba(0,0,0,0.18)' },
+  // On iOS 26 the disc is Apple's glass (GlassFill) with a hint of the theme, so its own fill steps aside.
+  soundLiquid: { backgroundColor: 'transparent', boxShadow: 'none' },
   topShade: { position: 'absolute', left: 0, right: 0, top: 0 },
   track: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
   bar: { height: 2, backgroundColor: 'rgba(255,255,255,0.9)' },
