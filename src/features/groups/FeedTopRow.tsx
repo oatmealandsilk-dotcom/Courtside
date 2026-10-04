@@ -61,7 +61,6 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
           const on = w.id === selected;
           return (
             <React.Fragment key={w.id ?? 'for-you'}>
-              {i > 0 ? <Text style={[styles.dot, { color: ink }, edge]}>·</Text> : null}
               <Pressable
                 accessibilityRole="tab"
                 accessibilityState={{ selected: on }}
@@ -73,27 +72,29 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
                   if (on) reveal(false);
                 }}
               >
-                <Text numberOfLines={1} style={[styles.word, on && styles.wordOn, { color: ink, opacity: on ? 1 : 0.62 }, edge]}>{w.name}</Text>
+                <Text numberOfLines={1} style={[styles.word, on && styles.wordOn, { color: ink, opacity: on ? 1 : 0.6 }, edge]}>{w.name}</Text>
               </Pressable>
             </React.Fragment>
           );
         })}
-        <Pressable accessibilityRole="button" accessibilityLabel={waiting ? 'Find or start a group, someone is asking to join yours' : 'Find or start a group'} hitSlop={10} onPress={onPlus} style={styles.plus}>
-          <Ionicons name="add" size={22} color={ink} style={[{ opacity: 0.85 }, edge]} />
-          {waiting ? <View style={styles.waiting} /> : null}
-        </Pressable>
       </ScrollView>
+      {/* Instagram keeps its one extra at the row's end, apart from the words (Oct 4). */}
+      <Pressable accessibilityRole="button" accessibilityLabel={waiting ? 'Find or start a group, someone is asking to join yours' : 'Find or start a group'} hitSlop={10} onPress={onPlus} style={styles.plus}>
+        <Ionicons name="add" size={26} color={ink} style={edge} />
+        {waiting ? <View style={styles.waiting} /> : null}
+      </Pressable>
     </View>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
   layer: { position: 'absolute', left: 0, right: 0, height: TOP_BAND_HEIGHT, zIndex: 8, alignItems: 'center', justifyContent: 'center' },
-  scroller: { flexGrow: 0, maxWidth: '100%' },
-  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 8, height: TOP_BAND_HEIGHT },
-  word: { fontSize: 16, lineHeight: 22, ...font('500'), letterSpacing: -0.2, maxWidth: 150, paddingVertical: 2 },
+  scroller: { flexGrow: 0, maxWidth: '78%' },
+  // Instagram's "Reels  Friends": bigger words, no dots, room between them.
+  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, gap: 20, height: TOP_BAND_HEIGHT },
+  word: { fontSize: 18, lineHeight: 24, ...font('600'), letterSpacing: -0.3, maxWidth: 150, paddingVertical: 2 },
   wordOn: { ...font('700') },
   dot: { fontSize: 16, lineHeight: 22, opacity: 0.5 },
-  plus: { marginLeft: 6, width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  plus: { position: 'absolute', right: 12, top: (TOP_BAND_HEIGHT - 32) / 2, width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   waiting: { position: 'absolute', top: 2, right: 2, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.brand, borderWidth: 1.5, borderColor: colors.bg },
 });

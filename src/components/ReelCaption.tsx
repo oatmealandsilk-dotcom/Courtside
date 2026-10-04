@@ -341,9 +341,10 @@ export function InstantMeta({ expiresAt, onPress }: { expiresAt: string; onPress
  * starts high enough to reach the bottom of the rail too. It is measured from
  * the words, not the screen, so it sits right on every phone.
  */
-const SHADE: readonly (readonly [number, number])[] = [[340, 0], [300, 0.05], [260, 0.12], [210, 0.21], [160, 0.3], [120, 0.37], [90, 0.42], [60, 0.47], [30, 0.51], [0, 0.54]];
+// About two thirds of what it was (Oct 4, owner: Instagram's clips look brighter): the words still hold, the picture stays lit.
+const SHADE: readonly (readonly [number, number])[] = [[300, 0], [260, 0.04], [220, 0.09], [180, 0.15], [140, 0.21], [100, 0.26], [70, 0.3], [40, 0.33], [0, 0.36]];
 /** Below the words, down to the screen's edge, behind the tab bar. */
-const SHADE_FLOOR = 0.56;
+const SHADE_FLOOR = 0.38;
 
 /**
  * A light shade down from the top edge of a clip in the feed, under the mark,
@@ -354,7 +355,7 @@ const SHADE_FLOOR = 0.56;
  * darkens the picture and never the disc.
  */
 export const TOP_SHADE = {
-  colors: ['rgba(0, 0, 0, 0.32)', 'rgba(0, 0, 0, 0.21)', 'rgba(0, 0, 0, 0.1)', 'rgba(0, 0, 0, 0.03)', 'rgba(0, 0, 0, 0)'],
+  colors: ['rgba(0, 0, 0, 0.24)', 'rgba(0, 0, 0, 0.15)', 'rgba(0, 0, 0, 0.07)', 'rgba(0, 0, 0, 0.02)', 'rgba(0, 0, 0, 0)'],
   locations: [0, 0.3, 0.6, 0.85, 1],
   below: 150,
 } as const;
