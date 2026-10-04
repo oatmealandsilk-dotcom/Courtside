@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { BrandMark } from '@/components/BrandMark';
 import { SessionCard } from '@/components/session/SessionCard';
+import { SessionStamp } from '@/components/share/SessionStamp';
 import { duration } from '@/lib/format';
 import type { ID } from '@/data/types';
 import type { SessionStory } from '@/features/share/sessionStory';
@@ -86,17 +87,19 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
   }
 
   if (design === 'sticker') {
-    // Small, so it sits on someone's own story without taking it over (Oct 3).
-    const cardW = Math.round(width * 0.52);
+    // The stamp alone, so it sits on someone's own story without taking it over (Oct 3, Oct 4).
+    const cardW = Math.round(width * 0.62);
     return (
       <View collapsable={false} style={[styles.centre, { width, height }]}>
-        <SessionCard {...common} width={cardW} />
+        <View style={[styles.sticker, { borderRadius: Math.round(20 * (cardW / 300)) }]}>
+          <SessionStamp session={story.session} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} />
+        </View>
       </View>
     );
   }
 
   // Small in the corner: the photo is the story, the card is the signature (Oct 3, owner).
-  const cardW = Math.round(width * 0.46);
+  const cardW = Math.round(width * 0.58);
   return (
     <View collapsable={false} style={{ width, height, overflow: 'hidden', backgroundColor: colors.court }}>
       {source ? (
@@ -106,8 +109,8 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
       )}
       {/* A soft shade low down, so the card reads on a bright photo too. */}
       <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.22)']} style={[styles.shade, { height: height * 0.35 }]} />
-      <View style={[styles.sticker, { left: Math.round(width * 0.06), bottom: Math.round(height * 0.15), borderRadius: Math.round(20 * (cardW / 358)) }]}>
-        <SessionCard {...common} width={cardW} />
+      <View style={[styles.sticker, { left: Math.round(width * 0.06), bottom: Math.round(height * 0.17), borderRadius: Math.round(20 * (cardW / 300)) }]}>
+        <SessionStamp session={story.session} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} />
       </View>
     </View>
   );

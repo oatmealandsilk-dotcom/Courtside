@@ -7,7 +7,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { SessionStoryArt, STORY_DESIGNS, type StoryDesign } from '@/components/share/SessionStoryArt';
-import { Button, EmptyState, Screen } from '@/components/ui';
+import { EmptyState, Screen } from '@/components/ui';
 import { postedIndex, sourceOn } from '@/features/activity/recent';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { storyFromLog, storyFromPost, type SessionStory } from '@/features/share/sessionStory';
@@ -31,6 +31,13 @@ import { colors, font, radius, spacing, typography, withAlpha } from '@/theme';
  */
 /** Room above and below the preview for its shadow, which the swiping row would otherwise cut off. */
 const SHADOW_ROOM = 16;
+
+const ACTIONS: { key: StoryAction; label: string; spoken: string; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
+  { key: 'instagram', label: 'Stories', spoken: 'Share to Instagram Stories', icon: 'logo-instagram' },
+  { key: 'copy', label: 'Copy', spoken: 'Copy the picture', icon: 'copy-outline' },
+  { key: 'save', label: 'Save', spoken: 'Save the picture', icon: 'download-outline' },
+  { key: 'more', label: 'More', spoken: 'More ways to share', icon: 'share-outline' },
+];
 
 export default function ShareSession() {
   const styles = useThemedStyles(styleDefinitions);
@@ -189,21 +196,21 @@ export default function ShareSession() {
               })}
             </View>
 
-            <View style={styles.buttons}>
-              <Button label="Instagram Stories" onPress={() => { void run('instagram'); }} loading={busy === 'instagram'} disabled={!!busy && busy !== 'instagram'} full />
-              <View style={styles.row}>
-                <View style={styles.half}><Button label="Copy" variant="secondary" onPress={() => { void run('copy'); }} loading={busy === 'copy'} disabled={!!busy && busy !== 'copy'} full /></View>
-                {save ? <View style={styles.half}><Button label="Save image" variant="secondary" onPress={() => { void run('save'); }} loading={busy === 'save'} disabled={!!busy && busy !== 'save'} full /></View> : null}
-                <View style={styles.half}><Button label="More…" variant="secondary" onPress={() => { void run('more'); }} loading={busy === 'more'} disabled={!!busy && busy !== 'more'} full /></View>
-              </View>
-              <Text style={note ? styles.note : styles.fine}>
-                {note || (design === 'overlay'
-                  ? 'See-through numbers: tap Copy, then paste them onto any Instagram story.'
-                  : design === 'sticker'
-                  ? 'A see-through sticker: save it, then add it over your own story.'
-                  : 'Pick Instagram, then Stories. Health numbers show only if your post shares them.')}
-              </Text>
+            {/* Strava's row of round buttons, in CourtSide's colours (Oct 4): Stories leads, the rest follow. */}
+            <View style={styles.actions}>
+              {ACTIONS.filter((a) => a.key !== 'save' || save).map((a) => {
+                const lead = a.key === 'instagram';
+                return (
+                  <Pressable key={a.key} accessibilityRole="button" accessibilityLabel={a.spoken} disabled={!!busy} onPress={() => { void run(a.key); }} style={({ pressed }) => [styles.action, pressed && styles.pressed, !!busy && busy !== a.key && styles.dimmed]}>
+                    <View style={[styles.actionCircle, lead && styles.actionLead]}>
+                      {busy === a.key ? <CourtSpinner size={22} ink={lead ? colors.brandInk : colors.text} /> : <Ionicons name={a.icon} size={24} color={lead ? colors.brandInk : colors.text} />}
+                    </View>
+                    <Text style={styles.actionLabel} numberOfLines={1}>{a.label}</Text>
+                  </Pressable>
+                );
+              })}
             </View>
+            {note ? <Text style={styles.note}>{note}</Text> : null}
           </View>
         </Screen>
       </View>
@@ -227,7 +234,12 @@ const styleDefinitions = StyleSheet.create({
   designOn: { backgroundColor: colors.surface },
   designText: { ...typography.smallStrong, color: colors.textMuted },
   designTextOn: { color: colors.text },
-  buttons: { gap: spacing.sm, paddingHorizontal: spacing.lg },
+  actions: { flexDirection: 'row', justifyContent: 'center', gap: spacing.lg, paddingHorizontal: spacing.lg, marginTop: spacing.xs },
+  action: { alignItems: 'center', gap: 6, width: 64 },
+  actionCircle: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  actionLead: { backgroundColor: colors.brand, borderColor: colors.brand },
+  actionLabel: { ...font('500'), fontSize: 12.5, color: colors.text },
+  dimmed: { opacity: 0.45 },
   row: { flexDirection: 'row', gap: spacing.sm },
   half: { flex: 1 },
   fine: { ...typography.caption, color: colors.textFaint, textAlign: 'center', letterSpacing: 0 },

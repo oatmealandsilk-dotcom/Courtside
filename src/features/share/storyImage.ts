@@ -1,4 +1,4 @@
-import { PixelRatio, Platform, Share, type View } from 'react-native';
+import { Linking, PixelRatio, Platform, Share, type View } from 'react-native';
 import Constants from 'expo-constants';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
@@ -40,6 +40,9 @@ export function canSaveStory(): boolean {
 export type StoryAction = 'instagram' | 'save' | 'more' | 'copy';
 
 /** What Copy says once the picture is on the clipboard: Instagram pastes it as a sticker. */
+/** Said once Instagram has opened with the picture ready to paste. */
+export const INSTAGRAM_NOTE = 'In Instagram, tap and hold your story, then Paste.';
+
 export const COPIED_NOTE = 'Copied. In Instagram, open your story, tap and hold, then Paste.';
 
 /**
@@ -54,6 +57,18 @@ export async function exportStory(view: View | null, action: StoryAction, title:
     const b64 = await captureRef(view, { format: 'png', quality: 1, result: 'base64', ...size });
     await Clipboard.setImageAsync(b64);
     return COPIED_NOTE;
+  }
+  if (action === 'instagram' && Platform.OS === 'ios') {
+    // Straight into Instagram (Oct 4): the picture on the clipboard, then its
+    // story camera, where it pastes. Build 12 hands it over with no paste.
+    const b64 = await captureRef(view, { format: 'png', quality: 1, result: 'base64', ...size });
+    await Clipboard.setImageAsync(b64);
+    try {
+      await Linking.openURL('instagram://story-camera');
+      return INSTAGRAM_NOTE;
+    } catch {
+      // No Instagram on this phone: the share sheet below.
+    }
   }
   const uri = await captureRef(view, { format: 'png', quality: 1, result: 'tmpfile', ...size });
   if (action === 'save') {
