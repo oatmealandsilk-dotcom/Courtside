@@ -82,8 +82,9 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
           </View>
         ))}
         <View style={[styles.overBrand, { gap: 6 * u, marginTop: 10 * u }]}>
-          <BrandMark size={22 * u} color="#FFFFFF" />
-          <Text style={[styles.overWord, { fontSize: 20 * u, lineHeight: 26 * u }]}>CourtSide</Text>
+          {/* The logo in CourtSide's own colour (Oct 4, owner), with a soft light edge so it holds on a dark photo too. */}
+          <BrandMark size={22 * u} color={colors.brand} />
+          <Text style={[styles.overWord, { fontSize: 20 * u, lineHeight: 26 * u, color: colors.brand }]}>CourtSide</Text>
         </View>
       </View>
     );
@@ -124,7 +125,7 @@ const styles = StyleSheet.create({
   overLabel: { color: '#FFFFFF', ...font('600'), textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 6 },
   overValue: { color: '#FFFFFF', ...font('700'), letterSpacing: -0.5, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 8 },
   overBrand: { flexDirection: 'row', alignItems: 'center' },
-  overWord: { color: '#FFFFFF', ...font('700'), letterSpacing: -0.4, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 6 },
+  overWord: { ...font('700'), letterSpacing: -0.4, textShadowColor: 'rgba(255,255,255,0.55)', textShadowRadius: 8 },
   shade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   sticker: { position: 'absolute', boxShadow: '0px 6px 22px rgba(0, 0, 0, 0.32)' },
 });
