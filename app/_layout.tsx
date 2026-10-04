@@ -1,5 +1,6 @@
 // First, before any text is drawn: text follows the phone's size setting, with a ceiling.
 import '@/lib/textScale';
+import '@/lib/launchSplash';
 import React, { useEffect } from 'react';
 import { usePauseWhenHidden } from '@/features/feed/pauseWhenHidden';
 import { Pressable, Text, View } from 'react-native';

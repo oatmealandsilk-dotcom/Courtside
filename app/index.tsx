@@ -9,6 +9,7 @@ import { raiseCurtain } from '@/features/feed/warmup';
 import { preloadNearbyMap } from '@/components/NearbyMap';
 import { useLaunchUpdate } from '@/lib/instantUpdates';
 
+import { launchPartReady, hideLaunch } from '@/lib/launchSplash';
 import { BrandMark } from '@/components/BrandMark';
 import { useApp } from '@/store/AppContext';
 import { colors, lightColors, spacing, typography, font } from '@/theme';
@@ -122,6 +123,8 @@ export default function Index() {
   }, [settled, held, gone, opacity, currentUserId, onboardingComplete, overTabs, launchUpdate.holding, launchCover]);
 
   // On its way back to the app underneath: a plain page for the moment it takes, no logo.
+  // Nothing to draw over (back into a running app, or already on the way in): let the phone's picture go.
+  useEffect(() => { if (backToApp || gone) hideLaunch(); }, [backToApp, gone]);
   if (backToApp) return <View style={styles.splash} />;
 
   // Signed in, but the account never came down even after retries: the app
@@ -156,7 +159,7 @@ export default function Index() {
         // and drawn the same way (cover), in the theme's colours: the cream fades into it with
         // nothing moving, on any size of phone (Oct 4, owner: theme fade back, no blip).
         <>
-          <Image source={require('../assets/launch-brand.png')} resizeMode="cover" style={[StyleSheet.absoluteFill, { tintColor: colors.brand }]} />
+          <Image source={require('../assets/launch-brand.png')} resizeMode="cover" style={[StyleSheet.absoluteFill, { tintColor: colors.brand }]} onLoad={() => launchPartReady('brand')} onError={() => launchPartReady('brand')} />
           {launchUpdate.downloading
             ? <Text style={styles.tagline}>Getting the newest version</Text>
             : <Image source={require('../assets/launch-tagline.png')} resizeMode="cover" style={[StyleSheet.absoluteFill, { tintColor: colors.textFaint }]} />}
@@ -174,7 +177,7 @@ export default function Index() {
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.splash, launchStyles.launch, { opacity: cover }]}>
           <StatusBar style="dark" />
           {/* The phone's own launch picture, drawn the same way (cover), so the hand-over is invisible (Oct 4, owner: "smooth like Instagram"). */}
-          <Image source={require('../assets/splash.png')} resizeMode="cover" style={StyleSheet.absoluteFill} />
+          <Image source={require('../assets/splash.png')} resizeMode="cover" style={StyleSheet.absoluteFill} onLoad={() => launchPartReady('cover')} onError={() => launchPartReady('cover')} />
         </Animated.View>
       ) : null}
     </Animated.View>
