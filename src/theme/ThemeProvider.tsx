@@ -265,7 +265,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   return (
     <ThemeContext.Provider value={{ theme, setTheme, night: theme === 'night', setNight }}>
       <View style={{ flex: 1, backgroundColor: loaded ? undefined : lightColors.bg }}>
-        {loaded ? children : null}
+        {/* While your last theme is read (a blink), the launch picture itself, not a bare cream
+            screen: the logo never drops out between the phone's picture and the app's (Oct 4). */}
+        {loaded ? children : <Image source={require('../../assets/splash.png')} resizeMode="cover" style={StyleSheet.absoluteFill} />}
         {shot ? (
           <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 9999 }, shotStyle]}>
             <Image source={{ uri: shot }} onLoad={shotShown} onError={shotShown} fadeDuration={0} resizeMode="cover" style={StyleSheet.absoluteFill} />
