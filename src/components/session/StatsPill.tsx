@@ -75,18 +75,19 @@ export function StatsPill({ session, hidden = [], onPress, scale = 1, active = f
   }, [active, reduced, scale, lift]);
   const chevron = useAnimatedStyle(() => ({ transform: [{ translateY: lift.value }] }));
 
-  const text = { ...font('600'), fontSize: 13.5 * k, color: '#FFFFFF', fontVariant: ['tabular-nums' as const], ...EDGE_SMALL };
+  // Lighter and tighter (Oct 4): the time bold, the rest a quieter medium, as the waitlist page sets type.
+  const text = { ...font('500'), fontSize: 13 * k, letterSpacing: -0.15 * k, color: '#FFFFFF', fontVariant: ['tabular-nums' as const], ...EDGE_SMALL };
   const row = (words: string, still = false) => (
     <View style={[styles.row, { height: 32 * k, paddingLeft: 10 * k, paddingRight: 5 * k, gap: 8 * k }]}>
       <ZoneGlyph size={14 * k} color="#FFFFFF" />
       {/* The time and the rest sit together with no gap between them, so the
           first dot has the same space either side as the others ("1h 24m · Won · 171 bpm"). */}
       <View style={[styles.row, still ? styles.keep : styles.shrink]}>
-        <Text style={[text, font('700'), styles.keep]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{p.time}</Text>
-        {words ? <Text style={[text, still ? styles.keep : styles.shrink]} numberOfLines={1} ellipsizeMode="clip" maxFontSizeMultiplier={1.2}>{`\u00A0· ${words}`}</Text> : null}
+        <Text style={[text, font('700'), { letterSpacing: -0.3 * k }, styles.keep]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{p.time}</Text>
+        {words ? <Text style={[text, { color: 'rgba(255, 255, 255, 0.86)' }, still ? styles.keep : styles.shrink]} numberOfLines={1} ellipsizeMode="clip" maxFontSizeMultiplier={1.2}>{`\u00A0· ${words}`}</Text> : null}
       </View>
       <View style={[styles.divider, { height: 14 * k }]} />
-      <Text style={[text, styles.keep, { fontSize: 13 * k }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>See stats</Text>
+      <Text style={[text, font('600'), styles.keep, { fontSize: 12.5 * k, letterSpacing: -0.1 * k }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>See stats</Text>
       {still ? <Ionicons name="chevron-up" size={11 * k} color="#FFFFFF" /> : <Reanimated.View style={chevron}><Ionicons name="chevron-up" size={11 * k} color="#FFFFFF" style={EDGE_SMALL} /></Reanimated.View>}
     </View>
   );
