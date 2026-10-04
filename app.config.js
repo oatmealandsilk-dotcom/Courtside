@@ -50,6 +50,9 @@ module.exports = {
     },
     web: { bundler: 'metro', output: 'single', name: 'CourtSide' },
     plugins: [
+      // Build 12 (Oct 4): the phone opens on the logo, cream, never a black frame. expo-system-ui
+      // (installed) paints the root the backgroundColor above; this keeps the launch picture full screen.
+      ['expo-splash-screen', { image: './assets/splash.png', backgroundColor: '#F8F7F2', resizeMode: 'cover', enableFullScreenImage_legacy: true }],
       'expo-router',
       // The microphone is only for voice notes in chats (expo-audio, below); the camera itself never records sound.
       ['expo-camera', { cameraPermission: 'CourtSide uses the camera to take an instant — one photo right after your session.', microphonePermission: 'CourtSide uses the microphone for voice notes you send in chats.', recordAudioAndroid: false }],
