@@ -1,6 +1,6 @@
 import type { User } from '@/data/types';
 import type { CanvasMarker } from '@/components/map/pinEngine';
-import { HIT_LIFT, agoShort, courtDotHtml, courtPinHtml, discSize, hitPinHtml, mePinHtml, playerPinClass, playerPinHtml } from '@/components/map/markers';
+import { HIT_LIFT, agoShort, courtPinHtml, discSize, hitPinHtml, mePinHtml, playerPinClass, playerPinHtml } from '@/components/map/markers';
 import type { MapModel, Placed } from '@/features/players/mapModel';
 import { isOpenToHit } from '@/features/players/openToHit';
 
@@ -49,7 +49,7 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
     return { id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, on, ringed), z: on ? 4 : 1, k: 'c' as const, r: (ringed ? 0 : 1e6) - c.count * 1000 + i, sel: on, g: 'c' as const, role: 'button', label: c.name };
   });
   // The still card: your city's courts as quiet dots, under everything.
-  if (!expanded) for (const c of model.cardCourts) list.push({ id: `d:${c.id}`, lat: c.lat, lng: c.lng, html: courtDotHtml(c, model.cardRinged.has(c.id)), z: 0 });
+  // The still card shows people and hits only; courts live on the full map (Oct 3, owner).
   // Open hits as flags, hung above any court pin at the same spot — on the
   // full map only. On the still card the flags crowded the city's name in the
   // middle, and the hits are listed just below it anyway (Oct 2).
