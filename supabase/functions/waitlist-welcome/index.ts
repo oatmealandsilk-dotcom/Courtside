@@ -33,6 +33,10 @@ const FROM = Deno.env.get('WAITLIST_FROM') ?? 'Robert at CourtSide <robert@court
 const REPLY_TO = Deno.env.get('WAITLIST_REPLY_TO') ?? '';
 const HERO = 'https://app.courtsidebase.com/waitlist/email-hero.png';
 const HEADER = 'https://app.courtsidebase.com/email/header.png';
+/** The same header, see-through, for the beta email's wash. */
+const HEADER_CLEAR = 'https://app.courtsidebase.com/email/header-clear.png';
+/** The site's wash behind the beta email (Oct 4, owner): green top left, peach top right, fading to cream. */
+const WASH = 'https://app.courtsidebase.com/email/wash.jpg';
 const FONT = "Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
 const SHARE_BASE = 'https://courtsidebase.com/';
 const BETA_LINK = Deno.env.get('BETA_LINK') ?? 'https://testflight.apple.com/join/21UJPuny';
@@ -109,15 +113,17 @@ It's a beta, so some stuff will break. If something looks off, reply with a scre
 
 Also, share the link with anyone interested. It's way more fun when your friends are on it.
 
-Robert`;
+Robert
+
+P.S. If you want to have an affiliate code, just let me know. You guys are early to it, so I can make you guys a deal 😎`;
   const p = (inner: string) => `<p style="margin:0 0 18px;font-size:16px;line-height:1.6;color:#3A3A33">${inner}</p>`;
   const step = (n: number, inner: string) => `<tr><td valign="top" style="width:28px;padding:0 0 10px;font-family:${FONT};font-size:16px;line-height:1.6;color:#3F7049;font-weight:600">${n}.</td><td style="padding:0 0 10px;font-family:${FONT};font-size:16px;line-height:1.6;color:#3A3A33">${inner}</td></tr>`;
   const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light only">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet"></head>
 <body style="margin:0;padding:0;background:#F8F7F2">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F8F7F2"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" background="${WASH}" style="background-color:#F8F7F2;background-image:url('${WASH}');background-repeat:no-repeat;background-position:top center;background-size:100% auto"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">
-<tr><td><img src="${HEADER}" width="560" alt="CourtSide" style="display:block;width:100%;max-width:560px;height:auto;border:0"></td></tr>
+<tr><td><img src="${HEADER_CLEAR}" width="560" alt="CourtSide" style="display:block;width:100%;max-width:560px;height:auto;border:0"></td></tr>
 <tr><td style="padding:8px 28px 8px;font-family:${FONT}">
 ${p(`${esc(hey)},`)}
 ${p('As promised, with everyone&rsquo;s interest, the beta is live!')}
@@ -135,6 +141,7 @@ ${p('Not on iPhone? You can use it in your browser at <a href="https://app.court
 ${p('It&rsquo;s a beta, so some stuff will break. If something looks off, reply with a screenshot and I&rsquo;ll fix it.')}
 ${p('Also, share the link with anyone interested. It&rsquo;s way more fun when your friends are on it.')}
 <p style="margin:26px 0 0;font-size:16px;line-height:1.5;color:#24251F">Robert</p>
+<p style="margin:22px 0 0;font-size:15px;line-height:1.6;color:#5D584C">P.S. If you want to have an affiliate code, just let me know. You guys are early to it, so I can make you guys a deal 😎</p>
 </td></tr>
 <tr><td style="padding:36px 28px 40px;font-family:${FONT};font-size:12px;line-height:1.6;color:#8A8577">You&rsquo;re getting this because you joined the CourtSide waitlist at courtsidebase.com.</td></tr>
 </table></td></tr></table>
