@@ -20,7 +20,7 @@ import { Glass } from '@/components/ui/Glass';
 import { TAB_BAR_H } from '@/features/navigation/barInset';
 import { useApp } from '@/store/AppContext';
 import { unreadChatCount } from '@/features/messages/groupRules';
-import { colors, pageIsDark, radius, spacing, typography, font } from '@/theme';
+import { colors, pageIsDark, radius, spacing, typography, font, withAlpha } from '@/theme';
 import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 
 /** The screen's pixels per point, read once: the bar's moves are rounded to whole pixels. */
@@ -147,7 +147,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
         <Animated.View style={[styles.pillWrap, tuck]}>
           {/* The shadow lives on a rounded layer of its own: on the square wrapper its corners showed past the pill's ends. */}
           <View style={styles.pillShadow}>
-          <Glass style={styles.pill} radius={TAB_BAR_H / 2} tint={colors.bg}>
+          <Glass clear style={styles.pill} radius={TAB_BAR_H / 2} tint={colors.bg}>
             {ITEMS.map((item, index) => {
               const active = item.route === activeRoute;
               return (
@@ -161,6 +161,8 @@ export function NavBar({ state, navigation }: NavBarProps) {
                   accessibilityLabel={item.label}
                   style={styles.bottomItem}
                 >
+                  {/* Instagram's soft lozenge behind the tab you are on, in the theme's own colour (Oct 4). */}
+                  {active ? <View pointerEvents="none" style={[styles.activeBubble, { backgroundColor: withAlpha(item.route === 'coaches' ? colors.info : item.route === 'discuss' ? colors.warning : colors.brand, 0.14) }]} /> : null}
                   <Animated.View style={[styles.bottomInner, settle]}>
                   <View>
                     <Ionicons
@@ -333,8 +335,9 @@ const styleDefinitions = StyleSheet.create({
   float: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 30 },
   pillWrap: { width: '100%', paddingHorizontal: 14 },
   pillShadow: { borderRadius: TAB_BAR_H / 2, shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
-  pill: { height: TAB_BAR_H, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
+  pill: { height: TAB_BAR_H, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255, 255, 255, 0.45)' },
   bottomItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  activeBubble: { position: 'absolute', left: 2, right: 2, top: 6, bottom: 6, borderRadius: 999 },
   bottomInner: { alignItems: 'center', justifyContent: 'center', gap: 3 },
   // Sits off the icon's shoulder rather than on top of it, so it needs no
   // ring to stand apart, and the number has room to breathe.
