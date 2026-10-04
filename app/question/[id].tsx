@@ -116,31 +116,33 @@ function QuestionDetail() {
           <VoteControls item={question} userId={currentUserId} onVote={direction => actions.voteQuestion(question.id, direction)} />
           {/* The same Reply button a reply has; it opens the line to type on right here. */}
           <Pressable accessibilityRole="button" accessibilityLabel="Reply to this thread" onPress={() => { setReplying(true); setTimeout(() => replyInput.current?.focus(), 50); }} style={styles.replyButton}>
-            <Ionicons name="chatbubble-outline" size={18} color={colors.textMuted}/>
-            <Text style={styles.time}>Reply</Text>
+            <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted}/>
+            <Text style={styles.replyLabel}>Reply</Text>
           </Pressable>
-          <Text style={[styles.time, { marginLeft: 'auto' }]}>{thread.length} {thread.length === 1 ? 'reply' : 'replies'}</Text>
         </View>
         {replying ? (
-          <View style={styles.inlineComposer}>
-            <TextInput ref={replyInput} autoFocus onFocus={() => reveal(replyInput.current)} accessibilityLabel="Reply to this thread" placeholder="Write a reply…" placeholderTextColor={colors.textFaint} multiline value={draft} onChangeText={setDraft} style={styles.replyInput}
+          <View style={styles.composer}>
+            <TextInput ref={replyInput} autoFocus onFocus={() => reveal(replyInput.current)} accessibilityLabel="Reply to this thread" placeholder="Add your reply…" placeholderTextColor={colors.textFaint} multiline value={draft} onChangeText={setDraft} style={styles.replyInput}
               blurOnSubmit={Platform.OS === 'web' ? true : undefined}
               onSubmitEditing={Platform.OS === 'web' ? submit : undefined} />
             {media ? <AttachedPreview media={media} onRemove={() => setMedia(null)} /> : null}
             <View style={styles.inlineActions}>
               <AttachButton onPick={setMedia} />
               <View style={{ flex: 1 }} />
-              <Pressable accessibilityRole="button" onPress={() => { setReplying(false); setDraft(''); setMedia(null); }} hitSlop={8}><Text style={styles.time}>Cancel</Text></Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Post reply" disabled={!draft.trim() && !media} onPress={submit} style={[styles.sendPill, !draft.trim() && !media && { opacity: 0.4 }]}><Text style={styles.sendText}>Reply</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={() => { setReplying(false); setDraft(''); setMedia(null); }} hitSlop={8}><Text style={styles.cancel}>Cancel</Text></Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Post reply" disabled={!draft.trim() && !media} onPress={submit} style={[styles.send, !draft.trim() && !media && styles.sendOff]}>
+                <Ionicons name="arrow-up" size={18} color={colors.brandInk} />
+              </Pressable>
             </View>
           </View>
         ) : null}
       </Card>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>
-          {thread.length} {thread.length === 1 ? 'reply' : 'replies'}
-        </Text>
+        <View style={styles.sectionHead}>
+          <Text style={styles.sectionTitle}>Replies</Text>
+          {thread.length > 0 ? <Text style={styles.sectionCount}>{thread.length}</Text> : null}
+        </View>
 
         {thread.length === 0 ? (
           question.source ? (
@@ -170,13 +172,16 @@ function QuestionDetail() {
 const styleDefinitions = StyleSheet.create({
   questionCard: { gap: spacing.md, borderWidth: 0, borderRadius: 0, backgroundColor: 'transparent', paddingHorizontal: 0, paddingBottom: 24, borderBottomWidth: 1, borderBottomColor: colors.border },
   askerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  replyButton: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36 },
-  inlineComposer: { gap: 8, paddingTop: spacing.xs },
-  // No browser focus ring either: the cursor is the only sign the line is live.
-  replyInput: { minHeight: 24, paddingVertical: 4, color: colors.text, fontSize: 15, lineHeight: 22, textAlignVertical: 'top', borderBottomWidth: 1, borderBottomColor: colors.border, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
+  replyButton: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt },
+  // A soft rounded box to write in, the way messaging apps do it.
+  composer: { gap: 6, paddingTop: 12, paddingBottom: 8, paddingHorizontal: 14, borderRadius: 20, backgroundColor: colors.surfaceAlt, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  // No browser focus ring either: the cursor is the only sign the box is live.
+  replyInput: { minHeight: 44, paddingVertical: 0, color: colors.text, fontSize: 16, lineHeight: 22, textAlignVertical: 'top', ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
   inlineActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 16 },
-  sendPill: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.brand },
-  sendText: { ...typography.smallStrong, color: colors.brandInk },
+  cancel: { ...typography.smallStrong, color: colors.textMuted },
+  replyLabel: { ...typography.smallStrong, color: colors.textMuted },
+  send: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brand },
+  sendOff: { opacity: 0.35 },
   asker: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   askerName: { ...typography.smallStrong, color: colors.text, fontSize: 14 },
   time: { ...typography.small, color: colors.textFaint },
@@ -197,7 +202,9 @@ const styleDefinitions = StyleSheet.create({
   },
   voteCount: { ...typography.bodyStrong, color: colors.text, minWidth: 24, textAlign: 'center' },
   section: { gap: spacing.md, paddingTop: spacing.xl },
+  sectionHead: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   sectionTitle: { ...typography.heading, color: colors.text },
+  sectionCount: { ...typography.bodyStrong, color: colors.textFaint },
   answerCard: { gap: 12, paddingVertical: 16 },
   nested: { marginLeft: 16, paddingLeft: 12, borderLeftWidth: 1, borderLeftColor: colors.border },
   replyBody: { fontSize: 15, lineHeight: 23, color: colors.text, paddingLeft: 8 },
