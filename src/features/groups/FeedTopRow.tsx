@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -52,13 +52,26 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   const [measured, setMeasured] = useState(0);
   const shift = useSharedValue(0);
   const placed = useRef(false);
+  const target = useRef(0);
   useEffect(() => {
     const at = spots.current.get(selected ?? 'for-you');
     if (!at || !viewW) return;
     const to = viewW / 2 - (at.x + at.w / 2);
-    if (!placed.current) { placed.current = true; shift.value = to; return; }
-    shift.value = withSpring(to, { damping: 22, stiffness: 220, mass: 0.8 });
+    if (!placed.current) { placed.current = true; target.current = to; shift.value = to; return; }
+    // Already heading there (the tap began it): leave the glide running untouched.
+    if (Math.abs(target.current - to) < 0.5) return;
+    target.current = to;
+    // One smooth glide, Apple's ease-out, no bounce: a spring re-aimed mid-flight read as a jolt.
+    shift.value = withTiming(to, { duration: 380, easing: Easing.bezier(0.22, 1, 0.36, 1) });
   }, [selected, viewW, measured, shift]);
+  // The glide starts on the tap itself; the feed underneath switches a frame later,
+  // so its heavy first draw never holds the row back.
+  const glideTo = (key: string) => {
+    const at = spots.current.get(key);
+    if (!at || !viewW) return;
+    target.current = viewW / 2 - (at.x + at.w / 2);
+    shift.value = withTiming(target.current, { duration: 380, easing: Easing.bezier(0.22, 1, 0.36, 1) });
+  };
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: shift.value }] }));
   return (
     <View pointerEvents={hidden ? 'none' : 'box-none'} style={[styles.layer, { top: insets.top + TOP_BAND_TOP, opacity: hidden ? 0 : 1 }]}>
@@ -74,13 +87,13 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
                   accessibilityState={{ selected: on }}
                   accessibilityLabel={w.id === 'activities' ? 'Activities' : w.id ? `${w.name}, group feed` : 'For you'}
                   hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
-                  onPress={() => onSelect(w.id)}
+                  onPress={() => { if (on) return; glideTo(w.id ?? 'for-you'); requestAnimationFrame(() => onSelect(w.id)); }}
                   onLayout={(e) => {
                     spots.current.set(w.id ?? 'for-you', { x: e.nativeEvent.layout.x, w: e.nativeEvent.layout.width });
                     if (spots.current.size >= words.length) setMeasured((n) => n + 1);
                   }}
                 >
-                  <Text numberOfLines={1} style={[styles.word, on && styles.wordOn, { color: ink, opacity: on ? 1 : 0.6 }, edge]}>{w.name}</Text>
+                  <Word name={w.name} spotKey={w.id ?? 'for-you'} spots={spots} shift={shift} viewW={viewW} style={[styles.word, { color: ink }, edge]} />
                 </Pressable>
               </React.Fragment>
             );
@@ -95,13 +108,30 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   );
 }
 
+/**
+ * One word of the row. Its brightness and size follow how near the middle it
+ * is, frame by frame on the animation thread, so the highlight travels with
+ * the glide instead of jumping when the tap lands. Every word keeps one weight:
+ * a word turning bold changed its width and moved the row's target mid-glide.
+ */
+function Word({ name, spotKey, spots, shift, viewW, style }: { name: string; spotKey: string; spots: React.MutableRefObject<Map<string, { x: number; w: number }>>; shift: SharedValue<number>; viewW: number; style: object }) {
+  const centre = useSharedValue(-1000);
+  const at = spots.current.get(spotKey);
+  useEffect(() => { if (at) centre.value = at.x + at.w / 2; });
+  const look = useAnimatedStyle(() => {
+    const away = Math.abs(shift.value + centre.value - viewW / 2);
+    return { opacity: interpolate(away, [0, 70], [1, 0.55], 'clamp'), transform: [{ scale: interpolate(away, [0, 70], [1, 0.94], 'clamp') }] };
+  });
+  return <Animated.Text numberOfLines={1} style={[style, look]}>{name}</Animated.Text>;
+}
+
 const styleDefinitions = StyleSheet.create({
   layer: { position: 'absolute', left: 0, right: 0, height: TOP_BAND_HEIGHT, zIndex: 8, alignItems: 'center', justifyContent: 'center' },
   clip: { alignSelf: 'stretch', overflow: 'hidden', height: TOP_BAND_HEIGHT },
   row: { position: 'absolute', left: 0, top: 0, flexDirection: 'row', alignItems: 'center', gap: 9, height: TOP_BAND_HEIGHT },
-  word: { fontSize: 16.5, lineHeight: 22, ...font('500'), letterSpacing: -0.25, maxWidth: 150, paddingVertical: 2 },
+  word: { fontSize: 17, lineHeight: 22, ...font('600'), letterSpacing: -0.3, maxWidth: 150, paddingVertical: 2 },
   wordOn: { ...font('700') },
-  dot: { fontSize: 16, lineHeight: 22, opacity: 0.5 },
+  dot: { fontSize: 15, lineHeight: 22, opacity: 0.35 },
   plus: { marginLeft: 6, width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   waiting: { position: 'absolute', top: 2, right: 2, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.brand, borderWidth: 1.5, borderColor: colors.bg },
 });
