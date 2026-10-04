@@ -10,7 +10,7 @@ import { isPageDragging, subscribePageDragging } from '@/features/navigation/swi
 import { KeyboardScrollContext, afterKeyboard, currentKeyboardHeight, type Measurable } from '@/lib/keyboardScroll';
 import { TAB_FOR_KEY, subscribeScrollToTop } from '@/features/navigation/scrollToTop';
 import { barCompact } from '@/features/navigation/barShrink';
-import Reanimated, { cancelAnimation, runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import Reanimated, { type SharedValue, cancelAnimation, runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
@@ -67,6 +67,8 @@ interface Props {
   memoryKey?: string;
   /** Hands the caller the scroller, for jumping to a particular child. */
   scrollRef?: React.MutableRefObject<ScrollView | null>;
+  /** Kept up to date with how far down the page is, for a caller that remembers a spot per section. */
+  offsetY?: SharedValue<number>;
   /**
    * Pull down past the top to run this; a small "Updated" note confirms it.
    * Giving back `false` means it did not work, and then there is no note.
@@ -104,6 +106,7 @@ export function Screen({
   headerWrapper,
   memoryKey,
   scrollRef,
+  offsetY,
   onRefresh,
   wash = true,
   bar = true,
@@ -314,6 +317,7 @@ export function Screen({
     onScroll: (event) => {
       const y = event.contentOffset.y;
       scrollY.value = y;
+      if (offsetY) offsetY.value = y;
       if (strip > 0) {
         gap.value = strip - y;
         // The line counts only under a finger: a fling or a bounce never ticks.

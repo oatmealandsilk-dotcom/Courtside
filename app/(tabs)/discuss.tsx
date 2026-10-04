@@ -1,6 +1,6 @@
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { SectionPager } from '@/components/SectionPager';
-import Reanimated from 'react-native-reanimated';
+import Reanimated, { useSharedValue } from 'react-native-reanimated';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -97,6 +97,20 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // Held locally only: pushing it into the address on every swipe made the
   // whole app re-render mid-gesture.
   const setSection = (value: string) => setLocalSection(asSection(value));
+  // Each section keeps its own place on the page (Oct 4, owner): leaving the map
+  // halfway down no longer drops you halfway down the threads. One you have not
+  // opened yet starts at the top.
+  const pageRef = useRef<ScrollView | null>(null);
+  const offsetY = useSharedValue(0);
+  const spots = useRef<Record<string, number>>({});
+  const shownSection = useRef(section);
+  useEffect(() => {
+    const was = shownSection.current;
+    if (was === section) return;
+    spots.current[was] = offsetY.value;
+    shownSection.current = section;
+    pageRef.current?.scrollTo({ y: spots.current[section] ?? 0, animated: false });
+  }, [section, offsetY]);
   // The real tab takes each ask as it hears it, so an old one can't come back
   // if the tab is rebuilt later. A picture of the tab sliding in (previewSection)
   // leaves the ask for the real one.
@@ -526,7 +540,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       </>);
 
   return (
-    <Screen memoryKey="discuss" wash onRefresh={previewSection === undefined && !isDesktopBrowser() ? actions.refresh : undefined}
+    <Screen memoryKey="discuss" scrollRef={pageRef} offsetY={offsetY} wash onRefresh={previewSection === undefined && !isDesktopBrowser() ? actions.refresh : undefined}
       title="Community"
       right={
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
