@@ -23,7 +23,7 @@ export function canSaveStory(): boolean { return true; }
 export type StoryAction = 'instagram' | 'save' | 'more' | 'copy';
 
 /** What Copy says once the picture is on the clipboard: Instagram pastes it as a sticker. */
-export const COPIED_NOTE = 'Copied. In Instagram, open your story, tap and hold, then Paste.';
+export const COPIED_NOTE = 'Copied. In Instagram, pick your photo or video for the story, then tap Add sticker (or tap and hold, then Paste).';
 
 /** The picture as a PNG file, ready to share or save. Exported for the demo's own check. */
 export async function storyBlob(view: View | null): Promise<Blob | string> {

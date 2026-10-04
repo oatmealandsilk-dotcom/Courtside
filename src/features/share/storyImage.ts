@@ -41,9 +41,9 @@ export type StoryAction = 'instagram' | 'save' | 'more' | 'copy';
 
 /** What Copy says once the picture is on the clipboard: Instagram pastes it as a sticker. */
 /** Said once Instagram has opened with the picture ready to paste. */
-export const INSTAGRAM_NOTE = 'In Instagram, tap and hold your story, then Paste.';
+export const INSTAGRAM_NOTE = 'In Instagram, pick your photo or video first, then tap Add sticker (or tap and hold, then Paste).';
 
-export const COPIED_NOTE = 'Copied. In Instagram, open your story, tap and hold, then Paste.';
+export const COPIED_NOTE = 'Copied. In Instagram, pick your photo or video for the story, then tap Add sticker (or tap and hold, then Paste).';
 
 /**
  * The hidden copy photographed and handed on. Says nothing back when the
