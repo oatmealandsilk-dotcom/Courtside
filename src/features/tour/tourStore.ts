@@ -70,6 +70,13 @@ export function openTour(keys: StepKey[], startAt: number, forced: boolean): voi
   emit();
 }
 
+/** Back one tip (Oct 4, owner: for a tip read too fast); nothing before the first. */
+export function prevStep(): void {
+  if (!state.open || state.step <= 0) return;
+  state = { ...state, step: state.step - 1 };
+  emit();
+}
+
 /** On to the next tip; past the last one, the tour is done. */
 export function nextStep(): void {
   if (!state.open) return;

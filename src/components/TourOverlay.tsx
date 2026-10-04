@@ -20,7 +20,7 @@ import { LAST_BUTTON, TOUR_STEPS, tourPageAt, type HoleShape, type TourSpot, typ
 import { useTourHeld } from '@/features/tour/tourHold';
 import { TOUR_ON, hasSeenTour, isNewAccount, markTourSeen } from '@/features/tour/tourSeen';
 import {
-  endTourQuietly, lastTourRect, measureTourTarget, nextStep, openTour, setTourPending, skipTour, useTour, useTourRequest,
+  endTourQuietly, lastTourRect, measureTourTarget, nextStep, prevStep, openTour, setTourPending, skipTour, useTour, useTourRequest,
   type TourRect, type TourRun,
 } from '@/features/tour/tourStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -865,6 +865,7 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
     return true;
   };
   const skip = () => { if (open) skipTour(); };
+  const tryBack = () => { if (!open || settling()) return; prevStep(); };
   // A touch on the dim, by how far it went. A tap, or a drag up or down,
   // moves on. Sideways, the pages never move against the finger: leftward
   // moves on (each tip's page lies to the right of the last, so the pages
@@ -1101,6 +1102,12 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
                 {/* Skip lives in the card, beside Next: with the lighter dim the page's own
                     buttons show clearly in the top corner, where it used to sit on them. Not
                     handed over to the dim mid-press, so a finger that moves a little still skips. */}
+                {/* Back one tip, for one read too fast (Oct 4, owner). */}
+                {run.step > 0 ? (
+                  <Pressable accessibilityRole="button" accessibilityLabel="Previous tip" onPress={tryBack} style={styles.skip}>
+                    <Text selectable={false} style={styles.skipText}>Back</Text>
+                  </Pressable>
+                ) : null}
                 {shownLast ? null : (
                   <Pressable ref={skipRef} cancelable={false} accessibilityRole="button" accessibilityLabel="Skip tutorial" onPress={skip} style={styles.skip}>
                     <Text selectable={false} style={styles.skipText}>Skip</Text>
