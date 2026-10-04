@@ -4704,7 +4704,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
     await rememberAnswered(me, label);
     // An invite claimed before the age was on file made no follow; now it can.
-    if (label === 'adult') void followInviter();
+    // The server follows only when both are adults or both are teens (migration 84).
+    void followInviter();
     return label;
   }, [requireUser]);
 

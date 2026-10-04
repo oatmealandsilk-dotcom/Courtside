@@ -176,6 +176,8 @@ export default function Onboarding() {
   // "Invited by?": only while joining, and only while no invite link has set it.
   const asksInviter = !editing && !forCoach;
   const [inviter, setInviter] = useState<MyInviter | null>(null);
+  // One adult and one teen: no automatic follow; a Follow button instead (Oct 4, owner).
+  const [followOffer, setFollowOffer] = useState<{ id: string; handle: string } | null>(null);
   const [inviteCode, setInviteCode] = useState('');
   const [inviteNote, setInviteNote] = useState<string | undefined>();
   const [claiming, setClaiming] = useState(false);
@@ -199,7 +201,14 @@ export default function Onboarding() {
     setClaiming(true);
     const r = await actions.claimInviteCode(code);
     setClaiming(false);
-    if (r.ok) { haptics.commit(); setInviter({ id: r.id, handle: r.handle, canSet: false }); setInviteNote(undefined); return true; }
+    if (r.ok) {
+      haptics.commit();
+      setInviter({ id: r.id, handle: r.handle, canSet: false });
+      setInviteNote(undefined);
+      // Not followed automatically (an adult and a teen): stay a moment so the Follow button can be seen.
+      if (!r.followed) { setFollowOffer({ id: r.id, handle: r.handle }); return false; }
+      return true;
+    }
     if (r.error === 'already' || r.error === 'too-late') {
       setInviter(r.handle ? { handle: r.handle, canSet: false } : { canSet: false });
       setInviteCode('');
@@ -378,7 +387,12 @@ export default function Onboarding() {
                 />
               </Group>
               {asksInviter && inviter?.handle ? (
-                <Text style={styles.note} accessibilityLabel={`Invited by @${inviter.handle}`}>Invited by @{inviter.handle}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <Text style={styles.note} accessibilityLabel={`Invited by @${inviter.handle}`}>Invited by @{inviter.handle}</Text>
+                  {followOffer ? (
+                    <Button label={`Follow @${followOffer.handle}`} variant="secondary" onPress={() => { actions.toggleFollow(followOffer.id); setFollowOffer(null); }} />
+                  ) : null}
+                </View>
               ) : asksInviter && inviter?.canSet ? (
                 <Field
                   label="Invited by?"
