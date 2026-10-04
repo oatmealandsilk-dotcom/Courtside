@@ -73,22 +73,21 @@ export function StatsPill({ session, hidden = [], onPress, scale = 1, active = f
     }, 1200);
     return () => { live = false; clearTimeout(t); };
   }, [active, reduced, scale, lift]);
-  const chevron = useAnimatedStyle(() => ({ transform: [{ translateY: lift.value }] }));
+  const chevron = useAnimatedStyle(() => ({ transform: [{ translateX: -lift.value }] }));
 
   // Lighter and tighter (Oct 4): the time bold, the rest a quieter medium, as the waitlist page sets type.
   const text = { ...font('500'), fontSize: 13 * k, letterSpacing: -0.15 * k, color: '#FFFFFF', fontVariant: ['tabular-nums' as const], ...EDGE_SMALL };
   const row = (words: string, still = false) => (
-    <View style={[styles.row, { height: 32 * k, paddingLeft: 10 * k, paddingRight: 5 * k, gap: 8 * k }]}>
-      <ZoneGlyph size={14 * k} color="#FFFFFF" />
+    // Instagram's "Made with Edits" pill (Oct 4): slim, fully round, one line, a small arrow, no divider.
+    <View style={[styles.row, { height: 30 * k, paddingLeft: 11 * k, paddingRight: 9 * k, gap: 7 * k }]}>
+      <ZoneGlyph size={13 * k} color="#FFFFFF" />
       {/* The time and the rest sit together with no gap between them, so the
           first dot has the same space either side as the others ("1h 24m · Won · 171 bpm"). */}
       <View style={[styles.row, still ? styles.keep : styles.shrink]}>
         <Text style={[text, font('700'), { letterSpacing: -0.3 * k }, styles.keep]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{p.time}</Text>
         {words ? <Text style={[text, { color: 'rgba(255, 255, 255, 0.86)' }, still ? styles.keep : styles.shrink]} numberOfLines={1} ellipsizeMode="clip" maxFontSizeMultiplier={1.2}>{`\u00A0· ${words}`}</Text> : null}
       </View>
-      <View style={[styles.divider, { height: 14 * k }]} />
-      <Text style={[text, font('600'), styles.keep, { fontSize: 12.5 * k, letterSpacing: -0.1 * k }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>See stats</Text>
-      {still ? <Ionicons name="chevron-up" size={11 * k} color="#FFFFFF" /> : <Reanimated.View style={chevron}><Ionicons name="chevron-up" size={11 * k} color="#FFFFFF" style={EDGE_SMALL} /></Reanimated.View>}
+      {still ? <Ionicons name="chevron-forward" size={12 * k} color="rgba(255, 255, 255, 0.85)" /> : <Reanimated.View style={chevron}><Ionicons name="chevron-forward" size={12 * k} color="rgba(255, 255, 255, 0.85)" style={EDGE_SMALL} /></Reanimated.View>}
     </View>
   );
   const inner = row(rest);
@@ -102,11 +101,11 @@ export function StatsPill({ session, hidden = [], onPress, scale = 1, active = f
       ))}
     </View>
   ) : null;
-  const shell = [styles.pill, { borderRadius: 16 * k }];
+  const shell = [styles.pill, { borderRadius: 999 }];
   // The workout card's own colour (Oct 3): the theme's brand with the same wash,
   // so a clip's stats read as the same thing as a stats post. Dark themes keep the glass.
   const glass = !isDark
-    ? <View style={[shell, styles.brandFill, { backgroundColor: colors.brand }]}><BrandWash radius={16 * k} />{inner}</View>
+    ? <View style={[shell, styles.brandFill, { backgroundColor: colors.brand }]}><BrandWash radius={15 * k} />{inner}</View>
     : Platform.OS === 'ios'
       ? <BlurView intensity={30} tint="dark" style={[shell, styles.iosFill]}>{inner}</BlurView>
       : <View style={[shell, styles.flatFill]}>{inner}</View>;
