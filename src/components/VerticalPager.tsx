@@ -1,6 +1,6 @@
 import { useTheme } from '@/theme/ThemeProvider';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { Platform, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { PullDisc, usePullDisc } from '@/components/PullDisc';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { cancelAnimation, runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
@@ -40,6 +40,9 @@ const COAST = 99;
 function pageKey(child: React.ReactNode, index: number) {
   return React.isValidElement(child) && child.key != null ? `k:${child.key}` : `i:${index}`;
 }
+
+/** The ring round the logo in the Feed's corner. */
+export const CORNER_RING = 44;
 
 export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.ReactNode[]; onIndex: (index: number) => void; /** The page the scroll came to rest on. */ onSettled?: (index: number) => void; initialIndex?: number; /** Pulling down past the first page fetches what is new. */ onRefresh?: () => Promise<void>; /** Shown in the gap the pull opens, beside the disc. */ pullHeader?: React.ReactNode; /** How far below the clock the pull row sits (clear of a band laid over the top). */ pullTop?: number; /** 'left': the logo and disc in the top-left corner, beside the Feed's words (Oct 4). */ pullAlign?: 'center' | 'left' }>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0, onRefresh, pullHeader, pullTop = 0, pullAlign = 'center' }, ref) {
   // Hears a theme change, so its own colours never lag the page's.
@@ -135,6 +138,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   }, [onRefresh]);
   // The disc and greeting ride in the middle of the open gap, fading in as it opens and out as it closes.
   const rowStyle = useAnimatedStyle(() => ({ opacity: pullRowOpacity(gap.value), transform: [{ translateY: pullRowLift(gap.value) }] }));
+  const cornerStyle = useAnimatedStyle(() => ({ opacity: pullRowOpacity(gap.value) }));
   // While the strip is in view, the first page's top corners look rounded —
   // drawn as caps laid over the corners, never by clipping the page: a
   // clipped box around a native video froze the picture while the sound ran on.
@@ -307,8 +311,14 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       {/* In the gap the pull opens, under the clock and in front of the feed (the caps above
           the first page would hide anything behind it): the greeting and the disc, which
           draws round as you pull, closes at the line, and turns while it fetches. */}
-      {onRefresh ? (
-        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + pullTop, height: PULL_DISC, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: pullAlign === 'left' ? 'flex-start' : 'center', gap: pullAlign === 'left' ? 8 : 12, paddingHorizontal: pullAlign === 'left' ? 16 : 48 }, rowStyle]}>
+      {onRefresh && pullAlign === 'left' ? (
+        // In the Feed's corner, level with its words (Oct 4): the ring draws round the logo, and stays put as you pull.
+        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + pullTop, left: 14, width: CORNER_RING, height: CORNER_RING, alignItems: 'center', justifyContent: 'center' }, cornerStyle]}>
+          {pullHeader}
+          <View style={StyleSheet.absoluteFill}><PullDisc gap={gap} disc={disc} line={PULL_LINE} size={CORNER_RING} /></View>
+        </Animated.View>
+      ) : onRefresh ? (
+        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + pullTop, height: PULL_DISC, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 48 }, rowStyle]}>
           {pullHeader}
           <PullDisc gap={gap} disc={disc} line={PULL_LINE} />
         </Animated.View>

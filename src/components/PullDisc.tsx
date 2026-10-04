@@ -88,7 +88,9 @@ export function usePullDisc(): PullDiscState {
  * small pop (and the tick); let go and it becomes the CourtSide spinner,
  * turning until the page is back. `gap` is how open the gap is, in points.
  */
-export function PullDisc({ gap, disc, line }: { gap: SharedValue<number>; disc: PullDiscState; line: number }) {
+export function PullDisc({ gap, disc, line, size: d = PULL_DISC }: { gap: SharedValue<number>; disc: PullDiscState; line: number; /** Bigger, to ring the logo in the Feed's corner (Oct 4). */ size?: number }) {
+  const r = (d - STROKE) / 2;
+  const lap = 2 * Math.PI * r;
   // Hears a theme change, so the ring takes the new colour.
   useTheme();
   const size = useAnimatedStyle(() => {
@@ -107,7 +109,7 @@ export function PullDisc({ gap, disc, line }: { gap: SharedValue<number>; disc: 
     const p = pullProgress(gap.value, line);
     const drawn = p * DRAWN + (1 - p * DRAWN) * disc.armed.value;
     const sweep = drawn + (0.5 - drawn) * disc.spin.value;
-    return { strokeDashoffset: LAP * (1 - sweep) };
+    return { strokeDashoffset: lap * (1 - sweep) };
   });
   const tailTurn = useAnimatedStyle(() => ({
     opacity: 0.38 * disc.spin.value,
@@ -117,16 +119,16 @@ export function PullDisc({ gap, disc, line }: { gap: SharedValue<number>; disc: 
   // Always there, mostly unseen, so a screen reader is told nothing about it:
   // otherwise it reads out a "Refreshing" bar on every page.
   return (
-    <Animated.View aria-hidden style={[styles.box, size]}>
-      <View style={[StyleSheet.absoluteFill, styles.track, { borderColor: ink }]} />
+    <Animated.View aria-hidden style={[{ width: d, height: d }, size]}>
+      <View style={[StyleSheet.absoluteFill, styles.track, { borderRadius: d / 2, borderColor: ink }]} />
       <Animated.View style={[StyleSheet.absoluteFill, tailTurn]}>
-        <Svg width={PULL_DISC} height={PULL_DISC}>
-          <Circle cx={PULL_DISC / 2} cy={PULL_DISC / 2} r={R} stroke={ink} strokeWidth={STROKE} strokeLinecap="round" fill="none" strokeDasharray={`${LAP} ${LAP}`} strokeDashoffset={LAP / 2} />
+        <Svg width={d} height={d}>
+          <Circle cx={d / 2} cy={d / 2} r={r} stroke={ink} strokeWidth={STROKE} strokeLinecap="round" fill="none" strokeDasharray={`${lap} ${lap}`} strokeDashoffset={lap / 2} />
         </Svg>
       </Animated.View>
       <Animated.View style={[StyleSheet.absoluteFill, leadTurn]}>
-        <Svg width={PULL_DISC} height={PULL_DISC}>
-          <ACircle cx={PULL_DISC / 2} cy={PULL_DISC / 2} r={R} stroke={ink} strokeWidth={STROKE} strokeLinecap="round" fill="none" strokeDasharray={`${LAP} ${LAP}`} animatedProps={leadArc} />
+        <Svg width={d} height={d}>
+          <ACircle cx={d / 2} cy={d / 2} r={r} stroke={ink} strokeWidth={STROKE} strokeLinecap="round" fill="none" strokeDasharray={`${lap} ${lap}`} animatedProps={leadArc} />
         </Svg>
       </Animated.View>
     </Animated.View>
@@ -135,5 +137,5 @@ export function PullDisc({ gap, disc, line }: { gap: SharedValue<number>; disc: 
 
 const styles = StyleSheet.create({
   box: { width: PULL_DISC, height: PULL_DISC },
-  track: { borderRadius: PULL_DISC / 2, borderWidth: STROKE, opacity: 0.14 },
+  track: { borderWidth: STROKE, opacity: 0.14 },
 });

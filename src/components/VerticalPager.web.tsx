@@ -1,4 +1,5 @@
 import { barCompact, glideBar } from '@/features/navigation/barShrink';
+import { StyleSheet, View } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { pagerStep } from '@/lib/pagerGesture';
@@ -15,6 +16,9 @@ export interface VerticalPagerHandle { scrollToTop: () => void }
 function pageKey(child: React.ReactNode, index: number) {
   return React.isValidElement(child) && child.key != null ? `k:${child.key}` : `i:${index}`;
 }
+
+/** The ring round the logo in the Feed's corner. */
+export const CORNER_RING = 44;
 
 export const VerticalPager = forwardRef<VerticalPagerHandle, {
   children: React.ReactNode[];
@@ -60,6 +64,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   };
   const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: gap.value }], borderTopLeftRadius: gap.value > 2 ? 22 : 0, borderTopRightRadius: gap.value > 2 ? 22 : 0 }));
   const rowStyle = useAnimatedStyle(() => ({ opacity: pullRowOpacity(gap.value), transform: [{ translateY: pullRowLift(gap.value) }] }));
+  const cornerStyle = useAnimatedStyle(() => ({ opacity: pullRowOpacity(gap.value) }));
   const pager = useRef<HTMLDivElement>(null);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Position as a fraction of a page: the bar ducking changes this box's
@@ -174,8 +179,14 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
 
   return <div style={{ position: 'relative', height: '100%', width: '100%' }}>
     {/* Behind the feed, in the gap the pull opens: the greeting and the disc, riding in its middle. */}
-    {onRefresh ? (
-      <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: pullTop, left: 0, right: 0, height: PULL_DISC, flexDirection: 'row', alignItems: 'center', justifyContent: pullAlign === 'left' ? 'flex-start' : 'center', gap: pullAlign === 'left' ? 8 : 12, paddingHorizontal: pullAlign === 'left' ? 16 : 0, zIndex: 0 }, rowStyle]}>
+    {onRefresh && pullAlign === 'left' ? (
+      // In the Feed's corner, level with its words (Oct 4): the ring draws round the logo.
+      <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: pullTop, left: 14, width: CORNER_RING, height: CORNER_RING, alignItems: 'center', justifyContent: 'center', zIndex: 0 }, cornerStyle]}>
+        {pullHeader}
+        <View style={StyleSheet.absoluteFill}><PullDisc gap={gap} disc={disc} line={WEB_HOME_PULL_LINE} size={CORNER_RING} /></View>
+      </Animated.View>
+    ) : onRefresh ? (
+      <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: pullTop, left: 0, right: 0, height: PULL_DISC, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, zIndex: 0 }, rowStyle]}>
         {pullHeader}
         <PullDisc gap={gap} disc={disc} line={WEB_HOME_PULL_LINE} />
       </Animated.View>
