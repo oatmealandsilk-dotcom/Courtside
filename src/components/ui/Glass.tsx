@@ -27,7 +27,10 @@ export function Glass({ children, style, radius = 999, interactive = false, tint
 }
 
 /** Apple's Liquid Glass is on this phone (iOS 26). */
-export const liquidGlass = Platform.OS === 'ios' && isLiquidGlassAvailable();
+// Off for the small controls over clips (Oct 4, owner: the app felt laggier): Apple's
+// glass re-renders the video beneath it every frame, on every loaded clip. The tab bar
+// keeps its glass through <Glass>; these fall back to their frosted fills.
+export const liquidGlass = false as boolean;
 
 /**
  * A control's own glass, filling it from behind, for buttons that float over
