@@ -31,6 +31,8 @@ import { useStartMapHold } from '@/features/feed/warmup';
 
 const HEIGHT = 330;
 const START_ZOOM = 11.5;
+/** The still card shows the whole metro (see NearbyMap). */
+const CARD_ZOOM = 10.4;
 /**
  * The pins' engine: the very text the phone's map runs inside its web view
  * (pinEngine), made into a function here, so the browser and the phone
@@ -76,7 +78,7 @@ export function NearbyMap(props: NearbyMapProps) {
   useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit]);
   const { home, start } = model;
   // The full map opens where you are; the still card on your town (location on) or your profile's city.
-  const view = expanded ? { center: start.center, zoom: start.zoom ?? START_ZOOM } : { center: model.city ?? start.center, zoom: START_ZOOM };
+  const view = expanded ? { center: start.center, zoom: start.zoom ?? START_ZOOM } : { center: model.city ?? start.center, zoom: CARD_ZOOM };
   const weather = useWeather(home);
   const cityName = model.cityName;
   const host = useRef<HTMLDivElement | null>(null);
@@ -239,7 +241,7 @@ export function NearbyMap(props: NearbyMapProps) {
   }, [home]); // eslint-disable-line react-hooks/exhaustive-deps
   // The still card follows a change of city on the profile.
   const cityKey = model.city ? `${model.city.lat},${model.city.lng}` : '';
-  useEffect(() => { if (!expanded && model.city) map.current?.jumpTo({ center: [model.city.lng, model.city.lat], zoom: START_ZOOM }); }, [cityKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!expanded && model.city) map.current?.jumpTo({ center: [model.city.lng, model.city.lat], zoom: CARD_ZOOM }); }, [cityKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pins: the same list the phone's map draws (pinList), handed to the engine, which keeps
   // each pin between changes and gathers, splits and fades them (pinEngine).

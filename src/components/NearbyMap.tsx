@@ -29,6 +29,8 @@ import { colors, radius, spacing } from '@/theme';
 const HEIGHT = 330;
 /** How far in the map starts: roughly a city. */
 const CITY_ZOOM = 11.5;
+/** The still card shows the whole metro (Oct 3): wide enough that nearby players are on it, so the courts spread out. */
+const CARD_ZOOM = 10.4;
 /** Close enough to read street names, when the map goes to someone. */
 const CLOSE_ZOOM = 13.5;
 
@@ -83,7 +85,7 @@ export function NearbyMap(props: NearbyMapProps) {
   useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit]);
   const { home, start } = model;
   // The full map opens where you are; the still card on your town (location on) or your profile's city.
-  const view = expanded ? { center: start.center, zoom: start.zoom ?? CITY_ZOOM } : { center: model.city ?? start.center, zoom: CITY_ZOOM };
+  const view = expanded ? { center: start.center, zoom: start.zoom ?? CITY_ZOOM } : { center: model.city ?? start.center, zoom: CARD_ZOOM };
   const weather = useWeather(home);
   const cityName = model.cityName;
   const canvas = useRef<MapCanvasHandle | null>(null);
@@ -97,7 +99,7 @@ export function NearbyMap(props: NearbyMapProps) {
   }, [home]); // eslint-disable-line react-hooks/exhaustive-deps
   // The still card follows a change of city on the profile.
   const cityKey = model.city ? `${model.city.lat},${model.city.lng}` : '';
-  useEffect(() => { if (!expanded && model.city) canvas.current?.flyTo(model.city, CITY_ZOOM, 0); }, [cityKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!expanded && model.city) canvas.current?.flyTo(model.city, CARD_ZOOM, 0); }, [cityKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // Picking someone, a court, a hit, or typing a city takes the map there.
   useEffect(() => { if (model.selected) canvas.current?.flyTo(model.selected.at, CLOSE_ZOOM); }, [model.selected]);
   // A court's card is tall (who may play, right now, what players say): its court lands above it, not under it.

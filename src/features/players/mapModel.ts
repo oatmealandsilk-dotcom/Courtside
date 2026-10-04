@@ -28,7 +28,7 @@ export interface Placed { user: User; at: LatLng; miles: number; seenAt?: string
 export interface PlacedHit { hit: HitRequest; at: { id?: string; name: string; lat: number; lng: number } }
 
 /** The still card's court dots: enough to say "there are courts here", not every one. */
-const CARD_COURTS = 30;
+const CARD_COURTS = 15;
 /** The still card's hit flags: the soonest few; the line under the city counts the rest. */
 const CARD_FLAGS = 3;
 /**
