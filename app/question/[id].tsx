@@ -1,4 +1,6 @@
 import { ThreadReply } from '@/components/ThreadReplies';
+import { MentionSuggestions } from '@/components/MentionSuggestions';
+import { useMentionDraft } from '@/features/mentions/useMentionDraft';
 import { AttachButton, AttachedPreview, type ReplyAttachment } from '@/components/ReplyMedia';
 import { SwipeSurface } from '@/components/SwipeSurface';
 import { requestSection } from '@/features/navigation/swipeOrder';
@@ -44,6 +46,7 @@ function QuestionDetail() {
   const [replying, setReplying] = useState(false);
   const replyInput = useRef<TextInput>(null);
   const reveal = useRevealOnFocus();
+  const tag = useMentionDraft(draft, setDraft, replyInput);
 
   const question = questions.find((q) => q.id === id);
   const asker = users.find((u) => u.id === question?.authorId);
@@ -121,8 +124,10 @@ function QuestionDetail() {
           </Pressable>
         </View>
         {replying ? (
+          <View style={{ gap: 8 }}>
+          <MentionSuggestions candidates={tag.rows} onPick={tag.pick} maxHeight={176} />
           <View style={styles.composer}>
-            <TextInput ref={replyInput} autoFocus onFocus={() => reveal(replyInput.current)} accessibilityLabel="Reply to this thread" placeholder="Add your reply…" placeholderTextColor={colors.textFaint} multiline value={draft} onChangeText={setDraft} style={styles.replyInput}
+            <TextInput ref={replyInput} autoFocus onFocus={() => reveal(replyInput.current)} accessibilityLabel="Reply to this thread" placeholder="Add your reply… (@ to tag)" placeholderTextColor={colors.textFaint} multiline value={draft} onChangeText={setDraft} onSelectionChange={tag.onSelectionChange} style={styles.replyInput}
               blurOnSubmit={Platform.OS === 'web' ? true : undefined}
               onSubmitEditing={Platform.OS === 'web' ? submit : undefined} />
             {media ? <AttachedPreview media={media} onRemove={() => setMedia(null)} /> : null}
@@ -134,6 +139,7 @@ function QuestionDetail() {
                 <Ionicons name="arrow-up" size={18} color={colors.brandInk} />
               </Pressable>
             </View>
+          </View>
           </View>
         ) : null}
       </Card>

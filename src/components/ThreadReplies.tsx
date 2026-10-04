@@ -1,6 +1,8 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useRef, useState } from 'react';
+import { MentionSuggestions } from '@/components/MentionSuggestions';
+import { useMentionDraft } from '@/features/mentions/useMentionDraft';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -37,6 +39,7 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
   const reveal = useRevealOnFocus();
   const lineRef = useRef<TextInput>(null);
   const responder = users.find(user => user.id === answer.authorId);
+  const tag = useMentionDraft(draft, setDraft, lineRef);
   const children = thread.filter(child => child.parentAnswerId === answer.id)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   return <View>
@@ -65,17 +68,19 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
           </Pressable> : null}
         </View>}
         {replying && <View style={styles.inlineComposer}>
-          {/* No box: just the line you type on, cursor blinking, like replying on Threads. */}
-          <TextInput ref={lineRef} autoFocus onFocus={() => reveal(lineRef.current)} accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} placeholder={`Reply to ${responder?.name?.split(' ')[0] ?? 'this'}…`} placeholderTextColor={colors.textFaint} multiline value={draft} onChangeText={setDraft} style={styles.replyInput}
-            // Enter sends on a computer; the web toolkit needs blurOnSubmit to do that in a multiline box.
-            blurOnSubmit={Platform.OS === 'web' ? true : undefined}
-            onSubmitEditing={Platform.OS === 'web' ? post : undefined}/>
-          {media ? <AttachedPreview media={media} onRemove={() => setMedia(null)} /> : null}
-          <View style={styles.inlineActions}>
-            <AttachButton onPick={setMedia} />
-            <View style={{ flex: 1 }} />
-            <Pressable accessibilityRole="button" onPress={() => { setReplying(false); setDraft(''); setMedia(null); }} hitSlop={8}><Text style={styles.time}>Cancel</Text></Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Post reply" disabled={!canSend} onPress={post} style={[styles.sendPill, !canSend && { opacity: 0.4 }]}><Text style={styles.sendText}>Reply</Text></Pressable>
+          <MentionSuggestions candidates={tag.rows} onPick={tag.pick} maxHeight={176} />
+          <View style={styles.composer}>
+            <TextInput ref={lineRef} autoFocus onFocus={() => reveal(lineRef.current)} accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} placeholder={`Reply to ${responder?.name?.split(' ')[0] ?? 'this'}… (@ to tag)`} placeholderTextColor={colors.textFaint} multiline value={draft} onChangeText={setDraft} onSelectionChange={tag.onSelectionChange} style={styles.replyInput}
+              // Enter sends on a computer; the web toolkit needs blurOnSubmit to do that in a multiline box.
+              blurOnSubmit={Platform.OS === 'web' ? true : undefined}
+              onSubmitEditing={Platform.OS === 'web' ? post : undefined}/>
+            {media ? <AttachedPreview media={media} onRemove={() => setMedia(null)} /> : null}
+            <View style={styles.inlineActions}>
+              <AttachButton onPick={setMedia} />
+              <View style={{ flex: 1 }} />
+              <Pressable accessibilityRole="button" onPress={() => { setReplying(false); setDraft(''); setMedia(null); }} hitSlop={8}><Text style={styles.cancel}>Cancel</Text></Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Post reply" disabled={!canSend} onPress={post} style={[styles.send, !canSend && styles.sendOff]}><Ionicons name="arrow-up" size={18} color={colors.brandInk} /></Pressable>
+            </View>
           </View>
         </View>}
       </>}
@@ -122,11 +127,14 @@ const styleDefinitions = StyleSheet.create({
   collapse: {position:'absolute',left:5,width:20,height:28,backgroundColor:colors.bg,justifyContent:'center'},
   replyBody: { fontSize: 15, lineHeight: 23, color: colors.text, paddingLeft: 42 },
   inlineComposer: { gap: 8, paddingLeft: 42 },
-  // No browser focus ring either: the cursor is the only sign the line is live.
-  replyInput: { minHeight: 24, paddingVertical: 4, color: colors.text, fontSize: 15, lineHeight: 22, textAlignVertical: 'top', borderBottomWidth: 1, borderBottomColor: colors.border, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
+  // The same soft rounded box as the thread's own reply box.
+  composer: { gap: 6, paddingTop: 12, paddingBottom: 8, paddingHorizontal: 14, borderRadius: 20, backgroundColor: colors.surfaceAlt, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  // No browser focus ring either: the cursor is the only sign the box is live.
+  replyInput: { minHeight: 40, paddingVertical: 0, color: colors.text, fontSize: 16, lineHeight: 22, textAlignVertical: 'top', ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
   inlineActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 16 },
-  sendPill: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.brand },
-  sendText: { ...typography.smallStrong, color: colors.brandInk },
+  cancel: { ...typography.smallStrong, color: colors.textMuted },
+  send: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brand },
+  sendOff: { opacity: 0.35 },
   replyActions: { flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap',paddingLeft:42 },
   replyButton: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36 },
   acceptedRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
@@ -146,5 +154,4 @@ const styleDefinitions = StyleSheet.create({
   },
   coachTagText: { ...typography.caption, fontSize: 9, color: colors.brandInk },
   answerBody: { ...typography.body, color: colors.text, lineHeight: 24, marginLeft: 16, paddingLeft: 29, borderLeftWidth: 1, borderLeftColor: colors.border },
-  composer: { gap: spacing.md, paddingTop: spacing.lg },
 });
