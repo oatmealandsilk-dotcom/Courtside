@@ -80,9 +80,12 @@ export function WarmCurtain() {
   return (
     <Animated.View pointerEvents={warm || lifting ? 'none' : 'auto'} style={[styles.curtain, style]}>
       {Platform.OS !== 'web' ? (
-        // On a phone: the launch picture itself, exactly as the phone drew it, so opening is one
-        // unbroken picture that then lifts into the app (Oct 4, owner: no blip on any device).
-        <Animated.Image source={require('../../assets/splash.png')} resizeMode="cover" style={[StyleSheet.absoluteFill, styles.launchPicture, brandStyle]} />
+        // On a phone: the launch picture's logo and line in the theme's colours, drawn exactly where the
+        // launch picture draws them, the same as the screen before it: it lifts into the app (Oct 4).
+        <Animated.View style={[StyleSheet.absoluteFill, brandStyle]}>
+          <Animated.Image source={require('../../assets/launch-brand.png')} resizeMode="cover" style={[StyleSheet.absoluteFill, { tintColor: colors.brand }]} />
+          <Animated.Image source={require('../../assets/launch-tagline.png')} resizeMode="cover" style={[StyleSheet.absoluteFill, { tintColor: colors.textFaint }]} />
+        </Animated.View>
       ) : (
         <>
           <Animated.View style={[styles.brand, brandStyle]}>

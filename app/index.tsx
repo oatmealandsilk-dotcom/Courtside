@@ -60,9 +60,7 @@ export default function Index() {
     // A beat on the cream first, then a slow, even fade: it reads as the app
     // settling into your colours rather than a cut (Oct 2, William: "wait a
     // bit before fading, don't have to do it super fast").
-    // Oct 4 (owner: "no blip on any device, in any circumstance"): the launch
-    // picture now stays, unchanged, until the app opens; the shell's curtain
-    // (the same picture) then fades straight into the app. No themed copy in between.
+    Animated.timing(cover, { toValue: 0, duration: 700, delay: 350, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }).start(() => setLaunchCover(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Opened on top of the app that is already running: something went to '/'
@@ -111,7 +109,7 @@ export default function Index() {
   useEffect(() => {
     // On a phone the loading screen stays until the cream has finished fading,
     // so the fade is never cut short by the app opening over it.
-    if (!settled || !held || gone || launchUpdate.holding) return;
+    if (!settled || !held || gone || launchUpdate.holding || launchCover) return;
     // Into the app: no fade here. The page it opens on is built behind the
     // shell's curtain — the same mark and name — and that curtain does the
     // one fade, once the page has drawn (see warmup). Fading here too showed
@@ -153,11 +151,25 @@ export default function Index() {
 
   return (
     <Animated.View style={[styles.splash, { opacity }]}>
-      <Animated.View style={[styles.brand, { opacity: rise, transform: [{ scale: rise.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) }] }]}>
-        <BrandMark size={76} />
-        <Text style={styles.wordmark}>CourtSide</Text>
-      </Animated.View>
-      <Text style={styles.tagline}>{launchUpdate.downloading ? 'Getting the newest version' : 'Growing the game'}</Text>
+      {Platform.OS !== 'web' ? (
+        // On a phone the themed screen is the launch picture's own logo and line, cut from it
+        // and drawn the same way (cover), in the theme's colours: the cream fades into it with
+        // nothing moving, on any size of phone (Oct 4, owner: theme fade back, no blip).
+        <>
+          <Image source={require('../assets/launch-brand.png')} resizeMode="cover" style={[StyleSheet.absoluteFill, { tintColor: colors.brand }]} />
+          {launchUpdate.downloading
+            ? <Text style={styles.tagline}>Getting the newest version</Text>
+            : <Image source={require('../assets/launch-tagline.png')} resizeMode="cover" style={[StyleSheet.absoluteFill, { tintColor: colors.textFaint }]} />}
+        </>
+      ) : (
+        <>
+          <Animated.View style={[styles.brand, { opacity: rise, transform: [{ scale: rise.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) }] }]}>
+            <BrandMark size={76} />
+            <Text style={styles.wordmark}>CourtSide</Text>
+          </Animated.View>
+          <Text style={styles.tagline}>{launchUpdate.downloading ? 'Getting the newest version' : 'Growing the game'}</Text>
+        </>
+      )}
       {launchCover ? (
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.splash, launchStyles.launch, { opacity: cover }]}>
           <StatusBar style="dark" />
