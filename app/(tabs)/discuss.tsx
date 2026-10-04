@@ -1,6 +1,6 @@
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { SectionPager } from '@/components/SectionPager';
-import Reanimated, { useSharedValue } from 'react-native-reanimated';
+import Reanimated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -102,15 +102,22 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // opened yet starts at the top.
   const pageRef = useRef<ScrollView | null>(null);
   const offsetY = useSharedValue(0);
-  const spots = useRef<Record<string, number>>({});
+  // The pane not on show is held at its own spot while it slides in (shifted by
+  // the difference), so the swipe shows it where you left it and nothing snaps after.
+  const spotPlayers = useSharedValue(0);
+  const spotThreads = useSharedValue(0);
+  const onShow = useSharedValue(section === 'players' ? 0 : 1);
   const shownSection = useRef(section);
   useEffect(() => {
     const was = shownSection.current;
     if (was === section) return;
-    spots.current[was] = offsetY.value;
+    (was === 'players' ? spotPlayers : spotThreads).value = offsetY.value;
     shownSection.current = section;
-    pageRef.current?.scrollTo({ y: spots.current[section] ?? 0, animated: false });
-  }, [section, offsetY]);
+    onShow.value = section === 'players' ? 0 : 1;
+    pageRef.current?.scrollTo({ y: (section === 'players' ? spotPlayers : spotThreads).value, animated: false });
+  }, [section, offsetY, spotPlayers, spotThreads, onShow]);
+  const playersHold = useAnimatedStyle(() => ({ transform: [{ translateY: onShow.value === 0 ? 0 : Math.max(0, offsetY.value - spotPlayers.value) }] }));
+  const threadsHold = useAnimatedStyle(() => ({ transform: [{ translateY: onShow.value === 1 ? 0 : Math.max(0, offsetY.value - spotThreads.value) }] }));
   // The real tab takes each ask as it hears it, so an old one can't come back
   // if the tab is rebuilt later. A picture of the tab sliding in (previewSection)
   // leaves the ask for the real one.
@@ -571,7 +578,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           little at the edge; a swipe left from Discussions goes on to Home. */}
       <SectionPager
         index={sectionIndex}
-        panes={[content('players'), content('discussions')]}
+        panes={[<Reanimated.View key="players" style={playersHold}>{content('players')}</Reanimated.View>, <Reanimated.View key="discussions" style={threadsHold}>{content('discussions')}</Reanimated.View>]}
         progress={underline.progress}
         depth={1}
         delegateLeft
