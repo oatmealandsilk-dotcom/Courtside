@@ -1,6 +1,7 @@
 import { themes, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -81,6 +82,13 @@ export function NearbyMap(props: NearbyMapProps) {
   const model = useMapModel(me, players, at, focusCourt, !expanded, focusHit, focusUser, focusSpot, !!locationOn);
   // The still card on the start page holds the opening curtain until its streets are drawn (see warmup).
   const painted = useStartMapHold(!expanded && (!!model.city || model.cityPending));
+  // The still card fades in whole once its map has drawn (Oct 4, owner): the
+  // city's name and the map arrive together instead of the words first and
+  // the map popping in behind. Never waits more than 2.5 s.
+  const cardIn = useSharedValue(0);
+  const showCard = () => { cardIn.value = withTiming(1, { duration: 420, easing: Easing.out(Easing.cubic) }); };
+  useEffect(() => { const t = setTimeout(showCard, 2500); return () => clearTimeout(t); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const cardFade = useAnimatedStyle(() => ({ opacity: cardIn.value, transform: [{ scale: 0.985 + 0.015 * cardIn.value }] }));
   // Anything else picked (a search result, a pin) takes the place of your own card.
   useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit]);
   const { home, start } = model;
@@ -132,7 +140,7 @@ export function NearbyMap(props: NearbyMapProps) {
       tpl={tpl}
       // The full map's first pins come in as one wave (once any sheet over it has gone); a tap on "+N" zooms in clear of the bars and the tray.
       popIn={expanded}
-      onPainted={expanded ? undefined : painted}
+      onPainted={expanded ? undefined : () => { painted?.(); showCard(); }}
       holdPins={expanded && holdPins}
       pad={{ top: insets.top + 120, bottom: 250, left: 50, right: 50 }}
       onTap={(id) => {
@@ -156,9 +164,11 @@ export function NearbyMap(props: NearbyMapProps) {
   if (!expanded) {
     return (
       <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of players, courts and hits near you" onPress={onExpand} disabled={!onExpand} style={styles.card}>
-        {mapView}
-        <PreviewOverlay cityName={cityName} count={model.inCity.length} placeCount={model.cardCourts.length} hitCount={model.cardHits.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} />
-        <MapCredit align="right" style={{ position: 'absolute', right: 10, bottom: 10 }} />
+        <Reanimated.View style={[StyleSheet.absoluteFill, cardFade]}>
+          {mapView}
+          <PreviewOverlay cityName={cityName} count={model.inCity.length} placeCount={model.cardCourts.length} hitCount={model.cardHits.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} />
+          <MapCredit align="right" style={{ position: 'absolute', right: 10, bottom: 10 }} />
+        </Reanimated.View>
       </Pressable>
     );
   }

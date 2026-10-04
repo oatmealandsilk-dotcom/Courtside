@@ -74,6 +74,9 @@ export function NearbyMap(props: NearbyMapProps) {
   const model = useMapModel(me, players, at, focusCourt, !expanded, focusHit, focusUser, focusSpot, !!locationOn);
   // The still card on the start page holds the opening curtain until its streets are drawn (see warmup).
   const painted = useStartMapHold(!expanded && (!!model.city || model.cityPending));
+  // The still card fades in whole once its map has drawn (Oct 4, owner), never waiting past 2.5 s.
+  const [cardShown, setCardShown] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setCardShown(true), 2500); return () => clearTimeout(t); }, []);
   // Anything else picked (a search result, a pin) takes the place of your own card.
   useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit]);
   const { home, start } = model;
@@ -134,7 +137,7 @@ export function NearbyMap(props: NearbyMapProps) {
     // flash on a dark theme.
     instance.on('style.load', () => applyLook(instance, expanded ? lookFor(themes[theme]) : cardLook(lookFor(themes[theme]))));
     // First time everything in view has drawn: the curtain over the start page may lift onto it.
-    if (!expanded) instance.once('idle', () => requestAnimationFrame(painted));
+    if (!expanded) instance.once('idle', () => requestAnimationFrame(() => { painted(); setCardShown(true); }));
     // The pins' shared styles, once per page, and the zoom classes they answer to.
     if (!document.getElementById('cs-pin-css')) { const css = document.createElement('style'); css.id = 'cs-pin-css'; css.textContent = MAP_PIN_CSS; document.head.appendChild(css); }
     const zoomClass = () => { const z = instance.getZoom(); el.classList.toggle('cs-close', z >= CLOSE_ZOOM_NAMES); el.classList.toggle('cs-far', z < FAR_ZOOM); el.classList.toggle('cs-short', z < SHORT_ZOOM); };
@@ -283,11 +286,13 @@ export function NearbyMap(props: NearbyMapProps) {
   if (!expanded) {
     return (
       <View style={styles.card}>
-        {canvas}
-        {/* A still card: the tap goes to the full map, not to the tiles. */}
-        <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of players, courts and hits near you" onPress={onExpand} disabled={!onExpand} style={StyleSheet.absoluteFill} />
-        <PreviewOverlay cityName={cityName} count={model.inCity.length} placeCount={model.cardCourts.length} hitCount={model.cardHits.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} />
-        <MapCredit align="right" style={{ position: 'absolute', right: 10, bottom: 10 }} />
+        <View style={[StyleSheet.absoluteFill, { opacity: cardShown ? 1 : 0, transform: [{ scale: cardShown ? 1 : 0.985 }], transition: 'opacity 420ms cubic-bezier(0.33, 1, 0.68, 1), transform 420ms cubic-bezier(0.33, 1, 0.68, 1)' } as object]}>
+          {canvas}
+          {/* A still card: the tap goes to the full map, not to the tiles. */}
+          <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of players, courts and hits near you" onPress={onExpand} disabled={!onExpand} style={StyleSheet.absoluteFill} />
+          <PreviewOverlay cityName={cityName} count={model.inCity.length} placeCount={model.cardCourts.length} hitCount={model.cardHits.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} />
+          <MapCredit align="right" style={{ position: 'absolute', right: 10, bottom: 10 }} />
+        </View>
       </View>
     );
   }
