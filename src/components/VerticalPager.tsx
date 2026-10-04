@@ -41,7 +41,7 @@ function pageKey(child: React.ReactNode, index: number) {
   return React.isValidElement(child) && child.key != null ? `k:${child.key}` : `i:${index}`;
 }
 
-export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.ReactNode[]; onIndex: (index: number) => void; /** The page the scroll came to rest on. */ onSettled?: (index: number) => void; initialIndex?: number; /** Pulling down past the first page fetches what is new. */ onRefresh?: () => Promise<void>; /** Shown in the gap the pull opens, beside the disc. */ pullHeader?: React.ReactNode; /** How far below the clock the pull row sits (clear of a band laid over the top). */ pullTop?: number }>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0, onRefresh, pullHeader, pullTop = 0 }, ref) {
+export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.ReactNode[]; onIndex: (index: number) => void; /** The page the scroll came to rest on. */ onSettled?: (index: number) => void; initialIndex?: number; /** Pulling down past the first page fetches what is new. */ onRefresh?: () => Promise<void>; /** Shown in the gap the pull opens, beside the disc. */ pullHeader?: React.ReactNode; /** How far below the clock the pull row sits (clear of a band laid over the top). */ pullTop?: number; /** 'left': the logo and disc in the top-left corner, beside the Feed's words (Oct 4). */ pullAlign?: 'center' | 'left' }>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0, onRefresh, pullHeader, pullTop = 0, pullAlign = 'center' }, ref) {
   // Hears a theme change, so its own colours never lag the page's.
   useTheme();
   const [height, setHeight] = useState(0);
@@ -308,7 +308,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
           the first page would hide anything behind it): the greeting and the disc, which
           draws round as you pull, closes at the line, and turns while it fetches. */}
       {onRefresh ? (
-        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + pullTop, height: PULL_DISC, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 48 }, rowStyle]}>
+        <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + pullTop, height: PULL_DISC, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: pullAlign === 'left' ? 'flex-start' : 'center', gap: pullAlign === 'left' ? 8 : 12, paddingHorizontal: pullAlign === 'left' ? 16 : 48 }, rowStyle]}>
           {pullHeader}
           <PullDisc gap={gap} disc={disc} line={PULL_LINE} />
         </Animated.View>

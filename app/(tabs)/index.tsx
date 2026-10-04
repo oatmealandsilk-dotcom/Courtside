@@ -12,6 +12,7 @@ import { onOpenGroupFeed, tookGroupFeed } from '@/features/groups/openGroupFeed'
 import { GroupTile } from '@/features/groups/GroupTile';
 import { inGroupFeed } from '@/features/groups/groupFeed';
 import { TOP_BAND_DROP, TOP_BAND_HEIGHT, TOP_BAND_TOP, TopBandContext } from '@/features/feed/topBand';
+import { PULL_DISC } from '@/lib/pullRefresh';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { goBack } from '@/lib/goBack';
@@ -1236,7 +1237,7 @@ function Home({ scope, topRow, paused, onChrome }: {
           {/* Pull-to-refresh is for phones: the app and a phone's browser (`phone`, above). Asking
               isDesktopBrowser() alone took it off the iPhone app: the app has no browser to read,
               so the check answered "computer" there, and the pull strip was never built. */}
-          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + TOP_BAND_HEIGHT : 0} pullHeader={scope ? undefined : <BrandMark size={40} />}>
+          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + (TOP_BAND_HEIGHT - PULL_DISC) / 2 : 0} pullAlign={topRow ? 'left' : 'center'} pullHeader={scope ? undefined : <BrandMark size={topRow ? 26 : 40} />}>
             {[...feed.map((item, index) => {
               const distance = Math.abs(index - active);
               const ahead = index - active;

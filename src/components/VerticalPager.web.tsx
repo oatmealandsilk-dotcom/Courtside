@@ -28,7 +28,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   /** Shown in the gap the pull opens, beside the disc. */
   pullHeader?: React.ReactNode;
   pullTop?: number;
-}>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0, onRefresh, pullHeader, pullTop = 0 }, ref) {
+  pullAlign?: 'center' | 'left';
+}>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0, onRefresh, pullHeader, pullTop = 0, pullAlign = 'center' }, ref) {
   // The scrollbar is part of the design too: reading the theme here is what
   // redraws it when the palette changes.
   useTheme();
@@ -174,7 +175,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   return <div style={{ position: 'relative', height: '100%', width: '100%' }}>
     {/* Behind the feed, in the gap the pull opens: the greeting and the disc, riding in its middle. */}
     {onRefresh ? (
-      <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: pullTop, left: 0, right: 0, height: PULL_DISC, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, zIndex: 0 }, rowStyle]}>
+      <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: pullTop, left: 0, right: 0, height: PULL_DISC, flexDirection: 'row', alignItems: 'center', justifyContent: pullAlign === 'left' ? 'flex-start' : 'center', gap: pullAlign === 'left' ? 8 : 12, paddingHorizontal: pullAlign === 'left' ? 16 : 0, zIndex: 0 }, rowStyle]}>
         {pullHeader}
         <PullDisc gap={gap} disc={disc} line={WEB_HOME_PULL_LINE} />
       </Animated.View>
