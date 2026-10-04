@@ -4,6 +4,7 @@ import { Platform, StyleSheet, Text } from 'react-native';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { BrandMark } from '@/components/BrandMark';
+import { LaunchMark } from '@/components/LaunchMark';
 import { MAP_WAIT_MS, curtainLiftBy, curtainReadyAnyway, launchSettle, setCurtainDown, setMapWaitOver, useCurtainReady, useStartDrawn } from '@/features/feed/warmup';
 import { colors, spacing, font } from '@/theme';
 
@@ -83,8 +84,7 @@ export function WarmCurtain() {
         // On a phone: the launch picture's logo and line in the theme's colours, drawn exactly where the
         // launch picture draws them, the same as the screen before it: it lifts into the app (Oct 4).
         <Animated.View style={[StyleSheet.absoluteFill, brandStyle]}>
-          <Animated.Image source={require('../../assets/launch-brand.png')} resizeMode="cover" style={[StyleSheet.absoluteFill, { tintColor: colors.brand }]} />
-          <Animated.Image source={require('../../assets/launch-tagline.png')} resizeMode="cover" style={[StyleSheet.absoluteFill, { tintColor: colors.textFaint }]} />
+          <LaunchMark ink={colors.brand} faint={colors.textFaint} />
         </Animated.View>
       ) : (
         <>

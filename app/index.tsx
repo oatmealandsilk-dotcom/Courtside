@@ -10,6 +10,7 @@ import { preloadNearbyMap } from '@/components/NearbyMap';
 import { useLaunchUpdate } from '@/lib/instantUpdates';
 
 import { launchPartReady, hideLaunch } from '@/lib/launchSplash';
+import { LaunchMark } from '@/components/LaunchMark';
 import { BrandMark } from '@/components/BrandMark';
 import { useApp } from '@/store/AppContext';
 import { colors, lightColors, spacing, typography, font } from '@/theme';
@@ -158,12 +159,7 @@ export default function Index() {
         // On a phone the themed screen is the launch picture's own logo and line, cut from it
         // and drawn the same way (cover), in the theme's colours: the cream fades into it with
         // nothing moving, on any size of phone (Oct 4, owner: theme fade back, no blip).
-        <>
-          <Image source={require('../assets/launch-brand.png')} resizeMode="cover" style={[StyleSheet.absoluteFill, { tintColor: colors.brand }]} onLoad={() => launchPartReady('brand')} onError={() => launchPartReady('brand')} />
-          {launchUpdate.downloading
-            ? <Text style={styles.tagline}>Getting the newest version</Text>
-            : <Image source={require('../assets/launch-tagline.png')} resizeMode="cover" style={[StyleSheet.absoluteFill, { tintColor: colors.textFaint }]} />}
-        </>
+        <LaunchMark ink={colors.brand} faint={colors.textFaint} line={launchUpdate.downloading ? 'Getting the newest version' : 'Growing the game'} />
       ) : (
         <>
           <Animated.View style={[styles.brand, { opacity: rise, transform: [{ scale: rise.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) }] }]}>
