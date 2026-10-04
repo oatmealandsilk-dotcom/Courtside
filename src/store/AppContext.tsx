@@ -2311,6 +2311,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         release();
         if (avatarUrl && avatarUrl !== patch.avatarUrl) patchCurrentUser(u => ({ ...u, avatarUrl }));
+        showToast({ title: 'Profile photo updated', icon: 'checkmark-circle-outline' });
       }
       await remote.updateProfile(me!, { ...patch, avatarUrl });
     })();

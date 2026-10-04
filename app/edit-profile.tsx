@@ -36,7 +36,12 @@ export default function EditProfile() {
         <View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View>
       ) : (
         <View style={{ gap: 20 }}>
-          <ProfilePhotoPicker name={name} value={avatarUrl} onChange={setAvatarUrl} />
+          {/* Instagram's way (Oct 4, owner): a chosen photo saves at once, without Save changes.
+              Only the photo: anything typed above still waits for Save changes. */}
+          <ProfilePhotoPicker name={name} value={avatarUrl} onChange={(uri) => {
+            setAvatarUrl(uri);
+            if (currentUser) actions.updateIdentity({ avatarUrl: uri, name: currentUser.name, bio: currentUser.bio, location: currentUser.location });
+          }} />
           <Field label="Name" value={name} onChangeText={setName} />
           {/* The handle has its own page: it has rules (once a month) and a live check. */}
           <View style={styles.wrap}>
@@ -48,7 +53,7 @@ export default function EditProfile() {
           </View>
           <Field label="Bio" value={bio} onChangeText={setBio} multiline />
           <LocationField value={location} onChange={(next, at) => { setLocation(next); setCityAt(at); }} />
-          <Button label="Save changes" disabled={!name.trim()} onPress={() => { actions.updateIdentity({ avatarUrl, name: name.trim(), bio: bio.trim(), location: location.trim(), cityAt: location.trim() ? cityAt : null }); router.back(); }} />
+          <Button label="Save changes" disabled={!name.trim()} onPress={() => { actions.updateIdentity({ name: name.trim(), bio: bio.trim(), location: location.trim(), cityAt: location.trim() ? cityAt : null }); router.back(); }} />
         </View>
       )}
     </Screen>
