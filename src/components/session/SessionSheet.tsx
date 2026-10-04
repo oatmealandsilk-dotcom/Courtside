@@ -13,6 +13,8 @@ import { isActive, sessionPeople, tagsOnSession } from '@/features/activity/sess
 import { overUsual } from '@/features/activity/usual';
 import { cleanZones, hardMinutes, postZones } from '@/features/activity/zones';
 import { openCourt } from '@/features/players/courtLink';
+import { TipBubble } from '@/components/TipBubble';
+import { learned, useTip } from '@/features/tips/tips';
 import { colors, font, withAlpha } from '@/theme';
 import { Duration, Figure } from './Duration';
 import { Pop } from './Pop';
@@ -72,6 +74,8 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
   const s = post.session;
   if (!s) return null;
   const mine = !!me && post.authorId === me;
+  // Tip (features/tips): the first time your own stats are open, share them like Strava.
+  const shareTip = useTip('share-session', mine && !!onShare);
   const activity = mine && s.activityId ? activities.find((a) => a.id === s.activityId && a.userId === me) : undefined;
   const logId = s.sessionId ?? activity?.sessionId;
   const log = mine && logId ? sessions.find((x) => x.id === logId && x.userId === me) : undefined;
@@ -207,7 +211,10 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
         </Pop>
       ) : null}
       {mine && onShare ? (
-        <FormRow icon="logo-instagram" label="Share to Instagram" chevron onPress={onShare} />
+        <View>
+          {shareTip.shown ? <TipBubble tip="share-session" shown onClose={shareTip.close} pointer="down" style={{ position: 'relative', alignSelf: 'center', marginBottom: 6 }} /> : null}
+          <FormRow icon="logo-instagram" label="Share to Instagram" chevron onPress={() => { learned('share-session'); onShare(); }} />
+        </View>
       ) : null}
       {mine && log && onEdit ? (
         <FormRow icon="create-outline" label="Edit session" chevron onPress={() => onEdit(log.id)} />

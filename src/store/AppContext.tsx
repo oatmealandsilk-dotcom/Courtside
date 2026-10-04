@@ -54,6 +54,7 @@ import { opensAtFor } from '@/features/hits/audience';
 import { forgetPushToken } from '@/features/push/push';
 import { framesAt } from '@/features/compose/frames';
 import { noteStep, reportError } from '@/lib/crashReporting';
+import { learned as learnedTip } from '@/features/tips/tips';
 import { emptyCourtLife, useCourtLife, type CourtLifeActions, type CourtLifeState } from '@/store/courtLife';
 import { forgetLinkPreviews } from '@/features/messages/linkPreview';
 import { groupInviteText } from '@/features/groups/inviteMessage';
@@ -2826,6 +2827,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const toggleLike = useCallback(
     (postId: ID) => {
+      learnedTip('double-tap');
       const me = requireUser();
       const now = stateRef.current.posts.find((p) => p.id === postId);
       // The buzz answers the tap itself. Inside the update it waited for

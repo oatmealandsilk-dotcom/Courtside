@@ -18,6 +18,8 @@ import { hasSessionStats } from '@/features/activity/format';
 import { StatsPill } from '@/components/session/StatsPill';
 import { agoInWords, compactNumber, timeLeft } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
+import { TipBubble } from '@/components/TipBubble';
+import { learned, useTip } from '@/features/tips/tips';
 import { useTourBusy } from '@/features/tour/tourStore';
 import { font } from '@/theme';
 import { tagsNotInCaption } from '@/features/feed/tags';
@@ -86,8 +88,15 @@ export const railCount = (n: number) => (n > 0 ? compactNumber(n) : ' ');
  * the whole caption with "24 minutes ago" under it, and a second tap folds
  * them again. The name, the place, "with" and each #tag keep their own taps.
  */
+/** Clips that have come on screen this visit, for the double-tap tip. */
+let clipsSeen = 0;
+
 export function ReelCaption({ post, author, onAuthor, onOpenStats, active = false }: { post: Post; author: User; onAuthor: () => void; /** Kept for the feed's call; the comments open from the rail. */ onOpenComments?: (from?: unknown) => void; onOpenStats?: () => void; active?: boolean }) {
   const { users, blockedIds } = useApp();
+  // Tips (features/tips): the stats pill the first time one shows; double-tap on the third clip seen.
+  const statsTip = useTip('see-stats', active && !!post.session && hasSessionStats(post.session));
+  useEffect(() => { if (active) clipsSeen += 1; }, [active]);
+  const likeTip = useTip('double-tap', active && post.kind === 'clip' && clipsSeen >= 3 && !(post.session && hasSessionStats(post.session)));
   const touring = useTourBusy();
   const { height: screenH } = useWindowDimensions();
   const [open, setOpen] = useState(false);
@@ -141,9 +150,11 @@ export function ReelCaption({ post, author, onAuthor, onOpenStats, active = fals
           A tap raises the stats with the clip still playing above them (session-stats); the names are in there, not here. */}
       {post.session && hasSessionStats(post.session) ? (
         <View style={styles.pill}>
-          <StatsPill session={post.session} hidden={blockedIds} onPress={onOpenStats} active={active} />
+          <TipBubble tip="see-stats" shown={statsTip.shown} onClose={statsTip.close} style={styles.tipAbove} />
+          <StatsPill session={post.session} hidden={blockedIds} onPress={onOpenStats ? () => { learned('see-stats'); onOpenStats(); } : undefined} active={active} />
         </View>
       ) : null}
+      <TipBubble tip="double-tap" shown={likeTip.shown} onClose={likeTip.close} style={styles.tipTop} />
     </View>
   );
 }
@@ -447,6 +458,8 @@ export function SwipeHint() {
 }
 
 const styles = StyleSheet.create({
+  tipAbove: { bottom: '100%', left: 0, marginBottom: 6, alignItems: 'flex-start' },
+  tipTop: { bottom: '100%', left: 0, right: 0, marginBottom: 12 },
   // The caption sits close under the name (one post's words); the small line keeps a little more air.
   wrap: { gap: 6 },
   // The face, then the handle's line with the place under it, both lines centred on the face.

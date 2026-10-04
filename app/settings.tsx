@@ -1,4 +1,6 @@
 import { PlayerName } from '@/components/PlayerName';
+import { resetTips } from '@/features/tips/tips';
+import { show as showToast } from '@/lib/toast';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -69,6 +71,7 @@ export default function Settings() {
       rows: [
         { icon: 'person-circle-outline', label: 'Account center', detail: 'Password, sign-in and payments', onPress: () => router.push('/account') },
         { icon: 'shield-checkmark-outline', label: 'Privacy center', onPress: () => router.push('/privacy') },
+        { icon: 'bulb-outline', label: 'Show tips again', onPress: () => { resetTips(); showToast({ title: 'Tips will show again', icon: 'bulb-outline' }); } },
       ],
     },
     // Phone alerts only exist in the app on a phone; a browser can't receive them, so it doesn't offer switches for them.

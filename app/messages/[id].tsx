@@ -1,4 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { TipBubble } from '@/components/TipBubble';
+import { learned, useTip } from '@/features/tips/tips';
 import { Wash } from '@/components/Wash';
 import { PlayerName } from '@/components/PlayerName';
 import React, { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
@@ -1096,6 +1098,7 @@ const Composer = memo(function Composer({ ref, styles, pickedCount, editingBody,
   const tools = !words && !editing && !pickedCount;
   const showSend = !!words || !!pickedCount || editing;
   const sendReady = (!!pickedCount && !editing) || (!!words && (!editing || words !== editingBody));
+  const micTip = useTip('hold-to-record', !showSend && !voice.recording && !editing);
   const cameraOn = photosOn === 'on';
   const mention = activeMention(draft, caret);
   const mentionRows = mention ? candidatesFor(mention.query, 5) : [];
@@ -1190,6 +1193,8 @@ const Composer = memo(function Composer({ ref, styles, pickedCount, editingBody,
               ) : null}
             </>
           )}
+          {/* Tip (features/tips): the mic records only while held. */}
+          <TipBubble tip="hold-to-record" shown={micTip.shown} onClose={micTip.close} pointer="down" style={{ bottom: '100%', right: 0, marginBottom: 8, alignItems: 'flex-end' }} />
           <SendOrMic
             showSend={showSend || (voice.recording && recMode === 'locked')}
             ready={voice.recording ? true : sendReady}
@@ -1198,7 +1203,7 @@ const Composer = memo(function Composer({ ref, styles, pickedCount, editingBody,
             holding={voice.recording && recMode === 'hold'}
             slide={recSlide}
             onSend={voice.recording ? () => { void sendRecording(); } : submit}
-            onMicDown={() => { if (voice.recording) return; setPlusOpen(false); setRecMode('hold'); void startRecording(); }}
+            onMicDown={() => { learned('hold-to-record'); if (voice.recording) return; setPlusOpen(false); setRecMode('hold'); void startRecording(); }}
             onMicUp={(heldMs, locked) => {
               // Hold to record, let go to send (owner, Oct 3). A quick tap records nothing and says how;
               // a screen reader's tap (which cannot hold) still records until Send or the bin.
