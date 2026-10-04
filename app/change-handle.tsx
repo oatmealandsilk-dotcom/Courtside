@@ -87,7 +87,7 @@ export default function ChangeHandle() {
       case 'ok': return { icon: 'checkmark-circle' as const, text: `@${handle} is free`, tone: styles.good };
       case 'taken': return { icon: 'close-circle' as const, text: `@${handle} is taken`, tone: styles.bad };
       case 'held': return { icon: 'time-outline' as const, text: `@${handle} was just let go by someone, so it is held for a couple of weeks`, tone: styles.bad };
-      case 'invalid': return { icon: 'alert-circle-outline' as const, text: 'Use 2 to 24 letters, numbers or underscores', tone: styles.bad };
+      case 'invalid': return { icon: 'alert-circle-outline' as const, text: 'Use 3 to 24 letters, numbers or underscores', tone: styles.bad };
       default: return null;
     }
   })();

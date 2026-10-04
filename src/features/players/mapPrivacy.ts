@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { learned as learnedTip } from '@/features/tips/tips';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
@@ -92,6 +93,7 @@ export function useWhoSeesYouUp(): boolean {
  * Resolves with the answer, or null if it was closed without one.
  */
 export function askWhoSeesYou(mode: 'first' | 'manage'): Promise<MapVisibility | null> {
+  learnedTip('map-who-sees');
   // Only one at a time: a second tap while it is up opens nothing more.
   if (waiting) return Promise.resolve(null);
   return new Promise((resolve) => {

@@ -11,6 +11,9 @@ import { useCourtOpen } from '@/features/players/courtLink';
 import { EmptyState } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { TipBubble } from '@/components/TipBubble';
+import { useTip } from '@/features/tips/tips';
 
 /** The community map as the whole page: tiles edge to edge, the controls laid over them. */
 export default function MapScreen() {
@@ -64,6 +67,9 @@ export default function MapScreen() {
   useEffect(() => { const t = setTimeout(() => setWaited(true), 2500); return () => clearTimeout(t); }, []);
   const willAsk = !asked.current && mustChoose && (locationEnabled || locationAsked === false);
   const holdPins = sheetUp || asking || willAsk || (mapLive === null && !waited);
+  // Tip (features/tips): the top-right button is where who sees you is chosen; the switch on Community only turns it on and off.
+  const insets = useSafeAreaInsets();
+  const whoTip = useTip('map-who-sees', !!currentUser && !!location.locationOn && !holdPins);
   return (
     <View style={{ flex: 1, backgroundColor: colors.bgElevated }}>
       {currentUser ? (
@@ -71,6 +77,7 @@ export default function MapScreen() {
       ) : (
         <EmptyState title="Sign in to see who is around" />
       )}
+      <TipBubble tip="map-who-sees" shown={whoTip.shown} onClose={whoTip.close} pointer="up" style={{ top: insets.top + 62, right: 10, left: 40, alignItems: 'flex-end' }} />
     </View>
   );
 }

@@ -2319,7 +2319,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [patchCurrentUser]);
   const checkHandle = useCallback(async (raw: string): Promise<HandleStatus | null> => {
     const wanted = raw.trim().toLowerCase();
-    if (!/^[a-z0-9_]{2,24}$/.test(wanted)) return 'invalid';
+    if (!/^[a-z0-9_]{3,24}$/.test(wanted)) return 'invalid';
     const me = stateRef.current.currentUserId;
     if (live(me)) return remote.handleStatus(wanted);
     // The demo: free unless someone in it already has it.
@@ -2333,7 +2333,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!self || self.handle === wanted) return;
     if (!live(me)) {
       // The demo keeps the same rules the database does.
-      if (!/^[a-z0-9_]{2,24}$/.test(wanted)) throw new Error('Use 2 to 24 letters, numbers or underscores.');
+      if (!/^[a-z0-9_]{3,24}$/.test(wanted)) throw new Error('Use 3 to 24 letters, numbers or underscores.');
       const since = self.handleChangedAt ? Date.now() - Date.parse(self.handleChangedAt) : Infinity;
       if (since < 30 * 86400000) throw new Error('You can change your handle once every 30 days.');
       if (stateRef.current.users.some((u) => u.id !== me && u.handle.toLowerCase() === wanted)) throw new Error(`@${wanted} is taken.`);

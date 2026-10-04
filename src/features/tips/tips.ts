@@ -7,9 +7,10 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
  * doing the thing first counts as knowing it, and that tip never shows. At
  * most one tip per visit to the app, never stacked.
  */
-export type TipKey = 'activities' | 'double-tap' | 'see-stats' | 'share-session' | 'hold-to-record' | 'who-liked' | 'chat-times';
+export type TipKey = 'map-who-sees' | 'activities' | 'double-tap' | 'see-stats' | 'share-session' | 'hold-to-record' | 'who-liked' | 'chat-times';
 
 export const TIP_WORDS: Record<TipKey, string> = {
+  'map-who-sees': 'Tap here to choose who sees you: players nearby, only friends, or just you.',
   activities: 'Your friends’ matches and practices show up here.',
   'double-tap': 'Double-tap a clip to like it.',
   'see-stats': 'Tap for the full stats.',
