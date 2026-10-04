@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -69,6 +69,9 @@ export default function ShareSession() {
   const cardH = Math.round((cardW * 16) / 9);
 
   const [picked, setPicked] = useState<string | undefined>();
+  const [score, setScore] = useState('');
+  // "6-4 6-3" reads as a score with proper dashes and single spaces.
+  const shownScore = score.trim() ? score.trim().replace(/\s*[-–]\s*/g, '–').replace(/\s+/g, ' ') : undefined;
   const photo = picked ?? story?.photo;
   const [index, setIndex] = useState<number | null>(null);
   // What the last button said ("Saved to your downloads…"); a new design clears it.
@@ -151,7 +154,7 @@ export default function ShareSession() {
       {/* The copy that is photographed: full size, out of sight under the page. */}
       <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.stage, size]}>
         <View ref={stage} collapsable={false} style={size}>
-          <SessionStoryArt design={design} story={story} width={size.width} photo={photo} hidden={blockedIds} onPhotoLoad={(ok) => { if (photo) setLoaded((was) => (was?.uri === photo && was.ok === ok ? was : { uri: photo, ok })); }} />
+          <SessionStoryArt design={design} story={story} width={size.width} photo={photo} hidden={blockedIds} score={shownScore} onPhotoLoad={(ok) => { if (photo) setLoaded((was) => (was?.uri === photo && was.ok === ok ? was : { uri: photo, ok })); }} />
         </View>
       </View>
       <View style={styles.page}>
@@ -172,7 +175,7 @@ export default function ShareSession() {
                     <View style={[styles.frame, { width: cardW, height: cardH }]} accessible accessibilityLabel={`${d.label} design`}>
                       {/* A see-through sticker is shown over a quiet backdrop, the way it will sit over a story. */}
                       {d.key === 'sticker' || d.key === 'overlay' ? <LinearGradient colors={[withAlpha(colors.text, 0.16), withAlpha(colors.text, 0.38)]} style={StyleSheet.absoluteFill} /> : null}
-                      <SessionStoryArt design={d.key} story={story} width={cardW} photo={photo} hidden={blockedIds} />
+                      <SessionStoryArt design={d.key} story={story} width={cardW} photo={photo} hidden={blockedIds} score={shownScore} />
                       {d.key === 'photo' ? (
                         <Pressable accessibilityRole="button" accessibilityLabel={photo ? 'Change photo' : 'Choose a photo'} onPress={() => { void choosePhoto(); }} style={({ pressed }) => [styles.photoButton, pressed && styles.pressed]}>
                           <Ionicons name="image-outline" size={14} color={colors.onMedia} />
@@ -195,6 +198,23 @@ export default function ShareSession() {
                 );
               })}
             </View>
+
+            {/* A match can carry its score on the picture (Oct 4, owner); typed here, never saved. */}
+            {story.session.kind === 'match' ? (
+              <View style={styles.scoreRow}>
+                <Text style={styles.scoreLabel}>Score</Text>
+                <TextInput
+                  value={score}
+                  onChangeText={(t) => setScore(t.slice(0, 24))}
+                  placeholder="6-4 6-3"
+                  placeholderTextColor={colors.textFaint}
+                  style={styles.scoreInput}
+                  returnKeyType="done"
+                  autoCorrect={false}
+                  accessibilityLabel="Match score, shown on the picture"
+                />
+              </View>
+            ) : null}
 
             {/* Strava's row of round buttons, in CourtSide's colours (Oct 4): Stories leads, the rest follow. */}
             <View style={styles.actions}>
@@ -234,6 +254,9 @@ const styleDefinitions = StyleSheet.create({
   designOn: { backgroundColor: colors.surface },
   designText: { ...typography.smallStrong, color: colors.textMuted },
   designTextOn: { color: colors.text },
+  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.xl, paddingHorizontal: 14, height: 44, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  scoreLabel: { ...font('600'), fontSize: 14, color: colors.textMuted },
+  scoreInput: { flex: 1, ...font('600'), fontSize: 16, color: colors.text, paddingVertical: 0 },
   actions: { flexDirection: 'row', justifyContent: 'center', gap: spacing.lg, paddingHorizontal: spacing.lg, marginTop: spacing.xs },
   action: { alignItems: 'center', gap: 6, width: 64 },
   actionCircle: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },

@@ -20,7 +20,9 @@ import { font } from '@/theme';
  * with along the bottom. No address and no tracker line: at this size they
  * only came out as specks. Everything scales with `width` (300 is the base).
  */
-export function SessionStamp({ session, width, eyebrow, place, hidden = [] }: {
+export function SessionStamp({ session, width, eyebrow, place, hidden = [], score }: {
+  /** A match's score, typed on the Share page. */
+  score?: string;
   session: SessionDetail;
   width: number;
   eyebrow: string;
@@ -51,6 +53,7 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [] }: {
         ) : null}
       </View>
       <Duration minutes={session.minutes} size={68 * u} color={look.figure} unitColor={look.muted} style={{ marginTop: 6 * u }} />
+      {score ? <Text numberOfLines={1} style={{ ...font('700'), fontSize: 24 * u, letterSpacing: -0.4 * u, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 2 * u }}>{score}</Text> : null}
       {place ? (
         <View style={[styles.row, { gap: 4 * u, marginTop: 2 * u }]}>
           <Ionicons name="location-outline" size={12 * u} color={look.muted} />
