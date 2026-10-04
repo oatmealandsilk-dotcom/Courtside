@@ -181,8 +181,11 @@ const phone = Platform.OS !== 'web' || !isDesktopBrowser();
  * 26pt of glyph at these sizes, where equal sizes made the heart look biggest.
  */
 const RAIL_ICONS = [['heart-outline', 31], ['chatbubble-outline', 29], ['arrow-redo-outline', 30], ['bookmark-outline', 28], ['ellipsis-horizontal', 26]] as const;
-/** The rail's last item (the three dots) centres on the words' small bottom line rather than standing on its baseline. */
-const RAIL_DROP = -6;
+/**
+ * The rail stands a little above the words' bottom line (Oct 4, owner: the dots sat too low,
+ * crowding the tab bar); the gaps between its items stay even.
+ */
+const RAIL_DROP = 10;
 
 /**
  * A hit's photo at its own shape. A tall one fills the page; a wide one (a
@@ -1608,8 +1611,8 @@ function Home({ scope, topRow, paused, onChrome }: {
             // The same plain chevron every other page has. Over a picture it sits on the mark's tile, in
             // the mark's ink: a bare white arrow vanished on a bright sky or a white ceiling.
             <Reanimated.View ref={scopeBackFade.ref as never} pointerEvents="box-none" style={[styles.scopeBackLayer, scopeBackFade.style]}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Go back" hitSlop={10} onPress={() => goBack()} style={[styles.scopeBack, activeOnPicture && styles.scopeBackTile, { top: insets.top + (activeOnPicture ? 7 : 10) }]}>
-                <Ionicons name="chevron-back" size={22} color={activeOnPicture ? (theme === 'us-open' ? '#FFFFFF' : colors.brand) : colors.text} />
+              <Pressable accessibilityRole="button" accessibilityLabel="Go back" hitSlop={10} onPress={() => goBack()} style={[styles.scopeBack, activeOnPicture && styles.scopeBackTile, { top: insets.top + (activeOnPicture ? 8 : 10) }]}>
+                <Ionicons name="chevron-back" size={21} color={activeOnPicture ? '#FFFFFF' : colors.text} />
               </Pressable>
             </Reanimated.View>
           ) : null}
@@ -1634,11 +1637,12 @@ const styleDefinitions = StyleSheet.create({
   groupEmptyTitle: { ...typography.title, color: colors.text, textAlign: 'center', marginTop: spacing.md },
   groupEmptyBody: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
   groupEmptyActions: { alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.lg },
-  scopeBack: { position: 'absolute', left: 12, padding: 6, zIndex: 6 },
+  scopeBack: { position: 'absolute', left: 16, padding: 6, zIndex: 6 },
   // Its own layer over the feed, so it can fade as a clip goes onto the comments stage.
   scopeBackLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 6 },
   // Over a picture: the mark's tile, 40 square (the sound disc's size), the chevron nudged right of centre to sit centred by eye.
-  scopeBackTile: { width: 40, height: 40, padding: 0, paddingRight: 2, borderRadius: 12, backgroundColor: `${colors.bg}E6`, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  // Over a picture: the sound button's frosted dark disc with a white chevron, no shadow (Oct 4), nudged right of centre to sit centred by eye.
+  scopeBackTile: { width: 38, height: 38, padding: 0, paddingRight: 2, borderRadius: 19, backgroundColor: 'rgba(16,18,17,0.34)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.28)', alignItems: 'center', justifyContent: 'center' },
   wordmarkOverlay: {
     // top comes from the safe-area inset at render; a fixed value put the
     // wordmark under the Dynamic Island on a phone.
