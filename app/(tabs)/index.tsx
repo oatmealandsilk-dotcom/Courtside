@@ -1186,6 +1186,17 @@ function Home({ scope, topRow, paused, onChrome }: {
   // there this early, a way to post, and a way back to the top.
   // Kept quiet on purpose: a dark page nobody is told about, found only by
   // scrolling all the way down.
+  // Activities' own last page (Oct 4, owner): a soft card to land on rather than a hard stop.
+  const caughtUp = (
+    <View key="caught-up" style={styles.endPage}>
+      <View style={styles.endCard}>
+        <Wash height={300} strength={0.65} fade={colors.surface} />
+        <View style={styles.endTile}><MarkDraw size={30} /></View>
+        <Text style={styles.endTitle}>You're all caught up.</Text>
+        <Text style={styles.endBody}>That's every session from you and the people you follow. Log your next one after you play.</Text>
+      </View>
+    </View>
+  );
   const endPage = (
     <View key="the-end" style={styles.endPage}>
       <View style={styles.endCard}>
@@ -1605,7 +1616,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                   )}
                 </React.Fragment>
               );
-            }), ...(scope ? [] : [endPage])]}
+            }), ...(scope?.activities ? [caughtUp] : scope ? [] : [endPage])]}
           </VerticalPager>
 
           {scopedBack ? (

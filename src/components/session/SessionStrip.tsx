@@ -9,6 +9,9 @@ import { kindWord, resultWord, sourceLabel, spokenDuration } from '@/features/ac
 import { sessionPeople } from '@/features/activity/sessionTags';
 import { colors, font, withAlpha } from '@/theme';
 import { Duration, Figure } from './Duration';
+import { cardLook } from './SessionCard';
+import { ZoneGlyph } from './ZoneGlyph';
+import { BrandWash } from '@/components/ui';
 
 /**
  * A photo post's session, straight under the picture (the picture stays
@@ -44,12 +47,14 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   const source = tracker ? sourceLabel(session.source ?? 'apple-health') : null;
   const spoken = [`${spokenDuration(session.minutes)}, ${what.toLowerCase()}`, hr && session.avgHr ? `average heart rate ${session.avgHr}` : null, hr ? `max ${session.maxHr}` : null, kcal ? `${kcal} calories` : null, lead ? `${vs} @${lead.handle}` : null, source].filter(Boolean).join(', ');
   const small = { fontSize: 13 * k, lineHeight: Math.round(17 * k) };
+  // The session card's own look (Oct 4, owner: "looks a bit flat"): the theme's colour and its wash, white numbers; glass-dark on dark themes.
+  const look = cardLook();
   const stats = [
-    kcal != null ? { key: 'kcal', label: 'Calories', node: <Figure value={kcal} baseline size={19 * k} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} duration={600} /> } : null,
-    hr && session.avgHr ? { key: 'avg', label: 'Avg HR', node: <Figure value={session.avgHr} unit="bpm" baseline unitScale={0.62} size={19 * k} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} duration={600} /> } : null,
-    hr ? { key: 'max', label: 'Max HR', node: <Figure value={session.maxHr!} unit="bpm" baseline unitScale={0.62} size={19 * k} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} duration={600} /> } : null,
+    kcal != null ? { key: 'kcal', label: 'Calories', node: <Figure value={kcal} baseline size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
+    hr && session.avgHr ? { key: 'avg', label: 'Avg HR', node: <Figure value={session.avgHr} unit="bpm" baseline unitScale={0.62} size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
+    hr ? { key: 'max', label: 'Max HR', node: <Figure value={session.maxHr!} unit="bpm" baseline unitScale={0.62} size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
   ].filter((x): x is { key: string; label: string; node: React.ReactElement } => !!x);
-  const time = <Duration minutes={session.minutes} size={19 * k} unitScale={0.62} color={colors.text} unitColor={colors.textMuted} play={play} delay={120} duration={600} />;
+  const time = <Duration minutes={session.minutes} size={19 * k} unitScale={0.62} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={600} />;
   // One panel, Strava's activity block in the theme's colour (Oct 4, owner: "needs big UI work"):
   // what it was and who with, then the numbers in even columns; with only the time shared, one line.
   return (
@@ -59,20 +64,21 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
       accessibilityHint="Opens the stats"
       disabled={!onPress}
       onPress={onPress}
-      style={({ pressed }) => [styles.panel, { borderRadius: 16 * k, paddingHorizontal: 14 * k, paddingVertical: 12 * k, gap: 12 * k }, pressed && onPress ? styles.pressed : null]}
+      style={({ pressed }) => [styles.panel, { backgroundColor: look.fill, borderColor: look.border, borderRadius: 18 * k, paddingHorizontal: 16 * k, paddingVertical: 14 * k, gap: 12 * k }, pressed && onPress ? styles.pressed : null]}
     >
+      {look.dark ? null : <BrandWash radius={18 * k} />}
       <View style={[styles.row, { gap: 8 * k }]}>
-        <View style={[styles.badge, { width: 26 * k, height: 26 * k, borderRadius: 13 * k }]}>
-          <Ionicons name="tennisball" size={14 * k} color={colors.brand} />
+        <View style={[styles.badge, { width: 28 * k, height: 28 * k, borderRadius: 14 * k, backgroundColor: withAlpha(look.ink, 0.16) }]}>
+          <ZoneGlyph size={14 * k} color={look.ink} />
         </View>
         <View style={[styles.flex, { gap: 1 * k }]}>
-          <Text style={[styles.title, { fontSize: 14.5 * k, lineHeight: Math.round(19 * k) }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{what}</Text>
+          <Text style={[styles.title, { color: look.ink }, { fontSize: 14.5 * k, lineHeight: Math.round(19 * k) }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{what}</Text>
           {lead || source ? (
-            <Text style={[styles.sub, small]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+            <Text style={[styles.sub, small, { color: look.muted }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
               {lead ? (
                 <>
                   {vs}{' '}
-                  <Text accessibilityRole="link" suppressHighlighting onPress={(e) => { e?.stopPropagation?.(); router.push(`/user/${lead.id}`); }} style={styles.handle}>@{lead.handle}</Text>
+                  <Text accessibilityRole="link" suppressHighlighting onPress={(e) => { e?.stopPropagation?.(); router.push(`/user/${lead.id}`); }} style={[styles.handle, { color: look.ink }]}>@{lead.handle}</Text>
                   {all.length > 1 ? ` +${all.length - 1}` : ''}
                   {source ? ' · ' : ''}
                 </>
@@ -82,13 +88,13 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
           ) : null}
         </View>
         {stats.length ? null : time}
-        {onPress ? <Ionicons name="chevron-forward" size={15 * k} color={colors.textFaint} /> : null}
+        {onPress ? <Ionicons name="chevron-forward" size={15 * k} color={look.muted} /> : null}
       </View>
       {stats.length ? (
-        <View style={[styles.row, styles.columns, { paddingTop: 10 * k }]}>
+        <View style={[styles.row, styles.columns, { paddingTop: 12 * k, borderTopColor: look.lines }]}>
           {[{ key: 'time', label: 'Time', node: time }, ...stats].map((st, i) => (
-            <View key={st.key} style={[styles.col, i > 0 && styles.colRule, { gap: 2 * k, paddingLeft: i > 0 ? 12 * k : 0 }]}>
-              <Text style={[styles.label, { fontSize: 11 * k }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{st.label}</Text>
+            <View key={st.key} style={[styles.col, i > 0 && [styles.colRule, { borderLeftColor: look.lines }], { gap: 2 * k, paddingLeft: i > 0 ? 12 * k : 0 }]}>
+              <Text style={[styles.label, { fontSize: 11 * k, color: look.muted }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{st.label}</Text>
               {st.node}
             </View>
           ))}
@@ -100,7 +106,7 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
 
 const styleDefinitions = StyleSheet.create({
   pressed: { opacity: 0.7 },
-  panel: { backgroundColor: withAlpha(colors.brand, 0.06), borderWidth: StyleSheet.hairlineWidth, borderColor: withAlpha(colors.brand, 0.16) },
+  panel: { overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, boxShadow: '0px 6px 18px rgba(20, 30, 24, 0.14)' },
   badge: { alignItems: 'center', justifyContent: 'center', backgroundColor: withAlpha(colors.brand, 0.12) },
   title: { ...font('700'), color: colors.text, letterSpacing: -0.2 },
   sub: { ...font('500'), color: colors.textMuted },

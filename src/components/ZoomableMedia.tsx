@@ -126,6 +126,14 @@ export const ZoomableMedia = forwardRef<ZoomableMediaHandle, ZoomableMediaProps>
         return;
       }
       const sideways = !down && Math.abs(e.translationX) > Math.abs(e.translationY) * 0.7;
+      // Dragged up or down hard, it goes too (Oct 4, owner: "dragging out of this hard should take me out").
+      if (onDismiss && scale.value <= 1.02 && !down && !sideways) {
+        panX.value = e.translationX * 0.25;
+        panY.value = e.translationY;
+        backdrop.value = 1 - Math.min(1, Math.abs(e.translationY) / (height.value * 0.6)) * 0.9;
+        if (pushing.value === 0) pushing.value = withTiming(1, { duration: 140 });
+        return;
+      }
       if (onDismiss && scale.value <= 1.02 && sideways) {
         // A window being pushed aside: it follows the finger, and the page
         // behind shows through more the further it goes.
@@ -152,6 +160,10 @@ export const ZoomableMedia = forwardRef<ZoomableMediaHandle, ZoomableMediaProps>
         panY.value = withTiming(0, SNAP);
         backdrop.value = withTiming(1, SNAP);
         pushing.value = withTiming(0, SNAP);
+        return;
+      }
+      if (onDismiss && scale.value <= 1.02 && Math.abs(e.translationY) > Math.abs(e.translationX) && (Math.abs(e.translationY) > 110 || Math.abs(e.velocityY) > 900)) {
+        if (home) goHome(); else dropAway(e.translationY);
         return;
       }
       const away = Math.abs(e.translationX) > 90 || Math.abs(e.velocityX) > 900;
