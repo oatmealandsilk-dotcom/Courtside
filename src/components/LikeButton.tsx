@@ -51,7 +51,7 @@ export function LikeButton({ ledgerKey, liked, count, onToggle, likesRoute, pop 
       </Tappable>
       <Pressable accessibilityRole="button" accessibilityLabel={`See who liked this${thing}`} hitSlop={8} disabled={total === 0} onPress={() => router.push(likesRoute)} style={countHit}>
         {/* "1.2k" past a thousand; no likes yet shows nothing, the space holding the line so the rail never jumps. */}
-        {(state) => <Text maxFontSizeMultiplier={1.2} style={[labelStyle, (state as { hovered?: boolean }).hovered && { textDecorationLine: 'underline' }]}>{total > 0 ? compactNumber(total) : '\u00A0'}</Text>}
+        {(state) => (total > 0 ? <Text maxFontSizeMultiplier={1.2} style={[labelStyle, (state as { hovered?: boolean }).hovered && { textDecorationLine: 'underline' }]}>{compactNumber(total)}</Text> : null)}
       </Pressable>
     </View>
   );

@@ -1334,7 +1334,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                       <LikeButton ledgerKey={`h:${story.id}`} liked={hitLiked} count={story.likedBy.length} onToggle={() => actions.toggleLikeStory(story.id)} likesRoute={{ pathname: '/likes', params: { id: story.id, kind: 'hit' } }} pop={burst.id === story.id ? burst.n : 0} what="hit" size={RAIL_ICONS[0][1]} style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
                       <Tappable accessibilityLabel="Hit comments" onPress={() => openHitComments()} scaleTo={0.78} style={styles.action}>
                         <Ionicons name="chatbubble-outline" size={RAIL_ICONS[1][1]} color="white" style={styles.actionGlyph} />
-                        <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(story.commentIds.length)}</Text>
+                        {(story.commentIds.length) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(story.commentIds.length)}</Text> : null}
                       </Tappable>
                       <Tappable accessibilityLabel="More options" onPress={() => router.push({ pathname: '/post-menu', params: { id: story.id, kind: 'hit' } })} scaleTo={0.78} style={styles.action}>
                         <Ionicons name="ellipsis-horizontal" size={RAIL_ICONS[4][1]} color="white" style={styles.actionGlyph} />
@@ -1534,7 +1534,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                       style={styles.action}
                     >
                       <Ionicons name="chatbubble-outline" size={RAIL_ICONS[1][1]} color="white" style={styles.actionGlyph} />
-                      <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.commentIds.length)}</Text>
+                      {(post.commentIds.length) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.commentIds.length)}</Text> : null}
                     </Tappable>
                     <Tappable
                       accessibilityLabel="Send this clip to someone"
@@ -1543,7 +1543,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                       style={styles.action}
                     >
                       <Ionicons name="arrow-redo-outline" size={RAIL_ICONS[2][1]} color="white" style={styles.actionGlyph} />
-                      <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.shares ?? 0)}</Text>
+                      {(post.shares ?? 0) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.shares ?? 0)}</Text> : null}
                     </Tappable>
                     <Tappable
                       accessibilityLabel={isSaved ? 'Remove from saved' : 'Save this clip'}
@@ -1552,7 +1552,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                       style={styles.action}
                     >
                       <Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={RAIL_ICONS[3][1]} color="white" style={styles.actionGlyph} />
-                      <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.savedBy?.length ?? 0)}</Text>
+                      {(post.savedBy?.length ?? 0) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.savedBy?.length ?? 0)}</Text> : null}
                     </Tappable>
                     <Tappable
                       accessibilityLabel="More options"
@@ -1730,7 +1730,8 @@ const styleDefinitions = StyleSheet.create({
   words: { gap: 6 },
   author: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   // The rail: 12 from the edge, one item every 63pt or so (TikTok's and Reels' rhythm). `bottom` is set per phone.
-  actions: { position: 'absolute', right: 12, gap: 16 },
+  // Instagram's rail (Oct 4): a number only where there is one, the same gap after every item.
+  actions: { position: 'absolute', right: 12, gap: 20 },
   action: { alignItems: 'center', gap: 2, minWidth: 48 },
   // Plain white outlines with a crisp dark edge, as Reels sets them, rather than a heavier icon or a soft smudge.
   actionGlyph: GLYPH_EDGE,
