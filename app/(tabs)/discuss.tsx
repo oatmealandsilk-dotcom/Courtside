@@ -9,7 +9,7 @@ import { Animated, Easing, Platform, ScrollView, TextInput, Pressable, StyleShee
 import { router } from 'expo-router';
 
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { InboxButton } from '@/components/InboxButton';
+import { InboxButton, NotificationButton } from '@/components/InboxButton';
 
 import { LevelPill } from '@/components/LevelPill';
 import { NearbyMap } from '@/components/NearbyMap';
@@ -568,6 +568,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           <Pressable accessibilityRole="button" accessibilityLabel={section === 'players' ? 'Look for someone to play with' : 'Start a discussion'} onPress={() => router.push(section === 'players' ? '/hit-request/new' : '/ask')} style={styles.fab}>
             <Ionicons name="add" size={22} color={colors.brandInk} />
           </Pressable>
+          {/* What's new for you (likes, follows, replies), on the page the app opens on. */}
+          <NotificationButton size={25} />
           {/* Your chats, in the same corner as on Feed. Pulled out by its padding so the icons sit evenly spaced. */}
           <InboxButton size={27} />
         </View>

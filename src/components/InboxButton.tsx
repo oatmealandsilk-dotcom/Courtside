@@ -73,6 +73,24 @@ export function InboxButton({ variant = 'plain', size = 24, ink, style }: {
   );
 }
 
+/**
+ * The bell that opens your notifications, with how many are new. On Profile
+ * and, since Oct 4 (owner), on Community too, the page the app opens on, so
+ * new likes and follows are seen without going looking.
+ */
+export function NotificationButton({ size = 24 }: { size?: number }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const { notifications, currentUserId } = useApp();
+  const unseen = notifications.filter((n) => n.userId === currentUserId && !n.read).length;
+  const slop = Math.max(8, Math.ceil((44 - (size + 8)) / 2));
+  return (
+    <Tappable accessibilityRole="link" accessibilityLabel={unseen ? `Notifications, ${unseen} new` : 'Notifications'} onPress={() => router.push('/notifications')} hitSlop={slop} style={styles.plain}>
+      <Ionicons name={unseen ? 'notifications' : 'notifications-outline'} size={size} color={colors.text} />
+      <UnreadBadge count={unseen} />
+    </Tappable>
+  );
+}
+
 const styleDefinitions = StyleSheet.create({
   plain: { padding: 4 },
   // The Feed's tile: nearly solid page colour with a hairline, so it holds on anything.
