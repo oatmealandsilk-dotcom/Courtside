@@ -232,10 +232,10 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
       // In the feed: the phone's tile, the same rounded square as the mark's at the other corner, centred level with it,
       // nearly solid so its icon stays crisp, with a hairline so it holds on a white sky. Elsewhere: a small dark disc.
       ...(discInk
-        ? { top: insets.top + drop + 27, width: 40, height: 40, borderRadius: 12, background: `${colors.bg}E6`, border: `0.5px solid ${colors.border}` }
+        ? { top: insets.top + drop + 30, width: 36, height: 36, borderRadius: 18, background: 'rgba(16,18,17,0.34)', border: '0.5px solid rgba(255,255,255,0.28)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', boxShadow: '0 2px 10px rgba(0,0,0,0.18)' }
         : { top: insets.top + drop + 22, width: 30, height: 30, borderRadius: 15, background: 'rgba(0,0,0,0.55)', border: 0 }),
       opacity: discOn ? 1 : 0, transform: discOn ? 'scale(1)' : 'scale(0.86)', transition: discOn ? 'opacity 160ms ease-out, transform 160ms ease-out' : 'opacity 140ms ease-in, transform 140ms ease-in',
-    }}><Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={discInk ? 19 : 17} color={discInk ?? 'white'} /></button></div>}
+    }}><Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={17} color="white" /></button></div>}
     {bare ? null : <div aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, background: 'rgba(255,255,255,0.25)' }}>
       <div ref={bar} style={{ height: 2, width: '0%', background: 'rgba(255,255,255,0.9)' }} />
     </div>}

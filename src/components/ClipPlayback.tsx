@@ -180,7 +180,7 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
       {silent || bare ? null : (
         <Pressable accessibilityRole="button" accessibilityLabel={muted ? 'Unmute clip' : 'Mute clip'} hitSlop={12} onPress={() => { setMuted((v) => !v); if (!discPinned) showDisc(); }} style={[styles.soundHit, { top: insets.top + drop + (discInk ? 25 : 22) }]}>
           <Animated.View style={[styles.sound, discInk ? styles.soundThemed : null, discStyle]}>
-            <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={19} color={discInk ?? 'white'} />
+            <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={17} color="white" />
           </Animated.View>
         </Pressable>
       )}
@@ -206,7 +206,8 @@ const styleDefinitions = StyleSheet.create({
   // The same rounded square as the mark's tile at the other corner, nearly
   // solid so its icon stays crisp, with a hairline so it holds on a white sky.
   // (Its fade-in sets its opacity, so none is set here.)
-  soundThemed: { width: 40, height: 40, borderRadius: 12, backgroundColor: `${colors.bg}E6`, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  // A small frosted dark disc with a white icon, Instagram-style, on any picture (Oct 3).
+  soundThemed: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(16,18,17,0.34)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.28)', boxShadow: '0px 2px 10px rgba(0,0,0,0.18)' },
   topShade: { position: 'absolute', left: 0, right: 0, top: 0 },
   track: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
   bar: { height: 2, backgroundColor: 'rgba(255,255,255,0.9)' },
