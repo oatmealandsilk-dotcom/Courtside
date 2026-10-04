@@ -1,5 +1,6 @@
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { SectionPager } from '@/components/SectionPager';
+import { PULL_GAP } from '@/lib/pullRefresh';
 import Reanimated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -104,18 +105,21 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const offsetY = useSharedValue(0);
   // The pane not on show is held at its own spot while it slides in (shifted by
   // the difference), so the swipe shows it where you left it and nothing snaps after.
-  const spotPlayers = useSharedValue(0);
-  const spotThreads = useSharedValue(0);
+  // The page's top is below 0 by the pull-to-refresh strip (Screen hides it there); scrolling
+  // to 0 opened the strip and set a refresh going (Oct 4).
+  const pageTop = Platform.OS !== 'web' && previewSection === undefined ? PULL_GAP : 0;
+  const spotPlayers = useSharedValue(pageTop);
+  const spotThreads = useSharedValue(pageTop);
   const onShow = useSharedValue(section === 'players' ? 0 : 1);
   const shownSection = useRef(section);
   useEffect(() => {
     const was = shownSection.current;
     if (was === section) return;
-    (was === 'players' ? spotPlayers : spotThreads).value = offsetY.value;
+    (was === 'players' ? spotPlayers : spotThreads).value = Math.max(pageTop, offsetY.value);
     shownSection.current = section;
     onShow.value = section === 'players' ? 0 : 1;
     pageRef.current?.scrollTo({ y: (section === 'players' ? spotPlayers : spotThreads).value, animated: false });
-  }, [section, offsetY, spotPlayers, spotThreads, onShow]);
+  }, [section, offsetY, spotPlayers, spotThreads, onShow, pageTop]);
   const playersHold = useAnimatedStyle(() => ({ transform: [{ translateY: onShow.value === 0 ? 0 : Math.max(0, offsetY.value - spotPlayers.value) }] }));
   const threadsHold = useAnimatedStyle(() => ({ transform: [{ translateY: onShow.value === 1 ? 0 : Math.max(0, offsetY.value - spotThreads.value) }] }));
   // The real tab takes each ask as it hears it, so an old one can't come back
