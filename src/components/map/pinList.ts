@@ -5,7 +5,7 @@ import { COURTS_MIN_ZOOM, type MapModel, type Placed } from '@/features/players/
 import { isOpenToHit } from '@/features/players/openToHit';
 
 /** Your face on your own pin, a touch bigger than everyone else's. */
-export const ME_SIZE = 34;
+export const ME_SIZE = 38;
 
 /**
  * About how wide a name pill under a pin is (11 px type, about 6.4 px a
@@ -65,7 +65,7 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
   }
   for (const p of shown) {
     const on = p.user.id === selectedId;
-    const size = on ? 38 : 30;
+    const size = on ? 42 : 34;
     // Open to hit is a class on the pin (cls), so it eases on and off in place rather than redrawing;
     // an open player stands above the plain ones beside them, so a neighbour never covers their ring.
     const widths = expanded ? nameWidths(p.user.name.split(' ')[0], { ago: agoShort(p.seenAt), open: isOpenToHit(p.user), court: !!p.court }) : { fw: discSize(size), fws: discSize(size) };

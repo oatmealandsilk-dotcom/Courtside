@@ -211,13 +211,17 @@ const storyRing = (gap: number, width: number) => `0 0 0 ${gap}px ${colors.bg},0
  * place to suggest.
  */
 export function courtPinHtml(court: Court, on: boolean, ring = false): string {
-  const size = on ? 30 : 24;
+  // A light rounded square with the court drawn in its colour: a place, not a person (Oct 5, owner: courts and
+  // players looked too alike). Picked, it fills in. People stay round, bigger, with their faces.
+  const size = on ? 28 : 22;
   const closed = isClosedCourt(court);
   const nameStyle = `position:absolute;left:calc(100% + ${ring ? 9 : 5}px);top:50%;transform:translateY(-50%);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 7px;border-radius:999px;background:${colors.bg};color:${closed ? colors.textMuted : colors.text};box-shadow:0 1px 3px rgba(0,0,0,.14);${FONT}`;
   const name = court.name && court.name !== 'Tennis courts' ? `<span class="cs-court-name" style="${nameStyle}">${court.name.replace(/[<>&"]/g, '')}${closed ? ` · ${court.access === 'private' ? 'private' : 'members'}` : ''}</span>` : '';
-  const fill = closed ? colors.borderStrong : colors.court;
-  const glyph = closed ? colors.bg : colors.brandInk;
-  return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:999px;background:${fill};border:2px solid ${colors.bg};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${ring ? storyRing(2, 2.5) : ''}0 2px 6px rgba(0,0,0,${on ? '.3' : '.2'});cursor:pointer${closed && !on ? ';opacity:.75' : ''}">${courtGlyph(glyph)}${name}${hitDot()}</div>`;
+  const tone = closed ? colors.borderStrong : colors.court;
+  const fill = on ? tone : colors.bg;
+  const glyph = on ? (closed ? colors.bg : colors.brandInk) : closed ? colors.textMuted : colors.court;
+  const edge = on ? `2px solid ${colors.bg}` : `1.5px solid ${tone}`;
+  return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:${on ? 8 : 6}px;background:${fill};border:${edge};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${ring ? storyRing(2, 2.5) : ''}0 2px 6px rgba(0,0,0,${on ? '.3' : '.2'});cursor:pointer${closed && !on ? ';opacity:.75' : ''}">${courtGlyph(glyph)}${name}${hitDot()}</div>`;
 }
 
 /** The dot an open hit folds into on a pin when zoomed out (pinEngine puts "cs-hit" on the pin). */
@@ -233,9 +237,9 @@ const hitDot = () => `<i class="cs-hitdot" style="background:${colors.brand};bor
  */
 export function courtDotHtml(court?: Court, ring = false): string {
   const closed = !!court && isClosedCourt(court);
-  const fill = closed ? colors.borderStrong : colors.court;
-  const halo = ring ? storyRing(1.5, 2.5) : `0 0 0 3px ${fill}38,`;
-  return `<div style="width:18px;height:18px;border-radius:999px;background:${fill};border:2px solid ${colors.bg};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${halo}0 2px 5px rgba(0,0,0,.22);pointer-events:none${closed ? ';opacity:.75' : ''}">${courtGlyph(closed ? colors.bg : colors.brandInk, 10)}</div>`;
+  const tone = closed ? colors.borderStrong : colors.court;
+  const halo = ring ? storyRing(1.5, 2.5) : '';
+  return `<div style="width:18px;height:18px;border-radius:5px;background:${colors.bg};border:1.5px solid ${tone};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${halo}0 1px 4px rgba(0,0,0,.18);pointer-events:none${closed ? ';opacity:.75' : ''}">${courtGlyph(closed ? colors.textMuted : tone, 10)}</div>`;
 }
 
 /**
@@ -282,7 +286,7 @@ export function clusterTemplates(): { badge: string; stack: string; court: strin
   return {
     badge: `<div style="position:absolute;right:-7px;top:-3px;min-width:22px;height:20px;padding:0 6px;box-sizing:border-box;border-radius:999px;background:${colors.text};color:${colors.bg};border:2px solid ${colors.bg};display:flex;align-items:center;justify-content:center;${FONT};font-size:11px;box-shadow:0 1px 4px rgba(0,0,0,.2)">{n}</div>`,
     stack: `<div style="position:absolute;left:${at - 9}px;top:${at - 2}px;width:${inner}px;height:${inner}px;border-radius:999px;background:${colors.surfaceAlt};border:1.5px solid ${colors.bg};box-sizing:border-box;box-shadow:0 2px 7px rgba(0,0,0,.2)"></div>`,
-    court: `<div class="cs-court cs-pin" style="position:relative;width:30px;height:30px;border-radius:999px;background:${colors.court};border:2px solid ${colors.bg};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px ${colors.court}40,0 2px 6px rgba(0,0,0,.22);color:${colors.brandInk};${FONT};font-size:12px;cursor:pointer">{n}${hitDot()}</div>`,
+    court: `<div class="cs-court cs-pin" style="position:relative;width:30px;height:30px;border-radius:8px;background:${colors.court};border:2px solid ${colors.bg};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px ${colors.court}40,0 2px 6px rgba(0,0,0,.22);color:${colors.brandInk};${FONT};font-size:12px;cursor:pointer">{n}${hitDot()}</div>`,
     // Beside you (or whoever is picked): the others crowding your spot, as a small ink "+3" with a disc peeking behind it.
     chip: `<div class="cs-pin" style="position:relative;width:40px;height:30px;cursor:pointer"><div style="position:absolute;left:12px;top:2px;width:26px;height:26px;border-radius:999px;background:${colors.surfaceAlt};border:1.5px solid ${colors.bg};box-sizing:border-box;box-shadow:0 2px 6px rgba(0,0,0,.18)"></div><div style="position:absolute;left:0;top:2px;min-width:28px;height:26px;padding:0 7px;box-sizing:border-box;border-radius:999px;background:${colors.text};color:${colors.bg};border:2px solid ${colors.bg};display:flex;align-items:center;justify-content:center;${FONT};box-shadow:0 2px 6px rgba(0,0,0,.22)">{n}</div></div>`,
   };
