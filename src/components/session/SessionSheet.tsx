@@ -121,8 +121,14 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
           <View key={p.id} style={[styles.person, p.pending && styles.pending]}>
             <Avatar name={p.name} seed={p.id} size={28} />
             <Text style={styles.vs} maxFontSizeMultiplier={1.2}>{i === 0 || p.opponent !== shown[i - 1].opponent ? (p.opponent ? 'vs' : 'with') : 'and'}</Text>
-            <Text accessibilityRole="link" accessibilityLabel={`@${p.handle}${p.pending ? ', waiting to accept' : ''}, open profile`} onPress={() => router.push(`/user/${p.id}`)} style={styles.handle} numberOfLines={1} maxFontSizeMultiplier={1.2}>@{p.handle}</Text>
-            {p.pending ? <Ionicons name="time-outline" size={13} color={colors.textFaint} /> : null}
+            <Text accessibilityRole="link" accessibilityLabel={`@${p.handle}, open profile`} onPress={() => router.push(`/user/${p.id}`)} style={styles.handle} numberOfLines={1} maxFontSizeMultiplier={1.2}>@{p.handle}</Text>
+            {/* The clock alone didn't say what it meant: a quiet word after it (Oct 4, owner). */}
+            {p.pending ? (
+              <View style={styles.waiting} accessible accessibilityLabel="waiting to accept">
+                <Ionicons name="time-outline" size={13} color={colors.textFaint} />
+                <Text style={styles.waitingText} maxFontSizeMultiplier={1.2}>waiting</Text>
+              </View>
+            ) : null}
           </View>
         ))}
       </View>
@@ -252,6 +258,8 @@ const styleDefinitions = StyleSheet.create({
   people: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 12, rowGap: 8 },
   person: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%' },
   pending: { opacity: 0.6 },
+  waiting: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  waitingText: { ...font('500'), fontSize: 13, color: colors.textMuted },
   vs: { ...font('400'), fontSize: 15, color: colors.textMuted },
   handle: { ...font('600'), fontSize: 15, color: colors.text, flexShrink: 1 },
   court: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: 130 },
