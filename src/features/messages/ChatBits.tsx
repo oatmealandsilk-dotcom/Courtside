@@ -148,16 +148,17 @@ export function Arrive({ mode: firstMode, mine, children }: { mode: ArriveMode; 
   const p = useSharedValue(mode === 'none' ? 1 : 0);
   useEffect(() => {
     if (mode === 'none') return;
+    // Softer springs (Oct 4, owner: "smoother"): yours settles without a bounce, theirs eases up.
     p.value = mode === 'sent'
-      ? withSpring(1, { damping: 17, stiffness: 260, mass: 0.7 })
-      : withTiming(1, { duration: 300, easing: Easing.out(Easing.cubic) });
+      ? withSpring(1, { damping: 21, stiffness: 230, mass: 0.8 })
+      : withSpring(1, { damping: 24, stiffness: 190, mass: 0.9 });
   // Only on arriving: a row drawn again later never plays it twice.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const look = useAnimatedStyle(() => (mode === 'none' ? {}
     : mode === 'sent'
-      ? { opacity: Math.min(1, p.value * 3), transform: [{ translateY: (1 - p.value) * 26 }, { scale: 0.92 + 0.08 * p.value }] }
-      : { opacity: Math.min(1, p.value * 1.4), transform: [{ translateY: (1 - p.value) * 12 }] }));
+      ? { opacity: Math.min(1, p.value * 3), transform: [{ translateY: (1 - p.value) * 20 }, { scale: 0.94 + 0.06 * p.value }] }
+      : { opacity: Math.min(1, p.value * 1.6), transform: [{ translateY: (1 - p.value) * 10 }, { scale: 0.97 + 0.03 * p.value }] }));
   return <Reanimated.View style={[look, mode !== 'none' && { transformOrigin: mine ? 'right bottom' : 'left bottom' }]}>{children}</Reanimated.View>;
 }
 

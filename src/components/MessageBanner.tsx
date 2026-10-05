@@ -135,8 +135,9 @@ export function MessageBanner({ enabled }: { enabled: boolean }) {
   gate.current = { ready, onInbox, openChat, me: currentUserId };
   useEffect(() => judgeIncoming((conversationId, message) => {
     const g = gate.current;
+    // That chat (or the inbox) on screen: nothing at all, not even the phone's own alert (Oct 4, owner).
+    if (AppState.currentState === 'active' && (g.onInbox || conversationId === g.openChat)) return 'here';
     if (!g.ready || AppState.currentState !== 'active') return 'off';
-    if (g.onInbox || conversationId === g.openChat) return 'here';
     if (message) {
       if (message.senderId === g.me || message.kind === 'system') return 'off';
       const kept = keepRef.current({ kind: 'chat', id: 0, conversationId, messages: [message], alertNewest: false, alerts: 0 });

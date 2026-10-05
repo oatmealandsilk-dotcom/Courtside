@@ -59,7 +59,7 @@ import { Slide, TimeAnchor, TimeSwipeArea } from '@/features/messages/MessageTim
 import { SwipeReply } from '@/features/messages/SwipeReply';
 import { buildRows, keepRows, type Gap, type ThreadRow } from '@/features/messages/threadRows';
 import {
-  Arrive, Burst, EmojiReactSheet, Flash, MessageInfoSheet, NewMessagesButton, ReactionsSheet, ReplyBar, ReplyQuote, SeenFaces, type ArriveMode,
+  Arrive, EmojiReactSheet, Flash, MessageInfoSheet, NewMessagesButton, ReactionsSheet, ReplyBar, ReplyQuote, SeenFaces, type ArriveMode,
 } from '@/features/messages/ChatBits';
 import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
@@ -72,7 +72,8 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 import { afterMenu, confirm, confirmAfterMenu } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
 import type { HitRequest, ID, Message, Post, Question, User } from '@/data/types';
-import Reanimated, { Easing, FadeIn, FadeInDown, FadeInUp, FadeOut, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
+import Reanimated, { Easing, FadeIn, FadeInDown, FadeInUp, FadeOut, ZoomIn, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
+import { BlurView } from 'expo-blur';
 import { colors, lift, pageIsDark, radius, spacing, typography, font, withAlpha } from '@/theme';
 
 /** One line of words in the typing box, and how many it grows to before it scrolls inside. */
@@ -1559,7 +1560,7 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
 
   // Under your newest message, at its right edge: "Sending…", "Sent" or "Seen". In a group, the faces of who has read up to here.
   const readUnder = readLine ? (
-    <Reanimated.View entering={arrive !== 'none' ? FadeIn.delay(180).duration(220) : undefined}>
+    <Reanimated.View entering={arrive !== 'none' ? FadeIn.delay(110).duration(260).easing(Easing.out(Easing.cubic)) : undefined}>
       <Slide mine><Text accessibilityLiveRegion="polite" style={styles.readLine}>{readLine}</Text></Slide>
     </Reanimated.View>
   ) : null;
@@ -1709,8 +1710,8 @@ function messageA11y({ who, words, time, reaction, canReact, react, reply, anyEm
 /**
  * One text message.
  *
- * Double tap leaves your default reaction (it bursts over the bubble as it
- * lands, Instagram's heart); a long press opens the menu. A reply carries a
+ * Double tap leaves your default reaction (its chip pops in under the
+ * bubble); a long press opens the menu. A reply carries a
  * small quote of what it answers at its top. Links in it light up and open
  * in the in-app browser. A message that is only a link is just its card, as
  * iMessage shows one; words with a link show the card under them once there
@@ -1737,12 +1738,10 @@ function Bubble({ message, rowProps, joinBottom, ctx, cardWidth, held = false, q
   const styles = rowProps.styles;
   const { mine, gap, time, onReply } = rowProps;
   const { me, defaultReaction, call } = ctx;
-  const [burst, setBurst] = useState(0);
-  const mineMark = me ? message.reactions?.[me] : undefined;
+  // Double tap leaves the reaction quietly: its chip pops in under the bubble, no big heart over it (Oct 4, owner).
   const react = () => {
     if (!canReact) return;
-    // Leaving it (not taking it back off): it bursts over the bubble.
-    if (mineMark !== defaultReaction) setBurst((n) => n + 1);
+    haptics.tap();
     call.react(message.id);
   };
   const tap = useDoubleTap(react);
@@ -1820,7 +1819,6 @@ function Bubble({ message, rowProps, joinBottom, ctx, cardWidth, held = false, q
               </View>
             ) : chips}
             {failedMark}
-            {burst ? <Burst key={burst} emoji={defaultReaction} onDone={() => setBurst(0)} /> : null}
           </>
         )}
       </HoldArea>
@@ -1860,9 +1858,7 @@ function PhotoMessage({ message, rowProps, joinBottom, ctx, width, held = false,
   const { mine, gap, time, onReply } = rowProps;
   const { me, defaultReaction, call } = ctx;
   const progress = useSendProgress(message.id);
-  const [burst, setBurst] = useState(0);
-  const mineMark = me ? message.reactions?.[me] : undefined;
-  const react = () => { if (!canReact) return; if (mineMark !== defaultReaction) setBurst((n) => n + 1); call.react(message.id); };
+  const react = () => { if (!canReact) return; haptics.tap(); call.react(message.id); };
   // A single tap waits out the double-tap window, so a double tap never opens the photo too.
   const tapped = useRef<{ index: number; rects: (TileRect | undefined)[] }>({ index: 0, rects: [] });
   const tap = useDoubleTap(react, () => call.openPhoto(message, tapped.current.index, tapped.current.rects));
@@ -1932,7 +1928,6 @@ function PhotoMessage({ message, rowProps, joinBottom, ctx, width, held = false,
                 {chips}
               </View>
             ) : chips}
-            {burst ? <Burst key={burst} emoji={defaultReaction} onDone={() => setBurst(0)} /> : null}
           </>
         )}
       </HoldArea>
@@ -2065,6 +2060,31 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, onClose,
   const { width: W, height: H } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { message, mine, rect } = target;
+  // The way it opens (iMessage's): the chat dims and softens, the message
+  // lifts a touch with a little give, the reactions grow out of its corner
+  // one by one and the actions unfold under it, all on one spring. Closing
+  // folds it all back quickly before anything else happens.
+  const still = useReducedMotion();
+  const p = useSharedValue(still ? 1 : 0);
+  const lift = useSharedValue(1);
+  useEffect(() => {
+    if (still) return;
+    p.value = withSpring(1, { damping: 22, stiffness: 340, mass: 0.7 });
+    lift.value = withSequence(withTiming(1.055, { duration: 120, easing: Easing.out(Easing.quad) }), withSpring(1.03, { damping: 13, stiffness: 280 }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const leaving = useRef(false);
+  const leave = (after: () => void) => {
+    if (leaving.current) return;
+    leaving.current = true;
+    if (still) { after(); return; }
+    lift.value = withTiming(1, { duration: 130, easing: Easing.out(Easing.quad) });
+    p.value = withTiming(0, { duration: 130, easing: Easing.in(Easing.quad) }, (done) => { if (done) runOnJS(after)(); });
+  };
+  const dimLook = useAnimatedStyle(() => ({ opacity: Math.min(1, p.value) }));
+  const liftLook = useAnimatedStyle(() => ({ transform: [{ scale: lift.value }] }));
+  const barLook = useAnimatedStyle(() => ({ opacity: Math.min(1, p.value * 1.4), transform: [{ translateY: (1 - p.value) * 10 }, { scale: 0.55 + 0.45 * p.value }] }));
+  const cardLook = useAnimatedStyle(() => ({ opacity: Math.min(1, p.value * 1.4), transform: [{ translateY: (1 - p.value) * -8 }, { scale: 0.82 + 0.18 * p.value }] }));
   const text = message.kind === 'text';
   // A photo's caption can be copied like any message's words.
   const caption = message.kind === 'photo' && !!message.body.trim();
@@ -2110,33 +2130,37 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, onClose,
   // ("Copy link", often): nothing in the menu answers until a moment after it opened.
   const openedAt = useRef(Date.now());
   const settledMenu = () => Date.now() - openedAt.current > 350;
-  const close = () => { if (settledMenu()) onClose(); };
-  const pick = (run: () => void) => { if (!settledMenu()) return; onClose(); run(); };
+  const close = () => { if (settledMenu()) leave(onClose); };
+  const pick = (run: () => void) => { if (!settledMenu()) return; leave(() => { onClose(); run(); }); };
   return (
-    <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
-      <Reanimated.View entering={FadeIn.duration(140)} style={StyleSheet.absoluteFill}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close menu" onPress={close} style={[StyleSheet.absoluteFill, styles.menuBackdrop]} />
+    <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={() => leave(onClose)}>
+      <View style={StyleSheet.absoluteFill}>
+        <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimLook]}>
+          {Platform.OS === 'ios' ? <BlurView intensity={14} tint="dark" style={StyleSheet.absoluteFill} /> : null}
+          <View style={[StyleSheet.absoluteFill, styles.menuBackdrop]} />
+        </Reanimated.View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close menu" onPress={close} style={StyleSheet.absoluteFill} />
         {target.copy ? (
           // Photos and court cards stay bright above the dimmed chat, lifted where they were, as iMessage keeps a held photo.
           // Drawn smaller (from its top corner on the sender's side) when the screen is too short for it and the menu.
-          <View
+          <Reanimated.View
             pointerEvents="none"
             style={[
-              scale < 1 ? null : styles.liftedCopy,
               { position: 'absolute', left: rect.x, top: rect.y - shift, width: rect.w },
-              scale < 1 && { transformOrigin: mine ? 'right top' : 'left top', transform: [{ scale }] },
+              scale < 1 ? { transformOrigin: mine ? 'right top' : 'left top', transform: [{ scale }] } : liftLook,
             ]}
           >
             {target.copy}
-          </View>
+          </Reanimated.View>
         ) : message.kind === 'text' ? (
-          <View pointerEvents="none" style={[styles.bubble, mine ? styles.mine : styles.theirs, styles.lifted, { position: 'absolute', left: rect.x, top: rect.y - shift, width: rect.w, alignSelf: 'auto' }]}>
+          <Reanimated.View pointerEvents="none" style={[styles.bubble, mine ? styles.mine : styles.theirs, styles.lifted, { position: 'absolute', left: rect.x, top: rect.y - shift, width: rect.w, alignSelf: 'auto' }, liftLook]}>
             <RichText style={[styles.bubbleText, mine && { color: colors.brandInk }]}>{message.body}</RichText>
-          </View>
+          </Reanimated.View>
         ) : null}
         {canReact ? (
-          <Reanimated.View entering={FadeInDown.duration(160).easing(Easing.out(Easing.cubic))} style={[styles.menuReactions, { top: top - shift, height: BAR_H }, side(BAR_W)]}>
-            {REACTIONS.map((emoji) => (
+          <Reanimated.View style={[styles.menuReactions, { top: top - shift, height: BAR_H, transformOrigin: mine ? 'right bottom' : 'left bottom' }, side(BAR_W), barLook]}>
+            {REACTIONS.map((emoji, i) => (
+              <Reanimated.View key={emoji} entering={still ? undefined : ZoomIn.delay(40 + i * 28).springify().damping(13).stiffness(260)}>
               <Pressable
                 key={emoji}
                 accessibilityRole="button"
@@ -2146,12 +2170,15 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, onClose,
               >
                 <Text style={{ fontSize: 22 }}>{emoji}</Text>
               </Pressable>
+              </Reanimated.View>
             ))}
             {!choosing ? (
               // Any emoji at all, from the whole emoji keyboard (Instagram's "+").
+              <Reanimated.View entering={still ? undefined : ZoomIn.delay(40 + REACTIONS.length * 28).springify().damping(13).stiffness(260)}>
               <Pressable accessibilityRole="button" accessibilityLabel="React with another emoji" onPress={() => pick(onMoreEmoji)} style={[styles.menuReaction, styles.menuReactionMore]}>
                 <Ionicons name="add" size={22} color={colors.textMuted} />
               </Pressable>
+              </Reanimated.View>
             ) : null}
           </Reanimated.View>
         ) : null}
@@ -2160,7 +2187,7 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, onClose,
             <Text style={[styles.menuHintText, { color: colors.onMedia }]}>Pick what a double tap leaves</Text>
           </Reanimated.View>
         ) : null}
-        <Reanimated.View entering={FadeInUp.duration(160).easing(Easing.out(Easing.cubic))} style={[styles.menuCard, { top: shown.y + shown.h + GAP - shift, width: CARD_W }, side(CARD_W)]}>
+        <Reanimated.View style={[styles.menuCard, { top: shown.y + shown.h + GAP - shift, width: CARD_W, transformOrigin: mine ? 'right top' : 'left top' }, side(CARD_W), cardLook]}>
           {actionRows.map((a, i) => (
             <Pressable key={a.key} accessibilityRole="button" onPress={() => pick(a.run)} style={({ pressed }) => [styles.menuRow, i > 0 && styles.menuRowRule, pressed && styles.menuRowPressed]}>
               <Text style={[styles.menuLabel, a.danger && { color: colors.danger }]}>{a.label}</Text>
@@ -2174,7 +2201,7 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, onClose,
             </Pressable>
           ) : null}
         </Reanimated.View>
-      </Reanimated.View>
+      </View>
     </Modal>
   );
 }
@@ -2354,7 +2381,7 @@ function TypingBubble({ styles, label, leading }: { styles: ReturnType<typeof us
     </View>
   );
   return (
-    <Reanimated.View entering={FadeInDown.duration(200)} exiting={FadeOut.duration(150)} style={styles.typingWrap} accessibilityLiveRegion="polite" accessibilityLabel={label ?? 'Typing'}>
+    <Reanimated.View entering={FadeInDown.duration(260).easing(Easing.out(Easing.cubic))} exiting={FadeOut.duration(180).easing(Easing.in(Easing.quad))} style={styles.typingWrap} accessibilityLiveRegion="polite" accessibilityLabel={label ?? 'Typing'}>
       {label ? <Text style={[styles.typingWho, leading !== undefined && styles.typingWhoBeside]} numberOfLines={1}>{label}</Text> : null}
       {leading !== undefined ? <View style={styles.typingRow}>{leading}{dots}</View> : dots}
     </Reanimated.View>
@@ -2463,7 +2490,7 @@ const styleDefinitions = StyleSheet.create({
   sharedCardArea: { maxWidth: '78%' },
   edited: { ...typography.caption, color: colors.textFaint, letterSpacing: 0, marginTop: 3, marginHorizontal: 6 },
   menuBackdrop: { backgroundColor: colors.overlay },
-  lifted: { transform: [{ scale: 1.03 }], shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
+  lifted: { shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 16, shadowOffset: { width: 0, height: 6 } },
   // A held photo or court card only lifts: a shadow on its see-through frame drew a box around it in a browser.
   liftedCopy: { transform: [{ scale: 1.03 }] },
   menuReactions: { position: 'absolute', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, borderRadius: radius.pill, backgroundColor: colors.bgElevated, shadowColor: '#000', shadowOpacity: 0.16, shadowRadius: 14, shadowOffset: { width: 0, height: 4 } },
