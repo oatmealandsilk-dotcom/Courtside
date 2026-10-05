@@ -20,6 +20,9 @@ export function warmStory() { void loadDrawing().catch(() => undefined); }
 /** A browser always saves to its downloads. */
 export function canSaveStory(): boolean { return true; }
 
+/** Copy works in a browser too (a browser that cannot copy pictures saves the file instead). */
+export function canCopyStory(): boolean { return true; }
+
 export type StoryAction = 'instagram' | 'save' | 'more' | 'copy';
 
 /** What Copy says once the picture is on the clipboard: Instagram pastes it as a sticker. */
