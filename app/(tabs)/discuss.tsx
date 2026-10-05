@@ -554,8 +554,12 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     <Screen memoryKey="discuss" scrollRef={pageRef} offsetY={offsetY} wash onRefresh={previewSection === undefined && !isDesktopBrowser() ? actions.refresh : undefined}
       title="Community"
       right={
-        // Search, bell, chats: the same order as Profile's bell and chats, chats always in the corner.
+        // Bell, chats, search: the same order as Profile (bell, chats, then the page's own button), so both pages match.
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>
+          {/* What's new for you (likes, follows, replies), on the page the app opens on. */}
+          <NotificationButton size={25} />
+          {/* Your chats. Pulled out by its padding so the icons sit evenly spaced. */}
+          <InboxButton size={27} />
           <Pressable
             accessibilityRole="link"
             accessibilityLabel="Search discussions and players"
@@ -565,10 +569,6 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           >
             <Ionicons name="search" size={23} color={colors.text} />
           </Pressable>
-          {/* What's new for you (likes, follows, replies), on the page the app opens on. */}
-          <NotificationButton size={25} />
-          {/* Your chats, in the same corner as on Feed. Pulled out by its padding so the icons sit evenly spaced. */}
-          <InboxButton size={27} />
         </View>
       }
     >
