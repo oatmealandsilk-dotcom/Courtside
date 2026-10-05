@@ -4,6 +4,7 @@ import { Image, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, Tex
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { show as showToast } from '@/lib/toast';
+import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import { whenLanded } from '@/lib/uploads';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import Reanimated, { Easing, FadeInDown, FadeOut, LinearTransition, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
@@ -592,7 +593,16 @@ export default function Compose() {
   const submit = () => {
     if (!canSubmit || groupWaiting || groupGone || sent.current) return;
     sent.current = true;
-
+    // Words CourtSide refuses (migration 117) are said here, before a photo or
+    // clip starts going up, and the draft stays as it is.
+    void actions.wordsRefused([body, location]).then((refused) => {
+      if (!refused) { submitNow(); return; }
+      sent.current = false;
+      haptics.reject();
+      showToast({ title: BLOCKED_WORDS_NOTE, body: 'Change them and share again.', icon: 'alert-circle-outline', long: true });
+    });
+  };
+  const submitNow = () => {
     if (mode === 'story' || mode === 'hit') {
       actions.addStory({
         caption: body.trim() || undefined,

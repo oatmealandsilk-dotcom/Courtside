@@ -566,6 +566,13 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /** Changes your handle. Throws with a plain-English reason when it cannot. */
   changeHandle: (handle: string) => Promise<void>;
   setPref: (key: PrefKey, value: boolean) => void;
+  /**
+   * Whether a post's or Instant's words (caption, place) would be refused
+   * for slurs, sexual words about children or threats (migration 117), asked
+   * before its photo or clip goes up so the draft stays. False in the demo,
+   * or when it cannot be asked (the post is still checked when saved).
+   */
+  wordsRefused: (texts: string[]) => Promise<boolean>;
   /** Your Hidden words, asked for (migration 117). 'not_ready' on a database without them. */
   loadHiddenWords: () => Promise<'ok' | 'not_ready' | 'failed'>;
   /** Saves them at once on this phone; resolves with why it did not save on the server, or null. An under-18 account keeps both offensive filters on. */
@@ -952,7 +959,8 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /* Messaging */
   openConversationWith: (userId: ID) => ID;
   /** Sends words in a chat; `replyToId` answers one of its messages (quoted above the new one). */
-  sendMessage: (conversationId: ID, body: string, replyToId?: ID) => void;
+  /** Resolves 'blocked' when its words were refused (migration 117): it is taken back, so the chat can put the words back in the box. */
+  sendMessage: (conversationId: ID, body: string, replyToId?: ID) => Promise<'blocked' | undefined>;
   /**
    * Your inbox settings for a chat, only ever seen by you: pin it to the top
    * (up to 3; false if that would be a fourth), mark it unread or read, or
@@ -1153,8 +1161,8 @@ function mergeFetchedMessages(prev: AppState, fetched: Message[], me: ID, openCh
     // a message that is here only for a reply's quote from further back,
     // outside that run (it would leave a gap above it).
     const inChat = inOrder([...c.messageIds, ...(cameIn.get(c.id) ?? [])], byId);
-    // An event line ("Mira added Dev") is news, but never unread.
-    const newFromOthers = added.filter((m) => m.conversationId === c.id && m.senderId !== me && m.kind !== 'system').length;
+    // An event line ("Mira added Dev") is news, but never unread; nor is one your Hidden words hid (migration 117).
+    const newFromOthers = added.filter((m) => m.conversationId === c.id && m.senderId !== me && m.kind !== 'system' && !m.hiddenByWords).length;
     const last = inChat[inChat.length - 1];
     return { ...c, messageIds: inChat.map((m) => m.id), updatedAt: last && last.createdAt > c.updatedAt ? last.createdAt : c.updatedAt, unreadCount: c.id === openChat ? c.unreadCount : c.unreadCount + newFromOthers };
   });
@@ -1654,9 +1662,10 @@ function addLiveComments(prev: AppState, got: Comment[], kind: 'post' | 'hit'): 
   const fresh = got.filter((c) => !have.has(c.id) && !prev.blockedIds.includes(c.authorId));
   // Each one shown is counted on its post or Instant, including any held but not yet counted.
   const shown = [...got.filter((c) => have.has(c.id)), ...fresh];
+  // One your Hidden words hid (migration 117), or a reply under it, is not counted for you, its owner.
+  const hiddenIds = new Set([...prev.comments, ...fresh].filter((c) => c.hiddenByWords).map((c) => c.id));
   const grow = <T extends { id: ID; commentIds: ID[] }>(x: T): T => {
-    // One hidden by its owner's Hidden words (migration 117) is never counted.
-    const missing = shown.filter((c) => c.postId === x.id && !c.hiddenByWords && !x.commentIds.includes(c.id)).map((c) => c.id);
+    const missing = shown.filter((c) => c.postId === x.id && !hiddenIds.has(c.id) && !(c.parentId && hiddenIds.has(c.parentId)) && !x.commentIds.includes(c.id)).map((c) => c.id);
     return missing.length ? { ...x, commentIds: [...x.commentIds, ...missing] } : x;
   };
   const posts = kind === 'post' ? prev.posts.map(grow) : prev.posts;
@@ -2045,7 +2054,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ...prev,
             messages: [...prev.messages, message],
             conversations: prev.conversations.map((c) => c.id === message.conversationId
-              ? { ...c, messageIds: [...c.messageIds, message.id], updatedAt: message.createdAt, unreadCount: message.senderId === me || system ? c.unreadCount : c.unreadCount + 1 }
+              // Never one your Hidden words hid (migration 117): no alert came for it, and it raises no badge.
+              ? { ...c, messageIds: [...c.messageIds, message.id], updatedAt: message.createdAt, unreadCount: message.senderId === me || system || message.hiddenByWords ? c.unreadCount : c.unreadCount + 1 }
               : c),
           });
           // It also means the group itself changed (its people, name, photo
@@ -3986,7 +3996,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const watchComments = useCallback((targetId: ID, kind: 'post' | 'hit') => {
     if (!live(stateRef.current.currentUserId, targetId)) return () => undefined;
     try {
-      return remote.onComments({ id: targetId, kind }, {
+      const me = stateRef.current.currentUserId;
+      const ownerId = kind === 'hit' ? stateRef.current.stories.find((st) => st.id === targetId)?.authorId : stateRef.current.posts.find((p) => p.id === targetId)?.authorId;
+      return remote.onComments({ id: targetId, kind, mine: !!me && ownerId === me }, {
         added: (comment) => setState((prev) => addLiveComments(prev, [comment], kind)),
         removed: (commentId) => setState((prev) => dropComment(prev, commentId)),
         connected: () => {
@@ -4755,8 +4767,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const kept = prev.answers.flatMap((a) => (a.questionId !== questionId ? [a] : fresh.has(a.id) ? [fresh.get(a.id)!] : keep(a) ? [a] : []));
       const known = new Set(kept.map((a) => a.id));
       const answers = [...kept, ...replies.filter((r) => !known.has(r.id))];
-      const inThread = answers.filter((a) => a.questionId === questionId).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1)).map((a) => a.id);
-      return { ...prev, answers, questions: prev.questions.map((q) => (q.id === questionId ? { ...q, answerIds: inThread, acceptedAnswerId: q.acceptedAnswerId && !inThread.includes(q.acceptedAnswerId) ? undefined : q.acceptedAnswerId } : q)) };
+      const here = answers.filter((a) => a.questionId === questionId);
+      // One your Hidden words hid (migration 117), or a reply under it, is not counted for you, the asker.
+      const hiddenIds = new Set(here.filter((a) => a.hiddenByWords).map((a) => a.id));
+      const inThread = here.filter((a) => !hiddenIds.has(a.id) && !(a.parentAnswerId && hiddenIds.has(a.parentAnswerId))).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1)).map((a) => a.id);
+      return { ...prev, answers, questions: prev.questions.map((q) => (q.id === questionId ? { ...q, answerIds: inThread, acceptedAnswerId: q.acceptedAnswerId && !here.some((a) => a.id === q.acceptedAnswerId) ? undefined : q.acceptedAnswerId } : q)) };
     });
   }, []);
   // Only real accounts and real posts are recorded; the demo records nothing.
@@ -4949,31 +4964,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // calledBack), and it never reaches anyone.
   const withdrawn = useRef(new Set<ID>());
   /** After a message's save: true when it was deleted meanwhile, and it is then taken back off the server (its photos too). */
-  const calledBack = (messageId: ID, result: 'refused' | 'failed' | void, photos: ChatPhoto[] = []) => {
+  const calledBack = (messageId: ID, result: 'refused' | 'blocked' | 'failed' | void, photos: ChatPhoto[] = []) => {
     if (!withdrawn.current.delete(messageId)) return false;
     // Refused: it never got there. Failed: it may have got there all the same, so it is unsent anyway.
-    if (result !== 'refused') {
+    if (result !== 'refused' && result !== 'blocked') {
       const hosted = photos.map((p) => p.path).filter((path) => !isLocalMedia(path));
       void remote.unsendMessage(messageId).then(() => { if (hosted.length) void remote.removeChatPhotos(hosted); });
     }
     return true;
   };
 
+  /**
+   * A message refused for its words (migration 117): it would be refused on
+   * every try, so it comes out of the chat rather than staying "Not sent",
+   * and the toast says why. Its photos, already up, come down again.
+   */
+  const takeBackRefused = (message: Message, photos: ChatPhoto[] = []) => {
+    setState((prev) => ({
+      ...prev,
+      messages: prev.messages.filter((m) => m.id !== message.id),
+      conversations: prev.conversations.map((c) => (c.id === message.conversationId ? { ...c, messageIds: c.messageIds.filter((mid) => mid !== message.id) } : c)),
+    }));
+    const hosted = photos.map((p) => p.path).filter((path) => !isLocalMedia(path));
+    if (hosted.length) void remote.removeChatPhotos(hosted);
+    showToast({ title: BLOCKED_WORDS_NOTE, body: 'It wasn’t sent.', icon: 'alert-circle-outline', long: true });
+  };
+
   const sendMessage = useCallback(
-    (conversationId: ID, body: string, replyToId?: ID) => {
+    (conversationId: ID, body: string, replyToId?: ID): Promise<'blocked' | undefined> => {
       haptics.commit();
       const me = requireUser();
       const trimmed = body.trim();
-      if (!trimmed) return;
+      if (!trimmed) return Promise.resolve(undefined);
       const sending = live(me, conversationId);
       // "Sending…" under it until the server has it.
       const message: Message = { ...makeMessage(conversationId, me, trimmed), ...(replyToId ? { replyToId } : null), ...(sending ? { sending: true } : null) };
       setState((prev) => appendMessage(prev, message));
-      if (sending) void remote.insertMessage(message).catch(() => 'failed' as const).then((result) => {
-        if (calledBack(message.id, result)) return;
+      if (!sending) return Promise.resolve(undefined);
+      return remote.insertMessage(message).catch(() => 'failed' as const).then((result): 'blocked' | undefined => {
+        if (calledBack(message.id, result)) return undefined;
+        if (result === 'blocked') { takeBackRefused(message); return 'blocked'; }
         setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, sending: undefined, ...(result === 'failed' ? { failed: true } : null) } : m)) }));
-        if (result === 'failed') return;
-        if (result !== 'refused') return;
+        if (result === 'failed') return undefined;
+        if (result !== 'refused') return undefined;
         setState((prev) => ({
           ...prev,
           messages: prev.messages.filter((m) => m.id !== message.id),
@@ -4986,9 +5019,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           void refreshChat(conversationId).then(() => {
             if (stateRef.current.conversations.some((c) => c.id === conversationId)) showToast({ title: 'You can’t send messages in this chat', icon: 'lock-closed-outline' });
           });
-          return;
+          return undefined;
         }
         showToast({ title: "You can't message this account", icon: 'lock-closed-outline' });
+        return undefined;
       });
     },
     [requireUser, appendMessage, makeMessage, refreshChat],
@@ -5008,6 +5042,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => appendMessage(prev, message));
     if (sending) void remote.insertMessage({ ...message, sending: undefined }).catch(() => 'failed' as const).then((result) => {
       if (calledBack(message.id, result)) return;
+      if (result === 'blocked') { takeBackRefused(message); return; }
       patchMessage(message.id, { sending: undefined, ...(result === 'failed' || result === 'refused' ? { failed: true } : null) });
       if (result === 'refused') void refreshChat(conversationId);
     });
@@ -5037,6 +5072,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!stillThere()) { withdrawn.current.delete(message.id); return; }
     const result = await remote.insertMessage({ ...message, audio: { url, ms: audio.ms }, sending: undefined, failed: undefined }).catch(() => 'failed' as const);
     if (calledBack(message.id, result)) return;
+    if (result === 'blocked') { takeBackRefused(message); return; }
     patchMessage(message.id, { sending: undefined, ...(result === 'failed' || result === 'refused' ? { failed: true } : null) });
     if (result === 'refused') void refreshChat(message.conversationId);
   }, [refreshChat, patchMessage]);
@@ -5096,6 +5132,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const result = await remote.insertMessage(hosted).catch(() => 'failed' as const);
     clearSendProgress(message.id);
     if (calledBack(message.id, result, sent)) return;
+    if (result === 'blocked') { takeBackRefused(message, sent); return; }
     if (result === 'failed' || result === 'refused') setFailed();
     else patchMessage(message.id, { sending: undefined });
     if (result === 'refused') void refreshChat(message.conversationId);
@@ -5467,6 +5504,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (message.kind === 'voice') { void deliverVoice({ ...message, failed: undefined, sending: true }); return; }
     void remote.insertMessage({ ...message, failed: undefined, sending: undefined }).catch(() => 'failed' as const).then((result) => {
       if (calledBack(messageId, result)) return;
+      if (result === 'blocked') { takeBackRefused(message); return; }
       patchMessage(messageId, { sending: undefined, ...(result === 'failed' || result === 'refused' ? { failed: true } : null) });
     });
   }, [requireUser, deliverPhotos, deliverVoice, patchMessage]);
@@ -5736,6 +5774,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (withdrawn.current.delete(message.id)) continue;
           const result = await remote.insertMessage({ ...message, conversationId, sending: undefined }).catch(() => 'failed' as const);
           if (calledBack(message.id, result)) continue;
+          if (result === 'blocked') { takeBackRefused({ ...message, conversationId }); continue; }
           patchMessage(message.id, { sending: undefined, ...(result === 'failed' || result === 'refused' ? { failed: true } : null) });
         }
       })();
@@ -6610,16 +6649,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = requireUser();
     haptics.tap();
     // Shown (or, if the server says no, hidden again): the flag, and a post's or Instant's count.
+    // With it go the replies under it (they were not shown or counted while it was hidden).
     const put = (hidden: boolean) => setState((prev) => {
-      if (kind === 'answer') return { ...prev, answers: prev.answers.map((a) => (a.id === id ? { ...a, hiddenByWords: hidden || undefined } : a)) };
-      if (kind === 'coach-reply') return { ...prev, coachReplies: prev.coachReplies.map((r) => (r.id === id ? { ...r, hiddenByWords: hidden || undefined } : r)) };
+      const recount = (ids: ID[], those: ID[]) => (hidden ? ids.filter((x) => !those.includes(x)) : [...ids, ...those.filter((x) => !ids.includes(x))]);
+      if (kind === 'answer') {
+        const answer = prev.answers.find((a) => a.id === id);
+        if (!answer) return prev;
+        const those = prev.answers.filter((a) => a.id === id || (a.parentAnswerId === id && !a.hiddenByWords)).map((a) => a.id);
+        return {
+          ...prev,
+          answers: prev.answers.map((a) => (a.id === id ? { ...a, hiddenByWords: hidden || undefined } : a)),
+          questions: prev.questions.map((q) => (q.id === answer.questionId ? { ...q, answerIds: recount(q.answerIds, those) } : q)),
+        };
+      }
+      if (kind === 'coach-reply') {
+        const reply = prev.coachReplies.find((r) => r.id === id);
+        if (!reply) return prev;
+        return {
+          ...prev,
+          coachReplies: prev.coachReplies.map((r) => (r.id === id ? { ...r, hiddenByWords: hidden || undefined } : r)),
+          coachQuestions: prev.coachQuestions.map((q) => (q.id === reply.questionId ? { ...q, replyIds: recount(q.replyIds, [id]) } : q)),
+        };
+      }
       const comment = prev.comments.find((c) => c.id === id);
       if (!comment) return prev;
-      const count = <T extends { id: ID; commentIds: ID[] }>(x: T): T => {
-        if (x.id !== comment.postId) return x;
-        if (hidden) return x.commentIds.includes(id) ? { ...x, commentIds: x.commentIds.filter((c) => c !== id) } : x;
-        return x.commentIds.includes(id) ? x : { ...x, commentIds: [...x.commentIds, id] };
-      };
+      const those = prev.comments.filter((c) => c.id === id || (c.parentId === id && !c.hiddenByWords)).map((c) => c.id);
+      const count = <T extends { id: ID; commentIds: ID[] }>(x: T): T => (x.id !== comment.postId ? x : { ...x, commentIds: recount(x.commentIds, those) });
       return {
         ...prev,
         comments: prev.comments.map((c) => (c.id === id ? { ...c, hiddenByWords: hidden || undefined } : c)),
@@ -6635,6 +6690,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       showToast({ title: 'That didn’t unhide. Try again in a moment.', icon: 'alert-circle-outline' });
     });
   }, [requireUser]);
+
+  const wordsRefused = useCallback(async (texts: string[]): Promise<boolean> => {
+    const me = stateRef.current.currentUserId;
+    if (!me || !live(me)) return false;
+    // Never holds a post up for long: no answer in 4 seconds counts as no (the server still checks it on saving).
+    return Promise.race([remote.wordsRefused(texts).catch(() => false), new Promise<boolean>((done) => setTimeout(() => done(false), 4000))]);
+  }, []);
 
   // Words refused anywhere they were written (migration 117): said once, in plain words.
   useEffect(() => onWordsRefused(() => showToast({ title: BLOCKED_WORDS_NOTE, icon: 'alert-circle-outline', long: true })), []);
@@ -7035,6 +7097,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setOpenToHit,
       checkHandle,
       changeHandle,
+      wordsRefused,
       loadHiddenWords,
       saveHiddenWords,
       unhideByWords,
@@ -7243,6 +7306,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setOpenToHit,
       checkHandle,
       changeHandle,
+      wordsRefused,
       loadHiddenWords,
       saveHiddenWords,
       unhideByWords,

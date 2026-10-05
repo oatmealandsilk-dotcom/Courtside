@@ -18,6 +18,7 @@ import { TermsCheck } from '@/components/TermsCheck';
 import { Avatar, Button, Field } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { remote, type HandleStatus } from '@/data/remote';
+import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import { SigningInAs, SigningInWith } from '@/components/SigningInAs';
 import { useLeave } from '@/components/LeaveCurtain';
 import { useApp } from '@/store/AppContext';
@@ -137,7 +138,8 @@ export default function SignIn() {
   }, [cleanHandle, mode]);
   const handleGone = handleStatus === 'taken' || handleStatus === 'held';
   // 3 to 20 characters: new handles need at least 3, and the sign-up itself keeps only the first 20.
-  const handleFits = /^[a-z0-9_]{3,20}$/.test(cleanHandle) && handleStatus !== 'invalid';
+  // 'words': CourtSide refuses words in it (migration 117); said here, so a new account is never quietly given another handle.
+  const handleFits = /^[a-z0-9_]{3,20}$/.test(cleanHandle) && handleStatus !== 'invalid' && handleStatus !== 'words';
   const ready = isSupabaseConfigured
     ? email.includes('@') && password.length >= 6 && (mode === 'sign-in' || (name.trim().length > 0 && handleFits && !handleGone && !!birthDate && !ageBlocked && agreed))
     : demoHandle.trim().length > 0;
@@ -445,6 +447,7 @@ export default function SignIn() {
                     autoComplete={fill('username-new')}
                     hint={handleGone ? `@${cleanHandle} is taken. Try another.`
                       : cleanHandle.length > 20 || handleStatus === 'invalid' ? 'Use 3 to 20 letters, numbers or underscores.'
+                      : handleStatus === 'words' ? BLOCKED_WORDS_NOTE
                       : handleStatus === 'ok' ? `@${cleanHandle} is free`
                       : cleanHandle && cleanHandle !== handle ? `Will be @${cleanHandle}` : 'Letters, numbers and underscores.'}
                   />

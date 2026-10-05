@@ -681,7 +681,10 @@ export default function Thread() {
       endEditing();
       return;
     }
-    actions.sendMessage(conversation.id, body, answering);
+    // Refused for its words (migration 117): it comes back out of the chat, and the words back into an empty box.
+    void actions.sendMessage(conversation.id, body, answering).then((result) => {
+      if (result === 'blocked' && !composer.current?.getText().trim()) composer.current?.setText(body);
+    });
     composer.current?.setText('');
     setReplyTo(null);
     // Stay in the box so the next message can be typed straight away.
@@ -690,7 +693,7 @@ export default function Thread() {
     toNewest(awayRef.current);
   };
   // A new chat's first hello, one tap from the empty chat (Instagram's wave).
-  const sayHi = () => actions.sendMessage(conversation.id, 'Hi 👋');
+  const sayHi = () => { void actions.sendMessage(conversation.id, 'Hi 👋'); };
   // Answering a message: the strip over the box, and the keyboard up to type.
   // Not one still on its way (or not sent): the server would drop the quote.
   const startReply = (message: Message) => {

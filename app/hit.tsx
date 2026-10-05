@@ -7,6 +7,8 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import * as haptics from '@/lib/haptics';
+import { show as showToast } from '@/lib/toast';
+import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import { useLightStatusWhileFocused } from '@/lib/statusBarStyle';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font } from '@/theme';
@@ -106,9 +108,18 @@ export default function Hit() {
   const post = () => {
     if (!shot || posting) return;
     setPosting(true);
-    actions.addStory({ caption: caption.trim() || undefined, imageUrl: shot, mediaLabel: 'Instant', thumbnailUrl: shot });
-    // Back to the tabs, on Home ('/' is also the splash screen's address).
-    router.dismissTo('/(tabs)');
+    // Words CourtSide refuses (migration 117) are said before the photo goes up, and the line stays to change.
+    void actions.wordsRefused([caption]).then((refused) => {
+      if (refused) {
+        setPosting(false);
+        haptics.reject();
+        showToast({ title: BLOCKED_WORDS_NOTE, body: 'Change them and post again.', icon: 'alert-circle-outline', long: true });
+        return;
+      }
+      actions.addStory({ caption: caption.trim() || undefined, imageUrl: shot, mediaLabel: 'Instant', thumbnailUrl: shot });
+      // Back to the tabs, on Home ('/' is also the splash screen's address).
+      router.dismissTo('/(tabs)');
+    });
   };
   // Another go: the count starts again the moment the camera is back.
   const retake = () => { setShot(null); setCount(null); };

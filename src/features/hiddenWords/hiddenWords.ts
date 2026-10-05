@@ -6,9 +6,12 @@ import type { Answer, CoachReply, Comment, HiddenWords, ID } from '@/data/types'
  * the server decides what is hidden, and the app only shows it.
  *
  *   - A comment, Instant comment, thread reply or coach reply that matches
- *     the filters of whoever owns the post (or thread, or question) arrives
- *     marked `hiddenByWords`, and only to its writer and that owner. Its
- *     writer sees it as normal; the owner finds it under "Hidden comments".
+ *     the filters of whoever owns the post (or thread, or question) comes
+ *     only to its writer and that owner, and so do the replies under it.
+ *     Only the owner's copy is marked `hiddenByWords` (from the owner-only
+ *     list of what was hidden): its writer gets it exactly as normal, with
+ *     nothing that says it was hidden; the owner finds it under "Hidden
+ *     comments", and the replies under it come back when it is unhidden.
  *   - A message from someone you don't follow that matches your filters
  *     arrives marked too, and shows as "Hidden message · tap to show".
  */
@@ -49,6 +52,24 @@ export function cleanWords(words: string[]): string[] {
  */
 export function shownInList(item: { hiddenByWords?: boolean }, writer: ID, me: ID | null): boolean {
   return !item.hiddenByWords || writer === me;
+}
+
+/**
+ * The comments on a post or Instant that show in its list for `me`, and are
+ * counted: never one hidden by Hidden words that isn't mine, nor a reply
+ * under such a one (it comes back with it when it is unhidden).
+ */
+export function listedComments(comments: Comment[], targetId: ID, me: ID | null): Comment[] {
+  const here = comments.filter((c) => c.postId === targetId);
+  const hidden = new Set(here.filter((c) => !shownInList(c, c.authorId, me)).map((c) => c.id));
+  return hidden.size ? here.filter((c) => !hidden.has(c.id) && !(c.parentId && hidden.has(c.parentId))) : here;
+}
+
+/** The same for a thread's replies. */
+export function listedAnswers(answers: Answer[], questionId: ID, me: ID | null): Answer[] {
+  const here = answers.filter((a) => a.questionId === questionId);
+  const hidden = new Set(here.filter((a) => !shownInList(a, a.authorId, me)).map((a) => a.id));
+  return hidden.size ? here.filter((a) => !hidden.has(a.id) && !(a.parentAnswerId && hidden.has(a.parentAnswerId))) : here;
 }
 
 /** The comments on a post or Instant that its owner's Hidden words hid, oldest first: only its owner gets these. */

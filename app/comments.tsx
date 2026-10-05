@@ -18,7 +18,7 @@ import { StageRail } from '@/components/StageRail';
 import { Avatar, BrandWash, Field } from '@/components/ui';
 import type { Comment, ID } from '@/data/types';
 import { LIST_PULL, getStage, markGone, markMounted, setCovered, stageKeyOf, useStageSelect } from '@/features/feed/commentStage';
-import { hiddenCommentsOn, shownInList } from '@/features/hiddenWords/hiddenWords';
+import { hiddenCommentsOn, listedComments } from '@/features/hiddenWords/hiddenWords';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -131,9 +131,9 @@ export default function CommentsSheet() {
   const takenDown = !!(kind === 'hit' ? stories.find((st) => st.id === id)?.removed : post?.removed);
   const author = post ? users.find((u) => u.id === post.authorId) : undefined;
   // Every comment and reply here (the count), and the same laid out as threads.
-  // One hidden by the owner's Hidden words (migration 117) counts and shows only for its writer;
-  // the owner finds it under "Hidden comments" at the end.
-  const all = comments.filter((c) => c.postId === id && shownInList(c, c.authorId, currentUserId));
+  // One hidden by the owner's Hidden words (migration 117), or a reply under it, is neither shown nor
+  // counted for the owner, who finds it under "Hidden comments" at the end.
+  const all = listedComments(comments, id, currentUserId);
   const threads = threadsOf(comments, id, 'oldest', currentUserId);
   const ownerId = kind === 'hit' ? stories.find((st) => st.id === id)?.authorId : post?.authorId;
   const hidden = hiddenCommentsOn(comments, id, currentUserId, ownerId);

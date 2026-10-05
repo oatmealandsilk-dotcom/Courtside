@@ -15,7 +15,7 @@ import { RichText } from '@/components/RichText';
 import { CommentThread, threadOf, threadsOf, useReplyDraft } from '@/components/CommentThread';
 import { CommentRow } from '@/components/CommentRow';
 import { HiddenComments } from '@/components/HiddenComments';
-import { hiddenCommentsOn, shownInList } from '@/features/hiddenWords/hiddenWords';
+import { hiddenCommentsOn, listedComments } from '@/features/hiddenWords/hiddenWords';
 import type { ID } from '@/data/types';
 import { Tappable } from '@/components/Tappable';
 import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
@@ -76,9 +76,9 @@ export default function HitThread() {
     }
   } : undefined;
   const liked = !!currentUserId && story.likedBy.includes(currentUserId);
-  // One hidden by the owner's Hidden words (migration 117) counts and shows only for its writer;
-  // the owner finds it under "Hidden comments" at the end.
-  const count = comments.filter((c) => c.postId === story.id && shownInList(c, c.authorId, currentUserId)).length;
+  // One hidden by the owner's Hidden words (migration 117), or a reply under it, is neither shown nor
+  // counted for the owner, who finds it under "Hidden comments" at the end.
+  const count = listedComments(comments, story.id, currentUserId).length;
   const thread = threadsOf(comments, story.id, 'oldest', currentUserId);
   const hidden = hiddenCommentsOn(comments, story.id, currentUserId, story.authorId);
   const submit = () => {

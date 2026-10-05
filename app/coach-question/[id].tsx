@@ -246,14 +246,20 @@ export default function CoachQuestionDetail() {
         );
       })}
 
-      <HiddenComments count={hiddenReplies.length} noun="replies">
-        {hiddenReplies.map((r) => <HiddenReplyRow key={r.id} authorId={r.coachUserId} body={r.body} createdAt={r.createdAt} onUnhide={() => actions.unhideByWords('coach-reply', r.id)} />)}
-      </HiddenComments>
-
       {!replies.length ? (
         <Text style={styles.waiting}>
-          Coaches usually reply within a day. You will get a notification when they do.
+          {hiddenReplies.length
+            ? 'A coach replied. It’s under Hidden replies below.'
+            : 'Coaches usually reply within a day. You will get a notification when they do.'}
         </Text>
+      ) : null}
+
+      {hiddenReplies.length ? (
+        <View style={styles.hiddenReplies}>
+          <HiddenComments count={hiddenReplies.length} noun="replies">
+            {hiddenReplies.map((r) => <HiddenReplyRow key={r.id} authorId={r.coachUserId} body={r.body} createdAt={r.createdAt} onUnhide={() => actions.unhideByWords('coach-reply', r.id)} />)}
+          </HiddenComments>
+        </View>
       ) : null}
 
       {removed ? null : iAmCoach ? (
@@ -355,6 +361,8 @@ const styleDefinitions = StyleSheet.create({
   replyActions: { flexDirection: 'row', gap: spacing.xl },
   helpful: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   waiting: { ...typography.small, color: colors.textFaint, lineHeight: 20, paddingBottom: spacing.lg },
+  // Hidden replies (migration 117) sit clear of the line above them and of the answer box below.
+  hiddenReplies: { marginTop: spacing.lg, marginBottom: spacing.lg },
   composer: { gap: spacing.md, paddingTop: spacing.xl },
   applyPrompt: {
     flexDirection: 'row',
