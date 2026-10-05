@@ -31,8 +31,9 @@ const ICON: Record<MapVisibility, keyof typeof Ionicons.glyphMap> = { nearby: 'p
  * Friends who follow you back (their rough area, just for them) or Only me,
  * under a short notice: only friends who follow them back can see where
  * they are, and turning Location off on the map hides them. Nothing of
- * theirs is shared until they answer here. Under 16s get exactly this too
- * (migration 119): the same two answers, off until they choose.
+ * theirs is shared until they answer here, and the screen starts on Only
+ * me, so Continue alone never turns sharing on. Under 16s get exactly this
+ * too (migration 119): the same two answers, off until they choose.
  */
 export default function MapVisibilitySheet() {
   const styles = useThemedStyles(styleDefinitions);
@@ -42,7 +43,9 @@ export default function MapVisibilitySheet() {
   const teen = onTeenMap(currentUser, teenMap);
   const choices = choicesFor(teen);
   // A teen's "Players nearby" is kept as friends only, so it reads as that here.
-  const shownAs = (v: MapVisibility | null | undefined): MapVisibility => (teen ? (v === 'none' ? 'none' : 'mutuals') : v ?? 'nearby');
+  // A teen who has never answered starts on Only me (as the server keeps them, and as
+  // visibilityLabel says): sharing takes a tap of their own on "Friends who follow you back".
+  const shownAs = (v: MapVisibility | null | undefined): MapVisibility => (teen ? (v === 'nearby' || v === 'mutuals' ? 'mutuals' : 'none') : v ?? 'nearby');
   const [picked, setPicked] = useState<MapVisibility>(shownAs(mapVisibility));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');

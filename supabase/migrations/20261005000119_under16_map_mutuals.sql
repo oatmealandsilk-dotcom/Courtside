@@ -5,6 +5,12 @@
 -- one piece. It is all-or-nothing: if any check below fails, it stops and
 -- nothing at all changes.
 --
+-- Order: run this (and check (c) at the bottom) BEFORE the app change that
+-- offers under 16s the choice goes live. Until it runs, the old
+-- set_map_visibility refuses them ('under_16'), so the app would offer a
+-- choice that cannot be saved ("Couldn't save that"). Nobody is shown
+-- either way; it only fails closed.
+--
 -- The owner, Oct 5: "Can we make under 16? To show their location if
 -- they're mutuals." (And, unchanged: a teen is never shown or suggested to
 -- adult strangers.)
