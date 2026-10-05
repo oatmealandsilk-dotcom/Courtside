@@ -17,6 +17,7 @@ import { readScore, scoreText, setsWinner } from '@/features/activity/score';
 import { computeStats } from '@/features/practice/stats';
 import { andList, canTagKind, firstName as firstOfName, isActive, tagsOnSession } from '@/features/activity/sessionTags';
 import { pickSource, postOf, postedIndex, sourceOn } from '@/features/activity/recent';
+import { isTennisActivity, workoutIcon } from '@/features/activity/workouts';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { hitPrefill, prefillFor } from '@/features/hits/followUp';
 import { localDay } from '@/features/practice/stats';
@@ -111,7 +112,7 @@ function LogSession() {
   const next = useRef<string | null>(null);
   // Posting is offered only while the server has tennis sessions switched on for its source.
   const flags = useTennisFlags();
-  const postable = (x: DetectedActivity) => (x.source === 'whoop' ? flags.whoop : x.source === 'apple-health' ? flags.apple : false);
+  const postable = (x: DetectedActivity) => sourceOn(x, flags);
 
   // The tracker session it was opened for. A copy of one already waiting
   // (the same game from the watch and from WHOOP) opens that one instead.
@@ -326,9 +327,9 @@ function LogSession() {
   ) : waiting ? (
     <SheetTitle title="Log your tennis" onClose={close} />
   ) : fresh ? (
-    <SheetTitle title={fromHit ? 'How was the hit?' : 'Log your tennis'} line={`${fromHit ? `${fromHit.place}. ` : ''}From ${fromWho(fresh)} · ${activityWhen(fresh)}. Only you see this.`} lines={2} onClose={close} />
+    <SheetTitle title={fromHit ? 'How was the hit?' : isTennisActivity(fresh) ? 'Log your tennis' : 'Log your workout'} line={`${fromHit ? `${fromHit.place}. ` : ''}From ${fromWho(fresh)} · ${activityWhen(fresh)}. Only you see this.`} lines={2} onClose={close} />
   ) : done ? (
-    <SheetTitle title="Log your tennis" line={done.status === 'logged' ? 'Logged. It counts toward your streak and hours.' : 'You already logged this session.'} lines={2} onClose={close} />
+    <SheetTitle title={isTennisActivity(done) ? 'Log your tennis' : 'Log your workout'} line={done.status === 'logged' ? 'Logged. It counts toward your streak and hours.' : 'You already logged this session.'} lines={2} onClose={close} />
   ) : choosing ? (
     <SheetTitle title="Log a session" line="Your tracker picked these up. Pick one, or log one yourself." lines={2} onClose={close} />
   ) : fromHit ? (
@@ -399,7 +400,7 @@ function LogSession() {
                 onPress={() => logThis(x)}
                 style={({ pressed }) => [styles.pickRow, i > 0 && styles.pickLine, pressed && styles.pressed]}
               >
-                <View style={styles.pickIcon}><Ionicons name="stopwatch-outline" size={18} color={colors.court} /></View>
+                <View style={styles.pickIcon}><Ionicons name={isTennisActivity(x) ? 'stopwatch-outline' : workoutIcon(x.sport)} size={18} color={colors.court} /></View>
                 <View style={styles.pickWords}>
                   <View style={styles.pickHeroLine}>
                     <Text style={styles.pickHero}>{duration(x.minutes)}</Text>
@@ -510,8 +511,8 @@ function LogSession() {
             </Pressable>
           ) : null}
           {fresh ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Not tennis? Hide this session" hitSlop={8} onPress={() => hide(fresh)} style={({ pressed }) => [styles.hide, pressed && { opacity: 0.6 }]}>
-              <Text style={styles.hideText}>Not tennis? Hide it</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={isTennisActivity(fresh) ? 'Not tennis? Hide this session' : 'Hide this workout'} hitSlop={8} onPress={() => hide(fresh)} style={({ pressed }) => [styles.hide, pressed && { opacity: 0.6 }]}>
+              <Text style={styles.hideText}>{isTennisActivity(fresh) ? 'Not tennis? Hide it' : 'Hide this workout'}</Text>
             </Pressable>
           ) : null}
         </ScrollView>

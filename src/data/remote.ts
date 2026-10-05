@@ -358,13 +358,16 @@ export interface RemoteData {
   userStateFailed?: boolean;
 }
 
-interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null; sets?: unknown }
+interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null; sets?: unknown; workout?: string | null }
 const toSession = (r: SessionRow): PracticeSession => {
   // A match's score (migration 91; absent before it runs), kept only when it is a good one.
   const sets = r.kind === 'match' ? validSets(r.sets) : undefined;
   return {
     id: r.id, userId: r.user_id, day: r.day, minutes: r.minutes, kind: r.kind, won: r.won ?? undefined, opponent: r.opponent ?? undefined, note: r.note ?? undefined,
-    activityId: r.activity_id ?? undefined, fromSessionId: r.from_session_id ?? undefined, ...(sets ? { sets } : {}), createdAt: r.created_at,
+    activityId: r.activity_id ?? undefined, fromSessionId: r.from_session_id ?? undefined, ...(sets ? { sets } : {}),
+    // What a fitness session logged from a workout was (migration 107; absent before it runs).
+    ...(r.kind === 'fitness' && r.workout ? { workout: r.workout } : {}),
+    createdAt: r.created_at,
   };
 };
 
@@ -388,23 +391,32 @@ const toSessionTag = (r: SessionTagRow): SessionTag => ({
 const tagRefusal = (error: { message?: string }) => (error.message ?? '').trim();
 
 interface ActivityRow {
-  id: string; user_id: string; source: DetectedActivity['source']; sport: 'tennis'; started_at: string; ended_at: string; tz_offset_min: number | null; minutes: number;
+  id: string; user_id: string; source: DetectedActivity['source']; sport: string | null; started_at: string; ended_at: string; tz_offset_min: number | null; minutes: number;
   avg_hr: number | null; max_hr: number | null; kcal: number | null; strain: number | string | null; device: string | null; status: DetectedActivity['status'];
   duplicate_of: string | null; session_id: string | null; created_at: string;
   /** Minutes in heart-rate zones 1–5 (migration 65; absent before it runs). */
   hr_zones?: number[] | null;
+  /** A workout's distance in metres (migration 107; absent before it runs). */
+  distance_m?: number | null;
+  external_id?: string | null;
 }
 const toActivity = (r: ActivityRow): DetectedActivity => ({
-  id: r.id, userId: r.user_id, source: r.source, sport: r.sport, startedAt: r.started_at, endedAt: r.ended_at, tzOffsetMin: r.tz_offset_min ?? undefined, minutes: r.minutes,
+  id: r.id, userId: r.user_id, source: r.source, sport: r.sport || 'tennis', startedAt: r.started_at, endedAt: r.ended_at, tzOffsetMin: r.tz_offset_min ?? undefined, minutes: r.minutes,
   avgHr: r.avg_hr ?? undefined, maxHr: r.max_hr ?? undefined, kcal: r.kcal ?? undefined,
   // numeric(3,1) arrives as a string.
   strain: r.strain == null ? undefined : Number(r.strain),
   device: r.device ?? undefined, status: r.status, duplicateOf: r.duplicate_of ?? undefined, sessionId: r.session_id ?? undefined, createdAt: r.created_at,
   zones: r.hr_zones ?? undefined,
+  ...(r.distance_m ? { distanceM: r.distance_m } : {}),
+  ...(r.external_id ? { externalId: r.external_id } : {}),
 });
-/** Your tracker sessions that ended in the last two weeks, newest first. Only your own rows come back (migration 58). */
-const activitiesQuery = (me: ID) => need().from('detected_activities').select('*').eq('user_id', me)
-  .gte('ended_at', new Date(Date.now() - 14 * 86_400_000).toISOString()).order('started_at', { ascending: false }).limit(60);
+/**
+ * Your tracker sessions that ended in the last `days` (two weeks unless
+ * asked), newest first. Only your own rows come back (migration 58). Room
+ * for a busy fortnight of workouts as well as tennis (migration 107).
+ */
+const activitiesQuery = (me: ID, days = 14, limit = 150) => need().from('detected_activities').select('*').eq('user_id', me)
+  .gte('ended_at', new Date(Date.now() - days * 86_400_000).toISOString()).order('started_at', { ascending: false }).limit(limit);
 
 interface HitRow { id: string; author_id: string; starts_at: string; place: { id?: string; name?: string; lat?: number; lng?: number } | null; level_min: number | null; level_max: number | null; format: HitRequest['format']; spots: number; note: string | null; conversation_id: string | null; cancelled: boolean; created_at: string; hit_joins?: { user_id: string }[]; audience?: string | null; opens_at?: string | null; include_groups?: boolean | null; joined_count?: number | null }
 const toHit = (r: HitRow): HitRequest => {
@@ -1680,7 +1692,7 @@ export const remote = {
   /* --------------------------------------------------------------- health */
 
   /** A person's days and which sources are connected. Null while the tables do not exist yet. */
-  async fetchHealth(me: ID): Promise<{ days: DailyHealth[]; connections: { provider: IntegrationProvider; lastSyncedAt?: string; readsWorkouts?: boolean }[] } | null> {
+  async fetchHealth(me: ID): Promise<{ days: DailyHealth[]; connections: { provider: IntegrationProvider; lastSyncedAt?: string; readsWorkouts?: boolean; readsAllWorkouts?: boolean }[] } | null> {
     const db = need();
     const [d, c] = await Promise.all([
       db.from('health_days').select('*').eq('user_id', me).order('date', { ascending: false }).limit(60),
@@ -1699,6 +1711,8 @@ export const remote = {
         provider: r.provider as IntegrationProvider, lastSyncedAt: r.last_synced_at ?? undefined,
         // Tennis sessions switched on for this source (migration 58; never without it).
         readsWorkouts: r.reads_workouts === true,
+        // Every workout too, its own yes (migration 107; never without it).
+        readsAllWorkouts: r.reads_all_workouts === true,
       })),
     };
   },
@@ -1725,21 +1739,35 @@ export const remote = {
     if (error) throw new Error(error.message);
   },
 
-  /** `readsWorkouts` turns tennis sessions on or off for a connected source (migration 58). */
-  async setHealthConnection(me: ID, provider: IntegrationProvider, connected: boolean, extra?: { readsWorkouts?: boolean }) {
+  /**
+   * `readsWorkouts` turns tennis sessions on or off for a connected source
+   * (migration 58); `readsAllWorkouts`, every other workout as well
+   * (migration 107), only ever on the person's own yes to it.
+   */
+  async setHealthConnection(me: ID, provider: IntegrationProvider, connected: boolean, extra?: { readsWorkouts?: boolean; readsAllWorkouts?: boolean }) {
     const db = need();
     if (!connected) {
       const { error } = await db.from('health_connections').delete().match({ user_id: me, provider });
       if (error) throw new Error(error.message);
       return;
     }
-    const tennis = extra?.readsWorkouts !== undefined;
+    const cols: Record<string, boolean> = {};
+    if (extra?.readsWorkouts !== undefined) cols.reads_workouts = extra.readsWorkouts;
+    if (extra?.readsAllWorkouts !== undefined) cols.reads_all_workouts = extra.readsAllWorkouts;
+    const tennis = Object.keys(cols).length > 0;
     // Turning tennis sessions on or off is not a sync, so it leaves "Synced …" as it was
     // (every caller has just made or already has the row).
     const row: Record<string, unknown> = tennis ? { user_id: me, provider } : { user_id: me, provider, last_synced_at: new Date().toISOString() };
-    let { error } = await db.from('health_connections').upsert(tennis ? { ...row, reads_workouts: extra!.readsWorkouts } : row);
-    // A database before migration 58 has no such column: the connection is still saved.
-    if (error && tennis && /reads_workouts/.test(error.message)) ({ error } = await db.from('health_connections').upsert(row));
+    let { error } = await db.from('health_connections').upsert({ ...row, ...cols });
+    // A database before migration 107 (or 58) has no such column: the rest is still saved.
+    if (error && 'reads_all_workouts' in cols && /reads_all_workouts/.test(error.message)) {
+      delete cols.reads_all_workouts;
+      ({ error } = await db.from('health_connections').upsert({ ...row, ...cols }));
+    }
+    if (error && 'reads_workouts' in cols && /reads_workouts/.test(error.message)) {
+      delete cols.reads_workouts;
+      ({ error } = await db.from('health_connections').upsert({ ...row, ...cols }));
+    }
     if (error) throw new Error(error.message);
   },
 
@@ -2371,7 +2399,14 @@ export const remote = {
     const row: Record<string, unknown> = { id: s.id, user_id: s.userId, day: s.day, minutes: s.minutes, kind: s.kind, won: s.won ?? null, opponent: s.opponent ?? null, note: s.note ?? null, created_at: s.createdAt };
     // A match's score only when there is one (migration 91), so a session with none saves on a database without it.
     if (s.sets?.length) row.sets = s.sets;
+    // What a workout was (migration 107), only when there is one, the same way.
+    if (s.workout) row.workout = s.workout;
     let { error } = await db.from('practice_sessions').insert(s.activityId ? { ...row, activity_id: s.activityId } : row);
+    // A database before migration 107 has no workout: the session still counts, as Fitness.
+    if (error && row.workout && /\bworkout\b/.test(error.message)) {
+      delete row.workout;
+      ({ error } = await db.from('practice_sessions').insert(s.activityId ? { ...row, activity_id: s.activityId } : row));
+    }
     // A database before migration 58 has no activity_id: the session still counts, just without the link.
     if (error && s.activityId && /activity_id/.test(error.message)) ({ error } = await db.from('practice_sessions').insert(row));
     // A database before migration 91 has no sets: the match still counts, with its result, and the score is dropped.
@@ -2654,6 +2689,17 @@ export const remote = {
     return ((data ?? []) as ActivityRow[]).map(toActivity);
   },
   /**
+   * Your tracker sessions from the last `days` (at most the 30 the server
+   * keeps), for Past workouts. Read on their own and handed back, never put
+   * in the app's list (an older one there would show as waiting to be
+   * logged). Null when they could not be read.
+   */
+  async fetchActivitiesSince(me: ID, days: number): Promise<DetectedActivity[] | null> {
+    const { data, error } = await activitiesQuery(me, Math.min(31, Math.max(1, days)), 300);
+    if (error) return null;
+    return ((data ?? []) as ActivityRow[]).map(toActivity);
+  },
+  /**
    * One of your own tracker sessions by its id, however old, while the
    * server still keeps it (30 days): Edit post's "Share health data" on a
    * post older than the two weeks the app holds (Oct 4). Null when it has
@@ -2665,9 +2711,9 @@ export const remote = {
     return toActivity(data as ActivityRow);
   },
   /**
-   * A tennis workout read from Apple Health on this phone, handed to the
-   * server, which keeps it, checks it against WHOOP's copy and files the
-   * in-app row. `notify` is true only when this very call filed it. Null on a
+   * A workout read from Apple Health on this phone (tennis, or since
+   * migration 107 any kind), handed to the server, which keeps it, checks
+   * it against WHOOP's copy and files the in-app row. `notify` is true only when this very call filed it. Null on a
    * database without the function, or when the server turned it away;
    * 'error' when it did not get through.
    */
@@ -2687,7 +2733,7 @@ export const remote = {
     if (error) return [];
     return ((data ?? []) as NotificationRow[]).map(toNotification);
   },
-  /** The "Tennis detected" rows from the last two weeks, for a check that just filed some. */
+  /** The "Tennis detected" and "Workout detected" rows from the last two weeks, for a check that just filed some. */
   async fetchActivityNotes(me: ID): Promise<Notification[]> {
     const { data, error } = await need().from('notifications').select('*').eq('user_id', me).eq('kind', 'activity')
       .gte('created_at', new Date(Date.now() - 14 * 86_400_000).toISOString());

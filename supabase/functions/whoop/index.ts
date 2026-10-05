@@ -12,11 +12,13 @@
 //                 WHOOP health data on THEIR account
 //   /finish     — (signed-in) the phone that started a sign-in collects it, as
 //                 the same player: only then is it put on the account, and the
-//                 last week is pulled (and the last 36 hours of tennis, quietly)
+//                 last week is pulled (and the last week of tennis, quietly)
 //   /sync       — (signed-in) pulls the last week again. {only: 'workouts'}
-//                 just looks for tennis in the last 36 hours: the app's check
-//                 when it opens, at most hourly. Answers {days, fresh}, fresh
-//                 being the tennis sessions it just filed
+//                 just looks for tennis in the last 36 hours (or {days: 1–7}
+//                 back: the app asks for the past week once): the app's check
+//                 when it opens, at most hourly. Answers {days, fresh,
+//                 workoutDays}, fresh being the tennis sessions it just filed
+//                 and workoutDays how far back it looked
 //   /disconnect — (signed-in) revokes CourtSide's access at WHOOP (which also
 //                 stops its webhooks), removes what WHOOP sent, forgets the tokens
 //   /webhook    — (POST, signed by WHOOP, no app token) WHOOP saying a
@@ -226,11 +228,13 @@ async function recordWorkouts(uid: string, list: WhoopWorkout[], quiet: boolean)
 }
 
 /**
- * Tennis in the last 36 hours, filed quietly (the app shows its own banner).
- * Also the safety net for a webhook that never came or failed after its
- * answer: a workout WHOOP deleted, or that stopped being tennis, is taken back.
+ * Tennis in the last `hours` (36 unless asked for more: the past week once,
+ * when WHOOP is connected and the first time the app asks after the Oct 5
+ * update), filed quietly (the app shows its own banner). Also the safety net
+ * for a webhook that never came or failed after its answer: a workout WHOOP
+ * deleted, or that stopped being tennis, is taken back.
  */
-async function workoutsFor(uid: string): Promise<string[]> {
+async function workoutsFor(uid: string, hours = 36): Promise<string[]> {
   const { data: ok } = await admin.rpc('tennis_allowed', { u: uid, src: 'whoop' });
   if (ok !== true) return [];
   const t = await tokensFor(uid);
@@ -239,8 +243,9 @@ async function workoutsFor(uid: string): Promise<string[]> {
   if (!t || t.member == null) return [];
   if (lacksWorkouts(t.scope)) { await setReadsWorkouts(uid, false); return []; }
   const end = new Date();
-  const since = new Date(end.getTime() - 36 * 3_600_000).toISOString();
-  const r = await page(uid, '/activity/workout', since, end.toISOString(), 2);
+  const since = new Date(end.getTime() - hours * 3_600_000).toISOString();
+  // 25 to a page: two pages for a day and a half, more for a week.
+  const r = await page(uid, '/activity/workout', since, end.toISOString(), hours > 36 ? 6 : 2);
   // WHOOP says this key may not read workouts.
   if (r.status === 403) { await setReadsWorkouts(uid, false); return []; }
   const fresh = await recordWorkouts(uid, r.records, true);
@@ -255,14 +260,20 @@ async function workoutsFor(uid: string): Promise<string[]> {
   return fresh;
 }
 
-/** The last week from WHOOP, folded into a row per day, plus any new tennis. With only = 'workouts', just the tennis. */
-async function sync(uid: string, only?: 'workouts'): Promise<{ days: number; fresh: string[] }> {
+/**
+ * The last week from WHOOP, folded into a row per day, plus any new tennis.
+ * With only = 'workouts', just the tennis. `workoutDays` (1 to 7) looks that
+ * far back for tennis instead of the last 36 hours; the answer's
+ * `workoutDays` says how far it looked, so the app knows this version did.
+ */
+async function sync(uid: string, only?: 'workouts', workoutDays?: number): Promise<{ days: number; fresh: string[]; workoutDays: number }> {
   const { data: have } = await admin.from('whoop_tokens').select('user_id').eq('user_id', uid).maybeSingle();
   if (!have) throw new Error('not connected');
+  const looked = workoutDays && workoutDays > 0 ? Math.min(7, workoutDays) : 1.5;
   let fresh: string[] = [];
-  try { fresh = await workoutsFor(uid); } catch (e) { console.error('[whoop] workouts', e); }
+  try { fresh = await workoutsFor(uid, Math.round(looked * 24)); } catch (e) { console.error('[whoop] workouts', e); }
   await sweep();
-  if (only === 'workouts') return { days: 0, fresh };
+  if (only === 'workouts') return { days: 0, fresh, workoutDays: looked };
   // As before: a key WHOOP will no longer refresh means connecting again.
   if (!(await tokensFor(uid))) throw new Error('not connected');
   const end = new Date();
@@ -297,7 +308,7 @@ async function sync(uid: string, only?: 'workouts'): Promise<{ days: number; fre
   }
   const rows = [...days.values()];
   // Disconnected while this ran: write nothing back (no WHOOP numbers, no 'connected' row).
-  if (!(await stillConnected(uid))) return { days: 0, fresh };
+  if (!(await stillConnected(uid))) return { days: 0, fresh, workoutDays: looked };
   if (rows.length) {
     // Other sources' numbers on the same day are kept: only WHOOP's columns are written.
     for (const row of rows) {
@@ -306,9 +317,9 @@ async function sync(uid: string, only?: 'workouts'): Promise<{ days: number; fre
       await admin.from('health_days').upsert({ ...row, sources, updated_at: new Date().toISOString() });
     }
   }
-  if (!(await stillConnected(uid))) return { days: 0, fresh };
+  if (!(await stillConnected(uid))) return { days: 0, fresh, workoutDays: looked };
   await admin.from('health_connections').upsert({ user_id: uid, provider: 'whoop', last_synced_at: new Date().toISOString() });
-  return { days: rows.length, fresh };
+  return { days: rows.length, fresh, workoutDays: looked };
 }
 const stillConnected = async (uid: string) => !!(await admin.from('whoop_tokens').select('user_id').eq('user_id', uid).maybeSingle()).data;
 
@@ -336,7 +347,8 @@ async function link(uid: string, a: Answer, bound: boolean): Promise<string | nu
   await admin.from('health_connections').upsert({ user_id: uid, provider: 'whoop', connected_at: new Date().toISOString(), ...(tennis ? { reads_workouts: true } : {}) });
   // Any other sign-in leaves tennis off (the app offers 'Turn on tennis sessions' again).
   if (!tennis) await setReadsWorkouts(uid, false);
-  try { await sync(uid); } catch { /* the app can ask again */ }
+  // The past week of tennis too, each one in Notifications to log (Oct 5).
+  try { await sync(uid, undefined, 7); } catch { /* the app can ask again */ }
   return null;
 }
 
@@ -440,8 +452,10 @@ Deno.serve(async (req) => {
   const uid = await whoIs(req);
   if (!uid) return json({ error: 'Sign in first.' }, 401);
   if (path === '/sync') {
-    const posted = await req.json().catch(() => ({})) as { only?: string };
-    try { return json(await sync(uid, posted.only === 'workouts' ? 'workouts' : undefined)); } catch (e) { return json({ error: e instanceof Error ? e.message : 'sync failed' }, 400); }
+    const posted = await req.json().catch(() => ({})) as { only?: string; days?: unknown };
+    // {days: 1–7}: how far back to look for tennis (the app asks for the past week once).
+    const days = typeof posted.days === 'number' && Number.isFinite(posted.days) && posted.days > 0 ? Math.min(7, posted.days) : undefined;
+    try { return json(await sync(uid, posted.only === 'workouts' ? 'workouts' : undefined, days)); } catch (e) { return json({ error: e instanceof Error ? e.message : 'sync failed' }, 400); }
   }
   if (path === '/finish') {
     const posted = await req.json().catch(() => ({})) as { n?: unknown };

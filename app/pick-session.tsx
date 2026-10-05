@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/ui';
 import { SheetTitle } from '@/components/sheet/SheetForm';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { activityDay } from '@/features/activity/format';
+import { isTennisActivity, workoutIcon } from '@/features/activity/workouts';
 import { needsLogging, pickLine, pickTitle, postOf, postedIndex, recentSessions, type SessionPick } from '@/features/activity/recent';
 import { takeSessionPicker } from '@/features/activity/sessionPicker';
 import { peopleText, peopleWords } from '@/features/activity/sessionTags';
@@ -62,7 +63,10 @@ export default function PickSession() {
       const a = pick.activity;
       setBusy(keyOf(pick));
       try {
-        await actions.logSession({ minutes: a.minutes, kind: 'practice', day: activityDay(a), activityId: a.id });
+        // Tennis logs as a practice, as it always has; any other workout as fitness, keeping what it was (Oct 5).
+        await actions.logSession(isTennisActivity(a)
+          ? { minutes: a.minutes, kind: 'practice', day: activityDay(a), activityId: a.id }
+          : { minutes: a.minutes, kind: 'fitness', day: activityDay(a), activityId: a.id, workout: a.sport });
       } catch (e) {
         const said = e instanceof Error ? e.message : '';
         // Logged already (on another phone, say): attach it all the same.
@@ -105,7 +109,7 @@ export default function PickSession() {
             {list.map((pick) => {
               const key = keyOf(pick);
               const used = !!postOf(pick, posted);
-              const icon = pick.type === 'tracker' ? <Ionicons name="stopwatch-outline" size={18} color={colors.court} />
+              const icon = pick.type === 'tracker' ? <Ionicons name={isTennisActivity(pick.activity) ? 'stopwatch-outline' : workoutIcon(pick.activity.sport)} size={18} color={colors.court} />
                 : pick.session.kind === 'match' ? <Ionicons name="trophy-outline" size={18} color={colors.textMuted} />
                 : pick.session.kind === 'fitness' ? <Ionicons name="barbell-outline" size={18} color={colors.textMuted} />
                 : <CourtGlyph size={15} color={colors.textMuted} />;

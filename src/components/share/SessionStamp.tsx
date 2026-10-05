@@ -9,6 +9,7 @@ import { Duration, Figure } from '@/components/session/Duration';
 import type { ID, SessionDetail } from '@/data/types';
 import { resultWord } from '@/features/activity/format';
 import { sessionPeople } from '@/features/activity/sessionTags';
+import { distanceFigure } from '@/features/activity/workouts';
 import { font } from '@/theme';
 
 /*
@@ -32,6 +33,9 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [], scor
   const look = cardLook();
   const u = width / 300;
   const result = resultWord(session);
+  // A workout's distance (migration 107) goes under the time, as on the post's card, so the
+  // numbers row never holds more than the three it has room for. Tennis never has one.
+  const far = session.workout ? distanceFigure(session.distanceM) : null;
   const stats = [
     session.kcal ? { label: 'Calories', value: session.kcal, unit: 'cal' } : null,
     session.maxHr != null && session.avgHr ? { label: 'Avg HR', value: session.avgHr, unit: 'bpm' } : null,
@@ -54,6 +58,11 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [], scor
       </View>
       <Duration minutes={session.minutes} size={68 * u} color={look.figure} unitColor={look.muted} style={{ marginTop: 6 * u }} />
       {score ? <Text numberOfLines={1} style={{ ...font('700'), fontSize: 24 * u, letterSpacing: -0.4 * u, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 2 * u }}>{score}</Text> : null}
+      {far ? (
+        <View style={{ marginTop: 2 * u }}>
+          <Figure value={far.value} part={far.value < 10 ? 'dec1' : 'int'} unit={far.unit} baseline size={24 * u} unitScale={0.5} color={look.figure} unitColor={look.muted} />
+        </View>
+      ) : null}
       {place ? (
         <View style={[styles.row, { gap: 4 * u, marginTop: 2 * u }]}>
           <Ionicons name="location-outline" size={12 * u} color={look.muted} />

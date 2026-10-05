@@ -3,7 +3,8 @@ import type { DetectedActivity, Notification } from '../types';
 import { CURRENT_USER_ID } from './users';
 
 /*
- * The demo's tennis sessions from a tracker: a WHOOP session that ended an
+ * The demo's tennis sessions from a tracker (and, since Oct 5, a run from
+ * the Watch, waiting with its "Workout detected" row): a WHOOP session that ended an
  * hour and a half ago, not logged yet, with its "Tennis detected" row in
  * Notifications, so the whole flow can be seen in the web demo (?as=you);
  * and an Apple Watch session from two days ago, already logged (ses-demo-2),
@@ -19,8 +20,28 @@ import { CURRENT_USER_ID } from './users';
 const startedAt = isoDaysAgo(0, 3);
 const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - 7); d.setHours(18, 12, 0, 0); return d.toISOString(); })();
 const watchStart = (() => { const d = new Date(); d.setDate(d.getDate() - 2); d.setHours(18, 4, 0, 0); return d.toISOString(); })();
+// A morning run this morning (Oct 5: every workout from Apple Health, migration 107), waiting to be logged, with its "Workout detected" row.
+const runStart = (() => { const d = new Date(); d.setHours(7, 2, 0, 0); if (d.getTime() > Date.now() - 45 * 60_000) d.setDate(d.getDate() - 1); return d.toISOString(); })();
 
 export const detectedActivities: DetectedActivity[] = [
+  {
+    id: 'act-demo-run',
+    userId: CURRENT_USER_ID,
+    source: 'apple-health',
+    sport: 'run',
+    startedAt: runStart,
+    endedAt: new Date(Date.parse(runStart) + 32 * 60_000).toISOString(),
+    tzOffsetMin: -new Date().getTimezoneOffset(),
+    minutes: 32,
+    distanceM: 5012,
+    avgHr: 152,
+    maxHr: 171,
+    kcal: 341,
+    device: 'Watch7,1',
+    externalId: 'demo-hk-run',
+    status: 'new',
+    createdAt: new Date(Date.parse(runStart) + 40 * 60_000).toISOString(),
+  },
   {
     id: 'act-demo-1',
     userId: CURRENT_USER_ID,
@@ -78,6 +99,17 @@ export const detectedActivities: DetectedActivity[] = [
 ];
 
 export const activityNotifications: Notification[] = [
+  {
+    id: 'n-act-run',
+    userId: CURRENT_USER_ID,
+    actorId: CURRENT_USER_ID,
+    kind: 'activity',
+    targetId: 'act-demo-run',
+    targetKind: 'activity',
+    createdAt: new Date(Date.parse(runStart) + 40 * 60_000).toISOString(),
+    read: false,
+    preview: 'Run · 32 min · from your Apple Watch', // the server's words (migration 107); the row shows 32m
+  },
   {
     id: 'n-act-1',
     userId: CURRENT_USER_ID,

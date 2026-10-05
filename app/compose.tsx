@@ -39,6 +39,7 @@ import { availableShare, chosenShare } from '@/features/activity/healthShare';
 import { useHealthChoice } from '@/features/activity/useHealthChoice';
 import type { CardPerson } from '@/components/session/SessionCard';
 import { KIND_LABEL, activityDay, loggedLabel } from '@/features/activity/format';
+import { inSentence, isTennisActivity, workoutName } from '@/features/activity/workouts';
 import { canTagKind } from '@/features/activity/sessionTags';
 import { shareAction, showLogged, useTrackerSession } from '@/features/activity/useTrackerSession';
 import { openWhoPlayed } from '@/features/activity/whoPlayedPicker';
@@ -350,7 +351,14 @@ export default function Compose() {
   const logMode = logNow || wasLog.current;
   // Logged before this page opened: what it was is already said.
   const openedLog = opened?.type === 'tracker' ? opened.session : undefined;
-  const [kind, setKind] = useState<PracticeSession['kind']>(fromHit?.kind ?? 'practice');
+  // A workout other than tennis (a run, a lift: Oct 5) logs as fitness, with
+  // what it was kept on the log; it has no Practice/Match/Drills choice, no
+  // result and nobody to tag. Tennis is exactly as it was.
+  const workoutLog = opened?.type === 'tracker' && !isTennisActivity(opened.activity);
+  const workoutSport = opened?.type === 'tracker' && !isTennisActivity(opened.activity) ? opened.activity.sport : undefined;
+  const [kind, setKind] = useState<PracticeSession['kind']>(() => (workoutLog ? 'fitness' : fromHit?.kind ?? 'practice'));
+  // Opened cold, the workout can arrive after the page: fitness from then on.
+  useEffect(() => { if (workoutLog) setKind('fitness'); }, [workoutLog]);
   const [won, setWon] = useState<'won' | 'lost' | null>(null);
   // A match's score (Oct 4, migration 91), your games first: when one side took more sets it decides the result.
   const [score, setScore] = useState('');
@@ -372,10 +380,13 @@ export default function Compose() {
   const shownKind = openedLog?.kind ?? kind;
   const shownWon = openedLog ? (openedLog.kind === 'match' ? openedLog.won : undefined) : pickedWon;
   const shownSets = openedLog ? (openedLog.kind === 'match' ? openedLog.sets : undefined) : scoreSets;
+  // What the workout was, while it is logged (or about to be) as fitness: "Run".
+  const shownWorkout = shownKind === 'fitness' ? openedLog?.workout ?? workoutSport : undefined;
   const sessionFor = (logId?: string): SessionDetail | null => (opened?.type === 'tracker' ? {
-    ...statsOf(opened, shareFor(opened)),
+    ...(({ workout: _w, ...rest }) => rest)(statsOf(opened, shareFor(opened))),
     kind: shownKind,
-    focus: loggedLabel({ kind: shownKind, won: shownWon }),
+    focus: loggedLabel({ kind: shownKind, won: shownWon, workout: shownWorkout }),
+    ...(shownWorkout ? { workout: shownWorkout } : {}),
     ...(shownWon !== undefined ? { won: shownWon } : {}),
     ...(shownSets?.length ? { sets: shownSets } : {}),
     ...(logId ? { sessionId: logId } : {}),
@@ -383,9 +394,11 @@ export default function Compose() {
   const cardSession = logMode ? sessionFor() : null;
   // "Practice — how did it go?": the hint follows what it was, never a time
   // of day. Left empty, the post says the day instead ("Saturday match").
-  const logHint = opened?.type === 'tracker' ? KIND_LABEL[shownKind] : '';
+  // A workout: "Run — how did it go?", and "Saturday run".
+  const shownWhat = shownWorkout ? workoutName(shownWorkout) : KIND_LABEL[shownKind];
+  const logHint = opened?.type === 'tracker' ? shownWhat : '';
   const logCaption = opened?.type === 'tracker'
-    ? `${new Date(`${activityDay(opened.activity)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })} ${KIND_LABEL[shownKind].toLowerCase()}`
+    ? `${new Date(`${activityDay(opened.activity)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })} ${inSentence(shownWhat)}`
     : '';
   const logInput = () => ({
     kind,
@@ -546,7 +559,7 @@ export default function Compose() {
         haptics.reward();
         closeMenu();
         // With an Instagram button on it: the session as a story picture.
-        showLogged(input.minutes ?? activity.minutes, { kind: input.kind, won: input.won, sets: input.sets }, streak, logId);
+        showLogged(input.minutes ?? activity.minutes, { kind: input.kind, won: input.won, sets: input.sets, workout: input.kind === 'fitness' ? workoutSport : undefined }, streak, logId);
       }, 300);
     } catch {
       acting.current = false;
@@ -571,7 +584,7 @@ export default function Compose() {
   const hideIt = () => {
     if (opened?.type !== 'tracker') return;
     const id = opened.activity.id;
-    confirm({ title: 'Hide this session?', message: 'It won’t count toward your streak.', confirmLabel: 'Hide', destructive: true, onConfirm: () => { actions.dismissActivity(id); goBackNow(); } });
+    confirm({ title: workoutLog ? 'Hide this workout?' : 'Hide this session?', message: 'It won’t count toward your streak.', confirmLabel: 'Hide', destructive: true, onConfirm: () => { actions.dismissActivity(id); goBackNow(); } });
   };
 
   // A quick second tap on Share would post it twice.
@@ -793,7 +806,8 @@ export default function Compose() {
   // Where it was: "Played at …?" when you are standing at a court, or Add location.
   const placeRows = (
     <>
-                  {!location && nearCourt && !nearWaved && (mode === 'post' || mode === 'clip' || logMode) ? (
+                  {/* Never for a workout away from a court (a run, a lift): "Played at" is for tennis. */}
+                  {!location && nearCourt && !nearWaved && !workoutLog && (mode === 'post' || mode === 'clip' || logMode) ? (
                     <FormRow
                       line
                       lead={<CourtGlyph size={16} color={colors.brand} />}
@@ -995,7 +1009,7 @@ export default function Compose() {
                 <Field bare accessibilityLabel="Caption" value={body} onChangeText={setBody} placeholder={`${logHint} — how did it go?`} multiline minHeight={44} mentions />
               </View>
             </View>
-            {openedLog ? null : (
+            {openedLog || workoutLog ? null : (
               <Reanimated.View layout={LinearTransition.duration(220)} style={styles.logChips}>
                 <Chips value={kind} onChange={(k) => { if (!k) return; setKind(k); if (k !== 'match') setWon(null); }} options={KINDS} />
                 {kind === 'match' ? (
@@ -1032,8 +1046,8 @@ export default function Compose() {
               {!whoRow && (media || tagged.length) ? <TagPlayers variant="row" line label="Tag people" tagged={tagged} onChange={setTagged} /> : null}
             </Reanimated.View>
             {opened?.type === 'tracker' && !openedLog && opened.activity.status === 'new' ? (
-              <Pressable accessibilityRole="button" accessibilityLabel="Not tennis? Hide this session" hitSlop={8} onPress={hideIt} style={({ pressed }) => [styles.hideIt, pressed && { opacity: 0.6 }]}>
-                <Text style={styles.hideItText}>Not tennis? Hide it</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel={workoutLog ? 'Hide this workout' : 'Not tennis? Hide this session'} hitSlop={8} onPress={hideIt} style={({ pressed }) => [styles.hideIt, pressed && { opacity: 0.6 }]}>
+                <Text style={styles.hideItText}>{workoutLog ? 'Hide this workout' : 'Not tennis? Hide it'}</Text>
               </Pressable>
             ) : null}
             <View style={{ height: DOCK_ROOM + insets.bottom }} />

@@ -3,6 +3,7 @@ import { localDay } from '@/features/practice/stats';
 import { duration } from '@/lib/format';
 import type { TennisFlags } from './flags';
 import { activityDay, activityTitle, activityWhen, dayWords, loggedLabel, loggedTitle, sessionFromActivity, sessionFromLogged, statsSourceOf } from './format';
+import { inSentence, isTennisActivity } from './workouts';
 
 /*
  * Your recent sessions as one list, for attaching one to a Post or a Clip
@@ -23,8 +24,15 @@ export type SessionPick =
   | { type: 'tracker'; activity: DetectedActivity; session?: PracticeSession }
   | { type: 'logged'; session: PracticeSession };
 
-/** Whether the server has tennis sessions switched on for a tracker's source (migrations 58 and 69: WHOOP, Apple Health, Fitbit, Oura, Polar). */
-export const sourceOn = (a: DetectedActivity, flags: TennisFlags) => (a.source === 'apple-health' ? flags.apple : a.source === 'health-connect' ? false : flags[a.source]);
+/**
+ * Whether the server has this kind of session switched on for a tracker's
+ * source: tennis by its source's switch (migrations 58 and 69: WHOOP, Apple
+ * Health, Fitbit, Oura, Polar), any other workout by 'workouts-apple'
+ * (migration 107; only Apple Health sends those).
+ */
+export const sourceOn = (a: DetectedActivity, flags: TennisFlags) => (!isTennisActivity(a)
+  ? a.source === 'apple-health' && flags.workoutsApple
+  : a.source === 'apple-health' ? flags.apple : a.source === 'health-connect' ? false : flags[a.source]);
 
 /** Posts of yours that carry a session, by what they carry: 'a:<tracker id>' or 's:<log id>' → the post. */
 export function postedIndex(posts: Post[], me: ID | null): Map<string, ID> {
@@ -85,16 +93,16 @@ export function statsOf(pick: SessionPick, share: HealthShareKey[]): SessionDeta
   return pick.type === 'tracker' ? sessionFromActivity(pick.activity, share) : sessionFromLogged(pick.session);
 }
 
-/** "Tennis" (what the tracker called it), "Match · Won". */
+/** "Tennis" or "Run" (what the tracker called it), "Match · Won", "Run" (a fitness session logged from a run). */
 export const pickTitle = (pick: SessionPick) => (pick.type === 'tracker' ? activityTitle(pick.activity) : loggedLabel(pick.session));
 
 /**
  * The caption a post from this session gets when you leave yours empty:
- * "Saturday tennis" (the day, and what the tracker called it), "Tuesday
- * practice". Never the time of day.
+ * "Saturday tennis" or "Saturday run" (the day, and what the tracker called
+ * it), "Tuesday practice". Never the time of day.
  */
 export const pickCaption = (pick: SessionPick) => (pick.type === 'tracker'
-  ? `${new Date(`${activityDay(pick.activity)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })} ${activityTitle(pick.activity).toLowerCase()}`
+  ? `${new Date(`${activityDay(pick.activity)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })} ${inSentence(activityTitle(pick.activity))}`
   : loggedTitle(pick.session));
 
 /**
@@ -104,7 +112,12 @@ export const pickCaption = (pick: SessionPick) => (pick.type === 'tracker'
  */
 export function pickSource(pick: SessionPick): string {
   if (pick.type === 'logged') return pick.session.activityId ? 'Tracker' : 'By hand';
-  switch (statsSourceOf(pick.activity)) {
+  return sourceWord(pick.activity);
+}
+
+/** A tracker's name in a word or two: "WHOOP", "Apple Watch", "Apple Health". */
+export function sourceWord(a: Pick<DetectedActivity, 'source' | 'device'>): string {
+  switch (statsSourceOf(a)) {
     case 'whoop': return 'WHOOP';
     case 'apple-watch': return 'Apple Watch';
     case 'apple-health': return 'Apple Health';

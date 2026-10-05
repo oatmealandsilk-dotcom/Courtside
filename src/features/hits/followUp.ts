@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { DetectedActivity, HitRequest, ID, PracticeSession, User } from '@/data/types';
 import { sourceOn } from '@/features/activity/recent';
+import { isTennisActivity } from '@/features/activity/workouts';
 import type { TennisFlags } from '@/features/activity/flags';
 import { localDay } from '@/features/practice/stats';
 
@@ -34,7 +35,8 @@ const played = (h: HitRequest, me: ID) => (h.authorId === me ? h.joinedIds.some(
 export function trackerFor(h: HitRequest, { me, activities, flags }: { me: ID; activities: DetectedActivity[]; flags: TennisFlags }): DetectedActivity | undefined {
   const from = Date.parse(h.startsAt) - 30 * 60_000;
   const to = Date.parse(h.startsAt) + 3 * 3_600_000;
-  return activities.find((a) => a.userId === me && (a.status === 'new' || a.status === 'logged') && sourceOn(a, flags)
+  // Tennis only: a run that morning is not the hit (Oct 5).
+  return activities.find((a) => a.userId === me && isTennisActivity(a) && (a.status === 'new' || a.status === 'logged') && sourceOn(a, flags)
     && Date.parse(a.startedAt) < to && Date.parse(a.endedAt) > from);
 }
 

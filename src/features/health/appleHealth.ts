@@ -2,6 +2,7 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { NativeModules, Platform, TurboModuleRegistry } from 'react-native';
 
 import type { DailyHealth } from '@/data/types';
+import { slugOfAppleWorkout } from '@/features/activity/workouts';
 
 /** A day of body numbers from the Health app. */
 export type BodyDay = Pick<DailyHealth, 'date'> & Partial<Pick<DailyHealth, 'restingHeartRate' | 'hrvMs' | 'sleepHours' | 'steps' | 'calories'>>;
@@ -15,7 +16,7 @@ export type BodyDay = Pick<DailyHealth, 'date'> & Partial<Pick<DailyHealth, 'res
 type Sample = { startDate: string; endDate: string; value: number };
 type SourcedSample = Sample & { sourceName?: string; sourceId?: string };
 /** One workout as the library hands it over (RCTAppleHealthKit+Queries.m, the workout branch of fetchSamplesOfType). */
-type AppleWorkout = { id: string; activityId: number; activityName: string; calories: number; start: string; end: string; sourceName: string; sourceId: string; device: string; tracked: boolean };
+type AppleWorkout = { id: string; activityId: number; activityName: string; calories: number; start: string; end: string; sourceName: string; sourceId: string; device: string; tracked: boolean; distance?: number; metadata?: unknown };
 type HrSample = { value: number; startDate: string; endDate: string; sourceId?: string; sourceName?: string };
 type HK = {
   initHealthKit: (perms: { permissions: { read: string[]; write: string[] } }, cb: (err: string | null) => void) => void;
@@ -78,8 +79,10 @@ const call = <T,>(fn: (cb: (err: string | null, r: T) => void) => void) => new P
 
 /**
  * Asks once for read access. Throws when refused or when HealthKit is not in this build.
- * `workouts` adds workouts and heart rate, for tennis sessions: asked only
- * from the tennis buttons, after CourtSide has said why (migration 58).
+ * `workouts` adds workouts and heart rate, for tennis sessions and (since
+ * Oct 5) every other workout: asked only from the Health page's buttons,
+ * after CourtSide has said why (migrations 58 and 107). Every workout type
+ * comes with the one Workout permission, its distance included.
  */
 export async function connectAppleHealth(opts: { workouts?: boolean } = {}): Promise<void> {
   const h = load();
@@ -96,40 +99,67 @@ const isoOf = (s: string) => new Date(s.replace(/([+-][0-9]{2})([0-9]{2})$/, '$1
 export type TennisWorkout = { id: string; startedAt: string; endedAt: string; minutes: number; kcal?: number; avgHr?: number; maxHr?: number; device?: string; tzOffsetMin: number };
 
 /**
- * Tennis workouts saved to Health since a moment, newest first, at most 10.
- * `skipWhoop` leaves out the ones the WHOOP app copied into Health, when
- * WHOOP already sends its own straight to the server. Never throws.
+ * Any workout from Health (owner, Oct 5): what it was as a short name
+ * ('tennis', 'run', 'strength'…; features/activity/workouts.ts), and its
+ * distance in metres when Health has one (runs, walks, rides, swims).
  */
-export async function readTennisWorkouts(sinceIso: string, opts: { skipWhoop?: boolean } = {}): Promise<TennisWorkout[]> {
+export type HealthWorkout = TennisWorkout & { sport: string; distanceM?: number };
+
+/** Miles as the library hands them over → whole metres, or nothing for a workout with no distance. */
+const metresOf = (miles: number | undefined) => (typeof miles === 'number' && Number.isFinite(miles) && miles > 0 ? Math.round(miles * 1609.344) : undefined);
+
+/**
+ * Workouts saved to Health since a moment, newest first, at most `limit`.
+ * `sports` keeps only those kinds ('tennis', or 'other' for everything else).
+ * `skipWhoopTennis` leaves out the tennis the WHOOP app copied into Health,
+ * when WHOOP already sends its own straight to the server; WHOOP sends only
+ * tennis, so its runs and lifts copied into Health are kept. `heartRate:
+ * false` skips the heart-rate read (one ask of Health per workout, the slow
+ * part), for a plain list. `skip` leaves out workouts by Health's id (ones
+ * already handed to the server), before their heart rate is read and before
+ * `limit` counts them. Never throws.
+ */
+export async function readWorkouts(sinceIso: string, opts: { sports?: ('tennis' | 'other')[]; skipWhoopTennis?: boolean; limit?: number; heartRate?: boolean; untilIso?: string; skip?: (id: string) => boolean } = {}): Promise<HealthWorkout[]> {
   const h = load();
   if (!h) return [];
   const settle = async <T,>(p: Promise<T>) => { try { return await p; } catch { return null; } };
+  const sports = opts.sports ?? ['tennis', 'other'];
   try {
     // getSamples, not getAnchoredWorkouts: the anchored query drops any workout saved without metadata.
-    const all = await settle(call<AppleWorkout[]>((cb) => h.getSamples({ type: 'Workout', startDate: sinceIso, endDate: new Date().toISOString(), ascending: false }, cb)));
-    // 48 is HKWorkoutActivityType.tennis.
-    const tennis = (all ?? [])
-      .filter((w) => w.activityId === 48 || w.activityName === 'Tennis')
-      .filter((w) => !opts.skipWhoop || !/whoop/i.test(`${w.sourceName} ${w.sourceId}`))
-      .slice(0, 10);
-    const out: TennisWorkout[] = [];
-    for (const w of tennis) {
+    const all = await settle(call<AppleWorkout[]>((cb) => h.getSamples({ type: 'Workout', startDate: sinceIso, endDate: opts.untilIso ?? new Date().toISOString(), ascending: false }, cb)));
+    const picked = (all ?? [])
+      .map((w) => ({ w, sport: slugOfAppleWorkout(w.activityId, w.activityName) }))
+      .filter(({ sport }) => sports.includes(sport === 'tennis' ? 'tennis' : 'other'))
+      .filter(({ w, sport }) => !(opts.skipWhoopTennis && sport === 'tennis' && /whoop/i.test(`${w.sourceName} ${w.sourceId}`)))
+      .filter(({ w }) => !opts.skip?.(w.id))
+      .slice(0, opts.limit ?? 40);
+    const out: HealthWorkout[] = [];
+    for (const { w, sport } of picked) {
       // A workout with an unreadable time is skipped on its own, not with the rest.
       let startedAt: string;
       let endedAt: string;
       try { startedAt = isoOf(w.start); endedAt = isoOf(w.end); } catch { continue; }
-      const hr = await settle(call<HrSample[]>((cb) => h.getHeartRateSamples({ startDate: w.start, endDate: w.end, ascending: true }, cb)));
-      // The workout's own watch first; any other source's beats only when it saved none.
-      const own = (hr ?? []).filter((s) => s.sourceId === w.sourceId);
-      const vals = (own.length ? own : hr ?? []).map((s) => s.value).filter((v) => v >= 30 && v <= 250);
+      let maxHr: number | undefined;
+      let avgHr: number | undefined;
+      if (opts.heartRate !== false) {
+        const hr = await settle(call<HrSample[]>((cb) => h.getHeartRateSamples({ startDate: w.start, endDate: w.end, ascending: true }, cb)));
+        // The workout's own watch first; any other source's beats only when it saved none.
+        const own = (hr ?? []).filter((s) => s.sourceId === w.sourceId);
+        const vals = (own.length ? own : hr ?? []).map((s) => s.value).filter((v) => v >= 30 && v <= 250);
+        maxHr = vals.length ? Math.round(Math.max(...vals)) : undefined;
+        avgHr = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : undefined;
+      }
       out.push({
         id: w.id,
+        sport,
         startedAt,
         endedAt,
         minutes: Math.round((Date.parse(endedAt) - Date.parse(startedAt)) / 60000),
         kcal: w.calories > 0 ? Math.round(w.calories) : undefined,
-        maxHr: vals.length ? Math.round(Math.max(...vals)) : undefined,
-        avgHr: vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : undefined,
+        // Tennis has no distance worth showing (a Watch counts the steps around the court).
+        distanceM: sport === 'tennis' ? undefined : metresOf(w.distance),
+        maxHr,
+        avgHr,
         device: w.device || w.sourceName || undefined,
         tzOffsetMin: -new Date(startedAt).getTimezoneOffset(),
       });
@@ -138,6 +168,16 @@ export async function readTennisWorkouts(sinceIso: string, opts: { skipWhoop?: b
   } catch {
     return [];
   }
+}
+
+/**
+ * Tennis workouts saved to Health since a moment, newest first, at most 10.
+ * `skipWhoop` leaves out the ones the WHOOP app copied into Health, when
+ * WHOOP already sends its own straight to the server. Never throws.
+ */
+export async function readTennisWorkouts(sinceIso: string, opts: { skipWhoop?: boolean } = {}): Promise<TennisWorkout[]> {
+  return (await readWorkouts(sinceIso, { sports: ['tennis'], skipWhoopTennis: opts.skipWhoop, limit: 10 }))
+    .map(({ sport: _sport, distanceM: _distance, ...w }) => w);
 }
 
 const dayOf = (iso: string) => iso.slice(0, 10);

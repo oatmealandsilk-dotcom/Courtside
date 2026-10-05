@@ -127,6 +127,13 @@ export interface PracticeSession {
   /** The tracker session this was logged from (migration 58). */
   activityId?: ID;
   /**
+   * What a fitness session logged from a workout was, as its short name
+   * ('run', 'strength'; see features/activity/workouts.ts), so it can still
+   * say "Run" after the workout's own record goes at 30 days (migration 107,
+   * column workout). Absent on tennis and on anything logged by hand.
+   */
+  workout?: string;
+  /**
    * When you accepted a tag with "Add to my sessions": the tagger's session
    * this copy came from (migration 62, column from_session_id). Accepting the
    * same session again finds this copy instead of making a second one.
@@ -231,12 +238,21 @@ export interface SessionPlayer {
   role: SessionTagRole;
 }
 
-/** A tennis session a tracker recorded, waiting to be logged. Private to its owner (migration 58). */
+/** A tennis session (or, from Apple Health, any workout) a tracker recorded, waiting to be logged. Private to its owner (migrations 58 and 107). */
 export interface DetectedActivity {
   id: ID;
   userId: ID;
   source: 'whoop' | 'apple-health' | 'health-connect' | TrackerId;
-  sport: 'tennis';
+  /**
+   * What it was, as a short name: 'tennis', or since migration 107 any
+   * workout from Apple Health ('run', 'walk', 'ride', 'strength', 'hiit',
+   * 'yoga', 'swim'…). Put into words by workoutName (features/activity/workouts.ts).
+   */
+  sport: string;
+  /** Its distance in metres, when Health had one (runs, walks, rides, swims; migration 107). */
+  distanceM?: number;
+  /** The tracker's own id for it (Apple Health's workout id), to match it against the phone's Health list. */
+  externalId?: string;
   startedAt: string;
   endedAt: string;
   /** Minutes east of UTC where it was played, when the tracker said. */
@@ -338,6 +354,14 @@ export interface SessionDetail {
   sessionId?: ID;
   /** What a session from your log was: practice, a match, drills or fitness. */
   kind?: PracticeSession['kind'];
+  /**
+   * A workout's short name ('run', 'strength'), on a fitness session from a
+   * workout (migration 107): the server writes it from the private row or
+   * the log, never the phone's word. Absent on tennis.
+   */
+  workout?: string;
+  /** A workout's distance in metres (runs, walks, rides, swims), written by the server from the private row (migration 107). Never on tennis. */
+  distanceM?: number;
   /** A match's result, when you said. */
   won?: boolean;
   /** A match's score, from the author's side, always as their log says it: only the server writes it (migration 91). */
@@ -705,6 +729,12 @@ export interface Integration {
   provides: string[];
   /** Tennis sessions switched on for this source (migration 58). */
   readsWorkouts?: boolean;
+  /**
+   * Every workout too, not only tennis (Apple Health; migration 107, column
+   * reads_all_workouts): its own yes to "Workouts from Apple Health", never
+   * carried over from the tennis one.
+   */
+  readsAllWorkouts?: boolean;
 }
 
 export interface DailyHealth {

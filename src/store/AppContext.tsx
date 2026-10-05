@@ -31,6 +31,8 @@ import { appleHealthAvailable, connectAppleHealth, readAppleHealth, readAppleNut
 import { isTracker, tennisFlags, TRACKERS } from '@/features/activity/flags';
 import { checkForTennis } from '@/features/activity/check';
 import { pickSource } from '@/features/activity/recent';
+import { isTennisActivity, workoutLine, workoutName } from '@/features/activity/workouts';
+import { mergePast, readOneWithHeartRate, readPastHealth, type PastWorkout } from '@/features/activity/pastWorkouts';
 import { postShare, reshare, sameShare } from '@/features/activity/healthShare';
 import { REFUSALS, maxTagsFor, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
 import { duration } from '@/lib/format';
@@ -609,7 +611,7 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    * `activityId`: the tracker session it was logged from, which then counts as logged.
    * `sets`: a match's score, your side first (migration 91); when one side took more sets, the result follows it.
    */
-  logSession: (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; sets?: MatchSet[]; opponent?: string; note?: string; day?: string; activityId?: ID }) => Promise<ID>;
+  logSession: (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; sets?: MatchSet[]; opponent?: string; note?: string; day?: string; activityId?: ID; workout?: string }) => Promise<ID>;
   deleteSession: (id: ID) => void;
   /** Post a "Looking for a hit". Throws a plain sentence if it cannot be posted. */
   /**
@@ -719,9 +721,11 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /**
    * Connects or disconnects a source. `tennis`: the screen has explained
    * tennis sessions and the person said Continue, so connecting may ask for
-   * workouts too (only while that source's switch is on).
+   * workouts too (only while that source's switch is on). `workouts`: what
+   * it explained was every workout ("Workouts from Apple Health"), so every
+   * workout is switched on too, not only tennis (migration 107).
    */
-  toggleIntegration: (provider: Integration['provider'], opts?: { tennis?: boolean }) => Promise<void>;
+  toggleIntegration: (provider: Integration['provider'], opts?: { tennis?: boolean; workouts?: boolean }) => Promise<void>;
   /** Pull the latest from a connected source (Apple Health reads the phone; WHOOP asks the server; Cronometer asks for a fresh export). */
   syncHealth: (provider: Integration['provider']) => Promise<void>;
   /* Tennis sessions from trackers (migration 58) */
@@ -734,15 +738,31 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    */
   fetchActivity: (id: ID) => Promise<DetectedActivity | null>;
   /**
-   * Looks for new tennis sessions (Apple Health on this phone, WHOOP on the
-   * server) when the app opens or comes back, and says so when one is found.
-   * Does nothing unless a source has tennis sessions on and its switch is on.
+   * Looks for new tennis sessions and (Oct 5) other workouts (Apple Health
+   * on this phone, WHOOP on the server) when the app opens, while it is open
+   * and when it comes back, and says so when one is found. Does nothing
+   * unless a source has sessions on and its switch is on. `tick`: one of
+   * the looks every couple of minutes while the app stays open, which reads
+   * your sessions and Notifications again only when something new came in.
    */
-  checkForActivities: (force?: boolean) => Promise<void>;
+  checkForActivities: (force?: boolean, tick?: boolean) => Promise<void>;
   /** "Not tennis": hides a session you have not logged, and its notification. */
   dismissActivity: (id: ID) => void;
-  /** Asks the source for workouts (Apple Health's sheet, or WHOOP's, Fitbit's, Oura's or Polar's sign-in again), then turns tennis sessions on for it. */
-  turnOnTennis: (provider: 'apple-health' | 'whoop' | TrackerId) => Promise<void>;
+  /**
+   * Past workouts (Oct 5): the last 30 days, from the server and, on an
+   * iPhone, the Health app, newest first. Handed back, never stored here.
+   * Null when the server could not be read.
+   */
+  pastWorkouts: () => Promise<PastWorkout[] | null>;
+  /** Log it on a past workout: hands one the server does not have yet to it (with its heart rate), and gives the id to open. Throws a plain sentence. */
+  logPastWorkout: (w: PastWorkout) => Promise<ID>;
+  /**
+   * Asks the source for workouts (Apple Health's sheet, or WHOOP's, Fitbit's,
+   * Oura's or Polar's sign-in again), then turns tennis sessions on for it.
+   * `workouts` (Apple Health; the person said yes to "Workouts from Apple
+   * Health"): every other workout as well (migration 107).
+   */
+  turnOnTennis: (provider: 'apple-health' | 'whoop' | TrackerId, opts?: { workouts?: boolean }) => Promise<void>;
   turnOffTennis: (provider: 'apple-health' | 'whoop' | TrackerId) => Promise<void>;
   /** If this person arrived through an invite link, it is claimed now: the two follow each other. */
   claimPendingReferral: () => Promise<void>;
@@ -1296,7 +1316,7 @@ function dropFixtures(state: AppState): AppState {
     healthHistory: state.healthIsReal ? state.healthHistory : [],
     // The list of what can be connected stays; the demo's "already connected,
     // synced two hours ago" does not.
-    integrations: state.healthIsReal ? state.integrations : state.integrations.map((i) => (i.connected || i.readsWorkouts ? { ...i, connected: false, lastSyncedAt: undefined, readsWorkouts: undefined } : i)),
+    integrations: state.healthIsReal ? state.integrations : state.integrations.map((i) => (i.connected || i.readsWorkouts ? { ...i, connected: false, lastSyncedAt: undefined, readsWorkouts: undefined, readsAllWorkouts: undefined } : i)),
     // The demo's card on file. Nobody should open Payments and find a Visa
     // they never added.
     paymentMethods: [],
@@ -1556,14 +1576,16 @@ function postsFollowLog(posts: Post[], me: ID, activityId: ID | null, log: Pract
       const won = log.kind === 'match' && log.won !== undefined ? log.won : undefined;
       // The log's score too (the server puts it on, migration 91).
       const sets = log.kind === 'match' && log.sets?.length ? log.sets : undefined;
-      const { won: _w, sets: _s, ...rest } = s;
-      return { ...p, session: { ...rest, kind: log.kind, focus: log.kind === 'match' && won !== undefined ? `Match · ${won ? 'Won' : 'Lost'}` : log.kind.charAt(0).toUpperCase() + log.kind.slice(1), sessionId: log.id, day: log.day, ...(won !== undefined ? { won } : {}), ...(sets ? { sets } : {}) } };
+      // A fitness session logged from a workout says what it was ("Run"), as the server writes it (migration 107).
+      const workout = log.kind === 'fitness' && log.workout ? log.workout : undefined;
+      const { won: _w, sets: _s, workout: _wk, ...rest } = s;
+      return { ...p, session: { ...rest, kind: log.kind, focus: log.kind === 'match' && won !== undefined ? `Match · ${won ? 'Won' : 'Lost'}` : workout ? workoutName(workout) : log.kind.charAt(0).toUpperCase() + log.kind.slice(1), sessionId: log.id, day: log.day, ...(won !== undefined ? { won } : {}), ...(sets ? { sets } : {}), ...(workout ? { workout } : {}) } };
     }
     if (deletedId && s.sessionId === deletedId) {
       changed = true;
-      // The names go with the log too, as the server takes them off.
+      // The names go with the log too, as the server takes them off. A workout's post goes back to what the workout was.
       const { kind: _k, won: _w, sessionId: _s, with: _with, sets: _sets, ...rest } = s;
-      return { ...p, session: { ...rest, focus: 'Tennis' } };
+      return { ...p, session: rest.workout ? { ...rest, kind: 'fitness' as const, focus: workoutName(rest.workout) } : { ...rest, focus: 'Tennis' } };
     }
     return p;
   });
@@ -1593,11 +1615,56 @@ const demoHandle: string | null = (() => {
   } catch { return null; }
 })();
 
-/** Demo build in a browser: `?toast=tennis` puts up the "Tennis detected" note for your waiting session, so the Log it flow can be seen. */
-const demoTennisToast: boolean = (() => {
-  if (isSupabaseConfigured || Platform.OS !== 'web') return false;
-  try { return new URLSearchParams(window.location.search).get('toast') === 'tennis'; } catch { return false; }
+/**
+ * Demo build in a browser: `?toast=tennis` puts up the "Tennis detected"
+ * note for your waiting session, `?toast=workout` the "Workout detected"
+ * one for your waiting run, so the Log it flow can be seen.
+ */
+const demoActivityToast: 'tennis' | 'workout' | null = (() => {
+  if (isSupabaseConfigured || Platform.OS !== 'web') return null;
+  try {
+    const asked = new URLSearchParams(window.location.search).get('toast');
+    return asked === 'tennis' || asked === 'workout' ? asked : null;
+  } catch { return null; }
 })();
+
+/**
+ * The note when a check files sessions. One: "Tennis detected" with its
+ * time, heart rate and source, as always, or "Workout detected" ("Run · 32
+ * min · 3.1 mi"), each with Log it, which opens the composer with it on
+ * (Oct 2): post it, or just log it. More than one at once (the past week,
+ * picked up once after the Oct 5 update, or a few since the app was last
+ * open): how many, and See them, which opens Notifications, where each one
+ * waits with its own row. Your own numbers, for you only: the lock-screen
+ * push never carries them (migration 58).
+ */
+function activityToast(count: number, newestFirst: DetectedActivity[], holdMs?: number) {
+  if (count > 1) {
+    const allTennis = newestFirst.length === count && newestFirst.every(isTennisActivity);
+    showToast({
+      title: `${count} ${allTennis ? 'tennis sessions' : 'workouts'} picked up`,
+      body: 'Each one is in Notifications, ready to log.',
+      glyph: 'session',
+      href: '/notifications',
+      action: { label: 'See them', onPress: () => router.push('/notifications') },
+      ...(holdMs ? { holdMs } : {}),
+    });
+    return;
+  }
+  const a = newestFirst[0];
+  if (!a) return;
+  const href = `/compose?activity=${a.id}`;
+  showToast({
+    title: isTennisActivity(a) ? 'Tennis detected' : 'Workout detected',
+    body: isTennisActivity(a)
+      ? [duration(a.minutes), a.maxHr ? `${a.maxHr} max bpm` : null, pickSource({ type: 'tracker', activity: a })].filter(Boolean).join(' · ')
+      : workoutLine(a),
+    glyph: 'session',
+    href,
+    action: { label: 'Log it', onPress: () => router.push(href as never) },
+    ...(holdMs ? { holdMs } : {}),
+  });
+}
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>({
@@ -2701,7 +2768,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [patchCurrentUser],
   );
 
-  const logSession = useCallback(async (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; sets?: MatchSet[]; opponent?: string; note?: string; day?: string; activityId?: ID }) => {
+  const logSession = useCallback(async (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; sets?: MatchSet[]; opponent?: string; note?: string; day?: string; activityId?: ID; workout?: string }) => {
     const me = requireUser();
     // A match's score (migration 91): the result follows the sets when one side took more, as the server makes it.
     const sets = input.kind === 'match' && input.sets?.length ? input.sets.slice(0, 5) : undefined;
@@ -2710,6 +2777,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       won: input.kind === 'match' ? setsWinner(sets) ?? input.won : undefined, ...(sets ? { sets } : {}),
       opponent: input.opponent?.trim() || undefined, note: input.note?.trim() || undefined,
       ...(input.activityId ? { activityId: input.activityId } : {}),
+      // What a fitness session logged from a workout was ('run', migration 107).
+      ...(input.kind === 'fitness' && input.workout ? { workout: input.workout } : {}),
       createdAt: new Date().toISOString(),
     };
     // A tracker session logged here counts as logged straight away (the database marks it too, migration 58).
@@ -6229,12 +6298,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // The three real sources: Apple Health (read on the phone), WHOOP (through
   // the server, which holds the keys), Cronometer (an export file). Without
   // Supabase the demo simply flips the flag.
-  const applyHealth = useCallback((got: { days: DailyHealth[]; connections: { provider: IntegrationProvider; lastSyncedAt?: string; readsWorkouts?: boolean }[] }) => {
+  const applyHealth = useCallback((got: { days: DailyHealth[]; connections: { provider: IntegrationProvider; lastSyncedAt?: string; readsWorkouts?: boolean; readsAllWorkouts?: boolean }[] }) => {
     setState((prev) => ({
       ...prev,
       healthHistory: got.days,
       healthIsReal: true,
-      integrations: withCatalog(prev.integrations).map((i) => { const c = got.connections.find((x) => x.provider === i.provider); return { ...i, connected: !!c, lastSyncedAt: c?.lastSyncedAt, readsWorkouts: c?.readsWorkouts }; }),
+      integrations: withCatalog(prev.integrations).map((i) => { const c = got.connections.find((x) => x.provider === i.provider); return { ...i, connected: !!c, lastSyncedAt: c?.lastSyncedAt, readsWorkouts: c?.readsWorkouts, readsAllWorkouts: c?.readsAllWorkouts }; }),
     }));
   }, []);
   /** Fetches your sources again; resolves with what came back (null when nothing did) for a step that cannot wait for the screen to redraw. */
@@ -6373,11 +6442,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
-   * Looks for new tennis sessions and says so when one turns up. `rows` are
-   * the sources as just fetched, for a step (turning tennis on) that cannot
-   * wait for the screen to catch up; otherwise the ones on screen.
+   * Looks for new tennis sessions and (Oct 5) other workouts, and says so
+   * when one turns up. `rows` are the sources as just fetched, for a step
+   * (turning sessions on) that cannot wait for the screen to catch up;
+   * otherwise the ones on screen. `tick` (the look every couple of minutes
+   * while the app stays open): your sessions and Notifications are read
+   * again only when something new reached the server.
    */
-  const checkWith = useCallback(async (force: boolean, rows: Pick<Integration, 'provider' | 'connected' | 'readsWorkouts'>[]) => {
+  const checkWith = useCallback(async (force: boolean, rows: Pick<Integration, 'provider' | 'connected' | 'readsWorkouts' | 'readsAllWorkouts'>[], tick = false) => {
     const me = stateRef.current.currentUserId;
     if (!live(me) || !stateRef.current.remoteLoaded) return;
     const on = (p: Integration['provider']) => rows.some((i) => i.provider === p && i.connected && i.readsWorkouts);
@@ -6385,46 +6457,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // migration 58): no need to ask the server anything.
     if (!on('apple-health') && !on('whoop') && !TRACKERS.some(on)) return;
     const flags = await tennisFlags(me);
-    const src = { apple: flags.apple && on('apple-health'), whoop: flags.whoop && on('whoop'), trackers: TRACKERS.filter((p) => flags[p] && on(p)) };
-    if (!src.apple && !src.whoop && !src.trackers.length) return;
-    const filed = await checkForTennis(me!, src, force);
+    // Every workout only on the person's own yes to it (readsAllWorkouts), never on the tennis one alone.
+    const all = rows.some((i) => i.provider === 'apple-health' && i.connected && i.readsWorkouts && i.readsAllWorkouts);
+    const src = { apple: flags.apple && on('apple-health'), appleWorkouts: flags.workoutsApple && all, whoop: flags.whoop && on('whoop'), trackers: TRACKERS.filter((p) => flags[p] && on(p)),
+      // The one-time look back over the past week (tennis too) only once 'flag:workouts-apple' is on for this
+      // person: that switch exists only once migration 107 keeps a week-old session as news, and it is tried
+      // on the owner's iPhone before everyone has it.
+      weekBack: flags.workoutsApple };
+    if (!src.apple && !src.appleWorkouts && !src.whoop && !src.trackers.length) return;
+    const { filed, news } = await checkForTennis(me!, src, force);
     if (stateRef.current.currentUserId !== me) return;
+    // A look while the app stays open that found nothing new: nothing to read again (the bell has its own small ask).
+    if (tick && !force && !news && !filed.length) return;
     const list = await remote.fetchActivities(me!);
     if (stateRef.current.currentUserId !== me) return;
     if (list) setState((prev) => ({ ...prev, detectedActivities: list }));
-    // The "Tennis detected" rows the server filed, into Notifications: after
-    // every check, as some are filed quietly (WHOOP's own alert, or while
-    // WHOOP was being connected) and never come back from the check itself.
+    // The "Tennis detected" and "Workout detected" rows the server filed, into
+    // Notifications: after every check, as some are filed quietly (WHOOP's own
+    // alert, or while WHOOP was being connected) and never come back from the check itself.
     const notes = await remote.fetchActivityNotes(me!);
     if (stateRef.current.currentUserId !== me) return;
     if (notes.length) setState((prev) => ({ ...prev, notifications: [...notes.filter((n) => !prev.notifications.some((x) => x.id === n.id)), ...prev.notifications] }));
     if (!filed.length) return;
-    // The newest one gets a banner; the rest wait in Notifications.
-    const a = (list ?? stateRef.current.detectedActivities).filter((x) => filed.includes(x.id)).sort((x, y) => (x.startedAt < y.startedAt ? 1 : -1))[0];
-    // Your own numbers, for you only: the lock-screen push never carries them (migration 58).
-    // "Log it" opens the composer with the session on it (Oct 2): post it, or just log it.
-    if (a) {
-      const href = `/compose?activity=${a.id}`;
-      showToast({
-        title: 'Tennis detected',
-        body: [duration(a.minutes), a.maxHr ? `${a.maxHr} max bpm` : null, pickSource({ type: 'tracker', activity: a })].filter(Boolean).join(' · '),
-        glyph: 'session',
-        href,
-        action: { label: 'Log it', onPress: () => router.push(href as never) },
-      });
-    }
+    activityToast(new Set(filed).size, (list ?? stateRef.current.detectedActivities).filter((x) => filed.includes(x.id)).sort((x, y) => (x.startedAt < y.startedAt ? 1 : -1)));
   }, []);
-  const checkForActivities = useCallback((force = false) => checkWith(force, stateRef.current.integrations), [checkWith]);
-  // The demo's own "Tennis detected" (see demoTennisToast), once the app is up.
+  const checkForActivities = useCallback((force = false, tick = false) => checkWith(force, stateRef.current.integrations, tick), [checkWith]);
+  // The demo's own "Tennis detected" or "Workout detected" (see demoActivityToast), once the app is up.
   const demoToastShown = useRef(false);
   useEffect(() => {
-    if (!demoTennisToast || demoToastShown.current || !state.ready || !state.currentUserId) return undefined;
-    const a = state.detectedActivities.find((x) => x.userId === state.currentUserId && x.status === 'new');
+    if (!demoActivityToast || demoToastShown.current || !state.ready || !state.currentUserId) return undefined;
+    const a = state.detectedActivities.find((x) => x.userId === state.currentUserId && x.status === 'new' && (demoActivityToast === 'tennis') === isTennisActivity(x));
     if (!a) return undefined;
     const t = setTimeout(() => {
       demoToastShown.current = true;
-      const href = `/compose?activity=${a.id}`;
-      showToast({ title: 'Tennis detected', body: [duration(a.minutes), a.maxHr ? `${a.maxHr} max bpm` : null, pickSource({ type: 'tracker', activity: a })].filter(Boolean).join(' · '), glyph: 'session', href, action: { label: 'Log it', onPress: () => router.push(href as never) }, holdMs: 12000 });
+      activityToast(1, [a], 12000);
     }, 2500);
     return () => clearTimeout(t);
   }, [state.ready, state.currentUserId, state.detectedActivities]);
@@ -6457,11 +6523,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (live(me)) void remote.dismissActivity(id);
   }, []);
 
-  const turnOnTennis = useCallback(async (provider: 'apple-health' | 'whoop' | TrackerId) => {
+  const pastWorkouts = useCallback(async (): Promise<PastWorkout[] | null> => {
     const me = stateRef.current.currentUserId;
+    if (!me) return [];
+    const switches = await tennisFlags(me);
+    const apple = stateRef.current.integrations.find((i) => i.provider === 'apple-health');
+    // Health's other workouts only on the person's own yes to every workout (migration 107).
+    const flags = { ...switches, workoutsApple: switches.workoutsApple && !!apple?.readsAllWorkouts };
+    // The demo: the sessions it holds, nothing from Health.
+    if (!live(me)) return mergePast(stateRef.current.detectedActivities, [], flags, me);
+    const whoopTennis = flags.whoop && stateRef.current.integrations.some((i) => i.provider === 'whoop' && i.connected && i.readsWorkouts);
+    const appleOn = !!apple?.connected && !!apple.readsWorkouts;
+    const [rows, health] = await Promise.all([
+      remote.fetchActivitiesSince(me, 31).catch(() => null),
+      appleOn && appleHealthAvailable() ? readPastHealth(flags, whoopTennis).catch(() => []) : Promise.resolve([]),
+    ]);
+    if (!rows || stateRef.current.currentUserId !== me) return null;
+    return mergePast(rows, health, flags, me);
+  }, []);
+
+  const logPastWorkout = useCallback(async (w: PastWorkout): Promise<ID> => {
+    const me = stateRef.current.currentUserId;
+    if (w.row) return w.row.id;
+    if (!live(me) || !w.health) throw new Error('That workout can’t be logged from here.');
+    // Handed to the server as the check would have, its heart rate read now.
+    const full = (await readOneWithHeartRate(w.health).catch(() => null)) ?? w.health;
+    const r = await remote.reportActivity(full.id, {
+      sport: full.sport, started_at: full.startedAt, ended_at: full.endedAt, tz_offset_min: full.tzOffsetMin,
+      avg_hr: full.avgHr ?? null, max_hr: full.maxHr ?? null, kcal: full.kcal ?? null, device: full.device ?? null,
+      ...(full.distanceM ? { distance_m: full.distanceM } : {}),
+    });
+    if (r === 'error') throw new Error('That didn’t go through. Try again.');
+    if (!r) throw new Error('That workout can’t be logged. It may be too old, or too short.');
+    void refreshActivities();
+    return r.id;
+  }, [refreshActivities]);
+
+  const turnOnTennis = useCallback(async (provider: 'apple-health' | 'whoop' | TrackerId, opts: { workouts?: boolean } = {}) => {
+    const me = stateRef.current.currentUserId;
+    // Every workout too: only Apple Health, and only on the person's own yes to it.
+    const all = provider === 'apple-health' && opts.workouts === true;
     if (!live(me)) {
       // The demo: switched on at once.
-      setState((prev) => ({ ...prev, integrations: prev.integrations.map((i) => (i.provider === provider ? { ...i, connected: true, readsWorkouts: true, lastSyncedAt: i.lastSyncedAt ?? new Date().toISOString() } : i)) }));
+      setState((prev) => ({ ...prev, integrations: prev.integrations.map((i) => (i.provider === provider ? { ...i, connected: true, readsWorkouts: true, ...(all ? { readsAllWorkouts: true } : {}), lastSyncedAt: i.lastSyncedAt ?? new Date().toISOString() } : i)) }));
       haptics.commit();
       return;
     }
@@ -6469,7 +6573,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // The phone's own Health sheet, now asking for workouts and heart rate too.
       await connectAppleHealth({ workouts: true });
       if (!stateRef.current.integrations.find((i) => i.provider === 'apple-health')?.connected) await pullFrom(me!, 'apple-health');
-      await remote.setHealthConnection(me!, 'apple-health', true, { readsWorkouts: true });
+      await remote.setHealthConnection(me!, 'apple-health', true, { readsWorkouts: true, ...(all ? { readsAllWorkouts: true } : {}) });
     } else if (provider === 'whoop') {
       await connectWhoop(true);
     } else {
@@ -6483,16 +6587,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const turnOffTennis = useCallback(async (provider: 'apple-health' | 'whoop' | TrackerId) => {
     const me = stateRef.current.currentUserId;
     if (!live(me)) {
-      setState((prev) => ({ ...prev, integrations: prev.integrations.map((i) => (i.provider === provider ? { ...i, readsWorkouts: false } : i)) }));
+      setState((prev) => ({ ...prev, integrations: prev.integrations.map((i) => (i.provider === provider ? { ...i, readsWorkouts: false, readsAllWorkouts: false } : i)) }));
       haptics.untap();
       return;
     }
-    await remote.setHealthConnection(me!, provider, true, { readsWorkouts: false });
+    // Off is off for both: tennis, and every other workout when that was on too.
+    const all = !!stateRef.current.integrations.find((i) => i.provider === provider)?.readsAllWorkouts;
+    await remote.setHealthConnection(me!, provider, true, { readsWorkouts: false, ...(all ? { readsAllWorkouts: false } : {}) });
     haptics.untap();
     await reloadHealth();
   }, [reloadHealth]);
 
-  const toggleIntegration = useCallback(async (provider: Integration['provider'], opts: { tennis?: boolean } = {}) => {
+  const toggleIntegration = useCallback(async (provider: Integration['provider'], opts: { tennis?: boolean; workouts?: boolean } = {}) => {
     const me = stateRef.current.currentUserId;
     const current = withCatalog(stateRef.current.integrations).find((i) => i.provider === provider);
     if (!current) return;
@@ -6515,10 +6621,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // the screen said so first (it may not have, if it had not heard about the switch yet).
     let tennis = false;
     if (provider === 'apple-health') {
-      tennis = opts.tennis === true && (await tennisFlags(me)).apple;
+      const f = await tennisFlags(me);
+      // Tennis, or (migration 107) every workout: the same Workout permission either way.
+      tennis = opts.tennis === true && (f.apple || f.workoutsApple);
+      // Every workout only when that is what the screen explained ("Workouts from Apple Health").
+      const all = tennis && opts.workouts === true && f.workoutsApple;
       await connectAppleHealth(tennis ? { workouts: true } : {});
       await pullFrom(me!, provider);
-      if (tennis) await remote.setHealthConnection(me!, provider, true, { readsWorkouts: true });
+      if (tennis) await remote.setHealthConnection(me!, provider, true, { readsWorkouts: true, ...(all ? { readsAllWorkouts: true } : {}) });
     } else if (provider === 'whoop') {
       tennis = opts.tennis === true && (await tennisFlags(me)).whoop;
       await connectWhoop(tennis);
@@ -6656,6 +6766,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       fetchActivity,
       checkForActivities,
       dismissActivity,
+      pastWorkouts,
+      logPastWorkout,
       turnOnTennis,
       turnOffTennis,
       claimPendingReferral,
@@ -6848,6 +6960,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       fetchActivity,
       checkForActivities,
       dismissActivity,
+      pastWorkouts,
+      logPastWorkout,
       turnOnTennis,
       turnOffTennis,
       claimPendingReferral,

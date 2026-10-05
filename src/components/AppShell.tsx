@@ -49,6 +49,8 @@ const routes = Object.keys(paths).map(name => ({ key: name, name }));
  */
 const SHEETS = new Set(['/compose', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/pick-court', '/ask', '/post-menu', '/edit-post', '/messages/new', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility']);
 const TAB_ORDER: string[] = Object.values(paths);
+/** How often an open app looks for new workouts and new Notifications rows: just over the two minutes the Apple Health look waits between looks. */
+const LIVE_LOOK_MS = 125_000;
 /** The pages that can take a clip's stage (see commentStage): its comments, and its session stats. */
 const STAGE_ROUTES = new Set(['/comments', '/session-stats']);
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -120,14 +122,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     const t = setTimeout(() => { void recoverChatPick().then((chatId) => { if (chatId) router.push(`/messages/${chatId}`); }); }, 1200);
     return () => clearTimeout(t);
   }, [currentUserId, remoteLoaded, onboardingComplete]);
-  // Tennis sessions from a tracker: looked for when the app opens and each
-  // time it comes back to the front. It does nothing unless a source has
-  // tennis sessions on and its server switch is on (migration 58).
+  // Tennis sessions and (Oct 5) other workouts from a tracker: looked for
+  // when the app opens, each time it comes back to the front, and every
+  // couple of minutes while it stays open on screen (the look itself is
+  // held to once every two minutes for Apple Health, once an hour for WHOOP
+  // and the others). It does nothing unless a source has sessions on and its
+  // server switch is on (migration 58).
   useEffect(() => {
     if (!isSupabaseConfigured || !currentUserId || !remoteLoaded || !onboardingComplete || !healthIsReal) return;
     void actions.checkForActivities();
     const sub = AppState.addEventListener('change', (s) => { if (s === 'active') void actions.checkForActivities(); });
     return () => sub.remove();
+  }, [currentUserId, remoteLoaded, onboardingComplete, healthIsReal]); // eslint-disable-line react-hooks/exhaustive-deps
+  // While the app stays open on screen, new rows in Notifications arrive
+  // without closing and opening it (Oct 5): a workout just found, WHOOP's own
+  // alert, anything else filed meanwhile. One small ask every two minutes
+  // and a bit, only while the app is in front. The workouts look on a tick
+  // hands over only workouts not handed over yet, and reads your sessions
+  // again only when one was.
+  useEffect(() => {
+    if (!isSupabaseConfigured || !currentUserId || !remoteLoaded || !onboardingComplete) return undefined;
+    const tick = setInterval(() => {
+      if (AppState.currentState !== 'active') return;
+      if (healthIsReal) void actions.checkForActivities(false, true);
+      void actions.catchUpNotifications();
+    }, LIVE_LOOK_MS);
+    return () => clearInterval(tick);
   }, [currentUserId, remoteLoaded, onboardingComplete, healthIsReal]); // eslint-disable-line react-hooks/exhaustive-deps
   // The age check: an account with no birthday on file is asked for one
   // before anything else, wherever it opens. (An answer given on this phone
@@ -189,7 +209,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (shown === paths.index) selected.current = TAB_ORDER.indexOf(paths.index);
   else if (shown === paths.discuss || shown.startsWith('/question/') || shown.startsWith('/user/')) selected.current = TAB_ORDER.indexOf(paths.discuss);
   else if (shown === paths.coaches || shown.startsWith('/coach/') || shown.startsWith('/coach-') || shown === '/ai-coach' || shown === '/booking-done') selected.current = TAB_ORDER.indexOf(paths.coaches);
-  else if (shown === paths.profile || ['/settings', '/edit-profile', '/change-handle', '/profile-details', '/your-sessions'].includes(shown)) selected.current = TAB_ORDER.indexOf(paths.profile);
+  else if (shown === paths.profile || ['/settings', '/edit-profile', '/change-handle', '/profile-details', '/your-sessions', '/workouts'].includes(shown)) selected.current = TAB_ORDER.indexOf(paths.profile);
   // Pages with their own bottom controls (a composer, an editor, a thread's
   // message box) run without the phone's floating bar. On a computer the
   // menu sits at the side, out of their way, so it stays, the way

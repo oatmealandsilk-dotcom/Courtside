@@ -1,5 +1,6 @@
 import type { DetectedActivity, ID, Post, PracticeSession, SessionDetail, User } from '@/data/types';
-import { kindWord, sessionFromLogged, statsSourceOf } from '@/features/activity/format';
+import { sessionFromLogged, statsSourceOf, whatWord } from '@/features/activity/format';
+import { isTennisActivity } from '@/features/activity/workouts';
 import { notKnownAdult } from '@/features/players/age';
 
 /*
@@ -35,10 +36,10 @@ function dateWords(day: string): string {
   return new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }).replace(/,/g, '');
 }
 
-/** "MATCH · FRI OCT 2", or just "TENNIS" with no day to go on. */
-export function storyEyebrow(s: Pick<SessionDetail, 'kind' | 'day'>, fallbackDay?: string): string {
+/** "MATCH · FRI OCT 2", "RUN · SAT OCT 4", or just "TENNIS" with no day to go on. */
+export function storyEyebrow(s: Pick<SessionDetail, 'kind' | 'day' | 'workout'>, fallbackDay?: string): string {
   const day = s.day ?? fallbackDay;
-  return (day ? `${kindWord(s)} · ${dateWords(day)}` : kindWord(s)).toUpperCase();
+  return (day ? `${whatWord(s)} · ${dateWords(day)}` : whatWord(s)).toUpperCase();
 }
 
 /** A place only for a known adult; a long name is cut by the picture itself, on one line. */
@@ -69,12 +70,14 @@ export function storyFromPost(post: Post, me: User | undefined): SessionStory | 
 /**
  * A session from your own log that is not on a post: its time and what it
  * was, and nothing else. From a tracker that is still switched on, its
- * attribution too ("Data by WHOOP"), since the time is the tracker's.
+ * attribution too ("Data by WHOOP"), since the time is the tracker's, and a
+ * workout's distance (a run's miles, migration 107: not a health number).
  */
 export function storyFromLog(s: PracticeSession, me: User | undefined, activity?: DetectedActivity): SessionStory {
   const session: SessionDetail = {
     ...sessionFromLogged(s),
     ...(activity ? { activityId: activity.id, source: statsSourceOf(activity) } : {}),
+    ...(activity && !isTennisActivity(activity) && s.kind === 'fitness' && s.workout && activity.distanceM ? { distanceM: activity.distanceM } : {}),
   };
   // A session logged from a hit keeps where it was in its note: "At Alder Park".
   const at = s.note?.startsWith('At ') ? s.note.slice(3).split(' · ')[0] : undefined;
