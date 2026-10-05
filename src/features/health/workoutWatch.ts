@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { requireOptionalNativeModule, type EventSubscription } from 'expo-modules-core';
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 /*
  * "Workout detected" on the lock screen the moment Apple Health saves a
@@ -104,6 +104,36 @@ export function onWorkoutInFront(listener: (w: WatchedWorkout) => void): () => v
   } catch {
     return () => undefined;
   }
+}
+
+/**
+ * The module's alerts still showing on the lock screen and in Notification
+ * Center (the person opened CourtSide from its icon instead of tapping one):
+ * each one's workout (Health's id) and the alert's own id. Empty on a build
+ * without the watching. Never throws.
+ */
+export async function presentedWorkoutAlerts(): Promise<{ workoutId: string; alertId: string }[]> {
+  if (!mod()) return [];
+  try {
+    const shown = await Notifications.getPresentedNotificationsAsync();
+    return shown.flatMap((n) => {
+      const w = workoutOf(n.request.content.data);
+      return w ? [{ workoutId: w.id, alertId: n.request.identifier }] : [];
+    });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Takes these alerts off the lock screen and Notification Center (their
+ * workouts are in Notifications now). Only with the app on screen: a look in
+ * the background (Health woke the app, and its alert just went up) leaves
+ * the alert for the person to see.
+ */
+export function dismissWorkoutAlerts(alertIds: string[]) {
+  if (!mod() || !alertIds.length || AppState.currentState !== 'active') return;
+  for (const id of alertIds) void Notifications.dismissNotificationAsync(id).catch(() => undefined);
 }
 
 /** The last alert tap handed over, kept across the app reloading itself for an instant update (as push.ts does). */

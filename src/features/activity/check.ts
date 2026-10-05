@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { remote } from '@/data/remote';
 import type { ID, TrackerId } from '@/data/types';
 import { appleHealthAvailable, readWorkouts, type HealthWorkout } from '@/features/health/appleHealth';
+import { dismissWorkoutAlerts, presentedWorkoutAlerts } from '@/features/health/workoutWatch';
 
 /*
  * The check for new tennis sessions and (since Oct 5) other workouts, run
@@ -34,7 +35,10 @@ import { appleHealthAvailable, readWorkouts, type HealthWorkout } from '@/featur
  * the moment Health saves a workout, app closed or not (features/health/
  * workoutWatch). A tap on it hands that one workout over here
  * (reportFromAlert), and with the app open the module asks for a look at
- * once instead of an alert (useWorkoutWatch).
+ * once instead of an alert (useWorkoutWatch). Opened from its icon instead,
+ * with such an alert still showing: the look files that workout without its
+ * in-app note (the lock screen already said it), and takes the alert away
+ * once its row is in Notifications.
  *
  * No .web twin: Apple Health is never available in a browser, and the WHOOP
  * call works there as it does on a phone.
@@ -62,7 +66,8 @@ function forgetOld(now: number) {
  * Workouts (by Health's id) whose lock-screen alert was just tapped: the tap
  * opens Log it on the workout itself, so a look that finds it in the same
  * moment (the app coming to the front) files it without its in-app note on
- * top of that page.
+ * top of that page. Also those whose alert is still showing when a look
+ * runs: the lock screen already said it, so no second note in the app.
  */
 const openedFromAlert = new Set<string>();
 export function openingFromAlert(healthId: string) { openedFromAlert.add(healthId); }
@@ -142,6 +147,9 @@ export function checkForTennis(me: ID, src: CheckSources, force = false): Promis
         const since = new Date((week || last === null ? now - WEEK : last) - LAG).toISOString();
         const sports: ('tennis' | 'other')[] = [...(src.apple ? ['tennis' as const] : []), ...(src.appleWorkouts ? ['other' as const] : [])];
         let failed = false;
+        // The phone's own alerts still showing (build 15): their workouts get no in-app note on top.
+        const shown = await presentedWorkoutAlerts();
+        for (const a of shown) openingFromAlert(a.workoutId);
         // At most 40 a look (the newest not handed over yet), well inside the server's 60 a day.
         const fresh = await readWorkouts(since, { sports, skipWhoopTennis: src.whoop, limit: 40, skip: (id) => handed.has(`${me}:${id}`) });
         for (const w of fresh) {
@@ -152,6 +160,8 @@ export function checkForTennis(me: ID, src: CheckSources, force = false): Promis
           if (r) news = true;
           if (r?.notify) { filed.push(r.id); fromHealth.set(r.id, w.id); }
         }
+        // Those alerts' workouts are with the server now (each with its row in Notifications): off the lock screen.
+        dismissWorkoutAlerts(shown.filter((a) => handed.has(`${me}:${a.workoutId}`)).map((a) => a.alertId));
         // A workout that did not get through is read again next time.
         if (!failed) {
           await noteLook(key, now);

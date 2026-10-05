@@ -55,6 +55,7 @@ import type { TeenMap } from '@/features/players/mapPrivacy';
 import { show as showToast } from '@/lib/toast';
 import { opensAtFor } from '@/features/hits/audience';
 import { forgetPushToken, registerForPush } from '@/features/push/push';
+import { stopWorkoutWatch } from '@/features/health/workoutWatch';
 import { framesAt } from '@/features/compose/frames';
 import { noteStep, reportError } from '@/lib/crashReporting';
 import { noteAppOpen } from '@/features/usage/appOpens';
@@ -2411,7 +2412,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const { id, email } = session.user;
         void loadRemote(id, email).then((ok) => { if (!ok && !cancelled && !stateRef.current.remoteLoaded && stateRef.current.currentUserId === id) void loadRemote(id, email); });
       }
-      if (event === 'SIGNED_OUT') setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, termsVersion: undefined, ...freshAccountSettings() }));
+      if (event === 'SIGNED_OUT') {
+        // Truly signed out (the session was ended, here or from another phone): this
+        // iPhone's own "Workout detected" alerts stop too (build 15, workoutWatch).
+        void stopWorkoutWatch();
+        setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, termsVersion: undefined, ...freshAccountSettings() }));
+      }
     });
     // Tokens only refresh while the app is in front.
     const sub = DeviceState.addEventListener('change', (status) => {
@@ -2697,6 +2703,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await forgetPushToken();
       try { await remoteAuth.signOutEverywhere(); } catch (err) { void registerForPush(); throw err; }
     }
+    // Nor this iPhone's own "Workout detected" alerts (build 15, workoutWatch).
+    void stopWorkoutWatch();
     // Everywhere includes this device: the remembered login is gone too.
     const savedAccounts = me ? await forgetAccount(me) : stateRef.current.savedAccounts;
     // Nothing of the account stays on the device (see signOut), its saved copy included.
@@ -2731,6 +2739,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // An account made with Apple: Apple's sheet confirms once more, so the server can revoke
     // the Sign in with Apple link too (best effort: closing the sheet still deletes the account).
     if (isSupabaseConfigured) await remoteAuth.deleteAccount(await remoteAuth.appleCodeForDelete());
+    // Nor this iPhone's own "Workout detected" alerts for it (build 15, workoutWatch).
+    void stopWorkoutWatch();
     // A deleted account has no business in the remembered-logins list.
     const savedAccounts = me ? await forgetAccount(me) : stateRef.current.savedAccounts;
     // Nor anything of it on the device (see signOut), its saved copy included.
@@ -2779,6 +2789,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void forgetLinkPreviews();
     // This phone stops getting the account's alerts before the session ends (the removal needs it).
     if (isSupabaseConfigured) void forgetPushToken().finally(() => remoteAuth.signOut());
+    // Nor this iPhone's own "Workout detected" alerts (build 15, workoutWatch): only signing out
+    // stops them, never an open that merely could not read the session (useWorkoutWatch).
+    void stopWorkoutWatch();
     // One account's health, courts and settings never carry over to the next one signed in.
     setState(signedOut);
   }, []);
@@ -5476,6 +5489,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         if (isSupabaseConfigured) await remoteAuth.deleteAccount();
       } catch { /* the sign-out below still takes it off this phone */ }
+      void stopWorkoutWatch();
       const savedAccounts = await forgetAccount(me).catch(() => stateRef.current.savedAccounts);
       setState((prev) => ({ ...signedOut(prev), savedAccounts }));
       void clearSnapshot(me);

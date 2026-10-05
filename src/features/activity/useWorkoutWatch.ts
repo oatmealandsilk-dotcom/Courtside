@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 
 import { openingFromAlert } from '@/features/activity/check';
-import { isDemo, tennisFlags } from '@/features/activity/flags';
+import { isDemo, tennisFlagsKnown } from '@/features/activity/flags';
 import { listenForWorkoutAlertTaps, onWorkoutInFront, startWorkoutWatch, stopWorkoutWatch, workoutWatchAvailable, type WatchedWorkout } from '@/features/health/workoutWatch';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { useApp } from '@/store/AppContext';
@@ -14,8 +14,13 @@ import { useApp } from '@/store/AppContext';
  * - The watching follows the person's switches: on while Apple Health's
  *   tennis sessions (or every workout) are on and the server's switch for
  *   them is on, told again each time the app opens; off when they are turned
- *   off or the person signs out. Settings' alert switch for sessions
- *   (push_activity) is passed along, as the server honours it for WHOOP.
+ *   off, or the server says its switch is off. Settings' alert switch for
+ *   sessions (push_activity) is passed along, as the server honours it for
+ *   WHOOP. Signing out (or deleting the account) stops it in the store
+ *   itself (AppContext), not here: an open with no session to be read (a
+ *   wake in the background, offline, with the sign-in out of date) looks
+ *   signed out here, and must leave the watching exactly as it was. So must
+ *   an open where the server's switches could not be asked.
  * - With the app open on screen, a new workout is looked for at once, and
  *   the app's own note ("Workout detected · Log it") shows instead of an alert.
  * - A tap on the alert hands that workout to the server, as the check does,
@@ -26,7 +31,7 @@ import { useApp } from '@/store/AppContext';
  * On a build without the watching (14 and older, Android, a browser) it does nothing.
  */
 export function useWorkoutWatch({ settled }: { settled: boolean }) {
-  const { currentUserId, authResolved, remoteLoaded, onboardingComplete, healthIsReal, integrations, prefs, actions } = useApp();
+  const { currentUserId, remoteLoaded, onboardingComplete, healthIsReal, integrations, prefs, actions } = useApp();
   const available = workoutWatchAvailable();
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
@@ -41,21 +46,22 @@ export function useWorkoutWatch({ settled }: { settled: boolean }) {
   const ready = isSupabaseConfigured && !!currentUserId && !isDemo(currentUserId) && remoteLoaded && onboardingComplete && !!healthIsReal;
 
   useEffect(() => {
-    if (!available || !authResolved) return undefined;
-    // Signed out: no alerts for an account that is not here.
-    if (!currentUserId) { void stopWorkoutWatch(); return undefined; }
-    if (!ready) return undefined;
+    // Not signed in and loaded (or not yet): left as it is (see above).
+    if (!available || !ready) return undefined;
+    // Their own switch is off (read from the server just now, with the rest of their Health connections).
+    if (!appleTennis) { void stopWorkoutWatch(); return undefined; }
     let stale = false;
-    void tennisFlags(currentUserId).then((f) => {
-      if (stale) return;
+    void tennisFlagsKnown(currentUserId).then((f) => {
+      // The server could not be asked: left as it is, until an open that can ask.
+      if (stale || !f) return;
       // The same rules as the check's (checkWith in AppContext): tennis, and every workout only on its own yes.
-      const tennis = f.apple && appleTennis;
+      const tennis = f.apple;
       const workouts = f.workoutsApple && appleAll;
       if (tennis || workouts) void startWorkoutWatch({ tennis, workouts, skipWhoopTennis: f.whoop && whoopTennis, alerts });
       else void stopWorkoutWatch();
     });
     return () => { stale = true; };
-  }, [available, authResolved, currentUserId, ready, appleTennis, appleAll, whoopTennis, alerts]);
+  }, [available, currentUserId, ready, appleTennis, appleAll, whoopTennis, alerts]);
 
   // Open on screen: look now (Apple Health's look is otherwise held to once every two minutes).
   useEffect(() => {

@@ -1,4 +1,5 @@
 import ExpoModulesCore
+import Foundation
 
 /**
  * The app's handle on WorkoutWatcher (see there): src/features/health/workoutWatch.ts
@@ -12,6 +13,13 @@ import ExpoModulesCore
  * missing and does nothing (requireOptionalNativeModule).
  */
 public class WorkoutWatchModule: Module {
+  /**
+   * This instance's mark on the watcher's listener. When the app reloads (an
+   * instant update, or in development) the old instance's goodbye can arrive
+   * after the new one has started listening: it only ever clears its own.
+   */
+  private let listenerToken = UUID()
+
   public func definition() -> ModuleDefinition {
     Name("WorkoutWatch")
 
@@ -25,19 +33,19 @@ public class WorkoutWatchModule: Module {
       WorkoutWatcher.shared.stop()
     }
 
-    OnStartObserving("onWorkout") { [weak self] in
+    OnStartObserving("onWorkout") { [weak self, token = self.listenerToken] in
       let ref = WeakModule(self)
-      WorkoutWatcher.shared.setInFrontHandler { payload in
+      WorkoutWatcher.shared.setInFrontHandler(owner: token) { payload in
         ref.module?.sendEvent("onWorkout", payload.mapValues { Optional($0) })
       }
     }
 
-    OnStopObserving("onWorkout") {
-      WorkoutWatcher.shared.setInFrontHandler(nil)
+    OnStopObserving("onWorkout") { [token = self.listenerToken] in
+      WorkoutWatcher.shared.clearInFrontHandler(owner: token)
     }
 
-    OnDestroy {
-      WorkoutWatcher.shared.setInFrontHandler(nil)
+    OnDestroy { [token = self.listenerToken] in
+      WorkoutWatcher.shared.clearInFrontHandler(owner: token)
     }
   }
 }

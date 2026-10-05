@@ -23,6 +23,7 @@ import { confirm } from '@/lib/confirm';
 import { replayTour } from '@/features/tour/tourStore';
 import { TOUR_ON } from '@/features/tour/tourSeen';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
+import { workoutWatchAvailable } from '@/features/health/workoutWatch';
 import { notKnownAdult } from '@/features/players/age';
 import { HitGlyph } from '@/components/HitGlyph';
 
@@ -49,7 +50,7 @@ interface Row {
  */
 export default function Settings() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras, mapLive, mapVisibility, teenMap, contactsFindableLive } = useApp();
+  const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras, mapLive, mapVisibility, teenMap, contactsFindableLive, integrations } = useApp();
   const [locationNote, setLocationNote] = useState('');
   const toggleLocation = async (next: boolean) => {
     // Never said who can see you on the map (migration 63): that comes first, the same as on the map.
@@ -64,8 +65,14 @@ export default function Settings() {
   // How many joined through your link or code, for the Invites row (Oct 5, owner: partners looked for it in Settings).
   const [joined, setJoined] = useState<number | null>(null);
   useEffect(() => { void actions.countReferrals().then(setJoined).catch(() => setJoined(null)); }, [actions]);
-  // The tennis-session alert switch shows once WHOOP's tennis sessions are switched on (migration 58).
+  // The tennis-session alert switch shows once WHOOP's tennis sessions are switched on (migration 58),
+  // and on an iPhone that puts up its own alert after each Apple Health workout (build 15,
+  // features/health/workoutWatch), which obeys the same switch.
   const tennis = useTennisFlags();
+  const appleRow = integrations.find((i) => i.provider === 'apple-health');
+  const appleAlerts = workoutWatchAvailable() && !!appleRow?.connected && !!appleRow.readsWorkouts && (tennis.apple || (!!appleRow.readsAllWorkouts && tennis.workoutsApple));
+  const appleAllAlerts = appleAlerts && !!appleRow?.readsAllWorkouts && tennis.workoutsApple;
+  const activityAlerts = tennis.whoop || appleAlerts;
   const mapAdult = !!currentUser && !notKnownAdult(currentUser);
   // A teen on the map (migration 78) can hear when a friend who follows them back is up for a hit.
   const mapTeen = onTeenMap(currentUser, teenMap);
@@ -134,7 +141,12 @@ export default function Settings() {
         { icon: 'paper-plane-outline' as const, label: 'Messages', toggle: { value: prefs.pushMessages, onChange: (v: boolean) => actions.setPref('pushMessages', v) } },
         { icon: 'heart-outline' as const, label: 'Likes and comments', toggle: { value: prefs.pushLikes, onChange: (v: boolean) => actions.setPref('pushLikes', v) } },
         { icon: 'chatbubble-ellipses-outline' as const, label: 'Coach replies', toggle: { value: prefs.pushCoach, onChange: (v: boolean) => actions.setPref('pushCoach', v) } },
-        ...(tennis.whoop ? [{ icon: 'stopwatch-outline' as const, label: 'Tennis sessions', detail: 'From WHOOP', toggle: { value: prefs.pushActivity, onChange: (v: boolean) => actions.setPref('pushActivity', v) } }] : []),
+        ...(activityAlerts ? [{
+          icon: 'stopwatch-outline' as const,
+          label: appleAllAlerts ? 'Workouts' : 'Tennis sessions',
+          detail: tennis.whoop && appleAlerts ? 'From WHOOP and Apple Health' : appleAlerts ? 'From Apple Health' : 'From WHOOP',
+          toggle: { value: prefs.pushActivity, onChange: (v: boolean) => actions.setPref('pushActivity', v) },
+        }] : []),
       ],
     }]),
     // The map's own alerts, each with its own switch. On a computer too: they also land in your Notifications.

@@ -19,19 +19,37 @@ import UserNotifications
  *   (migration 107). Never a number on the lock screen.
  * - Only one that ended in the last 12 hours, 5 minutes to 10 hours long
  *   (the server keeps no other), never between 10pm and 7am here, tennis
- *   only unless the person said yes to every workout, never WHOOP's copy of
- *   a tennis session when WHOOP sends its own alert, none when Settings'
- *   alert switch for sessions is off, and each session once (also when two
- *   apps saved it: the Watch's run and Strava's copy of it).
+ *   only unless the person said yes to every workout, no tennis at all when
+ *   WHOOP already sends its own tennis alert (one session, one alert), none
+ *   when Settings' alert switch for sessions is off, and each session once
+ *   (also when two apps saved it: the Watch's run and Strava's copy of it).
  * - With CourtSide open on screen, no alert: the app is told instead, and
  *   its own check puts up its own "Workout detected" note at once.
  *
+ * A locked phone: Health keeps its data sealed until the phone is unlocked,
+ * which is the usual state when a Watch workout reaches a phone in a pocket.
+ * Such a read is kept waiting and made again at the unlock (while iOS still
+ * lets the app run, about half a minute), or else at the next wake, launch
+ * or open. So with the phone locked the alert can come at the unlock, or
+ * only with the next workout Health saves.
+ *
+ * Each time the app comes to the front, whatever Health saved meanwhile is
+ * read too (as seen, no alert: the app shows its own note), so a session
+ * the app already filed never buzzes later.
+ *
  * What it may do is saved by the app (WorkoutWatchModule's start, from
  * src/features/health/workoutWatch.ts) whenever the person turns sessions
- * on, and each time the app opens; stop forgets it all. Nothing here ever
- * asks for Health or for alerts: those are the app's own questions. The
+ * on, and each time the app opens; stop forgets it all. Switches the app has
+ * not confirmed for 30 days count as off (`lease`), so an older version of
+ * the app's code that never says (an instant update rolled back) can't leave
+ * alerts running for someone who has since turned sessions off. Nothing here
+ * ever asks for Health or for alerts: those are the app's own questions. The
  * alert's tap is handled in the app (useWorkoutWatch), which hands the
  * workout to the server as its own check would and opens Log it on it.
+ *
+ * Every failure from Health is written to the phone's log ("[WorkoutWatch]",
+ * seen in Console.app during a device test): a signed build without the
+ * background-delivery entitlement otherwise looks exactly like "no workouts".
  */
 final class WorkoutWatcher: @unchecked Sendable {
   static let shared = WorkoutWatcher()
@@ -42,7 +60,7 @@ final class WorkoutWatcher: @unchecked Sendable {
     var tennis: Bool
     /** Every other workout too (reads_all_workouts and flag:workouts-apple). */
     var workouts: Bool
-    /** WHOOP sends its own tennis alert: its copy in Health stays quiet. */
+    /** WHOOP sends its own tennis alert (its server push): no tennis alert from here at all, so one session never buzzes twice. */
     var skipWhoopTennis: Bool
     /** Settings' alert switch for sessions (push_activity). Off: no alert, the app still finds them. */
     var alerts: Bool
@@ -73,6 +91,10 @@ final class WorkoutWatcher: @unchecked Sendable {
     static let prefs = "courtside.workoutWatch.prefs"
     static let anchor = "courtside.workoutWatch.anchor"
     static let notified = "courtside.workoutWatch.notified"
+    /** A read Health refused while the phone was locked, still to be made. */
+    static let pending = "courtside.workoutWatch.pending"
+    /** When the app last confirmed the switches (start). */
+    static let confirmedAt = "courtside.workoutWatch.confirmedAt"
   }
 
   /** How long ago a workout may have ended and still get an alert (the server's rule). */
@@ -85,79 +107,175 @@ final class WorkoutWatcher: @unchecked Sendable {
   private static let alertsAtOnce = 3
   /** Apple Health waits for each wake to be finished; it is finished by this many seconds at the latest. */
   private static let wakeBudget: TimeInterval = 20
+  /** Switches not confirmed by the app for this long count as off (see the note at the top). */
+  private static let lease: TimeInterval = 30 * 86_400
 
   private let store = HKHealthStore()
-  /** Every piece of state below is read and written on this one queue, one thing at a time. */
+  /** Every piece of state below is read and written on this one queue, one thing at a time (except unlockTask: the main thread's). */
   private let queue = DispatchQueue(label: "co.courtside.workout-watch")
   private let defaults = UserDefaults.standard
   private var observer: HKObserverQuery?
   /** Set while the app listens (WorkoutWatchModule): told about a new workout instead of an alert, while the app is open. */
   private var inFrontHandler: (@Sendable ([String: Any]) -> Void)?
+  /** Which module instance set the handler: an older one going away (the app reloading) never clears a newer one's. */
+  private var inFrontOwner: UUID?
+  /** The phone's notices of the app coming to the front and of the phone being unlocked (kept for as long as the app runs). */
+  private var appNotices: [NSObjectProtocol] = []
+  /** Main thread only: the few seconds iOS grants while a read refused by a locked phone waits for the unlock. */
+  private var unlockTask: UIBackgroundTaskIdentifier = .invalid
 
-  private init() {}
+  private init() {
+    // Made at launch on the main thread (WorkoutWatchAppDelegate), so the very first open is heard too.
+    if Thread.isMainThread {
+      MainActor.assumeIsolated { listenToApp() }
+    } else {
+      DispatchQueue.main.async { MainActor.assumeIsolated { self.listenToApp() } }
+    }
+  }
 
   // MARK: - What the app calls
 
   /**
    * At launch, before anything else (WorkoutWatchAppDelegate): the observer
    * is set up again, so a wake from Health finds it waiting, also when the
-   * app was closed. Only when the person has it on.
+   * app was closed. Only when the person has it on. A read the locked phone
+   * refused is made now.
    */
   func resumeAtLaunch() {
     queue.async {
-      guard self.loadPrefs() != nil else { return }
+      guard self.loadPrefs() != nil else {
+        // Switches the app has not confirmed for a month: off, and Health stops waking the app for them.
+        if self.defaults.object(forKey: Key.prefs) != nil { self.forget() }
+        return
+      }
       self.arm()
+      if self.defaults.bool(forKey: Key.pending) { self.look {} }
     }
   }
 
   /**
-   * Switched on, or opened with it on: the person's switches are saved and
-   * the observer set up. The first time (or the first after stop) only notes
-   * how far Health has got, so nothing already in it ever buzzes.
+   * Switched on, or opened with it on: the person's switches are saved (and
+   * confirmed for another 30 days) and the observer set up. The first time
+   * (or the first after stop) only notes how far Health has got, so nothing
+   * already in it ever buzzes.
    */
   func start(_ prefs: Prefs) {
     queue.async {
-      let fresh = self.loadPrefs() == nil
-      self.defaults.set(prefs.asDictionary, forKey: Key.prefs)
-      if fresh {
+      if self.loadPrefs() == nil {
         self.defaults.removeObject(forKey: Key.anchor)
         self.defaults.removeObject(forKey: Key.notified)
+        self.defaults.removeObject(forKey: Key.pending)
       }
+      self.defaults.set(prefs.asDictionary, forKey: Key.prefs)
+      self.defaults.set(Date(), forKey: Key.confirmedAt)
       self.arm()
-      if self.loadAnchor() == nil { self.look {} }
+      if self.loadAnchor() == nil || self.defaults.bool(forKey: Key.pending) { self.look {} }
     }
   }
 
   /** Switched off, or signed out: no more wakes, and everything kept for it is forgotten. */
   func stop() {
+    queue.async { self.forget() }
+  }
+
+  /** The app's listener, from the module instance `owner`. */
+  func setInFrontHandler(owner: UUID, _ handler: @escaping @Sendable ([String: Any]) -> Void) {
     queue.async {
-      self.defaults.removeObject(forKey: Key.prefs)
-      self.defaults.removeObject(forKey: Key.anchor)
-      self.defaults.removeObject(forKey: Key.notified)
-      if let observer = self.observer {
-        self.store.stop(observer)
-        self.observer = nil
-      }
-      guard HKHealthStore.isHealthDataAvailable() else { return }
-      self.store.disableBackgroundDelivery(for: HKObjectType.workoutType()) { _, _ in }
+      self.inFrontOwner = owner
+      self.inFrontHandler = handler
     }
   }
 
-  /** The app's listener (or nil when it stops listening). */
-  func setInFrontHandler(_ handler: (@Sendable ([String: Any]) -> Void)?) {
-    queue.async { self.inFrontHandler = handler }
+  /** The app stops listening: cleared only when `owner` is the one that set it. */
+  func clearInFrontHandler(owner: UUID) {
+    queue.async {
+      guard self.inFrontOwner == owner else { return }
+      self.inFrontOwner = nil
+      self.inFrontHandler = nil
+    }
+  }
+
+  // MARK: - The app coming to the front, and the unlock
+
+  @MainActor private func listenToApp() {
+    let center = NotificationCenter.default
+    appNotices = [
+      center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: nil) { [weak self] _ in self?.catchUp() },
+      center.addObserver(forName: UIApplication.protectedDataDidBecomeAvailableNotification, object: nil, queue: nil) { [weak self] _ in self?.unlocked() },
+    ]
+  }
+
+  /**
+   * The app came to the front: the observer set up again if Health stopped
+   * it, and whatever Health saved meanwhile read now. With the app open that
+   * is marked as seen, without an alert (the app is told and shows its own
+   * note), so a session the app files now never buzzes with a later wake.
+   */
+  private func catchUp() {
+    queue.async {
+      guard self.loadPrefs() != nil else { return }
+      self.arm()
+      self.look {}
+    }
+  }
+
+  /** The phone was unlocked: a read Health refused while it was locked is made now. */
+  private func unlocked() {
+    queue.async {
+      guard self.defaults.bool(forKey: Key.pending), self.loadPrefs() != nil else {
+        self.endUnlockWait()
+        return
+      }
+      self.look { self.endUnlockWait() }
+    }
+  }
+
+  /** Asks iOS for its few seconds of grace after a locked read, so an unlock soon after still gets the alert at once. */
+  private func waitForUnlock() {
+    DispatchQueue.main.async {
+      MainActor.assumeIsolated {
+        guard self.unlockTask == .invalid else { return }
+        self.unlockTask = UIApplication.shared.beginBackgroundTask(withName: "workout-watch") { [weak self] in
+          // The time is up: the read stays pending, for the next wake, launch or open.
+          MainActor.assumeIsolated { self?.endUnlockWaitNow() }
+        }
+      }
+    }
+  }
+
+  private func endUnlockWait() {
+    DispatchQueue.main.async { MainActor.assumeIsolated { self.endUnlockWaitNow() } }
+  }
+
+  @MainActor private func endUnlockWaitNow() {
+    guard unlockTask != .invalid else { return }
+    UIApplication.shared.endBackgroundTask(unlockTask)
+    unlockTask = .invalid
   }
 
   // MARK: - The observer
 
   private func arm() {
     guard observer == nil, HKHealthStore.isHealthDataAvailable() else { return }
-    let query = HKObserverQuery(sampleType: HKObjectType.workoutType(), predicate: nil) { [weak self] _, completionHandler, error in
+    let query = HKObserverQuery(sampleType: HKObjectType.workoutType(), predicate: nil) { [weak self] query, completionHandler, error in
       // Apple Health waits for this before it wakes the app again, and gives
       // up on an app that never calls it: it is called on every path, and
       // after `wakeBudget` seconds at the latest.
       let finish = Once(completionHandler)
-      guard let self, error == nil else {
+      guard let self else {
+        finish.run()
+        return
+      }
+      if let error {
+        // Health stopped this observer: let go of it, so the next open, start or launch sets up a new one.
+        NSLog("[WorkoutWatch] workout observer failed: %@", String(describing: error))
+        let failed = ObjectIdentifier(query)
+        self.queue.async {
+          if let current = self.observer, ObjectIdentifier(current) == failed {
+            self.store.stop(current)
+            self.observer = nil
+          }
+        }
         finish.run()
         return
       }
@@ -166,13 +284,16 @@ final class WorkoutWatcher: @unchecked Sendable {
     }
     store.execute(query)
     observer = query
-    // Health remembers this between launches; asking again each launch is harmless.
-    store.enableBackgroundDelivery(for: HKObjectType.workoutType(), frequency: .immediate) { _, _ in }
+    // Health remembers this between launches; asking again each launch is harmless. It fails when the
+    // signed build lacks the background-delivery entitlement: then no wakes at all, hence the log.
+    store.enableBackgroundDelivery(for: HKObjectType.workoutType(), frequency: .immediate) { ok, error in
+      if !ok || error != nil { NSLog("[WorkoutWatch] enableBackgroundDelivery failed: %@", String(describing: error)) }
+    }
   }
 
   /** Reads what is new since the last look and announces what deserves it. `done` is called exactly once, on every path. */
   private func look(_ done: @escaping @Sendable () -> Void) {
-    guard let prefs = loadPrefs() else {
+    guard loadPrefs() != nil, HKHealthStore.isHealthDataAvailable() else {
       done()
       return
     }
@@ -186,13 +307,30 @@ final class WorkoutWatcher: @unchecked Sendable {
         return
       }
       self.queue.async {
-        // Not readable (the phone is locked, and Health keeps its data
-        // sealed until it is unlocked): the anchor stays where it was, so
-        // the next look reads the same workouts again.
-        guard error == nil, let newAnchor else {
+        // Switched off or signed out while this read ran (stop): nothing is kept, nothing announced.
+        guard let prefs = self.loadPrefs() else {
           done()
           return
         }
+        if let error {
+          if WorkoutWatcher.isLocked(error) {
+            // The phone is locked, and Health keeps its data sealed until it is unlocked: the anchor
+            // stays where it was, and the same read is made again at the unlock (while iOS still lets
+            // the app run), else at the next wake, launch or open. Health's wake is still answered at
+            // once (`done`): an app that keeps Health waiting stops being woken.
+            self.defaults.set(true, forKey: Key.pending)
+            self.waitForUnlock()
+          } else {
+            NSLog("[WorkoutWatch] reading workouts failed: %@", String(describing: error))
+          }
+          done()
+          return
+        }
+        guard let newAnchor else {
+          done()
+          return
+        }
+        self.defaults.removeObject(forKey: Key.pending)
         self.saveAnchor(newAnchor)
         if anchor == nil {
           done()
@@ -216,10 +354,16 @@ final class WorkoutWatcher: @unchecked Sendable {
         }
         // Remembered before anything else, so no later wake announces them again.
         self.defaults.set(seen.suffix(WorkoutWatcher.rememberAtMost).map(\.encoded), forKey: Key.notified)
-        self.announce(fresh, prefs: prefs, now: now, done: done)
+        self.announce(fresh, now: now, done: done)
       }
     }
     store.execute(query)
+  }
+
+  /** Health's "the phone is locked" answer to a read. */
+  private static func isLocked(_ error: Error) -> Bool {
+    let e = error as NSError
+    return e.domain == HKErrorDomain && e.code == HKError.Code.errorDatabaseInaccessible.rawValue
   }
 
   /** Whether a workout just saved to Health should get an alert. */
@@ -229,14 +373,15 @@ final class WorkoutWatcher: @unchecked Sendable {
     guard w.endDate > now.addingTimeInterval(-WorkoutWatcher.freshFor), w.endDate < now.addingTimeInterval(600) else { return false }
     let tennis = w.workoutActivityType == .tennis
     guard tennis ? prefs.tennis : prefs.workouts else { return false }
-    if tennis && prefs.skipWhoopTennis {
-      let source = w.sourceRevision.source
-      if "\(source.name) \(source.bundleIdentifier)".range(of: "whoop", options: .caseInsensitive) != nil { return false }
-    }
+    // WHOOP sends its own "Tennis detected" for the session (the server's push, which only stays quiet when
+    // the app has already handed the Watch's copy over): from any source, tennis gets no second alert from
+    // here. Runs and the rest still do, and the app's own check files the tennis all the same. (Fitbit, Oura
+    // and Polar never push from the server, so their copies need no such rule.)
+    if tennis && prefs.skipWhoopTennis { return false }
     return true
   }
 
-  private func announce(_ fresh: [HKWorkout], prefs: Prefs, now: Date, done: @escaping @Sendable () -> Void) {
+  private func announce(_ fresh: [HKWorkout], now: Date, done: @escaping @Sendable () -> Void) {
     let newest = Array(fresh.sorted { $0.endDate > $1.endDate }.prefix(WorkoutWatcher.alertsAtOnce))
     DispatchQueue.main.async {
       // On screen (open, or opening: a launch the person made is "inactive" for its first moments).
@@ -250,32 +395,39 @@ final class WorkoutWatcher: @unchecked Sendable {
           done()
           return
         }
-        self.alert(newest, prefs: prefs, now: now, done: done)
+        self.alert(newest, now: now, done: done)
       }
     }
   }
 
   /** The lock-screen alerts, with the app in the background or closed. */
-  private func alert(_ newest: [HKWorkout], prefs: Prefs, now: Date, done: @escaping @Sendable () -> Void) {
+  private func alert(_ newest: [HKWorkout], now: Date, done: @escaping @Sendable () -> Void) {
     // Night where the phone is, or the person turned these alerts off: in the app only, as on the server.
     let hour = Calendar.current.component(.hour, from: now)
-    guard prefs.alerts, hour >= 7, hour < 22 else {
+    guard loadPrefs()?.alerts == true, hour >= 7, hour < 22 else {
       done()
       return
     }
-    let center = UNUserNotificationCenter.current()
-    center.getNotificationSettings { settings in
-      // Alerts not allowed (the app's own question was never answered yes): nothing to put up.
-      guard [.authorized, .provisional, .ephemeral].contains(settings.authorizationStatus) else {
-        done()
-        return
+    UNUserNotificationCenter.current().getNotificationSettings { settings in
+      let allowed = [.authorized, .provisional, .ephemeral].contains(settings.authorizationStatus)
+      self.queue.async {
+        // Alerts not allowed (the app's own question was never answered yes), or the person turned
+        // sessions or these alerts off (or signed out) while Health was read: nothing to put up.
+        guard allowed, self.loadPrefs()?.alerts == true else {
+          done()
+          return
+        }
+        let center = UNUserNotificationCenter.current()
+        let group = DispatchGroup()
+        for w in newest {
+          group.enter()
+          center.add(WorkoutWatcher.request(for: w)) { error in
+            if let error { NSLog("[WorkoutWatch] alert failed: %@", String(describing: error)) }
+            group.leave()
+          }
+        }
+        group.notify(queue: self.queue) { done() }
       }
-      let group = DispatchGroup()
-      for w in newest {
-        group.enter()
-        center.add(WorkoutWatcher.request(for: w)) { _ in group.leave() }
-      }
-      group.notify(queue: self.queue) { done() }
     }
   }
 
@@ -379,8 +531,25 @@ final class WorkoutWatcher: @unchecked Sendable {
 
   // MARK: - What is kept on the phone
 
+  /** The person's switches, while the app has confirmed them within `lease`; nil when off. */
   private func loadPrefs() -> Prefs? {
-    Prefs(defaults.dictionary(forKey: Key.prefs))
+    guard let confirmed = defaults.object(forKey: Key.confirmedAt) as? Date,
+          Date().timeIntervalSince(confirmed) < WorkoutWatcher.lease else { return nil }
+    return Prefs(defaults.dictionary(forKey: Key.prefs))
+  }
+
+  /** Everything kept for the watching gone, the observer stopped, and Health's wakes switched off. On `queue`. */
+  private func forget() {
+    for key in [Key.prefs, Key.anchor, Key.notified, Key.pending, Key.confirmedAt] { defaults.removeObject(forKey: key) }
+    if let observer {
+      store.stop(observer)
+      self.observer = nil
+    }
+    endUnlockWait()
+    guard HKHealthStore.isHealthDataAvailable() else { return }
+    store.disableBackgroundDelivery(for: HKObjectType.workoutType()) { ok, error in
+      if !ok || error != nil { NSLog("[WorkoutWatch] disableBackgroundDelivery failed: %@", String(describing: error)) }
+    }
   }
 
   private func loadAnchor() -> HKQueryAnchor? {

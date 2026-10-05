@@ -11,5 +11,7 @@ export const workoutWatchAvailable = () => false;
 export async function alertsAllowed(): Promise<boolean> { return false; }
 export async function startWorkoutWatch(_p: WatchPrefs): Promise<void> { /* nothing to watch in a browser */ }
 export async function stopWorkoutWatch(): Promise<void> { /* nothing to stop */ }
+export async function presentedWorkoutAlerts(): Promise<{ workoutId: string; alertId: string }[]> { return []; }
+export function dismissWorkoutAlerts(_alertIds: string[]) { /* no alerts in a browser */ }
 export function onWorkoutInFront(_listener: (w: WatchedWorkout) => void): () => void { return () => undefined; }
 export function listenForWorkoutAlertTaps(_listener: (w: WatchedWorkout) => void): () => void { return () => undefined; }
