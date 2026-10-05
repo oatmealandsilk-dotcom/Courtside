@@ -70,9 +70,10 @@ async function onThisPhone(url: string, id: string, kind: StoryMediaKind): Promi
  * Into Instagram: 'sent', or 'no-instagram' when the phone has none (the
  * builds that carry react-native-share can ask truthfully: iPhone's
  * LSApplicationQueriesSchemes and Android's <queries>, see storyImage.ts),
- * or 'unavailable' when the hand-over failed.
+ * or 'unavailable' when the hand-over failed, or 'cancelled' when the menu
+ * was closed before the hand-over.
  */
-async function toInstagram(uri: string, kind: StoryMediaKind, sticker?: string): Promise<'sent' | 'no-instagram' | 'unavailable'> {
+async function toInstagram(uri: string, kind: StoryMediaKind, sticker: string | undefined, cancelled: () => boolean): Promise<'sent' | 'no-instagram' | 'unavailable' | 'cancelled'> {
   if (!canShareMediaStory()) return 'unavailable';
   try {
     const Share_ = (require('react-native-share') as typeof import('react-native-share')).default;
@@ -82,6 +83,7 @@ async function toInstagram(uri: string, kind: StoryMediaKind, sticker?: string):
     } else if (!(await Linking.canOpenURL(STORIES_URL).catch(() => false))) {
       return 'no-instagram';
     }
+    if (cancelled()) return 'cancelled';
     // Round a photo that is not 9:16, Instagram fills with these two (left
     // out, react-native-share sends its own purple): the court's darkest
     // colour, faintly tinted with the court at the top, as the session's
@@ -107,18 +109,27 @@ async function toInstagram(uri: string, kind: StoryMediaKind, sticker?: string):
  * out-of-sight HandleSticker, photographed first (a story without it is
  * still sent if that fails). Says nothing back once Instagram (or the
  * share sheet) has opened; a sentence when it could not.
+ *
+ * `cancelled`: true once the menu has been closed while the file was still
+ * coming down. Then nothing opens: Instagram arriving on its own a moment
+ * after you closed the menu would be a surprise. Asked again just before
+ * each hand-over.
  */
-export async function shareMediaToStory({ url, kind, id, sticker }: { url: string; kind: StoryMediaKind; id: string; sticker: View | null }): Promise<string | null> {
+export async function shareMediaToStory({ url, kind, id, sticker, cancelled = () => false }: { url: string; kind: StoryMediaKind; id: string; sticker: View | null; cancelled?: () => boolean }): Promise<string | null> {
   let stickerPng: string | undefined;
   try {
     if (sticker) stickerPng = await captureRef(sticker, { format: 'png', quality: 1, result: 'base64' });
   } catch {
     // Without the sticker: the clip or photo alone.
   }
+  if (cancelled()) return null;
   const file = await onThisPhone(url, id, kind);
-  if ((await toInstagram(file.uri, kind, stickerPng)) === 'sent') return null;
+  if (cancelled()) return null;
+  const sent = await toInstagram(file.uri, kind, stickerPng, cancelled);
+  if (sent === 'sent' || sent === 'cancelled') return null;
   // No Instagram, or a hand-over that failed: the share sheet, with the file.
   if (!(await Sharing.isAvailableAsync())) return 'Sharing is not available on this phone.';
+  if (cancelled()) return null;
   await Sharing.shareAsync(file.uri, { mimeType: TYPES[file.ext], dialogTitle: 'Share to Instagram Stories' });
   return null;
 }

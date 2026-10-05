@@ -99,8 +99,14 @@ picture's own **Share to Instagram**). Code: `src/features/share/mediaStory.ts`.
 - Instagram gets the file as it was uploaded. A trim, a speed, a zoom or
   "posted without sound" are applied by CourtSide's player as the clip plays,
   not cut into the file, so they do not come along; Instagram's editor can
-  trim and mute. Instagram's guidance is clips up to about 20 seconds and
-  under 50 MB; a longer one may be cut short there.
+  trim and mute. The menu says so on a clip posted without sound or trimmed
+  ("The full original clip, with its sound. Trim and mute it in Instagram."),
+  so nobody who muted a clip to hide what was said is surprised. Instagram's
+  guidance is clips up to about 20 seconds and under 50 MB; a longer one may
+  be cut short there.
+- Closing the menu while the file is still coming down (a tap above it, the
+  back button) cancels the share: Instagram does not open on its own a moment
+  later.
 
 To check on build 15 (or 14, over the air): your own clip → ••• → Share to
 Instagram Story, then the same on a photo post. Instagram should open on its

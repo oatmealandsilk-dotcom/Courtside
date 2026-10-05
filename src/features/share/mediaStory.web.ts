@@ -12,6 +12,6 @@ export function canShareMediaStory(): boolean {
   return false;
 }
 
-export async function shareMediaToStory(_input: { url: string; kind: StoryMediaKind; id: string; sticker: View | null }): Promise<string | null> {
+export async function shareMediaToStory(_input: { url: string; kind: StoryMediaKind; id: string; sticker: View | null; cancelled?: () => boolean }): Promise<string | null> {
   return 'Instagram Stories opens from the CourtSide app on your phone.';
 }

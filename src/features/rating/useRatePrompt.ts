@@ -28,7 +28,8 @@ const STALE_MS = 2 * 60_000;
  *   your posts have been liked by others.
  *
  * Then, once a calm page is in front (`calm`: past sign-up, the tutorial,
- * the splash, and not a composer, a sheet or a camera), a two-second
+ * the splash and the curtain, and on one of the four tabs or Your
+ * sessions, never a page where someone may be typing), a two-second
  * pause, and the phone's own rating box. Never while setting up
  * (onboardingComplete), never in a browser or on a build without the box,
  * and only for players known to be adults: nothing in Apple's or Google's

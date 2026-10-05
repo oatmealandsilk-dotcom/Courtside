@@ -16,7 +16,7 @@ import { RouteTransition } from './RouteTransition';
 import { useResponsive } from '@/lib/useResponsive';
 import { getPendingTab, setPendingTab, subscribePendingTab } from '@/features/navigation/pendingTab';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
-import { askForCommunityMap, isStartTab } from '@/features/navigation/startTab';
+import { askForCommunityMap, isStartTab, isTabPage } from '@/features/navigation/startTab';
 import { launchSettle, useCurtainDown } from '@/features/feed/warmup';
 import { useApp } from '@/store/AppContext';
 import { isPublicPath } from '@/features/share/publicPaths';
@@ -272,8 +272,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // The phone's own "Workout detected" alert (build 15): kept in step with the switches, and its tap opens Log it.
   useWorkoutWatch({ settled: !detour && !onSplash });
   // "Rate CourtSide" (build 15): the phone's own rating box after a happy moment, only ever on a calm
-  // page: past the splash, the gates and the tutorial, and not a composer, a sheet or a camera.
-  useRatePrompt({ calm: !!currentUserId && !detour && !onSplash && !hideEverywhere && !tourOpen && curtainDown && !phoneOnlyHide && !SHEETS.has(pathname) });
+  // page: past the splash, the gates, the tutorial and the opening curtain, and then only on one of the
+  // four tabs or Your sessions. A list of pages it may show on, not of pages it may not: anywhere else
+  // (a chat, the AI coach, an answer, edit profile, settings) someone may be mid-message or mid-change.
+  useRatePrompt({ calm: !!currentUserId && !detour && !onSplash && !tourOpen && curtainDown && (isTabPage(pathname) || pathname === '/your-sessions') });
   const sentTo = useRef<string | null>(null);
   useEffect(() => {
     if (!detour) { sentTo.current = null; return; }

@@ -58,6 +58,13 @@ export default function PostMenu() {
   // Share to Instagram Story: on its way (the file coming down), and the sticker photographed for it.
   const [working, setWorking] = useState(false);
   const sticker = useRef<View>(null);
+  // Gone: the menu has left the screen (the back button or a swipe, not only close()), so a share
+  // still on its way stops before it opens Instagram. Set false again on mount for React's dev double-mount.
+  const gone = useRef(false);
+  useEffect(() => {
+    gone.current = false;
+    return () => { gone.current = true; };
+  }, []);
 
   // The same rise and fall as the comments and Send-to sheets.
   const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
@@ -95,23 +102,37 @@ export default function PostMenu() {
   const storyMedia: { url: string; kind: StoryMediaKind } | null = post && mine && !removed && currentUser && canShareMediaStory()
     ? (post.videoUrl ? { url: post.videoUrl, kind: 'video' } : post.imageUrl && !post.session ? { url: post.imageUrl, kind: 'photo' } : null)
     : null;
+  // Closing the menu (a tap above it, Done, the back button) while the file is still coming down
+  // cancels the share: Instagram does not open on its own a moment later.
+  const cancelled = () => closing.current || gone.current;
   const toStory = async () => {
     if (!post || !storyMedia || working) return;
     setWorking(true);
     try {
-      const said = await shareMediaToStory({ url: storyMedia.url, kind: storyMedia.kind, id: post.id, sticker: sticker.current });
+      const said = await shareMediaToStory({ url: storyMedia.url, kind: storyMedia.kind, id: post.id, sticker: sticker.current, cancelled });
+      if (cancelled()) return;
       if (said) setDone(said);
       else close();
     } catch (err) {
+      if (cancelled()) return;
       setDone(err instanceof Error && err.message ? err.message : 'Instagram could not be opened. Try again.');
     } finally {
-      setWorking(false);
+      if (!gone.current) setWorking(false);
     }
   };
+  // What Instagram gets is the file as uploaded (mediaStory.ts): "posted without sound" and a trim
+  // are applied by CourtSide's player, not cut into it, so the note says so rather than surprise anyone.
+  const trimmed = !!post && (post.trimStart != null || post.trimEnd != null);
+  const asIs = !!post && storyMedia?.kind === 'video' && (!!post.muted || trimmed);
+  const storyNote = !storyMedia ? undefined
+    : working ? (storyMedia.kind === 'video' ? 'Getting your clip ready…' : 'Getting your photo ready…')
+    : asIs && post?.muted ? (trimmed ? 'The full original clip, with its sound. Trim and mute it in Instagram.' : 'The original clip, with its sound. Mute it in Instagram.')
+    : asIs ? 'The full original clip, before your trim. Trim it in Instagram.'
+    : storyMedia.kind === 'video' ? 'Your clip in your story, with your @handle.' : 'Your photo in your story, with your @handle.';
   const storyRow: Row | null = post && storyMedia ? {
     key: 'ig-story', icon: 'logo-instagram',
     label: post.session ? 'Share clip to Instagram Story' : 'Share to Instagram Story',
-    note: working ? (storyMedia.kind === 'video' ? 'Getting your clip ready…' : 'Getting your photo ready…') : storyMedia.kind === 'video' ? 'Your clip in your story, with your @handle.' : 'Your photo in your story, with your @handle.',
+    note: storyNote,
     onPress: toStory,
   } : null;
   // A hit is a moment, not a keepsake: nothing to save or send on.
