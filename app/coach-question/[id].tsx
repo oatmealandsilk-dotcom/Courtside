@@ -14,6 +14,8 @@ import { Avatar, Button, Chip, EmptyState, Field, Screen } from '@/components/ui
 import { relativeTime } from '@/lib/format';
 import { afterMenu, confirm, confirmAfterMenu, confirmReport } from '@/lib/confirm';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
+import { HiddenComments, HiddenReplyRow } from '@/components/HiddenComments';
+import { hiddenCoachRepliesOn, shownInList } from '@/features/hiddenWords/hiddenWords';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useStillLoading } from '@/lib/useStillLoading';
@@ -46,9 +48,11 @@ export default function CoachQuestionDetail() {
   if (found) {
     shown.current = {
       question: found,
+      // One hidden by the asker's Hidden words (migration 117) shows only to the coach who wrote it;
+      // the asker finds it under "Hidden replies" at the end.
       replies: found.replyIds
         .map((rid) => coachReplies.find((r) => r.id === rid))
-        .filter((r): r is NonNullable<typeof r> => Boolean(r))
+        .filter((r): r is NonNullable<typeof r> => Boolean(r) && shownInList(r!, r!.coachUserId, currentUserId))
         .sort((a, b) => b.helpfulBy.length - a.helpfulBy.length),
     };
   }
@@ -63,6 +67,7 @@ export default function CoachQuestionDetail() {
     );
   }
   const { question, replies } = view;
+  const hiddenReplies = hiddenCoachRepliesOn(coachReplies, question.id, currentUserId, question.authorId);
 
   const author = users.find((u) => u.id === question.authorId);
   const iAmCoach = Boolean(currentUser?.isCoach);
@@ -240,6 +245,10 @@ export default function CoachQuestionDetail() {
           </View>
         );
       })}
+
+      <HiddenComments count={hiddenReplies.length} noun="replies">
+        {hiddenReplies.map((r) => <HiddenReplyRow key={r.id} authorId={r.coachUserId} body={r.body} createdAt={r.createdAt} onUnhide={() => actions.unhideByWords('coach-reply', r.id)} />)}
+      </HiddenComments>
 
       {!replies.length ? (
         <Text style={styles.waiting}>

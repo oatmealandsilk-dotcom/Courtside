@@ -31,7 +31,7 @@ export const replyIndent = (big: boolean) => (big ? 40 : 32) + spacing.md;
  * gets anything on a hold.
  * Holding someone else's comment reports it (App Review 1.2, Oct 5).
  */
-export function CommentRow({ comment, big = false, reply = false, onPressBody, onReply, onLayout }: {
+export function CommentRow({ comment, big = false, reply = false, onPressBody, onReply, onUnhide, onLayout }: {
   comment: Comment;
   /** The post page's cut: bigger picture, name and words. */
   big?: boolean;
@@ -41,6 +41,8 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
   onPressBody?: () => void;
   /** Shows "Reply" under the words. */
   onReply?: () => void;
+  /** Shows "Unhide" under the words: one your Hidden words hid, on something of yours (migration 117). */
+  onUnhide?: () => void;
   onLayout?: (y: number) => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -92,6 +94,11 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
         {onReply && !comment.removed ? (
           <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${who?.name ?? 'this comment'}`} hitSlop={{ top: 6, bottom: 8, left: 8, right: 16 }} onPress={onReply} style={styles.replyButton}>
             <Text style={[styles.replyText, big && styles.replyTextBig]}>Reply</Text>
+          </Pressable>
+        ) : null}
+        {onUnhide ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={`Unhide ${who?.name ?? 'this'}'s comment`} hitSlop={{ top: 6, bottom: 8, left: 8, right: 16 }} onPress={onUnhide} style={styles.replyButton}>
+            <Text style={[styles.replyText, big && styles.replyTextBig]}>Unhide</Text>
           </Pressable>
         ) : null}
       </View>

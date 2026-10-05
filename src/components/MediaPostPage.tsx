@@ -110,7 +110,8 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
   }, [active, post.id, post.session]);
   // Newest first, the way the sheet lists them; they fill the bottom of the page.
   // Replies stay folded on the page: "View 2 replies" opens the sheet at them.
-  const thread = threadsOf(comments, post.id, 'newest');
+  // Never one hidden by the owner's Hidden words (migration 117), unless it is yours: the sheet lists those under "Hidden comments".
+  const thread = threadsOf(comments, post.id, 'newest', currentUserId);
   const [captionOpen, setCaptionOpen] = useState(false);
   // A photo: one tap opens it full screen (pinch to look closer, it snaps
   // back), two taps like it. The single tap waits out the double-tap window.

@@ -50,16 +50,18 @@ const QUOTE_ICON: Partial<Record<Message['kind'], keyof typeof Ionicons.glyphMap
  * it is from someone you blocked, folded away in the chat, so its words stay
  * hidden here too (the inbox's wording).
  */
-export function ReplyQuote({ original, who, mine, onPress, standalone = false, blocked = false }: {
+export function ReplyQuote({ original, who, mine, onPress, standalone = false, blocked = false, hidden = false }: {
   original?: Message; who: string; mine: boolean; onPress?: () => void;
   /** Above a photo or voice note rather than inside a bubble: on its own soft card. */
   standalone?: boolean;
   blocked?: boolean;
+  /** The message answered is hidden here by your Hidden words (migration 117): its words stay hidden in the quote too. */
+  hidden?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const ink = mine && !standalone;
-  const icon = original && !blocked ? QUOTE_ICON[original.kind] : undefined;
-  const words = !original ? 'This message is no longer available' : blocked ? 'Message from someone you blocked' : quoteWords(original);
+  const icon = original && !blocked && !hidden ? QUOTE_ICON[original.kind] : undefined;
+  const words = !original ? 'This message is no longer available' : blocked ? 'Message from someone you blocked' : hidden ? 'Hidden message' : quoteWords(original);
   return (
     <Pressable
       // Inside a bubble (itself a button) it cannot be a button too: a browser refuses a button in a button.

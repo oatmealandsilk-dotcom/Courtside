@@ -1,3 +1,4 @@
+import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import { useCallback, useMemo } from 'react';
 
 import { isLocalMedia, remote, uploadMedia } from '@/data/remote';
@@ -118,6 +119,8 @@ export function groupSentence(word: string): string {
     case 'not_ready': return 'Groups aren’t switched on yet.';
     case 'bad_photo': return 'That photo couldn’t be used. Try another one.';
     case 'bad_look': return 'That look couldn’t be saved. Try another emoji.';
+    // A name or description refused for its words (migration 117).
+    case 'blocked_words': return BLOCKED_WORDS_NOTE;
     default: return 'That didn’t go through. Check your connection and try again.';
   }
 }

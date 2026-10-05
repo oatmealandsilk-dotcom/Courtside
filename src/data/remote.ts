@@ -22,7 +22,7 @@ import { blankVideoLocation } from '@/lib/videoLocation';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, Story, TakedownKind, TakedownReason, Tip, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet } from './types';
+import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, Story, TakedownKind, TakedownReason, Tip, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet } from './types';
 import { validSets } from '@/features/activity/score';
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
@@ -30,12 +30,15 @@ import { isMapCourtId } from '@/features/places/courtName';
 import type { Openness } from '@/features/players/age';
 import { lookFrom } from '@/features/groups/look';
 import { asKind, asReason } from '@/features/moderation/reasons';
+import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 
 /** What a new player did first, after setup. */
 /** What the live handle check says about a handle. */
 export type HandleStatus = 'ok' | 'yours' | 'invalid' | 'taken' | 'held';
 
 export type FirstMove = 'post' | 'instant' | 'answer' | 'ask' | 'later';
+/** What a profile save can change. */
+export type ProfilePatch = { name?: string; bio?: string; location?: string; cityAt?: { lat: number; lng: number } | null; avatarUrl?: string; profile?: PlayerProfile; isPrivate?: boolean; readReceipts?: boolean; openToHitUntil?: string | null; firstMove?: FirstMove };
 /** One person who has invited anyone, as the admin Invites page shows them (migration 71). */
 export interface InviteSummaryRow {
   id: ID; name: string; handle: string; avatarUrl?: string; suspended?: boolean;
@@ -130,6 +133,23 @@ interface ProfileRow {
  * reasons. Only the author and admins ever get such a row back.
  */
 interface RemovedColumns { removed_at?: string | null; removed_reason?: string | null }
+/** Hidden by the owner's Hidden words (migration 117): only on comments, Instant comments, thread replies and coach replies. */
+interface HiddenColumn { hidden_by_words_at?: string | null }
+/** Marked only when it is hidden, so everything else comes out exactly as before. */
+const withHidden = <T extends object>(item: T, row: HiddenColumn): T => (row.hidden_by_words_at ? { ...item, hiddenByWords: true } : item);
+/** hidden_words()'s answer as the app keeps it; null when it is not that shape. */
+function asHiddenWords(data: unknown): HiddenWords | null {
+  const d = data as Partial<HiddenWords> | null;
+  if (!d || typeof d !== 'object' || typeof d.hideOffensiveComments !== 'boolean') return null;
+  return {
+    hideOffensiveComments: d.hideOffensiveComments,
+    hideOffensiveRequests: d.hideOffensiveRequests !== false,
+    customWords: Array.isArray(d.customWords) ? d.customWords.filter((w): w is string => typeof w === 'string') : [],
+    customInComments: d.customInComments !== false,
+    customInRequests: d.customInRequests !== false,
+    locked: d.locked === true,
+  };
+}
 const removedOf = (row: RemovedColumns): Removed | undefined =>
   row.removed_at ? { reason: asReason(row.removed_reason), at: row.removed_at } : undefined;
 /** Marked only when it was taken down, so an untouched one comes out exactly as before. */
@@ -152,20 +172,20 @@ type PostRow = {
   speed?: number | string | null; volume?: number | string | null;
   location?: string | null; edited_at?: string | null; feature_ok?: boolean | null; referred_by?: string | null; is_first?: boolean | null;
   court_id?: string | null; court_name?: string | null; court_lat?: number | null; court_lng?: number | null;
-  post_likes?: { user_id: string }[]; post_saves?: { user_id: string }[]; comments?: { id: string }[];
+  post_likes?: { user_id: string }[]; post_saves?: { user_id: string }[]; comments?: ({ id: string } & HiddenColumn)[];
 } & RemovedColumns;
 type CommentRow = {
   id: string; post_id: string; author_id: string; body: string; created_at: string; image_url?: string | null;
   /** A reply's thread and the comment it answers (migration 56); absent before it. */
   parent_id?: string | null; reply_to_id?: string | null;
   comment_likes?: { user_id: string }[];
-} & RemovedColumns;
+} & RemovedColumns & HiddenColumn;
 type StoryRow = {
   id: string; author_id: string; image_url: string | null; video_url: string | null; thumbnail_url: string | null;
   media_label: string | null; caption: string | null; archived: boolean; created_at: string; expires_at: string;
   story_views?: { user_id: string }[];
   story_likes?: { user_id: string }[];
-  story_comments?: ({ id: string; story_id: string; author_id: string; body: string; created_at: string; parent_id?: string | null; reply_to_id?: string | null; story_comment_likes?: { user_id: string }[] } & RemovedColumns)[];
+  story_comments?: ({ id: string; story_id: string; author_id: string; body: string; created_at: string; parent_id?: string | null; reply_to_id?: string | null; story_comment_likes?: { user_id: string }[] } & RemovedColumns & HiddenColumn)[];
 } & RemovedColumns;
 
 const toUser = (row: ProfileRow, followers: number, following: number): User => ({
@@ -239,7 +259,8 @@ const toPost = (row: PostRow): Post => withRemoved<Post>({
   match: row.match ?? undefined,
   session: trustedSession(row.session),
   likedBy: (row.post_likes ?? []).map((l) => l.user_id),
-  commentIds: (row.comments ?? []).map((c) => c.id),
+  // A comment hidden by the owner's Hidden words (migration 117) is never counted.
+  commentIds: (row.comments ?? []).filter((c) => !c.hidden_by_words_at).map((c) => c.id),
   tags: row.tags ?? [],
   views: row.views,
   shares: row.shares,
@@ -255,7 +276,7 @@ const toPost = (row: PostRow): Post => withRemoved<Post>({
   groupId: row.group_id ?? undefined,
 }, row);
 
-const toComment = (row: CommentRow): Comment => withRemoved<Comment>({
+const toComment = (row: CommentRow): Comment => withHidden(withRemoved<Comment>({
   id: row.id,
   postId: row.post_id,
   authorId: row.author_id,
@@ -265,7 +286,7 @@ const toComment = (row: CommentRow): Comment => withRemoved<Comment>({
   imageUrl: row.image_url ?? undefined,
   parentId: row.parent_id ?? undefined,
   replyToId: row.reply_to_id ?? undefined,
-}, row);
+}, row), row);
 
 const toStory = (row: StoryRow): Story => withRemoved<Story>({
   id: row.id,
@@ -279,17 +300,17 @@ const toStory = (row: StoryRow): Story => withRemoved<Story>({
   caption: row.caption ?? undefined,
   viewedBy: (row.story_views ?? []).map((v) => v.user_id),
   likedBy: (row.story_likes ?? []).map((l) => l.user_id),
-  commentIds: (row.story_comments ?? []).map((c) => c.id),
+  commentIds: (row.story_comments ?? []).filter((c) => !c.hidden_by_words_at).map((c) => c.id),
   archived: row.archived || undefined,
 }, row);
 
 /** A comment on a hit, shaped like any other comment with the hit as its "post". */
-const toStoryComment = (row: NonNullable<StoryRow['story_comments']>[number]): Comment => withRemoved<Comment>({
+const toStoryComment = (row: NonNullable<StoryRow['story_comments']>[number]): Comment => withHidden(withRemoved<Comment>({
   id: row.id, postId: row.story_id, authorId: row.author_id, body: row.body, createdAt: row.created_at,
   likedBy: (row.story_comment_likes ?? []).map((l) => l.user_id),
   parentId: row.parent_id ?? undefined,
   replyToId: row.reply_to_id ?? undefined,
-}, row);
+}, row), row);
 
 /** How many comment watches have opened, for unique channel names. */
 let commentWatches = 0;
@@ -532,9 +553,9 @@ const toCourtReview = (r: CourtReviewRow): CourtReview => ({
   updatedAt: r.updated_at,
 });
 interface QuestionRow extends RemovedColumns { id: string; author_id: string; title: string; body: string; topic: string; tags: string[]; votes: number; voted_by: Record<string, 1 | -1>; accepted_answer_id: string | null; edited_at: string | null; created_at: string }
-interface AnswerRow extends RemovedColumns { id: string; question_id: string; author_id: string; parent_answer_id: string | null; body: string; votes: number; voted_by: Record<string, 1 | -1>; from_coach: boolean; created_at: string; media_url?: string | null; media_kind?: 'photo' | 'video' | null; media_thumb?: string | null }
+interface AnswerRow extends RemovedColumns, HiddenColumn { id: string; question_id: string; author_id: string; parent_answer_id: string | null; body: string; votes: number; voted_by: Record<string, 1 | -1>; from_coach: boolean; created_at: string; media_url?: string | null; media_kind?: 'photo' | 'video' | null; media_thumb?: string | null }
 interface CoachQuestionRow extends RemovedColumns { id: string; author_id: string; title: string; body: string; specialty: string; video_url: string | null; media_label: string | null; resolved: boolean; created_at: string }
-interface CoachReplyRow extends RemovedColumns { id: string; question_id: string; coach_user_id: string; body: string; helpful_by: string[]; created_at: string }
+interface CoachReplyRow extends RemovedColumns, HiddenColumn { id: string; question_id: string; coach_user_id: string; body: string; helpful_by: string[]; created_at: string }
 interface CoachingRequestRow {
   id: string; coach_id: string; user_id: string; service_id: string; question: string; video_label: string | null; status: string; response: string | null; responded_at: string | null; created_at: string;
   /** Migration 35. */
@@ -588,17 +609,17 @@ const toQuestion = (r: QuestionRow, answers: AnswerRow[]): Question => withRemov
   createdAt: r.created_at, votes: r.votes, votedBy: r.voted_by ?? {}, answerIds: answers.filter((a) => a.question_id === r.id).map((a) => a.id),
   acceptedAnswerId: r.accepted_answer_id ?? undefined, editedAt: r.edited_at ?? undefined,
 }, r);
-const toAnswer = (r: AnswerRow): Answer => withRemoved<Answer>({
+const toAnswer = (r: AnswerRow): Answer => withHidden(withRemoved<Answer>({
   id: r.id, questionId: r.question_id, authorId: r.author_id, parentAnswerId: r.parent_answer_id ?? undefined, body: r.body,
   createdAt: r.created_at, votes: r.votes, votedBy: r.voted_by ?? {}, fromCoach: r.from_coach,
   media: r.media_url && r.media_kind ? { kind: r.media_kind, url: r.media_url, thumb: r.media_thumb ?? undefined } : undefined,
-}, r);
+}, r), r);
 const toCoachQuestion = (r: CoachQuestionRow, replies: CoachReplyRow[]): CoachQuestion => withRemoved<CoachQuestion>({
   id: r.id, authorId: r.author_id, title: r.title, body: r.body, specialty: r.specialty as CoachQuestion['specialty'], createdAt: r.created_at,
   videoUrl: r.video_url ?? undefined, mediaLabel: r.media_label ?? undefined, resolved: r.resolved,
   replyIds: replies.filter((x) => x.question_id === r.id).map((x) => x.id),
 }, r);
-const toCoachReply = (r: CoachReplyRow): CoachReply => withRemoved<CoachReply>({ id: r.id, questionId: r.question_id, coachUserId: r.coach_user_id, body: r.body, createdAt: r.created_at, helpfulBy: r.helpful_by ?? [] }, r);
+const toCoachReply = (r: CoachReplyRow): CoachReply => withHidden(withRemoved<CoachReply>({ id: r.id, questionId: r.question_id, coachUserId: r.coach_user_id, body: r.body, createdAt: r.created_at, helpfulBy: r.helpful_by ?? [] }, r), r);
 const toCoachingRequest = (r: CoachingRequestRow): CoachingRequest => ({
   id: r.id, coachId: r.coach_id, userId: r.user_id, serviceId: r.service_id, question: r.question, videoLabel: r.video_label ?? undefined,
   status: r.status as CoachingRequest['status'], createdAt: r.created_at, response: r.response ?? undefined, respondedAt: r.responded_at ?? undefined,
@@ -902,6 +923,9 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // everything else so it is known before any post is read: until it is, the
   // names on posts' session stats are not shown (see trustedSession).
   const tagsProbe = db.from('session_tags').select('id').limit(0).then(({ error }) => readinessOf(error), () => null);
+  // Messages your Hidden words hid (migration 117), newest first: none on a database without them.
+  const heldLoad = db.from('message_word_holds').select('message_id').order('held_at', { ascending: false }).limit(1000)
+    .then(({ data, error }) => (error ? [] : ((data ?? []) as { message_id: string }[]).map((r) => r.message_id)), () => [] as string[]);
   const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows, sessionRows, pollRows, myPollVotes, hitRows, prefRows, activityRows, hitInviteRows] = await Promise.all([
     // Every profile, in chunks, so nobody is left out past the first 1,000.
     allRows<ProfileRow>((from, to) => db.from('profiles').select('*').order('created_at', { ascending: true }).range(from, to)),
@@ -957,7 +981,9 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // The member columns are picked at run time (with or without role), so the query's own typing cannot see the shape.
   const convRows = (convs.data ?? []) as unknown as ConversationRow[];
   const messageRows = convRows.flatMap((c) => c.messages ?? []).filter((m) => !hidden.has(m.id)).sort(byTime);
-  const dm = toConversations(me, convRows, messageRows, toMutes(prefRows.error ? [] : prefRows.data));
+  const listed = toConversations(me, convRows, messageRows, toMutes(prefRows.error ? [] : prefRows.data));
+  const held = new Set(await heldLoad);
+  const dm = held.size ? { ...listed, messages: listed.messages.map((m) => (held.has(m.id) && m.senderId !== me ? { ...m, hiddenByWords: true } : m)) } : listed;
   if (requests.error) console.warn('[remote] follow requests table missing; run the pending migrations', requests.error.message);
   const stories = storiesTry.error ? await storiesPlain() : storiesTry;
   if (storiesTry.error) console.warn('[remote] hit likes/comments tables missing; run the pending migrations', storiesTry.error.message);
@@ -1078,16 +1104,40 @@ export function standInName(handle: string): string {
 }
 
 const fail = (what: string) => (error: unknown) => {
+  // Words the database refuses (migration 117): said once, in plain words, wherever they were written.
+  if (isBlockedWords(error)) { wordsRefused(); return; }
   console.warn(`[remote] ${what} failed`, error);
 };
+
+/* ----------------------------------------------------------- hidden words */
+
+export { BLOCKED_WORDS_NOTE };
+/** Whether an error is that refusal: slurs, sexual words about children, threats. */
+export function isBlockedWords(error: unknown): boolean {
+  const message = typeof error === 'string' ? error : (error as { message?: unknown } | null | undefined)?.message;
+  return typeof message === 'string' && /blocked_words/.test(message);
+}
+const wordsRefusedListeners = new Set<() => void>();
+const wordsRefused = () => wordsRefusedListeners.forEach((fn) => fn());
+/** Told each time a write is refused for its words; the app shows BLOCKED_WORDS_NOTE. */
+export function onWordsRefused(fn: () => void): () => void {
+  wordsRefusedListeners.add(fn);
+  return () => { wordsRefusedListeners.delete(fn); };
+}
+/** A save refused for its words, so the app takes back what it showed. */
+const refusedFor = (error: unknown) => (isBlockedWords(error) ? ('blocked' as const) : undefined);
+/** Why your Hidden words did not save, as set_hidden_words says it. */
+export type HiddenWordsRefusal = 'too_many_words' | 'word_too_long' | 'not_ready' | 'failed';
 
 /**
  * Why a group chat function said no, from the exact words it raises
  * (migration 54; 42's older wording for a full group too). Null for anything
  * else, which the app treats as "didn't go through".
  */
-export type GroupRefusal = 'blocked' | 'teen' | 'full' | 'not-admin';
+export type GroupRefusal = 'blocked' | 'teen' | 'full' | 'not-admin' | 'words';
 function groupRefusal(message: string): GroupRefusal | null {
+  // A group name with words CourtSide refuses (migration 117); checked first, as it says "blocked" too.
+  if (/blocked_words/.test(message)) return 'words';
   if (/teen_closed/.test(message)) return 'teen';
   if (/group_full|up to 16 people/.test(message)) return 'full';
   if (/not_admin/.test(message)) return 'not-admin';
@@ -1159,15 +1209,78 @@ const toGroup = (row: GroupRow): FeedGroup => ({
 /** The server's word for why a group action said no (migration 67), or 'failed'. */
 const groupWord = (error: { code?: string; message: string }) =>
   missingFunction(error) ? 'not_ready'
-    : /adults_only|their_age|group_limit|their_limit|not_admin|not_found|name_needed|slow_down|bad_photo|bad_look/.exec(error.message)?.[0] ?? 'failed';
+    : /adults_only|their_age|group_limit|their_limit|not_admin|not_found|name_needed|slow_down|bad_photo|bad_look|blocked_words/.exec(error.message)?.[0] ?? 'failed';
+
+/**
+ * Of these messages, the ones your Hidden words hid for you (migration 117).
+ * Empty on a database without them, or when it could not be asked (they
+ * then show as normal).
+ */
+async function heldMessageIdsOf(ids: ID[]): Promise<ID[]> {
+  const wanted = ids.filter((id) => UUID_RE.test(id));
+  if (!wanted.length || !supabase) return [];
+  const out: ID[] = [];
+  for (let i = 0; i < wanted.length; i += 150) {
+    const { data, error } = await supabase.from('message_word_holds').select('message_id').in('message_id', wanted.slice(i, i + 150));
+    if (error) { if (!missingTable(error)) fail('hidden messages')(error); return out; }
+    out.push(...((data ?? []) as { message_id: string }[]).map((r) => r.message_id));
+  }
+  return out;
+}
+/** The same messages, the ones hidden for you marked (only ever someone else's). */
+async function markHeld(me: ID, messages: Message[]): Promise<Message[]> {
+  const theirs = messages.filter((m) => m.senderId !== me && m.kind !== 'system' && !!m.body?.trim()).map((m) => m.id);
+  if (!theirs.length) return messages;
+  const held = new Set(await heldMessageIdsOf(theirs).catch(() => [] as ID[]));
+  return held.size ? messages.map((m) => (held.has(m.id) ? { ...m, hiddenByWords: true } : m)) : messages;
+}
 
 export const remote = {
+  /* ------------------------------ hidden words ------------------------------ */
+
+  /** Your Hidden words as they really work (migration 117). 'not_ready' on a database without it; null when it could not be asked. */
+  async fetchHiddenWords(): Promise<HiddenWords | 'not_ready' | null> {
+    const { data, error } = await need().rpc('hidden_words');
+    if (error) { if (missingFunction(error)) return 'not_ready'; fail('hidden words')(error); return null; }
+    return asHiddenWords(data);
+  },
+  /** Saves them; what the server kept (an under-18 account keeps both offensive filters on), or why not. */
+  async saveHiddenWords(next: Omit<HiddenWords, 'locked'>): Promise<HiddenWords | HiddenWordsRefusal> {
+    const { data, error } = await need().rpc('set_hidden_words', {
+      p_hide_comments: next.hideOffensiveComments, p_hide_requests: next.hideOffensiveRequests, p_words: next.customWords,
+      p_in_comments: next.customInComments, p_in_requests: next.customInRequests,
+    });
+    if (error) {
+      if (missingFunction(error)) return 'not_ready';
+      const word = /too_many_words|word_too_long/.exec(error.message)?.[0] as HiddenWordsRefusal | undefined;
+      if (word) return word;
+      fail('hidden words save')(error);
+      return 'failed';
+    }
+    return asHiddenWords(data) ?? 'failed';
+  },
+  /** Shows a comment or reply your Hidden words hid, to everyone again. Nobody is told. True when it took. */
+  async unhideWords(kind: HiddenWordsKind, id: ID): Promise<boolean> {
+    const { error } = await need().rpc('unhide_words', { p_kind: kind, p_id: id });
+    if (error) { fail('unhide')(error); return false; }
+    return true;
+  },
+  /**
+   * Of these messages, the ones hidden for you by your Hidden words (from
+   * someone you don't follow). Empty on a database without them, or when it
+   * could not be asked (they then show as normal).
+   */
+  heldMessageIds: heldMessageIdsOf,
+  /** The same messages, the hidden ones marked. */
+  markHeld,
+
   /* ------------------------ discussions and coaching ------------------------ */
 
   /** The words of a thread you wrote; the tally is the server's and is left alone. */
   async insertPoll(questionId: ID, options: string[]) {
     const { error } = await need().from('polls').insert({ question_id: questionId, options });
     if (error) fail('poll')(error);
+    return refusedFor(error);
   },
   async votePoll(questionId: ID, option: number) {
     const { error } = await need().from('poll_votes').upsert({ question_id: questionId, option }, { onConflict: 'question_id,user_id' });
@@ -1179,6 +1292,8 @@ export const remote = {
       edited_at: q.editedAt ?? null, created_at: q.createdAt,
     });
     if (error) fail('thread save')(error);
+    // 'blocked': refused for its words (migration 117); the app takes it back.
+    return refusedFor(error);
   },
   /**
    * A change to a thread already up (an edit, an accepted answer): those
@@ -1190,8 +1305,9 @@ export const remote = {
     const { data, error } = await need().from('questions').update({
       title: q.title, body: q.body, tags: q.tags, accepted_answer_id: q.acceptedAnswerId ?? null, edited_at: q.editedAt ?? null,
     }).eq('id', q.id).select('id');
-    if (error) { fail('thread save')(error); return; }
-    if (!(data ?? []).length) await remote.upsertQuestion(q);
+    if (error) { fail('thread save')(error); return refusedFor(error); }
+    if (!(data ?? []).length) return remote.upsertQuestion(q);
+    return undefined;
   },
   async upsertAnswer(a: Answer) {
     const { error } = await need().from('answers').upsert({
@@ -1200,6 +1316,7 @@ export const remote = {
       ...(a.media ? { media_url: a.media.url, media_kind: a.media.kind, media_thumb: a.media.thumb ?? null } : {}),
     });
     if (error) fail('answer save')(error);
+    return refusedFor(error);
   },
   async voteQuestion(questionId: ID, dir: 1 | -1) { const { error } = await need().rpc('vote_question', { q: questionId, dir }); if (error) fail('vote')(error); },
   async voteAnswer(answerId: ID, dir: 1 | -1) { const { error } = await need().rpc('vote_answer', { a: answerId, dir }); if (error) fail('vote')(error); },
@@ -1208,6 +1325,7 @@ export const remote = {
       id: q.id, author_id: q.authorId, title: q.title, body: q.body, specialty: q.specialty, video_url: q.videoUrl ?? null, media_label: q.mediaLabel ?? null, resolved: q.resolved, created_at: q.createdAt,
     });
     if (error) fail('coach question save')(error);
+    return refusedFor(error);
   },
   /** "This answered it" / "Reopen": just that, so the question keeps its date (see updateQuestion). */
   async setCoachQuestionResolved(q: CoachQuestion) {
@@ -1235,6 +1353,7 @@ export const remote = {
   async insertCoachReply(r: CoachReply) {
     const { error } = await need().from('coach_replies').upsert({ id: r.id, question_id: r.questionId, coach_user_id: r.coachUserId, body: r.body, created_at: r.createdAt });
     if (error) fail('coach reply save')(error);
+    return refusedFor(error);
   },
   async toggleReplyHelpful(replyId: ID) { const { error } = await need().rpc('toggle_reply_helpful', { r: replyId }); if (error) fail('helpful')(error); },
   async insertCoachingRequest(r: CoachingRequest) {
@@ -1242,6 +1361,7 @@ export const remote = {
       id: r.id, coach_id: r.coachId, user_id: r.userId, service_id: r.serviceId, question: r.question, video_label: r.videoLabel ?? null, status: r.status, created_at: r.createdAt,
     });
     if (error) fail('coaching request save')(error);
+    return refusedFor(error);
   },
   async markNotificationsRead(ids: ID[]) {
     if (!ids.length) return;
@@ -1396,8 +1516,10 @@ export const remote = {
   },
 
   /** A group's new name ('' takes the name off). True when it took. */
-  async renameGroup(conversationId: ID, title: string): Promise<boolean> {
+  async renameGroup(conversationId: ID, title: string): Promise<boolean | 'blocked'> {
     const { error } = await need().rpc('rename_group', { conv: conversationId, new_title: title });
+    // A name refused for its words (migration 117): the app says why instead of "didn't change".
+    if (error && isBlockedWords(error)) return 'blocked';
     if (error) { fail('rename group')(error); return false; }
     return true;
   },
@@ -1573,8 +1695,10 @@ export const remote = {
    * Resolves whether it was saved: an update the database quietly turned
    * down changes no row, so that counts as not saved too.
    */
-  async editMessage(messageId: ID, body: string): Promise<boolean> {
+  async editMessage(messageId: ID, body: string): Promise<boolean | 'blocked'> {
     const { data, error } = await need().from('messages').update({ body }).eq('id', messageId).select('id');
+    // Refused for its words (migration 117): the app says why instead of "didn't save".
+    if (error && isBlockedWords(error)) return 'blocked';
     if (error) { fail('message edit')(error); return false; }
     return !!data?.length;
   },
@@ -1653,7 +1777,7 @@ export const remote = {
     if (conv.error || msgs.error) return null;
     if (!conv.data) return 'gone';
     const dm = toConversations(me, [conv.data as unknown as ConversationRow], ((msgs.data ?? []) as MessageRow[]).reverse(), toMutes(pref.error ? [] : pref.data));
-    return dm.conversations[0] ? { conversation: dm.conversations[0], messages: dm.messages } : null;
+    return dm.conversations[0] ? { conversation: dm.conversations[0], messages: await markHeld(me, dm.messages) } : null;
   },
 
   /**
@@ -1683,7 +1807,7 @@ export const remote = {
     }
     const conv: ConversationRow = { id: conversationId, updated_at: before, conversation_members: (members.data ?? []) as ConversationRow['conversation_members'] };
     const dm = toConversations(me, [conv], shown.reverse());
-    return { messages: dm.messages, more: rows.length === MESSAGE_PAGE };
+    return { messages: await markHeld(me, dm.messages), more: rows.length === MESSAGE_PAGE };
   },
 
   /**
@@ -1932,7 +2056,7 @@ export const remote = {
     const { data, error } = isNew
       ? await need().from('coach_services').insert(row).select('id').single()
       : await need().from('coach_services').update(row).eq('id', service.id).select('id').single();
-    if (error) throw new Error(/price_cents/.test(error.message) ? 'Prices run from $5 to $1,000.' : error.message);
+    if (error) throw new Error(isBlockedWords(error) ? BLOCKED_WORDS_NOTE : /price_cents/.test(error.message) ? 'Prices run from $5 to $1,000.' : error.message);
     return (data as { id: string }).id;
   },
   async removeService(serviceId: ID) {
@@ -1941,7 +2065,7 @@ export const remote = {
   },
   async insertCoachReview(review: CoachReview) {
     const { error } = await need().from('coach_reviews').insert({ id: review.id, coach_id: review.coachId, author_id: review.authorId, rating: review.rating, body: review.body });
-    if (error) throw new Error(/row-level security/.test(error.message) ? 'You can review a coach once they have answered one of your bookings.' : error.message);
+    if (error) throw new Error(isBlockedWords(error) ? BLOCKED_WORDS_NOTE : /row-level security/.test(error.message) ? 'You can review a coach once they have answered one of your bookings.' : error.message);
   },
   async insertCoachResult(result: CoachResult) {
     const { error } = await need().from('coach_results').insert({ id: result.id, coach_id: result.coachId, client_name: result.clientName, focus: result.focus, before: result.before, after: result.after, weeks: result.weeks, note: result.note ?? null });
@@ -1987,6 +2111,7 @@ export const remote = {
       if (/change_handle|function .* does not exist|schema cache/i.test(error.message)) {
         throw new Error('Changing handles is not open yet. Try again soon.');
       }
+      if (isBlockedWords(error)) throw new Error(BLOCKED_WORDS_NOTE);
       throw new Error(error.message);
     }
     return String(data);
@@ -2458,7 +2583,8 @@ export const remote = {
   async fetchMessagesSince(since: string): Promise<Message[]> {
     const { data, error } = await need().from('messages').select('*').gt('created_at', since).order('created_at', { ascending: true }).limit(500);
     if (error || !data) return [];
-    return toConversations('', [], data as MessageRow[]).messages;
+    // Only ever someone else's message is held for you, so your own are never marked.
+    return markHeld('', toConversations('', [], data as MessageRow[]).messages);
   },
 
   /**
@@ -3000,6 +3126,7 @@ export const remote = {
       busy: r.busy ?? null, access: r.access ?? null, notes: r.notes?.trim() || null, from_hit: r.fromHit && /^[0-9a-f-]{36}$/i.test(r.fromHit) ? r.fromHit : null,
     }, { onConflict: 'court_id,user_id' });
     if (!error) return;
+    if (isBlockedWords(error)) throw new Error(BLOCKED_WORDS_NOTE);
     fail('court review')(error);
     if (missingTable(error)) throw new Error('Court reviews aren’t switched on yet. Try again soon.');
     if (/30 courts a day|slow down/i.test(error.message)) throw new Error('That’s a lot of courts for one day. Try again tomorrow.');
@@ -3091,6 +3218,8 @@ export const remote = {
       ...(h.audience ? { audience: h.audience, include_groups: !!h.includeGroups } : {}),
     });
     if (error) {
+      // A note refused for its words (migration 117): saying so is the whole message.
+      if (isBlockedWords(error)) throw new Error(BLOCKED_WORDS_NOTE);
       fail('hit request')(error);
       // Never posted for everyone instead: a database without migration 76 says no, and so does the app.
       if (h.audience && /audience|include_groups/.test(error.message)) throw new Error('Invite-first hits aren’t ready yet. Post it for everyone, or try again later.');
@@ -3127,11 +3256,16 @@ export const remote = {
   async insertTip(tip: Tip) {
     const { error } = await need().from('tips').insert({ id: tip.id, user_id: tip.authorId, body: tip.body, created_at: tip.createdAt });
     if (error) fail('tip')(error);
+    return refusedFor(error);
   },
   async voteTip(tipId: ID, dir: 1 | -1) { const { error } = await need().rpc('vote_tip', { t: tipId, dir }); if (error) fail('tip vote')(error); },
 
   /** Resolves false when it was not saved (most callers need not ask). */
-  async updateProfile(me: ID, patch: { name?: string; bio?: string; location?: string; cityAt?: { lat: number; lng: number } | null; avatarUrl?: string; profile?: PlayerProfile; isPrivate?: boolean; readReceipts?: boolean; openToHitUntil?: string | null; firstMove?: FirstMove }): Promise<boolean> {
+  async updateProfile(me: ID, patch: ProfilePatch): Promise<boolean> {
+    return (await remote.saveProfile(me, patch)) === 'ok';
+  },
+  /** The same, saying why not: 'blocked' when its words were refused (migration 117). */
+  async saveProfile(me: ID, patch: ProfilePatch): Promise<'ok' | 'blocked' | 'failed'> {
     const row: Record<string, unknown> = {};
     if (patch.firstMove !== undefined) { row.first_move = patch.firstMove; row.first_move_at = new Date().toISOString(); }
     if (patch.openToHitUntil !== undefined) row.open_to_hit_until = patch.openToHitUntil;
@@ -3152,8 +3286,8 @@ export const remote = {
       if (Object.keys(row).length) ({ error } = await need().from('profiles').update(row).eq('id', me));
       else error = null;
     }
-    if (error) { fail('profile update')(error); return false; }
-    return true;
+    if (error) { fail('profile update')(error); return refusedFor(error) ?? 'failed'; }
+    return 'ok';
   },
 
   /**
@@ -3251,6 +3385,8 @@ export const remote = {
         fail('group post insert')(error);
         throw new Error(/not_in_group/.test(error.message) ? 'You are not in that group any more.' : 'Groups are not switched on yet. Share it with everyone instead.');
       }
+      // Refused for its words (migration 117): saying so is the whole message.
+      if (isBlockedWords(error)) throw new Error(BLOCKED_WORDS_NOTE);
       // Before saying it failed (and you post it again, as a second post): is it there after all?
       if (await landed()) return;
       fail('post insert')(error);
@@ -3269,20 +3405,22 @@ export const remote = {
     if (error) fail('post archive')(error);
   },
   /** The author's edit: words, tags, who is in it, where it was — and when. */
-  async updatePost(postId: ID, patch: { body: string; tags: string[]; taggedUserIds: ID[]; location?: string; court?: TaggedCourt | null; editedAt: string }) {
+  /** Resolves 'blocked' when the new words were refused (migration 117). */
+  async updatePost(postId: ID, patch: { body: string; tags: string[]; taggedUserIds: ID[]; location?: string; court?: TaggedCourt | null; editedAt: string }): Promise<'blocked' | undefined> {
     const base = { body: patch.body, tags: patch.tags, tagged_user_ids: patch.taggedUserIds };
     const court = patch.court === undefined ? {} : { court_id: patch.court?.id ?? null, court_name: patch.court?.name ?? null, court_lat: patch.court?.lat ?? null, court_lng: patch.court?.lng ?? null };
     let { error } = await need().from('posts').update({ ...base, location: patch.location ?? null, ...court, edited_at: patch.editedAt }).eq('id', postId);
     // Before migration 51 there is nowhere to keep the court: save the rest.
     if (error && /court_/.test(error.message)) ({ error } = await need().from('posts').update({ ...base, location: patch.location ?? null, edited_at: patch.editedAt }).eq('id', postId));
-    if (!error) return;
+    if (!error) return undefined;
     if (/location|edited_at/.test(error.message)) {
       console.warn('[remote] edit columns missing; run the pending migration — saving the words only');
       const retry = await need().from('posts').update(base).eq('id', postId);
       if (retry.error) fail('post edit')(retry.error);
-      return;
+      return refusedFor(retry.error);
     }
     fail('post edit')(error);
+    return refusedFor(error);
   },
   /**
    * "Share health data" changed on a post already up (Oct 4, owner). Only the
@@ -3329,6 +3467,8 @@ export const remote = {
     // Before migration 52 there is nowhere for the photo: the words still go up.
     if (error && comment.imageUrl && /image_url/.test(error.message)) ({ error } = await insert(row));
     if (error) fail('comment insert')(error);
+    // 'blocked': refused for its words (migration 117); the app takes it back off the list.
+    return refusedFor(error);
   },
 
   /** The same as insertPost: saved under the phone's own id, safe to send twice, throws when it could not be saved. */
@@ -3351,6 +3491,7 @@ export const remote = {
       ({ error } = await need().from('stories').insert(row));
     }
     if (!error || error.code === '23505') return;
+    if (isBlockedWords(error)) throw new Error(BLOCKED_WORDS_NOTE);
     // Before saying it failed (and it is posted again, as a second one): is it there after all?
     const { data: there } = await need().from('stories').select('id').eq('id', story.id).maybeSingle().then((r) => r, () => ({ data: null }));
     if (there) return;
@@ -3386,6 +3527,7 @@ export const remote = {
       id: comment.id, story_id: comment.postId, author_id: comment.authorId, body: comment.body, created_at: comment.createdAt,
     }, comment);
     if (error) fail('hit comment insert')(error);
+    return refusedFor(error);
   },
 
   /**

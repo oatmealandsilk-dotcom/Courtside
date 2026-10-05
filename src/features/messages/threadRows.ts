@@ -37,6 +37,8 @@ export interface ThreadRow {
   face: boolean;
   /** From someone you blocked, folded: the ids of the run it stands for (one quiet line). */
   folded?: ID[];
+  /** Hidden by your Hidden words (migration 117): "Hidden message · tap to show" until tapped. */
+  wordsHidden?: boolean;
   /** In a group, who has read up to here (their faces go under it). */
   seenBy?: ID[];
 }
@@ -91,6 +93,11 @@ export function buildRows(thread: Message[], opts: { me: ID | null; group: boole
       rows.push({ key: `fold:${message.id}`, message, stamp, gap: 'plain', joinBelow: false, name: false, face: false, folded: run });
       continue;
     }
+    // From someone you don't follow, hidden by your Hidden words (migration 117): one quiet line until tapped.
+    if (!mine && message.hiddenByWords && !shown.has(message.id)) {
+      rows.push({ key: `words:${message.id}`, message, stamp, gap: 'plain', joinBelow: false, name: false, face: false, wordsHidden: true });
+      continue;
+    }
     const name = theirsInGroup && !inRun;
     const gap: Gap = inRun ? 'run' : prev && !stamp && !name && prev.kind !== 'system' ? 'turn' : 'plain';
     rows.push({
@@ -113,7 +120,7 @@ export function keepRows(cache: Map<string, ThreadRow>, rows: ThreadRow[]): Thre
   const out = rows.map((row) => {
     const was = cache.get(row.key);
     return was && was.message === row.message && was.stamp === row.stamp && was.gap === row.gap && was.joinBelow === row.joinBelow
-      && was.name === row.name && was.face === row.face && sameIds(was.folded, row.folded) && sameIds(was.seenBy, row.seenBy)
+      && was.name === row.name && was.face === row.face && sameIds(was.folded, row.folded) && sameIds(was.seenBy, row.seenBy) && was.wordsHidden === row.wordsHidden
       ? was : row;
   });
   cache.clear();

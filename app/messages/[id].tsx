@@ -519,6 +519,7 @@ export default function Thread() {
         original={original}
         // Answering someone you blocked, whose words are folded away here: the quote keeps them hidden too.
         originalBlocked={!!original && group && original.senderId !== currentUserId && blockedIds.includes(original.senderId) && !shownIds.includes(original.id)}
+        originalHidden={!!original && !!original.hiddenByWords && original.senderId !== currentUserId && !shownIds.includes(original.id)}
         held={menuId === m.id}
         flashKey={flash?.id === m.id ? flash.n : undefined}
         readLine={m.id === lastRealId ? readLine : null}
@@ -1347,13 +1348,15 @@ const noop = () => {};
  * read line), an event line, or a folded run. Drawn again only when one of
  * its own values changes (see Thread's renderRow).
  */
-const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlocked, held, flashKey, readLine, seenHidden, canWrite }: {
+const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlocked, originalHidden = false, held, flashKey, readLine, seenHidden, canWrite }: {
   item: ThreadRow;
   ctx: RowCtx;
   /** The message it answers, when it is here (undefined: gone, or not loaded yet). */
   original?: Message;
   /** That message is from someone you blocked, folded away here. */
   originalBlocked: boolean;
+  /** That message is hidden here by your Hidden words (migration 117): the quote keeps its words hidden too. */
+  originalHidden?: boolean;
   /** Its menu is open: the lifted copy stands in for it. */
   held: boolean;
   flashKey?: number;
@@ -1404,6 +1407,30 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
     );
   }
 
+  // Hidden by your Hidden words (migration 117): someone you don't follow
+  // wrote words your filters hide. One quiet line, the way a blocked
+  // person's messages fold, until you tap to see it.
+  if (item.wordsHidden) {
+    return (
+      <View>
+        {stamp}
+        <Row mine={false} gap="plain" leading={gutter ? <View style={styles.faceSpace} /> : undefined} styles={styles}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Hidden message. Show"
+            onPress={() => call.showFolded([message.id])}
+            style={({ pressed }) => [styles.folded, pressed && { opacity: 0.7 }]}
+          >
+            <Ionicons name="eye-off-outline" size={14} color={colors.textFaint} />
+            <Text style={styles.foldedText}>
+              Hidden message · <Text style={styles.foldedShow}>tap to show</Text>
+            </Text>
+          </Pressable>
+        </Row>
+      </View>
+    );
+  }
+
   // In a group, others' messages carry who sent them: a face by the
   // last bubble of each run, a name over the first. Both open their profile.
   const sender = gutter ? ctx.faceOf(message.senderId) : undefined;
@@ -1434,6 +1461,7 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
     <ReplyQuote
       original={original}
       blocked={originalBlocked}
+      hidden={originalHidden}
       who={original ? ctx.nameOf(original.senderId) : ''}
       mine={mine}
       standalone={standalone}
