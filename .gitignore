@@ -2,6 +2,8 @@ node_modules/
 .expo/
 dist/
 web-build/
+# The auto-tester's screenshots (npm run smoke)
+smoke-screenshots/
 *.log
 npm-debug.*
 yarn-error.*

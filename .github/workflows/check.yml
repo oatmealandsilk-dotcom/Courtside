@@ -1,10 +1,13 @@
 # Every change is type-checked before it can go live.
 #
-# `npm run typecheck` is the project's only automated check, and until now it
-# only ran when someone remembered to. With more than one person (and more
-# than one Claude) sending changes, it runs here on every pull request and
-# every pushed branch, so a change that breaks the build shows a red cross on
-# GitHub before anyone merges it, instead of breaking the live site after.
+# `npm run typecheck` used to run only when someone remembered to. With more
+# than one person (and more than one Claude) sending changes, it runs here on
+# every pull request and every pushed branch, so a change that breaks the
+# build shows a red cross on GitHub before anyone merges it, instead of
+# breaking the live site after.
+#
+# After it passes, the auto-tester (the "smoke" job below) clicks through the
+# app itself.
 name: Check
 
 on:
@@ -34,3 +37,57 @@ jobs:
 
       - name: Type-check
         run: npm run typecheck
+
+  # The auto-tester (scripts/smoke.mjs): builds the web app in demo mode (no
+  # database), opens it in Chrome at a phone's width and clicks through the
+  # main screens: sign-in, each tab, a post and its comments, a chat,
+  # Settings, sharing a session, search and Open to hit. It fails on an error,
+  # a blank screen or a missing button. Runs once the type-check has passed,
+  # on every pushed branch. When it fails, the screenshot of every step is
+  # kept for a week: open the failed run on GitHub, scroll to Artifacts, and
+  # download "smoke-screenshots".
+  smoke:
+    name: Auto-tester
+    needs: typecheck
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm install --legacy-peer-deps
+
+      # The build's working files (Metro's cache, demo-only), kept between runs
+      # so a build only redoes the files that changed. Saved only by a run that
+      # passes; a new one starts whenever package-lock.json changes.
+      - name: Reuse the last build's working files
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/courtside-smoke
+          key: smoke-build-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      # Chrome comes installed on GitHub's Ubuntu machines. Stopped after 7
+      # minutes, so a stuck run still counts as failed and keeps its screenshots.
+      - name: Click through the app
+        run: npm run smoke
+        timeout-minutes: 7
+        env:
+          SMOKE_CACHE_DIR: ${{ runner.temp }}/courtside-smoke
+
+      # Also when the whole job ran out of time (that counts as cancelled, not failed).
+      - name: Keep the screenshots
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-screenshots
+          path: smoke-screenshots/
+          retention-days: 7
+          if-no-files-found: ignore
