@@ -11,17 +11,27 @@ import { colors } from '@/theme';
  * own — it refracts what scrolls beneath and catches the light. Older
  * iPhones get a frosted blur; Android and the browser a translucent tint.
  * Reserved for chrome that floats over content: the tab bar, map controls.
+ *
+ * Android (Oct 5): the theme's own colour, nearly solid. Its blur needs the
+ * page wrapped in a blur target, and without one it fell back to a flat
+ * white or near-black film that is no theme's colour (a pale wash on New
+ * York's navy), with two warnings each time; nearly solid also keeps the
+ * labels readable over a busy clip.
  */
 export function Glass({ children, style, radius = 999, interactive = false, tint, clear = false }: { children?: React.ReactNode; style?: StyleProp<ViewStyle>; radius?: number; interactive?: boolean; /** A hint of colour in the glass; the theme's ground by default. */ tint?: string; /** More glass, less tint: what is beneath shows through (the tab bar, Oct 4). */ clear?: boolean }) {
-  const { night } = useTheme();
+  // Dark glass on a dark page (Night, and New York's navy).
+  const { dark } = useTheme();
   const rounded = { borderRadius: radius, overflow: 'hidden' as const };
   // Read at draw time, so the veil is the court you are on, not the one the file loaded with.
   const veil = { backgroundColor: `${(tint ?? colors.surface).slice(0, 7)}${clear ? 'B3' : 'CC'}` };
   if (Platform.OS === 'ios' && isLiquidGlassAvailable()) {
-    return <GlassView glassEffectStyle="regular" isInteractive={interactive || clear} tintColor={clear && tint ? `${tint.slice(0, 7)}BF` : tint} colorScheme={night ? 'dark' : 'light'} style={[rounded, style]}>{children}</GlassView>;
+    return <GlassView glassEffectStyle="regular" isInteractive={interactive || clear} tintColor={clear && tint ? `${tint.slice(0, 7)}BF` : tint} colorScheme={dark ? 'dark' : 'light'} style={[rounded, style]}>{children}</GlassView>;
   }
-  if (Platform.OS === 'ios' || Platform.OS === 'android') {
-    return <BlurView intensity={clear ? 80 : 55} tint={night ? 'dark' : 'light'} experimentalBlurMethod="dimezisBlurView" style={[rounded, veil, style]}>{children}</BlurView>;
+  if (Platform.OS === 'ios') {
+    return <BlurView intensity={clear ? 80 : 55} tint={dark ? 'dark' : 'light'} style={[rounded, veil, style]}>{children}</BlurView>;
+  }
+  if (Platform.OS === 'android') {
+    return <View style={[rounded, { backgroundColor: `${(tint ?? colors.surface).slice(0, 7)}${clear ? 'E6' : 'F2'}` }, style]}>{children}</View>;
   }
   return <View style={[rounded, veil, clear ? styles.webClear : styles.web, style]}>{children}</View>;
 }

@@ -160,8 +160,17 @@ const ThemeContext = createContext({
   theme: 'default' as ThemeName,
   setTheme: (_name: ThemeName) => {},
   night: false,
+  /**
+   * The page itself is dark: Night, and New York's navy (Oct 5). What the
+   * status bar's icons, the glass's tint and the like follow; `night` is only
+   * the Night theme itself.
+   */
+  dark: false,
   setNight: (_value: boolean) => {},
 });
+
+/** Themes whose page is dark. */
+const DARK_THEMES: ReadonlySet<ThemeName> = new Set<ThemeName>(['night', 'us-open']);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, updateTheme] = useState<ThemeName>(readStored);
@@ -263,7 +272,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const setNight = (value: boolean) => setTheme(value ? 'night' : 'default');
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, night: theme === 'night', setNight }}>
+    <ThemeContext.Provider value={{ theme, setTheme, night: theme === 'night', dark: DARK_THEMES.has(theme), setNight }}>
       <View style={{ flex: 1, backgroundColor: loaded ? undefined : lightColors.bg }}>
         {/* While your last theme is read (a blink), the launch picture itself, not a bare cream
             screen: the logo never drops out between the phone's picture and the app's (Oct 4). */}

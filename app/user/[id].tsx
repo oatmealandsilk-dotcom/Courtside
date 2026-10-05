@@ -225,7 +225,7 @@ function UserProfile() {
           <View style={styles.tabs}>
             {TABS.map((t) => (
               <Pressable key={t} accessibilityRole="tab" accessibilityState={{ selected: tab === t }} accessibilityLabel={`${t}, ${counts[t]}`} onPress={() => setTab(t)} style={[styles.tab, tab === t && styles.tabOn]}>
-                <Text style={{ color: tab === t ? colors.brand : colors.textMuted, fontWeight: tab === t ? '700' : '400' }}>{t}<Text style={[styles.tabCount, tab === t && { color: colors.brand }]}>  {compactNumber(counts[t])}</Text></Text>
+                <Text style={{ color: tab === t ? colors.brand : colors.textMuted, ...font(tab === t ? '700' : '400') }}>{t}<Text style={[styles.tabCount, tab === t && { color: colors.brand }]}>  {compactNumber(counts[t])}</Text></Text>
               </Pressable>
             ))}
           </View>
