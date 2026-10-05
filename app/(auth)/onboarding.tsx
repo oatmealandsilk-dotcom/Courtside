@@ -11,7 +11,7 @@ import { Button, Collapse, Field, SegmentedControl, Toggle } from '@/components/
 import { SCALES } from '@/features/players/ratingScales';
 import { writeSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
 import { replaceWithStart } from '@/features/navigation/startTab';
-import { peekShareTarget } from '@/features/invite/referral';
+import { handleFromText, isWaitlistCode, peekReferrer, peekShareTarget } from '@/features/invite/referral';
 import type { InviteCodeResult, MyInviter } from '@/data/remote';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
@@ -151,12 +151,28 @@ export default function Onboarding() {
   // One adult and one teen: no automatic follow; a Follow button instead (Oct 4, owner).
   const [followOffer, setFollowOffer] = useState<{ id: string; handle: string } | null>(null);
   const [inviteCode, setInviteCode] = useState('');
+  // The handle filled in for them, so the hint names what is actually in the box.
+  const [prefilled, setPrefilled] = useState<string | null>(null);
   const [inviteNote, setInviteNote] = useState<string | undefined>();
   const [claiming, setClaiming] = useState(false);
   useEffect(() => {
     if (!asksInviter) return;
     let live = true;
-    void actions.myInviter().then((r) => { if (live) setInviter(r); });
+    void (async () => {
+      const r = await actions.myInviter();
+      if (!live) return;
+      setInviter(r);
+      if (!r?.canSet) return;
+      // Filled in for them, still theirs to change: first the invite link this
+      // phone opened (kept only when its claim did not get through), then the
+      // waitlist's guess (a credit made from it, or a match only offered:
+      // nothing counts until they press Continue).
+      const kept = await peekReferrer().catch(() => null);
+      const suggested = kept ?? r.handle ?? r.suggested ?? null;
+      if (!live || !suggested) return;
+      setInviteCode((typed) => typed || suggested);
+      setPrefilled(suggested);
+    })();
     return () => { live = false; };
   }, [asksInviter, actions]);
   const INVITE_ERRORS: Record<Exclude<InviteCodeResult['error'], undefined>, string> = {
@@ -168,8 +184,9 @@ export default function Onboarding() {
   };
   /** Claims a typed code. True when there is nothing left to claim (so setup may go on). */
   const claimCode = async (): Promise<boolean> => {
-    const code = inviteCode.trim().replace(/^@+/, '');
-    if (!code || !inviter?.canSet || inviter.handle) return true;
+    // A pasted invite link, spaces or an @ all come down to the handle.
+    const code = handleFromText(inviteCode);
+    if (!code || !inviter?.canSet) return true;
     setClaiming(true);
     const r = await actions.claimInviteCode(code);
     setClaiming(false);
@@ -186,7 +203,10 @@ export default function Onboarding() {
       setInviteCode('');
       return true;
     }
-    setInviteNote(INVITE_ERRORS[r.error]);
+    // A friend's waitlist link whose owner has no CourtSide account to credit yet.
+    setInviteNote(r.error === 'not-found' && isWaitlistCode(code)
+      ? "That's a waitlist link we can't match to a player yet. Type your friend's @handle instead, or clear this box."
+      : INVITE_ERRORS[r.error]);
     return false;
   };
 
@@ -377,7 +397,7 @@ export default function Onboarding() {
                   segments={YEARS.map((y) => ({ value: String(y.value), label: y.label }))}
                 />
               </Group>
-              {asksInviter && inviter?.handle ? (
+              {asksInviter && inviter?.handle && !inviter.canSet ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                   <Text style={styles.note} accessibilityLabel={`Invited by @${inviter.handle}`}>Invited by @{inviter.handle}</Text>
                   {followOffer ? (
@@ -387,12 +407,13 @@ export default function Onboarding() {
               ) : asksInviter && inviter?.canSet ? (
                 <Field
                   label="Invited by?"
-                  placeholder="Enter a code: their @handle"
+                  placeholder="Their @handle (or paste their link)"
                   value={inviteCode}
                   onChangeText={(t) => { setInviteCode(t); setInviteNote(undefined); }}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  hint={inviteNote ?? 'Optional. Can only be set once.'}
+                  // A handle matched from the link they used: theirs to keep or change, today only.
+                  hint={inviteNote ?? (prefilled && handleFromText(inviteCode) === prefilled ? `Matched from the link you used. Not @${prefilled}? Type who invited you.` : 'Optional. Can only be set once.')}
                   onSubmitEditing={() => void claimCode()}
                 />
               ) : null}

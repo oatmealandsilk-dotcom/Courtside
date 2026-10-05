@@ -49,8 +49,13 @@ export interface InviteSummaryRow {
   qualified: number;
   paid: number; paidCents: number; owed: number; owedCents: number; lastPaidAt?: string;
 }
-/** Who invited me: their id and @handle once set; canSet while a code may still be typed (inside a day of joining). */
-export interface MyInviter { id?: ID; handle?: string; name?: string; canSet: boolean }
+/**
+ * Who invited me: their id and @handle once set; canSet while a code may
+ * still be typed (inside a day of joining). With nobody set yet, `suggested`
+ * is the @handle the waitlist matched from a link they used (migration 116):
+ * filled in at "Invited by?", and only counted once they press Continue.
+ */
+export interface MyInviter { id?: ID; handle?: string; name?: string; canSet: boolean; suggested?: string }
 export type InviteCodeResult =
   | { ok: true; id: ID; handle: string; followed: boolean; error?: undefined }
   | { ok?: undefined; error: 'not-found' | 'self' | 'already' | 'too-late' | 'offline'; handle?: string };
@@ -1994,11 +1999,16 @@ export const remote = {
 
   /* -------------------------------------------------------------- invites */
 
-  /** Claims the invite this person joined through; returns who invited them, or null when the handle is unknown or the tables are not there yet. */
-  async claimReferral(handle: string): Promise<ID | null> {
+  /**
+   * Claims the invite this person joined through. Answered: `followed` is who
+   * was followed (null when no follow was made, or nothing was credited).
+   * Not answered (offline, a server hiccup): `ok: false`, so the handle is
+   * kept and tried again rather than lost.
+   */
+  async claimReferral(handle: string): Promise<{ ok: true; followed: ID | null } | { ok: false }> {
     const { data, error } = await need().rpc('claim_referral', { p_handle: handle });
-    if (error) return null;
-    return (data as ID | null) ?? null;
+    if (error) return { ok: false };
+    return { ok: true, followed: (data as ID | null) ?? null };
   },
 
   /** Who invited me (migration 80), and whether a code may still be typed. Null when unknown. */
@@ -3835,7 +3845,8 @@ export const auth = {
     if (error) throw new Error(error.message);
     return data.session;
   },
-  async signUp(email: string, password: string, name: string, handle: string, birthDate?: string) {
+  async signUp(email: string, password: string, name: string, handle: string, birthDate?: string, invitedBy?: string | null) {
+    const base = (process.env.EXPO_BASE_URL ?? '').replace(/\/$/, '');
     const { data, error } = await need().auth.signUp({
       email: email.trim(),
       password,
@@ -3845,7 +3856,14 @@ export const auth = {
       // saved, or only from the email link (on any phone or browser), and the
       // age check saves it from here instead of asking again. It still goes
       // through set_birth_date, and comes off once the age is on file.
-      options: { data: { name: name.trim(), handle: handle.trim().toLowerCase(), terms_version: TERMS_VERSION, terms_accepted_at: new Date().toISOString(), ...(birthDate ? { birth_date: birthDate } : {}) } },
+      // The invite link this person came through rides along as well, and the
+      // server credits it the moment the account is made (migration 116), so
+      // it is not lost when the confirmation email opens in another browser.
+      options: {
+        data: { name: name.trim(), handle: handle.trim().toLowerCase(), terms_version: TERMS_VERSION, terms_accepted_at: new Date().toISOString(), ...(birthDate ? { birth_date: birthDate } : {}), ...(invitedBy ? { invited_by: invitedBy } : {}) },
+        // The confirmation link comes back to this same site, where the invite link was kept.
+        ...(Platform.OS === 'web' ? { emailRedirectTo: `${window.location.origin}${base}/` } : {}),
+      },
     });
     if (error) throw new Error(error.message);
     // With email confirmation on, there is no session yet; the screen says so.

@@ -605,7 +605,7 @@
           <div class="app-cta">
             <a class="btn btn-primary btn-app" href="https://testflight.apple.com/join/21UJPuny" target="_blank" rel="noopener">Get the iPhone app <svg aria-hidden="true"><use href="#out"/></svg></a>
             <p class="app-note">Free. Opens Apple’s TestFlight: install it, then CourtSide. On Android? <a href="https://app.courtsidebase.com">Use CourtSide on the web</a>.</p>
-            <p class="invited" data-invited hidden>Invited by <strong data-at></strong>? Type <b class="code" data-code></b> when the app asks “Invited by?”</p>
+            <p class="invited" data-invited hidden><span data-lead>From a friend’s link?</span> Type <b class="code" data-code></b> when the app asks “Invited by?”</p>
           </div>
           <div class="or-email">
             <p class="or-label"><label for="quick-email">Not on your iPhone right now? Get the link by email</label> <span class="opt">(optional)</span></p>
@@ -846,7 +846,9 @@
       if (res.ok) {
         const rows = await res.json();
         const row = Array.isArray(rows) ? rows[0] : rows;
-        if (row && row.code) return { kind: row.already ? 'already' : 'ok', place: row.place, code: row.code };
+        // Someone already on the list gets no code back (migration 116): their
+        // link is only handed out when the email is new here.
+        if (row && (row.code || row.already)) return { kind: row.already ? 'already' : 'ok', place: row.place, code: row.code || null };
         return { kind: 'error' };
       }
       if (res.status === 404) return { kind: await add('waitlist', { email, name, source }) };
@@ -928,6 +930,7 @@
     card.querySelector('strong').textContent = result.kind === 'already' ? 'You’re already in.' : 'You’re in.';
     card.querySelector('.spot-words span').textContent = 'The beta is open. Get CourtSide on your iPhone now.';
     card.querySelector('.share-link').value = link;
+    carryRef(card);
     const note = card.querySelector('.msg');
     card.querySelector('[data-copy]').addEventListener('click', async () => {
       try { await navigator.clipboard.writeText(link); note.textContent = 'Copied.'; }
@@ -1012,27 +1015,80 @@
   //     them too (migration 83). Optional: an empty box goes straight on.
   // Anyone without such a link, or who already joined on this visit, goes
   // straight to TestFlight as before.
+  //
+  // Oct 5: a player whose account the server keeps out of signed-out
+  // lookups (a teen, or a private account, like the partner link
+  // ?ref=omuchitaletennis) got nothing at all, so nobody from their link was
+  // told what to type and the credit was lost. Now a ?ref= handle that some
+  // account really has (handle_status, the same check the sign-up form
+  // makes: taken, or held after a rename) shows the handle from the link
+  // itself: no name, no photo, nothing the link does not already say. A
+  // label that is nobody's (a new campaign, a typo) shows nothing, so nobody
+  // is told to type a handle the app would refuse. Our own campaign labels
+  // never name anyone, even if someone took that handle.
   const maybeHandle = source && /^[a-z0-9_]{2,24}$/.test(source) ? source : null;
+  const CAMPAIGNS = new Set(['instagram', 'ig', 'insta', 'courtsidebase', 'courtside', 'reddit', 'tiktok', 'facebook', 'fb', 'twitter', 'threads', 'youtube', 'snapchat', 'whatsapp', 'discord', 'linktree', 'linkinbio', 'bio', 'email', 'newsletter', 'qr', 'flyer', 'poster', 'google', 'share', 'web', 'app', 'testflight', 'beta', 'robertzchen', 'robchzn', 'gipsperformance']);
+  const refParam = ((params.get('ref') || '').trim().toLowerCase().replace(/^@+/, ''));
+  const refCandidate = /^[a-z0-9_]{2,24}$/.test(refParam) && !CAMPAIGNS.has(refParam) ? refParam : null;
+  // Set once the server says an account has that handle.
+  let linkHandle = null;
+  function showInvited(lead, handle) {
+    document.querySelectorAll('[data-invited]').forEach((el) => {
+      el.querySelector('[data-lead]').textContent = lead;
+      el.querySelector('[data-code]').textContent = handle;
+      el.hidden = false;
+    });
+  }
+  async function rpc(name, body) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(String(res.status));
+    return res.json();
+  }
   (async function findInviter() {
-    if (!maybeHandle) return;
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/share_preview`, {
-        method: 'POST',
-        headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ p_kind: 'referrer', p_id: maybeHandle }),
-      });
-      if (!res.ok) return;
-      const got = await res.json();
-      const handle = got && got.open && got.author && typeof got.author.handle === 'string' ? got.author.handle : null;
-      if (!handle) return;
+    // A public player's link names them (share_preview, as the app's join page does).
+    const named = maybeHandle && !CAMPAIGNS.has(maybeHandle)
+      ? rpc('share_preview', { p_kind: 'referrer', p_id: maybeHandle })
+        .then((got) => (got && got.open && got.author && typeof got.author.handle === 'string' ? got.author.handle : null))
+        .catch(() => null)
+      : Promise.resolve(null);
+    const real = refCandidate
+      ? rpc('handle_status', { p_handle: refCandidate }).then((s) => s === 'taken' || s === 'held').catch(() => false)
+      : Promise.resolve(false);
+    real.then((yes) => { if (yes) { linkHandle = refCandidate; carryRef(document); } });
+    // The line under the button goes up once both answers are in, so it does
+    // not change under the reader. A slow answer still gets the plain line
+    // after a second.
+    let shown = false;
+    const plain = () => {
+      if (shown || inviter || !linkHandle) return;
+      shown = true;
+      showInvited('From a friend’s link?', linkHandle);
+    };
+    const timer = setTimeout(plain, 1000);
+    const handle = await named;
+    await real;
+    clearTimeout(timer);
+    if (handle) {
       inviter = handle;
-      document.querySelectorAll('[data-invited]').forEach((el) => {
-        el.querySelector('[data-at]').textContent = `@${handle}`;
-        el.querySelector('[data-code]').textContent = handle;
-        el.hidden = false;
-      });
-    } catch {}
+      showInvited(`Invited by @${handle}?`, handle);
+      carryRef(document);
+    } else plain();
   })();
+
+  // The web app's links carry the handle too (app.courtsidebase.com/join?ref=…),
+  // so someone on Android or a computer who signs up there is credited.
+  function carryRef(root) {
+    const handle = inviter || linkHandle;
+    if (!handle) return;
+    root.querySelectorAll('a[href="https://app.courtsidebase.com"], a[href="https://app.courtsidebase.com/"]').forEach((a) => {
+      a.setAttribute('href', `https://app.courtsidebase.com/join?ref=${encodeURIComponent(handle)}`);
+    });
+  }
+  carryRef(document);
 
   (function inviteStep() {
     const step = document.getElementById('invite-step');
@@ -1043,19 +1099,31 @@
     const go = form.querySelector('[data-go]');
     document.addEventListener('click', (event) => {
       const link = event.target.closest && event.target.closest('a[href^="https://testflight.apple.com/"]');
-      if (!link || link.closest('dialog') || joined || !(inviter || referredBy)) return;
+      if (!link || link.closest('dialog') || joined || !(inviter || linkHandle || referredBy)) return;
       event.preventDefault();
       const typeLine = form.querySelector('[data-type]');
+      // Signing in with Apple can hide the real email, and then nothing matches it.
+      const apple = ' (with Apple, choose Share My Email)';
       if (inviter) {
         step.querySelector('#invite-title').textContent = `Invited by @${inviter}?`;
         typeLine.querySelector('[data-code]').textContent = inviter;
         typeLine.querySelector('[data-at]').textContent = `@${inviter}`;
         typeLine.hidden = false;
-        form.querySelector('[data-why]').textContent = `Or add your email, then sign up in the app with the same one, and we’ll credit @${inviter} for you`;
+        form.querySelector('[data-why]').textContent = `Or add your email, then sign up in the app with the same one${apple}, and we’ll credit @${inviter} for you`;
+      } else if (linkHandle) {
+        // The account behind the link is not shown signed out: only the link's own words.
+        step.querySelector('#invite-title').textContent = 'Came from a friend’s link?';
+        typeLine.querySelector('[data-code]').textContent = linkHandle;
+        typeLine.querySelector('[data-at]').textContent = 'whoever sent it';
+        typeLine.hidden = false;
+        form.querySelector('[data-why]').textContent = `Or add your email, then sign up in the app with the same one${apple}, so whoever sent the link gets the credit`;
       } else {
         step.querySelector('#invite-title').textContent = 'Came from a friend’s link?';
         typeLine.hidden = true;
-        form.querySelector('[data-why]').textContent = 'Add your email so your friend gets the credit';
+        // What always happens. The app credit also needs the friend to have an
+        // account with their list email when this person signs up, so it is
+        // not promised here.
+        form.querySelector('[data-why]').textContent = 'Add your email so your friend moves up the list';
       }
       msg.className = 'msg';
       msg.textContent = '';
