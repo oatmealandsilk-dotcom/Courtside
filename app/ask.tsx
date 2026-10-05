@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { DragSheet } from '@/components/DragSheet';
@@ -27,7 +27,9 @@ export default function Ask() {
   const { actions } = useApp();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [topic, setTopic] = useState<QuestionTopic>('gear');
+  // Opened from an empty topic in Discussions ("Ask a question"): that topic, picked.
+  const asked = useLocalSearchParams<{ topic?: string }>().topic;
+  const [topic, setTopic] = useState<QuestionTopic>(asked && asked in TOPIC_META ? (asked as QuestionTopic) : 'gear');
   const [closeSignal, setCloseSignal] = useState(0);
   const [posted, setPosted] = useState<string | null>(null);
   // A poll: off until asked for, then two options to start, up to four.

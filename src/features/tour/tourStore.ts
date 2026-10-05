@@ -120,7 +120,7 @@ export interface TourRequest {
 
 /**
  * The demo switch, in a browser only, read once as the page loads, the way
- * ?as= is: ?tour=1 to ?tour=6 (one per tip, as many as TOUR_STEPS holds)
+ * ?as= is: ?tour=1 to ?tour=3 (one per tip, as many as TOUR_STEPS holds)
  * open the tour at that tip whoever is signed in, and ?tour=new runs the
  * real first-run check as if the account were new. It does nothing the
  * Settings row doesn't, so it is harmless anywhere.

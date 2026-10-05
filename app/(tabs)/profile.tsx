@@ -5,7 +5,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { onSkippedSaved, readSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
 import { Image, Pressable, Share, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
 import { SectionPager } from '@/components/SectionPager';
@@ -26,9 +26,17 @@ import { TilePin } from '@/components/TilePin';
 import { TileRemoved } from '@/features/moderation/RemovedNote';
 import { colors, spacing, typography, font, lift } from '@/theme';
 import { wrappedYear } from '@/features/wrapped/yearInTennis';
-import { useTourTarget } from '@/features/tour/tourStore';
+import { useTourOpen } from '@/features/tour/tourStore';
+import { TipBubble } from '@/components/TipBubble';
+import { forNewPlayer, useTip } from '@/features/tips/tips';
+import { useWelcomeNote } from '@/features/welcome/welcomeNote';
+import { useIsFocused } from '@/lib/useIsFocused';
+import { useResponsive } from '@/lib/useResponsive';
 import { isTaggedIn } from '@/features/activity/sessionTags';
 import { studioLine } from '@/features/coaching/studioSummary';
+
+/** The messages tip's pointer from the page's right edge: the menu button (38), the gap (14), then half the paper plane (35), less half the pointer. */
+const INBOX_POINTER = 38 + 14 + 17 - 8;
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
  // December to mid-January: the year's recap sits at the top of your links.
@@ -44,8 +52,13 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  // yours entirely, not just whichever of them the feed happens to hold.
  useEffect(() => { if (user?.id) void actions.loadPostsOf(user.id); }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
  const { width: windowWidth } = useWindowDimensions();
- // The tutorial's last tip lights the bell and the paper plane together, so they share one box it can find.
- const tourInbox = useTourTarget('profile-inbox');
+ // The first time a new player opens Profile on a phone, a tip at the paper plane (Oct 5: it was
+ // the tutorial's last tip). Only on this tab, never a picture of it sliding in, never under the tutorial.
+ const pathname = usePathname();
+ const focused = useIsFocused();
+ const tourOpen = useTourOpen();
+ const { isPhone } = useResponsive();
+ const inboxTip = useTip('messages', focused && pathname === '/profile' && isPhone && !tourOpen && previewSection === undefined && forNewPlayer(user?.joinedAt));
  // The section lives here, not in the address (see discuss.tsx for why).
  const [localTab, setLocalTab] = useState<'Posts' | 'Clips' | 'Tagged'>('Posts');
  const section = previewSection ?? localTab;
@@ -84,7 +97,9 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  };
  // People asking to join the groups you run.
  const groupsAsking = feedGroups.reduce((n, g) => n + (g.members.some((m) => m.id === currentUserId && m.admin) ? g.requests.length : 0), 0);
- const unseen = notifications.filter(n => n.userId === currentUserId && !n.read).length;
+ // CourtSide's own welcome counts too, until Notifications is first opened (welcomeNote).
+ const welcome = useWelcomeNote(user);
+ const unseen = notifications.filter(n => n.userId === currentUserId && !n.read).length + (welcome.unread ? 1 : 0);
  const savedCount = saved.postIds.length + saved.questionIds.length;
  const swipe = (direction: 1 | -1) => {
    const next = swipeDestination('/profile', tab, direction);
@@ -116,7 +131,8 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
        {/* Taken down by an admin (migration 108): still yours to see, dimmed and marked; nobody else sees it. */}
        {p.removed ? <TileRemoved /> : null}
      </Pressable>)}</View>
-     {!items.length && <EmptyState title={selected==='Tagged'?'No tagged posts yet':`No ${selected.toLowerCase()} yet`} body="Your shared moments will appear here."/>}
+     {/* Never a dead end (Oct 5): your own grid, empty, offers the first clip. */}
+     {!items.length && <EmptyState title={selected==='Tagged'?'No tagged posts yet':`No ${selected.toLowerCase()} yet`} body={selected==='Tagged' ? 'Posts you’re tagged in will appear here.' : 'Your shared moments will appear here.'} action={selected==='Tagged' ? undefined : { label: 'Share your first clip', onPress: () => router.push('/compose') }}/>}
    </View>;
  };
  // The three grids are rebuilt only when the posts change, so switching
@@ -132,9 +148,11 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const page = (selected: string, live: boolean) => {
   const index = TABS.indexOf(selected as typeof TABS[number]);
   const body = <>
+   {/* Hangs from the top of the page, its pointer under the paper plane in the header (the menu, a gap, then half the plane). */}
+   {live ? <TipBubble tip="messages" shown={inboxTip.shown} onClose={inboxTip.close} pointer="up" pointerRight={INBOX_POINTER} style={styles.inboxTip} /> : null}
    {!hasMoved && <Pressable accessibilityRole="link" accessibilityLabel="Make your first move" onPress={() => router.push('/first-move')} style={styles.setup}>
      <Ionicons name="videocam-outline" size={20} color={colors.brand}/>
-     <View style={{ flex: 1 }}><Text style={styles.setupTitle}>Make your first move</Text><Text style={styles.meta}>Post a clip, or answer someone's question. It's how players near you find you.</Text></View>
+     <View style={{ flex: 1 }}><Text style={styles.setupTitle}>Make your first move</Text><Text style={styles.meta}>Bring your hitting partners, or post your first clip.</Text></View>
      <Ionicons name="chevron-forward" size={16} color={colors.textMuted}/>
    </Pressable>}
    {skipped.length > 0 && <Pressable accessibilityRole="link" accessibilityLabel="Finish setting up your profile" onPress={() => router.push({ pathname: '/onboarding', params: { step: String(SETUP_STEP_INDEX[skipped[0]]), from: 'profile' } })} style={styles.setup}>
@@ -198,8 +216,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
   return body;
  };
  return <Screen memoryKey="profile" title="Profile" wash subtitle={`@${user.handle}`} onRefresh={previewSection === undefined && !isDesktopBrowser() ? actions.refresh : undefined} right={<View style={styles.headerActions}>
-   {/* Never folded away by the phone's renderer (a plain box can be), or the tutorial could not measure it. */}
-   <View ref={tourInbox} collapsable={false} style={styles.headerActions}>
+   <View style={styles.headerActions}>
      <Tappable accessibilityRole="link" accessibilityLabel={unseen ? `Notifications, ${unseen} new` : 'Notifications'} onPress={() => router.push('/notifications')} hitSlop={10} style={styles.headerButton}>
        <Ionicons name={unseen ? 'notifications' : 'notifications-outline'} size={27} color={colors.text}/>
        <UnreadBadge count={unseen} />
@@ -250,6 +267,8 @@ function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?:
 }
 
 const styleDefinitions = StyleSheet.create({
+ // The messages tip, from the top of the page up to the paper plane in the header.
+ inboxTip:{top:-2,left:0,right:0,alignItems:'flex-end'},
  setup:{marginTop:16,marginHorizontal:0,padding:14,borderRadius:16,backgroundColor:colors.brandDim,flexDirection:'row',alignItems:'center',gap:12},setupTitle:{...typography.smallStrong,fontSize:14,color:colors.text},identity:{gap:12,paddingTop:16,paddingBottom:20,alignItems:'stretch'},identityRow:{flexDirection:'row',alignItems:'center',gap:16},identityWords:{flex:1,gap:6,minWidth:0},meta:{fontSize:12,color:colors.textMuted,lineHeight:19},nameRow:{flexDirection:'row',gap:10,alignItems:'center',flexWrap:'wrap'},name:{...typography.title,fontSize:22,color:colors.text},bio:{...typography.body,lineHeight:22,color:colors.text},followRow:{flexDirection:'row',alignItems:'center',gap:10},follow:{flexDirection:'row',alignItems:'baseline'},followCount:{...typography.bodyStrong,color:colors.text},followDot:{color:colors.textFaint,fontSize:14},tabCount:{...typography.smallStrong,fontSize:12,color:colors.textFaint},injury:{...typography.small,color:colors.danger},buttons:{flexDirection:'row',gap:8,alignSelf:'stretch',marginTop:6},settings:{borderWidth:1,borderColor:colors.border,borderRadius:10,padding:10,justifyContent:'center'},streak:{flexDirection:'row',alignItems:'center',gap:3,paddingHorizontal:8,paddingVertical:2,borderRadius:999,backgroundColor:colors.bgElevated},streakText:{...typography.caption,letterSpacing:0,fontWeight:'600',color:colors.clay},
  // "Log" beside the streak: the streak pill's size, in plain ink, so the streak stays the louder of the two.
  logPill:{flexDirection:'row',alignItems:'center',gap:2,paddingLeft:6,paddingRight:9,paddingVertical:2,borderRadius:999,borderWidth:StyleSheet.hairlineWidth,borderColor:colors.borderStrong},logPillText:{...typography.caption,letterSpacing:0,fontWeight:'600',color:colors.textMuted},pillPressed:{opacity:0.6},

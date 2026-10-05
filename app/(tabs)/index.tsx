@@ -1279,7 +1279,8 @@ function Home({ scope, topRow, paused, onChrome }: {
             <EmptyState
               title={scope?.groupId ? 'Loading the group' : scope?.activities ? (ready ? 'No activities yet' : 'Loading activities') : scope ? 'Nothing here yet' : ready ? 'Your court is quiet' : 'Loading your clips'}
               body={scope?.activities ? 'Log a session after you play, or follow players, and their sessions show up here.' : scope ? undefined : 'Be the first on it: a clip, a photo, or an instant after you play.'}
-              action={(!scope || scope.activities) && ready ? { label: scope?.activities ? 'Log a session' : 'Share something', onPress: () => router.push('/compose') } : undefined}
+              // "Log a session" opens the log sheet itself (Oct 5: it opened the + menu).
+              action={(!scope || scope.activities) && ready ? { label: scope?.activities ? 'Log a session' : 'Share something', onPress: () => router.push(scope?.activities ? '/log-session' : '/compose') } : undefined}
             />
           )}
         </View>

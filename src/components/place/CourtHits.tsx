@@ -6,6 +6,8 @@ import { HitCard } from '@/components/HitCard';
 import { HitGlyph } from '@/components/HitGlyph';
 import { useCourtHits } from '@/features/places/useCourtHits';
 import { playHere } from '@/features/players/courtLink';
+import { notKnownAdult } from '@/features/players/age';
+import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, spacing, typography } from '@/theme';
 
@@ -18,6 +20,8 @@ import { colors, lift, spacing, typography } from '@/theme';
 export function CourtHits({ place, closed = false }: { place: { id?: string; name: string; lat: number; lng: number }; closed?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const hits = useCourtHits(place).slice(0, 3);
+  const { currentUser } = useApp();
+  const forFriends = !!currentUser && notKnownAdult(currentUser);
   if (closed && !hits.length) return null;
   return (
     <View style={styles.wrap}>
@@ -34,7 +38,8 @@ export function CourtHits({ place, closed = false }: { place: { id?: string; nam
           <View style={styles.promptTile}><HitGlyph size={24} color={colors.brand} /></View>
           <View style={{ flex: 1 }}>
             <Text style={styles.promptTitle}>Play here</Text>
-            <Text style={styles.promptBody}>Pick a time. Players nearby can join.</Text>
+            {/* A teen's hit reaches only the people who follow them (hits/visible), so it says so. */}
+            <Text style={styles.promptBody}>{forFriends ? 'Pick a time. Friends who follow you can join.' : 'Pick a time. Players nearby can join.'}</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
         </Pressable>

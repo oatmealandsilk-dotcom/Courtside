@@ -7,7 +7,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
  * doing the thing first counts as knowing it, and that tip never shows. At
  * most one tip per visit to the app, never stacked.
  */
-export type TipKey = 'map-who-sees' | 'activities' | 'double-tap' | 'see-stats' | 'share-session' | 'hold-to-record' | 'who-liked' | 'chat-times' | 'hold-to-edit';
+export type TipKey = 'map-who-sees' | 'activities' | 'double-tap' | 'see-stats' | 'share-session' | 'hold-to-record' | 'who-liked' | 'chat-times' | 'hold-to-edit' | 'ask-coach' | 'messages';
 
 export const TIP_WORDS: Record<TipKey, string> = {
   'map-who-sees': 'Tap here to choose who sees you: players nearby, only friends, or just you.',
@@ -20,7 +20,24 @@ export const TIP_WORDS: Record<TipKey, string> = {
   'chat-times': 'Swipe left to see when each message was sent.',
   // The first tap on your own ring in Community's Open to hit row (Oct 5, owner).
   'hold-to-edit': 'Hold to edit your time and distance.',
+  // Were tips 5 and 6 of the first-run tutorial; now each shows the first time
+  // a new player opens that place (Oct 5, owner: "Do all"). See forNewPlayer.
+  'ask-coach': 'Ask a coach anything here. It’s free.',
+  messages: 'Your chats live here. The bell shows your alerts.',
 };
+
+/** How long an account counts as new for the tips that took over from the tutorial. */
+const NEW_PLAYER_DAYS = 14;
+
+/**
+ * The tips that took over from the tutorial (Ask a coach, where messages
+ * live) are for new players only: someone who has been here a while has
+ * already found both, and an update should not start pointing at them.
+ */
+export function forNewPlayer(joinedAt: string | undefined): boolean {
+  const at = joinedAt ? Date.parse(joinedAt) : NaN;
+  return Number.isFinite(at) && Date.now() - at < NEW_PLAYER_DAYS * 86_400_000;
+}
 
 /**
  * Kept beside the done tips (v2): Settings → Tips is Off, so a tip added

@@ -38,7 +38,14 @@ import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 /** 'words': it has words CourtSide refuses in it (migration 117). */
 export type HandleStatus = 'ok' | 'yours' | 'invalid' | 'taken' | 'held' | 'words';
 
-export type FirstMove = 'post' | 'instant' | 'answer' | 'ask' | 'later';
+/**
+ * What a new player did first, after setup. 'invite' (shared their link),
+ * 'follow' (followed a player near them) and 'find' (went to find a friend
+ * by @handle) came with the first-move page's Oct 5 change; the database
+ * takes them from migration 124. Before it, saving one of those is refused
+ * and nothing is kept (the save is quiet either way).
+ */
+export type FirstMove = 'post' | 'instant' | 'answer' | 'ask' | 'later' | 'invite' | 'follow' | 'find';
 /** What a profile save can change. */
 export type ProfilePatch = { name?: string; bio?: string; location?: string; cityAt?: { lat: number; lng: number } | null; avatarUrl?: string; profile?: PlayerProfile; isPrivate?: boolean; readReceipts?: boolean; openToHitUntil?: string | null; firstMove?: FirstMove };
 /** One person who has invited anyone, as the admin Invites page shows them (migration 71). */
@@ -4427,6 +4434,16 @@ export const auth = {
     const base = (process.env.EXPO_BASE_URL ?? '').replace(/\/$/, '');
     const redirectTo = Platform.OS === 'web' ? `${window.location.origin}${base}/account?reset=1` : 'https://app.courtsidebase.com/account?reset=1';
     const { error } = await need().auth.resetPasswordForEmail(email.trim(), { redirectTo });
+    if (error) throw new Error(error.message);
+  },
+  /** The sign-up confirmation email again, coming back to the same place the first one did. */
+  async resendConfirmation(email: string) {
+    const base = (process.env.EXPO_BASE_URL ?? '').replace(/\/$/, '');
+    const { error } = await need().auth.resend({
+      type: 'signup',
+      email: email.trim(),
+      ...(Platform.OS === 'web' ? { options: { emailRedirectTo: `${window.location.origin}${base}/` } } : {}),
+    });
     if (error) throw new Error(error.message);
   },
   /**

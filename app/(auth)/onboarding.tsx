@@ -125,8 +125,14 @@ export default function Onboarding() {
   const [location, setLocation] = useState(currentUser?.location ?? '');
   const [cityAt, setCityAt] = useState(currentUser?.cityAt ?? null);
   const [skillSystem, setSkillSystem] = useState<'NTRP' | 'UTR'>(existing?.skillSystem === 'UTR' ? 'UTR' : 'NTRP');
+  // Joining, the rating starts empty (Oct 5): it used to start at 3.5, and
+  // beginners kept it and were matched at the wrong level. "Not sure?" under
+  // it lists the levels in plain words. Changing your answers later starts
+  // from what you have.
+  const joining = !editing && !forCoach && params.from !== 'profile' && !existing?.onboardedAt;
   const [rating, setRating] = useState(existing?.rating && existing.skillSystem !== 'ITF' ? existing.rating : 3.5);
-  const [ratingText, setRatingText] = useState(String(existing?.rating && existing.skillSystem !== 'ITF' ? existing.rating : '3.5'));
+  const [ratingText, setRatingText] = useState(joining ? '' : String(existing?.rating && existing.skillSystem !== 'ITF' ? existing.rating : '3.5'));
+  const [levelsOpen, setLevelsOpen] = useState(false);
   const [yearsPlaying, setYearsPlaying] = useState<number | undefined>(existing?.yearsPlaying);
   const [playStyle, setPlayStyle] = useState<PlayStyle>(existing?.playStyle ?? 'all-court');
   const [styleOpen, setStyleOpen] = useState(false);
@@ -239,7 +245,16 @@ export default function Onboarding() {
     setSkillSystem(next);
     const fresh = next === 'UTR' ? 6.0 : 3.5;
     setRating(fresh);
-    setRatingText(fresh.toFixed(1));
+    // Nothing typed yet stays nothing: switching scale is not picking a level.
+    setRatingText((was) => (was.trim() ? fresh.toFixed(1) : ''));
+  };
+  // "Not sure?": each level in plain words, with the number it stands for (the top of its band; the last, half a step past the one before).
+  const levels = scale.bands.map((b, i, all) => ({ label: b.label, value: i === all.length - 1 ? all[i - 1].upTo + (skillSystem === 'NTRP' ? 0.5 : 1) : b.upTo }));
+  const pickLevel = (value: number) => {
+    haptics.tap();
+    setRating(value);
+    setRatingText(value.toFixed(1));
+    setLevelsOpen(false);
   };
 
   /* -------------------------------- Profile ------------------------------- */
@@ -383,12 +398,26 @@ export default function Onboarding() {
                     label="Rating"
                     value={ratingText}
                     onChangeText={typeRating}
+                    placeholder={skillSystem === 'UTR' ? 'e.g. 6.0' : 'e.g. 3.5'}
                     keyboardType="decimal-pad"
                     selectTextOnFocus
                   />
                 </View>
               </View>
-              <Text style={styles.note}>{ratingValid ? band.label : `Enter ${scale.min.toFixed(1)}–${scale.max.toFixed(1)}`}</Text>
+              <View style={styles.noteRow}>
+                <Text style={[styles.note, { flex: 1 }]}>{ratingValid ? band.label : ratingText.trim() ? `Enter ${scale.min.toFixed(1)}–${scale.max.toFixed(1)}` : 'So you’re matched at your level.'}</Text>
+                <Pressable accessibilityRole="button" accessibilityState={{ expanded: levelsOpen }} accessibilityLabel="Not sure of your rating? Pick your level" hitSlop={8} onPress={() => { haptics.tap(); setLevelsOpen((o) => !o); }}>
+                  <Text style={styles.notSure}>{levelsOpen ? 'Close' : 'Not sure?'}</Text>
+                </Pressable>
+              </View>
+              {/* The levels in plain words, easing open under the rating; one tap fills it in. */}
+              <Collapse open={levelsOpen}>
+                <View style={styles.list}>
+                  {levels.map((l, i) => (
+                    <Row key={l.label} label={l.label} detail={`${skillSystem} ${l.value.toFixed(1)}`} selected={ratingValid && rating === l.value} first={i === 0} onPress={() => pickLevel(l.value)} />
+                  ))}
+                </View>
+              </Collapse>
               {ratingOnly ? null : <>
               <Group label="Years playing">
                 <SegmentedControl<string>
@@ -613,11 +642,14 @@ const styleDefinitions = StyleSheet.create({
   title: { ...typography.display, color: colors.text },
   stepLabel: { ...typography.small, color: colors.textFaint, fontVariant: ['tabular-nums'] },
   lead: { ...typography.small, color: colors.textMuted },
-  body: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.lg, maxWidth: 560, width: '100%', alignSelf: 'center' },
+  // From the top, under its title (Oct 5): centred, a short step left a large empty gap above the form.
+  body: { flexGrow: 1, justifyContent: 'flex-start', paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.lg, maxWidth: 560, width: '100%', alignSelf: 'center' },
   bodyTop: { justifyContent: 'flex-start', paddingTop: spacing.xl },
   group: { gap: spacing.sm },
   groupLabel: { ...typography.smallStrong, color: colors.textMuted },
   note: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
+  noteRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.md },
+  notSure: { ...typography.smallStrong, color: colors.brand },
   twoCol: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-end' },
 
   list: { borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },

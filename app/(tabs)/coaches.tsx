@@ -3,7 +3,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Button, Screen } from '@/components/ui';
@@ -17,7 +17,10 @@ import { statusLabel, usePaidBooking } from '@/features/coaching/bookings';
 import { studioLine } from '@/features/coaching/studioSummary';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
-import { useTourTarget } from '@/features/tour/tourStore';
+import { useTourOpen } from '@/features/tour/tourStore';
+import { TipBubble } from '@/components/TipBubble';
+import { forNewPlayer, learned, useTip } from '@/features/tips/tips';
+import { useIsFocused } from '@/lib/useIsFocused';
 
 function Coaching() {
   const styles = useThemedStyles(styleDefinitions);
@@ -26,9 +29,15 @@ function Coaching() {
   const paidBooking = usePaidBooking();
   // Where the box sits on screen, so the question page can grow out of it.
   const askPill = useRef<View>(null);
-  // The tutorial's Coaching tip lights this box and the line under it, so the two share one box it can find.
-  const tourAsk = useTourTarget('coach-ask');
+  // The first time a new player opens Coaching, a tip over the box (Oct 5: it
+  // was the tutorial's fifth tip). Only on this tab, never a picture of it
+  // sliding in, and never under the tutorial.
+  const pathname = usePathname();
+  const focused = useIsFocused();
+  const tourOpen = useTourOpen();
+  const askTip = useTip('ask-coach', focused && pathname === '/coaches' && !tourOpen && forNewPlayer(currentUser?.joinedAt));
   const openAsk = () => {
+    learned('ask-coach');
     const pill = askPill.current;
     if (!pill) { router.push('/ask-coach'); return; }
     pill.measureInWindow((x, y, w, h) => {
@@ -90,8 +99,8 @@ function Coaching() {
           <Text style={styles.sectionCount}>free</Text>
         </View>
       </View>
-      {/* Never folded away by the phone's renderer (a plain box can be), or the tutorial could not measure it. */}
-      <View ref={tourAsk} collapsable={false}>
+      {/* The box, with the first-visit tip hanging under it: drawn above what follows, so the tip is never under the next row. */}
+      <View style={styles.askWrap}>
       {/* Tapped, this box grows and lifts into the full question page (see ask-coach), where you type from the start. */}
       <Pressable
         ref={askPill}
@@ -103,11 +112,12 @@ function Coaching() {
         <Text style={styles.askPlaceholder}>Your question</Text>
         <View style={styles.askGo}><Ionicons name="arrow-forward" size={16} color={colors.brandInk} /></View>
       </Pressable>
+      <TipBubble tip="ask-coach" shown={askTip.shown} onClose={askTip.close} pointer="up" style={styles.askTip} />
+      </View>
       {/* No promise nobody can keep: until coaches are on, the note says what really happens.
           This is the one place the tab says asking is public (and, once coaches are on, that
           they are verified), so the header and the Coaches section don't repeat it. */}
       <Text style={styles.askNote}>{shown.length ? 'Public. A verified coach answers, usually within a day.' : 'Public. Your question stays up until a coach answers.'}</Text>
-      </View>
       {/* The AI coach shows up here once it is switched on (its key added on the server). */}
       {aiCoachOn ? (
         <Pressable accessibilityRole="link" accessibilityLabel="AI coach" onPress={() => router.push('/ai-coach')} style={({ pressed }) => [styles.ai, pressed && styles.pressed]}>
@@ -264,6 +274,9 @@ function Coaching() {
 const styleDefinitions = StyleSheet.create({
   pressed: { opacity: 0.72 },
   askNote: { ...typography.small, color: colors.textMuted, lineHeight: 18, paddingTop: spacing.sm, paddingLeft: 2 },
+  // The tip under the box, its pointer at the box's bottom edge, over the line and the row below.
+  askWrap: { zIndex: 5 },
+  askTip: { top: '100%', left: 0, right: 0, marginTop: 4 },
   // The way in is a question you could start typing, not a card about asking.
   askField: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,

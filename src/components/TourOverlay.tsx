@@ -18,6 +18,7 @@ import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { isPageDragging, isPageScrolling } from '@/features/navigation/swipeLock';
 import { LAST_BUTTON, TOUR_STEPS, tourPageAt, type HoleShape, type TourSpot, type TourStep, type TourTargetId } from '@/features/tour/steps';
 import { useTourHeld } from '@/features/tour/tourHold';
+import { useMapLead } from '@/features/tour/mapLead';
 import { TOUR_ON, hasSeenTour, isNewAccount, markTourSeen } from '@/features/tour/tourSeen';
 import {
   endTourQuietly, lastTourRect, measureTourTarget, nextStep, prevStep, openTour, setTourPending, skipTour, useTour, useTourRequest,
@@ -34,19 +35,19 @@ import { colors, pageIsDark, radius, typography } from '@/theme';
 /**
  * The first-run tutorial: the screen dims a little, a small card explains one
  * thing at a time, and a lit window in the dim glides along the bar to the
- * thing being explained. A tap anywhere moves on (a swipe never moves the
- * pages against the finger; see touched).
+ * thing being explained. Next moves on; so does a tap on the dim (a swipe
+ * never moves the pages against the finger; see touched).
  *
  * It begins on the page the app opens on (Community, on Find Players),
  * sliding there under the dim from whichever tab the player was on, and the
  * pages move along under its tips the way a swipe moves them (see each tip's
- * page in steps.ts): on to the threads while it shows the swipe, on to the
- * Feed and its +, then Coaching and Profile. On those two a second window
- * lights the very thing the tip names on the page (the Ask a coach box; the
- * bell and paper plane), while the bar's button for that page stays lit too.
- * The card steps aside while the pages turn and comes back once the page has
- * landed, pointing at it. The Feed's clips hold still under the dim while it
- * is up (app/(tabs)/index.tsx).
+ * page in steps.ts): on to Discussions while it shows the swipe, then on to
+ * the Feed and its +. On the first tip a second window lights the one thing
+ * to do on the map page (the invite card, the friends card or "I'm free":
+ * mapLead.ts), while the bar's Community button stays lit too. The card
+ * steps aside while the pages turn and comes back once the page has landed,
+ * pointing at it. The Feed's clips hold still under the dim while it is up
+ * (app/(tabs)/index.tsx).
  *
  * Got it on the last tip, or Skip on any, and the pages glide back to the
  * map, at its top (useBackToStart).
@@ -435,7 +436,6 @@ function placeCard(o: { hole: Hole | null; W: number; H: number; cardW: number; 
   const { hole, W, H, cardW, cardH } = o;
   if (!hole) {
     const x = o.left + (W - o.left - cardW) / 2;
-    // Room under it for "Tap anywhere to continue".
     const y = Math.max(o.top + M, Math.min(H * 0.5, H - o.bottom - M - cardH - 40));
     return { x, y, side: null, ptr: cardW / 2 };
   }
@@ -471,6 +471,8 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
   const { isPhone, isCompactSidebar } = useResponsive();
   const reduce = useReducedMotion();
   const reader = useScreenReader();
+  // What the map page leads with, for the first tip's words (mapLead.ts).
+  const lead = useMapLead();
   const layout: Layout = isPhone ? 'phone' : 'wide';
   const dark = pageIsDark();
   const dimAlpha = dark ? DIM_DARK : DIM_LIGHT;
@@ -483,7 +485,7 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
 
   const steps = useMemo(() => run.keys.map((k) => TOUR_STEPS.find((s) => s.key === k)).filter((s): s is TourStep => !!s), [run.keys]);
   // A tip left out of this layout never reaches here; the phone's words stand in for the types' sake.
-  const wordsFor = (s: TourStep) => (reader && s.screenReader) || s[layout] || s.phone;
+  const wordsFor = (s: TourStep) => (reader && s.screenReader) || (lead ? s.byLead?.[lead] : undefined) || s[layout] || s.phone;
   const step = steps[run.step] ?? steps[0];
   const last = run.step >= run.total - 1;
   // The bar's window (a sidebar row on a computer), and the second window on the page itself.
@@ -588,7 +590,8 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
     };
     timer = setTimeout(poll, Math.max(0, lastTurnAt + PAGE_LOOK_MS - Date.now()));
     return () => { alive = false; if (timer) clearTimeout(timer); };
-  }, [run.step, pageSpot?.id, turnedAt, W, H, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Looked for again when the map page settles on what it leads with (its spots came down after the tip did).
+  }, [run.step, pageSpot?.id, turnedAt, W, H, tick, lead]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ---- The two windows ---- */
   const local = (r: TourRect): TourRect => ({ x: r.x - origin.x, y: r.y - origin.y, width: r.width, height: r.height });
@@ -1004,7 +1007,6 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
     };
   });
   const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
-  const hintStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
 
   // The dim is each window's own shadow, spread past every edge of its part of the screen.
   // The inner shadow softens the window's edge by a few points, so it reads as light, not a cut-out.
@@ -1022,8 +1024,9 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
   const glow = [{ boxShadow: `0px 0px 14px 2px rgba(255, 255, 255, ${glowAlpha})` }, dark ? styles.holeRim : null];
   const edge = dark ? colors.borderStrong : colors.border;
   const pointerSides = place.side === 'down' ? styles.pointerDown : place.side === 'up' ? styles.pointerUp : styles.pointerLeft;
-  // The first tip, with no window, carries the "tap anywhere" line; the swipe tip the fingertip that shows the swipe.
-  const mapShown = shown.key === 'map';
+  // The swipe tip carries the fingertip that shows the swipe. (The first
+  // tip's "Tap anywhere to continue" chip went on Oct 5: Next is the one way
+  // on that is shown, though a tap on the dim still moves on.)
   const swipeShown = shown.key === 'swipe';
   const hidden = { accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' as const, 'aria-hidden': true };
   const webDialog = Platform.OS === 'web' ? { role: 'dialog' as const, 'aria-modal': true, 'aria-labelledby': TITLE_ID } : {};
@@ -1074,13 +1077,6 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
       <Animated.View style={[styles.cardWrap, { width: cardW, pointerEvents: waiting ? 'none' : 'auto' }, cardStyle]}>
         {/* A thumb's swipe means nothing to a mouse, so a computer never gets the swipe tip at all (steps.ts). */}
         {swipeShown && layout === 'phone' && up ? <SwipeDemo reduce={reduce} cardW={cardW} fade={fade} hidden={hidden} /> : null}
-        {mapShown ? (
-          <Animated.View {...hidden} pointerEvents="none" style={[styles.tapHintRow, hintStyle]}>
-            <Text selectable={false} style={[styles.tapHint, { borderColor: edge }]}>
-              {layout === 'wide' ? 'Click anywhere to continue' : 'Tap anywhere to continue'}
-            </Text>
-          </Animated.View>
-        ) : null}
         <Animated.View style={[styles.card, { borderColor: edge }, boxStyle]}>
           <View ref={cardRef} style={[StyleSheet.absoluteFill, styles.focusRing]} {...webFocus}>
             <Animated.View style={[styles.words, fadeStyle]}>
@@ -1269,13 +1265,6 @@ const styleDefinitions = StyleSheet.create({
   pointerDown: { left: 4, top: -5.5, borderRightWidth: 1, borderBottomWidth: 1 },
   pointerUp: { left: 4, top: 3.5, borderTopWidth: 1, borderLeftWidth: 1 },
   pointerLeft: { left: 3.5, top: 4, borderBottomWidth: 1, borderLeftWidth: 1 },
-  // A small chip in the card's own colours: white words on the dim vanished over a light page once the dim was lighter.
-  // Above the card, over the map: under it, the chip covered the "Courts near you" heading.
-  tapHintRow: { position: 'absolute', left: 0, right: 0, bottom: '100%', marginBottom: 12, alignItems: 'center' },
-  tapHint: {
-    ...typography.small, color: colors.textMuted, backgroundColor: colors.surface, overflow: 'hidden',
-    borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 4,
-  },
   actions: { flexDirection: 'row', alignItems: 'center' },
   // Quieter than Next, with the same 44-point reach that takes no room.
   skip: { paddingVertical: 14, marginVertical: -14, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },

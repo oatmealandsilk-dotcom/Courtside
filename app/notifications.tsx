@@ -24,6 +24,8 @@ import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { HitGlyph } from '@/components/HitGlyph';
 import { showCourtOnMap } from '@/features/players/courtLink';
 import { isDesktopBrowser } from '@/lib/browserDevice';
+import { notKnownAdult } from '@/features/players/age';
+import { useWelcomeNote } from '@/features/welcome/welcomeNote';
 
 /**
  * One row per thing that happened to you, the way Instagram does it.
@@ -205,7 +207,12 @@ function detectedWho(preview: string | undefined, sport: string | undefined): st
 
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
-  const { notifications, users, posts, stories, comments, hitRequests, conversations, questions, currentUserId, followRequests, followingIds, followedCourts, sessionTags, detectedActivities, actions } = useApp();
+  const { notifications, users, posts, stories, comments, hitRequests, conversations, questions, currentUserId, currentUser, followRequests, followingIds, followedCourts, sessionTags, detectedActivities, actions } = useApp();
+  // CourtSide's own welcome, for a new player (welcomeNote): seen once this page opens, though its tint stays until you leave.
+  const welcome = useWelcomeNote(currentUser);
+  const [welcomeTint] = useState(welcome.unread);
+  const { markSeen: markWelcomeSeen } = welcome;
+  useEffect(() => { if (welcome.shown) markWelcomeSeen(); }, [welcome.shown]); // eslint-disable-line react-hooks/exhaustive-deps
   // "New hit at Alder Park" opens the map on that court: where it is comes from the courts you follow.
   const courtRows = notifications.some((n) => n.kind === 'court-activity');
   useEffect(() => { if (courtRows && followedCourts === null) void actions.loadFollowedCourts(); }, [courtRows, followedCourts, actions]);
@@ -368,12 +375,35 @@ export default function Notifications() {
 
   return (
     <Screen title="Notifications" compactTitle onBack={() => goBack()} onRefresh={isDesktopBrowser() ? undefined : actions.refresh}>
+      {welcome.shown && currentUser ? (
+        // From CourtSide itself, with one next step: the invite sheet for a
+        // teen (their friends), Find Players for everyone else.
+        <View style={[styles.row, welcomeTint && styles.rowUnread, groups.length ? styles.welcomeGap : null]}>
+          <View>
+            <View style={styles.brandFace}><BrandMark size={24} /></View>
+            <View style={[styles.badge, { backgroundColor: colors.court }]}><Ionicons name="hand-right" size={11} color={colors.brandInk} /></View>
+          </View>
+          <View style={styles.body}>
+            <Text style={styles.text}><Text style={styles.who}>CourtSide</Text><Text> Welcome, {currentUser.name.split(' ')[0]}. Glad you’re here.</Text></Text>
+            <Text style={styles.preview} numberOfLines={2}>{notKnownAdult(currentUser) ? 'Add your friends to see who’s up for a hit.' : 'Find players near you, or invite your own.'}</Text>
+            <Text style={styles.time}>{relativeTime(currentUser.joinedAt)}</Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => { if (notKnownAdult(currentUser)) router.push('/invite'); else { requestSection('/discuss', 'players'); goToTab('/discuss'); } }}
+            style={styles.accept}
+          >
+            <Text style={styles.acceptText}>{notKnownAdult(currentUser) ? 'Add friends' : 'Find players'}</Text>
+          </Pressable>
+        </View>
+      ) : null}
       {groups.length === 0 ? (
         <EmptyState
           icon="notifications-outline"
-          title="Nothing yet"
+          title={welcome.shown ? 'Nothing else yet' : 'Nothing yet'}
           body="Likes, replies and shares on your posts land here. Following players is the quickest way to get some."
-          action={{ label: 'Find players near you', onPress: () => { requestSection('/discuss', 'players'); goToTab('/discuss'); } }}
+          // The welcome above already offers the way on.
+          action={welcome.shown ? undefined : { label: 'Find players near you', onPress: () => { requestSection('/discuss', 'players'); goToTab('/discuss'); } }}
         />
       ) : (
         <View style={styles.list}>
@@ -537,6 +567,8 @@ const styleDefinitions = StyleSheet.create({
     borderRadius: radius.md,
   },
   rowUnread: { backgroundColor: colors.brandDim },
+  // The welcome sits above the sections, with a little air before the first heading.
+  welcomeGap: { marginBottom: spacing.md },
   badge: {
     position: 'absolute',
     right: -3,

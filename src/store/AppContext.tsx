@@ -52,6 +52,7 @@ import { requestFeedRefresh } from '@/features/feed/feedBus';
 import { blockDevice, groupFor, rememberAnswered, yearsOld, type AgeGroup } from '@/features/age/ageCheck';
 import { knownOpen, notKnownAdult, type AgeSource, type Openness, type OpennessMap } from '@/features/players/age';
 import type { TeenMap } from '@/features/players/mapPrivacy';
+import { placeFor } from '@/features/players/positions';
 import { show as showToast } from '@/lib/toast';
 import { opensAtFor } from '@/features/hits/audience';
 import { forgetPushToken, registerForPush } from '@/features/push/push';
@@ -3102,11 +3103,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let mapLive = stateRef.current.mapLive;
     if (mapLive !== false) {
       // Round you: about 80 km each way (the tray lists people up to 50
-      // miles out), from the phone's fix or else your own last spot. Without
-      // either, the server answers only for you (and, since migration 98,
-      // your friends), which still says whether it is there.
+      // miles out), from the phone's fix or else your own last spot, or else
+      // (Oct 5) the city on your profile: a new player with Location off had
+      // no spot at all, so the server answered only for them and their
+      // friends, and a town with a dozen players on the map read "You're
+      // early here". The server's own rules decide who comes back (since
+      // migration 105 any part of the map shows its adults to an adult, the
+      // way panning the full map there does; a teen only ever sees friends
+      // who follow each other with them). Without any of the three, it
+      // answers only for you and your friends, which still says whether it is there.
       const s = stateRef.current;
-      const from = s.detectedCoords ?? (s.lastSeen[me!] ? { lat: s.lastSeen[me!].lat, lng: s.lastSeen[me!].lng } : null);
+      const self = s.users.find((u) => u.id === me);
+      const town = self?.cityAt ?? (self?.location ? placeFor(self.location) : undefined);
+      const from = s.detectedCoords ?? (s.lastSeen[me!] ? { lat: s.lastSeen[me!].lat, lng: s.lastSeen[me!].lng } : null) ?? (town ? { lat: town.lat, lng: town.lng } : null);
       const around = from ? { minLat: from.lat - 0.75, maxLat: from.lat + 0.75, minLng: from.lng - Math.min(1, 0.75 / Math.max(0.2, Math.cos((from.lat * Math.PI) / 180))), maxLng: from.lng + Math.min(1, 0.75 / Math.max(0.2, Math.cos((from.lat * Math.PI) / 180))) } : null;
       const got = await remote.fetchMapPlayers(view ?? around);
       if (got === 'missing') mapLive = false;

@@ -19,6 +19,7 @@ import { useApp } from '@/store/AppContext';
 import type { Conversation, Message, User } from '@/data/types';
 import { colors, spacing, typography, font, radius } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
+import { learned } from '@/features/tips/tips';
 
 type Section = 'all' | 'groups' | 'coaches' | 'clients';
 
@@ -54,6 +55,8 @@ export default function Inbox() {
   const styles = useThemedStyles(styleDefinitions);
   const { conversations, messages, users, currentUserId, currentUser, blockedIds, hitRequests, actions, lastSeen } = useApp();
   const [search, setSearch] = useState('');
+  // Found the chats on your own: the "Your chats live here" tip on Profile is never needed.
+  useEffect(() => { learned('messages'); }, []);
   // Opened from the Coaching tab's chats button: straight onto Coaches (or Clients, for a coach).
   const { section: askedSection } = useLocalSearchParams<{ section?: string }>();
   const [section, setSection] = useState<Section>(askedSection === 'coaches' || askedSection === 'clients' ? askedSection : 'all');
