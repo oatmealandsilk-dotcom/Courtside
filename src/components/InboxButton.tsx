@@ -5,7 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { Tappable } from '@/components/Tappable';
 import { useApp } from '@/store/AppContext';
-import { unreadChatCount } from '@/features/messages/groupRules';
+import { isGroupChat, isMuted, unreadChatCount } from '@/features/messages/groupRules';
 import { colors, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
@@ -45,16 +45,28 @@ export function UnreadBadge({ count, style }: { count: number; style?: StyleProp
  * rounded square the Feed's mark and sound button wear, so it reads over a
  * clip, a bright sky or a written post scrolling underneath.
  */
-export function InboxButton({ variant = 'plain', size = 24, ink, style }: {
+export function InboxButton({ variant = 'plain', size = 24, ink, style, coaching = false }: {
   variant?: 'plain' | 'tile';
   size?: number;
   /** The icon's colour; the page's text colour unless given. */
   ink?: string;
   style?: StyleProp<ViewStyle>;
+  /**
+   * On the Coaching tab (Oct 5, owner): opens your chats on Coaches (Clients, for a coach), and
+   * its number counts only those chats, so it matches where it takes you.
+   */
+  coaching?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { conversations } = useApp();
-  const unread = unreadChatCount(conversations);
+  const { conversations, users, currentUserId, currentUser } = useApp();
+  const coach = !!currentUser?.isCoach;
+  const unread = coaching
+    ? conversations.filter((c) => {
+      if (isGroupChat(c) || isMuted(c) || !(c.unreadCount > 0 || c.markedUnread)) return false;
+      const other = users.find((u) => u.id === c.participantIds.find((id) => id !== currentUserId));
+      return !!other && (coach ? !other.isCoach : !!other.isCoach);
+    }).length
+    : unreadChatCount(conversations);
   const tile = variant === 'tile';
   // At least 44 points to aim at, however small the icon is drawn.
   const box = tile ? 40 : size + 8;
@@ -63,7 +75,7 @@ export function InboxButton({ variant = 'plain', size = 24, ink, style }: {
     <Tappable
       accessibilityRole="link"
       accessibilityLabel={unread ? `Messages, ${unread} unread` : 'Messages'}
-      onPress={() => router.push('/messages')}
+      onPress={() => router.push(coaching ? { pathname: '/messages', params: { section: coach ? 'clients' : 'coaches' } } : '/messages')}
       hitSlop={slop}
       style={[tile ? styles.tile : styles.plain, style]}
     >

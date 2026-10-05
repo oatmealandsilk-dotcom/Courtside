@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -54,7 +54,9 @@ export default function Inbox() {
   const styles = useThemedStyles(styleDefinitions);
   const { conversations, messages, users, currentUserId, currentUser, blockedIds, hitRequests, actions, lastSeen } = useApp();
   const [search, setSearch] = useState('');
-  const [section, setSection] = useState<Section>('all');
+  // Opened from the Coaching tab's chats button: straight onto Coaches (or Clients, for a coach).
+  const { section: askedSection } = useLocalSearchParams<{ section?: string }>();
+  const [section, setSection] = useState<Section>(askedSection === 'coaches' || askedSection === 'clients' ? askedSection : 'all');
   // The row being held, and which of its two lists is showing.
   const [held, setHeld] = useState<{ conversation: Conversation; name: string; step: 'menu' | 'mute' } | null>(null);
   // The one row slid open to its actions.

@@ -8,6 +8,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Button, Screen } from '@/components/ui';
 import { LiveDot } from '@/components/LiveDot';
+import { InboxButton } from '@/components/InboxButton';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { money, relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
@@ -46,7 +47,7 @@ function Coaching() {
   const shown = coaches.filter((c) => c.listed !== false);
 
   return (
-    <Screen memoryKey="coaches" title="Coaching" wash onRefresh={isDesktopBrowser() ? undefined : actions.refresh}>
+    <Screen memoryKey="coaches" title="Coaching" wash onRefresh={isDesktopBrowser() ? undefined : actions.refresh} right={<InboxButton size={27} coaching />}>
       {/* ------------------------------ Coach studio ---------------------------- */}
       {/* Coaches only: their studio comes first, not tucked under everything else. */}
       {myCoach && studio ? (
