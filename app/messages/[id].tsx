@@ -6,6 +6,7 @@ import { PlayerName } from '@/components/PlayerName';
 import React, { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   FlatList,
   Keyboard,
   Modal,
@@ -40,7 +41,7 @@ import { goBack } from '@/lib/goBack';
 import { VoiceNote } from '@/components/VoiceNote';
 import { EmojiKeyboard } from '@/components/EmojiKeyboard';
 import { isDesktopBrowser } from '@/lib/browserDevice';
-import { VOICE_LIMIT_MS, clock, useVoiceRecorder } from '@/features/voice/useVoiceRecorder';
+import { VOICE_LIMIT_MS, canRecordVoice, clock, useVoiceRecorder } from '@/features/voice/useVoiceRecorder';
 import { openCourt } from '@/features/players/courtLink';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { COURT_CARD_W, CourtCard } from '@/features/messages/CourtCard';
@@ -59,6 +60,7 @@ import { phoneSaysCopied } from '@/lib/copied';
 import { useModalOpenWhile } from '@/lib/modalOpen';
 import * as Notifications from 'expo-notifications';
 import { clearChatPick, noteChatPick, takeRecoveredPick } from '@/features/messages/pendingPick';
+import { chatCameToFront } from '@/features/messages/chatInFront';
 import { GroupInviteCard } from '@/features/groups/GroupInviteCard';
 import { readGroupInvite } from '@/features/groups/inviteMessage';
 import { Slide, TimeAnchor, TimeSwipeArea } from '@/features/messages/MessageTimes';
@@ -124,6 +126,8 @@ interface Calls {
   jumpTo: (messageId: ID) => void;
   showFolded: (ids: ID[]) => void;
   openPhoto: (message: Message, index: number, rects: (TileRect | undefined)[]) => void;
+  /** A shared clip this phone hasn't loaded: fetched, so its card can show it. */
+  loadPost: (postId: ID) => void;
   // The message box.
   send: (text: string) => void;
   sendVoice: (recording: { uri: string; ms: number }) => void;
@@ -138,7 +142,7 @@ interface Calls {
   escape: () => void;
 }
 const CALL_NAMES: (keyof Calls)[] = [
-  'openMenu', 'startReply', 'react', 'anyEmoji', 'copy', 'retry', 'openReactions', 'jumpTo', 'showFolded', 'openPhoto',
+  'openMenu', 'startReply', 'react', 'anyEmoji', 'copy', 'retry', 'openReactions', 'jumpTo', 'showFolded', 'openPhoto', 'loadPost',
   'send', 'sendVoice', 'recording', 'typed', 'focused', 'toggleEmoji', 'plusToggled', 'camera', 'photos', 'court', 'escape',
 ];
 
@@ -162,6 +166,9 @@ interface RowCtx {
 }
 
 const firstName = (u?: User) => u?.name.trim().split(/\s+/)[0] ?? 'Someone';
+
+/** Shared clips already asked for (see Calls.loadPost). */
+const askedPosts = new Set<string>();
 
 /**
  * One conversation: bubbles, shared-item cards and a message box.
@@ -271,6 +278,8 @@ export default function Thread() {
     setPicked(recovered ? recovered.slice(0, MAX_CHAT_PHOTOS) : []);
   }, [id]);
 
+  // While this chat is the page in front, a tapped alert about it leaves it be (see chatInFront).
+  useEffect(() => (focused && id ? chatCameToFront(id) : undefined), [focused, id]);
   // Opening a chat fetches it fresh, so it never sits on an old copy waiting for the next refresh.
   useEffect(() => { if (id) void actions.syncConversation(id); }, [id, actions]);
   // Android: this chat's alerts leave the notification shade once it is open and read
@@ -285,15 +294,21 @@ export default function Thread() {
       .catch(() => undefined);
   }, [focused, id]);
 
+  // Read only while you can see it: in a browser, the tab in front; on a
+  // phone, the app in front (not in the background, nor half-hidden behind
+  // the app switcher or Notification Center), and read again on coming back.
   useEffect(() => {
+    const seen = () => (typeof document === 'undefined' ? AppState.currentState === 'active' : document.visibilityState === 'visible');
     const mark = () => {
-      if (focused && conversation && !removed && (typeof document === 'undefined' || document.visibilityState === 'visible')) actions.markConversationRead(conversation.id);
+      if (focused && conversation && !removed && seen()) actions.markConversationRead(conversation.id);
     };
     mark();
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', mark);
       return () => document.removeEventListener('visibilitychange', mark);
     }
+    const sub = AppState.addEventListener('change', (now) => { if (now === 'active') mark(); });
+    return () => sub.remove();
   }, [focused, conversation?.id, messages, currentUserId, actions, removed]);
 
   // A group you were taken out of shows the messages it had when you were.
@@ -785,6 +800,8 @@ export default function Thread() {
     jumpTo: (messageId) => { void jumpTo(messageId); },
     showFolded: (ids) => setShownIds((s) => [...s, ...ids]),
     openPhoto: (m, index, rects) => { Keyboard.dismiss(); setViewing({ message: m, index, rects }); },
+    // Asked once each while the app is open: one gone for good is not asked about on every draw.
+    loadPost: (postId) => { if (askedPosts.has(postId)) return; askedPosts.add(postId); void actions.loadPost(postId); },
     send,
     sendVoice: sendVoiceNote,
     recording: setRecording,
@@ -1209,7 +1226,8 @@ const Composer = memo(function Composer({ ref, styles, pickedCount, editingBody,
   const words = draft.trim();
   // The photo and court buttons step aside while there are words (or photos) to send, as Instagram's do, and the box takes the room.
   const tools = !words && !editing && !pickedCount;
-  const showSend = !!words || !!pickedCount || editing;
+  // A browser that can't record a voice note every phone can play offers no mic: the Send arrow stays, dim until there is something to send.
+  const showSend = !!words || !!pickedCount || editing || !canRecordVoice;
   const sendReady = (!!pickedCount && !editing) || (!!words && (!editing || words !== editingBody));
   const micTip = useTip('hold-to-record', !showSend && !voice.recording && !editing);
   const cameraOn = photosOn === 'on';
@@ -1657,7 +1675,7 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
         <HoldArea hover={hover} onHold={(rect) => openMenu({ message, mine, rect })} style={styles.sharedCardArea}>
           {(hold) => (
             <>
-              <SharedCard message={message} posts={ctx.posts} questions={ctx.questions} users={ctx.users} sentAt={sentAt} onLongPress={hold} styles={styles} />
+              <SharedCard message={message} posts={ctx.posts} questions={ctx.questions} users={ctx.users} sentAt={sentAt} onLongPress={hold} onMissingPost={ctx.call.loadPost} styles={styles} />
               {failedMark}
             </>
           )}
@@ -1756,14 +1774,21 @@ function Reactions({ message, me, mine, styles, onOpen, inline = false }: { mess
 }
 
 /** A shared clip, discussion or profile: a small card that opens it (a clip with its picture). */
-function SharedCard({ message, posts, questions, users, sentAt, onLongPress, styles }: {
-  message: Message; posts: Post[]; questions: Question[]; users: User[]; sentAt: string; onLongPress: () => void; styles: any;
+function SharedCard({ message, posts, questions, users, sentAt, onLongPress, onMissingPost, styles }: {
+  message: Message; posts: Post[]; questions: Question[]; users: User[]; sentAt: string; onLongPress: () => void;
+  onMissingPost: (postId: ID) => void; styles: any;
 }) {
   const post = message.kind === 'post' ? posts.find((p) => p.id === message.sharedId) : undefined;
   const person = message.kind === 'profile' ? users.find((u) => u.id === message.sharedId) : undefined;
   const question = message.kind === 'question' ? questions.find((q) => q.id === message.sharedId) : undefined;
   const there = post ?? person ?? question;
-  const label = !there ? 'This item was removed' : person ? person.name : question ? question.title : (post?.body || 'A clip');
+  // A clip or thread this phone hasn't loaded (an older one, say) is very likely
+  // still there: its page fetches it, so the card opens it, and a clip is
+  // fetched here too so its card can show it. Only a profile that isn't here is gone.
+  const opens = !!there || ((message.kind === 'post' || message.kind === 'question') && !!message.sharedId);
+  useEffect(() => { if (message.kind === 'post' && !post && message.sharedId) onMissingPost(message.sharedId); }, [message.kind, message.sharedId, post, onMissingPost]);
+  const label = person ? person.name : question ? question.title : post ? (post.body || 'A clip')
+    : message.kind === 'post' ? 'A clip' : message.kind === 'question' ? 'A discussion' : 'This item was removed';
   const kindWord = message.kind === 'profile' ? 'Profile' : message.kind === 'post' ? 'Clip' : 'Discussion';
   const thumb = post ? clipPicture(post) : undefined;
   return (
@@ -1772,7 +1797,7 @@ function SharedCard({ message, posts, questions, users, sentAt, onLongPress, sty
       accessibilityLabel={`${kindWord}: ${label}, sent ${sentAt}`}
       scaleTo={0.97}
       onLongPress={onLongPress}
-      onPress={() => (there ? router.push(message.kind === 'profile' ? `/user/${message.sharedId}` : message.kind === 'post' ? `/post/${message.sharedId}` : `/question/${message.sharedId}`) : undefined)}
+      onPress={() => (opens ? router.push(message.kind === 'profile' ? `/user/${message.sharedId}` : message.kind === 'post' ? `/post/${message.sharedId}` : `/question/${message.sharedId}`) : undefined)}
       style={[styles.sharedCard, post && styles.sharedCardClip]}
     >
       {post ? (
@@ -2290,7 +2315,8 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
             {target.copy}
           </Reanimated.View>
         ) : message.kind === 'text' ? (
-          <Reanimated.View pointerEvents="none" style={[styles.bubble, mine ? styles.mine : styles.theirs, styles.lifted, { position: 'absolute', left: rect.x, top: rect.y - shift, width: rect.w, alignSelf: 'auto' }, liftLook]}>
+          // A long message is drawn smaller the same way, so it never runs under the actions or off the screen.
+          <Reanimated.View pointerEvents="none" style={[styles.bubble, mine ? styles.mine : styles.theirs, styles.lifted, { position: 'absolute', left: rect.x, top: rect.y - shift, width: rect.w, alignSelf: 'auto' }, scale < 1 ? { transformOrigin: mine ? 'right top' : 'left top', transform: [{ scale }] } : liftLook]}>
             <RichText style={[styles.bubbleText, mine && { color: colors.brandInk }]}>{message.body}</RichText>
           </Reanimated.View>
         ) : null}
