@@ -556,7 +556,7 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /** "I'm in": joins, and resolves the group chat to open (or a sentence saying why not). */
   joinHit: (hitId: ID) => Promise<{ conversationId?: ID; error?: string }>;
   leaveHit: (hitId: ID) => void;
-  cancelHit: (hitId: ID) => void;
+  cancelHit: (hitId: ID) => Promise<void>;
   /** Your hits, posted or joined, from the last two days, called-off ones included: for "How was the hit?". The demo's are already loaded. */
   recentHits: () => Promise<HitRequest[]>;
   /**
@@ -2968,10 +2968,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return demoApi.headToHead({ me, other: userId, sessions: s.sessions, tags: s.sessionTags });
   }, []);
 
-  const cancelHit = useCallback((hitId: ID) => {
+  const cancelHit = useCallback(async (hitId: ID) => {
     const me = requireUser();
+    const had = stateRef.current.hitRequests.find((h) => h.id === hitId);
     setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.filter((h) => h.id !== hitId) }));
-    if (live(me, hitId)) void remote.cancelHit(hitId);
+    if (!live(me, hitId)) return;
+    try {
+      await remote.cancelHit(hitId);
+    } catch {
+      // Still on for everyone else: it comes back here too, and says so (unless a refetch already brought it back).
+      if (stateRef.current.currentUserId !== me) return;
+      if (had) setState((prev) => (prev.hitRequests.some((h) => h.id === hitId) ? prev : { ...prev, hitRequests: [...prev.hitRequests, had].sort((a, b) => a.startsAt.localeCompare(b.startsAt)) }));
+      showToast({ title: 'That didn’t go through. Your hit is still on.', icon: 'alert-circle-outline' });
+    }
   }, [requireUser]);
 
   const toggleLike = useCallback(

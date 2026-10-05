@@ -2810,7 +2810,8 @@ export const remote = {
     return { conversationId: (data as string) || undefined };
   },
   async leaveHit(hitId: ID) { const { error } = await need().rpc('leave_hit', { hit: hitId }); if (error) fail('leave hit')(error); },
-  async cancelHit(hitId: ID) { const { error } = await need().from('hit_requests').update({ cancelled: true }).eq('id', hitId); if (error) fail('cancel hit')(error); },
+  /** Throws when it does not go through, so the hit can come back on screen. */
+  async cancelHit(hitId: ID) { const { error } = await need().from('hit_requests').update({ cancelled: true }).eq('id', hitId); if (error) { fail('cancel hit')(error); throw error; } },
   async insertTip(tip: Tip) {
     const { error } = await need().from('tips').insert({ id: tip.id, user_id: tip.authorId, body: tip.body, created_at: tip.createdAt });
     if (error) fail('tip')(error);
