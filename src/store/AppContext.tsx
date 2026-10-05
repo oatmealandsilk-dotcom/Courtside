@@ -691,10 +691,11 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   addCoachReview: (coachId: ID, rating: number, body: string) => void;
   /**
    * Books a coach's service. On a real account the player pays through
-   * Stripe first: paid, cancelled, pending (Stripe has not said yet), or
-   * left (in a browser the page itself went to Stripe and comes back later).
+   * Stripe first: paid, cancelled, pending (Stripe has not said yet), closed
+   * (the player shut the pay sheet and Stripe has no payment), or left (in a
+   * browser the page itself went to Stripe and comes back later).
    */
-  bookCoach: (serviceId: ID, question: string, video?: { uri?: string } | null) => Promise<{ outcome: 'paid' | 'cancelled' | 'pending' | 'left'; requestId?: ID }>;
+  bookCoach: (serviceId: ID, question: string, video?: { uri?: string } | null) => Promise<{ outcome: 'paid' | 'cancelled' | 'pending' | 'closed' | 'left'; requestId?: ID }>;
   /** Reloads coaches, services, reviews and bookings. */
   refreshCoaching: () => Promise<void>;
   /** Asks Stripe directly whether a booking has been paid for. */
@@ -5248,8 +5249,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (paid) haptics.commit();
     // Not paid yet is not the same as cancelled: the sheet may have been
     // closed while Stripe was still taking the payment. Only Stripe's own
-    // cancel link (handled above) means nothing was charged; anything else
-    // goes to the booking page, which keeps asking Stripe for a while.
+    // cancel link (handled above) means nothing was charged. The player
+    // closing the sheet themselves stays on the coach's page with what they
+    // wrote ("closed"); a return from Stripe without the paid mark goes to the
+    // booking page, which keeps asking Stripe for a while.
+    if (!paid && result.type !== 'success') return { outcome: 'closed' as const, requestId };
     return { outcome: paid ? ('paid' as const) : ('pending' as const), requestId };
   }, [requireUser, refreshCoaching, confirmBooking]);
 
