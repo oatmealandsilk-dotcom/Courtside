@@ -16,15 +16,29 @@ export function useVoiceRecorder() {
   const startedAt = useRef(0);
   const tick = useRef<ReturnType<typeof setInterval> | null>(null);
   const live = useRef(false);
+  // Counts every start and finish, so a start still getting ready (the
+  // microphone question up, the phone slow to set up) knows it was let go
+  // of or thrown away meanwhile, and records nothing.
+  const gen = useRef(0);
+  const lastStart = useRef(0);
 
   useEffect(() => () => { if (tick.current) clearInterval(tick.current); }, []);
 
-  const start = async (): Promise<'ok' | 'denied' | 'failed'> => {
+  const start = async (): Promise<'ok' | 'denied' | 'failed' | 'cancelled'> => {
+    const mine = ++gen.current;
+    lastStart.current = mine;
+    const stale = () => gen.current !== mine;
     try {
       const permission = await requestRecordingPermissionsAsync();
       if (!permission.granted) return 'denied';
+      if (stale()) return 'cancelled';
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-      await recorder.prepareToRecordAsync();
+      if (!stale()) await recorder.prepareToRecordAsync();
+      if (stale()) {
+        // Back to playing through the speaker, unless a newer start has the microphone now.
+        if (lastStart.current === mine) await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => undefined);
+        return 'cancelled';
+      }
       recorder.record();
       live.current = true;
       startedAt.current = Date.now();
@@ -33,11 +47,13 @@ export function useVoiceRecorder() {
       tick.current = setInterval(() => setElapsed(Date.now() - startedAt.current), 200);
       return 'ok';
     } catch {
-      return 'failed';
+      return stale() ? 'cancelled' : 'failed';
     }
   };
 
   const finish = async (): Promise<{ uri: string; ms: number } | null> => {
+    // Also calls off a start still getting ready.
+    gen.current += 1;
     if (!live.current) return null;
     live.current = false;
     if (tick.current) { clearInterval(tick.current); tick.current = null; }
