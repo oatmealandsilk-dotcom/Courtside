@@ -9,9 +9,29 @@ import { useApp } from '@/store/AppContext';
 export const KIND_LABEL: Record<CoachService['kind'], string> = {
   'video-review': 'Video review',
   'written-qa': 'Written answer',
-  'live-session': 'Live session',
+  // Real time, one to one: the only kind Apple lets the app take card payments for outside
+  // In-App Purchase (guideline 3.1.3(d) and (e)): in person or on a video call. The name says so (Oct 5).
+  'live-session': 'Live lesson',
   plan: 'Training plan',
 };
+
+/**
+ * The kinds a coach can be paid for through Stripe. Video reviews, written
+ * answers and plans are delivered inside the app, which Apple counts as
+ * digital content (In-App Purchase only), so for now only live lessons are
+ * offered as paid services (owner's plan, Oct 3). The server refuses the
+ * others too once a live Stripe key is in (coach-payments).
+ */
+export const PAID_KINDS: CoachService['kind'][] = ['live-session'];
+
+/**
+ * Paid booking is part of a later release, not this one (owner's call, Oct 3:
+ * coaching is free at launch and App Review sees no payments). Until this is
+ * turned on in a reviewed update, prices and booking show to admins only,
+ * whatever Stripe key the server has, so adding a live key can never switch
+ * paid booking on by itself inside the build Apple approved.
+ */
+export const PAID_BOOKING_RELEASED = false;
 
 export const SPECIALTY_LABEL: Record<CoachSpecialty, string> = {
   serve: 'Serve', forehand: 'Forehand', backhand: 'Backhand', volleys: 'Volleys', footwork: 'Footwork',
@@ -80,4 +100,16 @@ export function usePayments(): { on: boolean | undefined; feePercent: number } {
     return () => { current = false; };
   }, [demo, user]);
   return state;
+}
+
+/**
+ * Whether this person sees prices and paid booking: payments switched on by
+ * the server (`true`, not just "not off": nothing shows while it is still
+ * asking) and, until paid booking is released, an admin. Everyone else sees
+ * coaching as it is at launch, free: Ask a coach and messaging a coach.
+ */
+export function usePaidBooking(): boolean {
+  const { currentUser } = useApp();
+  const payments = usePayments();
+  return payments.on === true && (PAID_BOOKING_RELEASED || !!currentUser?.isAdmin);
 }

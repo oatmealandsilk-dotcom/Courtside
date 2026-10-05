@@ -12,6 +12,9 @@ import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { askAiCoach, fetchAiPlan, type AiCoachReply, type CoachOption } from '@/data/api';
 import { generatePlan } from '@/features/aiCoach/planGenerator';
 import { useAiCoachLive, useAiCoachOn } from '@/features/aiCoach/switch';
+import { useAiCoachConsent } from '@/features/aiCoach/consent';
+import { usePaidBooking } from '@/features/coaching/bookings';
+import { openLegal } from '@/lib/legal';
 import { planRemindersSupported, readPlanReminders, schedulePlanReminders, setPlanReminders } from '@/features/aiCoach/planReminder';
 import { show as showToast } from '@/lib/toast';
 import { duration, formatDate, experienceLabel, hoursAndMinutes } from '@/lib/format';
@@ -78,9 +81,10 @@ function aboutYou(p: PlayerProfile, signal: ReturnType<typeof healthSignal>, who
  */
 export default function AiCoachRoute() {
   const on = useAiCoachOn();
+  const consent = useAiCoachConsent();
   const { currentUser } = useApp();
   const [later, setLater] = useState(false);
-  if (on === undefined) {
+  if (on === undefined || (on && consent.agreed === undefined)) {
     return <Screen title="AI Coach" compactTitle onBack={() => goBack()}><View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View></Screen>;
   }
   if (!on) {
@@ -90,6 +94,9 @@ export default function AiCoachRoute() {
       </Screen>
     );
   }
+  // Before anything leaves the phone: a clear yes to sending it to Anthropic (Apple 5.1.2(i)
+  // and 5.1.3). This comes before the week is asked for, which happens as soon as the coach opens.
+  if (!consent.agreed) return <AiCoachConsent onAgree={consent.agree} />;
   // First time in: the coach asks what it needs (fitness, sessions, a goal,
   // a tournament), which joining no longer does. Skippable; it just plans less well.
   const p = currentUser?.profile;
@@ -111,7 +118,59 @@ export default function AiCoachRoute() {
   return <Train />;
 }
 
+/**
+ * The one-time question before the AI coach is used: who powers it, exactly
+ * what is sent, and a clear Agree or Not now. "Not now" goes back and sends
+ * nothing. The answer is kept with the account (migration 115), the server
+ * checks it too, and Coach memory has the way to take it back.
+ */
+function AiCoachConsent({ onAgree }: { onAgree: () => Promise<boolean> }) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const agree = async () => {
+    setBusy(true);
+    setFailed(false);
+    const ok = await onAgree().catch(() => false);
+    setBusy(false);
+    if (!ok) setFailed(true);
+  };
+  const sent = [
+    'Your questions, and your recent chats with the coach',
+    'Your tennis profile: rating, play style, goals, injury and schedule notes, next tournament',
+    'If Apple Health is connected: your recent sleep and heart rate variability',
+  ];
+  return (
+    <Screen title="AI Coach" compactTitle onBack={() => goBack()}>
+      <View style={introStyles.card}>
+        <View style={introStyles.mark}><Ionicons name="sparkles" size={20} color={colors.brand} /></View>
+        <Text style={introStyles.title}>Before you use the AI coach</Text>
+        <Text style={introStyles.body}>The AI coach is powered by Claude, an AI made by Anthropic. To answer you and plan your week, CourtSide sends Anthropic:</Text>
+        <View style={introStyles.list}>
+          {sent.map((line) => (
+            <View key={line} style={introStyles.item}>
+              <Ionicons name="checkmark" size={16} color={colors.brand} />
+              <Text style={introStyles.itemText}>{line}</Text>
+            </View>
+          ))}
+        </View>
+        <Text style={introStyles.body}>Numbers from WHOOP are never sent. Anthropic does not use it to train its AI. You can stop any time from Settings → Account center → Coach memory.</Text>
+        <Pressable accessibilityRole="link" onPress={() => openLegal('privacy')} hitSlop={8}><Text style={introStyles.link}>Read the privacy policy</Text></Pressable>
+        {failed ? <Text style={introStyles.error}>That didn’t save. Check your connection and try again.</Text> : null}
+        <Pressable accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={() => { void agree(); }} style={({ pressed }) => [introStyles.go, (pressed || busy) && { opacity: 0.85 }]}>
+          <Text style={introStyles.goText}>{busy ? 'Saving…' : 'Agree'}</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={() => goBack()} hitSlop={8}><Text style={introStyles.later}>Not now</Text></Pressable>
+      </View>
+    </Screen>
+  );
+}
+
 const introStyles = StyleSheet.create({
+  list: { alignSelf: 'stretch', gap: spacing.sm },
+  item: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
+  itemText: { ...typography.body, color: colors.text, flex: 1, lineHeight: 22 },
+  link: { ...typography.smallStrong, color: colors.brand },
+  error: { ...typography.small, color: colors.danger, textAlign: 'center' },
   card: { ...lift, alignItems: 'center', gap: spacing.md, padding: spacing.xl, borderRadius: 20, backgroundColor: colors.surface, marginTop: spacing.lg },
   mark: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   title: { ...typography.heading, color: colors.text, textAlign: 'center' },
@@ -133,6 +192,8 @@ function Train() {
   const styles = useThemedStyles(styleDefinitions);
   const live = useAiCoachLive();
   const { currentUser, healthHistory, integrations, coaches, users } = useApp();
+  // Prices are only given to the coach where paid booking is open; otherwise it suggests coaches without one.
+  const paidBooking = usePaidBooking();
   // A morning reminder opens straight onto that day of the plan.
   const params = useLocalSearchParams<{ section?: string; day?: string }>();
   const [openDay, setOpenDay] = useState<number | null>(params.day !== undefined && /^[0-6]$/.test(params.day) ? Number(params.day) : null);
@@ -184,7 +245,7 @@ function Train() {
   // Coaches the AI may suggest when a person would help more: real ones only.
   const options: CoachOption[] = coaches
     .filter((c) => UUID.test(c.id) && c.services.length)
-    .map((c) => ({ id: c.id, name: users.find((u) => u.id === c.userId)?.name ?? 'Coach', specialties: c.specialties, fromCents: Math.min(...c.services.map((s) => s.priceCents)) }));
+    .map((c) => ({ id: c.id, name: users.find((u) => u.id === c.userId)?.name ?? 'Coach', specialties: c.specialties, fromCents: paidBooking ? Math.min(...c.services.map((s) => s.priceCents)) : 0 }));
 
   if (!currentUser || !plan) {
     return <Screen title="AI Coach" compactTitle onBack={() => goBack()}><View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View></Screen>;

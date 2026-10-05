@@ -13,7 +13,7 @@ import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { money, relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useAiCoachOn } from '@/features/aiCoach/switch';
-import { statusLabel } from '@/features/coaching/bookings';
+import { statusLabel, usePaidBooking } from '@/features/coaching/bookings';
 import { studioLine } from '@/features/coaching/studioSummary';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
@@ -23,6 +23,7 @@ function Coaching() {
   const styles = useThemedStyles(styleDefinitions);
   const { coaches, users, coachingRequests, coachQuestions, currentUserId, currentUser, actions } = useApp();
   const aiCoachOn = useAiCoachOn();
+  const paidBooking = usePaidBooking();
   // Where the box sits on screen, so the question page can grow out of it.
   const askPill = useRef<View>(null);
   // The tutorial's Coaching tip lights this box and the line under it, so the two share one box it can find.
@@ -163,8 +164,8 @@ function Coaching() {
                       <Text style={styles.meta}>· {coach.ratingCount}</Text>
                     </View>
                   ) : <Text style={styles.meta}>New</Text>}
-                  {coach.payoutsReady === false ? <Text style={styles.meta}>Booking soon</Text>
-                    : price ? <View style={styles.priceTag}><Text style={styles.priceText}>from {money(price)}</Text></View> : null}
+                  {/* Prices only where paid booking is open (admins, until it is released): no "Booking soon" placeholders. */}
+                  {paidBooking && coach.payoutsReady !== false && price ? <View style={styles.priceTag}><Text style={styles.priceText}>from {money(price)}</Text></View> : null}
                 </View>
               </Pressable>
             );

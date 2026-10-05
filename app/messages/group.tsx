@@ -199,7 +199,8 @@ export default function ChatDetails() {
                   title: `Report ${first(other)}?`,
                   message: `A person at CourtSide will look at this chat. ${first(other)} isn’t told it was you.`,
                   confirmLabel: 'Report',
-                  onConfirm: () => { actions.reportUser(other.id, 'messages'); showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' }); },
+                  // Reported as the chat, naming them, so the admin can read it and act on it (Oct 5).
+                  onConfirm: () => { actions.reportChat(conversation.id, 'one-to-one chat', other.id); showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' }); },
                 })}
                 style={({ pressed }) => [styles.row, pressed && styles.pressed]}
               >

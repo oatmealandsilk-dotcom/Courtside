@@ -1,7 +1,8 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useRef, useState } from 'react';
-import { confirmDelete } from '@/lib/confirm';
+import { confirmDelete, confirmReport } from '@/lib/confirm';
+import { show as showToast } from '@/lib/toast';
 import * as haptics from '@/lib/haptics';
 import { MentionSuggestions } from '@/components/MentionSuggestions';
 import { useMentionDraft } from '@/features/mentions/useMentionDraft';
@@ -42,9 +43,17 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
   const lineRef = useRef<TextInput>(null);
   const responder = users.find(user => user.id === answer.authorId);
   const tag = useMentionDraft(draft, setDraft, lineRef);
-  // Hold your own reply to delete it, as on Instagram.
+  // Hold your own reply to delete it, as on Instagram; hold someone else's to report it (Oct 5).
   const mine = !preview && answer.authorId === currentUserId;
-  const askDelete = mine ? () => { haptics.tap(); confirmDelete(() => actions.deleteAnswer(answer.id), 'this reply'); } : undefined;
+  const theirs = !preview && !!currentUserId && answer.authorId !== currentUserId;
+  const askDelete = mine ? () => { haptics.tap(); confirmDelete(() => actions.deleteAnswer(answer.id), 'this reply'); }
+    : theirs ? () => {
+      haptics.tap();
+      confirmReport('reply', () => {
+        actions.reportUser(answer.authorId, `answer:${answer.id}`);
+        showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
+      });
+    } : undefined;
   const children = thread.filter(child => child.parentAnswerId === answer.id)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   return <View>
@@ -60,8 +69,8 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
       </Pressable>
       {!collapsed && <>
         {acceptedId === answer.id && <Text style={styles.acceptedText}>Accepted by the asker</Text>}
-        {answer.body ? (mine
-          ? <Pressable accessibilityHint="Hold to delete" onLongPress={askDelete} delayLongPress={350}><RichText style={styles.replyBody}>{answer.body}</RichText></Pressable>
+        {answer.body ? (askDelete
+          ? <Pressable accessibilityHint={mine ? 'Hold to delete' : 'Hold to report'} onLongPress={askDelete} delayLongPress={350}><RichText style={styles.replyBody}>{answer.body}</RichText></Pressable>
           : <RichText style={styles.replyBody}>{answer.body}</RichText>) : null}
         {answer.media ? <View style={{ paddingLeft: 42 }}><ReplyMediaView media={answer.media} onLongPress={askDelete} /></View> : null}
         {!preview && <View style={styles.replyActions}>

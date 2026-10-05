@@ -16,9 +16,9 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { formatDate } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
-import * as toast from '@/lib/toast';
 import { confirm } from '@/lib/confirm';
 import { useAiCoachOn } from '@/features/aiCoach/switch';
+import { usePaidBooking } from '@/features/coaching/bookings';
 import { useGateSpace } from '@/lib/useGateSpace';
 import { KeyboardScrollContext, useKeyboardReveal } from '@/lib/keyboardScroll';
 import { KEYBOARD_ROOM, useKeyboardRoom } from '@/lib/keyboardRoom';
@@ -37,6 +37,7 @@ export default function AccountCentre() {
   const styles = useThemedStyles(styleDefinitions);
   const { currentUser, actions } = useApp();
   const aiCoachOn = useAiCoachOn();
+  const paidBooking = usePaidBooking();
   const [info, setInfo] = useState<Awaited<ReturnType<typeof actions.accountInfo>>>(null);
   const [sheet, setSheet] = useState<Sheet>(null);
   const [busy, setBusy] = useState(false);
@@ -70,6 +71,8 @@ export default function AccountCentre() {
 
   const hasGoogle = info?.providers.includes('google') ?? false;
   const hasEmail = info?.providers.includes('email') ?? false;
+  // On an iPhone, deleting an account made with Apple asks Apple to confirm once more (so CourtSide leaves the Apple ID too).
+  const appleConfirm = Platform.OS === 'ios' && (info?.providers.includes('apple') ?? false);
 
   const download = async () => {
     const data = JSON.stringify(actions.exportData(), null, 2);
@@ -157,10 +160,15 @@ export default function AccountCentre() {
 
       <Text style={styles.sectionTitle}>Your data</Text>
       <View style={styles.card}>
-        {row('shield-checkmark-outline', 'Privacy', undefined, () => router.push('/privacy'), false, 0)}
-        {row('card-outline', 'Payments', undefined, () => router.push('/payments'), false, 1)}
-        {row('sparkles-outline', 'Coach memory', undefined, () => (aiCoachOn ? router.push('/coach-memory') : toast.show({ title: 'AI coach is coming soon', body: 'A weekly plan and a coach to ask about your game', icon: 'sparkles' })), false, 2)}
-        {row('download-outline', 'Download your data', undefined, () => { void download(); }, false, 3)}
+        {/* Payments and Coach memory only show once there is something behind them: paid booking
+            open to this person, and the AI coach switched on (confirmed, not just "not off yet").
+            Nothing here says "coming soon" (App Review 2.1, Oct 5). */}
+        {[
+          row('shield-checkmark-outline', 'Privacy', undefined, () => router.push('/privacy'), false, 0),
+          paidBooking ? row('card-outline', 'Payments', undefined, () => router.push('/payments'), false, 1) : null,
+          aiCoachOn === true ? row('sparkles-outline', 'Coach memory', undefined, () => router.push('/coach-memory'), false, 1) : null,
+          row('download-outline', 'Download your data', undefined, () => { void download(); }, false, 1),
+        ].filter(Boolean)}
       </View>
 
       <View style={[styles.card, { marginTop: spacing.xl }]}>
@@ -200,7 +208,7 @@ export default function AccountCentre() {
               <>
                 <SheetTitle title="Delete your account?" line="This can't be undone." onClose={() => setSheet(null)} />
                 <View style={styles.sheetBody}>
-                  <Text style={styles.sheetNote}>Your profile, posts, clips, instants, questions and messages are removed for good. Coaches keep records of paid sessions. Type DELETE to confirm.</Text>
+                  <Text style={styles.sheetNote}>Your profile, posts, clips, instants, questions and messages are removed for good.{paidBooking ? ' Coaches keep records of paid sessions.' : ''} Type DELETE to confirm.{appleConfirm ? ' Apple then asks you to confirm once more, so CourtSide is also removed from your Apple ID.' : ''}</Text>
                   <Field soft value={confirmWord} onChangeText={setConfirmWord} autoCapitalize="none" placeholder="DELETE" />
                   {error ? <Text style={styles.error}>{error}</Text> : null}
                   <Button label="Delete my account" variant="danger" loading={busy} disabled={confirmWord.trim() !== 'DELETE'} onPress={() => run(async () => { await actions.deleteAccount(); router.replace('/'); }, 'Account deleted.')} full />

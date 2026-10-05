@@ -19,6 +19,7 @@ import { withCatalog } from '@/lib/integrations';
 import { relativeTime, hoursAndMinutes } from '@/lib/format';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
+import { useAiCoachOn } from '@/features/aiCoach/switch';
 import type { Integration } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -78,6 +79,8 @@ export default function Health() {
   const connected = integrations.filter((i) => i.connected).length;
   // Tennis sessions, per source, once the server's switch for it is on. Off, this page is as it always was.
   const flags = useTennisFlags();
+  // The coach is only mentioned once it is switched on: nothing here promises a feature nobody can find (App Review 2.1).
+  const coachOn = useAiCoachOn() === true;
   const tennisOn = (provider: Integration['provider']) => (provider === 'apple-health' ? flags.apple : provider === 'whoop' || isTracker(provider) ? flags[provider] : false);
   // Fitbit, Oura and Polar: open once the server has their keys and their switch is on.
   const trackers = useTrackerStatus();
@@ -238,7 +241,9 @@ export default function Health() {
 
   return (
     <Screen title="Health" compactTitle onBack={() => goBack()}>
-      <Text style={styles.lead}>{connected ? 'The coach plans around these.' : 'Connect a source and the coach plans around how recovered you are.'}</Text>
+      <Text style={styles.lead}>{coachOn
+        ? (connected ? 'If you use the AI coach, it plans around these.' : 'Connect a source and, if you use the AI coach, it plans around how recovered you are.')
+        : 'Your sleep and recovery, from the sources you connect.'}</Text>
 
       {latest ? (
         <View style={styles.today}>
@@ -274,13 +279,16 @@ export default function Health() {
         </View>
       ) : null}
 
-      {/* Says what the server does: WHOOP's numbers go on disconnect only once its switch is on. */}
+      {/* Says what the server does: WHOOP's numbers go on disconnect only once its switch is on. Who else
+          gets the numbers is said plainly: nobody, unless you agree to the AI coach, which is powered by
+          Anthropic (App Review 5.1.2 and 5.1.3, Oct 5). */}
       <Text style={styles.foot}>
+        {`Only you see these.${coachOn ? ` If you agree to use the AI coach, your recent sleep and heart rate variability are sent to Anthropic, which powers it${flags.whoop ? '; WHOOP’s numbers never are' : ''}.` : ''} `}
         {flags.whoop
-          ? `Only you and the AI coach see these, and WHOOP’s numbers never go to the coach. Tennis sessions stay private until you post one. Disconnecting ${removersText} removes what it sent; other sources stay until you delete your account.`
+          ? `Tennis sessions stay private until you post one. Disconnecting ${removersText} removes what it sent; other sources stay until you delete your account.`
           : flags.apple
-            ? 'Only you and the AI coach see these. Tennis sessions stay private until you post one. Disconnecting stops new numbers; what was already read stays until you delete your account.'
-            : 'Only you and the coach see these. Disconnecting stops new numbers; what was already read stays until you delete your account.'}
+            ? 'Tennis sessions stay private until you post one. Disconnecting stops new numbers; what was already read stays until you delete your account.'
+            : 'Disconnecting stops new numbers; what was already read stays until you delete your account.'}
       </Text>
     </Screen>
   );

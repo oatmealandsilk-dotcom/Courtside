@@ -167,11 +167,11 @@ Six looks to choose from: the warm CourtSide original, a dark Night theme, and f
 SAFETY FIRST
 • CourtSide is for ages 13 and up.
 • Teen accounts (ages 13 to 17) start private, and only people a teen follows can start a chat with them.
-• Report a post, hit, or profile from its ••• menu. Block or mute anyone.
+• Report a post, hit, profile, thread, comment or message. Block or mute anyone.
 • No ads. We don't sell your data or track you across other apps.
 
-EARLY ACCESS
-CourtSide is brand new, and you're early. Tell us what to build next with a tip right in your feed, and vote on everyone else's ideas.
+TELL US WHAT TO BUILD
+Tell us what to build next with a tip right in your feed, and vote on everyone else's ideas.
 
 Anything about training, injuries, or fitness on CourtSide is general information shared by players, not medical advice.
 
@@ -179,7 +179,7 @@ Terms of Service: https://oatmealandsilk-dotcom.github.io/Courtside/terms.html
 Privacy Policy: https://oatmealandsilk-dotcom.github.io/Courtside/privacy.html
 ```
 
-3,014 characters.
+2,988 characters.
 
 **What is deliberately left out, and why:**
 
@@ -190,7 +190,7 @@ Privacy Policy: https://oatmealandsilk-dotcom.github.io/Courtside/privacy.html
 - **Talk Tennis / Reddit.** Leave them out until you have permission.
 - No prices and no competitor names, as asked.
 
-**Optional coaching paragraph.** Add it only if **real** coaches are on CourtSide at launch, ready to answer. Paste it between the FIND PLAYERS and YOUR PROFILE sections, with an empty line above and below. It is 166 characters, so the description becomes 3,182.
+**Optional coaching paragraph.** Add it only if **real** coaches are on CourtSide at launch, ready to answer. Paste it between the FIND PLAYERS and YOUR PROFILE sections, with an empty line above and below. It is 166 characters, so the description becomes 3,156.
 
 ```text
 COACHING
@@ -214,10 +214,10 @@ hitting,partner,forum,serve,forehand,backhand,racquet,match,doubles,club,trainin
 ### Support URL
 
 ```text
-https://oatmealandsilk-dotcom.github.io/Courtside/support.html
+https://app.courtsidebase.com/privacy.html
 ```
 
-**This page does not exist yet** (right now that address shows "page not found"). Apple requires the Support URL to open a page with a working way to contact you. Ask Claude to add a short support page with your email address and a few answers; it goes live with the next website update. **If you submit before it exists, use the privacy policy address instead** (`https://oatmealandsilk-dotcom.github.io/Courtside/privacy.html`), which ends with your contact email. Never paste an address that does not load.
+**Paste the address above for now.** Apple requires the Support URL to open a page with a working way to contact you, and the privacy policy ends with the support email. The real support page (`public/support.html`: the support email, how to report or block someone, and how to delete an account, in the app or on the web) is written and goes live with the next website update. Once Claude has checked that `https://app.courtsidebase.com/support.html` opens (not "page not found"), put that address here and in App Store Connect instead. Never paste an address that does not load. Also send a test email to support@courtsidebase.com and check it arrives.
 
 ### Marketing URL (optional)
 
@@ -264,9 +264,9 @@ Apple's current age ratings are **4+, 9+, 13+, 16+ and 18+**. You answer questio
 **What CourtSide has that matters here**
 
 - **Its own age check.** Everyone gives a date of birth once: on the sign-up form, or on a one-time screen (`app/(auth)/birthday.tsx`) for accounts made through Google. The question is neutral (it does not hint at which answers pass). **Under 13:** no account is kept, and the phone remembers the answer so the question cannot simply be answered again with a different date. **13 to 17:** a teen account, private to start with, and only people the teen follows can start a new chat with them. The database itself enforces this (`supabase/migrations/20260918000013_age_check.sql`), so the app cannot be tricked around it. The date of birth is never shown to anyone.
-- **Reporting.** Posts and hits (from their ••• menu) and profiles (••• at the top right) can be reported. Each report is saved in the `reports` table (think of it as one tab of a spreadsheet) with who reported what. Nobody can read that table from the app; you read it in Supabase (Table Editor → reports).
+- **Reporting.** Posts and hits (from their ••• menu), profiles (••• at the top right), threads (the flag at the top), comments, replies and chat messages (press and hold), questions to coaches (•••) and whole chats (the chat's details) can be reported. Each report is saved in the `reports` table (think of it as one tab of a spreadsheet) with who reported what. Nobody can read that table from the app; you read it in Supabase (Table Editor → reports).
 - **Blocking and muting** from the same ••• menus. Blocked people are listed in Settings → Blocked.
-- **No ads, no in-app purchases (Apple's own payment system), no in-app web browser.** Paid coaching is paid on Stripe's own web page, which opens from the app.
+- **No ads, no in-app purchases (Apple's own payment system), no in-app web browser.** Coaching is free at launch; nothing can be bought in this version.
 
 ### In-App Controls
 
@@ -502,8 +502,8 @@ AGE CHECK AND TEEN ACCOUNTS
 Everyone gives a date of birth once: on the sign-up form, or on a one-time screen for accounts made with a sign-in service such as Google. Under 13: no account is kept (an account just made through a sign-in service is deleted at once), and the device will not offer sign-up again. 13 to 17: a teen account. It starts private, and only people the teen follows can start a new chat with them. This rule is enforced in our database, not only in the app. A date of birth is never shown to anyone.
 
 REPORTING, BLOCKING AND MUTING
-- Report: the ••• button on any post or hit, or the ••• button at the top right of any profile. Reports are saved to our database and a person reviews them within 24 hours. We remove content and suspend accounts that break our Terms of Service.
-- Block or mute: from the same ••• menus. Blocking hides that person's posts, hits, threads and chat. Muting hides their posts from your feed. Blocked people are listed in Settings > Blocked.
+- Report: the ••• button on any post or hit, the ••• button at the top right of any profile, the flag at the top of a discussion thread, or press and hold any comment, reply or chat message. A whole chat can be reported from its details. Reports are saved to our database and a person reviews them within 24 hours. What you report is hidden from you at once. We remove content and suspend accounts that break our Terms of Service; a suspended account's posts are hidden from everyone.
+- Block or mute: from the same ••• menus. Blocking stops one-to-one messages and hides each person's posts, hits, threads, replies and coach questions from the other. Muting hides their posts from your feed. Blocked people are listed in Settings > Privacy center > Blocked.
 - Our Terms of Service forbid abusive, hateful, sexual, dangerous or illegal content and harassment.
 
 DELETING AN ACCOUNT
@@ -514,12 +514,12 @@ Some threads on the Community tab are marked "Talk Tennis". They are headlines a
 
 PERMISSIONS
 - Location is off until the person turns it on (Settings > Location, or the switch on the Find Players map). It is used only while the app is open, to center the map. The exact position is never sent to our servers. Weather on the map comes from Open-Meteo, which receives the map's center rounded to about 1 km.
-- The camera is used only to take a hit. The photo library is used only when someone chooses a photo or video to post.
+- The camera is used only to take a hit, or a photo to send in a chat. The photo library is used only when someone chooses a photo or video to post or send; if photo access is refused, Apple's own picker still opens.
 - After sign-in, the app asks once whether it may send notifications.
 
 GOOD TO KNOW
 - iPhone only.
-- Paid coaching: approved coaches sell video reviews, written answers, training plans and live sessions. Tapping "Continue to payment" opens Stripe's own pay page in the browser; the app never handles card details. There are no subscriptions, no ads, and no Apple in-app purchases. The app is offered in the United States storefront only.
+- Coaching is free in this version: Ask a coach (public questions that verified coaches answer), coach pages, and messaging a coach. Nothing can be bought. When paid lessons are added in a later update, players will only book real-time, one-to-one lessons (in person or on a live video call), paid through Stripe under guideline 3.1.3(d) and (e); no digital content will be sold. There are no subscriptions, no ads, and no Apple in-app purchases.
 - Training, injury and fitness content is general information, not medical advice, and the app says so.
 
 Contact: oatmealandsilk@gmail.com
@@ -562,10 +562,10 @@ Items marked **(Claude)** are code or website changes Claude makes once you say 
 - [ ] **(Claude) Hide the "Coming soon" AI coach card** and the "What the coach remembers" row, or keep them and add the extra reviewer line from section 5. Apple dislikes placeholder features (rule 2.1), so hiding is safer.
 - [ ] **(Claude) Remove "demo build"** from the About screen, and its lines "Coaches are verified by hand" and "coaching, human or AI".
 - [ ] **(Claude) Safety features Apple expects in apps where people post (rule 1.2):**
-  - a Report option on comments, discussion threads and replies, and inside a chat (today only posts, hits and profiles have one);
+  - [x] a Report option on comments, discussion threads and replies, coach questions, and inside a chat (done Oct 5 on feat/appstore-ready: hold a comment, reply or message; the flag on a thread; ••• on a coach question; chat details);
   - a basic filter that stops obviously offensive words from being posted;
   - "By creating an account you agree to the Terms of Service and Privacy Policy", with links, on the sign-up screen;
-  - the Settings → Blocked screen says blocked people "cannot see your posts, message you, or find your profile". The privacy policy says blocking does not yet stop them seeing your public posts. Make the screen match what blocking really does, or make blocking do what the screen says.
+  - [x] the Settings → Blocked screen, Help and the privacy policy now all say what blocking really does (Oct 5).
 - [ ] **(Claude) Account deletion must remove uploaded photos and videos too.** Today the files stay reachable at their web address after the account is gone. Apple requires deleting the account's data (rule 5.1.1(v)). Also check that the `delete-account` server function is deployed, and test it with a throwaway account.
 - [ ] **(Claude) Production build settings:** the real Supabase key must be in the build (`eas.json` still holds a placeholder), and the Expo project ID must be set so push notifications work. A build missing either falls back to a broken or demo mode.
 - [x] **Grand Slam theme names.** Renamed Sep 30 to Melbourne, Paris, London and New York (the tournament names are trademarks, rule 5.2.1), in the app and on the waitlist page.
@@ -581,8 +581,8 @@ Items marked **(Claude)** are code or website changes Claude makes once you say 
 ### D. Web pages (updating them is public)
 
 - [ ] **(Claude, with your go-ahead) Update the privacy policy for coach applications.** It still says the Apply form sends nothing, but since today it saves applications and résumés (section 4). Updating it changes the public website.
-- [ ] **(Claude) Keep the privacy policy and Terms in step with section B.** Both now say some profiles, posts, threads and coaches are samples, and that coach prices are a preview. When those are removed, those sentences should go too.
-- [ ] **(Claude) Add a support page** (`support.html`) with your email and short answers, so the Support URL works.
+- [x] **(Claude) Keep the privacy policy and Terms in step with section B.** Done Oct 5: the samples, Reddit and "early access" lines are gone, paid coaching is described as later, and the privacy policy now covers contacts, phone linking, Sign in with Apple, voice notes, chat photos, link previews and the copy kept on the phone. Both now say some profiles, posts, threads and coaches are samples, and that coach prices are a preview. When those are removed, those sentences should go too.
+- [x] **(Claude) Add a support page** (`support.html`) with your email and short answers, so the Support URL works. Written Oct 5; it is live once the website is next updated.
 - [ ] **(you) Open the privacy, terms and support links** on your phone and check each one loads.
 
 ### E. Demo accounts and testing

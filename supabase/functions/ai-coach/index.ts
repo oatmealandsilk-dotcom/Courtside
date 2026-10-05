@@ -12,6 +12,10 @@
 // Secret:   set ANTHROPIC_API_KEY in Supabase → Edge Functions → Secrets.
 // The app asks `status` and shows the coach only once the key is there, so
 // adding the key is what switches it on; removing it switches it off.
+// `plan` and `chat` also need the player's yes on record (the ai_coach_consent
+// table, migration 115): nothing about them goes to Anthropic before they
+// agree in the app, even from an older copy of the app that never asked
+// (Apple 5.1.2(i) and 5.1.3, Oct 5). So run migration 115 before adding the key.
 // (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / SUPABASE_ANON_KEY are provided.)
 import Anthropic from 'npm:@anthropic-ai/sdk@0.128.0';
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -75,6 +79,12 @@ async function whoIs(req: Request): Promise<string | null> {
   });
   const { data } = await asUser.auth.getUser();
   return data.user?.id ?? null;
+}
+
+/** Whether the player agreed to their details going to Anthropic (migration 115). No row, or no table yet: no. */
+async function agreed(userId: string): Promise<boolean> {
+  const { data, error } = await admin.from('ai_coach_consent').select('user_id').eq('user_id', userId).maybeSingle();
+  return !error && !!data;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -269,7 +279,7 @@ async function chat(userId: string, body: { prompt: string; context: string; coa
       { type: 'text', text: VOICE, cache_control: { type: 'ephemeral' } },
       { type: 'text', text: `About this player:\n${body.context}\n\nWhat you remember from earlier sessions:\n${summary || '(first conversations — nothing yet)'}` },
       { type: 'text', text: handoffAllowed
-        ? `Human coaches on CourtSide who could take this player:\n${body.coaches.map((c) => `- id ${c.id}: ${c.name}, ${c.specialties.join(' & ')}, from $${(c.fromCents / 100).toFixed(0)}`).join('\n')}\n\nSuggest one ONLY if: the player has now raised the same topic three times (${repeated.length ? `already twice: ${repeated.join(', ')}` : 'no topic has repeated yet'}), or the question cannot be answered well without watching them play, or an injury needs a person to look at it. Pick the coach whose specialty fits. Otherwise handoff is null.`
+        ? `Human coaches on CourtSide who could take this player:\n${body.coaches.map((c) => `- id ${c.id}: ${c.name}, ${c.specialties.join(' & ')}${c.fromCents > 0 ? `, from $${(c.fromCents / 100).toFixed(0)}` : ''}`).join('\n')}\n\nSuggest one ONLY if: the player has now raised the same topic three times (${repeated.length ? `already twice: ${repeated.join(', ')}` : 'no topic has repeated yet'}), or the question cannot be answered well without watching them play, or an injury needs a person to look at it. Pick the coach whose specialty fits. Otherwise handoff is null.`
         : 'Do not suggest a human coach in this reply; handoff must be null.' },
     ],
     messages: [
@@ -335,6 +345,9 @@ Deno.serve(async (req) => {
     const userId = await whoIs(req);
     if (!userId) return json({ error: 'Sign in to talk to the coach.' }, 401);
     if (!KEY && body.mode !== 'memory') return json({ error: 'The AI coach is not switched on yet.', off: true }, 503);
+    if ((body.mode === 'plan' || body.mode === 'chat') && !(await agreed(userId))) {
+      return json({ error: 'Open the AI coach in the app and agree first.', consent: true }, 403);
+    }
     switch (body.mode) {
       case 'plan':
         return json(await buildPlan(userId, body));

@@ -120,3 +120,18 @@ export function confirmDelete(onYes: () => void, what = 'this post') {
 export function confirmAction(title: string, body: string, yes: string, onYes: () => void) {
   confirm({ title, message: body, confirmLabel: yes, onConfirm: onYes });
 }
+
+/**
+ * Reporting one thing (a thread, a reply, a comment, a message), asked the
+ * same way everywhere: who sees it and that the author is not told. `report`
+ * runs on yes; the caller says thanks (a toast) after it.
+ */
+export function confirmReport(what: string, report: () => void, fromMenu = false) {
+  (fromMenu ? confirmAfterMenu : confirm)({
+    title: `Report this ${what}?`,
+    message: 'A person at CourtSide will look at it. Whoever wrote it isn’t told it was you.',
+    confirmLabel: 'Report',
+    destructive: true,
+    onConfirm: report,
+  });
+}

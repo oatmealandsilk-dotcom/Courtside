@@ -1,10 +1,13 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { WebView } from 'react-native-webview';
 import {  } from 'react-native-reanimated';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 
 import { STYLE, type Look } from '@/components/map/look';
+import { ENGINE_CSS, ENGINE_JS } from '@/components/map/engineLoader';
+import { useThemedStyles } from '@/theme/ThemeProvider';
+import { colors, radius, spacing, typography } from '@/theme';
 import { CLOSE_ZOOM_NAMES, FAR_ZOOM, MAP_PIN_CSS, SHORT_ZOOM } from '@/components/map/markers';
 import { CARD_BOX, FULL_MAP_BOX, PIN_ENGINE_JS, type CanvasMarker, type ClusterTemplates } from '@/components/map/pinEngine';
 import type { LatLng, ViewBounds } from '@/features/players/positions';
@@ -52,10 +55,32 @@ interface Props {
  * a web view, so the phone gets the app's own warm-paper look instead of
  * Apple's stock map with its shields and yellow motorways. Nothing native
  * to build — Expo Go has the web view — and one look everywhere.
+ *
+ * The map's code comes from a public file host, with a second one to fall
+ * back on (engineLoader). If neither answers, or the page has not started
+ * within 15 seconds, the map says so with a Try again button (the still card
+ * on Community just says so, and shows itself anyway). If iOS or Android
+ * stops the web view to free memory, it is started again by itself (Oct 5).
  */
 export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, holdPins = false, pad, onTap, onMapTap, onMove, onPainted, farBelow, onFar, style }, ref) {
+  const styles = useThemedStyles(styleDefinitions);
   const web = useRef<WebView | null>(null);
   const ready = useRef(false);
+  // The page never started (no map code, or nothing within 15 s): said on the map, with Try again.
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    const t = setTimeout(() => { if (!ready.current) setFailed(true); }, 15_000);
+    return () => clearTimeout(t);
+  }, [attempt]);
+  // A failed map still lets the card it sits on show (it waits for "painted").
+  useEffect(() => { if (failed) latest.current.onPainted?.(); }, [failed]);
+  const restart = () => {
+    ready.current = false;
+    setFailed(false);
+    setAttempt((n) => n + 1);
+    web.current?.reload();
+  };
   const latest = useRef({ onTap, onMapTap, onMove, onPainted, onFar });
   latest.current = { onTap, onMapTap, onMove, onPainted, onFar };
   const send = (js: string) => { if (ready.current) web.current?.injectJavaScript(`${js};true;`); };
@@ -94,11 +119,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
   // never shows first (as in the browser's WebMap and applyLook); 'load' puts
   // them on again with the latest theme.
   const html = useMemo(() => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+${ENGINE_CSS}
 <style>html,body,#m{margin:0;height:100%;background:${look.background?.fill ?? '#F4EFE6'};overflow:hidden}.maplibregl-ctrl{display:none}.maplibregl-canvas{outline:none}${MAP_PIN_CSS.replace(/\n/g, '')}</style></head>
-<body><div id="m"></div><script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script><script>
+<body><div id="m"></div><script>
 var LOOK=${lookJson};var APPLIED=null;
 var post=function(o){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify(o))};
+function start(){
 var map=new maplibregl.Map({container:'m',style:'${STYLE}',center:[${center.lng},${center.lat}],zoom:${zoom},interactive:${interactive},attributionControl:false,dragRotate:false,pitchWithRotate:false,touchPitch:false});
 map.touchZoomRotate.disableRotation();
 function P(id,k,v){map.setPaintProperty(id,k+'-transition',{duration:0,delay:0});map.setPaintProperty(id,k,v)}
@@ -121,6 +147,8 @@ window.__cs={
   fly:function(lat,lng,z,ms,oy,exact){map.flyTo({center:[lng,lat],zoom:z==null?map.getZoom():exact?z:Math.max(map.getZoom(),z),duration:ms,offset:[0,oy||0]})},
   look:function(l){LOOK=l;document.body.style.background=(l.background&&l.background.fill)||'#F4EFE6';if(map.isStyleLoaded())look(l)}
 };
+}
+${ENGINE_JS}
 </script></body></html>`, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
@@ -137,11 +165,16 @@ window.__cs={
         domStorageEnabled
         allowsInlineMediaPlayback
         setBuiltInZoomControls={false}
+        // The phone stopped the page to free memory (the map and the video feed both use a lot): start it again.
+        onContentProcessDidTerminate={() => { ready.current = false; web.current?.reload(); }}
+        onRenderProcessGone={() => { ready.current = false; web.current?.reload(); }}
         onMessage={(e) => {
           let msg: { type: string; id?: string; lat?: number; lng?: number; zoom?: number; s?: number; w?: number; n?: number; e?: number; far?: boolean };
           try { msg = JSON.parse(e.nativeEvent.data); } catch { return; }
+          if (msg.type === 'fail') { setFailed(true); return; }
           if (msg.type === 'ready') {
             ready.current = true;
+            setFailed(false);
             send(`document.body.classList.toggle('cs-still',${stillNow.current ? 'true' : 'false'})`);
             send(`window.__cs.look(${lookNow.current})`);
             send(`window.__cs.hold(${holdNow.current ? 'true' : 'false'})`);
@@ -161,8 +194,23 @@ window.__cs={
           }
         }}
       />
+      {failed ? (
+        <View style={styles.failed} pointerEvents="box-none">
+          {interactive ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="The map couldn't load. Try again" onPress={restart} style={({ pressed }) => [styles.failedPill, pressed && { opacity: 0.8 }]}>
+              <Text style={styles.failedText}>Map couldn’t load · <Text style={styles.failedAgain}>Try again</Text></Text>
+            </Pressable>
+          ) : <View style={styles.failedPill}><Text style={styles.failedText}>Map couldn’t load</Text></View>}
+        </View>
+      ) : null}
     </View>
   );
 });
 
-const styles = StyleSheet.create({ web: { flex: 1, backgroundColor: 'transparent' } });
+const styleDefinitions = StyleSheet.create({
+  web: { flex: 1, backgroundColor: 'transparent' },
+  failed: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
+  failedPill: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  failedText: { ...typography.smallStrong, color: colors.textMuted },
+  failedAgain: { color: colors.brand },
+});

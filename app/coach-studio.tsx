@@ -15,13 +15,15 @@ import { confirm } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
 import { money } from '@/lib/format';
 import * as haptics from '@/lib/haptics';
-import { KIND_LABEL, SPECIALTY_LABEL, turnaround, usePayments } from '@/features/coaching/bookings';
+import { KIND_LABEL, PAID_KINDS, SPECIALTY_LABEL, turnaround, usePayments } from '@/features/coaching/bookings';
 import { openBookingCount, studioSetup, waitingQuestionCount } from '@/features/coaching/studioSummary';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, radius, spacing, typography, lift } from '@/theme';
 
-const KINDS = Object.keys(KIND_LABEL) as CoachService['kind'][];
+// New services are live lessons only: the one kind Apple lets the app take card payments for (see PAID_KINDS).
+// A service of another kind made before Oct 5 can still be opened and edited as it is.
+const KINDS = PAID_KINDS;
 const SPECIALTIES = Object.keys(SPECIALTY_LABEL) as CoachSpecialty[];
 const TURNAROUNDS = [24, 48, 72, 168];
 /** Each kind of service's small picture, on its card. */
@@ -32,7 +34,7 @@ const KIND_ICON: Record<CoachService['kind'], keyof typeof Ionicons.glyphMap> = 
   plan: 'reader-outline',
 };
 type Draft = { id: string; kind: CoachService['kind']; title: string; description: string; price: string; turnaroundHours: number; active: boolean };
-const blank = (): Draft => ({ id: `new-${Date.now()}`, kind: 'video-review', title: '', description: '', price: '', turnaroundHours: 48, active: true });
+const blank = (): Draft => ({ id: `new-${Date.now()}`, kind: 'live-session', title: '', description: '', price: '', turnaroundHours: 48, active: true });
 /** Where the checklist's steps jump to. */
 type Section = 'page' | 'services' | 'payouts';
 /** The page's Save button: nothing to save, edits waiting, saving, just saved. */
@@ -213,7 +215,7 @@ export default function CoachStudio() {
     <View style={styles.editor}>
       <Text style={styles.editorTitle}>{editing ? 'Edit service' : 'New service'}</Text>
       <Text style={styles.label}>Kind</Text>
-      <View style={styles.chips}>{KINDS.map((k) => <Chip key={k} label={KIND_LABEL[k]} selected={draft.kind === k} onPress={() => setDraft({ ...draft, kind: k })} />)}</View>
+      <View style={styles.chips}>{(KINDS.includes(draft.kind) ? KINDS : [...KINDS, draft.kind]).map((k) => <Chip key={k} label={KIND_LABEL[k]} selected={draft.kind === k} onPress={() => setDraft({ ...draft, kind: k })} />)}</View>
       <Field well label="Title" value={draft.title} onChangeText={(v) => setDraft({ ...draft, title: v })} />
       <Field well label="What the player gets" value={draft.description} onChangeText={(v) => setDraft({ ...draft, description: v })} multiline minHeight={80} />
       <View style={styles.priceRow}>
@@ -226,7 +228,7 @@ export default function CoachStudio() {
         </Text>
       </View>
       <Text style={styles.label}>Answered within</Text>
-      <Options value={draft.turnaroundHours} options={TURNAROUNDS} onChange={(h) => setDraft({ ...draft, turnaroundHours: h })} label="Answered within" />
+      <Options value={draft.turnaroundHours} options={TURNAROUNDS} onChange={(h) => setDraft({ ...draft, turnaroundHours: h })} label={draft.kind === 'live-session' ? 'Replies within' : 'Answered within'} />
       <View style={styles.toggleRow}>
         <View style={styles.rowWords}>
           <Text style={styles.rowTitle}>Offered</Text>

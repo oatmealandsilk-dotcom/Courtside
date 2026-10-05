@@ -38,7 +38,15 @@ const safeBack = (back: string | null | undefined, fallback: string) => {
   return fallback;
 };
 const withQuery = (base: string, q: Record<string, string>) => `${base}${base.includes('?') ? '&' : '?'}${new URLSearchParams(q)}`;
-const KIND: Record<string, string> = { 'video-review': 'Video review', 'written-qa': 'Written answer', 'live-session': 'Live session', plan: 'Training plan' };
+const KIND: Record<string, string> = { 'video-review': 'Video review', 'written-qa': 'Written answer', 'live-session': 'Live lesson', plan: 'Training plan' };
+/**
+ * What can be paid for with a live key: real-time lessons only, in person or
+ * on a video call. Apple lets an iPhone app take card payments outside its
+ * own In-App Purchase only for those (guidelines 3.1.3(d) and (e)); a video
+ * review, written answer or plan delivered in the app counts as digital
+ * content. With a test key (admins trying it out) every kind still works.
+ */
+const LIVE_KINDS = new Set(['live-session']);
 const intentOf = (s: { payment_intent?: string | { id: string } | null }) => (typeof s.payment_intent === 'string' ? s.payment_intent : s.payment_intent?.id ?? null);
 /** Shown on Stripe's pay page, next to the Pay button, so the refund rules are seen before paying. */
 const PAY_NOTE = 'Once your coach answers, the booking is complete. If they miss the deadline you can have your money back in the app. Questions or problems: support@courtsidebase.com. CourtSide Terms of Use apply.';
@@ -172,6 +180,7 @@ Deno.serve(async (req) => {
         if (question.length < 2) throw new Plain('Say what you want looked at first.');
         const { data: service } = await admin.from('coach_services').select('id, coach_id, title, price_cents, kind, active').eq('id', serviceId).maybeSingle();
         if (!service || !service.active) throw new Plain('That service is no longer offered.');
+        if (LIVE && !LIVE_KINDS.has(String(service.kind))) throw new Plain('This coach only takes lesson bookings for now.');
         const { data: coach } = await admin.from('coaches').select('id, user_id, listed, payouts_ready, stripe_account_id, stripe_livemode').eq('id', service.coach_id).maybeSingle();
         if (!coach?.listed || !coach.payouts_ready || !coach.stripe_account_id) throw new Plain(CLOSED);
         if (coach.user_id === user.id) throw new Plain('You cannot book yourself.');

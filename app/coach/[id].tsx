@@ -8,10 +8,11 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
 import { pickFromDevice, type PickedMedia } from '@/components/MediaPicker';
-import { KIND_LABEL, SPECIALTY_LABEL, statusLabel, turnaround, usePayments } from '@/features/coaching/bookings';
+import { KIND_LABEL, SPECIALTY_LABEL, statusLabel, turnaround, usePaidBooking } from '@/features/coaching/bookings';
 import { money, relativeTime } from '@/lib/format';
 import { openLegal } from '@/lib/legal';
 import { useApp } from '@/store/AppContext';
+import { show as showToast } from '@/lib/toast';
 import { colors, font, radius, spacing, typography, lift } from '@/theme';
 
 /**
@@ -24,7 +25,9 @@ export default function CoachDetail() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { coaches, users, coachingRequests, coachResults, coachReviews, currentUserId, actions } = useApp();
-  const payments = usePayments();
+  // Paid booking is not part of this release (owner's call, Oct 3): until it is, only admins see
+  // prices and booking (to test them); everyone else gets the free ways in, a message or a question.
+  const paidBooking = usePaidBooking();
 
   const coach = coaches.find((c) => c.id === id);
   const user = users.find((u) => u.id === coach?.userId);
@@ -61,7 +64,12 @@ export default function CoachDetail() {
   const reviews = coachReviews.filter((r) => r.coachId === coach.id).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   const myReview = reviews.find((r) => r.authorId === currentUserId);
   const canReview = !isOwner && !!currentUserId && !myReview && mine.some((r) => r.status === 'answered');
-  const bookable = !isOwner && coach.listed !== false && payments.on !== false && coach.payoutsReady !== false;
+  const bookable = !isOwner && coach.listed !== false && paidBooking && coach.payoutsReady !== false;
+  const message = async () => {
+    const lock = await actions.messageLock(user.id);
+    if (lock) { showToast({ title: lock, icon: 'lock-closed-outline', long: true }); return; }
+    router.push(`/messages/${actions.openConversationWith(user.id)}`);
+  };
 
   const book = async () => {
     if (!service || question.trim().length < 2 || busy) return;
@@ -147,8 +155,20 @@ export default function CoachDetail() {
       ) : null}
 
       {/* ----------------------------------------------------------- book */}
-      <Text style={styles.sectionTitle}>{isOwner ? 'Your services' : `Book ${first}`}</Text>
-      {services.length === 0 ? (
+      {/* Players without paid booking see no prices or services at all (App Review 2.1 and 3.1.1):
+          the free ways to reach the coach instead. The coach still sees their own services. */}
+      {!isOwner && !paidBooking ? (
+        <>
+          <Text style={styles.sectionTitle}>Ask {first}</Text>
+          <View style={styles.freeRow}>
+            <View style={{ flex: 1 }}><Button label={`Message ${first}`} variant="secondary" onPress={() => { void message(); }} full /></View>
+            <View style={{ flex: 1 }}><Button label="Ask a free question" variant="secondary" onPress={() => router.push('/ask-coach')} full /></View>
+          </View>
+          <Text style={styles.muted}>Questions are public and free: a verified coach answers, usually within a day.</Text>
+        </>
+      ) : null}
+      {isOwner || paidBooking ? <Text style={styles.sectionTitle}>{isOwner ? 'Your services' : `Book ${first}`}</Text> : null}
+      {!isOwner && !paidBooking ? null : services.length === 0 ? (
         <Text style={styles.muted}>{isOwner ? 'Add a service in your studio so players can book you.' : 'No services on offer right now.'}</Text>
       ) : (
         <View style={styles.group}>
@@ -166,7 +186,7 @@ export default function CoachDetail() {
                 {bookable ? <View style={[styles.radio, on && styles.radioOn]}>{on ? <View style={styles.radioDot} /> : null}</View> : null}
                 <View style={styles.serviceWords}>
                   <Text style={styles.serviceTitle}>{s.title}</Text>
-                  <Text style={styles.meta}>{KIND_LABEL[s.kind]} · answered within {turnaround(s.turnaroundHours)}</Text>
+                  <Text style={styles.meta}>{KIND_LABEL[s.kind]} · {s.kind === 'live-session' ? 'replies' : 'answered'} within {turnaround(s.turnaroundHours)}</Text>
                   {on && s.description ? <Text style={styles.serviceDesc}>{s.description}</Text> : null}
                 </View>
                 <Text style={styles.price}>{money(s.priceCents)}</Text>
@@ -175,7 +195,7 @@ export default function CoachDetail() {
           })}
         </View>
       )}
-      {!isOwner && (payments.on === false || coach.payoutsReady === false) ? <Text style={styles.muted}>Booking opens soon. Ask {first} a free question on the Coaching tab in the meantime.</Text> : null}
+      {!isOwner && paidBooking && coach.payoutsReady === false ? <Text style={styles.muted}>{first} can’t take bookings yet. Message them, or ask a free question on the Coaching tab.</Text> : null}
 
       {service && bookable ? (
         <View style={styles.form}>
@@ -321,6 +341,7 @@ export default function CoachDetail() {
 }
 
 const styleDefinitions = StyleSheet.create({
+  freeRow: { flexDirection: 'row', gap: spacing.sm },
   hero: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingTop: spacing.sm },
   heroWords: { flex: 1, gap: 4, minWidth: 0 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

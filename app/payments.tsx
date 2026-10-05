@@ -6,7 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { EmptyState, Screen } from '@/components/ui';
 import { goBack } from '@/lib/goBack';
 import { formatDate, money } from '@/lib/format';
-import { statusLabel } from '@/features/coaching/bookings';
+import { statusLabel, usePaidBooking } from '@/features/coaching/bookings';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography, lift } from '@/theme';
@@ -23,6 +23,15 @@ export default function Payments() {
     .filter((r) => r.userId === currentUserId && !!r.paidAt && !!r.priceCents)
     .sort((a, b) => Date.parse(b.paidAt!) - Date.parse(a.paidAt!));
   const spent = paid.filter((r) => !r.refundedAt).reduce((sum, r) => sum + (r.priceCents ?? 0), 0);
+  // Reached by a link while paid booking is not open to this person: coaching is free, nothing to list.
+  const paidBooking = usePaidBooking();
+  if (!paidBooking && paid.length === 0) {
+    return (
+      <Screen title="Payments" compactTitle onBack={() => goBack()}>
+        <EmptyState icon="card-outline" title="No payments" body="Coaching on CourtSide is free right now: ask a coach a question, or message a coach from their page." />
+      </Screen>
+    );
+  }
 
   return (
     <Screen title="Payments" compactTitle onBack={() => goBack()}>

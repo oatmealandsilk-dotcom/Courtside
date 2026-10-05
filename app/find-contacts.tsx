@@ -18,13 +18,11 @@ type Found = { match: ContactMatch; contactName?: string };
 type Phase = 'start' | 'reading' | 'done' | 'denied' | 'ask-again' | 'unavailable' | 'limit' | 'failed';
 
 /**
- * Google Play asks for a plain, up-front word, before the phone's own question,
- * whenever contacts leave the phone: what goes, where, and what happens to it.
- * The iPhone keeps its own (shorter) line.
+ * A plain, up-front word, before the phone's own question, whenever contacts
+ * leave the phone: what goes, where, and what happens to it. Google Play asks
+ * for it, and Apple's rules want the same clarity, so both phones say it (Oct 5).
  */
-const INTRO = Platform.OS === 'android'
-  ? 'To find friends, CourtSide sends the phone numbers and emails in your contacts to its server, checks them against CourtSide accounts, then deletes them. Nothing from your contacts is saved or shown to anyone.'
-  : 'We check the phone numbers and emails in your contacts against CourtSide, then forget them. Nothing from your contacts is saved or shown to anyone.';
+const INTRO = 'To find friends, CourtSide sends the phone numbers and emails in your contacts to its server, checks them against CourtSide accounts, then deletes them. Nothing from your contacts is saved or shown to anyone.';
 
 /** Where the switch is, in the words of the phone in hand (Android keeps Contacts one step deeper, under Permissions). */
 const SETTINGS_LINE = Platform.OS === 'android'

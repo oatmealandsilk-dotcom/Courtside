@@ -747,7 +747,7 @@ function toMutes(rows: unknown): Map<ID, ChatPrefs> {
 }
 
 type Edge = { follower_id: string; following_id: string };
-interface ReportRow { id: string; reporter_id: string; target_user_id: string | null; target: string | null; reason: string | null; created_at: string; status?: string | null; reviewed_at?: string | null }
+interface ReportRow { id: string; reporter_id: string | null; target_user_id: string | null; target: string | null; reason: string | null; created_at: string; status?: string | null; reviewed_at?: string | null }
 /** A report as the admin's Reports screen shows it. */
 /** Someone who asked for early access on the waitlist page. */
 export interface WaitlistEntry { id: string; email: string; name?: string; source?: string; referredBy?: string; createdAt: string }
@@ -756,18 +756,40 @@ export interface SiteFeedback { id: string; message: string; email?: string; cre
 /** Where the beta invite email stands: live once Apple has approved the beta. */
 export interface BetaInviteStatus { live: boolean; total: number; invited: number; waiting: number; sent: number; failed: string[] }
 
+/** The kinds of thing a report can be about, besides an account or a chat. */
+export type ReportedItemKind = 'post' | 'hit' | 'question' | 'answer' | 'comment' | 'coach-question' | 'coach-reply';
+const ITEM_KINDS: ReportedItemKind[] = ['post', 'hit', 'question', 'answer', 'comment', 'coach-question', 'coach-reply'];
+
 export interface AdminReport {
   id: ID;
-  reporterId: ID;
+  /** Who sent it; gone when they have since deleted their account (the report stays, migration 115). */
+  reporterId?: ID;
   /** The account the report is about. */
   userId?: ID;
-  /** What was reported: a post, a hit, an account, or a chat ("Report group"). */
-  kind: 'post' | 'hit' | 'profile' | 'conversation';
+  /** What was reported: a post, a hit, a thread, a reply, a comment, a coach question or reply, an account, or a chat. */
+  kind: ReportedItemKind | 'profile' | 'conversation';
   targetId?: ID;
+  /** One message in a reported chat ("Report" on a message). */
+  messageId?: ID;
   reason?: string;
   createdAt: string;
   status: 'open' | 'removed' | 'suspended' | 'dismissed';
   reviewedAt?: string;
+}
+
+/**
+ * A copy of one message of a reported chat, kept for the admin (migration
+ * 115): as it was when reported, or the version before it was unsent,
+ * edited, removed or deleted with an account.
+ */
+export interface ReportEvidence {
+  messageId?: ID;
+  senderId?: ID;
+  kind: string;
+  body: string;
+  photos?: ChatPhoto[];
+  sentAt?: string;
+  why: 'reported' | 'unsent' | 'edited' | 'removed' | 'deleted';
 }
 
 /** A reported chat as an admin sees it (report_chat_context, migration 54): its name, who is in it, and its last messages, oldest first. */
@@ -1017,6 +1039,15 @@ async function coachPayments<T>(mode: string, body: Record<string, unknown> = {}
 
 /* --------------------------------------------------------------- writes */
 
+/**
+ * The name the sign-up step gives an account it was told no name for: the
+ * handle, underscores as spaces, each word capitalised (Postgres's initcap,
+ * handle_new_user in migration 34).
+ */
+export function standInName(handle: string): string {
+  return handle.replace(/_/g, ' ').toLowerCase().replace(/(^|[^a-z0-9])([a-z])/g, (_m, before: string, letter: string) => before + letter.toUpperCase());
+}
+
 const fail = (what: string) => (error: unknown) => {
   console.warn(`[remote] ${what} failed`, error);
 };
@@ -1172,9 +1203,21 @@ export const remote = {
     const { error } = await need().from('notifications').update({ read: true }).in('id', ids);
     if (error) fail('notification read')(error);
   },
-  async insertReport(me: ID, targetUserId: ID | null, target: string, reason: string) {
-    const { error } = await need().from('reports').insert({ reporter_id: me, target_user_id: targetUserId, target, reason });
+  /**
+   * Files a report. With `returnId` (an admin's own report: nobody else may
+   * read reports, so only they can have it back) resolves to the new
+   * report's id; otherwise to null.
+   */
+  async insertReport(me: ID, targetUserId: ID | null, target: string, reason: string, returnId = false): Promise<ID | null> {
+    const row = { reporter_id: me, target_user_id: targetUserId, target, reason };
+    if (returnId) {
+      const { data, error } = await need().from('reports').insert(row).select('id').single();
+      if (error) { fail('report')(error); return null; }
+      return (data as { id: string }).id;
+    }
+    const { error } = await need().from('reports').insert(row);
     if (error) fail('report')(error);
+    return null;
   },
   /** Your settings row as the server has it now (blocks, mutes, saved threads made on another device included). Null when there is none; throws when it could not be read. */
   async fetchUserState(me: ID): Promise<UserState | null> {
@@ -1764,6 +1807,24 @@ export const remote = {
     if (error) return [];
     return ((data ?? []) as CoachingRequestRow[]).map(toCoachingRequest);
   },
+  /**
+   * Whether you agreed to the AI coach sending your details to Anthropic
+   * (migration 115). False when you have not, or on a database without it.
+   */
+  async aiCoachConsent(me: ID): Promise<boolean> {
+    const { data, error } = await need().from('ai_coach_consent').select('user_id').eq('user_id', me).maybeSingle();
+    if (error) { if (!missingTable(error)) fail('ai coach consent')(error); return false; }
+    return !!data;
+  },
+  /** Agree (or take it back). Resolves false when the database refused or does not have it yet. */
+  async setAiCoachConsent(me: ID, agree: boolean): Promise<boolean> {
+    const db = need();
+    const { error } = agree
+      ? await db.from('ai_coach_consent').upsert({ user_id: me }, { onConflict: 'user_id', ignoreDuplicates: true })
+      : await db.from('ai_coach_consent').delete().eq('user_id', me);
+    if (error) { fail('ai coach consent')(error); return false; }
+    return true;
+  },
   /** Is Stripe set up on the server? Null when the payments function is not there yet. */
   async paymentsStatus(): Promise<{ on: boolean; feePercent: number } | null> {
     const { data, error } = await need().functions.invoke<{ on: boolean; feePercent: number }>('coach-payments', { body: { mode: 'status' } });
@@ -2054,20 +2115,35 @@ export const remote = {
     if (error) { fail('reports')(error); return []; }
     return ((data ?? []) as ReportRow[]).map((r) => {
       const [kind, id] = (r.target ?? '').split(':');
+      // A report about one message names it in the reason ("message:<id>"); the card points at it.
+      const messageId = /^message:([0-9a-f-]{36})$/i.exec(r.reason ?? '')?.[1];
       return {
-        id: r.id, reporterId: r.reporter_id, userId: r.target_user_id ?? undefined,
-        kind: kind === 'post' || kind === 'hit' || kind === 'conversation' ? kind : 'profile', targetId: id || undefined,
-        reason: r.reason || undefined, createdAt: r.created_at, status: (r.status ?? 'open') as AdminReport['status'], reviewedAt: r.reviewed_at ?? undefined,
+        id: r.id, reporterId: r.reporter_id ?? undefined, userId: r.target_user_id ?? undefined,
+        kind: (ITEM_KINDS as string[]).includes(kind) || kind === 'conversation' ? kind as AdminReport['kind'] : 'profile', targetId: id || undefined,
+        messageId, reason: messageId ? 'one message' : r.reason || undefined,
+        createdAt: r.created_at, status: (r.status ?? 'open') as AdminReport['status'], reviewedAt: r.reviewed_at ?? undefined,
       };
     });
   },
-  /** The reported post or hit as it stands, removed or not (admins can see removed ones). */
-  async fetchReportedItem(kind: 'post' | 'hit', id: ID): Promise<{ body: string; picture?: string; removed: boolean } | null> {
-    const table = kind === 'post' ? 'posts' : 'stories';
-    const { data, error } = await need().from(table).select('*').eq('id', id).maybeSingle();
-    if (error || !data) return null;
-    const row = data as { body?: string; caption?: string | null; image_url?: string | null; thumbnail_url?: string | null; removed_at?: string | null };
-    return { body: row.body ?? row.caption ?? '', picture: row.thumbnail_url ?? row.image_url ?? undefined, removed: !!row.removed_at };
+  /**
+   * What was reported, as it stands: a post or hit (removed or not: admins
+   * can see removed ones), or the words of a thread, reply, comment or coach
+   * question or reply. Null when it is gone.
+   */
+  async fetchReportedItem(kind: ReportedItemKind, id: ID): Promise<{ body: string; picture?: string; removed: boolean } | null> {
+    const tables: Record<ReportedItemKind, string[]> = {
+      post: ['posts'], hit: ['stories'], question: ['questions'], answer: ['answers'],
+      // A comment is under a post or under a hit: whichever has it.
+      comment: ['comments', 'story_comments'], 'coach-question': ['coach_questions'], 'coach-reply': ['coach_replies'],
+    };
+    for (const table of tables[kind]) {
+      const { data, error } = await need().from(table).select('*').eq('id', id).maybeSingle();
+      if (error || !data) continue;
+      const row = data as { title?: string | null; body?: string | null; caption?: string | null; image_url?: string | null; thumbnail_url?: string | null; removed_at?: string | null };
+      const words = [row.title, row.body ?? row.caption].filter((x): x is string => !!x && !!x.trim()).join(' · ');
+      return { body: words, picture: row.thumbnail_url ?? row.image_url ?? undefined, removed: !!row.removed_at };
+    }
+    return null;
   },
   /**
    * A reported chat, for the admin's Reports screen: admins cannot read
@@ -2110,6 +2186,17 @@ export const remote = {
       if (gone) fail('remove reported photos')(gone);
     }
     return true;
+  },
+  /** The copy of a reported chat kept for its report (migration 115), oldest first. Admins only; none before that migration. */
+  async fetchReportEvidence(reportId: ID): Promise<ReportEvidence[]> {
+    const { data, error } = await need().from('report_evidence').select('message_id, sender_id, kind, body, photos, sent_at, why')
+      .eq('report_id', reportId).order('sent_at', { ascending: true }).limit(200);
+    if (error) { if (!missingTable(error)) fail('report evidence')(error); return []; }
+    type Row = { message_id: string | null; sender_id: string | null; kind: string | null; body: string | null; photos: unknown; sent_at: string | null; why: ReportEvidence['why'] };
+    return ((data ?? []) as Row[]).map((r) => ({
+      messageId: r.message_id ?? undefined, senderId: r.sender_id ?? undefined, kind: r.kind ?? 'text', body: r.body ?? '',
+      photos: r.kind === 'photo' ? toChatPhotos(r.photos) : undefined, sentAt: r.sent_at ?? undefined, why: r.why,
+    }));
   },
   /** An admin's decision on a report. Resolves false when the database refused. */
   async moderateReport(reportId: ID, decision: 'remove' | 'restore' | 'suspend' | 'unsuspend' | 'dismiss'): Promise<boolean> {
@@ -2304,11 +2391,11 @@ export const remote = {
   },
 
   /** Open hits from an hour ago on, with who is in: the list the app loads at the start. Null when it could not be asked. */
-  /** The posts and hits you have reported (migration 81); none on a database without it. */
+  /** The posts, hits, threads, replies, comments and coach questions you have reported (migrations 81 and 115); none on a database without it. */
   async fetchMyReported(): Promise<ID[]> {
     const { data, error } = await need().rpc('my_reported_targets');
     if (error || !Array.isArray(data)) return [];
-    return (data as unknown[]).map((t) => /^(?:post|hit):(.+)$/.exec(String(t))?.[1]).filter((id): id is string => !!id);
+    return (data as unknown[]).map((t) => /^(?:post|hit|question|answer|comment|coach-question|coach-reply):(.+)$/.exec(String(t))?.[1]).filter((id): id is string => !!id);
   },
   async fetchHits(me?: ID | null): Promise<HitRequest[] | null> {
     const { data, error } = await need().from('hit_requests').select('*, hit_joins(user_id)').eq('cancelled', false)
@@ -3718,7 +3805,42 @@ export const auth = {
     if (error) throw new Error(error.message);
     const name = [cred.fullName?.givenName, cred.fullName?.familyName].filter(Boolean).join(' ').trim();
     if (name && !data.user?.user_metadata?.name) await client.auth.updateUser({ data: { name } }).catch(() => undefined);
+    // The profile was made by the sign-up step before Apple's name could reach it, from the
+    // first part of the email: with Hide My Email a random string ("X7k2m9qbzt"), which the
+    // setup's Name box then showed. Apple's name (this time's, or one saved on an earlier
+    // sign-in) goes on the profile while it still holds that stand-in, before the app loads
+    // it, so the reviewer and everyone else start with their real name (App Review 4.0, Oct 5).
+    const metaName = typeof data.user?.user_metadata?.name === 'string' ? data.user.user_metadata.name.trim() : '';
+    const appleName = (name || metaName).slice(0, 60);
+    if (data.user && appleName) {
+      try {
+        const { data: row } = await client.from('profiles').select('name, handle').eq('id', data.user.id).maybeSingle();
+        const p = row as { name?: string; handle?: string } | null;
+        if (p?.handle && p.name && (p.name === standInName(p.handle) || p.name === p.handle) && p.name !== appleName) {
+          await client.from('profiles').update({ name: appleName }).eq('id', data.user.id).eq('name', p.name);
+        }
+      } catch { /* the setup's Name box is still there to fix it */ }
+    }
     return data.session;
+  },
+  /**
+   * For deleting an account made with Apple: Apple's own sheet asks the
+   * person to confirm once more and hands back a one-time code, which the
+   * server swaps for Apple's token and revokes (Apple's account-deletion
+   * guidance). Null when the account has no Apple sign-in, off an iPhone, or
+   * when the sheet is closed; deleting goes ahead either way.
+   */
+  async appleCodeForDelete(): Promise<string | null> {
+    if (Platform.OS !== 'ios') return null;
+    try {
+      const { data } = await need().auth.getUser();
+      if (!(data.user?.identities ?? []).some((i) => i.provider === 'apple')) return null;
+      if (!(await AppleAuthentication.isAvailableAsync())) return null;
+      const cred = await AppleAuthentication.signInAsync({ requestedScopes: [] });
+      return cred.authorizationCode ?? null;
+    } catch {
+      return null;
+    }
   },
   async account() {
     const { data, error } = await need().auth.getUser();
@@ -3782,8 +3904,13 @@ export const auth = {
     if (error) throw new Error(error.message);
     if (Platform.OS !== 'web' && data.url) await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
   },
-  async deleteAccount() {
-    const { data, error } = await need().functions.invoke<{ ok?: boolean; error?: string }>('delete-account', { body: {} });
+  /**
+   * Deletes the account. `appleCode` is a fresh code from Apple's sheet (see
+   * appleCodeForDelete): with it the server also revokes the Sign in with
+   * Apple link, so CourtSide leaves the person's Apple ID settings too.
+   */
+  async deleteAccount(appleCode?: string | null) {
+    const { data, error } = await need().functions.invoke<{ ok?: boolean; error?: string }>('delete-account', { body: appleCode ? { appleCode } : {} });
     if (error || !data?.ok) throw new Error(data?.error ?? error?.message ?? 'Could not delete the account.');
     await need().auth.signOut();
   },

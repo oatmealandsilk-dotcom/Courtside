@@ -41,8 +41,9 @@ export type { NearbyMapProps };
 
 /**
  * The browser fetches its map engine separately and starts it early (see
- * NearbyMap.web). On the phone the map is part of the app already: nothing
- * to fetch, so nothing to do.
+ * NearbyMap.web). On the phone each map's web view fetches it itself, from a
+ * public file host with a second to fall back on (engineLoader), and keeps a
+ * copy after the first time; there is nothing to start early here.
  */
 export function preloadNearbyMap() {}
 /** In the browser: once the map engine asked for is in. On the phone there is nothing to wait for. */
