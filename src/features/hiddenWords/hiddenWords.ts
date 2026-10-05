@@ -6,8 +6,9 @@ import type { Answer, CoachReply, Comment, HiddenWords, ID } from '@/data/types'
  * the server decides what is hidden, and the app only shows it.
  *
  *   - A comment, Instant comment, thread reply or coach reply that matches
- *     the filters of whoever owns the post (or thread, or question) comes
- *     only to its writer and that owner, and so do the replies under it.
+ *     the filters of whoever owns the post (or thread, or question), by
+ *     someone that owner doesn't follow, comes only to its writer and that
+ *     owner, and so do the replies under it.
  *     Only the owner's copy is marked `hiddenByWords` (from the owner-only
  *     list of what was hidden): its writer gets it exactly as normal, with
  *     nothing that says it was hidden; the owner finds it under "Hidden

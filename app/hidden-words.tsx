@@ -18,6 +18,7 @@ import { colors, radius, spacing, typography } from '@/theme';
  * comments and message requests that may be offensive, and your own words,
  * phrases and emojis. CourtSide keeps the list of offensive words up to
  * date; nobody is told when something of theirs is hidden from you.
+ * Nothing from someone you follow is ever hidden (friends trash-talk).
  *
  * Under 18 (not known to be an adult), the two offensive switches stay on
  * and are stricter; they show as on and cannot be turned off (the server
@@ -113,7 +114,7 @@ export default function HiddenWordsPage() {
 
       <Text style={styles.sectionTitle}>Offensive words and phrases</Text>
       <View style={styles.card}>
-        {switchRow('chatbubble-outline', 'Hide offensive comments', 'Comments that may be offensive go to Hidden comments, at the end of the comments on your posts, Instants, threads and questions.', settings.hideOffensiveComments, (v) => save({ hideOffensiveComments: v }), true, locked)}
+        {switchRow('chatbubble-outline', 'Hide offensive comments', 'Comments from people you don’t follow that may be offensive go to Hidden comments, at the end of the comments on your posts, Instants, threads and questions.', settings.hideOffensiveComments, (v) => save({ hideOffensiveComments: v }), true, locked)}
         {switchRow('paper-plane-outline', 'Hide offensive message requests', 'A message from someone you don’t follow that may be offensive shows as “Hidden message” until you tap it, and doesn’t alert you.', settings.hideOffensiveRequests, (v) => save({ hideOffensiveRequests: v }), false, locked)}
       </View>
       <Text style={styles.note}>
@@ -156,7 +157,7 @@ export default function HiddenWordsPage() {
         <Text style={styles.count}>{words.length ? `${words.length} of ${HIDDEN_WORDS_MAX} · tap one to remove it` : 'Nothing added yet'}</Text>
       </View>
       <View style={[styles.card, styles.cardGap]}>
-        {switchRow('chatbubbles-outline', 'Hide comments', 'With your words and phrases in them.', settings.customInComments, (v) => save({ customInComments: v }), true)}
+        {switchRow('chatbubbles-outline', 'Hide comments', 'From people you don’t follow, with your words and phrases in them.', settings.customInComments, (v) => save({ customInComments: v }), true)}
         {switchRow('mail-outline', 'Hide message requests', 'From people you don’t follow, with your words and phrases in them.', settings.customInRequests, (v) => save({ customInRequests: v }), false)}
       </View>
       <Text style={styles.note}>Only you can see your list. Hidden comments stay hidden from everyone but you and the person who wrote them, and you can unhide any of them.</Text>

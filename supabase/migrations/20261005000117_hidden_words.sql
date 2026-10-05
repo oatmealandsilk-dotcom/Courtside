@@ -28,11 +28,16 @@
 --                 players say to each other all the time ("Rematch Saturday?
 --                 I'm gonna kill you lol"). Hidden, never refused (Oct 5,
 --                 owner: "many times ppl can arrange stuff. Trust me"), the
---                 way Instagram does it: a message from someone you follow
---                 always shows as normal.
+--                 way Instagram does it: a comment or message from someone
+--                 you follow always shows as normal.
 --      teen       more that are only hidden for under-18 accounts: plain
 --                 swearing that isn't aimed at anyone ("holy shit what a
 --                 shot"), "how old are you", "send pics", "sexy".
+--    Friends trash-talk (Oct 5, owner: "Trust me on this"): the offensive
+--    and teen words and your own words never hide anything written by
+--    someone you follow, on your posts, Instants, threads and questions or
+--    in your chats, whatever your age (a teen chose to follow them). Only
+--    the severe words are refused for everyone, friends too.
 --    Matching ignores capitals, accents, repeated letters ("fuuuck"), the
 --    usual swaps (0 for o, 1 for i, 3 for e, 4 for a, 5 or $ for s, @ for
 --    a), look-alike letters from other alphabets and small capitals,
@@ -55,14 +60,16 @@
 --    server ignores turning them off.
 --
 -- 3. Comments. A new comment on your post or Instant, a reply in your
---    thread, or a coach's reply on your question, that matches your
---    filters, is hidden: only the person who wrote it (to whom it looks
---    exactly as normal: nothing on it says it is hidden) and you can see
---    it, and so are the replies under it. You find it under "Hidden
---    comments" at the end of the comments and can Unhide it. Nobody else
---    sees it, it is not counted for them (link previews too), and nobody is
---    told about it (no notification, no phone alert, then or after you
---    unhide it). Nothing is deleted.
+--    thread, or a coach's reply on your question, from someone you don't
+--    follow, that matches your filters, is hidden: only the person who
+--    wrote it (to whom it looks exactly as normal: nothing on it says it is
+--    hidden) and you can see it, and so are the replies under it. You find
+--    it under "Hidden comments" at the end of the comments and can Unhide
+--    it. Nobody else sees it, it is not counted for them (link previews
+--    too), and nobody is told about it (no notification, no phone alert,
+--    then or after you unhide it). Nothing is deleted. From someone you
+--    follow it is never hidden, the same as their messages. Like messages,
+--    this is decided when it is written or edited.
 --
 -- 4. Messages. CourtSide has no message requests folder: anyone you can
 --    message lands in the same inbox. So the closest honest equivalent: a
@@ -77,9 +84,10 @@
 --   word_filters (new): each person's settings; you read only yours, and
 --     change them only through set_hidden_words.
 --   comment_word_holds (new): which comment, Instant comment, thread reply
---     or coach reply is hidden, and for whose post, thread or question; only
---     that owner reads it. Nothing is added to the comments themselves, so
---     whoever wrote one cannot tell it was hidden (or learn your own words).
+--     or coach reply is hidden, and for whose post, thread or question (never
+--     one by someone that owner follows); only that owner reads it. Nothing
+--     is added to the comments themselves, so whoever wrote one cannot tell
+--     it was hidden (or learn your own words).
 --   private.words_hidden_here, private.words_quiet (new): the two helpers
 --     the reading rules and the notification triggers ask; the app cannot
 --     call them (the "private" area is closed to it, see migration 109).
@@ -441,6 +449,7 @@ create policy "your hidden words are yours" on public.word_filters for select us
 -- p_place 'comments'; or to them in a chat, 'requests') is hidden for them.
 -- With no settings yet, both offensive filters are on. Not a known adult:
 -- the offensive filters are on whatever the row says, with the teen words.
+-- Only asked about words by someone p_owner doesn't follow (words_hide).
 create or replace function public.hidden_by_words(p_owner uuid, p_body text, p_place text)
 returns boolean language plpgsql stable security definer set search_path = public as $$
 declare
@@ -562,9 +571,11 @@ returns uuid language sql stable security definer set search_path = public as $$
 $$;
 
 -- On a new one: hidden when it matches its owner's filters (never the
--- owner's own words). On an edit of the words: checked again (hidden, or
--- shown again). Only unhide_words below takes a hold off otherwise. The
--- same row sent twice (the app's retry, an upsert) is left as it is.
+-- owner's own words, and never words by someone the owner follows: friends
+-- trash-talk, so the same rule as messages, whatever the owner's age). On
+-- an edit of the words: checked again (hidden, or shown again). Only
+-- unhide_words below takes a hold off otherwise. The same row sent twice
+-- (the app's retry, an upsert) is left as it is.
 create or replace function public.words_hide()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare
@@ -587,6 +598,7 @@ begin
     v_kind := 'coach-reply'; v_owner := public.words_owner_of('coach_replies', new.question_id); v_writer := new.coach_user_id;
   end if;
   if v_owner is not null and v_writer is not null and v_writer is distinct from v_owner
+     and not exists (select 1 from public.follows fo where fo.follower_id = v_owner and fo.following_id = v_writer)
      and public.hidden_by_words(v_owner, new.body, 'comments') then
     insert into public.comment_word_holds (kind, item_id, owner_id, writer_id)
     values (v_kind, new.id, v_owner, v_writer)
