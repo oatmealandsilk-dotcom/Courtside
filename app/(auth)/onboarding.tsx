@@ -365,7 +365,8 @@ export default function Onboarding() {
         ref={scrollRef}
         onScroll={keyboard.onScroll}
         scrollEventThrottle={16}
-        contentContainerStyle={styles.body}
+        // The rating alone sits right under its title; the setup steps stay centred as before.
+        contentContainerStyle={[styles.body, ratingOnly && styles.bodyTop]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'android' ? 'on-drag' : undefined}
@@ -633,6 +634,7 @@ const styleDefinitions = StyleSheet.create({
   stepLabel: { ...typography.small, color: colors.textFaint, fontVariant: ['tabular-nums'] },
   lead: { ...typography.small, color: colors.textMuted },
   body: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.lg, maxWidth: 560, width: '100%', alignSelf: 'center' },
+  bodyTop: { justifyContent: 'flex-start', paddingTop: spacing.xl },
   group: { gap: spacing.sm },
   groupLabel: { ...typography.smallStrong, color: colors.textMuted },
   note: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
