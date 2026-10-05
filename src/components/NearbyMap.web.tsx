@@ -1,10 +1,11 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { Suspense, lazy } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 // The map's stylesheet is small and stays with the app; only the engine waits.
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
+import { MapCardFailed, MapCardLoading } from '@/components/map/MapLoadState';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { useStartMapHold } from '@/features/feed/warmup';
 import { Button } from '@/components/ui';
@@ -60,19 +61,31 @@ export function NearbyMap(props: NearbyMapProps) {
   );
 }
 
-/** The map's place while its engine downloads. As a still card on the start page, it holds the opening curtain too (see warmup), handing over to the map itself. */
+/**
+ * The map's place while its engine downloads. As a still card on the start
+ * page, it holds the opening curtain too (see warmup), handing over to the
+ * map itself; it looks just as the card does while its map loads after.
+ */
 function StandIn({ expanded }: { expanded: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   useStartMapHold(!expanded);
   return (
     <View style={expanded ? styles.fill : styles.card}>
-      <CourtSpinner size={24} />
+      {expanded ? <CourtSpinner size={24} /> : <MapCardLoading />}
     </View>
   );
 }
 
 function MapUnavailable({ expanded, onBack }: NearbyMapProps) {
   const styles = useThemedStyles(styleDefinitions);
+  // The still card says it as the phone's does; a tap loads the page again (the engine comes with it).
+  if (!expanded) {
+    return (
+      <Pressable accessibilityRole="button" accessibilityLabel="The map didn't load. Tap to try again" onPress={() => window.location.reload()} style={styles.card}>
+        <MapCardFailed />
+      </Pressable>
+    );
+  }
   return (
     <View style={expanded ? styles.fill : styles.card}>
       <Text style={styles.title}>The map didn’t load</Text>

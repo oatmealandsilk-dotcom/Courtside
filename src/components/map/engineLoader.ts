@@ -1,25 +1,108 @@
 /**
- * Where the phone's map pages get MapLibre, the code that draws the map
- * (MapCanvas and the court thumbnails run it inside a web view). It comes
- * from a free public file host, so if one is slow, down or blocked the map
- * would stay a blank box: each file is tried at a second host (jsDelivr)
- * before the page gives up and says so ({type: 'fail'}), so the app can
- * show "Map couldn't load · Try again" instead (Oct 5, App Review 2.1).
- * The version is pinned, so after one good load the phone keeps a copy.
+ * How a map gets going, and keeps going on a poor signal (Oct 5: on two
+ * bars of 5G the Find Players card showed its city's name over a blank map
+ * with "Map couldn't load" on top).
+ *
+ * Where the phone gets MapLibre, the code that draws the map: MapCanvas and
+ * the court pictures run it inside a web view, which fetches it, with its
+ * stylesheet, from the first of three hosts that gives it whole: unpkg, then
+ * jsDelivr, then our own site (a copy in public/maplibre/4.7.1). A host that
+ * has not started answering in 12 seconds, or goes quiet for 10 mid-download,
+ * is dropped for the next one; a slow download that keeps arriving is never
+ * cut off. Nothing here holds up the page itself: the stylesheet used to be
+ * a <link> in its head, and a host that stalled on it stopped the page from
+ * running at all. The version is pinned, so after one good load the phone
+ * keeps a copy.
+ *
+ * PAINT_WATCH_JS, run by the phone's page and the browser's map alike, says
+ * when the map is up (its style has arrived: from then on a slow network only
+ * means streets fill in late, never a failure) and when it has first drawn,
+ * fetching again any streets that failed on the way. useMapLoad decides when
+ * a map that never came up is tried again, and when to say it didn't load.
  */
 const VERSION = '4.7.1';
 const HOSTS = [
   `https://unpkg.com/maplibre-gl@${VERSION}/dist/maplibre-gl`,
   `https://cdn.jsdelivr.net/npm/maplibre-gl@${VERSION}/dist/maplibre-gl`,
+  // The same files, byte for byte, on our own site (the web build serves public/).
+  `https://app.courtsidebase.com/maplibre/${VERSION}/maplibre-gl`,
 ];
 
-/** The map's stylesheet, with the second host if the first does not answer. */
-export const ENGINE_CSS = `<link rel="stylesheet" href="${HOSTS[0]}.css" onerror="this.onerror=null;this.href='${HOSTS[1]}.css'">`;
+/**
+ * A script body that fetches the map's code and stylesheet, then calls
+ * `start()` (the page's own code, which must be defined, along with `post`,
+ * before this runs). It posts as it goes, so the app can tell a slow load
+ * from a stuck one: {type:'boot'} at once, {type:'progress'} while files
+ * arrive, {type:'engine'} once the code runs, {type:'online'} whenever the
+ * phone's connection comes back, and {type:'fail', stage} when no host gave
+ * the files or start() threw.
+ */
+export const ENGINE_JS = `(function(){
+var hosts=${JSON.stringify(HOSTS)},FIRST=12000,QUIET=10000,beatAt=0;
+post({type:'boot'});
+window.addEventListener('online',function(){post({type:'online'})});
+function beat(n){var t=Date.now();if(t-beatAt<1000)return;beatAt=t;post({type:'progress',got:n})}
+function grab(url){return new Promise(function(ok,no){
+var ctl=typeof AbortController==='function'?new AbortController():null,timer=0,over=false;
+function end(e,text){if(over)return;over=true;clearTimeout(timer);if(e){try{ctl&&ctl.abort()}catch(x){}no(e)}else ok(text)}
+function wait(ms){clearTimeout(timer);timer=setTimeout(function(){end(new Error('no answer'))},ms)}
+wait(FIRST);
+fetch(url,{mode:'cors',credentials:'omit',signal:ctl?ctl.signal:undefined}).then(function(r){
+if(!r.ok)throw new Error('HTTP '+r.status);
+wait(QUIET);
+if(!r.body||!r.body.getReader||typeof TextDecoder!=='function')return r.text();
+var rd=r.body.getReader(),dec=new TextDecoder(),parts=[],got=0;
+function pump(){return rd.read().then(function(c){if(c.done){parts.push(dec.decode());return parts.join('')}got+=c.value.length;parts.push(dec.decode(c.value,{stream:true}));wait(QUIET);beat(got);return pump()})}
+return pump();
+}).then(function(t){end(null,t)},function(e){end(e)});
+})}
+function fromHosts(ext){var i=0;function next(){if(i>=hosts.length)return Promise.reject(new Error('no host answered'));var h=hosts[i++];post({type:'progress',host:i});return grab(h+ext).catch(next)}return next()}
+function begin(){post({type:'engine'});try{start()}catch(e){post({type:'fail',stage:'start',detail:String(e&&e.message||e)})}}
+if(window.maplibregl){begin();return}
+Promise.all([fromHosts('.js'),fromHosts('.css')]).then(function(f){
+var css=document.createElement('style');css.textContent=f[1];document.head.appendChild(css);
+var js=document.createElement('script');js.textContent=f[0];document.head.appendChild(js);document.head.removeChild(js);
+if(window.maplibregl)begin();else post({type:'fail',stage:'engine',detail:'did not start'});
+},function(e){post({type:'fail',stage:'engine',detail:String(e&&e.message||e)})});
+})();`;
 
 /**
- * A script body that loads the map's code from the first host that answers,
- * then calls `start()` (the page's own code, which must be defined, along
- * with `post`, before this runs). When neither host answers, or start()
- * throws, it posts {type: 'fail'}.
+ * Watches one map from its first moment, as `function(map, tell)`; run
+ * straight after the map is made, before anything else listens to it.
+ *
+ * - tell('up'): the style has arrived and the map can draw.
+ * - tell('painted'): everything in view has drawn for the first time.
+ *   Streets that failed to arrive by then are fetched again (in 1.5, 4 and
+ *   9 seconds, or at once when the connection comes back) before it says so.
+ *   A street that fails asks for a fresh frame: MapLibre draws nothing new
+ *   for a failure, so without one the map never says it has settled. Each
+ *   try also forgets any lettering that failed to arrive, which MapLibre 4
+ *   would otherwise never ask for again (every street needing it failing
+ *   with it).
+ * - tell('fail', why): the style never came, or none of the streets did
+ *   even after those three tries.
+ *
+ * Returns {stop} for a map that is being taken down.
  */
-export const ENGINE_JS = `(function(){var urls=${JSON.stringify(HOSTS.map((h) => `${h}.js`))};var i=0;function next(){if(window.maplibregl){try{start()}catch(e){post({type:'fail'})}return}if(i>=urls.length){post({type:'fail'});return}var s=document.createElement('script');s.src=urls[i++];s.onload=function(){if(window.maplibregl){try{start()}catch(e){post({type:'fail'})}}else next()};s.onerror=next;document.head.appendChild(s)}next()})();`;
+export const PAINT_WATCH_JS = `function(map,tell){
+var up=false,painted=false,over=false,trouble=0,good=0,tries=0,timer=0,WAITS=[1500,4000,9000];
+function again(){timer=0;trouble=0;try{var g=map.style&&map.style.glyphManager,k;if(g&&g.entries)for(k in g.entries)if(g.entries[k]&&g.entries[k].requests)g.entries[k].requests={}}catch(e){}try{var st=map.getStyle(),id,d,s;for(id in st.sources){d=st.sources[id];s=map.getSource(id);if(d&&d.url&&s&&s.setUrl)s.setUrl(d.url)}}catch(e){}}
+map.on('error',function(e){if(over||painted)return;var er=e&&e.error;if(er&&er.status===404)return;if(!up){over=true;tell('fail','style: '+String(er&&er.message||'error'));return}if(e&&e.sourceId){trouble++;try{map.triggerRepaint()}catch(x){}}});
+map.on('sourcedata',function(e){if(e&&e.tile)good++});
+map.on('style.load',function(){if(!up){up=true;tell('up')}});
+map.on('idle',function(){if(painted||over)return;if(trouble){if(timer)return;if(tries<WAITS.length){timer=setTimeout(again,WAITS[tries++]);return}if(!good){over=true;tell('fail','tiles');return}}painted=true;tell('painted')});
+function online(){if(timer){clearTimeout(timer);again()}}
+window.addEventListener('online',online);
+return {stop:function(){over=true;clearTimeout(timer);window.removeEventListener('online',online)}};
+}`;
+
+/*
+ * When a map that has not come up is tried again (useMapLoad): a page or map
+ * that fails is made afresh after 2 seconds, then 6; after the third failure,
+ * or 45 seconds without the map coming up and nothing arriving, the card says
+ * it didn't load. A map that has said nothing at all for 20 seconds counts
+ * as failed.
+ */
+export const RETRY_WAITS_MS = [2000, 6000];
+export const LOAD_BUDGET_MS = 45_000;
+export const LOAD_SILENCE_MS = 20_000;
