@@ -43,18 +43,29 @@ export function useTrackerSession(activityId: ID | undefined) {
   const { actions, detectedActivities, remoteLoaded, users, currentUserId, sessions, posts, stories } = useApp();
   const flags = useTennisFlags();
   const postable = (x: DetectedActivity) => sourceOn(x, flags);
-  const found = activityId ? detectedActivities.find((x) => x.id === activityId) : undefined;
+  // One older than the two weeks the app holds (a "Tennis detected" row from
+  // weeks back) is asked for by its id, and its twin with it: held here only.
+  const [fetched, setFetched] = useState<DetectedActivity[]>([]);
+  const pool = fetched.length ? [...detectedActivities, ...fetched] : detectedActivities;
+  const found = activityId ? pool.find((x) => x.id === activityId) : undefined;
   // The copy of a game the other tracker saw first stands for it, however that
   // one stands now: once it is logged, this one shows as logged too (never a
   // second log of the same game).
-  const twin = found?.status === 'duplicate' && found.duplicateOf ? detectedActivities.find((x) => x.id === found.duplicateOf) : undefined;
+  const twin = found?.status === 'duplicate' && found.duplicateOf ? pool.find((x) => x.id === found.duplicateOf) : undefined;
   const live = twin ?? found;
 
   const [looked, setLooked] = useState(false);
   const [gaveUp, setGaveUp] = useState(false);
   useEffect(() => {
     if (!activityId || found || !remoteLoaded || looked) return;
-    void actions.refreshActivities().finally(() => setLooked(true));
+    void actions.refreshActivities()
+      .then(async () => {
+        const a = await actions.fetchActivity(activityId);
+        const of = a?.status === 'duplicate' && a.duplicateOf ? await actions.fetchActivity(a.duplicateOf) : null;
+        if (a) setFetched([a, ...(of ? [of] : [])]);
+      })
+      .catch(() => undefined)
+      .finally(() => setLooked(true));
   }, [activityId, found, remoteLoaded, looked, actions]);
   useEffect(() => {
     if (!activityId) return undefined;
