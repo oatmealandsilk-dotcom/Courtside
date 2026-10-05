@@ -12,6 +12,14 @@ let local = {};
 try { local = JSON.parse(require('fs').readFileSync(`${__dirname}/.courtside-local.json`, 'utf8')); } catch { /* none */ }
 const label = process.env.COURTSIDE_LABEL || local.label;
 const green = (process.env.COURTSIDE_ICON || local.icon) === 'green';
+// Android push alerts go through Google's Firebase, which needs its
+// google-services.json in the build (Oct 4, Android prep). On Expo's build
+// service it comes from the GOOGLE_SERVICES_JSON file variable (the path EAS
+// writes it to); on this Mac, from google-services.json in the project folder,
+// which is never committed. With neither, the Android build is still made and
+// works, just without push alerts (registerForPush says 'unavailable').
+const googleServicesFile = process.env.GOOGLE_SERVICES_JSON
+  || (require('fs').existsSync(`${__dirname}/google-services.json`) ? './google-services.json' : undefined);
 
 module.exports = {
   expo: {
@@ -44,17 +52,46 @@ module.exports = {
       },
     },
     android: {
+      // The same id as the iPhone app's bundleIdentifier. Google Play never lets it change once the first build is uploaded.
       package: 'co.courtside.app',
+      // Play's build number. Expo's build service keeps the real count and adds one per
+      // production build (appVersionSource "remote" + autoIncrement in eas.json); this is only where it starts.
       versionCode: 1,
-      edgeToEdgeEnabled: true,
-      adaptiveIcon: { foregroundImage: './assets/adaptive-icon-beige.png', backgroundColor: '#F8F7F2' },
-      permissions: ['CAMERA', 'RECORD_AUDIO', 'READ_MEDIA_IMAGES', 'READ_MEDIA_VIDEO', 'ACCESS_COARSE_LOCATION'],
+      // The beige icon he chose (Oct 1), unchanged: the green mark on the cream ground. Android
+      // crops icons to a circle or a squircle, and the iPhone-sized mark lost its tips in the
+      // circle, so this copy of the mark is drawn a little smaller to sit inside Android's safe
+      // zone. The same picture is the Android 13+ "themed icon" (Android only uses its shape).
+      adaptiveIcon: { foregroundImage: './assets/android-icon-foreground.png', monochromeImage: './assets/android-icon-foreground.png', backgroundColor: '#F8F7F2' },
+      // Only what the app uses (Oct 4): the camera (instants, hits), the microphone (voice notes),
+      // location while open (courts and players near you), contacts read-only (find friends) and
+      // alerts. Photos need nothing on Android 13+: the system photo picker hands over only what
+      // was chosen. Older phones get their storage permission from the picker itself.
+      permissions: ['CAMERA', 'RECORD_AUDIO', 'ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'READ_CONTACTS', 'POST_NOTIFICATIONS', 'VIBRATE'],
+      // Taken back out of what the add-ons slip in. Full photo-library access is what Google
+      // Play's photo policy rejects apps for when the picker is enough; nothing is ever written
+      // to contacts; there is no background location; no advertising id is used; and nothing
+      // draws over other apps (the template's "display over other apps" is for debug screens only).
+      blockedPermissions: [
+        'android.permission.SYSTEM_ALERT_WINDOW',
+        'android.permission.READ_MEDIA_IMAGES',
+        'android.permission.READ_MEDIA_VIDEO',
+        'android.permission.READ_MEDIA_AUDIO',
+        'android.permission.READ_MEDIA_VISUAL_USER_SELECTED',
+        'android.permission.WRITE_CONTACTS',
+        'android.permission.ACCESS_BACKGROUND_LOCATION',
+        'com.google.android.gms.permission.AD_ID',
+      ],
+      // No app links yet: the iPhone app has no associated domains either, so links to
+      // app.courtsidebase.com open the website on both. Add the two together when wanted.
+      ...(googleServicesFile ? { googleServicesFile } : {}),
     },
     web: { bundler: 'metro', output: 'single', name: 'CourtSide' },
     plugins: [
       // Build 12 (Oct 4): the phone opens on the logo, cream, never a black frame. expo-system-ui
       // (installed) paints the root the backgroundColor above; this keeps the launch picture full screen.
-      ['expo-splash-screen', { image: './assets/splash.png', backgroundColor: '#F8F7F2', resizeMode: 'cover', enableFullScreenImage_legacy: true }],
+      // Android (Oct 4) only ever shows a round logo in the middle of the colour, never a
+      // full-screen picture, so it gets the mark on its own, cream around it, as on the icon.
+      ['expo-splash-screen', { image: './assets/splash.png', backgroundColor: '#F8F7F2', resizeMode: 'cover', enableFullScreenImage_legacy: true, android: { image: './assets/android-icon-foreground.png', imageWidth: 288, resizeMode: 'contain', backgroundColor: '#F8F7F2' } }],
       'expo-router',
       // The microphone is only for voice notes in chats (expo-audio, below); the camera itself never records sound.
       ['expo-camera', { cameraPermission: 'CourtSide uses the camera to take an instant — one photo right after your session.', microphonePermission: 'CourtSide uses the microphone for voice notes you send in chats.', recordAudioAndroid: false }],
@@ -63,7 +100,9 @@ module.exports = {
       // Build 14 (Oct 4): find friends from your contacts. Only phone numbers and emails are checked, and nothing is kept.
       ['expo-contacts', { contactsPermission: 'CourtSide checks your contacts’ phone numbers and emails to show which friends are already on CourtSide. Nothing from your contacts is saved.' }],
       ['expo-location', { locationWhenInUsePermission: 'CourtSide uses your location while the app is open to show courts and players near you. You choose who can see you.' }],
-      ['expo-notifications', { color: '#3F7049' }],
+      // Android draws the status-bar alert icon in white from the picture's shape alone, so
+      // it gets the mark as a white cut-out (Oct 4); the full-colour app icon would be a blank square.
+      ['expo-notifications', { color: '#3F7049', icon: './assets/notification-icon.png' }],
       'expo-apple-authentication',
       // No playing on in the background: nothing in the app is meant to be
       // heard once you leave it (clips and voice notes both stop), and without
