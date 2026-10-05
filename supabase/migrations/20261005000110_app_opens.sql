@@ -12,7 +12,9 @@
 -- app calls once a day when it starts or comes back to the front. It can
 -- only ever write the caller's own row, and only the first open of a day
 -- counts (later ones change nothing). Nobody can read, change or delete
--- rows from the app, except admins reading them.
+-- rows from the app, admins included: admins only ever see the daily
+-- totals below (retention_summary / retention_overall), never one person's
+-- days, which is what the privacy policy promises.
 --
 -- The day is the phone's own date (so a 9pm sign-up in New York and a
 -- next-morning open count as day 0 and day 1, not as the same UTC day). It
@@ -41,11 +43,12 @@ create table if not exists public.app_opens (
 create index if not exists app_opens_day_idx on public.app_opens (day);
 
 alter table public.app_opens enable row level security;
+-- No direct reads or writes for anyone signed in to the app, admins
+-- included: rows go in only through note_app_open, and come out only as
+-- totals. (A first draft let admins read the rows one by one; this takes it
+-- back, so running the file again also removes it if it went live.)
 revoke all on public.app_opens from public, anon, authenticated;
--- Admins may read the rows (the app's own admin pages could, later); nobody writes them directly.
-grant select on public.app_opens to authenticated;
 drop policy if exists app_opens_admin_read on public.app_opens;
-create policy app_opens_admin_read on public.app_opens for select to authenticated using (public.is_admin());
 
 -- The one way in: the caller's own row for today, first open of the day only.
 create or replace function public.note_app_open(p_platform text, p_day date default null)
@@ -153,3 +156,5 @@ commit;
 
 -- Check (should list note_app_open, retention_summary, retention_overall):
 --   select proname from pg_proc where proname in ('note_app_open', 'retention_summary', 'retention_overall');
+-- Check (should be empty: no policy lets anyone read single rows):
+--   select policyname from pg_policies where tablename = 'app_opens';

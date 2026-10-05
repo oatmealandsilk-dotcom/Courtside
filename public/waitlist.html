@@ -279,6 +279,20 @@
   .btn-app svg { width: 18px; height: 18px; }
   .app-note { margin: 0; font-size: 15px; color: var(--muted); max-width: 30em; text-wrap: pretty; }
   .app-note a { color: var(--text); font-weight: 600; }
+  /* Someone a player invited (?ref=their handle): the handle to type in the app, shown once the server says it is a real public account. */
+  .invited { margin: 0; font-size: 15px; color: var(--muted); max-width: 30em; text-wrap: pretty; }
+  .invited strong { color: var(--text); font-weight: 600; }
+  .code { font-weight: 600; color: var(--text); background: var(--brand-dim); border-radius: 6px; padding: 1px 7px; white-space: nowrap; }
+  /* The one step before TestFlight, only for someone who came from a player's or a friend's link. */
+  .invite-step { width: min(440px, calc(100% - 32px)); padding: 0; border: 1px solid var(--border); border-radius: 20px; background: var(--bg); color: var(--text); box-shadow: var(--shadow-float); }
+  .invite-step::backdrop { background: rgba(15, 20, 18, 0.45); }
+  .invite-card { display: grid; gap: 16px; padding: 26px 24px 22px; }
+  .invite-card h2 { font-size: 24px; }
+  .invite-card p { margin: 0; color: var(--muted); font-size: 15px; text-wrap: pretty; }
+  .invite-card .msg:empty { min-height: 0; margin-top: -8px; }
+  .invite-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  .invite-actions .btn { text-decoration: none; }
+  .invite-actions .btn-primary { flex: 1 1 auto; }
   .or-email { display: grid; gap: 12px; padding-top: 22px; border-top: 1px solid var(--border); max-width: 480px; }
   .or-label { margin: 0; font-size: 15px; color: var(--muted); }
   .or-label .opt { color: var(--faint); }
@@ -591,6 +605,7 @@
           <div class="app-cta">
             <a class="btn btn-primary btn-app" href="https://testflight.apple.com/join/21UJPuny" target="_blank" rel="noopener">Get the iPhone app <svg aria-hidden="true"><use href="#out"/></svg></a>
             <p class="app-note">Free. Opens Apple’s TestFlight: install it, then CourtSide. On Android? <a href="https://app.courtsidebase.com">Use CourtSide on the web</a>.</p>
+            <p class="invited" data-invited hidden>Invited by <strong data-at></strong>? Type <b class="code" data-code></b> when the app asks “Invited by?”</p>
           </div>
           <div class="or-email">
             <p class="or-label"><label for="quick-email">Not on your iPhone right now? Get the link by email</label> <span class="opt">(optional)</span></p>
@@ -766,6 +781,23 @@
   </div>
 </footer>
 
+<dialog class="invite-step" id="invite-step" aria-labelledby="invite-title">
+  <form class="invite-card" novalidate>
+    <h2 id="invite-title">Before you go</h2>
+    <p data-type hidden>When CourtSide asks <strong>“Invited by?”</strong>, type <b class="code" data-code></b>. That’s how <span data-at></span> gets the credit.</p>
+    <div class="field">
+      <label for="invite-email"><span data-why></span> <span class="opt">(optional)</span></label>
+      <input id="invite-email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com">
+    </div>
+    <p class="msg" role="status" aria-live="polite"></p>
+    <div class="invite-actions">
+      <a class="btn btn-primary" data-go autofocus href="https://testflight.apple.com/join/21UJPuny" target="_blank" rel="noopener">Continue to TestFlight</a>
+      <button class="btn btn-quiet" type="button" data-back>Back</button>
+    </div>
+    <p class="fine">Your email only goes on our list (see the <a href="privacy.html">privacy policy</a>). Leave it empty to go straight on.</p>
+  </form>
+</dialog>
+
 <script>
   // The page's own key is the public one the app ships with: it can add a row
   // to the waitlist or the feedback box, and read nothing back.
@@ -777,6 +809,10 @@
   const source = ((params.get('ref') || params.get('utm_source') || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40)) || null;
   const referredBy = ((params.get('r') || '').toLowerCase().replace(/[^0-9a-f]/g, '').slice(0, 8)) || null;
   const SHARE_BASE = 'https://courtsidebase.com/';
+  // Set once this visit's email is on the list with the link's label: the label is recorded, so the buttons go straight on.
+  let joined = false;
+  // The player a ?ref= names, once the server says it is a real, public CourtSide account (see findInviter).
+  let inviter = null;
   const stillMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -799,10 +835,11 @@
     }
   }
 
-  async function join(email, name) {
+  async function join(email, name, keepalive = false) {
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/join_waitlist`, {
         method: 'POST',
+        keepalive,
         headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
         body: JSON.stringify({ p_email: email, p_name: name, p_source: source, p_referred_by: referredBy }),
       });
@@ -820,6 +857,11 @@
     } catch {
       return { kind: 'offline' };
     }
+  }
+
+  // The welcome email goes out now. The server checks this person is on the list and has not had it yet.
+  function sendWelcome(email) {
+    fetch(`${SUPABASE_URL}/functions/v1/waitlist-welcome`, { method: 'POST', headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ email }), keepalive: true }).catch(() => {});
   }
 
   // How many are in already — shown once it is a number worth showing.
@@ -944,9 +986,9 @@
       const result = await join(email, name);
       busy(form, false);
       if (result.kind === 'ok' || result.kind === 'already') {
+        joined = true;
         msg.textContent = '';
-        // The welcome email goes out now. The server checks this person is on the list and has not had it yet.
-        if (result.kind === 'ok') fetch(`${SUPABASE_URL}/functions/v1/waitlist-welcome`, { method: 'POST', headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ email }), keepalive: true }).catch(() => {});
+        if (result.kind === 'ok') sendWelcome(email);
         if (result.code) showSpot(form, result, email);
         else confirmIn(form, result.kind === 'ok' ? 'You’re in.' : 'You’re already in.', 'The beta is open. Get CourtSide on your iPhone now.');
         return;
@@ -956,6 +998,95 @@
     });
   });
 
+  // Links from players and friends (Oct 5). The "Get the iPhone app" buttons
+  // used to go straight to TestFlight, and the link's ?ref= / ?r= was lost:
+  // TestFlight cannot carry it into the app. So the page does two things:
+  //  1. ?ref=<handle>: once the server says that handle is a real, public
+  //     CourtSide account (share_preview, the same check the app's join page
+  //     uses, so a made-up link names nobody), it shows the handle to type
+  //     when the app asks "Invited by?" — that is what credits the player.
+  //  2. Before TestFlight opens, someone who came from a player's or a
+  //     friend's link is offered the email list, recorded exactly as the
+  //     email form does (join_waitlist, with the link's label and the
+  //     friend's code), so signing up in the app with that email credits
+  //     them too (migration 83). Optional: an empty box goes straight on.
+  // Anyone without such a link, or who already joined on this visit, goes
+  // straight to TestFlight as before.
+  const maybeHandle = source && /^[a-z0-9_]{2,24}$/.test(source) ? source : null;
+  (async function findInviter() {
+    if (!maybeHandle) return;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/share_preview`, {
+        method: 'POST',
+        headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_kind: 'referrer', p_id: maybeHandle }),
+      });
+      if (!res.ok) return;
+      const got = await res.json();
+      const handle = got && got.open && got.author && typeof got.author.handle === 'string' ? got.author.handle : null;
+      if (!handle) return;
+      inviter = handle;
+      document.querySelectorAll('[data-invited]').forEach((el) => {
+        el.querySelector('[data-at]').textContent = `@${handle}`;
+        el.querySelector('[data-code]').textContent = handle;
+        el.hidden = false;
+      });
+    } catch {}
+  })();
+
+  (function inviteStep() {
+    const step = document.getElementById('invite-step');
+    if (!step || typeof step.showModal !== 'function') return;
+    const form = step.querySelector('form');
+    const input = form.querySelector('input[name="email"]');
+    const msg = form.querySelector('.msg');
+    const go = form.querySelector('[data-go]');
+    document.addEventListener('click', (event) => {
+      const link = event.target.closest && event.target.closest('a[href^="https://testflight.apple.com/"]');
+      if (!link || link.closest('dialog') || joined || !(inviter || referredBy)) return;
+      event.preventDefault();
+      const typeLine = form.querySelector('[data-type]');
+      if (inviter) {
+        step.querySelector('#invite-title').textContent = `Invited by @${inviter}?`;
+        typeLine.querySelector('[data-code]').textContent = inviter;
+        typeLine.querySelector('[data-at]').textContent = `@${inviter}`;
+        typeLine.hidden = false;
+        form.querySelector('[data-why]').textContent = `Or add your email, then sign up in the app with the same one, and we’ll credit @${inviter} for you`;
+      } else {
+        step.querySelector('#invite-title').textContent = 'Came from a friend’s link?';
+        typeLine.hidden = true;
+        form.querySelector('[data-why]').textContent = 'Add your email so your friend gets the credit';
+      }
+      msg.className = 'msg';
+      msg.textContent = '';
+      input.removeAttribute('aria-invalid');
+      step.showModal();
+    });
+    form.querySelector('[data-back]').addEventListener('click', () => step.close());
+    // Return in the email box does what the button does.
+    form.addEventListener('submit', (event) => { event.preventDefault(); go.click(); });
+    // The button is a plain link to TestFlight, so the phone opens it like
+    // any other link; it is only held back when the email is mistyped.
+    go.addEventListener('click', (event) => {
+      const email = input.value.trim();
+      if (email && !EMAIL.test(email)) {
+        input.setAttribute('aria-invalid', 'true');
+        msg.className = 'msg error';
+        msg.textContent = 'That email doesn’t look right — fix it, or leave it empty.';
+        event.preventDefault();
+        input.focus();
+        return;
+      }
+      if (email) {
+        // keepalive: it still lands while the page hands over to TestFlight.
+        // The link cannot wait for the answer, or the phone would treat
+        // TestFlight as a pop-up and block it.
+        void join(email, null, true).then((result) => { if (result.kind === 'ok') sendWelcome(email); });
+        joined = true;
+      }
+      step.close();
+    });
+  })();
 
   // Every court the app has, on the page too. The choice is kept in the browser.
   (function themes() {
