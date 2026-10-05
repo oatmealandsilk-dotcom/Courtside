@@ -5,11 +5,14 @@
 //                 ten minutes. With {tennis: true} it also asks to read
 //                 workouts, and that yes turns tennis sessions on (migration 58)
 //   /callback   — WHOOP sends the browser back here; the code becomes tokens,
-//                 the last week is pulled (and the last 36 hours of tennis,
-//                 quietly), and the browser returns to the app. A tennis
-//                 sign-in is parked instead (?whoop=pending&n=…) for /finish
-//   /finish     — (signed-in) the phone that started a tennis sign-in collects
-//                 it, as the same player: only then is it put on the account
+//                 which are parked (?whoop=pending&n=…) for /finish. Every
+//                 sign-in, tennis or not, since the security review (Oct 5):
+//                 before, a plain sign-in went straight onto the account that
+//                 started it, so a WHOOP link someone sent you put YOUR
+//                 WHOOP health data on THEIR account
+//   /finish     — (signed-in) the phone that started a sign-in collects it, as
+//                 the same player: only then is it put on the account, and the
+//                 last week is pulled (and the last 36 hours of tennis, quietly)
 //   /sync       — (signed-in) pulls the last week again. {only: 'workouts'}
 //                 just looks for tennis in the last 36 hours: the app's check
 //                 when it opens, at most hourly. Answers {days, fresh}, fresh
@@ -27,6 +30,8 @@
 //           migration 65 stores them. Either can go first: before 65 the
 //           database ignores them.
 // Secrets:  supabase secrets set WHOOP_CLIENT_ID=... WHOOP_CLIENT_SECRET=...
+//           optional ALLOW_DEV_RETURN=1 while testing in Expo Go (remove before going live):
+//           without it, a sign-in only ever returns to the app or app.courtsidebase.com.
 // WHOOP app: redirect URL = https://<project>.supabase.co/functions/v1/whoop/callback
 //            scopes = read:recovery read:sleep read:cycles read:profile read:workout offline
 //            webhook URL = https://<project>.supabase.co/functions/v1/whoop/webhook, model version v2
@@ -81,8 +86,16 @@ async function open(state: string): Promise<{ uid: string; back: string; tennis?
 }
 /** How long a sign-in link works: an old one, found or sent later, is useless. */
 const SIGN_IN_MS = 10 * 60_000;
-/** Only the app's own addresses may be returned to. */
-const safeBack = (back: string) => /^(courtside:\/\/|exps?:\/\/[a-z0-9-]+\.exp\.direct\/|exps?:\/\/(localhost|\d{1,3}(\.\d{1,3}){3}):\d+\/|https:\/\/app\.courtsidebase\.com\/)/.test(back) ? back : 'courtside://health';
+/**
+ * Only the app's own addresses may be returned to. Expo Go's addresses only
+ * while ALLOW_DEV_RETURN is set: anyone can open one of those, so in
+ * production a sign-in's pick-up code could otherwise be sent to a stranger.
+ */
+const DEV_RETURN = Deno.env.get('ALLOW_DEV_RETURN') === '1';
+const safeBack = (back: string) =>
+  /^(courtside:\/\/|https:\/\/app\.courtsidebase\.com\/)/.test(back)
+  || (DEV_RETURN && /^(exps?:\/\/[a-z0-9-]+\.exp\.direct\/|exps?:\/\/(localhost|\d{1,3}(\.\d{1,3}){3}):\d+\/)/.test(back))
+    ? back : 'courtside://health';
 
 /** Tennis sessions on or off for this person's WHOOP (the app shows 'Turn on tennis sessions' again when off). */
 async function setReadsWorkouts(uid: string, on: boolean) {
@@ -409,15 +422,11 @@ Deno.serve(async (req) => {
     const t = await res.json();
     const scope: string = typeof t.scope === 'string' ? t.scope : opened.tennis ? SCOPES : BASE_SCOPES;
     const answer: Answer = { access_token: t.access_token, refresh_token: t.refresh_token, expires_at: new Date(Date.now() + t.expires_in * 1000).toISOString(), scope, member: null };
-    if (!opened.tennis) {
-      // As before: straight onto the account that asked. It never carries tennis.
-      const bad = await link(opened.uid, answer, false);
-      if (bad) console.error('[whoop] link', bad);
-      return go(bad ? 'failed' : 'connected');
+    if (opened.tennis) {
+      // Tennis: webhooks name only the WHOOP member, so learn which one this is.
+      const prof = await fetch(API + '/user/profile/basic', { headers: { authorization: 'Bearer ' + t.access_token } }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      answer.member = typeof prof?.user_id === 'number' ? prof.user_id : null;
     }
-    // Tennis: webhooks name only the WHOOP member, so learn which one this is.
-    const prof = await fetch(API + '/user/profile/basic', { headers: { authorization: 'Bearer ' + t.access_token } }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-    answer.member = typeof prof?.user_id === 'number' ? prof.user_id : null;
     // Parked until the phone that started this collects it as the same player
     // (/finish), under a fresh code that only this browser sees: the state's
     // own code was in a link that anyone could have been sent.
@@ -437,13 +446,17 @@ Deno.serve(async (req) => {
   if (path === '/finish') {
     const posted = await req.json().catch(() => ({})) as { n?: unknown };
     const n = typeof posted.n === 'string' && /^[0-9a-f-]{36}$/i.test(posted.n) ? posted.n : null;
-    // Collected once, whoever asks. (Refusals answer 200 with the sentence the app shows.)
-    const { data: taken } = n ? await admin.from('whoop_pending').delete().eq('n', n).select() : { data: null };
+    // Collected once, and only by the account that started it: a WHOOP
+    // sign-in link someone else sent can never put your WHOOP on their
+    // account, and someone else holding the code cannot use it up.
+    // (Refusals answer 200 with the sentence the app shows.)
+    const { data: taken } = n ? await admin.from('whoop_pending').delete().eq('n', n).eq('user_id', uid).select() : { data: null };
     const got = ((taken ?? []) as { user_id: string; answer: Answer; expires_at: string }[])[0];
+    if (!got && n) {
+      const { data: theirs } = await admin.from('whoop_pending').select('n').eq('n', n).gt('expires_at', new Date().toISOString()).limit(1);
+      if ((theirs ?? []).length) return json({ error: 'That WHOOP sign-in was started on another account.' });
+    }
     if (!got || Date.parse(got.expires_at) < Date.now()) return json({ error: 'That WHOOP sign-in has expired. Try again.' });
-    // Only the account that started it: a WHOOP sign-in link someone else
-    // sent can never put your WHOOP on their account.
-    if (got.user_id !== uid) return json({ error: 'That WHOOP sign-in was started on another account.' });
     const bad = await link(uid, got.answer, true);
     if (bad) { console.error('[whoop] link', bad); return json({ error: 'Could not connect WHOOP right now. Try again.' }); }
     return json({ ok: true });

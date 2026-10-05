@@ -11,9 +11,24 @@ import { colors, surfaceColorFor } from '@/theme';
  */
 const FONT = "font:600 11px Inter,system-ui,sans-serif";
 
+/**
+ * A picture address made safe to sit inside url('…') in a style attribute
+ * (security review, Oct 5): https only, and nothing in it can end the
+ * string, the url( ) or the attribute. A player writes their own avatar
+ * address, and these pins are HTML, so a crafted one could otherwise run
+ * script on everyone who sees their pin. Anything else: no picture.
+ */
+const safePicture = (url?: string): string => {
+  if (!url || url.length > 2000 || !/^https:\/\/[^\s]+$/i.test(url)) return '';
+  const encoded = url.replace(/['"()\\<>]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}`);
+  // Last, so the parser reads "&amp;" back as the address's own "&" and never meets an entity of the sender's.
+  return encoded.replace(/&/g, '&amp;');
+};
+
 const face = (user: User, size: number) => {
-  const fill = user.avatarUrl ? `background-image:url('${user.avatarUrl}');background-size:cover;` : `background:${surfaceColorFor(user.avatarSeed)};`;
-  return `<div style="width:${size}px;height:${size}px;border-radius:999px;${fill}color:#fff;${FONT};display:flex;align-items:center;justify-content:center">${user.avatarUrl ? '' : initials(user.name)}</div>`;
+  const picture = safePicture(user.avatarUrl);
+  const fill = picture ? `background-image:url('${picture}');background-size:cover;` : `background:${surfaceColorFor(user.avatarSeed)};`;
+  return `<div style="width:${size}px;height:${size}px;border-radius:999px;${fill}color:#fff;${FONT};display:flex;align-items:center;justify-content:center">${picture ? '' : esc(initials(user.name))}</div>`;
 };
 
 /** How long ago someone last shared where they are, as short as a map label wants: "now", "12m", "3h", "2d", "5w". */

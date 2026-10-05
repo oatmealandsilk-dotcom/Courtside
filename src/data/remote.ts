@@ -401,18 +401,24 @@ const toActivity = (r: ActivityRow): DetectedActivity => ({
 const activitiesQuery = (me: ID) => need().from('detected_activities').select('*').eq('user_id', me)
   .gte('ended_at', new Date(Date.now() - 14 * 86_400_000).toISOString()).order('started_at', { ascending: false }).limit(60);
 
-interface HitRow { id: string; author_id: string; starts_at: string; place: { id?: string; name?: string; lat?: number; lng?: number } | null; level_min: number | null; level_max: number | null; format: HitRequest['format']; spots: number; note: string | null; conversation_id: string | null; cancelled: boolean; created_at: string; hit_joins?: { user_id: string }[]; audience?: string | null; opens_at?: string | null; include_groups?: boolean | null }
-const toHit = (r: HitRow): HitRequest => ({
-  id: r.id, authorId: r.author_id, startsAt: r.starts_at,
-  // The court's map id when it was picked from the courts list (kept only if it is one), so the hit lands on that court's page.
-  place: { id: isMapCourtId(r.place?.id) ? r.place.id : undefined, name: String(r.place?.name ?? 'A court').slice(0, 120), lat: typeof r.place?.lat === 'number' ? r.place.lat : undefined, lng: typeof r.place?.lng === 'number' ? r.place.lng : undefined },
-  levelMin: r.level_min ?? undefined, levelMax: r.level_max ?? undefined, format: r.format, spots: r.spots, note: r.note ?? undefined,
-  conversationId: r.conversation_id ?? undefined, cancelled: r.cancelled, createdAt: r.created_at, joinedIds: (r.hit_joins ?? []).map((j) => j.user_id),
-  // Who sees it first (migration 76). A database without it sends none of these: every hit is for everyone.
-  ...(r.audience === 'invite_first' || r.audience === 'invite_only'
-    ? { audience: r.audience, opensAt: r.opens_at ?? undefined, includeGroups: !!r.include_groups, invitedIds: [] as ID[] }
-    : {}),
-});
+interface HitRow { id: string; author_id: string; starts_at: string; place: { id?: string; name?: string; lat?: number; lng?: number } | null; level_min: number | null; level_max: number | null; format: HitRequest['format']; spots: number; note: string | null; conversation_id: string | null; cancelled: boolean; created_at: string; hit_joins?: { user_id: string }[]; audience?: string | null; opens_at?: string | null; include_groups?: boolean | null; joined_count?: number | null }
+const toHit = (r: HitRow): HitRequest => {
+  const joinedIds = (r.hit_joins ?? []).map((j) => j.user_id);
+  // How many are in that this account is not shown (migration 95's count, kept by the server); none before it.
+  const hiddenJoins = typeof r.joined_count === 'number' ? Math.max(0, r.joined_count - joinedIds.length) : 0;
+  return {
+    id: r.id, authorId: r.author_id, startsAt: r.starts_at,
+    // The court's map id when it was picked from the courts list (kept only if it is one), so the hit lands on that court's page.
+    place: { id: isMapCourtId(r.place?.id) ? r.place.id : undefined, name: String(r.place?.name ?? 'A court').slice(0, 120), lat: typeof r.place?.lat === 'number' ? r.place.lat : undefined, lng: typeof r.place?.lng === 'number' ? r.place.lng : undefined },
+    levelMin: r.level_min ?? undefined, levelMax: r.level_max ?? undefined, format: r.format, spots: r.spots, note: r.note ?? undefined,
+    conversationId: r.conversation_id ?? undefined, cancelled: r.cancelled, createdAt: r.created_at, joinedIds,
+    ...(hiddenJoins ? { hiddenJoins } : {}),
+    // Who sees it first (migration 76). A database without it sends none of these: every hit is for everyone.
+    ...(r.audience === 'invite_first' || r.audience === 'invite_only'
+      ? { audience: r.audience, opensAt: r.opens_at ?? undefined, includeGroups: !!r.include_groups, invitedIds: [] as ID[] }
+      : {}),
+  };
+};
 /** Who was invited to which hit: the poster reads every invite to their own hit, an invited player only their own (migration 76). Nothing without it. */
 const hitInvitesQuery = () => need().from('hit_invites').select('hit_id, user_id').order('created_at', { ascending: true }).limit(1000);
 const withInvites = (hits: HitRequest[], rows: { hit_id: string; user_id: string }[] | null | undefined): HitRequest[] => {
@@ -1379,7 +1385,17 @@ export const remote = {
       if (bytes.byteLength > 10 * 1024 * 1024) throw new Error('That résumé is over 10 MB. Attach a smaller PDF or Word file.');
       const safeName = resume.name.replace(/[^\w.\-]+/g, '_').slice(-80) || 'resume.pdf';
       resumePath = `${me}/${Date.now().toString(36)}-${safeName}`;
-      const { error } = await db.storage.from('coach-applications').upload(resumePath, bytes, { contentType: resume.mimeType || 'application/pdf', upsert: false });
+      // The shelf takes PDF and Word files only (migration 100): named by the
+      // file's ending when the phone's own label is something else or missing.
+      const byEnding: Record<string, string> = {
+        pdf: 'application/pdf',
+        doc: 'application/msword',
+        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      };
+      const ending = /\.([a-z]+)$/i.exec(safeName)?.[1]?.toLowerCase() ?? '';
+      const told = (resume.mimeType ?? '').toLowerCase();
+      const contentType = Object.values(byEnding).includes(told) ? told : byEnding[ending] ?? 'application/pdf';
+      const { error } = await db.storage.from('coach-applications').upload(resumePath, bytes, { contentType, upsert: false });
       if (error) throw new Error(`The résumé did not upload: ${error.message}`);
     }
     const { error } = await db.from('coach_applications').insert({
@@ -2162,10 +2178,12 @@ export const remote = {
   /**
    * "Typing…" in one chat: a quick signal sent straight between phones (never
    * stored). `ping` says you are typing; `onTyping` hears who else is.
+   * Both channels are private (migration 96): only people in the chat may
+   * listen or send, and only you may listen to your own chat list's channel.
    */
   typing(conversationId: ID, me: ID, onTyping: (userId: ID, stopped?: boolean) => void, others: ID[] = []): { ping: () => void; stop: () => void; off: () => void } {
     const db = need();
-    const channel = db.channel(`typing:${conversationId}`, { config: { broadcast: { self: false } } })
+    const channel = db.channel(`typing:${conversationId}`, { config: { private: true, broadcast: { self: false } } })
       .on('broadcast', { event: 'typing' }, ({ payload }) => {
         const p = payload as { userId?: string; stop?: boolean } | null;
         if (p?.userId && p.userId !== me) onTyping(p.userId, !!p.stop);
@@ -2173,7 +2191,7 @@ export const remote = {
       .subscribe();
     // The others' inboxes hear it too, so their chat list says "typing…"
     // (Oct 4, owner). Sent without joining their channels; a big group is capped.
-    const inboxes = others.filter((id) => id !== me).slice(0, 16).map((id) => db.channel(`inbox-typing:${id}`));
+    const inboxes = others.filter((id) => id !== me).slice(0, 16).map((id) => db.channel(`inbox-typing:${id}`, { config: { private: true } }));
     return {
       ping: () => {
         void channel.send({ type: 'broadcast', event: 'typing', payload: { userId: me } });
@@ -2191,7 +2209,7 @@ export const remote = {
   /** "Typing…" for the chat list: hears which of your chats someone is typing in right now. */
   inboxTyping(me: ID, onTyping: (conversationId: ID, userId: ID, stopped?: boolean) => void): () => void {
     const db = need();
-    const channel = db.channel(`inbox-typing:${me}`)
+    const channel = db.channel(`inbox-typing:${me}`, { config: { private: true } })
       .on('broadcast', { event: 'typing' }, ({ payload }) => {
         const p = payload as { conversationId?: string; userId?: string; stop?: boolean } | null;
         if (p?.conversationId && p.userId && p.userId !== me) onTyping(p.conversationId, p.userId, !!p.stop);
@@ -2808,7 +2826,9 @@ export const remote = {
     if (patch.name !== undefined) row.name = patch.name;
     if (patch.bio !== undefined) row.bio = patch.bio;
     if (patch.location !== undefined) row.location = patch.location;
-    if (patch.cityAt !== undefined) { row.city_lat = patch.cityAt?.lat ?? null; row.city_lng = patch.cityAt?.lng ?? null; }
+    // A town, not a spot (security review, Oct 5): profiles are public, and "Use my location" hands over the phone's own fix, so only two decimals (about 1 km) ever leave the phone. The server rounds too.
+    const town = (n?: number) => (n == null ? null : Math.round(n * 100) / 100);
+    if (patch.cityAt !== undefined) { row.city_lat = town(patch.cityAt?.lat); row.city_lng = town(patch.cityAt?.lng); }
     if (patch.avatarUrl !== undefined) row.avatar_url = patch.avatarUrl;
     if (patch.profile !== undefined) row.profile = patch.profile;
     let { error } = await need().from('profiles').update(row).eq('id', me);

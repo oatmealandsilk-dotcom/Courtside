@@ -29,8 +29,15 @@ const PAGE = 100;
 /** No account holds this many files; the cap is only so a surprise cannot loop forever. */
 const MAX_PAGES = 200;
 
-/** Everything in one person's folder in one bucket. Returns how many files went. */
-async function emptyFolder(admin: SupabaseClient, bucket: string, folder: string): Promise<number> {
+/** How deep sub-folders are followed: the app never makes any, so this only bounds a surprise. */
+const MAX_DEPTH = 4;
+
+/**
+ * Everything in one person's folder in one bucket, sub-folders included (the
+ * app never makes any, but the storage rules allowed them, so a file tucked
+ * into one would otherwise outlive the account). Returns how many files went.
+ */
+async function emptyFolder(admin: SupabaseClient, bucket: string, folder: string, depth = 0): Promise<number> {
   let removed = 0;
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const { data, error } = await admin.storage.from(bucket).list(folder, { limit: PAGE });
@@ -39,13 +46,23 @@ async function emptyFolder(admin: SupabaseClient, bucket: string, folder: string
       return removed;
     }
     if (!data || data.length === 0) return removed;
-    const { error: gone } = await admin.storage.from(bucket).remove(data.map((file) => `${folder}/${file.name}`));
-    if (gone) {
-      console.error('[delete-account] remove', bucket, gone);
-      return removed;
+    // A listing names sub-folders too (they have no id): emptied first, they then drop out of the listing.
+    const subfolders = data.filter((entry) => entry.id == null);
+    const files = data.filter((entry) => entry.id != null);
+    for (const sub of subfolders) {
+      if (depth < MAX_DEPTH) removed += await emptyFolder(admin, bucket, `${folder}/${sub.name}`, depth + 1);
     }
-    removed += data.length;
+    if (files.length) {
+      const { error: gone } = await admin.storage.from(bucket).remove(files.map((file) => `${folder}/${file.name}`));
+      if (gone) {
+        console.error('[delete-account] remove', bucket, gone);
+        return removed;
+      }
+      removed += files.length;
+    }
     if (data.length < PAGE) return removed;
+    // A full page of sub-folders that could not be emptied would list the same way forever.
+    if (!files.length && depth >= MAX_DEPTH) return removed;
   }
   return removed;
 }

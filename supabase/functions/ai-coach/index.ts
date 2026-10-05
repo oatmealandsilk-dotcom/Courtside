@@ -15,6 +15,7 @@
 // (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / SUPABASE_ANON_KEY are provided.)
 import Anthropic from 'npm:@anthropic-ai/sdk@0.128.0';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { takeRate } from '../_shared/rateLimit.ts';
 
 const PLAN_MODEL = 'claude-opus-5-5';
 const CHAT_MODEL = 'claude-sonnet-5';
@@ -24,6 +25,12 @@ const SUMMARISE_EVERY = 10;     // exchanges between summary refreshes
 const HANDOFF_COOLDOWN_DAYS = 7;
 const PLAN_CAP_PER_WEEK = 3;    // regenerations a player gets for one week
 const LIMITS = { prompt: 2000, context: 6000, coaches: 12 };
+// Ceilings for everyone together, a day (security review, Oct 5): each
+// account has its own cap above, but accounts are free, so without these a
+// script making accounts could run up the Anthropic bill without end.
+// Settable as secrets; set a monthly spend limit in the Anthropic console too.
+const ALL_CHATS_A_DAY = Math.max(1, Number(Deno.env.get('AI_DAILY_CHATS')) || 2000);
+const ALL_PLANS_A_DAY = Math.max(1, Number(Deno.env.get('AI_DAILY_PLANS')) || 100);
 
 const KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? '';
 const anthropic = new Anthropic({ apiKey: KEY || 'missing' });
@@ -173,6 +180,12 @@ async function buildPlan(userId: string, body: { context: string; profileHash: s
     if (cached.data) return { plan: cached.data.plan, cached: true, capped: true };
     throw new Error('Plan limit reached for this week.');
   }
+  // The day's ceiling for everyone (counted after the player's own cap, so
+  // someone already over theirs cannot use it up for everyone else).
+  if (!(await takeRate(admin, 'ai-plans', 'all', ALL_PLANS_A_DAY, 86400))) {
+    if (cached.data) return { plan: cached.data.plan, cached: true, capped: true };
+    throw new Error('The coach is busy today. Try again tomorrow.');
+  }
 
   const response = await anthropic.messages.create({
     model: PLAN_MODEL,
@@ -228,6 +241,8 @@ async function chat(userId: string, body: { prompt: string; context: string; coa
   if (taken.error) throw taken.error;
   if (taken.data == null) return { capped: true, remaining: 0 };
   const used = Number(taken.data) - 1;
+  // The day's ceiling for everyone, after the player's own cap (see ALL_CHATS_A_DAY).
+  if (!(await takeRate(admin, 'ai-chats', 'all', ALL_CHATS_A_DAY, 86400))) return { capped: true, remaining: 0 };
 
   const memoryRow = await admin.from('coach_memory').select('summary, exchanges').eq('user_id', userId).maybeSingle();
   const summary: string = memoryRow.data?.summary ?? '';

@@ -22,11 +22,14 @@ export function opensAtFor(startsAt: string, now = Date.now()): string {
   return new Date(Math.min(now + HOUR, Date.parse(startsAt) - 3 * HOUR)).toISOString();
 }
 
+/** How many are in a hit, counting the people this account is not shown (hiddenJoins): what takes its spots. */
+export const joinedCount = (hit: Pick<HitRequest, 'joinedIds' | 'hiddenJoins'>): number => hit.joinedIds.length + (hit.hiddenJoins ?? 0);
+
 /** Whether a hit is out for everyone: posted that way, opened by its poster, or invite-first past its time with a spot still free. */
 export function isHitOpen(hit: HitRequest, now = Date.now()): boolean {
   if (!hit.audience || hit.audience === 'everyone') return true;
   if (hit.audience === 'invite_only') return false;
-  return !!hit.opensAt && Date.parse(hit.opensAt) <= now && hit.joinedIds.length < hit.spots;
+  return !!hit.opensAt && Date.parse(hit.opensAt) <= now && joinedCount(hit) < hit.spots;
 }
 
 /**
@@ -60,7 +63,7 @@ export function audienceLine(hit: HitRequest, me: ID | null, now = Date.now()): 
   if (isHitOpen(hit, now)) return null;
   const mine = !!me && hit.authorId === me;
   if (hit.audience === 'invite_only') return mine ? 'Only the people you invited can see it' : 'Invite only';
-  const full = hit.joinedIds.length >= hit.spots;
+  const full = joinedCount(hit) >= hit.spots;
   const when = hit.opensAt ? opensWhen(hit.opensAt, new Date(now)) : null;
   if (mine) {
     if (!when) return 'Invite first';
