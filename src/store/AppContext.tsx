@@ -52,7 +52,7 @@ import { knownOpen, notKnownAdult, type AgeSource, type Openness, type OpennessM
 import type { TeenMap } from '@/features/players/mapPrivacy';
 import { show as showToast } from '@/lib/toast';
 import { opensAtFor } from '@/features/hits/audience';
-import { forgetPushToken } from '@/features/push/push';
+import { forgetPushToken, registerForPush } from '@/features/push/push';
 import { framesAt } from '@/features/compose/frames';
 import { noteStep, reportError } from '@/lib/crashReporting';
 import { learned as learnedTip } from '@/features/tips/tips';
@@ -454,6 +454,22 @@ function freshAccountSettings(): Partial<AppState> {
   return {
     mutedIds: [], blockedIds: [], reportedIds: [], alertIds: [], saved: { postIds: [], questionIds: [] },
     paymentMethods: [], defaultPaymentId: null, prefs: DEFAULT_PREFS,
+  };
+}
+
+/**
+ * What an account leaving this device (logged out, logged out everywhere,
+ * deleted) leaves on screen: nothing of its own for whoever signs in next.
+ * Its health (its tracker sessions too), its courts (who it follows, what it
+ * said, where it checked in), its groups and map settings, and its own
+ * settings all go with it.
+ */
+function signedOut(prev: AppState): AppState {
+  return {
+    ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [],
+    ...emptyCourtLife, ...emptyFeedGroups, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null,
+    mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility, teenMap: isSupabaseConfigured ? 'off' : prev.teenMap,
+    ...freshAccountSettings(),
   };
 }
 
@@ -2255,10 +2271,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const signOutEverywhere = useCallback(async () => {
     const me = stateRef.current.currentUserId;
     void forgetLinkPreviews();
-    if (isSupabaseConfigured) await remoteAuth.signOutEverywhere();
+    if (isSupabaseConfigured) {
+      // This phone stops getting the account's alerts while the session can still take its address off (as Log out does).
+      await forgetPushToken();
+      try { await remoteAuth.signOutEverywhere(); } catch (err) { void registerForPush(); throw err; }
+    }
     // Everywhere includes this device: the remembered login is gone too.
     const savedAccounts = me ? await forgetAccount(me) : stateRef.current.savedAccounts;
-    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, savedAccounts, ...freshAccountSettings() }));
+    // Nothing of the account stays on the device (see signOut), its saved copy included.
+    setState((prev) => ({ ...signedOut(prev), savedAccounts }));
+    if (me) void clearSnapshot(me);
   }, []);
 
   const switchAccount = useCallback(async (id: ID) => {
@@ -2288,7 +2310,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (isSupabaseConfigured) await remoteAuth.deleteAccount();
     // A deleted account has no business in the remembered-logins list.
     const savedAccounts = me ? await forgetAccount(me) : stateRef.current.savedAccounts;
-    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, savedAccounts, ...freshAccountSettings() }));
+    // Nor anything of it on the device (see signOut), its saved copy included.
+    setState((prev) => ({ ...signedOut(prev), savedAccounts }));
+    if (me) void clearSnapshot(me);
   }, []);
   const retryLoad = useCallback(async () => {
     const me = stateRef.current.currentUserId;
@@ -2332,10 +2356,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void forgetLinkPreviews();
     // This phone stops getting the account's alerts before the session ends (the removal needs it).
     if (isSupabaseConfigured) void forgetPushToken().finally(() => remoteAuth.signOut());
-    // One account's health (its tracker sessions too) never carries over to the next one signed in.
-    // Nor do its courts: who it follows, what it said, where it checked in.
-    // Nor its own settings (blocks, mutes, switches, saved threads).
-    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [], ...emptyCourtLife, ...emptyFeedGroups, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null, mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility, teenMap: isSupabaseConfigured ? 'off' : prev.teenMap, ...freshAccountSettings() }));
+    // One account's health, courts and settings never carry over to the next one signed in.
+    setState(signedOut);
   }, []);
 
   const patchCurrentUser = useCallback(
@@ -4850,7 +4872,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (isSupabaseConfigured) await remoteAuth.deleteAccount();
       } catch { /* the sign-out below still takes it off this phone */ }
       const savedAccounts = await forgetAccount(me).catch(() => stateRef.current.savedAccounts);
-      setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, savedAccounts, ...freshAccountSettings() }));
+      setState((prev) => ({ ...signedOut(prev), savedAccounts }));
+      void clearSnapshot(me);
       return 'under13' as const;
     };
     const years = yearsOld(birthDate);
