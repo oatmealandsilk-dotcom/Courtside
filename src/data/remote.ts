@@ -22,13 +22,14 @@ import { blankVideoLocation } from '@/lib/videoLocation';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Story, Tip, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet } from './types';
+import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, Story, TakedownKind, TakedownReason, Tip, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet } from './types';
 import { validSets } from '@/features/activity/score';
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
 import { isMapCourtId } from '@/features/places/courtName';
 import type { Openness } from '@/features/players/age';
 import { lookFrom } from '@/features/groups/look';
+import { asKind, asReason } from '@/features/moderation/reasons';
 
 /** What a new player did first, after setup. */
 /** What the live handle check says about a handle. */
@@ -124,7 +125,20 @@ interface ProfileRow {
   age_group?: string | null;
   read_receipts?: boolean | null;
 }
-interface PostRow {
+/**
+ * Taken down by an admin (migration 108): when, and which of the eight
+ * reasons. Only the author and admins ever get such a row back.
+ */
+interface RemovedColumns { removed_at?: string | null; removed_reason?: string | null }
+const removedOf = (row: RemovedColumns): Removed | undefined =>
+  row.removed_at ? { reason: asReason(row.removed_reason), at: row.removed_at } : undefined;
+/** Marked only when it was taken down, so an untouched one comes out exactly as before. */
+const withRemoved = <T extends object>(item: T, row: RemovedColumns): T => {
+  const removed = removedOf(row);
+  return removed ? { ...item, removed } : item;
+};
+
+type PostRow = {
   /** The group it is shared to, if any (migration 67). */
   group_id?: string | null;
   id: string; author_id: string; kind: Post['kind']; body: string; media_label: string | null;
@@ -139,20 +153,20 @@ interface PostRow {
   location?: string | null; edited_at?: string | null; feature_ok?: boolean | null; referred_by?: string | null; is_first?: boolean | null;
   court_id?: string | null; court_name?: string | null; court_lat?: number | null; court_lng?: number | null;
   post_likes?: { user_id: string }[]; post_saves?: { user_id: string }[]; comments?: { id: string }[];
-}
-interface CommentRow {
+} & RemovedColumns;
+type CommentRow = {
   id: string; post_id: string; author_id: string; body: string; created_at: string; image_url?: string | null;
   /** A reply's thread and the comment it answers (migration 56); absent before it. */
   parent_id?: string | null; reply_to_id?: string | null;
   comment_likes?: { user_id: string }[];
-}
-interface StoryRow {
+} & RemovedColumns;
+type StoryRow = {
   id: string; author_id: string; image_url: string | null; video_url: string | null; thumbnail_url: string | null;
   media_label: string | null; caption: string | null; archived: boolean; created_at: string; expires_at: string;
   story_views?: { user_id: string }[];
   story_likes?: { user_id: string }[];
-  story_comments?: { id: string; story_id: string; author_id: string; body: string; created_at: string; parent_id?: string | null; reply_to_id?: string | null; story_comment_likes?: { user_id: string }[] }[];
-}
+  story_comments?: ({ id: string; story_id: string; author_id: string; body: string; created_at: string; parent_id?: string | null; reply_to_id?: string | null; story_comment_likes?: { user_id: string }[] } & RemovedColumns)[];
+} & RemovedColumns;
 
 const toUser = (row: ProfileRow, followers: number, following: number): User => ({
   id: row.id,
@@ -192,17 +206,18 @@ const POST_SELECT = '*, post_likes(user_id), post_saves(user_id), comments(*, co
 export const POST_PAGE = 40;
 /** A group's feed comes a page of this many at a time (group_feed, migration 74). */
 const GROUP_PAGE = 20;
-type FullPostRow = PostRow & { comments?: CommentRow[]; removed_at?: string | null };
+type FullPostRow = PostRow & { comments?: CommentRow[] };
 /**
- * Rows to the posts and comments the app holds. A post an admin removed never
- * comes through; admins see it only on the Reports screen.
+ * Rows to the posts and comments the app holds. A post an admin took down
+ * comes back only to its author and to admins (the database decides), and
+ * arrives marked `removed`: the feeds leave it out, its author's own pages
+ * show it marked.
  */
 function toPosts(rows: FullPostRow[]): { posts: Post[]; comments: Comment[] } {
-  const live = rows.filter((row) => !row.removed_at);
-  return { posts: live.map(toPost), comments: live.flatMap((row) => (row.comments ?? []).map(toComment)) };
+  return { posts: rows.map(toPost), comments: rows.flatMap((row) => (row.comments ?? []).map(toComment)) };
 }
 
-const toPost = (row: PostRow): Post => ({
+const toPost = (row: PostRow): Post => withRemoved<Post>({
   id: row.id,
   authorId: row.author_id,
   kind: row.kind,
@@ -238,9 +253,9 @@ const toPost = (row: PostRow): Post => ({
   isFirst: row.is_first || undefined,
   editedAt: row.edited_at ?? undefined,
   groupId: row.group_id ?? undefined,
-});
+}, row);
 
-const toComment = (row: CommentRow): Comment => ({
+const toComment = (row: CommentRow): Comment => withRemoved<Comment>({
   id: row.id,
   postId: row.post_id,
   authorId: row.author_id,
@@ -250,9 +265,9 @@ const toComment = (row: CommentRow): Comment => ({
   imageUrl: row.image_url ?? undefined,
   parentId: row.parent_id ?? undefined,
   replyToId: row.reply_to_id ?? undefined,
-});
+}, row);
 
-const toStory = (row: StoryRow): Story => ({
+const toStory = (row: StoryRow): Story => withRemoved<Story>({
   id: row.id,
   authorId: row.author_id,
   createdAt: row.created_at,
@@ -266,15 +281,15 @@ const toStory = (row: StoryRow): Story => ({
   likedBy: (row.story_likes ?? []).map((l) => l.user_id),
   commentIds: (row.story_comments ?? []).map((c) => c.id),
   archived: row.archived || undefined,
-});
+}, row);
 
 /** A comment on a hit, shaped like any other comment with the hit as its "post". */
-const toStoryComment = (row: NonNullable<StoryRow['story_comments']>[number]): Comment => ({
+const toStoryComment = (row: NonNullable<StoryRow['story_comments']>[number]): Comment => withRemoved<Comment>({
   id: row.id, postId: row.story_id, authorId: row.author_id, body: row.body, createdAt: row.created_at,
   likedBy: (row.story_comment_likes ?? []).map((l) => l.user_id),
   parentId: row.parent_id ?? undefined,
   replyToId: row.reply_to_id ?? undefined,
-});
+}, row);
 
 /** How many comment watches have opened, for unique channel names. */
 let commentWatches = 0;
@@ -504,10 +519,10 @@ const toCourtReview = (r: CourtReviewRow): CourtReview => ({
   ...(r.from_hit ? { fromHit: r.from_hit } : {}),
   updatedAt: r.updated_at,
 });
-interface QuestionRow { id: string; author_id: string; title: string; body: string; topic: string; tags: string[]; votes: number; voted_by: Record<string, 1 | -1>; accepted_answer_id: string | null; edited_at: string | null; created_at: string }
-interface AnswerRow { id: string; question_id: string; author_id: string; parent_answer_id: string | null; body: string; votes: number; voted_by: Record<string, 1 | -1>; from_coach: boolean; created_at: string; media_url?: string | null; media_kind?: 'photo' | 'video' | null; media_thumb?: string | null }
-interface CoachQuestionRow { id: string; author_id: string; title: string; body: string; specialty: string; video_url: string | null; media_label: string | null; resolved: boolean; created_at: string }
-interface CoachReplyRow { id: string; question_id: string; coach_user_id: string; body: string; helpful_by: string[]; created_at: string }
+interface QuestionRow extends RemovedColumns { id: string; author_id: string; title: string; body: string; topic: string; tags: string[]; votes: number; voted_by: Record<string, 1 | -1>; accepted_answer_id: string | null; edited_at: string | null; created_at: string }
+interface AnswerRow extends RemovedColumns { id: string; question_id: string; author_id: string; parent_answer_id: string | null; body: string; votes: number; voted_by: Record<string, 1 | -1>; from_coach: boolean; created_at: string; media_url?: string | null; media_kind?: 'photo' | 'video' | null; media_thumb?: string | null }
+interface CoachQuestionRow extends RemovedColumns { id: string; author_id: string; title: string; body: string; specialty: string; video_url: string | null; media_label: string | null; resolved: boolean; created_at: string }
+interface CoachReplyRow extends RemovedColumns { id: string; question_id: string; coach_user_id: string; body: string; helpful_by: string[]; created_at: string }
 interface CoachingRequestRow {
   id: string; coach_id: string; user_id: string; service_id: string; question: string; video_label: string | null; status: string; response: string | null; responded_at: string | null; created_at: string;
   /** Migration 35. */
@@ -556,22 +571,22 @@ function withPolls(questions: Question[], polls: PollRow[], mine: { question_id:
     return p ? { ...q, poll: { options: p.options, counts: (p.counts ?? []).slice(0, p.options.length), myVote: myVote.get(q.id) } } : q;
   });
 }
-const toQuestion = (r: QuestionRow, answers: AnswerRow[]): Question => ({
+const toQuestion = (r: QuestionRow, answers: AnswerRow[]): Question => withRemoved<Question>({
   id: r.id, authorId: r.author_id, title: r.title, body: r.body, topic: r.topic as Question['topic'], tags: r.tags ?? [],
   createdAt: r.created_at, votes: r.votes, votedBy: r.voted_by ?? {}, answerIds: answers.filter((a) => a.question_id === r.id).map((a) => a.id),
   acceptedAnswerId: r.accepted_answer_id ?? undefined, editedAt: r.edited_at ?? undefined,
-});
-const toAnswer = (r: AnswerRow): Answer => ({
+}, r);
+const toAnswer = (r: AnswerRow): Answer => withRemoved<Answer>({
   id: r.id, questionId: r.question_id, authorId: r.author_id, parentAnswerId: r.parent_answer_id ?? undefined, body: r.body,
   createdAt: r.created_at, votes: r.votes, votedBy: r.voted_by ?? {}, fromCoach: r.from_coach,
   media: r.media_url && r.media_kind ? { kind: r.media_kind, url: r.media_url, thumb: r.media_thumb ?? undefined } : undefined,
-});
-const toCoachQuestion = (r: CoachQuestionRow, replies: CoachReplyRow[]): CoachQuestion => ({
+}, r);
+const toCoachQuestion = (r: CoachQuestionRow, replies: CoachReplyRow[]): CoachQuestion => withRemoved<CoachQuestion>({
   id: r.id, authorId: r.author_id, title: r.title, body: r.body, specialty: r.specialty as CoachQuestion['specialty'], createdAt: r.created_at,
   videoUrl: r.video_url ?? undefined, mediaLabel: r.media_label ?? undefined, resolved: r.resolved,
   replyIds: replies.filter((x) => x.question_id === r.id).map((x) => x.id),
-});
-const toCoachReply = (r: CoachReplyRow): CoachReply => ({ id: r.id, questionId: r.question_id, coachUserId: r.coach_user_id, body: r.body, createdAt: r.created_at, helpfulBy: r.helpful_by ?? [] });
+}, r);
+const toCoachReply = (r: CoachReplyRow): CoachReply => withRemoved<CoachReply>({ id: r.id, questionId: r.question_id, coachUserId: r.coach_user_id, body: r.body, createdAt: r.created_at, helpfulBy: r.helpful_by ?? [] }, r);
 const toCoachingRequest = (r: CoachingRequestRow): CoachingRequest => ({
   id: r.id, coachId: r.coach_id, userId: r.user_id, serviceId: r.service_id, question: r.question, videoLabel: r.video_label ?? undefined,
   status: r.status as CoachingRequest['status'], createdAt: r.created_at, response: r.response ?? undefined, respondedAt: r.responded_at ?? undefined,
@@ -928,9 +943,11 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     following.set(edge.follower_id, (following.get(edge.follower_id) ?? 0) + 1);
   }
 
-  // A post or hit an admin removed never shows in a feed; admins see it only on the Reports screen.
-  const postRows = ((posts.data ?? []) as (PostRow & { comments?: CommentRow[]; removed_at?: string | null })[]).filter((row) => !row.removed_at);
-  const storyRows = ((stories.data ?? []) as (StoryRow & { removed_at?: string | null })[]).filter((row) => !row.removed_at);
+  // A post or Instant an admin took down comes only to its author and to
+  // admins (the database decides), marked: the feeds leave it out, and its
+  // author sees it on their own pages as removed, with the reason.
+  const postRows = (posts.data ?? []) as (PostRow & { comments?: CommentRow[] })[];
+  const storyRows = (stories.data ?? []) as StoryRow[];
   // Your own age: from your settings row, the only place it is since
   // migration 64; before that, from your profile row like everyone's.
   const ownState = (ustate.data ?? null) as UserStateRow | null;
@@ -1035,6 +1052,22 @@ function groupRefusal(message: string): GroupRefusal | null {
   return null;
 }
 
+/**
+ * How a take-down or restore went: 'done' (or it already was), 'refused'
+ * (not an admin), 'gone' (deleted meanwhile), 'not_ready' (a database
+ * without migration 108 yet) or 'failed' (anything else; logged).
+ */
+export type ModerationResult = 'done' | 'refused' | 'gone' | 'not_ready' | 'failed';
+function moderationResult(error: { code?: string; message: string } | null, what: string): ModerationResult {
+  if (!error) return 'done';
+  if (missingFunction(error)) return 'not_ready';
+  if (/not allowed/.test(error.message)) return 'refused';
+  if (/not found/.test(error.message)) return 'gone';
+  fail(what)(error);
+  return 'failed';
+}
+/** A reported post or Instant as the Reports screen shows it. */
+export interface ReportedItem { body: string; picture?: string; removed: boolean; reason?: TakedownReason }
 /**
  * The database does not have the function asked for: it has not had the
  * migration that adds it yet. PostgREST answers "Could not find the function
@@ -2061,13 +2094,14 @@ export const remote = {
       };
     });
   },
-  /** The reported post or hit as it stands, removed or not (admins can see removed ones). */
-  async fetchReportedItem(kind: 'post' | 'hit', id: ID): Promise<{ body: string; picture?: string; removed: boolean } | null> {
+  /** The reported post or hit as it stands, removed or not (admins can see removed ones), and why it was taken down. */
+  async fetchReportedItem(kind: 'post' | 'hit', id: ID): Promise<ReportedItem | null> {
     const table = kind === 'post' ? 'posts' : 'stories';
     const { data, error } = await need().from(table).select('*').eq('id', id).maybeSingle();
     if (error || !data) return null;
-    const row = data as { body?: string; caption?: string | null; image_url?: string | null; thumbnail_url?: string | null; removed_at?: string | null };
-    return { body: row.body ?? row.caption ?? '', picture: row.thumbnail_url ?? row.image_url ?? undefined, removed: !!row.removed_at };
+    const row = data as { body?: string; caption?: string | null; image_url?: string | null; thumbnail_url?: string | null } & RemovedColumns;
+    const removed = removedOf(row);
+    return { body: row.body ?? row.caption ?? '', picture: row.thumbnail_url ?? row.image_url ?? undefined, removed: !!removed, ...(removed ? { reason: removed.reason } : {}) };
   },
   /**
    * A reported chat, for the admin's Reports screen: admins cannot read
@@ -2116,6 +2150,40 @@ export const remote = {
     const { error } = await need().rpc('moderate_report', { report: reportId, decision });
     if (error) { fail('moderate')(error); return false; }
     return true;
+  },
+  /**
+   * An admin takes something down (take_down, migration 108): hidden from
+   * everyone but its author and the admins, and its author told why. See
+   * ModerationResult for the answers.
+   */
+  async takeDown(kind: TakedownKind, id: ID, reason: TakedownReason, note?: string): Promise<ModerationResult> {
+    const words = note?.replace(/\s+/g, ' ').trim().slice(0, 200);
+    const { error } = await need().rpc('take_down', { p_kind: kind, p_id: id, p_reason: reason, p_note: words || null });
+    return moderationResult(error, 'take down');
+  },
+  /** An admin puts it back exactly as it was (restore_content, migration 108). */
+  async restoreContent(kind: TakedownKind, id: ID): Promise<ModerationResult> {
+    const { error } = await need().rpc('restore_content', { p_kind: kind, p_id: id });
+    return moderationResult(error, 'restore');
+  },
+  /** Settings → Admin → Removed: everything taken down, newest first (admin_removed, migration 108). */
+  async fetchRemoved(): Promise<RemovedItem[] | 'not_ready' | null> {
+    const { data, error } = await need().rpc('admin_removed');
+    if (error) { if (missingFunction(error)) return 'not_ready'; fail('removed list')(error); return null; }
+    type Raw = { kind?: unknown; id?: unknown; parent_id?: unknown; author_id?: unknown; preview?: unknown; picture?: unknown; reason?: unknown; note?: unknown; removed_at?: unknown; removed_by?: unknown };
+    const rows: Raw[] = Array.isArray(data) ? (data as Raw[]) : [];
+    const text = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
+    return rows.flatMap((r): RemovedItem[] => {
+      const kind = asKind(r.kind);
+      const id = text(r.id);
+      const authorId = text(r.author_id);
+      const removedAt = text(r.removed_at);
+      if (!kind || !id || !authorId || !removedAt) return [];
+      return [{
+        kind, id, authorId, removedAt, preview: text(r.preview) ?? '', reason: asReason(r.reason),
+        parentId: text(r.parent_id), picture: text(r.picture), note: text(r.note), removedBy: text(r.removed_by),
+      }];
+    });
   },
 
   /* ------------------------------ more posts ------------------------------ */

@@ -22,6 +22,7 @@ import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font } from '@/theme';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { CourtSpinner } from '@/components/CourtSpinner';
+import { RemovedNote } from '@/features/moderation/RemovedNote';
 
 /** One hit with its likes and comments — the same page a post gets. */
 export default function HitThread() {
@@ -86,6 +87,8 @@ export default function HitThread() {
           <Text style={styles.clockText}>INSTANT · {hitClock(story)}</Text>
         </View>
       </Pressable>
+      {/* Taken down by an admin (migration 108): only its author and admins can open it. */}
+      {story.removed ? <RemovedNote removed={story.removed} style={{ marginTop: spacing.md }} /> : null}
 
       <View style={styles.authorRow}>
         <Pressable accessibilityRole="link" onPress={() => router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`)} style={styles.author}>
@@ -107,7 +110,7 @@ export default function HitThread() {
         {thread.map((t) => (
           <CommentThread key={t.top.id} thread={t} open={openThreads.has(t.top.id)} onToggle={() => toggleThread(t.top.id)} onReply={startReply} />
         ))}
-        <View style={styles.composer}>
+        {story.removed ? null : <View style={styles.composer}>
           {replyingTo ? (
             <View style={styles.replying}>
               <Text style={styles.replyingText} numberOfLines={1}>Replying to {replyingTo.self ? 'your comment' : <Text style={styles.replyingHandle}>@{replyingTo.handle}</Text>}</Text>
@@ -118,7 +121,7 @@ export default function HitThread() {
           ) : null}
           <Field inputRef={input} value={draft} onChangeText={changeDraft} placeholder={replyingTo ? (replyingTo.self ? 'Add a reply' : `Reply to @${replyingTo.handle}`) : 'Add a comment'} multiline minHeight={70} onSubmitEditing={submit} mentions />
           <Button label={replyingTo ? 'Post reply' : 'Post comment'} onPress={submit} disabled={!hasWords} />
-        </View>
+        </View>}
       </View>
     </Screen>
   );

@@ -17,7 +17,7 @@ import { TERMS_VERSION } from '@/lib/legal';
 
 import { fetchBootstrap, searchPosts as apiSearchPosts, signIn as apiSignIn, type Bootstrap } from '@/data/api';
 import * as demoApi from '@/data/api';
-import { CHAT_PHOTO_UNREADABLE, auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ReportedChat, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState } from '@/data/remote';
+import { CHAT_PHOTO_UNREADABLE, auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReportedChat, type ReportedItem, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
@@ -59,6 +59,7 @@ import { learned as learnedTip } from '@/features/tips/tips';
 import { emptyCourtLife, useCourtLife, type CourtLifeActions, type CourtLifeState } from '@/store/courtLife';
 import { forgetLinkPreviews } from '@/features/messages/linkPreview';
 import { groupInviteText } from '@/features/groups/inviteMessage';
+import { KIND_WORD } from '@/features/moderation/reasons';
 import { emptyFeedGroups, useFeedGroups, type FeedGroupsActions, type FeedGroupsState } from '@/store/feedGroups';
 import type {
   DailyHealth,
@@ -103,7 +104,7 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch, HealthShareKey, HeadToHead, MatchSet } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch, HealthShareKey, HeadToHead, MatchSet, Removed, RemovedItem, TakedownKind, TakedownReason } from '@/data/types';
 import { setsWinner } from '@/features/activity/score';
 
 interface NewStoryInput {
@@ -869,12 +870,29 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   loadSiteFeedback: () => Promise<SiteFeedback[]>;
   /** Admins only: take someone off the waitlist (they asked), or clear a feedback note. */
   removeFromWaitlistPage: (table: 'waitlist' | 'site_feedback', id: ID) => Promise<boolean>;
-  loadReportedItem: (kind: 'post' | 'hit', id: ID) => Promise<{ body: string; picture?: string; removed: boolean } | null>;
+  loadReportedItem: (kind: 'post' | 'hit', id: ID) => Promise<ReportedItem | null>;
   /** Admins only: a reported chat's name, people and last 30 messages (admins cannot otherwise read a chat they are not in). */
   loadReportedChat: (conversationId: ID) => Promise<ReportedChat | null>;
   decideReport: (reportId: ID, decision: 'remove' | 'restore' | 'suspend' | 'unsuspend' | 'dismiss') => Promise<boolean>;
   /** Admins only: takes one message (a photo, say) out of a reported chat, for everyone in it, and its photos off the shelf. */
   removeReportedMessage: (messageId: ID) => Promise<boolean>;
+  /**
+   * Admins only (the database refuses anyone else, migration 108): takes a
+   * post, Instant, comment, thread, reply or coach question down. It is
+   * marked removed here at once (the feeds drop it; its author and admins
+   * see it marked), the author is told why, and "Taken down · Undo" shows.
+   * If the server says no it comes back as it was and a toast says why.
+   * `note`: the admin's own words for "Something else" (admins only see it).
+   * `quiet`: no toast on success (an Undo passes it). `reportId`: taken down
+   * from that report; on a database without migration 108 yet it is removed
+   * the Reports screen's old way instead (moderate_report), so nothing stops
+   * working in between.
+   */
+  takeDown: (kind: TakedownKind, id: ID, reason: TakedownReason, options?: { note?: string; quiet?: boolean; reportId?: ID }) => Promise<ModerationResult>;
+  /** Admins only: puts something taken down back exactly as it was. The same marking, rollback and toasts as takeDown. */
+  restoreContent: (kind: TakedownKind, id: ID, quiet?: boolean) => Promise<ModerationResult>;
+  /** Admins only: Settings → Admin → Removed. 'not_ready' before migration 108; null when it could not load. */
+  loadRemoved: () => Promise<RemovedItem[] | 'not_ready' | null>;
 
   /* Messaging */
   openConversationWith: (userId: ID) => ID;
@@ -1486,6 +1504,53 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       authResolved: true,
       error: null,
     });
+}
+
+/** The thing a take-down is about, wherever the app holds it (a comment on an Instant sits with the post comments). */
+function heldItem(s: Pick<AppState, 'posts' | 'stories' | 'comments' | 'questions' | 'answers' | 'coachQuestions' | 'coachReplies'>, kind: TakedownKind, id: ID): { removed?: Removed } | undefined {
+  switch (kind) {
+    case 'post': return s.posts.find((x) => x.id === id);
+    case 'hit': return s.stories.find((x) => x.id === id);
+    case 'comment': case 'hit-comment': return s.comments.find((x) => x.id === id);
+    case 'question': return s.questions.find((x) => x.id === id);
+    case 'answer': return s.answers.find((x) => x.id === id);
+    case 'coach-question': return s.coachQuestions.find((x) => x.id === id);
+    default: return s.coachReplies.find((x) => x.id === id);
+  }
+}
+
+/**
+ * One thing marked taken down (or, with no `removed`, put back) where the
+ * app holds it. Nothing else moves: a feed leaves it out by the mark, and
+ * its author's own pages show the mark. Pure, for a setState updater.
+ */
+function markRemoved(prev: AppState, kind: TakedownKind, id: ID, removed: Removed | undefined): AppState {
+  const mark = <T extends { id: ID; removed?: Removed }>(list: T[]): T[] =>
+    list.map((x) => {
+      if (x.id !== id) return x;
+      const next = { ...x };
+      if (removed) next.removed = removed; else delete next.removed;
+      return next;
+    });
+  // Not held here (a report's post that never loaded, say): nothing changes, nothing redraws.
+  if (!heldItem(prev, kind, id)) return prev;
+  switch (kind) {
+    case 'post': return { ...prev, posts: mark(prev.posts) };
+    case 'hit': return { ...prev, stories: mark(prev.stories) };
+    case 'comment': case 'hit-comment': return { ...prev, comments: mark(prev.comments) };
+    case 'question': return { ...prev, questions: mark(prev.questions) };
+    case 'answer': return { ...prev, answers: mark(prev.answers) };
+    case 'coach-question': return { ...prev, coachQuestions: mark(prev.coachQuestions) };
+    default: return { ...prev, coachReplies: mark(prev.coachReplies) };
+  }
+}
+
+/** Why a take-down or restore did not go through, for its toast. */
+function moderationRefusal(result: ModerationResult, restoring: boolean): { title: string; body?: string } {
+  if (result === 'refused') return { title: 'Only admins can do that' };
+  if (result === 'not_ready') return { title: 'Taking things down isn’t switched on yet', body: 'It needs the database update (migration 108) first.' };
+  if (result === 'gone') return { title: 'It’s already gone', body: 'Whoever posted it has deleted it.' };
+  return { title: restoring ? 'Couldn’t put it back. Try again.' : 'Couldn’t take it down. Try again.' };
 }
 
 function addPosts(prev: AppState, got: { posts: Post[]; comments: Comment[] }): AppState {
@@ -4272,6 +4337,58 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (ok) haptics.commit();
     return ok;
   }, []);
+  // Taking down and putting back (migration 108). Marked here first, then
+  // the server; if it says no, the mark goes back to what it was, unless
+  // something else has changed it meanwhile.
+  const amAdmin = () => !!stateRef.current.users.find((u) => u.id === stateRef.current.currentUserId)?.isAdmin;
+  const restoreRef = useRef<(kind: TakedownKind, id: ID, quiet?: boolean) => Promise<ModerationResult>>(async () => 'failed');
+  const takeDown = useCallback(async (kind: TakedownKind, id: ID, reason: TakedownReason, options: { note?: string; quiet?: boolean; reportId?: ID } = {}): Promise<ModerationResult> => {
+    const { note, quiet = false, reportId } = options;
+    const me = stateRef.current.currentUserId;
+    if (!me || !amAdmin()) return 'refused';
+    const before = heldItem(stateRef.current, kind, id)?.removed;
+    const removed: Removed = { reason, at: new Date().toISOString() };
+    haptics.commit();
+    setState((prev) => markRemoved(prev, kind, id, removed));
+    let result: ModerationResult = live(me, id) ? await remote.takeDown(kind, id, reason, note) : 'done';
+    // Before migration 108, a reported post or Instant still comes down the old way (no reason kept, nobody told).
+    const oldWay = result === 'not_ready' && !!reportId && (kind === 'post' || kind === 'hit') && live(reportId);
+    if (oldWay) result = (await remote.moderateReport(reportId!, 'remove')) ? 'done' : 'failed';
+    if (result !== 'done') {
+      setState((prev) => (heldItem(prev, kind, id)?.removed === removed ? markRemoved(prev, kind, id, before) : prev));
+      showToast({ ...moderationRefusal(result, false), icon: 'alert-circle-outline', long: true });
+      return result;
+    }
+    const word = KIND_WORD[kind];
+    const title = `${word.charAt(0).toUpperCase()}${word.slice(1)} taken down`;
+    // The old way has no Restore of its own here: its report card has one.
+    if (!quiet && oldWay) showToast({ title, body: 'Restore it from its report if you need to.', icon: 'eye-off-outline' });
+    else if (!quiet) {
+      offerUndo(title, () => {
+        // Still down (or never here to see): Undo puts it back.
+        const now = heldItem(stateRef.current, kind, id);
+        return !now || !!now.removed;
+      }, () => { void restoreRef.current(kind, id, true); }, { body: 'Only its author and admins can see it now.', icon: 'eye-off-outline' });
+    }
+    return result;
+  }, []);
+  const restoreContent = useCallback(async (kind: TakedownKind, id: ID, quiet = false): Promise<ModerationResult> => {
+    const me = stateRef.current.currentUserId;
+    if (!me || !amAdmin()) return 'refused';
+    const before = heldItem(stateRef.current, kind, id)?.removed;
+    haptics.commit();
+    setState((prev) => markRemoved(prev, kind, id, undefined));
+    const result: ModerationResult = live(me, id) ? await remote.restoreContent(kind, id) : 'done';
+    if (result !== 'done') {
+      setState((prev) => (before && !heldItem(prev, kind, id)?.removed ? markRemoved(prev, kind, id, before) : prev));
+      showToast({ ...moderationRefusal(result, true), icon: 'alert-circle-outline', long: true });
+      return result;
+    }
+    if (!quiet) showToast({ title: 'Put back', body: 'Everyone who could see it before can see it again.', icon: 'eye-outline' });
+    return result;
+  }, []);
+  restoreRef.current = restoreContent;
+  const loadRemoved = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchRemoved() : []), []);
   // Opening someone's followers or following: their follows come in then.
   const loadFollowsOf = useCallback(async (userId: ID) => {
     if (!live(stateRef.current.currentUserId, userId)) return;
@@ -6710,6 +6827,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadReportedChat,
       decideReport,
       removeReportedMessage,
+      takeDown,
+      restoreContent,
+      loadRemoved,
       openConversationWith,
       sendMessage,
       sendCourt,
@@ -6902,6 +7022,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadReportedChat,
       decideReport,
       removeReportedMessage,
+      takeDown,
+      restoreContent,
+      loadRemoved,
       openConversationWith,
       sendMessage,
       sendCourt,
@@ -6939,12 +7062,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  // Reported posts and hits are left out of everything the screens read.
+  // Reported posts and hits are left out of everything the screens read. So
+  // is anything taken down (migration 108) that is neither yours nor seen by
+  // an admin: the database already keeps those away, so this only catches a
+  // copy held from before (an account that stopped being an admin, say).
+  const amAdminNow = !!currentUser?.isAdmin;
   const unreported = useMemo(() => {
-    if (!state.reportedIds.length) return null;
+    const me = state.currentUserId;
+    const shut = (x: { authorId: ID; removed?: Removed }) => !!x.removed && x.authorId !== me && !amAdminNow;
+    const strays = state.posts.some(shut) || state.stories.some(shut);
+    if (!state.reportedIds.length && !strays) return null;
     const out = new Set(state.reportedIds);
-    return { posts: state.posts.filter((p) => !out.has(p.id)), stories: state.stories.filter((s) => !out.has(s.id)), hitRequests: state.hitRequests.filter((h) => !out.has(h.id)) };
-  }, [state.reportedIds, state.posts, state.stories, state.hitRequests]);
+    return {
+      posts: state.posts.filter((p) => !out.has(p.id) && !shut(p)),
+      stories: state.stories.filter((s) => !out.has(s.id) && !shut(s)),
+      hitRequests: out.size ? state.hitRequests.filter((h) => !out.has(h.id)) : state.hitRequests,
+    };
+  }, [state.reportedIds, state.posts, state.stories, state.hitRequests, state.currentUserId, amAdminNow]);
   const value = useMemo<AppContextValue>(
     () => ({ ...state, ...unreported, ready: state.ready && state.authResolved, currentUser, actions, seeing, shownAtCourt, ageSaysAdult }),
     [state, unreported, currentUser, actions, seeing, shownAtCourt, ageSaysAdult],

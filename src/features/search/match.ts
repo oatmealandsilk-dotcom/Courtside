@@ -125,7 +125,7 @@ export function matchPosts(q: Query, posts: Post[], blocked: Set<ID>): Post[] {
   if (q.mode === 'people' || q.text.length < 2) return [];
   const ranked: { post: Post; rank: number }[] = [];
   for (const post of posts) {
-    if (post.archived || blocked.has(post.authorId)) continue;
+    if (post.archived || post.removed || blocked.has(post.authorId)) continue;
     const tags = tagsOf(post.tags, post.body);
     let rank: number;
     if (q.mode === 'tag') {
@@ -165,7 +165,7 @@ export function matchThreads(q: Query, questions: Question[], blocked: Set<ID>, 
   if (q.mode === 'people' || q.text.length < 2) return [];
   const ranked: { hit: ThreadHit; rank: number }[] = [];
   for (const question of questions) {
-    if (blocked.has(question.authorId)) continue;
+    if (question.removed || blocked.has(question.authorId)) continue;
     const tags = tagsOf(question.tags, `${question.title} ${question.body}`);
     const title = plain(question.title);
     const body = plain(question.body);

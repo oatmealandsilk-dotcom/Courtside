@@ -357,7 +357,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const [shownCount, setShownCount] = useState(25);
   const visible = useMemo(() => {
     // Nobody you have blocked or muted shows up here, the same as in the feed.
-    let list = questions.filter((q) => !blockedIds.includes(q.authorId) && !mutedIds.includes(q.authorId));
+    // Nor does a thread an admin took down (migration 108): its author finds it from their notification.
+    let list = questions.filter((q) => !q.removed && !blockedIds.includes(q.authorId) && !mutedIds.includes(q.authorId));
     if (topic !== 'all') list = list.filter((q) => q.topic === topic);
 
     const newest = (a: typeof list[number], b: typeof list[number]) => Date.parse(b.createdAt) - Date.parse(a.createdAt);

@@ -25,7 +25,7 @@ export function QuestionsPanel() {
   const styles = useThemedStyles(styleDefinitions);
   const { coachQuestions, users } = useApp();
   const list = [...coachQuestions]
-    .filter((q) => !q.resolved)
+    .filter((q) => !q.resolved && !q.removed)
     .sort((a, b) => (a.replyIds.length - b.replyIds.length) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
   return (
     <>

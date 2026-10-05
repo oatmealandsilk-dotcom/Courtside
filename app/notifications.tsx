@@ -52,6 +52,7 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap | 'h
   posted: { name: 'checkmark', tint: 'success' },
   'coach-application': { name: 'ribbon', tint: 'brand' },
   report: { name: 'flag', tint: 'warning' },
+  removed: { name: 'eye-off', tint: 'danger' },
   booking: { name: 'calendar', tint: 'brand' },
   'coach-answer': { name: 'shield-checkmark', tint: 'brand' },
   refund: { name: 'return-down-back', tint: 'success' },
@@ -92,6 +93,8 @@ const VERB: Record<NotificationKind, string> = {
   posted: 'is live',
   'coach-application': 'updated your coach application',
   report: 'sent a report',
+  // The words come from the row's preview (migration 108); see verbFor.
+  removed: 'removed something of yours',
   booking: 'booked you',
   'coach-answer': 'answered your booking',
   refund: 'refunded a booking',
@@ -146,6 +149,17 @@ function routeFor(group: Group): string {
   if (group.targetKind === 'hit-request') return `/hit-request/${group.targetId}`;
   if (group.targetKind === 'question') return `/question/${group.targetId}`;
   return `/coach-question/${group.targetId}`;
+}
+
+/**
+ * The server's notice for something of yours taken down (migration 108),
+ * "Your clip was removed for breaking CourtSide's rules: Violence or
+ * weapons.", in its two parts: what it was, and the reason (none for
+ * "something else").
+ */
+function removedNotice(preview: string | undefined): { thing: string; reason?: string } {
+  const m = /^Your (.+?) was removed for breaking CourtSide.s rules(?:: (.+?))?\.?$/.exec((preview ?? '').trim());
+  return m ? { thing: m[1], reason: m[2] } : { thing: 'post' };
 }
 
 /** Which heading a row sits under: new ones first, then by how long ago. */
@@ -224,6 +238,8 @@ export default function Notifications() {
   // "liked your clip", "liked your photo": the verb names what was liked, not just "post".
   const verbFor = (group: Group) => {
     if (group.kind === 'milestone') return `just passed ${group.preview ?? 'a milestone'}`;
+    // From CourtSide: "removed your clip for breaking its rules"; the reason goes on the line under it.
+    if (group.kind === 'removed') return `removed your ${removedNotice(group.preview).thing} for breaking its rules`;
     if (group.kind === 'session-tag') return `tagged you in a ${group.preview === 'match' ? 'match' : 'practice'}`;
     // Someone who joined through a link you shared (migration 68).
     if (group.kind === 'follow' && group.preview === INVITE_LINE) return 'joined CourtSide from your link';
@@ -354,7 +370,7 @@ export default function Notifications() {
                 ? (posts.find((p) => p.id === group.targetId)?.kind === 'clip' ? 'Your clip' : 'Your post')
                 : group.kind === 'posted'
                 ? (group.preview?.startsWith('Instant') || group.preview?.startsWith('Hit')) ? 'Your instant' : group.targetKind === 'question' ? 'Your question' : 'Your post'
-                : group.kind === 'coach-application' || group.kind === 'refund' ? 'CourtSide'
+                : group.kind === 'coach-application' || group.kind === 'refund' || group.kind === 'removed' ? 'CourtSide'
                 : group.kind === 'activity' ? 'Tennis detected.'
                 : rest.length === 0
                 ? nameOf(first)
@@ -385,7 +401,7 @@ export default function Notifications() {
               >
                 <View>
                   {/* Two faces, overlapped, when more than one person did it. */}
-                  {group.kind === 'coach-application' || group.kind === 'refund' || group.kind === 'activity' ? (
+                  {group.kind === 'coach-application' || group.kind === 'refund' || group.kind === 'activity' || group.kind === 'removed' ? (
                     // From CourtSide itself: the mark, not a person's face.
                     <View style={styles.brandFace}><BrandMark size={24} /></View>
                   ) : rest.length ? (
@@ -412,6 +428,11 @@ export default function Notifications() {
                       <Text style={styles.preview} numberOfLines={1}>
                         {[tagState(tag), yourResult(tag), shortDay(tag.day), duration(tag.minutes)].filter(Boolean).join(' · ')}
                       </Text>
+                    ) : null
+                  ) : group.kind === 'removed' ? (
+                    // The reason only: the whole sentence is already the row's words.
+                    removedNotice(group.preview).reason ? (
+                      <Text style={styles.preview} numberOfLines={2}>Reason: {removedNotice(group.preview).reason}</Text>
                     ) : null
                   ) : group.preview && group.kind !== 'milestone' && group.preview !== INVITE_LINE ? (
                     <Text style={styles.preview} numberOfLines={1}>

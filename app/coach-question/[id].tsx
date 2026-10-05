@@ -12,7 +12,9 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { Tappable } from '@/components/Tappable';
 import { Avatar, Button, Chip, EmptyState, Field, Screen } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
-import { confirmAfterMenu } from '@/lib/confirm';
+import { afterMenu, confirm, confirmAfterMenu } from '@/lib/confirm';
+import { RemovedNote } from '@/features/moderation/RemovedNote';
+import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { RichText } from '@/components/RichText';
@@ -21,7 +23,11 @@ import type { CoachQuestion, CoachReply } from '@/data/types';
 import { SPECIALTY_LABEL } from '@/features/coaching/bookings';
 import { colors, radius, spacing, typography, font } from '@/theme';
 
-/** One Ask-a-Coach thread: the player's question and every coach reply. */
+/**
+ * One Ask-a-Coach thread: the player's question and every coach reply. An
+ * admin also gets "Take down" (or "Restore") in the "…" menu, and on a hold
+ * of a coach's reply; a removed one says so to its author (migration 108).
+ */
 export default function CoachQuestionDetail() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -61,6 +67,26 @@ export default function CoachQuestionDetail() {
   const author = users.find((u) => u.id === question.authorId);
   const iAmCoach = Boolean(currentUser?.isCoach);
   const mine = question.authorId === currentUserId;
+  const admin = Boolean(currentUser?.isAdmin);
+  // Taken down by an admin: only its asker and admins can open it, and coaches can no longer answer.
+  const removed = question.removed;
+  const moderateQuestion = () => {
+    if (removed) {
+      confirmAfterMenu({ title: 'Restore this question?', message: 'Everyone sees it again, with its coach replies.', confirmLabel: 'Restore', onConfirm: () => { void actions.restoreContent('coach-question', question.id); } });
+    } else {
+      // Once the menu has gone: a page opened while it is still fading can fail to appear on a phone.
+      afterMenu(() => router.push({ pathname: '/take-down', params: { kind: 'coach-question', id: question.id } }));
+    }
+  };
+  // An admin's hold on a coach's reply.
+  const moderateReply = (reply: CoachReply) => {
+    haptics.tap();
+    if (reply.removed) {
+      confirm({ title: 'Restore this reply?', message: 'Everyone who could see it before sees it again.', confirmLabel: 'Restore', onConfirm: () => { void actions.restoreContent('coach-reply', reply.id); } });
+    } else {
+      confirm({ title: 'Take down this reply?', message: 'Choose which of CourtSide’s rules it breaks on the next page.', confirmLabel: 'Choose a reason', destructive: true, onConfirm: () => router.push({ pathname: '/take-down', params: { kind: 'coach-reply', id: reply.id } }) });
+    }
+  };
 
   // Asked once, from the menu, the way a post's Delete asks.
   const askToDelete = () => confirmAfterMenu({
@@ -81,13 +107,14 @@ export default function CoachQuestionDetail() {
       title="Ask a coach"
       compactTitle
       onBack={() => goBack()}
-      right={mine ? (
+      right={mine || admin ? (
         <Tappable accessibilityRole="button" accessibilityLabel="More options" onPress={() => setMenuOpen(true)} hitSlop={10} style={styles.more}>
           <Ionicons name="ellipsis-horizontal" size={24} color={colors.text} />
         </Tappable>
       ) : undefined}
     >
       <View style={styles.head}>
+        {removed ? <RemovedNote removed={removed} style={{ alignSelf: 'flex-start' }} /> : null}
         <View style={styles.authorRow}>
           <Avatar name={author?.name ?? '?'} seed={author?.avatarSeed ?? question.id} size={38} />
           <View style={{ flex: 1 }}>
@@ -156,7 +183,12 @@ export default function CoachQuestionDetail() {
               </View>
             </Pressable>
 
-            <RichText style={styles.body}>{reply.body}</RichText>
+            {admin ? (
+              <Pressable accessibilityHint={reply.removed ? 'Hold to restore it' : 'Hold to take it down'} onLongPress={() => moderateReply(reply)} delayLongPress={400}>
+                <RichText style={styles.body}>{reply.body}</RichText>
+              </Pressable>
+            ) : <RichText style={styles.body}>{reply.body}</RichText>}
+            {reply.removed ? <RemovedNote removed={reply.removed} quiet /> : null}
 
             <View style={styles.replyActions}>
               <Pressable
@@ -195,7 +227,7 @@ export default function CoachQuestionDetail() {
         </Text>
       ) : null}
 
-      {iAmCoach ? (
+      {removed ? null : iAmCoach ? (
         <View style={styles.composer}>
           <Field
             label="Your answer"
@@ -238,14 +270,27 @@ export default function CoachQuestionDetail() {
         <Pressable accessibilityLabel="Close menu" onPress={() => setMenuOpen(false)} style={styles.backdrop}>
           <View style={styles.sheet}>
             <View style={styles.grabber} />
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => { setMenuOpen(false); askToDelete(); }}
-              style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: colors.surfaceAlt }]}
-            >
-              <Ionicons name="trash-outline" size={21} color={colors.danger} />
-              <Text style={[styles.menuLabel, { color: colors.danger }]}>Delete question</Text>
-            </Pressable>
+            {mine ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => { setMenuOpen(false); askToDelete(); }}
+                style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: colors.surfaceAlt }]}
+              >
+                <Ionicons name="trash-outline" size={21} color={colors.danger} />
+                <Text style={[styles.menuLabel, { color: colors.danger }]}>Delete question</Text>
+              </Pressable>
+            ) : null}
+            {/* Admins only (the database refuses anyone else). */}
+            {admin ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => { setMenuOpen(false); moderateQuestion(); }}
+                style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: colors.surfaceAlt }]}
+              >
+                <Ionicons name={removed ? 'eye-outline' : 'eye-off-outline'} size={21} color={removed ? colors.text : colors.danger} />
+                <Text style={[styles.menuLabel, !removed && { color: colors.danger }]}>{removed ? 'Restore question' : 'Take down'}</Text>
+              </Pressable>
+            ) : null}
           </View>
         </Pressable>
       </Modal>

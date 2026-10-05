@@ -84,7 +84,7 @@ export function useCourtPosts(place: { id?: string; lat: number; lng: number } |
     if (!place) return [];
     const ctx = courtSeeing({ users, blockedIds, mutedIds, followingIds, currentUserId, shownAtCourt });
     return posts
-      .filter((p) => !!p.court && !p.archived && sameCourt(p.court, place) && canSeeAtCourt(p, ctx))
+      .filter((p) => !!p.court && !p.archived && !p.removed && sameCourt(p.court, place) && canSeeAtCourt(p, ctx))
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   }, [posts, users, blockedIds, mutedIds, followingIds, currentUserId, shownAtCourt, place?.id, place?.lat, place?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 

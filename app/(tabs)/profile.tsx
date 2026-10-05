@@ -23,6 +23,7 @@ import { playStyleLabel, surfaceLabel } from '@/lib/badges';
 import { compactNumber } from '@/lib/format';
 import { TileViews } from '@/components/TileViews';
 import { TilePin } from '@/components/TilePin';
+import { TileRemoved } from '@/features/moderation/RemovedNote';
 import { colors, spacing, typography, font, lift } from '@/theme';
 import { wrappedYear } from '@/features/wrapped/yearInTennis';
 import { useTourTarget } from '@/features/tour/tourStore';
@@ -112,6 +113,8 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
        {(p.videoUrl || p.kind === 'clip') && (p.views ?? 0) > 0 ? <TileViews views={p.views ?? 0} /> : null}
        {/* Pinned, top left; the tile's own label says "pinned" to a screen reader. */}
        {p.pinned && selected !== 'Tagged' ? <TilePin /> : null}
+       {/* Taken down by an admin (migration 108): still yours to see, dimmed and marked; nobody else sees it. */}
+       {p.removed ? <TileRemoved /> : null}
      </Pressable>)}</View>
      {!items.length && <EmptyState title={selected==='Tagged'?'No tagged posts yet':`No ${selected.toLowerCase()} yet`} body="Your shared moments will appear here."/>}
    </View>;

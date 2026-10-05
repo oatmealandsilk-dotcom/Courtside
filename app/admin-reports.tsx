@@ -1,17 +1,18 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { goBack } from '@/lib/goBack';
 
 import { TileCover } from '@/components/TileCover';
 import { Avatar, Button, EmptyState, Screen, SegmentedControl } from '@/components/ui';
-import type { AdminReport, ReportedChat } from '@/data/remote';
+import type { AdminReport, ReportedChat, ReportedItem } from '@/data/remote';
 import { GroupAvatar, groupName } from '@/features/messages/groups';
 import { ChatPhotoImage, PhotoViewer } from '@/features/messages/ChatPhotoViews';
 import { confirm } from '@/lib/confirm';
 import { relativeTime } from '@/lib/format';
+import { reasonLabel } from '@/features/moderation/reasons';
 import type { ChatPhoto, User } from '@/data/types';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -24,10 +25,12 @@ const CHAT_PREVIEW = 8;
 
 /**
  * Reports, for admins only (the database will not hand them to anyone else).
- * Each one shows what was reported and by whom; from it an admin can remove
- * the post or hit (hidden from everyone, but kept), suspend the account (no
- * posting, commenting, replying or messaging), or dismiss the report. Both
- * removing and suspending can be undone from the same card.
+ * Each one shows what was reported and by whom; from it an admin can take
+ * the post or hit down (one tap to the Take down page, which asks why; it is
+ * hidden from everyone but its author, kept, its author told, and the report
+ * marked done: migration 108), suspend the account (no posting, commenting,
+ * replying or messaging), or dismiss the report. Both taking down and
+ * suspending can be undone from the same card.
  *
  * A reported group chat ("Report group") shows its name, who is in it and
  * its last 30 messages, which admins can read only because it was reported
@@ -40,7 +43,7 @@ export default function AdminReports() {
   const { users, currentUser, actions } = useApp();
   const [tab, setTab] = useState<Tab>('open');
   const [reports, setReports] = useState<AdminReport[] | null>(null);
-  const [items, setItems] = useState<Record<string, { body: string; picture?: string; removed: boolean } | null>>({});
+  const [items, setItems] = useState<Record<string, ReportedItem | null>>({});
   // Reported chats, by report, and which of them show every message.
   const [chats, setChats] = useState<Record<string, ReportedChat | null>>({});
   const [chatOpen, setChatOpen] = useState<Record<string, boolean>>({});
@@ -62,7 +65,8 @@ export default function AdminReports() {
     setItems(Object.fromEntries(wanted.map((r, i) => [r.id, got[i]])));
     setChats(Object.fromEntries(chatReports.map((r, i) => [r.id, gotChats[i]])));
   }, [actions]);
-  useEffect(() => { void load(); }, [load]);
+  // Again each time the page comes back into view: a take-down from here closes its report on the server.
+  useFocusEffect(useCallback(() => { void load(); }, [load]));
 
   // Takes one message out of a reported chat, for everyone in it (its photos come off the shelf too).
   const removeLine = (messageId: string, what: string) => confirm({
@@ -171,7 +175,7 @@ export default function AdminReports() {
                     {item.picture ? <TileCover uri={item.picture} style={styles.thumb} accessibilityIgnoresInvertColors /> : <View style={[styles.thumb, styles.noThumb]}><Ionicons name="document-text-outline" size={18} color={colors.textMuted} /></View>}
                     <View style={{ flex: 1, gap: 2 }}>
                       <Text style={styles.body} numberOfLines={2}>{item.body || 'No caption'}</Text>
-                      <Text style={styles.muted} numberOfLines={1}>{person ? `by @${person.handle}` : ''}{item.removed ? ' · Removed' : ''}</Text>
+                      <Text style={styles.muted} numberOfLines={1}>{person ? `by @${person.handle}` : ''}{item.removed ? ` · Removed${item.reason ? `: ${reasonLabel(item.reason)}` : ''}` : ''}</Text>
                     </View>
                   </>
                 )}
@@ -184,7 +188,8 @@ export default function AdminReports() {
                 {report.kind !== 'profile' && item ? (
                   item.removed
                     ? <Button label="Restore" variant="secondary" loading={waiting('restore')} onPress={() => void decide(report, 'restore')} />
-                    : <Button label="Remove" variant="danger" loading={waiting('remove')} onPress={() => void decide(report, 'remove')} />
+                    // The reason is picked on the Take down page; the report is marked done there too (migration 108).
+                    : <Button label="Take down" variant="danger" onPress={() => router.push({ pathname: '/take-down', params: { kind: report.kind, id: report.targetId!, report: report.id, ...(report.userId ? { who: report.userId } : {}) } })} />
                 ) : null}
                 {report.userId ? (
                   isSuspended

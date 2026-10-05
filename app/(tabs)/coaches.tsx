@@ -34,10 +34,11 @@ function Coaching() {
       router.push(w && h ? { pathname: '/ask-coach', params: { from: [x, y, w, h].map(Math.round).join(',') } } : '/ask-coach');
     });
   };
-  const recentQuestions = [...coachQuestions]
+  // A question an admin took down (migration 108) is left out; its asker finds it from their notification.
+  const recentQuestions = coachQuestions.filter((q) => !q.removed)
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
     .slice(0, 3);
-  const unanswered = coachQuestions.filter((q) => q.replyIds.length === 0).length;
+  const unanswered = coachQuestions.filter((q) => !q.removed && q.replyIds.length === 0).length;
   // Your bookings; one still at Stripe's pay page is not a booking yet.
   const myRequests = coachingRequests.filter((r) => r.userId === currentUserId && r.status !== 'awaiting-payment').sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   const myCoach = coaches.find((c) => c.userId === currentUserId);

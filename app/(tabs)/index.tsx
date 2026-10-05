@@ -50,6 +50,8 @@ import { hasSessionStats } from '@/features/activity/format';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { TipPage } from '@/components/TipPage';
 import { isLive } from '@/features/stories/stories';
+import { RemovedNote } from '@/features/moderation/RemovedNote';
+import { show as showToast } from '@/lib/toast';
 import { ClipPlayback } from '@/components/ClipPlayback';
 import { NEWEST_FIRST, rankFeed, type FeedItem, type RankContext } from '@/features/feed/rankFeed';
 import { challengeFor, entriesFor } from '@/features/challenge/weekly';
@@ -172,8 +174,13 @@ export type FeedScope =
 /** What the Feed's top row needs to know from the feed under it: whether a picture fills the top, and whether the chrome is put away. */
 export interface FeedChrome { picture: boolean; hidden: boolean }
 
-/** Only a post shared with everyone is dealt into For you; one shared to a group only stays in that group's feed. */
-const forYou = (p: { imageUrl?: string; videoUrl?: string; groupId?: string }) => reachable(p) && !p.groupId;
+/**
+ * Only a post shared with everyone is dealt into For you; one shared to a
+ * group only stays in that group's feed. One an admin took down (migration
+ * 108) is in no feed: its author and admins see it only on its author's
+ * own pages, marked.
+ */
+const forYou = (p: { imageUrl?: string; videoUrl?: string; groupId?: string; removed?: unknown }) => reachable(p) && !p.groupId && !p.removed;
 
 // On a phone — the app or a phone's browser — a vertical clip fills the whole
 // page, edge to edge. The tall 9:16 box in the middle is for computer windows.
@@ -438,7 +445,7 @@ function Home({ scope, topRow, paused, onChrome }: {
         if (scope.activities) {
           const follows = new Set(data.followingIds);
           const acts = data.posts
-            .filter((p) => !p.archived && !p.groupId && reachable(p) && !!p.session && hasSessionStats(p.session) && (p.authorId === data.currentUserId || follows.has(p.authorId)))
+            .filter((p) => !p.archived && !p.removed && !p.groupId && reachable(p) && !!p.session && hasSessionStats(p.session) && (p.authorId === data.currentUserId || follows.has(p.authorId)))
             .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
           setOrder(acts.map((p) => `p:${p.id}`));
           setActive(0);
@@ -450,7 +457,7 @@ function Home({ scope, topRow, paused, onChrome }: {
         const mine = groupId
           ? data.posts.filter((p) => inGroupFeed(p, groupId, group) && reachable(p)).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
           : ids && byId
-          ? ids.flatMap((id) => { const p = byId.get(id); return p && !p.archived ? [p] : []; })
+          ? ids.flatMap((id) => { const p = byId.get(id); return p && !p.archived && !p.removed ? [p] : []; })
           : data.posts
             // Archived posts only ever in your own archive's set, opened from the Archive page.
             .filter((p) => (set === 'archived'
@@ -465,7 +472,7 @@ function Home({ scope, topRow, paused, onChrome }: {
       }
       // A post whose picture or video is a link only its author's phone could
       // open (an upload that never finished) is left out of the deal.
-      const ranked = rankFeed(data.posts.filter(forYou), data.questions.filter((q) => !q.source), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st)), rankContext(data, seen.current)).flatMap((i) =>
+      const ranked = rankFeed(data.posts.filter(forYou), data.questions.filter((q) => !q.source && !q.removed), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st)), rankContext(data, seen.current)).flatMap((i) =>
         i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : [],
       );
       // Something of yours from the last few minutes goes first, so a fresh post
@@ -474,7 +481,7 @@ function Home({ scope, topRow, paused, onChrome }: {
       // on it sits by its time like everyone else's. Holding your own day's posts
       // above everything put other people's newer posts pages down after a pull.
       const justMine: string[] = NEWEST_FIRST ? [] : data.posts
-        .filter((p) => p.authorId === data.currentUserId && !p.archived && !p.groupId && Date.now() - Date.parse(p.createdAt) < 5 * 60_000)
+        .filter((p) => p.authorId === data.currentUserId && !p.archived && !p.removed && !p.groupId && Date.now() - Date.parse(p.createdAt) < 5 * 60_000)
         .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
         .map((p) => `p:${p.id}`);
       // The ranking already puts what you have watched this visit lower down
@@ -639,7 +646,7 @@ function Home({ scope, topRow, paused, onChrome }: {
     const data = latest.current;
     const hidden = new Set([...data.blockedIds, ...data.mutedIds]);
     const have = new Set(orderRef.current);
-    const fresh = rankFeed(data.posts.filter((p) => forYou(p) && !p.archived && !hidden.has(p.authorId)), data.questions, data.comments, data.currentUserId, data.stories.filter((st) => isLive(st)), rankContext(data, seenNow.current))
+    const fresh = rankFeed(data.posts.filter((p) => forYou(p) && !p.archived && !hidden.has(p.authorId)), data.questions.filter((q) => !q.removed), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st)), rankContext(data, seenNow.current))
       .flatMap((i) => (i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : []))
       .filter((k) => !have.has(k));
     if (!fresh.length) return;
@@ -797,6 +804,8 @@ function Home({ scope, topRow, paused, onChrome }: {
         // whatever else asked for it; a group's feed also holds its members'
         // posts to everyone.
         if (post && post.groupId && post.groupId !== scope?.groupId && !scope?.userId && !scope?.ids) return [];
+        // Taken down by an admin (migration 108): only on its author's own pages (which its author and admins alone can open), marked.
+        if (post?.removed && !scope?.userId) return [];
         return post && !away(post.authorId, post) && (!post.archived || scope?.set === 'archived') ? [{ type: 'post' as const, post }] : [];
       }
       if (key.startsWith('h:')) {
@@ -805,7 +814,7 @@ function Home({ scope, topRow, paused, onChrome }: {
         return story && !away(story.authorId) && isLive(story) ? [{ type: 'hit' as const, story }] : [];
       }
       const question = questionById.get(id);
-      return question && !away(question.authorId) ? [{ type: 'question' as const, question }] : [];
+      return question && !away(question.authorId) && !question.removed ? [{ type: 'question' as const, question }] : [];
     });
   }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds, scope?.set, scope?.groupId, scope?.start, keepMuted]);
   // This week's challenge, and its top clips so far. They are settled once
@@ -1056,8 +1065,14 @@ function Home({ scope, topRow, paused, onChrome }: {
     if (quick) likeByTap(postId, alreadyLiked);
   };
 
-  const share = (kind: 'post' | 'question', id: string) =>
+  const share = (kind: 'post' | 'question', id: string) => {
+    // Something taken down can't be sent on: nobody else could open it.
+    if (kind === 'post' ? posts.some((p) => p.id === id && p.removed) : questions.some((q) => q.id === id && q.removed)) {
+      showToast({ title: 'This was taken down', body: 'Only whoever posted it and CourtSide’s admins can see it, so it can’t be shared.', icon: 'eye-off-outline' });
+      return;
+    }
     router.push(`/share?kind=${kind}&id=${id}`);
+  };
 
   /**
    * How many items either side of the current one stay mounted.
@@ -1438,6 +1453,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                       onReady={(ok) => markReady(post.id, ok)}
                     />
                     {cover(post.id, 'mark')}
+                    {post.removed ? <View pointerEvents="none" style={[styles.removedWrap, { top: insets.top + 12 }]}><RemovedNote removed={post.removed} /></View> : null}
                   </View>
                 );
               }
@@ -1465,6 +1481,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                         active={active === index && focused}
                       />
                     </View>
+                    {post.removed ? <View pointerEvents="none" style={[styles.removedWrap, { top: insets.top + 12 }]}><RemovedNote removed={post.removed} /></View> : null}
                   </View>
                 );
               }
@@ -1592,6 +1609,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                   </ChromeLayer>
                  </Reanimated.View></PinchZone>
                   {post.videoUrl ? cover(post.id, 'word', post.thumbnailUrl, post.orientation === 'landscape') : null}
+                  {post.removed ? <View pointerEvents="none" style={[styles.removedWrap, { top: insets.top + 12 }]}><RemovedNote removed={post.removed} /></View> : null}
                 </View>
               );
             }).map((page, index) => {
@@ -1704,6 +1722,9 @@ const styleDefinitions = StyleSheet.create({
   markPill: { width: 46, height: 46, borderRadius: 13, backgroundColor: `${colors.bg}E6`, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   viewer: { flex: 1, width: '100%', minHeight: 0 },
   clip: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
+  // "Removed: <reason>" across the top of a page an admin took down (only its author and admins ever see
+  // one, and only in a scoped feed): level with the back button, clear of it on both sides.
+  removedWrap: { position: 'absolute', left: 64, right: 64, alignItems: 'center', zIndex: 6 },
   holdPage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
   holdWord: { ...typography.display, fontSize: 34, ...font('600'), color: colors.brand, letterSpacing: -1.2 },
   bone: { height: 12, borderRadius: 6, backgroundColor: colors.border },

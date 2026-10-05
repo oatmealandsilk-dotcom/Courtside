@@ -26,7 +26,8 @@ export default function AdminWelcome() {
   const [stats, setStats] = useState<FirstDayStats | null>(null);
   const load = useCallback(async () => {
     const [got, numbers] = await Promise.all([actions.loadFirstPosts(), actions.loadFirstDayStats()]);
-    setPosts(got);
+    // A first post an admin took down (migration 108) needs no welcome.
+    setPosts(got.filter((p) => !p.removed));
     setStats(numbers);
   }, [actions]);
   useEffect(() => { void load(); }, [load]);

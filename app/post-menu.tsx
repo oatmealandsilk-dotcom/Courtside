@@ -16,6 +16,7 @@ import { postShareText } from '@/features/share/shareText';
 import { confirm, confirmBlock } from '@/lib/confirm';
 import { notKnownAdult } from '@/features/players/age';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
+import { removedLine } from '@/features/moderation/reasons';
 import type { Post, Story } from '@/data/types';
 
 type Row = {
@@ -32,7 +33,8 @@ type Row = {
  * The "…" menu under a post's Save button: a short sheet that slides up from
  * the bottom. Your own post can be pinned, archived or deleted; anyone else's
  * can be reported, and its author muted or blocked. Everything else — save,
- * send, share the link — is there for both.
+ * send, share the link — is there for both. Admins also get "Take down"
+ * (or "Restore" once it is down); nobody else ever sees either.
  */
 export default function PostMenu() {
   const styles = useThemedStyles(styleDefinitions);
@@ -76,8 +78,13 @@ export default function PostMenu() {
   if (!item) return <View style={styles.backdrop}><SheetBackdrop /><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => goBack('/')} style={StyleSheet.absoluteFill} /></View>;
 
   const url = shareLink('post', item.id, currentUser?.handle);
+  // Taken down by an admin (migration 108): only its author and admins see
+  // it, so there is nothing to save, send, share or edit; deleting and
+  // archiving still work.
+  const removed = item.removed;
+  const admin = !!currentUser?.isAdmin;
   // A hit is a moment, not a keepsake: nothing to save or send on.
-  const rows: Row[] = post ? [
+  const rows: Row[] = post && !removed ? [
     { key: 'save', icon: isSaved ? 'bookmark' : 'bookmark-outline', label: isSaved ? 'Remove from saved' : 'Save', onPress: () => { actions.toggleSavePost(post.id); close(); } },
     { key: 'send', icon: 'paper-plane-outline', label: 'Send to…', onPress: () => router.replace({ pathname: '/share', params: { kind: 'post', id: post.id } }) },
     // Your own post with a session on it shares as the session's story picture (share-session), the way Strava does; any other post as its own card.
@@ -92,19 +99,21 @@ export default function PostMenu() {
     );
   }
   // The original file, for the owner and for CourtSide's own channels (an admin): one tap to the camera roll, then Instagram.
-  if (post && (post.videoUrl || post.imageUrl) && (mine || (currentUser?.isAdmin && post.featureOk !== false))) {
+  if (post && (post.videoUrl || post.imageUrl) && (mine || (currentUser?.isAdmin && post.featureOk !== false && !removed))) {
     // Android's share sheet has no "Save to gallery" (a real save needs a new build: docs/android-setup.md), so there it says what it does.
     rows.push({ key: 'download', icon: 'download-outline', label: Platform.OS === 'android' ? 'Share original' : 'Download', note: currentUser?.isAdmin && !mine ? 'The author said CourtSide may feature this.' : Platform.OS === 'android' ? 'The original file, to send to another app.' : 'The original, to post elsewhere.', onPress: async () => { try { await downloadMedia(post.videoUrl ?? post.imageUrl!, post.id.slice(0, 8)); close(); } catch (err) { setDone(err instanceof Error ? err.message : 'Could not download.'); } } });
   }
   if (mine && post) {
     rows.push(
-      { key: 'edit', icon: 'create-outline', label: 'Edit', onPress: () => router.replace({ pathname: '/edit-post', params: { id: post.id, kind: 'post' } }) },
-      // A place only typed, with no court: one tap to pick the court, so the post shows on its page.
-      // Known adults only: a court tag says where a minor regularly plays.
-      ...(post.location && !post.court && currentUser && !notKnownAdult(currentUser)
-        ? [{ key: 'court', icon: 'court' as const, label: 'Add the court', note: 'Shows this post on the court’s page.', onPress: () => router.replace({ pathname: '/edit-post', params: { id: post.id, kind: 'post', pickPlace: '1' } }) }]
-        : []),
-      { key: 'pin', icon: 'pin-outline', label: post.pinned ? 'Unpin from profile' : 'Pin to profile', note: post.pinned ? undefined : 'Shown first on your profile.', onPress: () => { actions.togglePinPost(post.id); close(); } },
+      ...(removed ? [] : [
+        { key: 'edit', icon: 'create-outline' as const, label: 'Edit', onPress: () => router.replace({ pathname: '/edit-post', params: { id: post.id, kind: 'post' } }) },
+        // A place only typed, with no court: one tap to pick the court, so the post shows on its page.
+        // Known adults only: a court tag says where a minor regularly plays.
+        ...(post.location && !post.court && currentUser && !notKnownAdult(currentUser)
+          ? [{ key: 'court', icon: 'court' as const, label: 'Add the court', note: 'Shows this post on the court’s page.', onPress: () => router.replace({ pathname: '/edit-post', params: { id: post.id, kind: 'post', pickPlace: '1' } }) }]
+          : []),
+        { key: 'pin', icon: 'pin-outline' as const, label: post.pinned ? 'Unpin from profile' : 'Pin to profile', note: post.pinned ? undefined : 'Shown first on your profile.', onPress: () => { actions.togglePinPost(post.id); close(); } },
+      ]),
       { key: 'archive', icon: 'archive-outline', label: post.archived ? 'Unarchive' : 'Archive', note: post.archived ? undefined : 'Hidden from everyone; kept in your archive.', onPress: () => { actions.toggleArchivePost(post.id); close(); } },
       // Asked once, the way other apps ask; the menu stays up behind the question, so Cancel leaves you on it.
       { key: 'delete', icon: 'trash-outline', label: 'Delete', danger: true, onPress: () => confirm({ title: 'Delete post?', message: "This can't be undone.", confirmLabel: 'Delete', destructive: true, onConfirm: () => { actions.deletePost(post.id); close(); } }) },
@@ -122,6 +131,14 @@ export default function PostMenu() {
       } },
     );
   }
+  // Admins only (the database refuses anyone else): take it down, with a
+  // reason, on its own page; or, once down, put it back.
+  if (admin) {
+    const what = isHit ? 'hit' as const : 'post' as const;
+    rows.push(removed
+      ? { key: 'restore', icon: 'eye-outline', label: 'Restore', note: 'Everyone who could see it before sees it again.', onPress: () => { void actions.restoreContent(what, item.id); close(); } }
+      : { key: 'takedown', icon: 'eye-off-outline', label: 'Take down', note: 'Breaks CourtSide’s rules. Its author is told why.', danger: true, onPress: () => router.replace({ pathname: '/take-down', params: { kind: what, id: item.id } }) });
+  }
 
   return (
     <View style={styles.backdrop}>
@@ -135,17 +152,31 @@ export default function PostMenu() {
             <Text style={styles.doneText}>{done}</Text>
             <Pressable accessibilityRole="button" onPress={close} style={styles.doneButton}><Text style={styles.doneButtonText}>Done</Text></Pressable>
           </View>
-        ) : rows.map((row) => (
-          <Pressable key={row.key} accessibilityRole="button" accessibilityLabel={row.label} onPress={() => { void row.onPress(); }} style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
-            {row.icon === 'court'
-              ? <View style={styles.glyph}><CourtGlyph size={17} color={row.danger ? colors.danger : colors.text} /></View>
-              : <Ionicons name={row.icon} size={22} color={row.danger ? colors.danger : colors.text} />}
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.label, row.danger && { color: colors.danger }]}>{row.label}</Text>
-              {row.note ? <Text style={styles.note}>{row.note}</Text> : null}
-            </View>
-          </Pressable>
-        ))}
+        ) : (
+          <>
+            {removed ? (
+              // Why it is down, in the words its author was given; who did it is never shown.
+              <View style={styles.removedBox} accessibilityRole="text">
+                <Ionicons name="eye-off-outline" size={20} color={colors.danger} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.removedTitle}>{removedLine(removed)}</Text>
+                  <Text style={styles.note}>{mine ? 'Only you and CourtSide’s admins can see it.' : 'Only its author and admins can see it.'}</Text>
+                </View>
+              </View>
+            ) : null}
+            {rows.map((row) => (
+              <Pressable key={row.key} accessibilityRole="button" accessibilityLabel={row.label} onPress={() => { void row.onPress(); }} style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
+                {row.icon === 'court'
+                  ? <View style={styles.glyph}><CourtGlyph size={17} color={row.danger ? colors.danger : colors.text} /></View>
+                  : <Ionicons name={row.icon} size={22} color={row.danger ? colors.danger : colors.text} />}
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.label, row.danger && { color: colors.danger }]}>{row.label}</Text>
+                  {row.note ? <Text style={styles.note}>{row.note}</Text> : null}
+                </View>
+              </Pressable>
+            ))}
+          </>
+        )}
       </Animated.View>
     </View>
   );
@@ -161,6 +192,8 @@ const styleDefinitions = StyleSheet.create({
   rowPressed: { backgroundColor: colors.surface },
   label: { ...typography.body, fontWeight: '600', color: colors.text },
   note: { ...typography.small, color: colors.textMuted, marginTop: 2 },
+  removedBox: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, paddingHorizontal: spacing.md, marginBottom: 4, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  removedTitle: { ...typography.body, fontWeight: '600', color: colors.danger },
   doneBox: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
   doneText: { ...typography.body, color: colors.text, textAlign: 'center' },
   doneButton: { marginTop: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: 10, borderRadius: radius.pill, backgroundColor: colors.brand },

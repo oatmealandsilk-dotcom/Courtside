@@ -14,6 +14,7 @@ import { ClipPlayback } from '@/components/ClipPlayback';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { Avatar, Button, EmptyState } from '@/components/ui';
 import { hitClock, isLive } from '@/features/stories/stories';
+import { RemovedNote } from '@/features/moderation/RemovedNote';
 import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -151,6 +152,8 @@ export default function StoryViewer() {
       </View>
 
       <View pointerEvents="box-none" style={[styles.bottom, { paddingBottom: insets.bottom + 16 }]}>
+        {/* Taken down by an admin (migration 108): only its author and admins get here, and see why. */}
+        {current.removed ? <RemovedNote removed={current.removed} style={{ alignSelf: 'flex-start' }} /> : null}
         {current.caption ? <Text style={styles.caption}>{current.caption}</Text> : null}
         <View style={styles.reactRow}>
           <Pressable accessibilityRole="button" accessibilityLabel={liked ? 'Unlike hit. Hold to see who liked it' : 'Like hit. Hold to see who liked it'} onPress={() => actions.toggleLikeStory(current.id)} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: current.id, kind: 'hit' } }); }} style={styles.views}>
@@ -168,7 +171,7 @@ export default function StoryViewer() {
               <Ionicons name="stats-chart" size={14} color="#FFFFFF" />
               <Text style={styles.viewsText}>{viewers} {viewers === 1 ? 'view' : 'views'}</Text>
             </View>
-            {isLive(current) || current.archived ? (
+            {current.removed ? null : isLive(current) || current.archived ? (
               <Button
                 label={current.archived ? 'Unarchive' : 'Archive'}
                 variant="secondary"
