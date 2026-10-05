@@ -537,7 +537,8 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    * map opens), or, with `view`, the part of the full map in view as it
    * moves (migration 63 answers for one part of the map at a time).
    */
-  loadLastSeen: (view?: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null) => Promise<void>;
+  /** Resolves false when the answer did not land (failed, or overtaken by a newer view), so the map can ask again. */
+  loadLastSeen: (view?: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null) => Promise<boolean>;
   /**
    * `activityId`: the tracker session it was logged from, which then counts as logged.
    * `sets`: a match's score, your side first (migration 91); when one side took more sets, the result follows it.
@@ -2494,9 +2495,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Goes up once the server has forgotten your spot (Location off): a load
   // asked for before then may still carry strangers near it, and is dropped.
   const spotGen = useRef(0);
-  const loadLastSeen = useCallback(async (view?: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null) => {
+  // Each view asked for gets the next number: only the newest view's answer is kept,
+  // so a slow answer for where the map was cannot replace the one for where it is.
+  const viewSeq = useRef(0);
+  const loadLastSeen = useCallback(async (view?: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null): Promise<boolean> => {
     const me = stateRef.current.currentUserId;
-    if (!live(me)) return;
+    if (!live(me)) return true;
     if (seenFor.current !== me) { seenFor.current = me; seenAround.current = {}; seenInView.current = {}; }
     // Location off that never reached the server: try the forget again first. Until it
     // goes through, your own row stays off your map, as the switch says.
@@ -2507,9 +2511,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         spotGen.current += 1;
         seenInView.current = Object.fromEntries(Object.entries(seenInView.current).filter(([, r]) => r.mutual));
       } else stillShown = true;
-      if (stateRef.current.currentUserId !== me) return;
+      if (stateRef.current.currentUserId !== me) return false;
     }
     const gen = spotGen.current;
+    const seq = view ? ++viewSeq.current : 0;
     // The map's own function first (migration 63): each pin where you may see
     // it. A database without it yet answers 'missing', and the map reads the
     // old table (everyone about a kilometre out) the way it always has.
@@ -2528,14 +2533,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       else { if (got) mapLive = true; rows = got; }
     }
     if (mapLive === false) rows = await remote.fetchLastSeen();
-    if (stateRef.current.currentUserId !== me || spotGen.current !== gen) return;
+    if (stateRef.current.currentUserId !== me || spotGen.current !== gen || (view && seq !== viewSeq.current)) return false;
     // Live, and the settings row said nothing (an account with no settings saved yet): never chosen.
     if (mapLive !== stateRef.current.mapLive || (mapLive && stateRef.current.mapVisibility === undefined && stateRef.current.remoteLoaded)) {
       setState((prev) => ({ ...prev, mapLive, mapVisibility: mapLive && prev.mapVisibility === undefined && prev.remoteLoaded ? null : prev.mapVisibility }));
     }
     // A failed load keeps what was there and is not "loaded": an error must
     // never read as nobody near you (the "You're early" card waits on this).
-    if (!rows) return;
+    if (!rows) return false;
     const loaded = Object.fromEntries(rows.filter((r) => !(stillShown && r.userId === me)).map((r) => [r.userId, r]));
     // The old table answers for everywhere at once: it replaces both.
     if (mapLive === false) { seenAround.current = loaded; seenInView.current = {}; }
@@ -2543,6 +2548,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     else seenAround.current = loaded;
     const merged = { ...seenAround.current, ...seenInView.current };
     setState((prev) => ({ ...prev, lastSeen: merged, lastSeenLoaded: true, users: withMapRings(prev.users, merged, me) }));
+    return true;
   }, []);
 
   const setMapVisibility = useCallback(async (v: MapVisibility): Promise<boolean> => {

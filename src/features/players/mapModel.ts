@@ -179,7 +179,8 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
     const hLng = Math.min(1, Math.max(0.01, b.maxLng - b.minLng));
     const area = { minLat: midLat - hLat, maxLat: midLat + hLat, minLng: midLng - hLng, maxLng: midLng + hLng };
     lastArea.current = area;
-    void actions.loadLastSeen(area);
+    // An answer that failed (or was overtaken) lets the next small pan here ask again.
+    void actions.loadLastSeen(area).catch(() => false).then((ok) => { if (!ok && lastArea.current === area) lastArea.current = null; });
   }, [card, actions.loadLastSeen]); // eslint-disable-line react-hooks/exhaustive-deps
   const ranked = useMemo<Placed[]>(
     () => players
