@@ -8,11 +8,16 @@
  *   npm run smoke -- --dist dist        test a build that already exists
  *   npm run smoke -- --serve            build and serve it, no test (to look around)
  *   npm run smoke -- --headed           watch the browser while it runs
+ *   npm run smoke -- --out shots        put the screenshots in shots/ (only the
+ *                                       tester's own NN-step.png files there are
+ *                                       ever replaced; nothing else is deleted)
  *
  * What it does:
  *   1. Builds the web app in demo mode: no Supabase settings, so the app runs
  *      on its built-in sample data and never talks to the live database. Any
- *      request to Supabase is blocked as well, and fails the run.
+ *      request to Supabase is blocked as well, and fails the run. Each run
+ *      builds into a fresh folder of its own (removed when it ends), so runs
+ *      in several worktrees at once never trip over each other.
  *   2. Serves the build on a free port on this machine.
  *   3. Drives headless Chrome at a phone's width (390px) through sign-in, every
  *      tab and the main pages, over Chrome's own debugging connection (no
@@ -100,21 +105,55 @@ class SetupError extends Error {}
 // 1. Build (demo mode)
 // ---------------------------------------------------------------------------
 
+/** How long the build may take before the run gives up on it, rather than hanging until GitHub stops the job. */
+const BUILD_TIMEOUT = Number(process.env.SMOKE_BUILD_TIMEOUT_MS) || 5 * 60 * 1000;
+
+/** Build folders this run made, removed again when it ends (however it ends). */
+const madeBuilds = new Set();
+function removeBuilds() {
+  for (const dist of madeBuilds) {
+    try { fs.rmSync(dist, { recursive: true, force: true }); } catch { /* best effort */ }
+    madeBuilds.delete(dist);
+  }
+}
+process.on('exit', removeBuilds);
+
+/**
+ * Build folders left behind by a run that was killed outright (nothing gets
+ * to tidy up then). Only ones over a day old: a run that old is not running.
+ */
+function removeStaleBuilds(scratch) {
+  const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+  for (const entry of fs.readdirSync(scratch, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !entry.name.startsWith('dist-')) continue;
+    const folder = path.join(scratch, entry.name);
+    try { if (fs.statSync(folder).mtimeMs < dayAgo) fs.rmSync(folder, { recursive: true, force: true }); } catch { /* another run's, or gone */ }
+  }
+}
+
 function buildDemo() {
   // Its own scratch folder, so its own Metro cache (Metro keeps it in the
   // system's temp folder). Metro's shared cache does not notice the Supabase
   // settings changing, so sharing it would hand this build the real settings
   // from an earlier real build, or hand a later real build the empty ones.
-  const scratch = path.join(os.tmpdir(), 'courtside-smoke');
-  const dist = path.join(scratch, 'dist');
+  // Every smoke run shares this one (it is demo-only), so later builds are quick.
+  // SMOKE_CACHE_DIR moves it (GitHub keeps it between runs from there).
+  const scratch = path.resolve(process.env.SMOKE_CACHE_DIR || path.join(os.tmpdir(), 'courtside-smoke'));
   fs.mkdirSync(scratch, { recursive: true });
-  fs.rmSync(dist, { recursive: true, force: true });
+  removeStaleBuilds(scratch);
+  // The build itself goes in a folder of its own for this run: several
+  // worktrees may run the tester at once, and a shared folder would be wiped
+  // or replaced by another run halfway through this one.
+  const dist = fs.mkdtempSync(path.join(scratch, 'dist-'));
+  madeBuilds.add(dist);
   log('building the web app in demo mode →', dist);
   const expo = path.join(ROOT, 'node_modules', '.bin', process.platform === 'win32' ? 'expo.cmd' : 'expo');
   if (!fs.existsSync(expo)) throw new SetupError('node_modules is missing: run `npm install --legacy-peer-deps` first.');
   const result = spawnSync(expo, ['export', '--platform', 'web', '--output-dir', dist], {
     cwd: ROOT,
     maxBuffer: 64 * 1024 * 1024,
+    timeout: BUILD_TIMEOUT,
+    killSignal: 'SIGKILL',
     stdio: OPTS.verbose ? 'inherit' : 'pipe',
     encoding: 'utf8',
     env: {
@@ -131,9 +170,13 @@ function buildDemo() {
       TEMP: scratch,
     },
   });
+  if (result.error?.code === 'ETIMEDOUT') {
+    if (!OPTS.verbose) process.stderr.write(`${result.stdout ?? ''}\n${result.stderr ?? ''}\n`);
+    throw new SetupError(`the web build took longer than ${(BUILD_TIMEOUT / 60000).toFixed(0)} minutes, so it was stopped (SMOKE_BUILD_TIMEOUT_MS sets the limit)`);
+  }
   if (result.status !== 0) {
     if (!OPTS.verbose) process.stderr.write(`${result.stdout ?? ''}\n${result.stderr ?? ''}\n`);
-    throw new SetupError(`the web build failed (expo export exited ${result.status})`);
+    throw new SetupError(`the web build failed (expo export exited ${result.status ?? result.signal ?? result.error?.message})`);
   }
   return dist;
 }
@@ -796,7 +839,35 @@ function takeProblems(page, since) {
   return page.problems.slice(since);
 }
 
+/** The tester's own screenshots ("01-sign-in.png", "07-settings-FAILED.png"): the only files it ever deletes. */
+const SCREENSHOT = /^\d{2}-[a-z0-9-]+(-FAILED)?\.png$/;
+
+/**
+ * Makes the screenshot folder, and clears out the last run's screenshots.
+ * Nothing else in it is touched: `--out` can name any folder (even the
+ * project, or the Desktop), so the folder itself is never deleted.
+ */
+function prepareScreenshots(out) {
+  try {
+    fs.mkdirSync(out, { recursive: true });
+  } catch (err) {
+    throw new SetupError(`cannot use ${out} for the screenshots: ${err.message}`);
+  }
+  if (!fs.statSync(out).isDirectory()) throw new SetupError(`${out} is a file, not a folder: choose another --out`);
+  for (const entry of fs.readdirSync(out, { withFileTypes: true })) {
+    if (entry.isFile() && SCREENSHOT.test(entry.name)) fs.rmSync(path.join(out, entry.name));
+  }
+}
+
 async function main() {
+  try {
+    return await run();
+  } finally {
+    removeBuilds();
+  }
+}
+
+async function run() {
   let dist = OPTS.dist ? path.resolve(ROOT, OPTS.dist) : '';
   if (dist && !fs.existsSync(path.join(dist, 'index.html'))) throw new SetupError(`no web build at ${dist}`);
   if (!dist) dist = buildDemo();
@@ -805,11 +876,12 @@ async function main() {
   const { server, origin } = await serve(dist);
   if (OPTS.serve) {
     console.log(`Serving the demo build at ${origin} — press Ctrl+C to stop.`);
+    // Stopped by Ctrl+C: leave through process.exit, so the build folder is removed.
+    for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]]) process.once(signal, () => { server.close(); process.exit(code); });
     return new Promise(() => {});
   }
 
-  fs.rmSync(OPTS.out, { recursive: true, force: true });
-  fs.mkdirSync(OPTS.out, { recursive: true });
+  prepareScreenshots(OPTS.out);
   const chrome = await launchChrome();
   const results = [];
   let page;
@@ -857,7 +929,13 @@ async function main() {
   return report(results, page);
 }
 
-/** A demo build has no Supabase address in it; a real one would let the test touch live data. */
+/**
+ * The app's code in a demo build has no Supabase address in it; a real build's
+ * would let the test touch live data. Only the app's code is checked: the
+ * waitlist page (public/waitlist.html, copied into every build as it is) names
+ * auth.courtsidebase.com, but the tester never opens it, and Chrome blocks
+ * that address anyway.
+ */
 function checkDemoBuild(dist) {
   const scripts = path.join(dist, '_expo', 'static', 'js', 'web');
   if (!fs.existsSync(scripts)) return;
@@ -865,7 +943,7 @@ function checkDemoBuild(dist) {
     if (!file.endsWith('.js')) continue;
     const code = fs.readFileSync(path.join(scripts, file), 'utf8');
     const live = code.match(/https:\/\/(auth\.courtsidebase\.com|[a-z0-9]{20}\.supabase\.co)/);
-    if (live) throw new SetupError(`this build talks to the live backend (${live[1]} in ${file}); the auto-tester only runs demo builds`);
+    if (live) throw new SetupError(`this build's app code talks to the live backend (${live[1]} in ${file}); the auto-tester only runs demo builds`);
   }
 }
 

@@ -65,12 +65,26 @@ jobs:
       - name: Install
         run: npm install --legacy-peer-deps
 
-      # Chrome comes installed on GitHub's Ubuntu machines.
+      # The build's working files (Metro's cache, demo-only), kept between runs
+      # so a build only redoes the files that changed. Saved only by a run that
+      # passes; a new one starts whenever package-lock.json changes.
+      - name: Reuse the last build's working files
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/courtside-smoke
+          key: smoke-build-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      # Chrome comes installed on GitHub's Ubuntu machines. Stopped after 7
+      # minutes, so a stuck run still counts as failed and keeps its screenshots.
       - name: Click through the app
         run: npm run smoke
+        timeout-minutes: 7
+        env:
+          SMOKE_CACHE_DIR: ${{ runner.temp }}/courtside-smoke
 
+      # Also when the whole job ran out of time (that counts as cancelled, not failed).
       - name: Keep the screenshots
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: smoke-screenshots
