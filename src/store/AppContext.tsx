@@ -281,6 +281,25 @@ function readAsked(key: string): boolean | null {
   }
 }
 
+/**
+ * A Location off that has not reached the server yet: the account whose spot
+ * still needs forgetting, kept on this device until a forget goes through.
+ */
+const FORGET_KEY = 'courtside-location-forget';
+async function readForgetPending(): Promise<string | null> {
+  try {
+    return Platform.OS === 'web' ? localStorage.getItem(FORGET_KEY) : await AsyncStorage.getItem(FORGET_KEY);
+  } catch {
+    return null;
+  }
+}
+function writeForgetPending(who: ID | null) {
+  try {
+    if (Platform.OS === 'web') { if (who) localStorage.setItem(FORGET_KEY, who); else localStorage.removeItem(FORGET_KEY); }
+    else void (who ? AsyncStorage.setItem(FORGET_KEY, who) : AsyncStorage.removeItem(FORGET_KEY)).catch(() => {});
+  } catch {}
+}
+
 function readDefaultPayment(): ID {
   try {
     if (Platform.OS !== 'web') return 'pm-visa';
@@ -2479,6 +2498,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = stateRef.current.currentUserId;
     if (!live(me)) return;
     if (seenFor.current !== me) { seenFor.current = me; seenAround.current = {}; seenInView.current = {}; }
+    // Location off that never reached the server: try the forget again first. Until it
+    // goes through, your own row stays off your map, as the switch says.
+    let stillShown = false;
+    if (!stateRef.current.locationEnabled && (await readForgetPending()) === me) {
+      if (await remote.forgetLastSeen().catch(() => false)) {
+        writeForgetPending(null);
+        spotGen.current += 1;
+        seenInView.current = Object.fromEntries(Object.entries(seenInView.current).filter(([, r]) => r.mutual));
+      } else stillShown = true;
+      if (stateRef.current.currentUserId !== me) return;
+    }
     const gen = spotGen.current;
     // The map's own function first (migration 63): each pin where you may see
     // it. A database without it yet answers 'missing', and the map reads the
@@ -2506,7 +2536,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // A failed load keeps what was there and is not "loaded": an error must
     // never read as nobody near you (the "You're early" card waits on this).
     if (!rows) return;
-    const loaded = Object.fromEntries(rows.map((r) => [r.userId, r]));
+    const loaded = Object.fromEntries(rows.filter((r) => !(stillShown && r.userId === me)).map((r) => [r.userId, r]));
     // The old table answers for everywhere at once: it replaces both.
     if (mapLive === false) { seenAround.current = loaded; seenInView.current = {}; }
     else if (view) seenInView.current = loaded;
@@ -5370,8 +5400,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // for its view keeps only your friends, so strangers loaded a moment
         // ago do not stay on the pins and in the tray until the next pan. A
         // load asked for before the server forgot is dropped when it lands.
-        void remote.forgetLastSeen().then((ok) => {
-          if (!ok || stateRef.current.currentUserId !== self) return;
+        // Kept on this device until the server has it, so a failed forget is tried again (loadLastSeen).
+        writeForgetPending(self);
+        void remote.forgetLastSeen().catch(() => false).then((ok) => {
+          if (stateRef.current.currentUserId !== self || stateRef.current.locationEnabled) return;
+          if (!ok) {
+            showToast({ title: 'Couldn’t hide your spot yet', body: 'Others may still see it. We’ll keep trying.', icon: 'cloud-offline-outline' });
+            return;
+          }
+          writeForgetPending(null);
           spotGen.current += 1;
           seenInView.current = Object.fromEntries(Object.entries(seenInView.current).filter(([, r]) => r.mutual));
           return loadLastSeen();
@@ -5394,6 +5431,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const place = nearestPlace(result.lat, result.lng);
     haptics.tap();
     remember(true);
+    writeForgetPending(null);
     setState((prev) => ({ ...prev, locationEnabled: true, locationAsked: true, detectedLocation: place.name, detectedCoords: { lat: result.lat, lng: result.lng } }));
     return null;
   }, [loadLastSeen]);
@@ -5422,6 +5460,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const marked = remote.markLastSeen(at.lat, at.lng, state.detectedLocation ?? undefined);
     if (refresh) void marked.then(() => loadLastSeen()).catch(() => undefined);
   }, [state.currentUserId, state.detectedCoords, state.detectedLocation, state.locationEnabled, loadLastSeen]);
+
+  // Back in the app (or signed in) with a Location off still to reach the server: try again.
+  useEffect(() => {
+    const me = stateRef.current.currentUserId;
+    if (!state.remoteLoaded || !live(me)) return;
+    void readForgetPending().then((who) => { if (who === me) void loadLastSeen(); });
+  }, [state.remoteLoaded, liveEpoch, loadLastSeen]);
 
   // The phone keeps the Location switch too (the browser reads it at start),
   // so the map opens where you are instead of forgetting on every launch.
