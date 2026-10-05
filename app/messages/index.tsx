@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
@@ -59,6 +59,23 @@ export default function Inbox() {
   const [held, setHeld] = useState<{ conversation: Conversation; name: string; step: 'menu' | 'mute' } | null>(null);
   // The one row slid open to its actions.
   const [openRow, setOpenRow] = useState<string | null>(null);
+  // "typing…" in a row while someone types in that chat (Oct 4, owner). Heard
+  // straight from their phone; it holds while they have a message on the go and goes when they send.
+  const [typingIn, setTypingIn] = useState<Record<string, { userId: string; at: number }>>({});
+  useEffect(() => actions.watchInboxTyping((conversationId, userId, stopped) => setTypingIn((t) => {
+    if (!stopped) return { ...t, [conversationId]: { userId, at: Date.now() } };
+    if (t[conversationId]?.userId !== userId) return t;
+    const next = { ...t }; delete next[conversationId]; return next;
+  })), [actions]);
+  useEffect(() => {
+    if (!Object.keys(typingIn).length) return;
+    const timer = setInterval(() => setTypingIn((cur) => {
+      const now = Date.now();
+      const next = Object.fromEntries(Object.entries(cur).filter(([, v]) => now - v.at < 7000));
+      return Object.keys(next).length === Object.keys(cur).length ? cur : next;
+    }), 1000);
+    return () => clearInterval(timer);
+  }, [typingIn]);
   const isCoach = Boolean(currentUser?.isCoach);
 
   // Every message by its id, once: each row's last message is looked up here, not searched for.
@@ -243,6 +260,10 @@ export default function Inbox() {
         <View style={styles.list}>
           {threads.map((t, index) => {
             const { conversation, muted, unread, name } = t;
+            // Their message arriving ends it at once.
+            const typer = typingIn[conversation.id];
+            const typing = typer && !blockedIds.includes(typer.userId) && !(t.last && t.last.senderId === typer.userId && Date.parse(t.last.createdAt) >= typer.at - 1000)
+              ? (t.group ? `${usersById.get(typer.userId)?.name.split(' ')[0] ?? 'Someone'} is typing…` : 'typing…') : undefined;
             // Mute only where the database has it (the hold menu's rule too).
             const canMute = hasGroupControls(conversation);
             const toggleMute = () => { if (muted) actions.muteChat(conversation.id, null); else setHeld({ conversation, name, step: 'mute' }); };
@@ -308,6 +329,7 @@ export default function Inbox() {
                   first={index === 0}
                   styles={styles}
                   line={(said) => preview(t.group, t.last, said)}
+                  typing={typing}
                   onOpen={() => { if (openRow) { setOpenRow(null); return; } router.push(`/messages/${conversation.id}`); }}
                   onHold={() => { setOpenRow(null); setHeld({ conversation, name, step: 'menu' }); }}
                   rowActions={rowActions}
@@ -335,8 +357,8 @@ export default function Inbox() {
 /** Something a row offers a screen reader: what the swipes and the hold menu do. */
 interface RowAction { name: string; label: string; run: () => void }
 
-function InboxRow({ thread, first, styles, line, onOpen, onHold, rowActions }: {
-  thread: Thread; first: boolean; styles: any; line: (said: string) => string; onOpen: () => void; onHold: () => void; rowActions: RowAction[];
+function InboxRow({ thread, first, styles, line, typing, onOpen, onHold, rowActions }: {
+  thread: Thread; first: boolean; styles: any; line: (said: string) => string; typing?: string; onOpen: () => void; onHold: () => void; rowActions: RowAction[];
 }) {
   const { conversation, other, last, group, muted, unread, name, people } = thread;
   const link = last?.kind === 'text' ? isOnlyLink(last.body) : null;
@@ -369,8 +391,8 @@ function InboxRow({ thread, first, styles, line, onOpen, onHold, rowActions }: {
           </View>
         </View>
         <View style={styles.rowBottom}>
-          <Text numberOfLines={1} style={[styles.preview, loud && styles.unreadPreview]}>
-            {line(said)}
+          <Text numberOfLines={1} style={[styles.preview, loud && styles.unreadPreview, typing && styles.typingPreview]} accessibilityLiveRegion="polite">
+            {typing ?? line(said)}
           </Text>
           {unread ? <View style={[styles.dot, muted && styles.dotMuted]} /> : null}
         </View>
@@ -410,6 +432,7 @@ const styleDefinitions = StyleSheet.create({
   time: { ...typography.small, color: colors.textFaint, flexShrink: 0 },
   unreadTime: { color: colors.brand, ...font('600') },
   preview: { ...typography.small, fontSize: 14, color: colors.textMuted, flex: 1 },
+  typingPreview: { color: colors.brand, fontStyle: 'italic' },
   unreadPreview: { color: colors.text, ...font('500') },
   dot: { width: 9, height: 9, borderRadius: 4.5, backgroundColor: colors.brand },
   dotMuted: { backgroundColor: colors.textFaint },

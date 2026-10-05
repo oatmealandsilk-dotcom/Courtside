@@ -272,22 +272,28 @@ export default function Thread() {
   );
 
   // "Typing…": who else in this chat is typing right now. Heard straight from
-  // their phone (nothing is stored); it lapses 4 seconds after the last word
-  // of it, and their message arriving ends it at once.
+  // their phone (nothing is stored). It holds steady for as long as they have
+  // a message on the go (their phone keeps saying so every couple of
+  // seconds), goes at once when they send, clear it or leave, and lapses 7
+  // seconds after the last word of it if their phone goes quiet.
   const [typing, setTyping] = useState<Record<string, number>>({});
-  const typingLink = useRef<{ ping: () => void; off: () => void } | null>(null);
+  const typingLink = useRef<{ ping: () => void; stop: () => void; off: () => void } | null>(null);
   useEffect(() => {
     if (!id || removed) return;
     setTyping({});
-    const link = actions.watchTyping(id, (uid) => setTyping((t) => ({ ...t, [uid]: Date.now() })));
+    const link = actions.watchTyping(id, (uid, stopped) => setTyping((t) => {
+      if (!stopped) return { ...t, [uid]: Date.now() };
+      if (!t[uid]) return t;
+      const next = { ...t }; delete next[uid]; return next;
+    }));
     typingLink.current = link;
-    return () => { link.off(); typingLink.current = null; };
+    return () => { if (draftNow.current.trim()) link.stop(); link.off(); typingLink.current = null; };
   }, [id, actions, removed]);
   useEffect(() => {
     if (!Object.keys(typing).length) return;
     const t = setInterval(() => setTyping((cur) => {
       const now = Date.now();
-      const next = Object.fromEntries(Object.entries(cur).filter(([, at]) => now - at < 4000));
+      const next = Object.fromEntries(Object.entries(cur).filter(([, at]) => now - at < 7000));
       return Object.keys(next).length === Object.keys(cur).length ? cur : next;
     }), 1000);
     return () => clearInterval(t);
@@ -303,6 +309,9 @@ export default function Thread() {
   const typers = Object.keys(typing).filter((uid) => uid !== currentUserId && !blockedIds.includes(uid));
   // While you type, the others hear it every couple of seconds, never on every key.
   const lastPing = useRef(0);
+  // What is in your box now and when you last typed in it, for the steady "typing…" the others see.
+  const draftNow = useRef('');
+  const lastKey = useRef(0);
   // A court (or anything else) sent from elsewhere as the answer to the message being replied to: the strip has done its job.
   useEffect(() => {
     if (replyTo && lastReal?.senderId === currentUserId && lastReal.replyToId === replyTo.id) setReplyTo(null);
@@ -612,6 +621,7 @@ export default function Thread() {
   };
 
   const send = (text: string) => {
+    if (draftNow.current.trim()) { draftNow.current = ''; lastPing.current = 0; typingLink.current?.stop(); }
     const body = text.trim();
     const answering = replyTo?.id;
     // Picked photos go with whatever is in the box as their caption.
@@ -661,10 +671,23 @@ export default function Thread() {
   };
   // While you type, the others hear it every couple of seconds, never on every key.
   const pingTyping = (text: string) => {
-    if (!text.trim()) return;
+    const had = draftNow.current.trim();
+    draftNow.current = text;
+    if (!text.trim()) { if (had) { lastPing.current = 0; typingLink.current?.stop(); } return; }
     const now = Date.now();
+    lastKey.current = now;
     if (now - lastPing.current > 2000) { lastPing.current = now; typingLink.current?.ping(); }
   };
+  // While a message is on the go, keep saying so, even with the keyboard put
+  // away, so the dots hold steady instead of blinking off in a pause. A
+  // message left sitting stops counting a minute after the last key.
+  useEffect(() => {
+    const beat = setInterval(() => {
+      const now = Date.now();
+      if (draftNow.current.trim() && now - lastKey.current < 60_000 && now - lastPing.current > 2500) { lastPing.current = now; typingLink.current?.ping(); }
+    }, 1000);
+    return () => clearInterval(beat);
+  }, []);
   // Tapping into the words brings the phone keyboard back in the emoji keyboard's place.
   const boxFocused = (on: boolean) => {
     setTypingFocus(on);

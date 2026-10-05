@@ -700,7 +700,8 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /** One chat fetched fresh as it opens, so it never shows an old copy for long. */
   syncConversation: (conversationId: ID) => Promise<void>;
   /** "Typing…" in a chat: `ping` while you type; `onTyping` hears the others. No-op in the demo. */
-  watchTyping: (conversationId: ID, onTyping: (userId: ID) => void) => { ping: () => void; off: () => void };
+  watchTyping: (conversationId: ID, onTyping: (userId: ID, stopped?: boolean) => void) => { ping: () => void; stop: () => void; off: () => void };
+  watchInboxTyping: (onTyping: (conversationId: ID, userId: ID, stopped?: boolean) => void) => () => void;
   /** Every reply in a thread, loaded when it is opened. */
   loadThread: (questionId: ID) => Promise<void>;
   /** The next page of older feed posts. Resolves with the ones that were added. */
@@ -3838,10 +3839,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // A chat just opened: fetched as it stands (its people, name, photo and
   // admins as well as its messages), so it never shows an old copy for long.
   const syncConversation = useCallback((conversationId: ID) => refreshChat(conversationId, true), [refreshChat]);
-  const watchTyping = useCallback((conversationId: ID, onTyping: (userId: ID) => void) => {
+  const watchTyping = useCallback((conversationId: ID, onTyping: (userId: ID, stopped?: boolean) => void) => {
     const me = stateRef.current.currentUserId;
-    if (!me || !live(me, conversationId)) return { ping: () => undefined, off: () => undefined };
-    try { return remote.typing(conversationId, me, onTyping); } catch { return { ping: () => undefined, off: () => undefined }; }
+    const none = { ping: () => undefined, stop: () => undefined, off: () => undefined };
+    if (!me || !live(me, conversationId)) return none;
+    const others = stateRef.current.conversations.find((c) => c.id === conversationId)?.participantIds ?? [];
+    try { return remote.typing(conversationId, me, onTyping, others); } catch { return none; }
+  }, []);
+  // The chat list's "typing…": which of your chats someone is typing in. Returns the way to stop listening.
+  const watchInboxTyping = useCallback((onTyping: (conversationId: ID, userId: ID, stopped?: boolean) => void) => {
+    const me = stateRef.current.currentUserId;
+    if (!me || !live(me)) return () => undefined;
+    try { return remote.inboxTyping(me, onTyping); } catch { return () => undefined; }
   }, []);
   // Scrolling up in a chat: the page of messages before the oldest one here.
   const loadOlderMessages = useCallback(async (conversationId: ID) => {
@@ -6065,6 +6074,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadOlderMessages,
       syncConversation,
       watchTyping,
+      watchInboxTyping,
       loadThread,
       loadMorePosts,
       loadPostsOf,
@@ -6252,6 +6262,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadOlderMessages,
       syncConversation,
       watchTyping,
+      watchInboxTyping,
       loadThread,
       loadMorePosts,
       loadPostsOf,

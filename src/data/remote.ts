@@ -2134,18 +2134,41 @@ export const remote = {
    * "Typing…" in one chat: a quick signal sent straight between phones (never
    * stored). `ping` says you are typing; `onTyping` hears who else is.
    */
-  typing(conversationId: ID, me: ID, onTyping: (userId: ID) => void): { ping: () => void; off: () => void } {
+  typing(conversationId: ID, me: ID, onTyping: (userId: ID, stopped?: boolean) => void, others: ID[] = []): { ping: () => void; stop: () => void; off: () => void } {
     const db = need();
     const channel = db.channel(`typing:${conversationId}`, { config: { broadcast: { self: false } } })
       .on('broadcast', { event: 'typing' }, ({ payload }) => {
-        const who = (payload as { userId?: string } | null)?.userId;
-        if (who && who !== me) onTyping(who);
+        const p = payload as { userId?: string; stop?: boolean } | null;
+        if (p?.userId && p.userId !== me) onTyping(p.userId, !!p.stop);
       })
       .subscribe();
+    // The others' inboxes hear it too, so their chat list says "typing…"
+    // (Oct 4, owner). Sent without joining their channels; a big group is capped.
+    const inboxes = others.filter((id) => id !== me).slice(0, 16).map((id) => db.channel(`inbox-typing:${id}`));
     return {
-      ping: () => { void channel.send({ type: 'broadcast', event: 'typing', payload: { userId: me } }); },
-      off: () => { void db.removeChannel(channel); },
+      ping: () => {
+        void channel.send({ type: 'broadcast', event: 'typing', payload: { userId: me } });
+        inboxes.forEach((inbox) => { void inbox.httpSend('typing', { conversationId, userId: me }).catch(() => undefined); });
+      },
+      // Sent, cleared or left: the dots go at once rather than after the lapse.
+      stop: () => {
+        void channel.send({ type: 'broadcast', event: 'typing', payload: { userId: me, stop: true } });
+        inboxes.forEach((inbox) => { void inbox.httpSend('typing', { conversationId, userId: me, stop: true }).catch(() => undefined); });
+      },
+      off: () => { void db.removeChannel(channel); inboxes.forEach((inbox) => { void db.removeChannel(inbox); }); },
     };
+  },
+
+  /** "Typing…" for the chat list: hears which of your chats someone is typing in right now. */
+  inboxTyping(me: ID, onTyping: (conversationId: ID, userId: ID, stopped?: boolean) => void): () => void {
+    const db = need();
+    const channel = db.channel(`inbox-typing:${me}`)
+      .on('broadcast', { event: 'typing' }, ({ payload }) => {
+        const p = payload as { conversationId?: string; userId?: string; stop?: boolean } | null;
+        if (p?.conversationId && p.userId && p.userId !== me) onTyping(p.conversationId, p.userId, !!p.stop);
+      })
+      .subscribe();
+    return () => { void db.removeChannel(channel); };
   },
 
   /** Open hits from an hour ago on, with who is in: the list the app loads at the start. Null when it could not be asked. */
