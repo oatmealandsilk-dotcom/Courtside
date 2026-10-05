@@ -176,7 +176,7 @@ function shortLength(preview: string): string {
 
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
-  const { notifications, users, posts, stories, comments, hitRequests, conversations, currentUserId, followRequests, followingIds, followedCourts, sessionTags, actions } = useApp();
+  const { notifications, users, posts, stories, comments, hitRequests, conversations, questions, currentUserId, followRequests, followingIds, followedCourts, sessionTags, actions } = useApp();
   // "New hit at Alder Park" opens the map on that court: where it is comes from the courts you follow.
   const courtRows = notifications.some((n) => n.kind === 'court-activity');
   useEffect(() => { if (courtRows && followedCourts === null) void actions.loadFollowedCourts(); }, [courtRows, followedCourts, actions]);
@@ -228,6 +228,13 @@ export default function Notifications() {
     // Someone who joined through a link you shared (migration 68).
     if (group.kind === 'follow' && group.preview === INVITE_LINE) return 'joined CourtSide from your link';
     if (group.kind === 'follow-request' && group.preview === INVITE_LINE) return 'joined CourtSide from your link and asked to follow you';
+    // A tag in a thread reply is a mention in a thread, not in a post.
+    if (group.kind === 'tag' && group.targetKind === 'question') return 'mentioned you in a thread';
+    // An answer in someone else's thread was a reply to your reply there, not to your question.
+    if (group.kind === 'answer') {
+      const thread = questions.find((q) => q.id === group.targetId);
+      if (thread && thread.authorId !== currentUserId) return 'replied to your reply';
+    }
     // A kind this build does not know yet (a newer server) still reads as a sentence.
     if (group.kind !== 'like' && group.kind !== 'comment' && group.kind !== 'share') return VERB[group.kind] ?? 'updated';
     const act = group.kind === 'like' ? 'liked' : group.kind === 'comment' ? 'commented on' : 'shared';
