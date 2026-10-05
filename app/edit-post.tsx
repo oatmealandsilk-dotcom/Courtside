@@ -6,7 +6,9 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { DragSheet } from '@/components/DragSheet';
 import { LocationLink } from '@/components/LocationChip';
-import type { TaggedCourt } from '@/data/types';
+import { HealthShareRow } from '@/components/session/HealthShareRow';
+import type { DetectedActivity, TaggedCourt } from '@/data/types';
+import { availableShare, chosenShare, choiceFromTicks, postShare, type HealthChoice } from '@/features/activity/healthShare';
 import { openPlacePicker } from '@/features/places/picker';
 import { TagPlayers } from '@/components/TagPlayers';
 import { Button, Field } from '@/components/ui';
@@ -16,12 +18,13 @@ import { colors, spacing, typography } from '@/theme';
 /**
  * Editing something of yours after it is up: a post's caption, who is in it
  * and where it was, or a thread's question and details. Saving stamps it
- * "Edited" next to the date.
+ * "Edited" next to the date. A tracker session's post also has "Share health
+ * data" (Oct 4, owner), as in the composer.
  */
 export default function EditPost() {
   const styles = useThemedStyles(styleDefinitions);
   const { id = '', kind: rawKind, pickPlace } = useLocalSearchParams<{ id?: string; kind?: string; pickPlace?: string }>();
-  const { posts, questions, currentUserId, actions } = useApp();
+  const { posts, questions, currentUserId, detectedActivities, actions } = useApp();
   const isQuestion = rawKind === 'question';
   const post = isQuestion ? undefined : posts.find((p) => p.id === id);
   const question = isQuestion ? questions.find((q) => q.id === id) : undefined;
@@ -57,10 +60,31 @@ export default function EditPost() {
   }, [pickPlace, filled, post, mine]);
   useEffect(() => () => { if (picked.current) clearTimeout(picked.current); }, []);
 
+  // "Share health data" (Oct 4, owner): only on a post from your own tracker
+  // while its numbers are still kept (30 days), the same switch and Choose as
+  // the composer, starting from what the post shows now (an older post only
+  // ever had the time). Held once found, so a refresh of your sessions while
+  // this is open cannot take the row away.
+  const activityId = mine ? post?.session?.activityId : undefined;
+  const held = activityId ? detectedActivities.find((a) => a.id === activityId && a.userId === currentUserId) : undefined;
+  const [tracker, setTracker] = useState<DetectedActivity | null>(held ?? null);
+  useEffect(() => {
+    if (tracker || !activityId) return undefined;
+    if (held) { setTracker(held); return undefined; }
+    // Older than the two weeks the app holds: asked for on its own.
+    let on = true;
+    void actions.fetchActivity(activityId).then((a) => { if (on && a) setTracker(a); });
+    return () => { on = false; };
+  }, [activityId, !!held]); // eslint-disable-line react-hooks/exhaustive-deps
+  const available = tracker ? availableShare(tracker) : [];
+  // Null until it is changed here: until then it reads what the post shares.
+  const [health, setHealth] = useState<HealthChoice | null>(null);
+  const healthShown = health ?? choiceFromTicks(postShare(post?.session), available);
+
   const canSave = filled && mine && (isQuestion ? title.trim().length >= 3 : true);
   const save = () => {
     if (!canSave) return;
-    if (post) actions.editPost(post.id, { body: body.trim(), taggedUserIds: tagged, location, court });
+    if (post) actions.editPost(post.id, { body: body.trim(), taggedUserIds: tagged, location, court, ...(health && available.length ? { share: chosenShare(health, available) } : {}) });
     if (question) actions.editQuestion(question.id, { title: title.trim(), body: body.trim() });
     setCloseSignal((n) => n + 1);
   };
@@ -91,6 +115,7 @@ export default function EditPost() {
           <>
             <Field label="Caption" labelRight={<LocationLink value={location} court={!!court} onPress={() => openPlacePicker((value, picked) => { setLocation(value); setCourt(picked ?? null); }, location)} onClear={() => { setLocation(''); setCourt(null); }} />} value={body} onChangeText={setBody} multiline minHeight={80} mentions />
             <TagPlayers tagged={tagged} onChange={setTagged} />
+            {tracker && available.length ? <HealthShareRow activity={tracker} choice={healthShown} onChoice={setHealth} /> : null}
           </>
         )}
         {mine ? <Button label="Save" onPress={save} disabled={!canSave} full /> : null}

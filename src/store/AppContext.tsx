@@ -31,6 +31,7 @@ import { appleHealthAvailable, connectAppleHealth, readAppleHealth, readAppleNut
 import { isTracker, tennisFlags, TRACKERS } from '@/features/activity/flags';
 import { checkForTennis } from '@/features/activity/check';
 import { pickSource } from '@/features/activity/recent';
+import { postShare, reshare, sameShare } from '@/features/activity/healthShare';
 import { REFUSALS, maxTagsFor, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
 import { duration } from '@/lib/format';
 import { takeReferrer } from '@/features/invite/referral';
@@ -102,7 +103,7 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch, HealthShareKey } from '@/data/types';
 
 interface NewStoryInput {
   imageUrl?: string;
@@ -573,8 +574,12 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /** Puts one of your posts away, or brings it back. */
   toggleArchivePost: (postId: ID, quiet?: boolean) => void;
   togglePinPost: (postId: ID, quiet?: boolean) => void;
-  /** Change your own post's words, tags, who is in it, and where it was. */
-  editPost: (postId: ID, patch: { body: string; taggedUserIds: ID[]; location?: string; court?: TaggedCourt | null }) => void;
+  /**
+   * Change your own post's words, tags, who is in it, and where it was; and,
+   * on a tracker session's post, which health numbers it shares (`share`,
+   * "Share health data"). The numbers come back off if the server refuses.
+   */
+  editPost: (postId: ID, patch: { body: string; taggedUserIds: ID[]; location?: string; court?: TaggedCourt | null; share?: HealthShareKey[] }) => void;
   /** Change your own thread's question and details. */
   editQuestion: (questionId: ID, patch: { title: string; body: string }) => void;
   /** Pull-to-refresh: fetches everything again from the server. */
@@ -619,6 +624,12 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /* Tennis sessions from trackers (migration 58) */
   /** Your tracker sessions fetched afresh (a log sheet opened from an alert before they had loaded). */
   refreshActivities: () => Promise<void>;
+  /**
+   * One of your tracker sessions by its id: the one held here, or read from
+   * the server for a post older than the two weeks held (Edit post's "Share
+   * health data"). Not added to your sessions list. Null once it has gone.
+   */
+  fetchActivity: (id: ID) => Promise<DetectedActivity | null>;
   /**
    * Looks for new tennis sessions (Apple Health on this phone, WHOOP on the
    * server) when the app opens or comes back, and says so when one is found.
@@ -3056,7 +3067,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
   }, [requireUser]);
 
-  const editPost = useCallback((postId: ID, patch: { body: string; taggedUserIds: ID[]; location?: string; court?: TaggedCourt | null }) => {
+  const editPost = useCallback((postId: ID, patch: { body: string; taggedUserIds: ID[]; location?: string; court?: TaggedCourt | null; share?: HealthShareKey[] }) => {
     const me = requireUser();
     const post = stateRef.current.posts.find((p) => p.id === postId);
     if (!post || post.authorId !== me) return;
@@ -3066,15 +3077,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const location = patch.location?.trim() || undefined;
     // A court belongs with its name: no location, no court.
     const court = location ? patch.court : null;
+    // "Share health data" changed (Oct 4, owner): only on a tracker session's
+    // post, only when the list really changed. Shown at once from your own
+    // tracker while it is held here; the server then writes the numbers from
+    // its private copy (migration 72) and its answer replaces these.
+    const healthWas = post.session;
+    const tracker = healthWas?.activityId ? stateRef.current.detectedActivities.find((a) => a.id === healthWas.activityId && a.userId === me) : undefined;
+    const healthNow = healthWas?.activityId && patch.share && !sameShare(postShare(healthWas), patch.share) ? reshare(healthWas, patch.share, tracker) : undefined;
     if (live(me, postId)) remote.updatePost(postId, { body: patch.body, tags, taggedUserIds: patch.taggedUserIds, location, court, editedAt });
     setState((prev) => {
       const before = prev.posts.find((p) => p.id === postId);
       const newlyTagged = patch.taggedUserIds.filter((id) => !(before?.taggedUserIds ?? []).includes(id));
       const next: AppState = {
         ...prev,
-        posts: prev.posts.map((p) => (p.id === postId ? { ...p, body: patch.body, tags, taggedUserIds: patch.taggedUserIds.length ? patch.taggedUserIds : undefined, location, court: court === undefined ? p.court : court ?? undefined, editedAt } : p)),
+        posts: prev.posts.map((p) => (p.id === postId ? { ...p, body: patch.body, tags, taggedUserIds: patch.taggedUserIds.length ? patch.taggedUserIds : undefined, location, court: court === undefined ? p.court : court ?? undefined, editedAt, ...(healthNow ? { session: healthNow } : {}) } : p)),
       };
       return newlyTagged.reduce((acc, id) => withNotification(acc, { userId: id, actorId: me, kind: 'tag', targetId: postId, targetKind: 'post', preview: snippet(patch.body || 'a post') }), next);
+    });
+    if (!healthNow || !live(me, postId)) return;
+    void remote.setPostHealthShare(postId, healthNow).catch(() => null).then((saved) => {
+      // The server's numbers, or back to what the post had. Not if it has
+      // changed again since (another edit, a refresh): that one counts.
+      setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === postId && p.session === healthNow ? { ...p, session: saved ?? healthWas } : p)) }));
+      if (!saved) showToast({ title: 'Your health numbers didn’t change', body: 'Try again in a moment.', icon: 'alert-circle-outline' });
     });
   }, [requireUser]);
 
@@ -5853,6 +5878,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (list && stateRef.current.currentUserId === me) setState((prev) => ({ ...prev, detectedActivities: list }));
   }, []);
 
+  // Read on its own and handed back, never added to your sessions list: an
+  // older one there would show up again as waiting to be logged (Oct 4).
+  const fetchActivity = useCallback(async (id: ID): Promise<DetectedActivity | null> => {
+    const me = stateRef.current.currentUserId;
+    const held = stateRef.current.detectedActivities.find((a) => a.id === id && a.userId === me);
+    if (held || !live(me, id)) return held ?? null;
+    return remote.fetchActivity(me!, id).catch(() => null);
+  }, []);
+
   const dismissActivity = useCallback((id: ID) => {
     const me = stateRef.current.currentUserId;
     haptics.tap();
@@ -6059,6 +6093,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleIntegration,
       syncHealth,
       refreshActivities,
+      fetchActivity,
       checkForActivities,
       dismissActivity,
       turnOnTennis,
@@ -6247,6 +6282,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleIntegration,
       syncHealth,
       refreshActivities,
+      fetchActivity,
       checkForActivities,
       dismissActivity,
       turnOnTennis,

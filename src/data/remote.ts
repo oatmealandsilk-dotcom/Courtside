@@ -2505,6 +2505,17 @@ export const remote = {
     return ((data ?? []) as ActivityRow[]).map(toActivity);
   },
   /**
+   * One of your own tracker sessions by its id, however old, while the
+   * server still keeps it (30 days): Edit post's "Share health data" on a
+   * post older than the two weeks the app holds (Oct 4). Null when it has
+   * gone or could not be read; only your own rows ever come back (migration 58).
+   */
+  async fetchActivity(me: ID, id: ID): Promise<DetectedActivity | null> {
+    const { data, error } = await need().from('detected_activities').select('*').eq('user_id', me).eq('id', id).maybeSingle();
+    if (error || !data) return null;
+    return toActivity(data as ActivityRow);
+  },
+  /**
    * A tennis workout read from Apple Health on this phone, handed to the
    * server, which keeps it, checks it against WHOOP's copy and files the
    * in-app row. `notify` is true only when this very call filed it. Null on a
@@ -2884,6 +2895,19 @@ export const remote = {
       return;
     }
     fail('post edit')(error);
+  },
+  /**
+   * "Share health data" changed on a post already up (Oct 4, owner). Only the
+   * list is this phone's word: the posts trigger (migration 72) rebuilds a
+   * tracker post's stats from the author's own private tracker row, keeps
+   * only the chosen numbers, and works out the names again. What it wrote
+   * comes back, so the post shows the server's numbers. Null when it did
+   * not save (not yours, no connection).
+   */
+  async setPostHealthShare(postId: ID, session: NonNullable<Post['session']>): Promise<Post['session'] | null> {
+    const { data, error } = await need().from('posts').update({ session: sessionToSend(session) }).eq('id', postId).select('session').maybeSingle();
+    if (error) { fail('post health share')(error); return null; }
+    return trustedSession((data as { session: Post['session'] | null } | null)?.session) ?? null;
   },
   async setPostPinned(postId: ID, pinned: boolean) {
     const { error } = await need().from('posts').update({ pinned }).eq('id', postId);

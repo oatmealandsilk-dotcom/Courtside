@@ -98,6 +98,56 @@ export function withShare(base: SessionDetail, a: DetectedActivity, share: Healt
   };
 }
 
+/*
+ * "Share health data" on a post already up (Oct 4, owner): Edit post has the
+ * same switch and Choose, starting from what the post shows now. Turning it
+ * off takes the numbers off; turning it on or ticking more puts them on from
+ * the author's own tracker, as the server does when the list changes
+ * (migration 72's posts trigger reads them from its private copy).
+ */
+
+/**
+ * The numbers a post shares now: its list, or, for a post made before the
+ * list existed (it only ever had the time, and heart rate with zones for an
+ * adult who asked), the numbers it carries.
+ */
+export function postShare(s: SessionDetail | undefined): HealthShareKey[] {
+  if (!s?.activityId) return [];
+  if (Array.isArray(s.share)) return HEALTH_KEYS.filter((k) => s.share?.includes(k));
+  return HEALTH_KEYS.filter((k) => {
+    switch (k) {
+      case 'hr': return !!s.maxHr || !!s.avgHr;
+      case 'zones': return !!cleanZones(s.zones);
+      case 'strain': return s.strain != null;
+      case 'kcal': return !!s.kcal;
+    }
+  });
+}
+
+/** Whether two lists name the same numbers, whatever the order. */
+export const sameShare = (a: HealthShareKey[], b: HealthShareKey[]) => a.length === b.length && a.every((k) => b.includes(k));
+
+/**
+ * A post's stats with a new list, as shown straight away: every number off,
+ * then the chosen ones back on from the author's tracker while this phone
+ * holds it. Without it (older than the two weeks the app keeps), numbers can
+ * only come off here; the server's answer brings the rest.
+ */
+export function reshare(s: SessionDetail, share: HealthShareKey[], a: DetectedActivity | undefined): SessionDetail {
+  const { maxHr, avgHr, zones, strain, kcal, share: _was, ...base } = s;
+  if (a) return withShare(base, a, share);
+  const has = (k: HealthShareKey) => share.includes(k);
+  return {
+    ...base,
+    share,
+    ...(has('hr') && maxHr ? { maxHr } : {}),
+    ...(has('hr') && avgHr ? { avgHr } : {}),
+    ...(has('zones') && zones ? { zones } : {}),
+    ...(has('strain') && strain != null ? { strain } : {}),
+    ...(has('kcal') && kcal ? { kcal } : {}),
+  };
+}
+
 /** Remembered on this phone for the next post, one choice per account (a shared phone must not share someone else's numbers). */
 const storeKey = (userId: string) => `courtside-health-share:${userId}`;
 
