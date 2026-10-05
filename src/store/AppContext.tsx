@@ -1647,14 +1647,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const kept = chatUnhidden(me, got);
     setState((prev) => applyFetchedChat(prev, kept, me, open ? conversationId : undefined));
   }, []);
+  // The newest message time the server itself gave, from the first load, the
+  // live updates and catch-ups (everything up to it is here), for catching up
+  // from. Never a time this phone put on a message of its own ("Sending…",
+  // "Not sent", or one sent while the live connection was down), which
+  // would skip what others sent meanwhile.
+  const serverNewest = useRef<{ me: ID; at: number } | null>(null);
+  const heardUpTo = (me: ID, list: Message[]) => {
+    let at = serverNewest.current?.me === me ? serverNewest.current.at : 0;
+    for (const m of list) { const t = Date.parse(m.createdAt); if (t > at) at = t; }
+    if (at) serverNewest.current = { me, at };
+  };
   // Whatever was sent while the phone slept or the connection was down, in one small ask:
-  // every message newer than the newest one here.
+  // every message newer than the newest one the server has given.
   const catchUpMessages = useCallback(async () => {
     const me = stateRef.current.currentUserId;
     if (!me || !UUID.test(me) || !isSupabaseConfigured) return;
-    const newest = stateRef.current.messages.reduce((t, m) => (m.createdAt > t ? m.createdAt : t), '');
-    const since = new Date((newest ? Date.parse(newest) : Date.now() - 86_400_000) - 5000).toISOString();
-    const fresh = unhidden(me, await remote.fetchMessagesSince(since).catch(() => [] as Message[]));
+    // Before any (only a saved copy shown): the newest from someone else, which the server dated.
+    const newest = serverNewest.current?.me === me ? serverNewest.current.at
+      : stateRef.current.messages.reduce((t, m) => (m.senderId !== me && !m.sending && !m.failed ? Math.max(t, Date.parse(m.createdAt) || 0) : t), 0);
+    const since = new Date((newest || Date.now() - 86_400_000) - 5000).toISOString();
+    const got = await remote.fetchMessagesSince(since).catch(() => [] as Message[]);
+    heardUpTo(me, got);
+    const fresh = unhidden(me, got);
     if (!fresh.length) return;
     const known = new Set(stateRef.current.conversations.map((c) => c.id));
     const strangers = [...new Set(fresh.map((m) => m.conversationId).filter((cid) => !known.has(cid)))];
@@ -1698,6 +1713,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           retry = setTimeout(() => setLiveEpoch((n) => n + 1), wait);
         },
         added: (message) => {
+          heardUpTo(me, [message]);
           if (stateRef.current.messages.some((m) => m.id === message.id) || isHidden(me, message.id)) return;
           const known = stateRef.current.conversations.some((c) => c.id === message.conversationId);
           if (known) {
@@ -1869,6 +1885,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       snapshotIds.current = null;
       const hidden = hiddenFor(me);
       for (const id of data.hiddenMessageIds ?? []) hidden.add(id);
+      heardUpTo(me, data.messages);
       // One deleted for yourself a moment ago, before the server had it, stays gone too.
       const shown = { ...data, messages: unhidden(me, data.messages) };
       setState((prev) => mergeRemote(prev, shown, me, email, snap, false));
