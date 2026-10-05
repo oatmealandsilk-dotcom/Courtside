@@ -60,6 +60,8 @@ module.exports = {
       ['expo-camera', { cameraPermission: 'CourtSide uses the camera to take an instant — one photo right after your session.', microphonePermission: 'CourtSide uses the microphone for voice notes you send in chats.', recordAudioAndroid: false }],
       ['expo-image-picker', { photosPermission: 'CourtSide needs your photo library to choose clips and photos to post.', microphonePermission: 'CourtSide uses the microphone for voice notes you send in chats.' }],
       'expo-video',
+      // Build 14 (Oct 4): find friends from your contacts. Only phone numbers and emails are checked, and nothing is kept.
+      ['expo-contacts', { contactsPermission: 'CourtSide checks your contacts’ phone numbers and emails to show which friends are already on CourtSide. Nothing from your contacts is saved.' }],
       ['expo-location', { locationWhenInUsePermission: 'CourtSide uses your location while the app is open to show courts and players near you. You choose who can see you.' }],
       ['expo-notifications', { color: '#3F7049' }],
       'expo-apple-authentication',

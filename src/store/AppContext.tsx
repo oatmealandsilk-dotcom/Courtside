@@ -102,7 +102,7 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch } from '@/data/types';
 
 interface NewStoryInput {
   imageUrl?: string;
@@ -625,6 +625,13 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   claimPendingReferral: () => Promise<void>;
   countReferrals: () => Promise<number>;
   fetchMyInvitees: () => Promise<Invitee[] | null>;
+  /** Find friends from contacts (migration 88): which of these numbers and emails are players. */
+  matchContacts: (phones: string[], emails: string[]) => Promise<ContactMatch[] | 'limit' | null>;
+  /** Your linked phone number, confirmed by text, or null. */
+  myPhone: () => Promise<string | null>;
+  startPhoneLink: (phone: string) => Promise<void>;
+  confirmPhoneLink: (phone: string, code: string) => Promise<void>;
+  unlinkPhone: () => Promise<void>;
   /** Who invited me (after any invite link has been claimed), or null offline / in the demo. */
   myInviter: () => Promise<MyInviter | null>;
   /** "Invited by?" at setup: the inviter's @handle. Set once, never changed. */
@@ -5690,6 +5697,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
   useEffect(() => { if (live(state.currentUserId)) void claimPendingReferral(); }, [state.currentUserId, claimPendingReferral]);
   const countReferrals = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.countReferrals(me!) : 0; }, []);
+  const matchContacts = useCallback(async (phones: string[], emails: string[]) => { const me = stateRef.current.currentUserId; return live(me) ? remote.matchContacts(phones, emails) : []; }, []);
+  const myPhone = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.myPhone() : null; }, []);
+  const startPhoneLink = useCallback(async (phone: string) => { await remote.startPhoneLink(phone); }, []);
+  const confirmPhoneLink = useCallback(async (phone: string, code: string) => { await remote.confirmPhoneLink(phone, code); }, []);
+  const unlinkPhone = useCallback(async () => { await remote.unlinkPhone(); }, []);
   const fetchMyInvitees = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.fetchMyInvitees() : []; }, []);
 
   const pullFrom = useCallback(async (me: ID, provider: Integration['provider']): Promise<boolean> => {
@@ -6029,6 +6041,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       claimPendingReferral,
       countReferrals,
       fetchMyInvitees,
+      matchContacts,
+      myPhone,
+      startPhoneLink,
+      confirmPhoneLink,
+      unlinkPhone,
       myInviter,
       claimInviteCode,
       askCoach,
@@ -6211,6 +6228,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       claimPendingReferral,
       countReferrals,
       fetchMyInvitees,
+      matchContacts,
+      myPhone,
+      startPhoneLink,
+      confirmPhoneLink,
+      unlinkPhone,
       myInviter,
       claimInviteCode,
       askCoach,

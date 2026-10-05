@@ -1317,3 +1317,13 @@ export interface Invitee {
   /** For those not counted yet, in the order they meet them. */
   missing?: InviteeMissing[];
 }
+
+/** A CourtSide player found in your phone's contacts (migration 88). `phone`/`email` is the contact detail that matched, as you sent it. */
+export interface ContactMatch {
+  id: ID;
+  handle: string;
+  name?: string;
+  avatarUrl?: string;
+  phone?: string;
+  email?: string;
+}

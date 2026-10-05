@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Clipboard from 'expo-clipboard';
@@ -72,6 +72,13 @@ export default function Invite() {
             <Text style={styles.secondaryText}>{copied ? 'Copied' : 'Copy'}</Text>
           </Pressable>
         </View>
+        {Platform.OS !== 'web' ? (
+          <Pressable accessibilityRole="link" accessibilityLabel="Find friends from your contacts" onPress={() => router.replace('/find-contacts')} style={({ pressed }) => [styles.poster, pressed && { opacity: 0.7 }]}>
+            <Ionicons name="people-outline" size={18} color={colors.text} />
+            <Text style={styles.posterText}>Find friends from your contacts</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+          </Pressable>
+        ) : null}
         <Pressable accessibilityRole="link" accessibilityLabel="Print a poster for your club" onPress={() => router.replace('/club-poster')} style={({ pressed }) => [styles.poster, pressed && { opacity: 0.7 }]}>
           <Ionicons name="print-outline" size={18} color={colors.text} />
           <Text style={styles.posterText}>Print a poster for your club</Text>

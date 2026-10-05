@@ -71,6 +71,9 @@ export default function Settings() {
       rows: [
         { icon: 'person-circle-outline', label: 'Account center', detail: 'Password, sign-in and payments', onPress: () => router.push('/account') },
         { icon: 'shield-checkmark-outline', label: 'Privacy center', onPress: () => router.push('/privacy') },
+        // Oct 4 (owner): link a number so friends can find you, and find friends from your contacts.
+        { icon: 'call-outline', label: 'Phone number', detail: 'So friends can find you', onPress: () => router.push('/link-phone') },
+        ...(Platform.OS === 'web' ? [] : [{ icon: 'people-outline' as const, label: 'Find friends from contacts', onPress: () => router.push('/find-contacts') }]),
         { icon: 'bulb-outline', label: 'Show tips again', onPress: () => { resetTips(); showToast({ title: 'Tips will show again', icon: 'bulb-outline' }); } },
       ],
     },

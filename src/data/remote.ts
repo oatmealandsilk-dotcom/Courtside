@@ -20,7 +20,7 @@ import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Story, Tip, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee } from './types';
+import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Story, Tip, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch } from './types';
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
 import { isMapCourtId } from '@/features/places/courtName';
@@ -1774,6 +1774,37 @@ export const remote = {
     return count ?? 0;
   },
 
+  /**
+   * Which of these phone numbers and emails (from the phone's contacts) are
+   * CourtSide players (migration 88). Nothing sent is kept. 'limit' after 10
+   * checks in a day; null when the server does not have it yet.
+   */
+  async matchContacts(phones: string[], emails: string[]): Promise<ContactMatch[] | 'limit' | null> {
+    const { data, error } = await need().rpc('match_contacts', { p_phones: phones.slice(0, 3000), p_emails: emails.slice(0, 3000) });
+    if (error || !data) return null;
+    const result = data as { matches?: ContactMatch[]; error?: string };
+    if (result.error === 'limit') return 'limit';
+    return result.matches ?? null;
+  },
+  /** The phone number linked to this account and confirmed by text, in +digits form, or null. */
+  async myPhone(): Promise<string | null> {
+    const { data } = await need().auth.getUser();
+    const phone = data.user?.phone_confirmed_at ? data.user.phone : '';
+    return phone ? `+${phone.replace(/^\+/, '')}` : null;
+  },
+  /** Texts a 6-digit code to this number; confirmPhoneLink finishes the link. Throws a readable message. */
+  async startPhoneLink(phone: string) {
+    const { error } = await need().auth.updateUser({ phone });
+    if (error) throw new Error(phoneError(error.message));
+  },
+  async confirmPhoneLink(phone: string, code: string) {
+    const { error } = await need().auth.verifyOtp({ phone, token: code, type: 'phone_change' });
+    if (error) throw new Error(phoneError(error.message));
+  },
+  async unlinkPhone() {
+    const { error } = await need().rpc('unlink_my_phone');
+    if (error) throw new Error('That did not go through. Try again.');
+  },
   /** Everyone who joined through my link or code: counted, or what is still missing (migration 85). Null while the function is missing. */
   async fetchMyInvitees(): Promise<Invitee[] | null> {
     const { data, error } = await need().rpc('my_invitees');
@@ -3150,6 +3181,17 @@ async function roomForSmallCover(me: ID): Promise<boolean> {
  * `me` is the folder it goes in: your own id, or a group's id for a group's
  * photo (migration 73 lets only that group's admins put files there).
  */
+/** Supabase's phone messages, in plain words. */
+function phoneError(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes('provider') || m.includes('unsupported') || m.includes('sms')) return 'Phone numbers can’t be linked just yet. Try again soon.';
+  if (m.includes('already') || m.includes('registered') || m.includes('exists')) return 'That number is already linked to another CourtSide account.';
+  if (m.includes('expired') || m.includes('invalid') || m.includes('token')) return 'That code didn’t work. Check it, or send a new one.';
+  if (m.includes('rate') || m.includes('too many') || m.includes('seconds')) return 'Too many tries. Wait a minute, then try again.';
+  if (m.includes('phone')) return 'That number doesn’t look right. Include the area code.';
+  return 'That didn’t go through. Try again.';
+}
+
 export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'video' | 'audio', onProgress?: (fraction: number) => void, options?: { smallCover?: boolean }): Promise<string> {
   try {
     const db = need();
