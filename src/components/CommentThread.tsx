@@ -5,6 +5,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { CommentRow, replyIndent } from '@/components/CommentRow';
 import type { Comment, ID } from '@/data/types';
+import { shownInList } from '@/features/hiddenWords/hiddenWords';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
@@ -19,9 +20,11 @@ const time = (c: Comment) => Date.parse(c.createdAt);
  * out: top-level comments in `order`, each with its replies oldest first (the
  * newest at the bottom of its thread). A reply whose comment is not here (a
  * hidden or not-yet-loaded one) is left out rather than shown on its own.
+ * One hidden by its owner's Hidden words (migration 117) shows only to `me`
+ * when I wrote it (the owner finds it under "Hidden comments" instead).
  */
-export function threadsOf(comments: Comment[], targetId: ID, order: 'oldest' | 'newest'): Thread[] {
-  const here = comments.filter((c) => c.postId === targetId);
+export function threadsOf(comments: Comment[], targetId: ID, order: 'oldest' | 'newest', me: ID | null = null): Thread[] {
+  const here = comments.filter((c) => c.postId === targetId && shownInList(c, c.authorId, me));
   const tops = here.filter((c) => !c.parentId).sort((a, b) => (order === 'oldest' ? time(a) - time(b) : time(b) - time(a)));
   const under = new Map<ID, Comment[]>();
   for (const c of here) if (c.parentId) under.set(c.parentId, [...(under.get(c.parentId) ?? []), c]);

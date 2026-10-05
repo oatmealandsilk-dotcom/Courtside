@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, EmptyState, Screen } from '@/components/ui';
@@ -127,6 +128,8 @@ export default function NewMessage() {
       case 'teen': return groupLockNote(namesOf(outcome.who), true);
       case 'blocked': return 'Some of the people you picked can’t be in a group together. Take someone out and try again.';
       case 'full': return `A group can have up to ${GROUP_CAP} people, you included.`;
+      // A name refused for its words (migration 117).
+      case 'words': return BLOCKED_WORDS_NOTE;
       default: return 'That group didn’t start. Check your connection and try again.';
     }
   };

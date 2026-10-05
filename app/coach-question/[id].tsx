@@ -14,6 +14,8 @@ import { Avatar, Button, Chip, EmptyState, Field, Screen } from '@/components/ui
 import { relativeTime } from '@/lib/format';
 import { afterMenu, confirm, confirmAfterMenu, confirmReport } from '@/lib/confirm';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
+import { HiddenComments, HiddenReplyRow } from '@/components/HiddenComments';
+import { hiddenCoachRepliesOn, shownInList } from '@/features/hiddenWords/hiddenWords';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useStillLoading } from '@/lib/useStillLoading';
@@ -46,9 +48,11 @@ export default function CoachQuestionDetail() {
   if (found) {
     shown.current = {
       question: found,
+      // One hidden by the asker's Hidden words (migration 117) shows only to the coach who wrote it;
+      // the asker finds it under "Hidden replies" at the end.
       replies: found.replyIds
         .map((rid) => coachReplies.find((r) => r.id === rid))
-        .filter((r): r is NonNullable<typeof r> => Boolean(r))
+        .filter((r): r is NonNullable<typeof r> => Boolean(r) && shownInList(r!, r!.coachUserId, currentUserId))
         .sort((a, b) => b.helpfulBy.length - a.helpfulBy.length),
     };
   }
@@ -63,6 +67,7 @@ export default function CoachQuestionDetail() {
     );
   }
   const { question, replies } = view;
+  const hiddenReplies = hiddenCoachRepliesOn(coachReplies, question.id, currentUserId, question.authorId);
 
   const author = users.find((u) => u.id === question.authorId);
   const iAmCoach = Boolean(currentUser?.isCoach);
@@ -243,8 +248,18 @@ export default function CoachQuestionDetail() {
 
       {!replies.length ? (
         <Text style={styles.waiting}>
-          Coaches usually reply within a day. You will get a notification when they do.
+          {hiddenReplies.length
+            ? 'A coach replied. It’s under Hidden replies below.'
+            : 'Coaches usually reply within a day. You will get a notification when they do.'}
         </Text>
+      ) : null}
+
+      {hiddenReplies.length ? (
+        <View style={styles.hiddenReplies}>
+          <HiddenComments count={hiddenReplies.length} noun="replies">
+            {hiddenReplies.map((r) => <HiddenReplyRow key={r.id} authorId={r.coachUserId} body={r.body} createdAt={r.createdAt} onUnhide={() => actions.unhideByWords('coach-reply', r.id)} />)}
+          </HiddenComments>
+        </View>
       ) : null}
 
       {removed ? null : iAmCoach ? (
@@ -346,6 +361,8 @@ const styleDefinitions = StyleSheet.create({
   replyActions: { flexDirection: 'row', gap: spacing.xl },
   helpful: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   waiting: { ...typography.small, color: colors.textFaint, lineHeight: 20, paddingBottom: spacing.lg },
+  // Hidden replies (migration 117) sit clear of the line above them and of the answer box below.
+  hiddenReplies: { marginTop: spacing.lg, marginBottom: spacing.lg },
   composer: { gap: spacing.md, paddingTop: spacing.xl },
   applyPrompt: {
     flexDirection: 'row',

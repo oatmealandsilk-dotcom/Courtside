@@ -20,12 +20,14 @@ import { AttachButton, AttachedPreview, ReplyMediaView, type ReplyAttachment } f
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useApp } from '@/store/AppContext';
 import type { Answer } from '@/data/types';
+import { listedAnswers } from '@/features/hiddenWords/hiddenWords';
 import { colors, font, radius, spacing, typography } from '@/theme';
 
 export function ThreadReplies({questionId, preview = false}:{questionId:string; preview?:boolean}) {
   const {questions,answers,currentUserId,actions}=useApp();
   const question=questions.find(q=>q.id===questionId);
-  const thread=answers.filter(a=>a.questionId===questionId).sort((a,b)=>Number(b.id===question?.acceptedAnswerId)-Number(a.id===question?.acceptedAnswerId)||b.votes-a.votes);
+  // Never one hidden by the asker's Hidden words (migration 117), unless it is yours, nor a reply under one: the thread page lists those for the asker.
+  const thread=listedAnswers(answers,questionId,currentUserId).sort((a,b)=>Number(b.id===question?.acceptedAnswerId)-Number(a.id===question?.acceptedAnswerId)||b.votes-a.votes);
   const canAccept = !!question && question.authorId === currentUserId && !preview;
   return <View>{thread.filter(a=>!a.parentAnswerId||!thread.some(p=>p.id===a.parentAnswerId)).map(a=><ThreadReply key={a.id} answer={a} thread={thread} acceptedId={question?.acceptedAnswerId} askerId={question?.authorId} preview={preview} closed={!!question?.removed} onAccept={canAccept ? (id) => actions.acceptAnswer(questionId, id) : undefined}/>)}</View>;
 }

@@ -31,6 +31,8 @@ import type { Answer } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
+import { HiddenComments, HiddenReplyRow } from '@/components/HiddenComments';
+import { hiddenAnswersOn, shownInList } from '@/features/hiddenWords/hiddenWords';
 import { confirm } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
 import { publicRoute } from '@/features/share/publicRoute';
@@ -65,9 +67,12 @@ function QuestionDetail() {
   }
 
   const meta = TOPIC_META[question.topic];
+  // One hidden by your Hidden words (migration 117) shows only to whoever wrote it;
+  // you find it under "Hidden replies" at the end, as the asker.
+  const hidden = hiddenAnswersOn(answers, question.id, currentUserId, question.authorId);
   const thread = question.answerIds
     .map((aid) => answers.find((a) => a.id === aid))
-    .filter((a): a is Answer => Boolean(a))
+    .filter((a): a is Answer => Boolean(a) && shownInList(a!, a!.authorId, currentUserId))
     .sort((a, b) => {
       if (question.acceptedAnswerId === a.id) return -1;
       if (question.acceptedAnswerId === b.id) return 1;
@@ -195,6 +200,10 @@ function QuestionDetail() {
         {thread.filter(answer => !answer.parentAnswerId || !thread.some(parent => parent.id === answer.parentAnswerId)).map(answer => (
           <ThreadReply key={answer.id} answer={answer} thread={thread} acceptedId={question.acceptedAnswerId} askerId={question.authorId} closed={!!removed} onAccept={question.authorId === currentUserId ? (aid) => actions.acceptAnswer(question.id, aid) : undefined} />
         ))}
+
+        <HiddenComments count={hidden.length} noun="replies">
+          {hidden.map((a) => <HiddenReplyRow key={a.id} authorId={a.authorId} body={a.body} createdAt={a.createdAt} onUnhide={() => actions.unhideByWords('answer', a.id)} />)}
+        </HiddenComments>
 
       </View>
     </Screen></SwipeSurface>

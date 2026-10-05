@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { Button, Screen } from '@/components/ui';
 import type { HandleStatus } from '@/data/remote';
+import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import { confirm } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
 import { show as showToast } from '@/lib/toast';
@@ -88,6 +89,8 @@ export default function ChangeHandle() {
       case 'taken': return { icon: 'close-circle' as const, text: `@${handle} is taken`, tone: styles.bad };
       case 'held': return { icon: 'time-outline' as const, text: `@${handle} was just let go by someone, so it is held for a couple of weeks`, tone: styles.bad };
       case 'invalid': return { icon: 'alert-circle-outline' as const, text: 'Use 3 to 24 letters, numbers or underscores', tone: styles.bad };
+      // Refused words (migration 117): said before the 30-day confirmation, not after it.
+      case 'words': return { icon: 'alert-circle-outline' as const, text: BLOCKED_WORDS_NOTE, tone: styles.bad };
       default: return null;
     }
   })();

@@ -226,6 +226,9 @@ Deno.serve(async (req) => {
           question, video_url: videoUrl, video_label: videoUrl ? 'Video attached' : null,
           status: 'awaiting-payment', price_cents: price, fee_cents: fee,
         }).select('id').single();
+        // A question with words CourtSide refuses (slurs, threats, sexual words about children:
+        // migration 117 checks it even though this function files it) is said in plain words.
+        if (error && /blocked_words/.test(error.message)) throw new Plain('This includes words that break CourtSide’s rules.');
         if (error || !request) throw new Error(error?.message ?? 'could not file the request');
         const done = back('courtside://booking-done');
         const who = coachProfile?.name || coachProfile?.handle || 'your coach';

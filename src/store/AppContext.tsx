@@ -17,7 +17,7 @@ import { TERMS_VERSION } from '@/lib/legal';
 
 import { fetchBootstrap, searchPosts as apiSearchPosts, signIn as apiSignIn, type Bootstrap } from '@/data/api';
 import * as demoApi from '@/data/api';
-import { CHAT_PHOTO_UNREADABLE, auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState } from '@/data/remote';
+import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, auth as remoteAuth, fetchRemote, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
@@ -108,7 +108,8 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch, HealthShareKey, HeadToHead, MatchSet, Removed, RemovedItem, TakedownKind, TakedownReason, TournamentEntry } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch, HealthShareKey, HeadToHead, MatchSet, Removed, RemovedItem, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind } from '@/data/types';
+import { HIDDEN_WORDS_MAX, HIDDEN_WORD_LENGTH, cleanWords, defaultHiddenWords } from '@/features/hiddenWords/hiddenWords';
 import { setsWinner } from '@/features/activity/score';
 
 interface NewStoryInput {
@@ -170,7 +171,7 @@ export type CoachApplicationInput = Omit<CoachApplication, 'id' | 'userId' | 'st
  * 'teen', the picked people who don't follow you, re-checked just now; for
  * 'blocked', the one person being added. Empty when it can't tell.
  */
-export type GroupOutcome = { ok: true; id: ID } | { ok: false; why: 'teen' | 'blocked' | 'full' | 'failed'; who: ID[] };
+export type GroupOutcome = { ok: true; id: ID } | { ok: false; why: 'teen' | 'blocked' | 'full' | 'words' | 'failed'; who: ID[] };
 
 interface NewQuestionInput {
   title: string;
@@ -462,6 +463,11 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
    * switch is not shown: it would do nothing, and come back on at the next start.
    */
   contactsFindableLive: boolean;
+  /**
+   * Your Hidden words (Settings → Hidden words, migration 117): null until
+   * the page has asked for them. The demo keeps its own on this phone.
+   */
+  hiddenWords: HiddenWords | null;
   /** Whether the app may ask the device where you are, and the city it found. */
   locationEnabled: boolean;
   /**
@@ -520,7 +526,7 @@ function freshAccountSettings(): Partial<AppState> {
   if (!isSupabaseConfigured) return {};
   return {
     mutedIds: [], blockedIds: [], blockedMeIds: [], reportedIds: [], alertIds: [], saved: { postIds: [], questionIds: [] },
-    paymentMethods: [], defaultPaymentId: null, prefs: DEFAULT_PREFS,
+    paymentMethods: [], defaultPaymentId: null, prefs: DEFAULT_PREFS, hiddenWords: null,
   };
 }
 
@@ -579,6 +585,19 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /** Changes your handle. Throws with a plain-English reason when it cannot. */
   changeHandle: (handle: string) => Promise<void>;
   setPref: (key: PrefKey, value: boolean) => void;
+  /**
+   * Whether a post's or Instant's words (caption, place) would be refused
+   * for slurs, sexual words about children or threats (migration 117), asked
+   * before its photo or clip goes up so the draft stays. False in the demo,
+   * or when it cannot be asked (the post is still checked when saved).
+   */
+  wordsRefused: (texts: string[]) => Promise<boolean>;
+  /** Your Hidden words, asked for (migration 117). 'not_ready' on a database without them. */
+  loadHiddenWords: () => Promise<'ok' | 'not_ready' | 'failed'>;
+  /** Saves them at once on this phone; resolves with why it did not save on the server, or null. An under-18 account keeps both offensive filters on. */
+  saveHiddenWords: (next: Omit<HiddenWords, 'locked'>) => Promise<string | null>;
+  /** "Unhide" on a comment or reply your Hidden words hid: everyone sees it again. Nobody is told. */
+  unhideByWords: (kind: HiddenWordsKind, id: ID) => void;
   /** The asker marks the answer that solved it. */
   acceptAnswer: (questionId: ID, answerId: ID) => void;
   /** The asker marks their coach question as answered. */
@@ -968,7 +987,8 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /* Messaging */
   openConversationWith: (userId: ID) => ID;
   /** Sends words in a chat; `replyToId` answers one of its messages (quoted above the new one). */
-  sendMessage: (conversationId: ID, body: string, replyToId?: ID) => void;
+  /** Resolves 'blocked' when its words were refused (migration 117): it is taken back, so the chat can put the words back in the box. */
+  sendMessage: (conversationId: ID, body: string, replyToId?: ID) => Promise<'blocked' | undefined>;
   /**
    * Your inbox settings for a chat, only ever seen by you: pin it to the top
    * (up to 3; false if that would be a fourth), mark it unread or read, or
@@ -1169,8 +1189,8 @@ function mergeFetchedMessages(prev: AppState, fetched: Message[], me: ID, openCh
     // a message that is here only for a reply's quote from further back,
     // outside that run (it would leave a gap above it).
     const inChat = inOrder([...c.messageIds, ...(cameIn.get(c.id) ?? [])], byId);
-    // An event line ("Mira added Dev") is news, but never unread.
-    const newFromOthers = added.filter((m) => m.conversationId === c.id && m.senderId !== me && m.kind !== 'system').length;
+    // An event line ("Mira added Dev") is news, but never unread; nor is one your Hidden words hid (migration 117).
+    const newFromOthers = added.filter((m) => m.conversationId === c.id && m.senderId !== me && m.kind !== 'system' && !m.hiddenByWords).length;
     const last = inChat[inChat.length - 1];
     return { ...c, messageIds: inChat.map((m) => m.id), updatedAt: last && last.createdAt > c.updatedAt ? last.createdAt : c.updatedAt, unreadCount: c.id === openChat ? c.unreadCount : c.unreadCount + newFromOthers };
   });
@@ -1269,7 +1289,7 @@ function withMapRings(users: User[], seen: Record<ID, LastSeen>, me: ID | null, 
   return changed ? next : users;
 }
 
-const isRefusal = (result: string): result is GroupRefusal | 'failed' => ['blocked', 'teen', 'full', 'not-admin', 'failed'].includes(result);
+const isRefusal = (result: string): result is GroupRefusal | 'failed' => ['blocked', 'teen', 'full', 'not-admin', 'words', 'failed'].includes(result);
 
 // In a browser, WHOOP's tennis sign-in (and Fitbit's, Oura's or Polar's) comes
 // back in its own small window (?whoop=pending, ?tracker=pending): that window
@@ -1677,8 +1697,10 @@ function addLiveComments(prev: AppState, got: Comment[], kind: 'post' | 'hit'): 
   const fresh = got.filter((c) => !have.has(c.id) && !prev.blockedIds.includes(c.authorId));
   // Each one shown is counted on its post or Instant, including any held but not yet counted.
   const shown = [...got.filter((c) => have.has(c.id)), ...fresh];
+  // One your Hidden words hid (migration 117), or a reply under it, is not counted for you, its owner.
+  const hiddenIds = new Set([...prev.comments, ...fresh].filter((c) => c.hiddenByWords).map((c) => c.id));
   const grow = <T extends { id: ID; commentIds: ID[] }>(x: T): T => {
-    const missing = shown.filter((c) => c.postId === x.id && !x.commentIds.includes(c.id)).map((c) => c.id);
+    const missing = shown.filter((c) => c.postId === x.id && !hiddenIds.has(c.id) && !(c.parentId && hiddenIds.has(c.parentId)) && !x.commentIds.includes(c.id)).map((c) => c.id);
     return missing.length ? { ...x, commentIds: [...x.commentIds, ...missing] } : x;
   };
   const posts = kind === 'post' ? prev.posts.map(grow) : prev.posts;
@@ -1823,6 +1845,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     defaultPaymentId: readDefaultPayment(),
     prefs: DEFAULT_PREFS,
     contactsFindableLive: false,
+    hiddenWords: null,
     tips: [],
     sessions: [],
     sessionTags: [],
@@ -2026,44 +2049,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
           dropRetries.current += 1;
           retry = setTimeout(() => setLiveEpoch((n) => n + 1), wait);
         },
-        added: (message) => {
-          heardUpTo(me, [message]);
-          if (stateRef.current.messages.some((m) => m.id === message.id) || isHidden(me, message.id)) return;
-          const known = stateRef.current.conversations.some((c) => c.id === message.conversationId);
-          if (known) {
-            // An event line ("Mira added Dev", "Dev named the group…") is never unread.
-            const system = message.kind === 'system';
-            setState((prev) => prev.messages.some((m) => m.id === message.id) ? prev : {
-              ...prev,
-              messages: [...prev.messages, message],
-              conversations: prev.conversations.map((c) => c.id === message.conversationId
-                ? { ...c, messageIds: [...c.messageIds, message.id], updatedAt: message.createdAt, unreadCount: message.senderId === me || system ? c.unreadCount : c.unreadCount + 1 }
-                : c),
-            });
-            // It also means the group itself changed (its people, name, photo
-            // or admins): fetch it as it stands, so every screen shows it now.
-            if (system) void refreshChat(message.conversationId);
-            // Someone else's message drops in as a banner at the top (MessageBanner decides whether it shows).
-            else if (message.senderId !== me) heardMessage(message);
-            return;
-          }
-          void remote.fetchConversation(me, message.conversationId).then((fetched) => {
-            if (!fetched) return;
-            const got = chatUnhidden(me, fetched);
-            setState((prev) => prev.conversations.some((c) => c.id === got.conversation.id) ? prev : {
-              ...prev,
-              conversations: [got.conversation, ...prev.conversations],
-              messages: [...prev.messages, ...got.messages.filter((m) => !prev.messages.some((p) => p.id === m.id))],
-            });
-            // A chat someone has just started with you: its first message gets a banner too.
-            if (message.senderId !== me && message.kind !== 'system') heardMessage(message);
-          });
+        added: (arrived) => {
+          // From someone you don't follow: asked whether your Hidden words hid it (migration 117) before it shows.
+          const ask = arrived.senderId !== me && arrived.kind !== 'system' && !!arrived.body.trim() && !stateRef.current.followingIds.includes(arrived.senderId);
+          if (ask) { void remote.heldMessageIds([arrived.id]).catch(() => [] as ID[]).then((held) => take(held.includes(arrived.id) ? { ...arrived, hiddenByWords: true } : arrived)); return; }
+          take(arrived);
         },
         // An edit, or a reaction, from the other phone: the words and reactions update in place.
         changed: (message) => {
+          const was = stateRef.current.messages.find((m) => m.id === message.id);
           setState((prev) => prev.messages.some((m) => m.id === message.id)
             ? { ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, body: message.body, editedAt: message.editedAt, reactions: message.reactions } : m)) }
             : prev);
+          // New words from someone you don't follow: asked again whether your Hidden words hide them (migration 117).
+          if (!was || was.body === message.body || message.senderId === me || stateRef.current.followingIds.includes(message.senderId)) return;
+          void remote.heldMessageIds([message.id]).catch(() => null).then((held) => {
+            if (!held) return;
+            const hidden = held.includes(message.id) || undefined;
+            setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id && m.body === message.body ? { ...m, hiddenByWords: hidden } : m)) }));
+          });
         },
         // Unsent by its sender: gone from this chat too, and from the banner if it is on one.
         removed: (messageId) => {
@@ -2075,6 +2079,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
           } : prev);
         },
       });
+      function take(message: Message) {
+        heardUpTo(me, [message]);
+        if (stateRef.current.messages.some((m) => m.id === message.id) || isHidden(me, message.id)) return;
+        const known = stateRef.current.conversations.some((c) => c.id === message.conversationId);
+        if (known) {
+          // An event line ("Mira added Dev", "Dev named the group…") is never unread.
+          const system = message.kind === 'system';
+          setState((prev) => prev.messages.some((m) => m.id === message.id) ? prev : {
+            ...prev,
+            messages: [...prev.messages, message],
+            conversations: prev.conversations.map((c) => c.id === message.conversationId
+              // Never one your Hidden words hid (migration 117): no alert came for it, and it raises no badge.
+              ? { ...c, messageIds: [...c.messageIds, message.id], updatedAt: message.createdAt, unreadCount: message.senderId === me || system || message.hiddenByWords ? c.unreadCount : c.unreadCount + 1 }
+              : c),
+          });
+          // It also means the group itself changed (its people, name, photo
+          // or admins): fetch it as it stands, so every screen shows it now.
+          if (system) void refreshChat(message.conversationId);
+          // Someone else's message drops in as a banner at the top (MessageBanner decides whether it shows);
+          // never one your Hidden words hid (migration 117), as no alert came for it either.
+          else if (message.senderId !== me && !message.hiddenByWords) heardMessage(message);
+          return;
+        }
+        void remote.fetchConversation(me, message.conversationId).then((fetched) => {
+          if (!fetched) return;
+          const got = chatUnhidden(me, fetched);
+          setState((prev) => prev.conversations.some((c) => c.id === got.conversation.id) ? prev : {
+            ...prev,
+            conversations: [got.conversation, ...prev.conversations],
+            messages: [...prev.messages, ...got.messages.filter((m) => !prev.messages.some((p) => p.id === m.id))],
+          });
+          // A chat someone has just started with you: its first message gets a banner too (not one your Hidden words hid).
+          if (message.senderId !== me && message.kind !== 'system' && !message.hiddenByWords) heardMessage(message);
+        });
+      }
       // Someone read your messages: "Read" shows under them straight away.
       offReads = remote.onReads((conversationId, userId, readAt) => {
         const upTo = Date.parse(readAt);
@@ -2846,7 +2885,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const updateIdentity = useCallback((patch: Partial<Pick<User, 'name' | 'bio' | 'location'>> & { avatarUrl?: string; cityAt?: { lat: number; lng: number } | null }) => {
-    const before = stateRef.current.users.find((u) => u.id === stateRef.current.currentUserId)?.avatarUrl;
+    const self = stateRef.current.users.find((u) => u.id === stateRef.current.currentUserId);
+    const before = self?.avatarUrl;
+    // Words refused (migration 117): your name, bio and town go back to what they were (the toast says why).
+    const putBack = (r: 'ok' | 'blocked' | 'failed') => {
+      if (r !== 'blocked' || !self) return;
+      patchCurrentUser((u) => ({ ...u, name: patch.name !== undefined && u.name === patch.name ? self.name : u.name, bio: patch.bio !== undefined && u.bio === patch.bio ? self.bio : u.bio, location: patch.location !== undefined && u.location === patch.location ? self.location : u.location }));
+    };
     patchCurrentUser(u => ({ ...u, ...patch, cityAt: patch.cityAt === null ? undefined : patch.cityAt ?? u.cityAt }));
     const me = stateRef.current.currentUserId;
     if (!live(me)) return;
@@ -2856,7 +2901,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // Any words in the same change go now, and the photo on its own once it is up: a slow
         // upload never carries older words over newer ones saved meanwhile (Save changes).
         const { avatarUrl: _photo, ...rest } = patch;
-        if (Object.values(rest).some((v) => v !== undefined)) void remote.updateProfile(me!, rest).catch(() => undefined);
+        if (Object.values(rest).some((v) => v !== undefined)) void remote.saveProfile(me!, rest).then(putBack, () => undefined);
         // A new photo is shown at once but only exists on this phone until it uploads. If the
         // upload fails, say so and put the old photo back: before, the failure was silent, the
         // owner kept seeing the new photo and everyone else saw their initials.
@@ -2877,7 +2922,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await remote.updateProfile(me!, { avatarUrl });
         return;
       }
-      await remote.updateProfile(me!, patch);
+      putBack(await remote.saveProfile(me!, patch));
     })();
   }, [patchCurrentUser]);
   const checkHandle = useCallback(async (raw: string): Promise<HandleStatus | null> => {
@@ -3759,7 +3804,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const healthWas = post.session;
     const tracker = healthWas?.activityId ? stateRef.current.detectedActivities.find((a) => a.id === healthWas.activityId && a.userId === me) : undefined;
     const healthNow = healthWas?.activityId && patch.share && !sameShare(postShare(healthWas), patch.share) ? reshare(healthWas, patch.share, tracker) : undefined;
-    if (live(me, postId)) remote.updatePost(postId, { body: patch.body, tags, taggedUserIds: patch.taggedUserIds, location, court, editedAt });
+    if (live(me, postId)) void remote.updatePost(postId, { body: patch.body, tags, taggedUserIds: patch.taggedUserIds, location, court, editedAt }).then((r) => {
+      if (r !== 'blocked') return;
+      // Refused for its words (migration 117): the post goes back to what it said (the toast says why).
+      setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === postId && p.editedAt === editedAt ? { ...p, body: post.body, tags: post.tags, taggedUserIds: post.taggedUserIds, location: post.location, court: post.court, editedAt: post.editedAt } : p)) }));
+    });
     setState((prev) => {
       const before = prev.posts.find((p) => p.id === postId);
       const newlyTagged = patch.taggedUserIds.filter((id) => !(before?.taggedUserIds ?? []).includes(id));
@@ -3781,13 +3830,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const editQuestion = useCallback((questionId: ID, patch: { title: string; body: string }) => {
     const me = requireUser();
     haptics.commit();
+    const was = stateRef.current.questions.find((q) => q.id === questionId && q.authorId === me);
     const tags = Array.from(new Set((patch.body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map((tag) => tag.slice(1).toLowerCase())));
     setState((prev) => ({
       ...prev,
       questions: prev.questions.map((q) => (q.id === questionId && q.authorId === me ? { ...q, title: patch.title, body: patch.body, tags, editedAt: new Date().toISOString() } : q)),
     }));
     const saved = stateRef.current.questions.find((q) => q.id === questionId);
-    if (saved && live(me, questionId)) void remote.updateQuestion({ ...saved, title: patch.title, body: patch.body, tags, editedAt: new Date().toISOString() });
+    if (saved && live(me, questionId)) void remote.updateQuestion({ ...saved, title: patch.title, body: patch.body, tags, editedAt: new Date().toISOString() }).then((r) => {
+      if (r !== 'blocked' || !was) return;
+      // Refused for its words (migration 117): the thread goes back to what it said (the toast says why).
+      setState((prev) => ({ ...prev, questions: prev.questions.map((q) => (q.id === questionId && q.title === patch.title && q.body === patch.body ? { ...q, title: was.title, body: was.body, tags: was.tags, editedAt: was.editedAt } : q)) }));
+    });
   }, [requireUser]);
   const acceptAnswer = useCallback((questionId: ID, answerId: ID) => {
     const me = requireUser();
@@ -3980,7 +4034,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       };
       haptics.commit();
       // A plain comment has no parent; only a reply needs its parent to be a saved row.
-      if (live(me, storyId) && (!comment.parentId || live(comment.parentId))) remote.insertStoryComment(comment);
+      // Refused for its words (migration 117): it comes off the list again (the toast says why).
+      if (live(me, storyId) && (!comment.parentId || live(comment.parentId))) void remote.insertStoryComment(comment).then((r) => { if (r === 'blocked') setState((prev) => dropComment(prev, comment.id)); });
       setState((prev) => {
         const story = prev.stories.find((st) => st.id === storyId);
         const next: AppState = {
@@ -4012,7 +4067,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       haptics.commit();
       // A plain comment has no parent; only a reply needs its parent to be a saved row.
       if (live(me, postId) && (!comment.parentId || live(comment.parentId))) {
-        if (!photo) remote.insertComment(comment);
+        // Refused for its words (migration 117): it comes off the list again (the toast says why).
+        if (!photo) void remote.insertComment(comment).then((r) => { if (r === 'blocked') setState((prev) => dropComment(prev, comment.id)); });
         else void (async () => {
           // Shrunk first (about 1080 px, a couple of hundred KB), then uploaded, then saved with its address.
           let imageUrl: string | undefined;
@@ -4024,7 +4080,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           // empty, and leaves the thread rather than staying as a blank row.
           if (!imageUrl && !said) { setState((prev) => dropComment(prev, comment.id)); return; }
           setState((prev) => ({ ...prev, comments: imageUrl ? prev.comments.map((c) => (c.id === comment.id ? { ...c, imageUrl } : c)) : prev.comments.map((c) => (c.id === comment.id ? { ...c, imageUrl: undefined } : c)) }));
-          await remote.insertComment({ ...comment, imageUrl });
+          if ((await remote.insertComment({ ...comment, imageUrl })) === 'blocked') setState((prev) => dropComment(prev, comment.id));
         })();
       }
       setState((prev) => {
@@ -4047,7 +4103,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const watchComments = useCallback((targetId: ID, kind: 'post' | 'hit') => {
     if (!live(stateRef.current.currentUserId, targetId)) return () => undefined;
     try {
-      return remote.onComments({ id: targetId, kind }, {
+      const me = stateRef.current.currentUserId;
+      const ownerId = kind === 'hit' ? stateRef.current.stories.find((st) => st.id === targetId)?.authorId : stateRef.current.posts.find((p) => p.id === targetId)?.authorId;
+      return remote.onComments({ id: targetId, kind, mine: !!me && ownerId === me }, {
         added: (comment) => setState((prev) => addLiveComments(prev, [comment], kind)),
         removed: (commentId) => setState((prev) => dropComment(prev, commentId)),
         connected: () => {
@@ -4080,7 +4138,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         href: `/question/${question.id}`, icon: 'chatbubbles',
       }));
       // The poll is saved once its thread is, since it hangs off the thread.
-      if (live(me, question.id)) void remote.upsertQuestion(question).then(() => { if (question.poll) void remote.insertPoll(question.id, question.poll.options); });
+      if (live(me, question.id)) void remote.upsertQuestion(question).then((r) => {
+        // Refused for its words (migration 117): it comes down again (the toast says why).
+        if (r === 'blocked') { setState((prev) => ({ ...prev, questions: prev.questions.filter((q) => q.id !== question.id) })); return; }
+        if (question.poll) void remote.insertPoll(question.id, question.poll.options);
+      });
       return question.id;
     },
     [requireUser],
@@ -4208,7 +4270,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (deleted()) return false;
           // A reply that was only a picture, which did not upload, is not saved empty.
           if (!hosted && !answer.body.trim()) return false;
-          await remote.upsertAnswer({ ...answer, media: hosted });
+          if ((await remote.upsertAnswer({ ...answer, media: hosted })) === 'blocked') {
+            // Refused for its words (migration 117): it comes off the thread again (the toast says why).
+            setState((prev) => ({
+              ...prev,
+              answers: prev.answers.filter((a) => a.id !== answer.id),
+              questions: prev.questions.map((q) => (q.id === answer.questionId ? { ...q, answerIds: q.answerIds.filter((id) => id !== answer.id) } : q)),
+            }));
+            return false;
+          }
           return true;
         })().catch(() => false);
         answerSaves.current.set(answer.id, saving);
@@ -4259,11 +4329,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...input,
       };
       setState((prev) => ({ ...prev, coachQuestions: [question, ...prev.coachQuestions] }));
+      // Refused for its words (migration 117): it comes down again (the toast says why).
+      const saveQuestion = (q: CoachQuestion) => remote.upsertCoachQuestion(q).then((r) => {
+        if (r === 'blocked') setState((prev) => ({ ...prev, coachQuestions: prev.coachQuestions.filter((x) => x.id !== q.id) }));
+        return r;
+      });
       if (live(me, question.id)) {
         // A clip still on this phone goes up first; the question is saved
         // pointing at the uploaded copy, so coaches can actually watch it.
         const local = question.videoUrl && isLocalMedia(question.videoUrl) ? question.videoUrl : null;
-        if (!local) void remote.upsertCoachQuestion(question);
+        if (!local) void saveQuestion(question);
         else {
           startUpload(question.id, 'Uploading your clip');
           coachClipsUploading.current.add(question.id);
@@ -4276,7 +4351,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               finishUpload(question.id);
               const saved = { ...question, videoUrl };
               setState((prev) => ({ ...prev, coachQuestions: prev.coachQuestions.map((q) => (q.id === question.id ? saved : q)) }));
-              return remote.upsertCoachQuestion(saved);
+              return saveQuestion(saved);
             })
             .catch((e: Error) => {
               // The question still goes up, without the clip, rather than not at all.
@@ -4285,7 +4360,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               finishUpload(question.id, false, e.message);
               const saved = { ...question, videoUrl: undefined, mediaLabel: undefined };
               setState((prev) => ({ ...prev, coachQuestions: prev.coachQuestions.map((q) => (q.id === question.id ? saved : q)) }));
-              void remote.upsertCoachQuestion(saved);
+              void saveQuestion(saved);
               showToast({ title: 'Your clip did not upload', body: `The question is up without it. ${e.message}`, icon: 'alert-circle-outline' });
             });
         }
@@ -4307,7 +4382,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         helpfulBy: [],
       };
       haptics.commit();
-      if (live(me, questionId)) void remote.insertCoachReply(reply);
+      if (live(me, questionId)) void remote.insertCoachReply(reply).then((r) => {
+        if (r !== 'blocked') return;
+        // Refused for its words (migration 117): it comes off the question again (the toast says why).
+        setState((prev) => ({
+          ...prev,
+          coachReplies: prev.coachReplies.filter((x) => x.id !== reply.id),
+          coachQuestions: prev.coachQuestions.map((q) => (q.id === questionId ? { ...q, replyIds: q.replyIds.filter((id) => id !== reply.id) } : q)),
+        }));
+      });
       setState((prev) => {
         const question = prev.coachQuestions.find((q) => q.id === questionId);
         const next: AppState = {
@@ -4791,8 +4874,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const kept = prev.answers.flatMap((a) => (a.questionId !== questionId ? [a] : fresh.has(a.id) ? [fresh.get(a.id)!] : keep(a) ? [a] : []));
       const known = new Set(kept.map((a) => a.id));
       const answers = [...kept, ...replies.filter((r) => !known.has(r.id))];
-      const inThread = answers.filter((a) => a.questionId === questionId).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1)).map((a) => a.id);
-      return { ...prev, answers, questions: prev.questions.map((q) => (q.id === questionId ? { ...q, answerIds: inThread, acceptedAnswerId: q.acceptedAnswerId && !inThread.includes(q.acceptedAnswerId) ? undefined : q.acceptedAnswerId } : q)) };
+      const here = answers.filter((a) => a.questionId === questionId);
+      // One your Hidden words hid (migration 117), or a reply under it, is not counted for you, the asker.
+      const hiddenIds = new Set(here.filter((a) => a.hiddenByWords).map((a) => a.id));
+      const inThread = here.filter((a) => !hiddenIds.has(a.id) && !(a.parentAnswerId && hiddenIds.has(a.parentAnswerId))).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1)).map((a) => a.id);
+      return { ...prev, answers, questions: prev.questions.map((q) => (q.id === questionId ? { ...q, answerIds: inThread, acceptedAnswerId: q.acceptedAnswerId && !here.some((a) => a.id === q.acceptedAnswerId) ? undefined : q.acceptedAnswerId } : q)) };
     });
   }, []);
   // Only real accounts and real posts are recorded; the demo records nothing.
@@ -4985,31 +5071,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // calledBack), and it never reaches anyone.
   const withdrawn = useRef(new Set<ID>());
   /** After a message's save: true when it was deleted meanwhile, and it is then taken back off the server (its photos too). */
-  const calledBack = (messageId: ID, result: 'refused' | 'failed' | void, photos: ChatPhoto[] = []) => {
+  const calledBack = (messageId: ID, result: 'refused' | 'blocked' | 'failed' | void, photos: ChatPhoto[] = []) => {
     if (!withdrawn.current.delete(messageId)) return false;
     // Refused: it never got there. Failed: it may have got there all the same, so it is unsent anyway.
-    if (result !== 'refused') {
+    if (result !== 'refused' && result !== 'blocked') {
       const hosted = photos.map((p) => p.path).filter((path) => !isLocalMedia(path));
       void remote.unsendMessage(messageId).then(() => { if (hosted.length) void remote.removeChatPhotos(hosted); });
     }
     return true;
   };
 
+  /**
+   * A message refused for its words (migration 117): it would be refused on
+   * every try, so it comes out of the chat rather than staying "Not sent",
+   * and the toast says why. Its photos, already up, come down again.
+   */
+  const takeBackRefused = (message: Message, photos: ChatPhoto[] = []) => {
+    setState((prev) => ({
+      ...prev,
+      messages: prev.messages.filter((m) => m.id !== message.id),
+      conversations: prev.conversations.map((c) => (c.id === message.conversationId ? { ...c, messageIds: c.messageIds.filter((mid) => mid !== message.id) } : c)),
+    }));
+    const hosted = photos.map((p) => p.path).filter((path) => !isLocalMedia(path));
+    if (hosted.length) void remote.removeChatPhotos(hosted);
+    showToast({ title: BLOCKED_WORDS_NOTE, body: 'It wasn’t sent.', icon: 'alert-circle-outline', long: true });
+  };
+
   const sendMessage = useCallback(
-    (conversationId: ID, body: string, replyToId?: ID) => {
+    (conversationId: ID, body: string, replyToId?: ID): Promise<'blocked' | undefined> => {
       haptics.commit();
       const me = requireUser();
       const trimmed = body.trim();
-      if (!trimmed) return;
+      if (!trimmed) return Promise.resolve(undefined);
       const sending = live(me, conversationId);
       // "Sending…" under it until the server has it.
       const message: Message = { ...makeMessage(conversationId, me, trimmed), ...(replyToId ? { replyToId } : null), ...(sending ? { sending: true } : null) };
       setState((prev) => appendMessage(prev, message));
-      if (sending) void remote.insertMessage(message).catch(() => 'failed' as const).then((result) => {
-        if (calledBack(message.id, result)) return;
+      if (!sending) return Promise.resolve(undefined);
+      return remote.insertMessage(message).catch(() => 'failed' as const).then((result): 'blocked' | undefined => {
+        if (calledBack(message.id, result)) return undefined;
+        if (result === 'blocked') { takeBackRefused(message); return 'blocked'; }
         setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, sending: undefined, ...(result === 'failed' ? { failed: true } : null) } : m)) }));
-        if (result === 'failed') return;
-        if (result !== 'refused') return;
+        if (result === 'failed') return undefined;
+        if (result !== 'refused') return undefined;
         setState((prev) => ({
           ...prev,
           messages: prev.messages.filter((m) => m.id !== message.id),
@@ -5022,9 +5126,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           void refreshChat(conversationId).then(() => {
             if (stateRef.current.conversations.some((c) => c.id === conversationId)) showToast({ title: 'You can’t send messages in this chat', icon: 'lock-closed-outline' });
           });
-          return;
+          return undefined;
         }
         showToast({ title: "You can't message this account", icon: 'lock-closed-outline' });
+        return undefined;
       });
     },
     [requireUser, appendMessage, makeMessage, refreshChat],
@@ -5044,6 +5149,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => appendMessage(prev, message));
     if (sending) void remote.insertMessage({ ...message, sending: undefined }).catch(() => 'failed' as const).then((result) => {
       if (calledBack(message.id, result)) return;
+      if (result === 'blocked') { takeBackRefused(message); return; }
       patchMessage(message.id, { sending: undefined, ...(result === 'failed' || result === 'refused' ? { failed: true } : null) });
       if (result === 'refused') void refreshChat(conversationId);
     });
@@ -5073,6 +5179,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!stillThere()) { withdrawn.current.delete(message.id); return; }
     const result = await remote.insertMessage({ ...message, audio: { url, ms: audio.ms }, sending: undefined, failed: undefined }).catch(() => 'failed' as const);
     if (calledBack(message.id, result)) return;
+    if (result === 'blocked') { takeBackRefused(message); return; }
     patchMessage(message.id, { sending: undefined, ...(result === 'failed' || result === 'refused' ? { failed: true } : null) });
     if (result === 'refused') void refreshChat(message.conversationId);
   }, [refreshChat, patchMessage]);
@@ -5132,6 +5239,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const result = await remote.insertMessage(hosted).catch(() => 'failed' as const);
     clearSendProgress(message.id);
     if (calledBack(message.id, result, sent)) return;
+    if (result === 'blocked') { takeBackRefused(message, sent); return; }
     if (result === 'failed' || result === 'refused') setFailed();
     else patchMessage(message.id, { sending: undefined });
     if (result === 'refused') void refreshChat(message.conversationId);
@@ -5196,7 +5304,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * on them in the pickers. For 'blocked' it can only name the one person
    * being added (who they are blocked with stays private).
    */
-  const whoCantJoin = useCallback(async (why: 'teen' | 'blocked' | 'full' | 'failed', ids: ID[]): Promise<ID[]> => {
+  const whoCantJoin = useCallback(async (why: 'teen' | 'blocked' | 'full' | 'words' | 'failed', ids: ID[]): Promise<ID[]> => {
     const me = stateRef.current.currentUserId;
     if (!me) return [];
     if (why === 'blocked') return ids.length === 1 ? ids : [];
@@ -5331,10 +5439,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
     void remote.renameGroup(conversationId, next ?? '').catch(() => false).then((ok) => {
-      if (ok) return;
+      if (ok === true) return;
       // Put the old name back, unless someone has changed it again meanwhile.
       put(next, before);
-      showToast({ title: 'The name didn’t change. Try again.', icon: 'alert-circle-outline' });
+      // Refused for its words (migration 117): saying so is the whole message.
+      showToast(ok === 'blocked' ? { title: BLOCKED_WORDS_NOTE, icon: 'alert-circle-outline', long: true } : { title: 'The name didn’t change. Try again.', icon: 'alert-circle-outline' });
     });
   }, [requireUser, appendMessage, eventLine]);
 
@@ -5502,6 +5611,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (message.kind === 'voice') { void deliverVoice({ ...message, failed: undefined, sending: true }); return; }
     void remote.insertMessage({ ...message, failed: undefined, sending: undefined }).catch(() => 'failed' as const).then((result) => {
       if (calledBack(messageId, result)) return;
+      if (result === 'blocked') { takeBackRefused(message); return; }
       patchMessage(messageId, { sending: undefined, ...(result === 'failed' || result === 'refused' ? { failed: true } : null) });
     });
   }, [requireUser, deliverPhotos, deliverVoice, patchMessage]);
@@ -5516,10 +5626,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, body: words, editedAt } : m)) }));
     if (!live(me, messageId)) return;
     void remote.editMessage(messageId, words).catch(() => false).then((saved) => {
-      if (saved) return;
+      if (saved === true) return;
       // Not saved: the words go back to what they were, unless they have been changed again since.
       setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === messageId && m.body === words && m.editedAt === editedAt ? { ...m, body: message.body, editedAt: message.editedAt } : m)) }));
-      showToast({ title: 'Your edit didn’t save', body: 'Try again in a moment.', icon: 'alert-circle-outline' });
+      // Refused for its words (migration 117): saying so is the whole message.
+      if (saved === 'blocked') showToast({ title: BLOCKED_WORDS_NOTE, icon: 'alert-circle-outline', long: true });
+      else showToast({ title: 'Your edit didn’t save', body: 'Try again in a moment.', icon: 'alert-circle-outline' });
     });
   }, [requireUser]);
 
@@ -5770,6 +5882,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (withdrawn.current.delete(message.id)) continue;
           const result = await remote.insertMessage({ ...message, conversationId, sending: undefined }).catch(() => 'failed' as const);
           if (calledBack(message.id, result)) continue;
+          if (result === 'blocked') { takeBackRefused({ ...message, conversationId }); continue; }
           patchMessage(message.id, { sending: undefined, ...(result === 'failed' || result === 'refused' ? { failed: true } : null) });
         }
       })();
@@ -6506,7 +6619,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     haptics.commit();
     const tip: Tip = { id: nextId('tip'), authorId: me, body, createdAt: new Date().toISOString(), votes: 0, votedBy: {} };
     setState((prev) => ({ ...prev, tips: [tip, ...prev.tips] }));
-    if (live(me, tip.id)) await remote.insertTip(tip);
+    // Refused for its words (migration 117): it comes off the board again (the toast says why).
+    if (live(me, tip.id) && (await remote.insertTip(tip)) === 'blocked') setState((prev) => ({ ...prev, tips: prev.tips.filter((t) => t.id !== tip.id) }));
   }, [requireUser]);
   const voteTip = useCallback((tipId: ID, direction: 1 | -1) => {
     haptics.tap();
@@ -6617,6 +6731,109 @@ export function AppProvider({ children }: { children: ReactNode }) {
     haptics.tap();
     setState((prev) => ({ ...prev, prefs: { ...prev.prefs, [key]: value } }));
   }, []);
+
+  /* -------------------------------------------------------- hidden words */
+  // Settings → Hidden words (migration 117). The server keeps them and does
+  // all the hiding; the demo keeps them on this phone and hides nothing.
+  const loadHiddenWords = useCallback(async (): Promise<'ok' | 'not_ready' | 'failed'> => {
+    const me = stateRef.current.currentUserId;
+    if (!me) return 'failed';
+    if (!live(me)) {
+      const self = stateRef.current.users.find((u) => u.id === me);
+      setState((prev) => (prev.hiddenWords ? prev : { ...prev, hiddenWords: defaultHiddenWords(!self || notKnownAdult(self)) }));
+      return 'ok';
+    }
+    const got = await remote.fetchHiddenWords().catch(() => null);
+    if (got === 'not_ready') return 'not_ready';
+    if (!got) return 'failed';
+    if (stateRef.current.currentUserId === me) setState((prev) => ({ ...prev, hiddenWords: got }));
+    return 'ok';
+  }, []);
+
+  const saveHiddenWords = useCallback(async (next: Omit<HiddenWords, 'locked'>): Promise<string | null> => {
+    const me = stateRef.current.currentUserId;
+    const before = stateRef.current.hiddenWords;
+    if (!me || !before) return 'That didn’t save. Try again.';
+    const customWords = cleanWords(next.customWords);
+    if (customWords.length > HIDDEN_WORDS_MAX) return `You can hide up to ${HIDDEN_WORDS_MAX} words and phrases.`;
+    if (customWords.some((w) => w.length > HIDDEN_WORD_LENGTH)) return `Each one can be up to ${HIDDEN_WORD_LENGTH} characters.`;
+    // Under 18: both offensive filters stay on, whatever was tapped (the server holds to it too).
+    const shown: HiddenWords = {
+      ...next, customWords, locked: before.locked,
+      hideOffensiveComments: before.locked || next.hideOffensiveComments,
+      hideOffensiveRequests: before.locked || next.hideOffensiveRequests,
+    };
+    setState((prev) => ({ ...prev, hiddenWords: shown }));
+    if (!live(me)) return null;
+    const saved = await remote.saveHiddenWords(shown).catch(() => 'failed' as const);
+    if (stateRef.current.currentUserId !== me) return null;
+    if (typeof saved === 'object') {
+      setState((prev) => (prev.hiddenWords === shown ? { ...prev, hiddenWords: saved } : prev));
+      return null;
+    }
+    // Not saved: back to what it was, unless it has been changed again since.
+    setState((prev) => (prev.hiddenWords === shown ? { ...prev, hiddenWords: before } : prev));
+    return saved === 'too_many_words' ? `You can hide up to ${HIDDEN_WORDS_MAX} words and phrases.`
+      : saved === 'word_too_long' ? `Each one can be up to ${HIDDEN_WORD_LENGTH} characters.`
+      : saved === 'not_ready' ? 'Hidden words aren’t switched on yet.'
+      : 'That didn’t save. Check your connection and try again.';
+  }, []);
+
+  const unhideByWords = useCallback((kind: HiddenWordsKind, id: ID) => {
+    const me = requireUser();
+    haptics.tap();
+    // Shown (or, if the server says no, hidden again): the flag, and a post's or Instant's count.
+    // With it go the replies under it (they were not shown or counted while it was hidden).
+    const put = (hidden: boolean) => setState((prev) => {
+      const recount = (ids: ID[], those: ID[]) => (hidden ? ids.filter((x) => !those.includes(x)) : [...ids, ...those.filter((x) => !ids.includes(x))]);
+      if (kind === 'answer') {
+        const answer = prev.answers.find((a) => a.id === id);
+        if (!answer) return prev;
+        const those = prev.answers.filter((a) => a.id === id || (a.parentAnswerId === id && !a.hiddenByWords)).map((a) => a.id);
+        return {
+          ...prev,
+          answers: prev.answers.map((a) => (a.id === id ? { ...a, hiddenByWords: hidden || undefined } : a)),
+          questions: prev.questions.map((q) => (q.id === answer.questionId ? { ...q, answerIds: recount(q.answerIds, those) } : q)),
+        };
+      }
+      if (kind === 'coach-reply') {
+        const reply = prev.coachReplies.find((r) => r.id === id);
+        if (!reply) return prev;
+        return {
+          ...prev,
+          coachReplies: prev.coachReplies.map((r) => (r.id === id ? { ...r, hiddenByWords: hidden || undefined } : r)),
+          coachQuestions: prev.coachQuestions.map((q) => (q.id === reply.questionId ? { ...q, replyIds: recount(q.replyIds, [id]) } : q)),
+        };
+      }
+      const comment = prev.comments.find((c) => c.id === id);
+      if (!comment) return prev;
+      const those = prev.comments.filter((c) => c.id === id || (c.parentId === id && !c.hiddenByWords)).map((c) => c.id);
+      const count = <T extends { id: ID; commentIds: ID[] }>(x: T): T => (x.id !== comment.postId ? x : { ...x, commentIds: recount(x.commentIds, those) });
+      return {
+        ...prev,
+        comments: prev.comments.map((c) => (c.id === id ? { ...c, hiddenByWords: hidden || undefined } : c)),
+        posts: kind === 'comment' ? prev.posts.map(count) : prev.posts,
+        stories: kind === 'hit-comment' ? prev.stories.map(count) : prev.stories,
+      };
+    });
+    put(false);
+    if (!live(me, id)) return;
+    void remote.unhideWords(kind, id).catch(() => false).then((ok) => {
+      if (ok) return;
+      put(true);
+      showToast({ title: 'That didn’t unhide. Try again in a moment.', icon: 'alert-circle-outline' });
+    });
+  }, [requireUser]);
+
+  const wordsRefused = useCallback(async (texts: string[]): Promise<boolean> => {
+    const me = stateRef.current.currentUserId;
+    if (!me || !live(me)) return false;
+    // Never holds a post up for long: no answer in 4 seconds counts as no (the server still checks it on saving).
+    return Promise.race([remote.wordsRefused(texts).catch(() => false), new Promise<boolean>((done) => setTimeout(() => done(false), 4000))]);
+  }, []);
+
+  // Words refused anywhere they were written (migration 117): said once, in plain words.
+  useEffect(() => onWordsRefused(() => showToast({ title: BLOCKED_WORDS_NOTE, icon: 'alert-circle-outline', long: true })), []);
 
   /* ------------------------------------------------------------- health */
   // The three real sources: Apple Health (read on the phone), WHOOP (through
@@ -7041,6 +7258,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       editOpenToHit,
       checkHandle,
       changeHandle,
+      wordsRefused,
+      loadHiddenWords,
+      saveHiddenWords,
+      unhideByWords,
       toggleMute,
       toggleBlock,
       toggleAlerts,
@@ -7249,6 +7470,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       editOpenToHit,
       checkHandle,
       changeHandle,
+      wordsRefused,
+      loadHiddenWords,
+      saveHiddenWords,
+      unhideByWords,
       toggleMute,
       toggleBlock,
       toggleAlerts,

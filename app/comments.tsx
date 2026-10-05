@@ -10,12 +10,15 @@ import Animated, { FadeInDown, FadeOut, runOnJS, scrollTo, useAnimatedRef, useAn
 
 import { CommentThread, threadOf, threadsOf, useReplyDraft } from '@/components/CommentThread';
 import { CommentsCaption } from '@/components/CommentsCaption';
+import { CommentRow } from '@/components/CommentRow';
+import { HiddenComments } from '@/components/HiddenComments';
 import { DragSheet, useSheetDrag } from '@/components/DragSheet';
 import { pickFromDevice } from '@/components/MediaPicker';
 import { StageRail } from '@/components/StageRail';
 import { Avatar, BrandWash, Field } from '@/components/ui';
 import type { Comment, ID } from '@/data/types';
 import { LIST_PULL, getStage, markGone, markMounted, setCovered, stageKeyOf, useStageSelect } from '@/features/feed/commentStage';
+import { hiddenCommentsOn, listedComments } from '@/features/hiddenWords/hiddenWords';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -128,8 +131,12 @@ export default function CommentsSheet() {
   const takenDown = !!(kind === 'hit' ? stories.find((st) => st.id === id)?.removed : post?.removed);
   const author = post ? users.find((u) => u.id === post.authorId) : undefined;
   // Every comment and reply here (the count), and the same laid out as threads.
-  const all = comments.filter((c) => c.postId === id);
-  const threads = threadsOf(comments, id, 'oldest');
+  // One hidden by the owner's Hidden words (migration 117), or a reply under it, is neither shown nor
+  // counted for the owner, who finds it under "Hidden comments" at the end.
+  const all = listedComments(comments, id, currentUserId);
+  const threads = threadsOf(comments, id, 'oldest', currentUserId);
+  const ownerId = kind === 'hit' ? stories.find((st) => st.id === id)?.authorId : post?.authorId;
+  const hidden = hiddenCommentsOn(comments, id, currentUserId, ownerId);
   // Comments made while the sheet is open slide in; the ones already there just appear.
   const openedAt = useRef(Date.now());
   // On the stage the first few threads rise with the sheet; the rest are drawn
@@ -363,6 +370,11 @@ export default function CommentsSheet() {
               />
             ))}
             {!threads.length ? <Text style={styles.empty}>{exists ? 'No comments yet. Start the conversation.' : looked ? 'This is no longer available.' : ''}</Text> : null}
+            <HiddenComments count={hidden.length}>
+              {hidden.map((c) => (
+                <CommentRow key={c.id} comment={c} big onUnhide={() => actions.unhideByWords(kind === 'hit' ? 'hit-comment' : 'comment', c.id)} />
+              ))}
+            </HiddenComments>
           </CommentList>
           <View ref={composer} style={styles.composer}>
             {replyingTo ? (

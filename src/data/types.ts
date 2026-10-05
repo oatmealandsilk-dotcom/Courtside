@@ -605,7 +605,32 @@ export interface Comment {
   replyToId?: ID;
   /** Taken down by an admin (migration 108). */
   removed?: Removed;
+  /**
+   * Hidden by the Hidden words of whoever owns the post or Instant
+   * (migration 117): only its writer (to whom it looks normal) and that
+   * owner (under "Hidden comments") ever get it. Never counted.
+   */
+  hiddenByWords?: boolean;
 }
+
+/**
+ * Your Hidden words (Settings → Hidden words, migration 117), the way
+ * Instagram has them: offensive comments and message requests hidden, and
+ * your own words and phrases (up to 100, each up to 30 characters) hidden
+ * from comments, message requests or both. `locked`: not known to be an
+ * adult, so the two offensive filters stay on (and are stricter).
+ */
+export interface HiddenWords {
+  hideOffensiveComments: boolean;
+  hideOffensiveRequests: boolean;
+  customWords: string[];
+  customInComments: boolean;
+  customInRequests: boolean;
+  locked: boolean;
+}
+
+/** Where a hidden comment or reply sits, as unhide_words names it. */
+export type HiddenWordsKind = 'comment' | 'hit-comment' | 'answer' | 'coach-reply';
 
 /* ------------------------------- Discussions ----------------------------- */
 
@@ -665,6 +690,8 @@ export interface Answer {
   media?: { kind: 'photo' | 'video'; url: string; thumb?: string };
   /** Taken down by an admin (migration 108). */
   removed?: Removed;
+  /** Hidden by the thread's owner's Hidden words (migration 117): only its writer and the owner see it. */
+  hiddenByWords?: boolean;
 }
 
 /* --------------------------------- Coaching ------------------------------ */
@@ -884,6 +911,8 @@ export interface CoachReply {
   helpfulBy: ID[];
   /** Taken down by an admin (migration 108). */
   removed?: Removed;
+  /** Hidden by the asker's Hidden words (migration 117): only the coach who wrote it and the asker see it. */
+  hiddenByWords?: boolean;
 }
 
 /* --------------------------- Coach applications -------------------------- */
@@ -1011,6 +1040,13 @@ export interface Message {
   replyToId?: ID;
   /** Yours, on its way to the server: "Sending…" under it until it lands. Never stored. */
   sending?: boolean;
+  /**
+   * From someone you don't follow, and matching your Hidden words (migration
+   * 117): shown as "Hidden message · tap to show", with no alert. CourtSide
+   * has no message-requests folder, so this is where Instagram's "Hidden
+   * requests" lands. Only you know; the sender is never told.
+   */
+  hiddenByWords?: boolean;
 }
 
 export interface Conversation {

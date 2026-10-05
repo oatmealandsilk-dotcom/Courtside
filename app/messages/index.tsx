@@ -156,9 +156,11 @@ export default function Inbox() {
     if (!last) return said;
     if (last.kind === 'system') return eventText(last, users, currentUserId);
     if (last.senderId === currentUserId) return `You: ${said}`;
-    if (!group) return said;
+    // Hidden by your Hidden words (migration 117): its words stay out of the inbox too.
+    const words = last.hiddenByWords ? 'Hidden message' : said;
+    if (!group) return words;
     if (blockedIds.includes(last.senderId)) return 'Message from someone you blocked';
-    return `${usersById.get(last.senderId)?.name.split(' ')[0] ?? 'Someone'}: ${said}`;
+    return `${usersById.get(last.senderId)?.name.split(' ')[0] ?? 'Someone'}: ${words}`;
   };
 
   const sections: { value: Section; label: string }[] = [

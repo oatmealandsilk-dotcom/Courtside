@@ -13,6 +13,9 @@ import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { PlayerName } from '@/components/PlayerName';
 import { RichText } from '@/components/RichText';
 import { CommentThread, threadOf, threadsOf, useReplyDraft } from '@/components/CommentThread';
+import { CommentRow } from '@/components/CommentRow';
+import { HiddenComments } from '@/components/HiddenComments';
+import { hiddenCommentsOn, listedComments } from '@/features/hiddenWords/hiddenWords';
 import type { ID } from '@/data/types';
 import { Tappable } from '@/components/Tappable';
 import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
@@ -73,8 +76,11 @@ export default function HitThread() {
     }
   } : undefined;
   const liked = !!currentUserId && story.likedBy.includes(currentUserId);
-  const count = comments.filter((c) => c.postId === story.id).length;
-  const thread = threadsOf(comments, story.id, 'oldest');
+  // One hidden by the owner's Hidden words (migration 117), or a reply under it, is neither shown nor
+  // counted for the owner, who finds it under "Hidden comments" at the end.
+  const count = listedComments(comments, story.id, currentUserId).length;
+  const thread = threadsOf(comments, story.id, 'oldest', currentUserId);
+  const hidden = hiddenCommentsOn(comments, story.id, currentUserId, story.authorId);
   const submit = () => {
     const text = draft.trim();
     if (!hasWords) return;
@@ -132,6 +138,9 @@ export default function HitThread() {
         {thread.map((t) => (
           <CommentThread key={t.top.id} thread={t} open={openThreads.has(t.top.id)} onToggle={() => toggleThread(t.top.id)} onReply={story.removed ? undefined : startReply} />
         ))}
+        <HiddenComments count={hidden.length}>
+          {hidden.map((c) => <CommentRow key={c.id} comment={c} onUnhide={() => actions.unhideByWords('hit-comment', c.id)} />)}
+        </HiddenComments>
         {story.removed ? null : <View style={styles.composer}>
           {replyingTo ? (
             <View style={styles.replying}>
