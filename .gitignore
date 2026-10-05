@@ -17,6 +17,10 @@ expo-env.d.ts
 .env.*
 !.env.example
 google-play-service-account.json
+# Firebase's Android push file: it goes to Expo's build service as a file variable (see docs/android-setup.md).
+google-services.json
+# Firebase's private key for push (FCM V1): it is uploaded to Expo, never kept here.
+*firebase-adminsdk*.json
 .claude/
 
 # This Mac's own preview look in Expo Go (see app.config.js)
