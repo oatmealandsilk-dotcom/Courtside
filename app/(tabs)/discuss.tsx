@@ -554,7 +554,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     <Screen memoryKey="discuss" scrollRef={pageRef} offsetY={offsetY} wash onRefresh={previewSection === undefined && !isDesktopBrowser() ? actions.refresh : undefined}
       title="Community"
       right={
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        // Search, bell, chats: the same order as Profile's bell and chats, chats always in the corner.
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>
           <Pressable
             accessibilityRole="link"
             accessibilityLabel="Search discussions and players"
@@ -563,10 +564,6 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             hitSlop={8}
           >
             <Ionicons name="search" size={23} color={colors.text} />
-          </Pressable>
-          {/* The + makes what the tab is about: a thread on Discussions, a hit on Find Players. */}
-          <Pressable accessibilityRole="button" accessibilityLabel={section === 'players' ? 'Look for someone to play with' : 'Start a discussion'} onPress={() => router.push(section === 'players' ? '/hit-request/new' : '/ask')} style={styles.fab}>
-            <Ionicons name="add" size={22} color={colors.brandInk} />
           </Pressable>
           {/* What's new for you (likes, follows, replies), on the page the app opens on. */}
           <NotificationButton size={25} />
@@ -648,14 +645,6 @@ const styleDefinitions = StyleSheet.create({
   playerChevron: { marginRight: spacing.lg },
   // A row with Follow at its end: the words take the room, the pill keeps the page's right margin.
   playerFollowBody: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingRight: spacing.lg },
-  fab: {
-    width: 38,
-    height: 38,
-    borderRadius: radius.pill,
-    backgroundColor: colors.brand,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   // Above the list, so the Sort menu opens over the threads rather than under them.
   controls: { gap: spacing.md, paddingBottom: spacing.lg, zIndex: 10, elevation: 10 },
   topicRow: { flexDirection: 'row', gap: spacing.sm, paddingVertical: 8 },
