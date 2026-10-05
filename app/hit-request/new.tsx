@@ -151,7 +151,8 @@ export default function NewHit() {
       posted.current = await actions.postHit({
         startsAt: start.toISOString(), place: where, format, spots, note: note.trim() || undefined,
         levelMin: level === 'mine' && rating ? Math.max(1, rating - step) : undefined,
-        levelMax: level === 'mine' && rating ? rating + step : undefined,
+        // The database keeps levels from 1 to 16.5 (a UTR of 15.6 or more would go past it, and fail to post).
+        levelMax: level === 'mine' && rating ? Math.min(16.5, rating + step) : undefined,
         ...(inviting ? { audience, includeGroups: groupsOn, invitedIds: pickedUsers.map((u) => u.id) } : {}),
       });
       sentTo.current = recipients;

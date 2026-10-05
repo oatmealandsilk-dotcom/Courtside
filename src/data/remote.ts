@@ -695,8 +695,10 @@ function withPolls(questions: Question[], polls: PollRow[], mine: { question_id:
     return p ? { ...q, poll: { options: p.options, counts: (p.counts ?? []).slice(0, p.options.length), myVote: myVote.get(q.id) } } : q;
   });
 }
+/** The topics the app draws. A row with any other (written around the app) reads as Technique, never a crash. */
+const QUESTION_TOPICS: ReadonlySet<string> = new Set<Question['topic']>(['gear', 'technique', 'strategy', 'injury', 'fitness', 'rules', 'mental']);
 const toQuestion = (r: QuestionRow, answers: AnswerRow[]): Question => withRemoved<Question>({
-  id: r.id, authorId: r.author_id, title: r.title, body: r.body, topic: r.topic as Question['topic'], tags: r.tags ?? [],
+  id: r.id, authorId: r.author_id, title: r.title, body: r.body, topic: QUESTION_TOPICS.has(r.topic) ? r.topic as Question['topic'] : 'technique', tags: r.tags ?? [],
   createdAt: r.created_at, votes: r.votes, votedBy: r.voted_by ?? {}, answerIds: answers.filter((a) => a.question_id === r.id && !heldHere(a.id, a.parent_answer_id)).map((a) => a.id),
   acceptedAnswerId: r.accepted_answer_id ?? undefined, editedAt: r.edited_at ?? undefined,
 }, r);
@@ -889,9 +891,9 @@ export interface SiteFeedback { id: string; message: string; email?: string; cre
 /** Where the beta invite email stands: live once Apple has approved the beta. */
 export interface BetaInviteStatus { live: boolean; total: number; invited: number; waiting: number; sent: number; failed: string[] }
 
-/** The kinds of thing a report can be about, besides an account or a chat. */
-export type ReportedItemKind = 'post' | 'hit' | 'question' | 'answer' | 'comment' | 'coach-question' | 'coach-reply';
-const ITEM_KINDS: ReportedItemKind[] = ['post', 'hit', 'question', 'answer', 'comment', 'coach-question', 'coach-reply'];
+/** The kinds of thing a report can be about, besides an account or a chat ('hit-request': an open hit on Find Players, since migration 126). */
+export type ReportedItemKind = 'post' | 'hit' | 'hit-request' | 'question' | 'answer' | 'comment' | 'coach-question' | 'coach-reply';
+const ITEM_KINDS: ReportedItemKind[] = ['post', 'hit', 'hit-request', 'question', 'answer', 'comment', 'coach-question', 'coach-reply'];
 
 export interface AdminReport {
   id: ID;
@@ -1532,8 +1534,9 @@ export const remote = {
       edited_at: q.editedAt ?? null, created_at: q.createdAt,
     });
     if (error) fail('thread save')(error);
-    // 'blocked': refused for its words (migration 117); the app takes it back.
-    return refusedFor(error);
+    // 'blocked': refused for its words (migration 117); 'failed': not saved for any other reason
+    // (offline, too long). Either way the app takes it back and says so.
+    return refusedFor(error) ?? (error ? 'failed' as const : undefined);
   },
   /**
    * A change to a thread already up (an edit, an accepted answer): those
@@ -1545,7 +1548,7 @@ export const remote = {
     const { data, error } = await need().from('questions').update({
       title: q.title, body: q.body, tags: q.tags, accepted_answer_id: q.acceptedAnswerId ?? null, edited_at: q.editedAt ?? null,
     }).eq('id', q.id).select('id');
-    if (error) { fail('thread save')(error); return refusedFor(error); }
+    if (error) { fail('thread save')(error); return refusedFor(error) ?? 'failed' as const; }
     if (!(data ?? []).length) return remote.upsertQuestion(q);
     return undefined;
   },
@@ -1556,7 +1559,8 @@ export const remote = {
       ...(a.media ? { media_url: a.media.url, media_kind: a.media.kind, media_thumb: a.media.thumb ?? null } : {}),
     });
     if (error) fail('answer save')(error);
-    return refusedFor(error);
+    // As for a thread: 'blocked' for its words, 'failed' for anything else.
+    return refusedFor(error) ?? (error ? 'failed' as const : undefined);
   },
   async voteQuestion(questionId: ID, dir: 1 | -1) { const { error } = await need().rpc('vote_question', { q: questionId, dir }); if (error) fail('vote')(error); },
   async voteAnswer(answerId: ID, dir: 1 | -1) { const { error } = await need().rpc('vote_answer', { a: answerId, dir }); if (error) fail('vote')(error); },
@@ -2597,15 +2601,17 @@ export const remote = {
    */
   async fetchReportedItem(kind: ReportedItemKind, id: ID): Promise<ReportedItem | null> {
     const tables: Record<ReportedItemKind, string[]> = {
-      post: ['posts'], hit: ['stories'], question: ['questions'], answer: ['answers'],
+      post: ['posts'], hit: ['stories'], 'hit-request': ['hit_requests'], question: ['questions'], answer: ['answers'],
       // A comment is under a post or under a hit: whichever has it.
       comment: ['comments', 'story_comments'], 'coach-question': ['coach_questions'], 'coach-reply': ['coach_replies'],
     };
     for (const table of tables[kind]) {
       const { data, error } = await need().from(table).select('*').eq('id', id).maybeSingle();
       if (error || !data) continue;
-      const row = data as { title?: string | null; body?: string | null; caption?: string | null; image_url?: string | null; thumbnail_url?: string | null } & RemovedColumns;
-      const words = [row.title, row.body ?? row.caption].filter((x): x is string => !!x && !!x.trim()).join(' · ');
+      const row = data as { title?: string | null; body?: string | null; caption?: string | null; image_url?: string | null; thumbnail_url?: string | null; note?: string | null; place?: { name?: unknown } | null } & RemovedColumns;
+      // An open hit has no words but its note, so its place goes with them.
+      const where = table === 'hit_requests' && typeof row.place?.name === 'string' ? `At ${row.place.name}` : null;
+      const words = [row.title, row.body ?? row.caption ?? row.note, where].filter((x): x is string => !!x && !!x.trim()).join(' · ');
       const removed = removedOf(row);
       return { body: words, picture: row.thumbnail_url ?? row.image_url ?? undefined, removed: !!removed, ...(removed ? { reason: removed.reason } : {}) };
     }
@@ -2919,7 +2925,8 @@ export const remote = {
   async fetchMyReported(): Promise<ID[]> {
     const { data, error } = await need().rpc('my_reported_targets');
     if (error || !Array.isArray(data)) return [];
-    return (data as unknown[]).map((t) => /^(?:post|hit|question|answer|comment|coach-question|coach-reply):(.+)$/.exec(String(t))?.[1]).filter((id): id is string => !!id);
+    // An open hit ('hit-request') since migration 126; before it the server never hands one back, and nothing changes.
+    return (data as unknown[]).map((t) => /^(?:post|hit|hit-request|question|answer|comment|coach-question|coach-reply):(.+)$/.exec(String(t))?.[1]).filter((id): id is string => !!id);
   },
   async fetchHits(me?: ID | null): Promise<HitRequest[] | null> {
     const { data, error } = await need().from('hit_requests').select('*, hit_joins(user_id)').eq('cancelled', false)

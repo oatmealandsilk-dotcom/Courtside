@@ -16,10 +16,16 @@ export function hitWhen(startsAt: string, now = new Date()): string {
 
 export const FORMAT_LABEL: Record<HitRequest['format'], string> = { singles: 'Singles', doubles: 'Doubles', hit: 'Just hitting' };
 
-export function levelText(h: Pick<HitRequest, 'levelMin' | 'levelMax'>): string {
+/**
+ * "3.5–4.5", "4.0+", "Up to 4.5" or "Any level". With `scale` (the poster's
+ * own: NTRP, UTR or ITF) it says which one: "UTR 9.4–11.4", since a UTR 10 and
+ * an NTRP 4.0 are nothing alike and the numbers alone don't say.
+ */
+export function levelText(h: Pick<HitRequest, 'levelMin' | 'levelMax'>, scale?: string): string {
   if (h.levelMin === undefined && h.levelMax === undefined) return 'Any level';
-  if (h.levelMin !== undefined && h.levelMax !== undefined) return `${h.levelMin.toFixed(1)}–${h.levelMax.toFixed(1)}`;
-  return h.levelMin !== undefined ? `${h.levelMin.toFixed(1)}+` : `Up to ${h.levelMax!.toFixed(1)}`;
+  const on = scale ? `${scale} ` : '';
+  if (h.levelMin !== undefined && h.levelMax !== undefined) return `${on}${h.levelMin.toFixed(1)}–${h.levelMax.toFixed(1)}`;
+  return h.levelMin !== undefined ? `${on}${h.levelMin.toFixed(1)}+` : `Up to ${on}${h.levelMax!.toFixed(1)}`;
 }
 
 /** "6pm" or "6:30pm": as short as a pin or a badge wants. */

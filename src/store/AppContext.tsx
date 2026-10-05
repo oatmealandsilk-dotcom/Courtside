@@ -767,9 +767,9 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   votePoll: (questionId: ID, option: number) => void;
   /**
    * A reply to a thread, or to a reply in it; `media` is a photo or clip picked on this device, uploaded here.
-   * Resolves 'blocked' when its words were refused (migration 117), as addComment does.
+   * Resolves 'blocked' when its words were refused (migration 117), as addComment does, and 'failed' when it did not save at all (it is taken back off the thread).
    */
-  addAnswer: (questionId: ID, body: string, parentAnswerId?: ID, media?: Answer['media']) => Promise<'blocked' | undefined>;
+  addAnswer: (questionId: ID, body: string, parentAnswerId?: ID, media?: Answer['media']) => Promise<'blocked' | 'failed' | undefined>;
   voteAnswer: (answerId: ID, direction: 1 | -1) => void;
 
   submitCoachingRequest: (coachId: ID, serviceId: ID, question: string, videoLabel?: string) => ID;
@@ -1368,8 +1368,8 @@ const nextId = (prefix: string): string => {
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-/** A report about one thing: what it is and its id. The same list the server reads (stamp_report, migration 115). */
-const REPORTED_TARGET = /^(?:post|hit|question|answer|comment|coach-question|coach-reply):(.+)$/;
+/** A report about one thing: what it is and its id. The same list the server reads (stamp_report, migration 115; an open hit, 'hit-request', since 126). */
+const REPORTED_TARGET = /^(?:post|hit|hit-request|question|answer|comment|coach-question|coach-reply):(.+)$/;
 
 /**
  * The made-up players, posts and threads the app ships with so a demo is
@@ -3875,9 +3875,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
     const saved = stateRef.current.questions.find((q) => q.id === questionId);
     if (saved && live(me, questionId)) void remote.updateQuestion({ ...saved, title: patch.title, body: patch.body, tags, editedAt: new Date().toISOString() }).then((r) => {
-      if (r !== 'blocked' || !was) return;
-      // Refused for its words (migration 117): the thread goes back to what it said (the toast says why).
+      if (!r || !was) return;
+      // Refused for its words (migration 117; the toast says why) or not saved at all: the thread goes back to what it said.
       setState((prev) => ({ ...prev, questions: prev.questions.map((q) => (q.id === questionId && q.title === patch.title && q.body === patch.body ? { ...q, title: was.title, body: was.body, tags: was.tags, editedAt: was.editedAt } : q)) }));
+      if (r === 'failed') showToast({ title: 'Your edit didn’t save', body: 'Check your connection and try again.', icon: 'alert-circle-outline' });
     });
   }, [requireUser]);
   const acceptAnswer = useCallback((questionId: ID, answerId: ID) => {
@@ -4190,6 +4191,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (live(me, question.id)) void remote.upsertQuestion(question).then((r) => {
         // Refused for its words (migration 117): it comes down again (the toast says why).
         if (r === 'blocked') { setState((prev) => ({ ...prev, questions: prev.questions.filter((q) => q.id !== question.id) })); return; }
+        // Not saved for any other reason (offline, say): it comes down too, with its
+        // "posted" note, rather than looking posted and vanishing on the next open.
+        if (r === 'failed') {
+          setState((prev) => ({
+            ...prev,
+            questions: prev.questions.filter((q) => q.id !== question.id),
+            notifications: prev.notifications.filter((n) => !(n.kind === 'posted' && n.targetId === question.id)),
+          }));
+          showToast({ title: 'Your thread didn’t post', body: 'Check your connection and try again.', icon: 'alert-circle-outline' });
+          return;
+        }
         if (question.poll) void remote.insertPoll(question.id, question.poll.options);
       });
       return question.id;
@@ -4246,7 +4258,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const answersDeleted = useRef(new Set<ID>());
 
   const addAnswer = useCallback(
-    (questionId: ID, body: string, parentAnswerId?: ID, media?: Answer['media']): Promise<'blocked' | undefined> => {
+    (questionId: ID, body: string, parentAnswerId?: ID, media?: Answer['media']): Promise<'blocked' | 'failed' | undefined> => {
       haptics.commit();
       const me = requireUser();
       let made: Answer | null = null;
@@ -4297,11 +4309,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         return next;
       });
-      let result: Promise<'blocked' | undefined> = Promise.resolve(undefined);
+      let result: Promise<'blocked' | 'failed' | undefined> = Promise.resolve(undefined);
       if (made && live(me, questionId)) {
         const answer: Answer = made;
         const deleted = () => answersDeleted.current.has(answer.id);
-        let refused = false;
+        let refused: 'blocked' | 'failed' | undefined;
+        // A reply that did not save comes off the thread again, so it never looks posted and then vanishes.
+        const takeBack = () => setState((prev) => ({
+          ...prev,
+          answers: prev.answers.filter((a) => a.id !== answer.id),
+          questions: prev.questions.map((q) => (q.id === answer.questionId ? { ...q, answerIds: q.answerIds.filter((id) => id !== answer.id) } : q)),
+        }));
+        const didntPost = () => showToast({ title: 'Your reply didn’t post', body: 'Check your connection and try again.', icon: 'alert-circle-outline' });
         const saving = (async () => {
           // A picture or clip from this device goes up first; the reply is saved with its web address.
           let hosted = answer.media;
@@ -4312,6 +4331,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
               hosted = { ...hosted, url, thumb };
             } catch {
               hosted = undefined;
+              // A reply that was only a picture, which did not upload, is not saved empty, nor left on the thread empty.
+              if (!answer.body.trim()) {
+                if (!deleted()) { takeBack(); didntPost(); refused = 'failed'; }
+                return false;
+              }
               if (!deleted()) showToast({ title: 'The photo or video didn’t upload', body: 'Your reply was posted without it.', icon: 'alert-circle-outline' });
             }
             const settled = hosted;
@@ -4319,23 +4343,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
           // Deleted while it went up: never saved.
           if (deleted()) return false;
-          // A reply that was only a picture, which did not upload, is not saved empty.
           if (!hosted && !answer.body.trim()) return false;
-          if ((await remote.upsertAnswer({ ...answer, media: hosted })) === 'blocked') {
-            // Refused for its words (migration 117): it comes off the thread again (the toast says why), and the box gets the words back.
-            refused = true;
-            setState((prev) => ({
-              ...prev,
-              answers: prev.answers.filter((a) => a.id !== answer.id),
-              questions: prev.questions.map((q) => (q.id === answer.questionId ? { ...q, answerIds: q.answerIds.filter((id) => id !== answer.id) } : q)),
-            }));
+          const r = await remote.upsertAnswer({ ...answer, media: hosted });
+          if (r) {
+            // Refused for its words (migration 117; the toast says why), or not saved at all
+            // (offline, say): it comes off the thread again, and the box gets the words back.
+            refused = r;
+            if (!deleted()) { takeBack(); if (r === 'failed') didntPost(); }
             return false;
           }
           return true;
         })().catch(() => false);
         answerSaves.current.set(answer.id, saving);
         void saving.then(() => answerSaves.current.delete(answer.id));
-        result = saving.then(() => (refused ? 'blocked' : undefined));
+        result = saving.then(() => refused);
       }
       setState((prev) => notifyMentions(prev, body, me, questionId, 'question', prev.questions.find((q) => q.id === questionId)?.authorId));
       return result;
@@ -7759,10 +7780,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       patch.posts = state.posts.filter((p) => !out.has(p.id) && !shut(p));
       patch.stories = state.stories.filter((s) => !out.has(s.id) && !shut(s));
       patch.hitRequests = out.size ? state.hitRequests.filter((h) => !out.has(h.id)) : state.hitRequests;
-      patch.questions = state.questions.filter((q) => !out.has(q.id));
-      patch.answers = state.answers.filter((a) => !out.has(a.id));
       patch.comments = state.comments.filter((c) => !out.has(c.id));
     }
+    // Threads and replies leave out anyone you blocked as well, at once (Oct 5): their
+    // replies no longer stay on a thread you had open, nor their threads in Search's
+    // recents, until it was loaded again (the database already does the same, 108).
+    // A thread's reply count drops the replies hidden here too, so the two agree.
+    const gone = new Set(state.answers.filter((a) => out.has(a.id) || blocked.has(a.authorId)).map((a) => a.id));
+    patch.answers = gone.size ? state.answers.filter((a) => !gone.has(a.id)) : state.answers;
+    const questions = state.questions.flatMap((q) => {
+      if (out.has(q.id) || blocked.has(q.authorId)) return [];
+      return gone.size && q.answerIds.some((id) => gone.has(id)) ? [{ ...q, answerIds: q.answerIds.filter((id) => !gone.has(id)) }] : [q];
+    });
+    patch.questions = questions.length === state.questions.length && questions.every((q, i) => q === state.questions[i]) ? state.questions : questions;
     return patch;
   }, [state.reportedIds, state.blockedIds, state.posts, state.stories, state.hitRequests, state.questions, state.answers, state.comments, state.coachQuestions, state.coachReplies, state.tips, state.currentUserId, amAdminNow]);
   const value = useMemo<AppContextValue>(

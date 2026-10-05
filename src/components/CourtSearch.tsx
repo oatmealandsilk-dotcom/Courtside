@@ -109,7 +109,8 @@ export function CourtSearch({ home, nearby, chosen, onChoose, typed, onType }: {
     <View style={{ gap: spacing.sm }}>
       <View style={styles.search}>
         <Ionicons name="search" size={16} color={colors.textFaint} />
-        <TextInput ref={input} value={typed} onChangeText={onType} placeholder="Search courts" placeholderTextColor={colors.textFaint} style={styles.searchInput} accessibilityLabel="Where" autoCorrect={false} returnKeyType="done" onSubmitEditing={() => { if (rows[0] && query) onChoose({ id: rows[0].c.id, name: labelOf(rows[0].c), lat: rows[0].c.lat, lng: rows[0].c.lng }); }} />
+        {/* A place's name is kept to 120 characters (hit_requests_place_check): longer failed to post. */}
+        <TextInput ref={input} value={typed} onChangeText={onType} maxLength={120} placeholder="Search courts" placeholderTextColor={colors.textFaint} style={styles.searchInput} accessibilityLabel="Where" autoCorrect={false} returnKeyType="done" onSubmitEditing={() => { if (rows[0] && query) onChoose({ id: rows[0].c.id, name: labelOf(rows[0].c), lat: rows[0].c.lat, lng: rows[0].c.lng }); }} />
         {loadingWide && query ? <ActivityIndicator size="small" color={colors.textFaint} /> : typed ? (
           <Pressable accessibilityRole="button" accessibilityLabel="Clear" hitSlop={8} onPress={() => onType('')}><Ionicons name="close-circle" size={17} color={colors.textFaint} /></Pressable>
         ) : null}
@@ -127,7 +128,7 @@ export function CourtSearch({ home, nearby, chosen, onChoose, typed, onType }: {
         ))}
         {query && !rows.length && !loadingWide ? <Text style={styles.none}>No courts called “{query}” nearby.</Text> : null}
         {query ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={`Use ${query}`} onPress={() => onChoose({ name: query })} style={({ pressed }) => [styles.row, rows.length > 0 && styles.rule, pressed && styles.pressed]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Use ${query}`} onPress={() => onChoose({ name: query.slice(0, 120) })} style={({ pressed }) => [styles.row, rows.length > 0 && styles.rule, pressed && styles.pressed]}>
             <View style={styles.tile}><Ionicons name="location-outline" size={16} color={colors.textMuted} /></View>
             <View style={styles.rowWords}>
               <Text style={styles.rowName} numberOfLines={2}>Use “<Text style={styles.rowNameMatch}>{query}</Text>”</Text>

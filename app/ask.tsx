@@ -72,13 +72,14 @@ export default function Ask() {
         <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
           <Section title="Your question">
             {/* The section title already says what goes here, so the box stays empty. */}
-            <Field soft value={title} onChangeText={setTitle} accessibilityLabel="Your question" />
+            {/* The most the database keeps (300 for the question, 10,000 for the details): longer looked posted and was lost. */}
+            <Field soft value={title} onChangeText={setTitle} accessibilityLabel="Your question" maxLength={300} />
           </Section>
           <Section title="Topic">
             <Chips options={TOPICS.map((t) => ({ value: t, label: TOPIC_META[t].label }))} value={topic} onChange={(t) => { if (t) setTopic(t); }} />
           </Section>
           <Section title="Details">
-            <Field soft value={body} onChangeText={setBody} placeholder="Optional" accessibilityLabel="Details" multiline minHeight={96} mentions />
+            <Field soft value={body} onChangeText={setBody} placeholder="Optional" accessibilityLabel="Details" multiline minHeight={96} mentions maxLength={10000} />
           </Section>
           {poll ? (
             <Section title="Poll" right={<Pressable accessibilityRole="button" accessibilityLabel="Remove the poll" hitSlop={8} onPress={() => setPoll(null)}><Text style={styles.remove}>Remove</Text></Pressable>}>

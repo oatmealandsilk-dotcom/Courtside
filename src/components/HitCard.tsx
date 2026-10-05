@@ -10,7 +10,8 @@ import { audienceLine, isHitOpen, joinedCount } from '@/features/hits/audience';
 import { FORMAT_LABEL, hitWhen, levelText } from '@/features/hits/format';
 import { openCourt } from '@/features/players/courtLink';
 import { formatMiles } from '@/features/players/geo';
-import { confirm } from '@/lib/confirm';
+import { confirm, confirmReport } from '@/lib/confirm';
+import { goBack } from '@/lib/goBack';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -30,8 +31,13 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
  * "Open to everyone now"; to an invited player, that they were. It has no
  * paper plane until it opens: sending it on would reach people it is not
  * for (they could not open it).
+ *
+ * Someone else's hit has a flag to report it (its note is their own words),
+ * and their picture and name open their profile, where Block is. `linked`
+ * (the default) opens the hit's own page on a tap; that page passes false,
+ * so a tap there no longer opens the same page again on top.
  */
-export function HitCard({ hit, miles }: { hit: HitRequest; miles?: number }) {
+export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?: number; linked?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const { users, currentUserId, actions } = useApp();
   const [busy, setBusy] = useState(false);
@@ -48,6 +54,15 @@ export function HitCard({ hit, miles }: { hit: HitRequest; miles?: number }) {
   const invitedText = invited.length === 0 ? (hit.includeGroups ? 'Your groups are invited' : null)
     : `${invited.length === 1 ? invited[0].name.split(' ')[0] : invited.length === 2 ? `${invited[0].name.split(' ')[0]} and ${invited[1].name.split(' ')[0]}` : `${invited[0].name.split(' ')[0]} and ${invited.length - 1} more`} invited${hit.includeGroups ? ', and your groups' : ''}`;
   const openChat = () => { if (hit.conversationId) router.push(`/messages/${hit.conversationId}`); };
+  // Someone else's: their profile from their picture and name, and a flag to report the hit.
+  const theirs = !mine && !!currentUserId;
+  const openPoster = theirs && author ? () => router.push(`/user/${author.id}`) : undefined;
+  // Reported, it leaves your screens at once (the hit's own page goes back, as a reported thread's does).
+  const report = () => confirmReport('hit', () => {
+    actions.reportUser(hit.authorId, `hit-request:${hit.id}`);
+    showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
+    if (!linked) goBack('/discuss');
+  });
   const join = async () => {
     if (busy) return;
     setBusy(true);
@@ -58,15 +73,22 @@ export function HitCard({ hit, miles }: { hit: HitRequest; miles?: number }) {
     else showToast({ title: 'You’re in', body: `${author?.name.split(' ')[0] ?? 'They'} will see it.`, icon: 'checkmark-circle-outline' });
   };
   return (
-    <Pressable accessibilityRole="link" onPress={() => router.push(`/hit-request/${hit.id}`)} style={({ pressed }) => [styles.card, pressed && { opacity: 0.92 }]}>
+    <Pressable accessibilityRole={linked ? 'link' : undefined} disabled={!linked} onPress={linked ? () => router.push(`/hit-request/${hit.id}`) : undefined} style={({ pressed }) => [styles.card, pressed && { opacity: 0.92 }]}>
       <View style={styles.head}>
-        <Avatar name={author?.name ?? '?'} seed={author?.avatarSeed ?? hit.id} uri={author?.avatarUrl} size={36} />
+        <Pressable accessibilityRole={openPoster ? 'link' : undefined} accessibilityLabel={openPoster ? `Open ${author!.name}'s profile` : undefined} disabled={!openPoster} onPress={(e) => { e.stopPropagation?.(); openPoster?.(); }}>
+          <Avatar name={author?.name ?? '?'} seed={author?.avatarSeed ?? hit.id} uri={author?.avatarUrl} size={36} />
+        </Pressable>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.who} numberOfLines={1}>{mine ? 'Your hit' : author?.name ?? 'A player'}{mine ? null : <Text style={styles.wants}> is looking for a hit</Text>}</Text>
+          <Pressable accessibilityRole={openPoster ? 'link' : undefined} disabled={!openPoster} onPress={(e) => { e.stopPropagation?.(); openPoster?.(); }} style={styles.whoPress}>
+            <Text style={styles.who} numberOfLines={1}>{mine ? 'Your hit' : author?.name ?? 'A player'}{mine ? null : <Text style={styles.wants}> is looking for a hit</Text>}</Text>
+          </Pressable>
           <Text style={styles.when}>{hitWhen(hit.startsAt)}</Text>
         </View>
         {open ? <Pressable accessibilityRole="button" accessibilityLabel="Send this hit to a chat" hitSlop={8} onPress={(e) => { e.stopPropagation?.(); router.push({ pathname: '/share', params: { kind: 'hit-request', id: hit.id } }); }} style={({ pressed }) => [styles.send, pressed && { opacity: 0.6 }]}>
           <Ionicons name="paper-plane-outline" size={18} color={colors.textMuted} />
+        </Pressable> : null}
+        {theirs ? <Pressable accessibilityRole="button" accessibilityLabel="Report this hit" hitSlop={8} onPress={(e) => { e.stopPropagation?.(); report(); }} style={({ pressed }) => [styles.send, pressed && { opacity: 0.6 }]}>
+          <Ionicons name="flag-outline" size={17} color={colors.textMuted} />
         </Pressable> : null}
       </View>
       <Pressable accessibilityRole="link" accessibilityLabel={`${hit.place.name}${miles !== undefined ? `, ${formatMiles(miles)}` : ''}. See the court`} disabled={hit.place.lat === undefined} onPress={(e) => { e.stopPropagation?.(); if (hit.place.lat !== undefined && hit.place.lng !== undefined) openCourt({ id: hit.place.id, name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={styles.place}>
@@ -75,7 +97,7 @@ export function HitCard({ hit, miles }: { hit: HitRequest; miles?: number }) {
       </Pressable>
       {/* One quiet line, not three chips: the format, the level, and how many can still join. */}
       <Text style={styles.details} numberOfLines={1}>
-        {FORMAT_LABEL[hit.format]} · {levelText(hit)} · <Text style={left ? styles.detailsLeft : undefined}>{left ? `${left} ${left === 1 ? 'spot' : 'spots'} left` : 'Full'}</Text>
+        {FORMAT_LABEL[hit.format]} · {levelText(hit, author?.profile.skillSystem)} · <Text style={left ? styles.detailsLeft : undefined}>{left ? `${left} ${left === 1 ? 'spot' : 'spots'} left` : 'Full'}</Text>
       </Text>
       {hit.note ? <Text style={styles.note} numberOfLines={3}>{hit.note}</Text> : null}
       {line ? (
@@ -122,6 +144,7 @@ const styleDefinitions = StyleSheet.create({
   card: { ...lift, gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   send: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgElevated },
+  whoPress: { alignSelf: 'flex-start', maxWidth: '100%' },
   who: { ...typography.bodyStrong, color: colors.text },
   wants: { ...typography.body, color: colors.textMuted },
   when: { ...typography.title, fontSize: 20, color: colors.text, marginTop: 2 },
