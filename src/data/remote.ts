@@ -792,6 +792,33 @@ async function allRows<T>(page: (from: number, to: number) => PromiseLike<{ data
   return { data: out, error: null };
 }
 
+/** The open-hits list: the first this many by start time, anywhere. */
+const HITS_CAP = 100;
+/**
+ * A full open-hits list can cut off your own hits further ahead (and ones you
+ * joined or were invited to): those are asked for on their own and added, so
+ * they never drop off Find Players, the map or Your hit.
+ */
+async function withMyHits(hits: HitRequest[], me: ID | null | undefined): Promise<HitRequest[]> {
+  if (hits.length < HITS_CAP || !me || !UUID_RE.test(me)) return hits;
+  try {
+    const db = need();
+    const [joined, invited] = await Promise.all([
+      db.from('hit_joins').select('hit_id').eq('user_id', me).gte('created_at', new Date(Date.now() - 32 * 86_400_000).toISOString()).limit(100),
+      db.from('hit_invites').select('hit_id').eq('user_id', me).limit(100),
+    ]);
+    const ids = [...new Set([...((joined.data ?? []) as { hit_id: string }[]), ...((invited.error ? [] : invited.data ?? []) as { hit_id: string }[])].map((r) => r.hit_id))].filter((id) => UUID_RE.test(id));
+    const base = db.from('hit_requests').select('*, hit_joins(user_id)').eq('cancelled', false).gte('starts_at', new Date(Date.now() - 3_600_000).toISOString());
+    const { data, error } = await (ids.length ? base.or(`author_id.eq.${me},id.in.(${ids.join(',')})`) : base.eq('author_id', me)).order('starts_at', { ascending: true }).limit(100);
+    if (error || !data?.length) return hits;
+    const have = new Set(hits.map((h) => h.id));
+    const extra = (data as HitRow[]).map(toHit).filter((h) => !have.has(h.id));
+    return extra.length ? [...hits, ...extra].sort((a, b) => a.startsAt.localeCompare(b.startsAt)) : hits;
+  } catch {
+    return hits;
+  }
+}
+
 /** How many messages of a chat come at a time: on open, and each time you scroll up for more. */
 export const MESSAGE_PAGE = 40;
 
@@ -856,7 +883,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     db.from('polls').select('question_id, options, counts').order('created_at', { ascending: false }).limit(300),
     db.from('poll_votes').select('question_id, option').eq('user_id', me),
     // Hits still ahead (or just started), with who is in.
-    db.from('hit_requests').select('*, hit_joins(user_id)').eq('cancelled', false).gte('starts_at', new Date(Date.now() - 3_600_000).toISOString()).order('starts_at', { ascending: true }).limit(100),
+    db.from('hit_requests').select('*, hit_joins(user_id)').eq('cancelled', false).gte('starts_at', new Date(Date.now() - 3_600_000).toISOString()).order('starts_at', { ascending: true }).limit(HITS_CAP),
     // Which chats you muted: only your own rows come back (migration 54; none without it).
     db.from('conversation_prefs').select('*'),
     // Tennis sessions your tracker picked up (migration 58; none without it).
@@ -912,6 +939,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // (migration 89) is asked on its own: the switch shows from the first visit.
   const contactsFindableReady = ustate.data || ustate.error ? false
     : await db.from('user_state').select('contacts_findable').limit(0).then(({ error }) => !error, () => false);
+  const hitList = await withMyHits(((hitRows.data ?? []) as HitRow[]).map(toHit), me);
   return {
     agesOnProfiles,
     ...(contactsFindableReady ? { contactsFindableReady: true } : {}),
@@ -939,7 +967,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     tips: ((tipRows.data ?? []) as TipRow[]).map(toTip),
     coachApplications: ((applicationRows.data ?? []) as CoachApplicationRow[]).map(toCoachApplication),
     sessions: ((sessionRows.data ?? []) as SessionRow[]).map(toSession),
-    hitRequests: withInvites(((hitRows.data ?? []) as HitRow[]).map(toHit), hitInviteRows.error ? null : (hitInviteRows.data as { hit_id: string; user_id: string }[])),
+    hitRequests: withInvites(hitList, hitInviteRows.error ? null : (hitInviteRows.data as { hit_id: string; user_id: string }[])),
     activities: activityRows.error ? [] : ((activityRows.data ?? []) as ActivityRow[]).map(toActivity),
     ...(tagsReady === null ? {} : { sessionTagsReady: tagsReady }),
     hiddenMessageIds: [...hidden],
@@ -2253,11 +2281,11 @@ export const remote = {
     if (error || !Array.isArray(data)) return [];
     return (data as unknown[]).map((t) => /^(?:post|hit):(.+)$/.exec(String(t))?.[1]).filter((id): id is string => !!id);
   },
-  async fetchHits(): Promise<HitRequest[] | null> {
+  async fetchHits(me?: ID | null): Promise<HitRequest[] | null> {
     const { data, error } = await need().from('hit_requests').select('*, hit_joins(user_id)').eq('cancelled', false)
-      .gte('starts_at', new Date(Date.now() - 3_600_000).toISOString()).order('starts_at', { ascending: true }).limit(100);
+      .gte('starts_at', new Date(Date.now() - 3_600_000).toISOString()).order('starts_at', { ascending: true }).limit(HITS_CAP);
     if (error) { fail('hits')(error); return null; }
-    const hits = (data as HitRow[]).map(toHit);
+    const hits = await withMyHits((data as HitRow[]).map(toHit), me);
     if (!hits.some((h) => h.audience)) return hits;
     const invites = await hitInvitesQuery();
     return withInvites(hits, invites.error ? null : (invites.data as { hit_id: string; user_id: string }[]));
@@ -2781,9 +2809,11 @@ export const remote = {
     return { error: /adults_only/.test(said) ? 'adults_only' : /location_off/.test(said) ? 'location_off' : /too_far/.test(said) ? 'too_far'
       : /closed_court/.test(said) ? 'closed_court' : /slow down/.test(said) ? 'slow_down' : /hidden/.test(said) ? 'hidden' : 'failed' };
   },
-  async checkOutOfCourt() {
+  /** False when it did not go through (you still show as playing there). */
+  async checkOutOfCourt(): Promise<boolean> {
     const { error } = await need().rpc('check_out_of_court');
     if (error) fail('check out')(error);
+    return !error;
   },
   /** Court rings in a box of the map: real courts with a post or hit there this week that you may see. */
   async fetchCourtRings(box: { minLat: number; minLng: number; maxLat: number; maxLng: number }): Promise<CourtRing[] | null> {
@@ -2838,14 +2868,16 @@ export const remote = {
     return { conversationId: (data as string) || undefined };
   },
   async leaveHit(hitId: ID) { const { error } = await need().rpc('leave_hit', { hit: hitId }); if (error) fail('leave hit')(error); },
-  async cancelHit(hitId: ID) { const { error } = await need().from('hit_requests').update({ cancelled: true }).eq('id', hitId); if (error) fail('cancel hit')(error); },
+  /** Throws when it does not go through, so the hit can come back on screen. */
+  async cancelHit(hitId: ID) { const { error } = await need().from('hit_requests').update({ cancelled: true }).eq('id', hitId); if (error) { fail('cancel hit')(error); throw error; } },
   async insertTip(tip: Tip) {
     const { error } = await need().from('tips').insert({ id: tip.id, user_id: tip.authorId, body: tip.body, created_at: tip.createdAt });
     if (error) fail('tip')(error);
   },
   async voteTip(tipId: ID, dir: 1 | -1) { const { error } = await need().rpc('vote_tip', { t: tipId, dir }); if (error) fail('tip vote')(error); },
 
-  async updateProfile(me: ID, patch: { name?: string; bio?: string; location?: string; cityAt?: { lat: number; lng: number } | null; avatarUrl?: string; profile?: PlayerProfile; isPrivate?: boolean; readReceipts?: boolean; openToHitUntil?: string | null; firstMove?: FirstMove }) {
+  /** Resolves false when it was not saved (most callers need not ask). */
+  async updateProfile(me: ID, patch: { name?: string; bio?: string; location?: string; cityAt?: { lat: number; lng: number } | null; avatarUrl?: string; profile?: PlayerProfile; isPrivate?: boolean; readReceipts?: boolean; openToHitUntil?: string | null; firstMove?: FirstMove }): Promise<boolean> {
     const row: Record<string, unknown> = {};
     if (patch.firstMove !== undefined) { row.first_move = patch.firstMove; row.first_move_at = new Date().toISOString(); }
     if (patch.openToHitUntil !== undefined) row.open_to_hit_until = patch.openToHitUntil;
@@ -2866,7 +2898,8 @@ export const remote = {
       if (Object.keys(row).length) ({ error } = await need().from('profiles').update(row).eq('id', me));
       else error = null;
     }
-    if (error) fail('profile update')(error);
+    if (error) { fail('profile update')(error); return false; }
+    return true;
   },
 
   /**

@@ -281,6 +281,25 @@ function readAsked(key: string): boolean | null {
   }
 }
 
+/**
+ * A Location off that has not reached the server yet: the account whose spot
+ * still needs forgetting, kept on this device until a forget goes through.
+ */
+const FORGET_KEY = 'courtside-location-forget';
+async function readForgetPending(): Promise<string | null> {
+  try {
+    return Platform.OS === 'web' ? localStorage.getItem(FORGET_KEY) : await AsyncStorage.getItem(FORGET_KEY);
+  } catch {
+    return null;
+  }
+}
+function writeForgetPending(who: ID | null) {
+  try {
+    if (Platform.OS === 'web') { if (who) localStorage.setItem(FORGET_KEY, who); else localStorage.removeItem(FORGET_KEY); }
+    else void (who ? AsyncStorage.setItem(FORGET_KEY, who) : AsyncStorage.removeItem(FORGET_KEY)).catch(() => {});
+  } catch {}
+}
+
 function readDefaultPayment(): ID {
   try {
     if (Platform.OS !== 'web') return 'pm-visa';
@@ -518,7 +537,8 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    * map opens), or, with `view`, the part of the full map in view as it
    * moves (migration 63 answers for one part of the map at a time).
    */
-  loadLastSeen: (view?: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null) => Promise<void>;
+  /** Resolves false when the answer did not land (failed, or overtaken by a newer view), so the map can ask again. */
+  loadLastSeen: (view?: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null) => Promise<boolean>;
   /**
    * `activityId`: the tracker session it was logged from, which then counts as logged.
    * `sets`: a match's score, your side first (migration 91); when one side took more sets, the result follows it.
@@ -537,7 +557,7 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /** "I'm in": joins, and resolves the group chat to open (or a sentence saying why not). */
   joinHit: (hitId: ID) => Promise<{ conversationId?: ID; error?: string }>;
   leaveHit: (hitId: ID) => void;
-  cancelHit: (hitId: ID) => void;
+  cancelHit: (hitId: ID) => Promise<void>;
   /** Your hits, posted or joined, from the last two days, called-off ones included: for "How was the hit?". The demo's are already loaded. */
   recentHits: () => Promise<HitRequest[]>;
   /**
@@ -1054,10 +1074,21 @@ const cleanTitle = (title?: string) => (title ?? '').replace(/\s+/g, ' ').trim()
  * follow each other with them, is the one place it comes from, so the pin,
  * the card and Who's up today all light up from here. Unchanged people keep
  * their objects (and nothing redraws when nobody changed).
+ *
+ * `fresh`: the rows map_players just answered with. Its open_until is the
+ * whole answer (profile and settings row together, null when off), so for
+ * anyone in it a ring turned off goes too. The old table never says, so
+ * then a ring is only ever added. People it did not answer for keep theirs.
  */
-function withMapRings(users: User[], seen: Record<ID, LastSeen>, me: ID | null): User[] {
+function withMapRings(users: User[], seen: Record<ID, LastSeen>, me: ID | null, fresh: Record<ID, LastSeen> | null = null): User[] {
   let changed = false;
   const next = users.map((u) => {
+    const now = u.id === me ? undefined : fresh?.[u.id];
+    if (now) {
+      if (u.openToHitUntil === now.openUntil) return u;
+      changed = true;
+      return { ...u, openToHitUntil: now.openUntil };
+    }
     const until = u.id === me ? undefined : seen[u.id]?.openUntil;
     if (!until || (u.openToHitUntil && u.openToHitUntil >= until)) return u;
     changed = true;
@@ -1799,7 +1830,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const refetch = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
-        void remote.fetchHits().then((hits) => { if (on && hits) setState((prev) => ({ ...prev, hitRequests: hits })); }).catch(() => undefined);
+        void remote.fetchHits(currentUserForLive).then((hits) => { if (on && hits) setState((prev) => ({ ...prev, hitRequests: hits })); }).catch(() => undefined);
       }, 400);
     };
     let off: (() => void) | undefined;
@@ -2541,11 +2572,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Goes up once the server has forgotten your spot (Location off): a load
   // asked for before then may still carry strangers near it, and is dropped.
   const spotGen = useRef(0);
-  const loadLastSeen = useCallback(async (view?: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null) => {
+  // Each view asked for gets the next number: only the newest view's answer is kept,
+  // so a slow answer for where the map was cannot replace the one for where it is.
+  const viewSeq = useRef(0);
+  const loadLastSeen = useCallback(async (view?: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null): Promise<boolean> => {
     const me = stateRef.current.currentUserId;
-    if (!live(me)) return;
+    if (!live(me)) return true;
     if (seenFor.current !== me) { seenFor.current = me; seenAround.current = {}; seenInView.current = {}; }
+    // Location off that never reached the server: try the forget again first. Until it
+    // goes through, your own row stays off your map, as the switch says.
+    let stillShown = false;
+    if (!stateRef.current.locationEnabled && (await readForgetPending()) === me) {
+      if (await remote.forgetLastSeen().catch(() => false)) {
+        writeForgetPending(null);
+        spotGen.current += 1;
+        seenInView.current = Object.fromEntries(Object.entries(seenInView.current).filter(([, r]) => r.mutual));
+      } else stillShown = true;
+      if (stateRef.current.currentUserId !== me) return false;
+    }
     const gen = spotGen.current;
+    const seq = view ? ++viewSeq.current : 0;
     // The map's own function first (migration 63): each pin where you may see
     // it. A database without it yet answers 'missing', and the map reads the
     // old table (everyone about a kilometre out) the way it always has.
@@ -2564,21 +2610,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
       else { if (got) mapLive = true; rows = got; }
     }
     if (mapLive === false) rows = await remote.fetchLastSeen();
-    if (stateRef.current.currentUserId !== me || spotGen.current !== gen) return;
+    if (stateRef.current.currentUserId !== me || spotGen.current !== gen || (view && seq !== viewSeq.current)) return false;
     // Live, and the settings row said nothing (an account with no settings saved yet): never chosen.
     if (mapLive !== stateRef.current.mapLive || (mapLive && stateRef.current.mapVisibility === undefined && stateRef.current.remoteLoaded)) {
       setState((prev) => ({ ...prev, mapLive, mapVisibility: mapLive && prev.mapVisibility === undefined && prev.remoteLoaded ? null : prev.mapVisibility }));
     }
     // A failed load keeps what was there and is not "loaded": an error must
     // never read as nobody near you (the "You're early" card waits on this).
-    if (!rows) return;
-    const loaded = Object.fromEntries(rows.map((r) => [r.userId, r]));
+    if (!rows) return false;
+    const loaded = Object.fromEntries(rows.filter((r) => !(stillShown && r.userId === me)).map((r) => [r.userId, r]));
     // The old table answers for everywhere at once: it replaces both.
     if (mapLive === false) { seenAround.current = loaded; seenInView.current = {}; }
     else if (view) seenInView.current = loaded;
     else seenAround.current = loaded;
     const merged = { ...seenAround.current, ...seenInView.current };
-    setState((prev) => ({ ...prev, lastSeen: merged, lastSeenLoaded: true, users: withMapRings(prev.users, merged, me) }));
+    setState((prev) => ({ ...prev, lastSeen: merged, lastSeenLoaded: true, users: withMapRings(prev.users, merged, me, mapLive === true ? loaded : null) }));
+    return true;
   }, []);
 
   const setMapVisibility = useCallback(async (v: MapVisibility): Promise<boolean> => {
@@ -3005,10 +3052,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return demoApi.headToHead({ me, other: userId, sessions: s.sessions, tags: s.sessionTags });
   }, []);
 
-  const cancelHit = useCallback((hitId: ID) => {
+  const cancelHit = useCallback(async (hitId: ID) => {
     const me = requireUser();
+    const had = stateRef.current.hitRequests.find((h) => h.id === hitId);
     setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.filter((h) => h.id !== hitId) }));
-    if (live(me, hitId)) void remote.cancelHit(hitId);
+    if (!live(me, hitId)) return;
+    try {
+      await remote.cancelHit(hitId);
+    } catch {
+      // Still on for everyone else: it comes back here too, and says so (unless a refetch already brought it back).
+      if (stateRef.current.currentUserId !== me) return;
+      if (had) setState((prev) => (prev.hitRequests.some((h) => h.id === hitId) ? prev : { ...prev, hitRequests: [...prev.hitRequests, had].sort((a, b) => a.startsAt.localeCompare(b.startsAt)) }));
+      showToast({ title: 'That didn’t go through. Your hit is still on.', icon: 'alert-circle-outline' });
+    }
   }, [requireUser]);
 
   const toggleLike = useCallback(
@@ -5497,8 +5553,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // for its view keeps only your friends, so strangers loaded a moment
         // ago do not stay on the pins and in the tray until the next pan. A
         // load asked for before the server forgot is dropped when it lands.
-        void remote.forgetLastSeen().then((ok) => {
-          if (!ok || stateRef.current.currentUserId !== self) return;
+        // Kept on this device until the server has it, so a failed forget is tried again (loadLastSeen).
+        writeForgetPending(self);
+        void remote.forgetLastSeen().catch(() => false).then((ok) => {
+          if (stateRef.current.currentUserId !== self || stateRef.current.locationEnabled) return;
+          if (!ok) {
+            showToast({ title: 'Couldn’t hide your spot yet', body: 'Others may still see it. We’ll keep trying.', icon: 'cloud-offline-outline' });
+            return;
+          }
+          writeForgetPending(null);
           spotGen.current += 1;
           seenInView.current = Object.fromEntries(Object.entries(seenInView.current).filter(([, r]) => r.mutual));
           return loadLastSeen();
@@ -5521,6 +5584,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const place = nearestPlace(result.lat, result.lng);
     haptics.tap();
     remember(true);
+    writeForgetPending(null);
     setState((prev) => ({ ...prev, locationEnabled: true, locationAsked: true, detectedLocation: place.name, detectedCoords: { lat: result.lat, lng: result.lng } }));
     return null;
   }, [loadLastSeen]);
@@ -5549,6 +5613,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const marked = remote.markLastSeen(at.lat, at.lng, state.detectedLocation ?? undefined);
     if (refresh) void marked.then(() => loadLastSeen()).catch(() => undefined);
   }, [state.currentUserId, state.detectedCoords, state.detectedLocation, state.locationEnabled, loadLastSeen]);
+
+  // Back in the app (or signed in) with a Location off still to reach the server: try again.
+  useEffect(() => {
+    const me = stateRef.current.currentUserId;
+    if (!state.remoteLoaded || !live(me)) return;
+    void readForgetPending().then((who) => { if (who === me) void loadLastSeen(); });
+  }, [state.remoteLoaded, liveEpoch, loadLastSeen]);
 
   // The phone keeps the Location switch too (the browser reads it at start),
   // so the map opens where you are instead of forgetting on every launch.
@@ -5725,9 +5796,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setOpenToHit = useCallback((on: boolean) => {
     const me = requireUser();
     const until = on ? endOfToday() : undefined;
+    const was = stateRef.current.users.find((u) => u.id === me)?.openToHitUntil;
     // The switch that sets it gives the tap (Toggle's `haptic`), the moment it flips.
     patchCurrentUser((u) => ({ ...u, openToHitUntil: until }));
-    if (live(me)) remote.updateProfile(me, { openToHitUntil: until ?? null });
+    if (!live(me)) return;
+    void remote.updateProfile(me, { openToHitUntil: until ?? null }).catch(() => false).then((ok) => {
+      // Not saved: nobody else sees it, so the switch goes back (unless a later tap has changed it since) and says so.
+      if (ok || stateRef.current.currentUserId !== me) return;
+      if (stateRef.current.users.find((u) => u.id === me)?.openToHitUntil !== until) return;
+      patchCurrentUser((u) => (u.openToHitUntil === until ? { ...u, openToHitUntil: was } : u));
+      haptics.untap();
+      showToast({ title: on ? 'Couldn’t turn on Open to hit today' : 'Couldn’t turn off Open to hit today', body: 'Check your connection and try again.', icon: 'cloud-offline-outline' });
+    });
   }, [requireUser, patchCurrentUser]);
 
   const toggleMute = useCallback((userId: ID, quiet?: boolean) => {

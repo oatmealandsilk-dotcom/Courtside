@@ -29,7 +29,7 @@ import { takeInviteCourt } from '@/features/invite/referral';
 import { notKnownAdult } from '@/features/players/age';
 import { askWhoSeesYouOnLaunch, canChooseVisibility, onTeenMap } from '@/features/players/mapPrivacy';
 import { isTourOpen, useTourOpen } from '@/features/tour/tourStore';
-import { IN_TOWN_MILES } from '@/features/players/mapModel';
+import { IN_TOWN_MILES, liveCentre } from '@/features/players/mapModel';
 import { isClosedCourt } from '@/features/players/courts';
 import { agoLabel } from '@/components/map/markers';
 import { confirmUnfollow } from '@/lib/confirm';
@@ -202,9 +202,13 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const [sort, setSort] = useState<'new' | 'hot' | 'top' | 'unanswered'>('new');
   // One centre for everything on Find Players (the map card's dots and count,
   // Courts near you, which hits are near, the court search), so their numbers
-  // agree and courts load once: your profile's city, else where the phone is.
+  // agree and courts load once: the card's own (liveCentre) with Location on,
+  // else your profile's city, else where the phone is.
   const { city: myCityAt } = useMyCity(currentUser);
-  const firstCentre = myCityAt ?? detectedCoords ?? null;
+  const liveLat = location.locationOn ? detectedCoords?.lat : undefined;
+  const liveLng = location.locationOn ? detectedCoords?.lng : undefined;
+  const liveAt = useMemo(() => (liveLat === undefined || liveLng === undefined ? null : liveCentre({ lat: liveLat, lng: liveLng })), [liveLat, liveLng]);
+  const firstCentre = liveAt ?? myCityAt ?? detectedCoords ?? null;
   const nearCourts = useNearCourts(firstCentre);
   // Hits still ahead (or just started), not called off, not from anyone blocked
   // or muted, and only those the teen rule lets you see (as on court pages and the map).
@@ -214,20 +218,31 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   }, [hitRequests, users, blockedIds, mutedIds, followingIds, currentUserId, seeing]);
   // Near first (within 25 km, the reach of hit matches), soonest first, with how far:
   // everything that close is near, so today's game beats next week's a mile closer.
-  // A place only typed has no spot, so it follows by time (most are local); the rest wait under "Further away".
+  // A place only typed has no spot, so it follows by time when its poster is near (their shared spot,
+  // else the same city on their profile; yours always); a typed place from another city waits under "Further away".
   const { openHits, furtherHits } = useMemo(() => {
     if (!firstCentre) return { openHits: seenHits.map((hit) => ({ hit, miles: undefined as number | undefined })), furtherHits: [] };
     const near: { hit: (typeof seenHits)[number]; miles: number | undefined }[] = [];
     const typed: typeof near = [];
     const far: typeof near = [];
+    const farTyped: typeof near = [];
+    const usersById = new Map(users.map((u) => [u.id, u]));
     for (const hit of seenHits) {
       const spot = hitSpot(hit);
-      if (!spot) { typed.push({ hit, miles: undefined }); continue; }
+      if (!spot) {
+        const seen = lastSeen[hit.authorId];
+        const author = usersById.get(hit.authorId);
+        // Nothing to tell by (no shared spot, no city on either profile): kept with the near ones, as before.
+        const local = hit.authorId === currentUserId
+          || (seen ? milesBetween(firstCentre, seen) <= NEAR_HIT_MILES : !author || !myCity || !author.location?.trim() || sameCity(author));
+        (local ? typed : farTyped).push({ hit, miles: undefined });
+        continue;
+      }
       const miles = milesBetween(firstCentre, spot);
       (miles <= NEAR_HIT_MILES ? near : far).push({ hit, miles });
     }
-    return { openHits: [...near, ...typed], furtherHits: far };
-  }, [seenHits, firstCentre?.lat, firstCentre?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+    return { openHits: [...near, ...typed], furtherHits: [...far, ...farTyped] };
+  }, [seenHits, firstCentre?.lat, firstCentre?.lng, lastSeen, users, currentUserId, myCity]); // eslint-disable-line react-hooks/exhaustive-deps
   const [furtherOpen, setFurtherOpen] = useState(false);
   const [moreHitsOpen, setMoreHitsOpen] = useState(false);
   const moreHits = Math.max(0, openHits.length - HITS_SHOWN);

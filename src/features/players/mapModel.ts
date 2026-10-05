@@ -46,6 +46,16 @@ export const COURTS_MIN_ZOOM = 10;
 
 /** Inside this many miles someone counts as in your town. */
 export const IN_TOWN_MILES = 30;
+
+/**
+ * The still card's centre with Location on (Oct 3): the big city you are
+ * near, else where you are. Find Players' lists under the card measure from
+ * it too, so the card's count and the lists agree.
+ */
+export function liveCentre(fix: LatLng): LatLng {
+  const place = nearestPlace(fix.lat, fix.lng);
+  return milesBetween(fix, place) <= IN_TOWN_MILES ? { lat: place.lat, lng: place.lng } : fix;
+}
 /** The tray lists people only this close (about 50 miles), unless you searched for someone or somewhere, or picked Following. */
 const TRAY_MILES = 50;
 
@@ -99,8 +109,8 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   const live = useMemo<{ at: LatLng; name: string } | null>(() => {
     if (fixLat === undefined || fixLng === undefined) return null;
     const at = { lat: fixLat, lng: fixLng };
-    const place = nearestPlace(fixLat, fixLng);
-    if (milesBetween(at, place) <= IN_TOWN_MILES) return { at: { lat: place.lat, lng: place.lng }, name: place.name.split(',')[0] };
+    const centre = liveCentre(at);
+    if (centre !== at) return { at: centre, name: nearestPlace(fixLat, fixLng).name.split(',')[0] };
     return { at, name: looked ?? 'you' };
   }, [fixLat, fixLng, looked]);
   const city = live ? live.at : profileCity;
@@ -169,7 +179,8 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
     const hLng = Math.min(1, Math.max(0.01, b.maxLng - b.minLng));
     const area = { minLat: midLat - hLat, maxLat: midLat + hLat, minLng: midLng - hLng, maxLng: midLng + hLng };
     lastArea.current = area;
-    void actions.loadLastSeen(area);
+    // An answer that failed (or was overtaken) lets the next small pan here ask again.
+    void actions.loadLastSeen(area).catch(() => false).then((ok) => { if (!ok && lastArea.current === area) lastArea.current = null; });
   }, [card, actions.loadLastSeen]); // eslint-disable-line react-hooks/exhaustive-deps
   const ranked = useMemo<Placed[]>(
     () => players

@@ -110,16 +110,17 @@ export function NearbyMap(props: NearbyMapProps) {
     if (lastHome.current.lat === home.lat && lastHome.current.lng === home.lng) return;
     lastHome.current = home;
     // Opened on a tagged court or a hit, or looking at a place searched for, the map stays there; the still card stays on your city.
-    if (expanded && model.homeKnown && !focusCourt && !focusHit && !focusSpot && !model.place) canvas.current?.flyTo(home, CITY_ZOOM, 600);
+    if (expanded && model.homeKnown && !focusCourt && !focusHit && !focusSpot && !model.place && !model.selected) canvas.current?.flyTo(home, CITY_ZOOM, 600);
   }, [home]); // eslint-disable-line react-hooks/exhaustive-deps
   // The still card follows a change of city on the profile.
   const cityKey = model.city ? `${model.city.lat},${model.city.lng}` : '';
   useEffect(() => { if (!expanded && model.city) canvas.current?.flyTo(model.city, CARD_ZOOM, 0); }, [cityKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // Picking someone, a court, a hit, or typing a city takes the map there.
-  useEffect(() => { if (model.selected) canvas.current?.flyTo(model.selected.at, CLOSE_ZOOM); }, [model.selected]);
+  // Keyed on who or what is picked, not the object: it is rebuilt on every data change, which must not pull the map back.
+  useEffect(() => { if (model.selected) canvas.current?.flyTo(model.selected.at, CLOSE_ZOOM); }, [model.selected?.user.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // A court's card is tall (who may play, right now, what players say): its court lands above it, not under it.
-  useEffect(() => { if (model.selectedCourt) canvas.current?.flyTo(model.selectedCourt, CLOSE_ZOOM, 500, -courtLift(windowH)); }, [model.selectedCourt]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (model.selectedHit) canvas.current?.flyTo(model.selectedHit.at, CLOSE_ZOOM); }, [model.selectedHit]);
+  useEffect(() => { if (model.selectedCourt) canvas.current?.flyTo(model.selectedCourt, CLOSE_ZOOM, 500, -courtLift(windowH)); }, [model.selectedCourt?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (model.selectedHit) canvas.current?.flyTo(model.selectedHit.at, CLOSE_ZOOM); }, [model.selectedHit?.hit.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // Your card up: your pin glides into the clear strip above it, so the ring switching on is there to see.
   useEffect(() => { if (meOpen && model.mePos) canvas.current?.flyTo(model.mePos, undefined, 500, -youLift(windowH)); }, [meOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   // A place picked from the search: exactly as close as it needs (placeZoom), out as well as in, so its court pins show;

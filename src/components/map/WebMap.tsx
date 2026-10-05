@@ -284,8 +284,9 @@ export function NearbyMap(props: NearbyMapProps) {
     return () => clearTimeout(t);
   }, [model.selected?.user.id, mapGen]); // eslint-disable-line react-hooks/exhaustive-deps
   // A court's card is tall (who may play, right now, what players say): its court lands above it, not under it.
-  useEffect(() => { if (model.selectedCourt) map.current?.flyTo({ center: [model.selectedCourt.lng, model.selectedCourt.lat], zoom: Math.max(map.current.getZoom(), CLOSE_ZOOM), duration: 500, offset: [0, -courtLift(host.current?.clientHeight ?? 800)] }); }, [model.selectedCourt]);
-  useEffect(() => { if (model.selectedHit) map.current?.flyTo({ center: [model.selectedHit.at.lng, model.selectedHit.at.lat], zoom: Math.max(map.current.getZoom(), CLOSE_ZOOM), duration: 500 }); }, [model.selectedHit]);
+  // Keyed on which court or hit is picked, not the object: courts and hits reloading must not pull the map back.
+  useEffect(() => { if (model.selectedCourt) map.current?.flyTo({ center: [model.selectedCourt.lng, model.selectedCourt.lat], zoom: Math.max(map.current.getZoom(), CLOSE_ZOOM), duration: 500, offset: [0, -courtLift(host.current?.clientHeight ?? 800)] }); }, [model.selectedCourt?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (model.selectedHit) map.current?.flyTo({ center: [model.selectedHit.at.lng, model.selectedHit.at.lat], zoom: Math.max(map.current.getZoom(), CLOSE_ZOOM), duration: 500 }); }, [model.selectedHit?.hit.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // Your card up: your pin glides into the clear strip above it, so the ring switching on is there to see.
   useEffect(() => { if (meOpen && model.mePos) map.current?.flyTo({ center: [model.mePos.lng, model.mePos.lat], zoom: map.current.getZoom(), duration: 500, offset: [0, -youLift(host.current?.clientHeight ?? 800)] }); }, [meOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   // A place picked from the search: exactly as close as it needs (placeZoom), out as well as in, so its court pins show;
