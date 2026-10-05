@@ -35,6 +35,22 @@ export const supabase: SupabaseClient | null =
 
 export const isSupabaseConfigured = supabase !== null;
 
+let throwaways = 0;
+/**
+ * A client that keeps nothing (no storage, no timers), for one job: checking
+ * a saved login before it replaces the one in use (Switch account). Its
+ * session lives only in its own memory and goes with it, and it never signs
+ * out (that would end the login being checked). Each gets its own name, so
+ * Supabase never takes two of them for the same client.
+ */
+export function throwawayAuthClient(): SupabaseClient | null {
+  if (!url || !key) return null;
+  throwaways += 1;
+  return createClient(url, key, {
+    auth: { storageKey: `courtside-check-${throwaways}`, persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+}
+
 /** Where the Android Google sign-in helper keeps its one-time secret (and nothing else for long). */
 export const ANDROID_OAUTH_KEY = 'courtside-android-oauth';
 let androidOAuth: SupabaseClient | null | undefined;

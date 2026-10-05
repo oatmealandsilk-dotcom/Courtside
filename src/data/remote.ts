@@ -14,7 +14,8 @@ import * as WebBrowser from 'expo-web-browser';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
-import { ANDROID_OAUTH_KEY, androidOAuthClient, supabase } from '@/lib/supabase';
+import { isAuthRetryableFetchError } from '@supabase/supabase-js';
+import { ANDROID_OAUTH_KEY, androidOAuthClient, supabase, throwawayAuthClient } from '@/lib/supabase';
 import { shrinkCover, shrinkPhoto, shrinkPhotoSized } from '@/lib/shrinkPhoto';
 import { COVER_MARK, smallName } from '@/lib/smallCover';
 import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
@@ -868,8 +869,8 @@ export interface SiteFeedback { id: string; message: string; email?: string; cre
 export interface BetaInviteStatus { live: boolean; total: number; invited: number; waiting: number; sent: number; failed: string[] }
 
 /** The kinds of thing a report can be about, besides an account or a chat. */
-export type ReportedItemKind = 'post' | 'hit' | 'question' | 'answer' | 'comment' | 'coach-question' | 'coach-reply';
-const ITEM_KINDS: ReportedItemKind[] = ['post', 'hit', 'question', 'answer', 'comment', 'coach-question', 'coach-reply'];
+export type ReportedItemKind = 'post' | 'hit' | 'question' | 'answer' | 'comment' | 'coach-question' | 'coach-reply' | 'tip';
+const ITEM_KINDS: ReportedItemKind[] = ['post', 'hit', 'question', 'answer', 'comment', 'coach-question', 'coach-reply', 'tip'];
 
 export interface AdminReport {
   id: ID;
@@ -2578,6 +2579,8 @@ export const remote = {
       post: ['posts'], hit: ['stories'], question: ['questions'], answer: ['answers'],
       // A comment is under a post or under a hit: whichever has it.
       comment: ['comments', 'story_comments'], 'coach-question': ['coach_questions'], 'coach-reply': ['coach_replies'],
+      // A tip on the tips board (account sweep, Oct 5).
+      tip: ['tips'],
     };
     for (const table of tables[kind]) {
       const { data, error } = await need().from(table).select('*').eq('id', id).maybeSingle();
@@ -2878,7 +2881,7 @@ export const remote = {
   async fetchMyReported(): Promise<ID[]> {
     const { data, error } = await need().rpc('my_reported_targets');
     if (error || !Array.isArray(data)) return [];
-    return (data as unknown[]).map((t) => /^(?:post|hit|question|answer|comment|coach-question|coach-reply):(.+)$/.exec(String(t))?.[1]).filter((id): id is string => !!id);
+    return (data as unknown[]).map((t) => /^(?:post|hit|question|answer|comment|coach-question|coach-reply|tip):(.+)$/.exec(String(t))?.[1]).filter((id): id is string => !!id);
   },
   async fetchHits(me?: ID | null): Promise<HitRequest[] | null> {
     const { data, error } = await need().from('hit_requests').select('*, hit_joins(user_id)').eq('cancelled', false)
@@ -3538,6 +3541,12 @@ export const remote = {
     return refusedFor(error);
   },
   async voteTip(tipId: ID, dir: 1 | -1) { const { error } = await need().rpc('vote_tip', { t: tipId, dir }); if (error) fail('tip vote')(error); },
+  /** Your own tip, off the board. Throws when it was not deleted (before migration 128 nobody could delete one). */
+  async deleteTip(id: ID) {
+    const { data, error } = await need().from('tips').delete().eq('id', id).select('id');
+    if (error) throw new Error(error.message);
+    if (!(data ?? []).length) throw new Error('tip not deleted');
+  },
 
   /** Resolves false when it was not saved (most callers need not ask). */
   async updateProfile(me: ID, patch: ProfilePatch): Promise<boolean> {
@@ -4288,14 +4297,38 @@ export const auth = {
     // then failed with "Invalid Refresh Token".
     await forgetLocalSession();
   },
-  /** Signs in as a remembered account from its refresh token, replacing whoever is signed in now. */
+  /**
+   * Logs out and ends this login on the server too (only this one: the
+   * account's other phones and computers stay signed in), so its saved token
+   * stops working. For a browser, which may be shared (see signOut).
+   */
+  async endSession() {
+    // Supabase takes the login off this device even when the server cannot be reached.
+    await need().auth.signOut({ scope: 'local' }).catch(() => undefined);
+    await forgetLocalSession();
+  },
+  /**
+   * Signs in as a remembered account from its refresh token, replacing whoever
+   * is signed in now. The saved login is renewed on a throwaway client that
+   * keeps nothing, and only a renewed one replaces the account on screen: an
+   * expired login, or no connection, leaves you signed in exactly as you
+   * were. (Renewing on the app's own client wiped the current login first,
+   * so a failure signed you out of both.) The account being left stays valid
+   * on the server too, so switching back is a tap. An expired login's error
+   * is marked `expired`, so only that one is dropped from the saved list.
+   */
   async resumeAccount(refreshToken: string) {
     const client = need();
-    // The account being left stays valid too, so switching back is a tap.
-    await forgetLocalSession();
-    const { data, error } = await client.auth.refreshSession({ refresh_token: refreshToken });
-    if (error || !data.session) throw new Error('That login has expired on this phone. Sign in with your email to add it again.');
-    return data.session;
+    const check = throwawayAuthClient();
+    if (!check) throw new Error('Supabase is not configured');
+    const { data, error } = await check.auth.refreshSession({ refresh_token: refreshToken });
+    if (error || !data.session) {
+      if (error && isAuthRetryableFetchError(error)) throw new Error('Could not reach CourtSide. Check your connection and try again.');
+      throw Object.assign(new Error('That login has expired on this phone. Sign in with your email to add it again.'), { expired: true });
+    }
+    const set = await client.auth.setSession({ access_token: data.session.access_token, refresh_token: data.session.refresh_token });
+    if (set.error || !set.data.session) throw new Error('Could not switch accounts. Check your connection and try again.');
+    return set.data.session;
   },
   /**
    * Google, through Supabase. On the web the whole page goes to Google and

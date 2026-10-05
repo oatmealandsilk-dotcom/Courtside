@@ -49,7 +49,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as toast from '@/lib/toast';
 import { anyUploading, cancelUpload, finishUpload, holdQuietUpload, setUploadProgress, simulateUpload, startUpload } from '@/lib/uploads';
 import { requestFeedRefresh } from '@/features/feed/feedBus';
-import { blockDevice, groupFor, rememberAnswered, yearsOld, type AgeGroup } from '@/features/age/ageCheck';
+import { blockDevice, groupFor, isDeviceBlocked, rememberAnswered, yearsOld, type AgeGroup } from '@/features/age/ageCheck';
 import { knownOpen, notKnownAdult, type AgeSource, type Openness, type OpennessMap } from '@/features/players/age';
 import type { TeenMap } from '@/features/players/mapPrivacy';
 import { show as showToast } from '@/lib/toast';
@@ -617,6 +617,8 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /** A suggestion from an early user, on the board for everyone to vote on. */
   submitTip: (body: string) => Promise<void>;
   voteTip: (tipId: ID, direction: 1 | -1) => void;
+  /** Your own tip, off the board for everyone. It comes back, with a toast, if the server says no. */
+  deleteTip: (tipId: ID) => void;
   /** Try the account load again after it failed. */
   retryLoad: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
@@ -630,7 +632,13 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /** Resolves once the account is loaded, or false if the person backed out. */
   signInWithGoogle: () => Promise<boolean>;
   signInWithApple: () => Promise<boolean>;
-  signOut: () => void;
+  /**
+   * Logs out. In a browser this also forgets the login on this computer and
+   * ends it on the server, so the next person cannot pick it up with a tap;
+   * `keepLogin` (Add account) keeps it, so switching back stays a tap. A
+   * phone keeps its logins in its keychain either way.
+   */
+  signOut: (options?: { keepLogin?: boolean }) => void;
   /* Account centre */
   accountInfo: () => Promise<{ email: string; providers: string[]; createdAt: string; lastSignInAt: string | null; emailConfirmed: boolean } | null>;
   changePassword: (password: string) => Promise<void>;
@@ -1066,6 +1074,13 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    */
   confirmBirthDate: (birthDate: string) => Promise<AgeGroup | 'under13'>;
   /**
+   * The birthday page on a phone that has had an under-13 answer, with an
+   * account signed in that has no age on file: one made in the last half
+   * hour (Apple or Google, which take no birthday first) is removed, the
+   * same as an under-13 answer removes one. True when it was removed.
+   */
+  removeNewAccountOnBlockedPhone: () => Promise<boolean>;
+  /**
    * Whether you may message someone one-to-one: always in a chat you already
    * have; otherwise someone not known to be an adult (a teen, or no birthday
    * given yet) only gets new chats from people they follow.
@@ -1368,8 +1383,8 @@ const nextId = (prefix: string): string => {
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-/** A report about one thing: what it is and its id. The same list the server reads (stamp_report, migration 115). */
-const REPORTED_TARGET = /^(?:post|hit|question|answer|comment|coach-question|coach-reply):(.+)$/;
+/** A report about one thing: what it is and its id. The same list the server reads (stamp_report, migration 115), plus a tip (128). */
+const REPORTED_TARGET = /^(?:post|hit|question|answer|comment|coach-question|coach-reply|tip):(.+)$/;
 
 /**
  * The made-up players, posts and threads the app ships with so a demo is
@@ -2794,16 +2809,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const switchAccount = useCallback(async (id: ID) => {
     const saved = stateRef.current.savedAccounts.find((a) => a.id === id);
     if (!saved) throw new Error('That account is not saved on this device.');
-    // One account's chat link cards never show for the next.
-    void forgetLinkPreviews();
     let session;
     try {
       session = await remoteAuth.resumeAccount(saved.refreshToken);
     } catch (err) {
-      const savedAccounts = await forgetAccount(id);
-      setState((prev) => ({ ...prev, savedAccounts }));
+      // Only a login that has really expired leaves the list; a dropped
+      // connection leaves it there to try again (and you as you were).
+      if ((err as { expired?: boolean } | null)?.expired) {
+        const savedAccounts = await forgetAccount(id);
+        setState((prev) => ({ ...prev, savedAccounts }));
+      }
       throw err;
     }
+    // One account's chat link cards never show for the next.
+    void forgetLinkPreviews();
     setState((prev) => ({ ...prev, currentUserId: session.user.id, remoteLoaded: false, onboardingComplete: false, error: null, detectedActivities: [], sessionTags: [], ...freshAccountSettings() }));
     await loadRemote(session.user.id, session.user.email);
   }, [loadRemote]);
@@ -2860,19 +2879,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signOut = useCallback(() => {
+  const signOut = useCallback((options: { keepLogin?: boolean } = {}) => {
     // Nothing of this account stays on the device for the next person.
     const leaving = stateRef.current.currentUserId;
     if (leaving) void clearSnapshot(leaving);
     // Nor the cards of the links in its chats.
     void forgetLinkPreviews();
+    // A computer can be shared: in a browser, Log out also forgets this login
+    // here and ends it on the server, so the next person at the computer
+    // cannot pick it from "Welcome back" with a tap. Add account keeps it
+    // (keepLogin), so switching back stays a tap; a phone keeps its logins
+    // in its keychain, as before.
+    const endLogin = Platform.OS === 'web' && !options.keepLogin && !!leaving;
     // This phone stops getting the account's alerts before the session ends (the removal needs it).
-    if (isSupabaseConfigured) void forgetPushToken().finally(() => remoteAuth.signOut());
+    if (isSupabaseConfigured) void forgetPushToken().finally(() => (endLogin ? remoteAuth.endSession() : remoteAuth.signOut()));
+    if (endLogin && leaving) void forgetAccount(leaving).catch(() => undefined);
     // Nor this iPhone's own "Workout detected" alerts (build 15, workoutWatch): only signing out
     // stops them, never an open that merely could not read the session (useWorkoutWatch).
     void stopWorkoutWatch();
     // One account's health, courts and settings never carry over to the next one signed in.
-    setState(signedOut);
+    setState((prev) => {
+      const next = signedOut(prev);
+      return endLogin ? { ...next, savedAccounts: prev.savedAccounts.filter((a) => a.id !== leaving) } : next;
+    });
   }, []);
 
   const patchCurrentUser = useCallback(
@@ -5713,18 +5742,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void remote.hideMessage(me, messageId);
   }, [requireUser]);
 
+  // Nothing is kept for a child: the account goes, and this phone remembers the answer.
+  const removeForAge = useCallback(async (me: ID) => {
+    await blockDevice();
+    try {
+      if (isSupabaseConfigured) await remoteAuth.deleteAccount();
+    } catch { /* the sign-out below still takes it off this phone */ }
+    void stopWorkoutWatch();
+    const savedAccounts = await forgetAccount(me).catch(() => stateRef.current.savedAccounts);
+    setState((prev) => ({ ...signedOut(prev), savedAccounts }));
+    void clearSnapshot(me);
+  }, []);
   const confirmBirthDate = useCallback(async (birthDate: string): Promise<AgeGroup | 'under13'> => {
     const me = requireUser();
     const tooYoung = async () => {
-      // Nothing is kept for a child: the account goes, and this phone remembers the answer.
-      await blockDevice();
-      try {
-        if (isSupabaseConfigured) await remoteAuth.deleteAccount();
-      } catch { /* the sign-out below still takes it off this phone */ }
-      void stopWorkoutWatch();
-      const savedAccounts = await forgetAccount(me).catch(() => stateRef.current.savedAccounts);
-      setState((prev) => ({ ...signedOut(prev), savedAccounts }));
-      void clearSnapshot(me);
+      await removeForAge(me);
       return 'under13' as const;
     };
     const years = yearsOld(birthDate);
@@ -5736,9 +5768,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // mistyped year here.
       const answer = await remote.setBirthDate(birthDate);
       if (answer === 'under_13') return tooYoung();
+      // Not saved (no connection, say): nothing is counted as answered, here or on
+      // this phone, so the page says to try again and asks again until it is saved.
+      // Counting the typed date left the account with no age on the server for good.
+      if (!answer) throw new Error('Could not save that');
       group = answer;
     }
-    // Without the database's answer (the demo, or its age check not reachable), the typed date stands.
+    // Without the database (the demo), the typed date stands.
     if (!group) {
       if (years < 13) return tooYoung();
       group = groupFor(years);
@@ -5753,7 +5789,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // The server follows only when both are adults or both are teens (migration 84).
     void followInviter();
     return label;
-  }, [requireUser]);
+  }, [requireUser, removeForAge]);
+  const removeNewAccountOnBlockedPhone = useCallback(async () => {
+    const me = stateRef.current.currentUserId;
+    if (!me || !isSupabaseConfigured) return false;
+    // Only an account with no age on file, made in the last half hour: an
+    // older one may be someone else's on a shared phone, and simply signs out.
+    if (stateRef.current.users.find((u) => u.id === me)?.ageGroup) return false;
+    if (!(await isDeviceBlocked())) return false;
+    const who = await remoteAuth.signedInUser().catch(() => null);
+    const made = Date.parse(who?.createdAt ?? '');
+    if (who?.id !== me || !(Date.now() - made < 30 * 60 * 1000) || stateRef.current.currentUserId !== me) return false;
+    await removeForAge(me);
+    return true;
+  }, [removeForAge]);
 
   const canMessage = useCallback((userId: ID) => {
     const s = stateRef.current;
@@ -6555,7 +6604,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     haptics.commit();
     patchCurrentUser((u) => ({ ...u, isPrivate: enabled || undefined }));
     if (live(me)) remote.updateProfile(me, { isPrivate: enabled });
-  }, [requireUser, patchCurrentUser]);
+    // Public now: everyone still waiting on a follow request is let in, the
+    // way Instagram does it, rather than left on "Requested" with nothing to wait for.
+    if (!enabled) {
+      for (const r of stateRef.current.followRequests) if (r.toId === me) acceptFollowRequest(r.fromId);
+    }
+  }, [requireUser, patchCurrentUser, acceptFollowRequest]);
 
   const setOpenToHit = useCallback((on: boolean) => {
     const me = requireUser();
@@ -6694,6 +6748,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = requireUser();
     setState((prev) => ({ ...prev, tips: prev.tips.map((t) => (t.id === tipId ? applyVote(t, me, direction) : t)) }));
     if (live(me, tipId)) void remote.voteTip(tipId, direction);
+  }, [requireUser]);
+  const deleteTip = useCallback((tipId: ID) => {
+    const me = requireUser();
+    const tip = stateRef.current.tips.find((t) => t.id === tipId);
+    if (!tip || tip.authorId !== me) return;
+    haptics.commit();
+    setState((prev) => ({ ...prev, tips: prev.tips.filter((t) => t.id !== tipId) }));
+    if (!live(me, tipId)) return;
+    remote.deleteTip(tipId).catch((err: unknown) => {
+      void reportError(err, { where: 'tip delete' });
+      setState((prev) => (prev.tips.some((t) => t.id === tipId) ? prev : { ...prev, tips: [tip, ...prev.tips] }));
+      showToast({ title: 'Couldn’t delete your tip. Try again.', icon: 'alert-circle-outline' });
+    });
   }, [requireUser]);
 
   const reportUser = useCallback((userId: ID, reason: string) => {
@@ -7338,6 +7405,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setPref,
       submitTip,
       voteTip,
+      deleteTip,
       retryLoad,
       requestPasswordReset,
       setReadReceiptsEnabled,
@@ -7487,6 +7555,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadMessage,
       reportChat,
       confirmBirthDate,
+      removeNewAccountOnBlockedPhone,
       canMessage,
       canAddToGroup,
       recheckFollows,
@@ -7546,6 +7615,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleAlerts,
       reportUser,
       submitTip,
+      deleteTip,
       setReadReceiptsEnabled,
       signIn,
       signUp,
@@ -7693,6 +7763,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadMessage,
       reportChat,
       confirmBirthDate,
+      removeNewAccountOnBlockedPhone,
       canMessage,
       canAddToGroup,
       recheckFollows,
@@ -7729,7 +7800,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const patch: Partial<Pick<AppState, 'posts' | 'stories' | 'hitRequests' | 'questions' | 'answers' | 'comments' | 'coachQuestions' | 'coachReplies' | 'tips'>> = {
       coachQuestions: state.coachQuestions.filter((q) => !out.has(q.id) && !blocked.has(q.authorId)),
       coachReplies: state.coachReplies.filter((r) => !out.has(r.id) && !blocked.has(r.coachUserId)),
-      tips: state.tips.filter((t) => !blocked.has(t.authorId)),
+      tips: state.tips.filter((t) => !out.has(t.id) && !blocked.has(t.authorId)),
     };
     if (out.size || strays) {
       patch.posts = state.posts.filter((p) => !out.has(p.id) && !shut(p));

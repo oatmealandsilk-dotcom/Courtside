@@ -16,6 +16,7 @@ import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
+import { openPlayer } from '@/features/navigation/openPlayer';
 
 /** How far a reply sits in: its picture lines up with the words of the comment it is under. */
 export const replyIndent = (big: boolean) => (big ? 40 : 32) + spacing.md;
@@ -59,7 +60,7 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
     }
   } : undefined;
   const liked = !!currentUserId && comment.likedBy.includes(currentUserId);
-  const openProfile = () => { if (who) router.push(who.id === currentUserId ? '/profile' : `/user/${who.id}`); };
+  const openProfile = () => { if (who) openPlayer(who.id, currentUserId); };
   // A photo in the comment opens to the whole screen; a tap anywhere puts it away.
   const [viewing, setViewing] = useState(false);
   // Someone else's comment: hold it to report it. It leaves your screens at once.

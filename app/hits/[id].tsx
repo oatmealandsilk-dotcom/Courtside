@@ -27,6 +27,7 @@ import { useStillLoading } from '@/lib/useStillLoading';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
 import { confirm } from '@/lib/confirm';
+import { openPlayer } from '@/features/navigation/openPlayer';
 
 /** One hit with its likes and comments — the same page a post gets. */
 export default function HitThread() {
@@ -127,7 +128,7 @@ export default function HitThread() {
       {story.removed ? <RemovedNote removed={story.removed} style={{ marginTop: spacing.md }} /> : null}
 
       <View style={styles.authorRow}>
-        <Pressable accessibilityRole="link" onPress={() => router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`)} style={styles.author}>
+        <Pressable accessibilityRole="link" onPress={() => openPlayer(author.id, currentUserId)} style={styles.author}>
           <Avatar name={author.name} seed={author.avatarSeed} size={36} />
           <View style={{ flex: 1 }}>
             <PlayerName userId={author.id} style={styles.name}>{author.name}</PlayerName>

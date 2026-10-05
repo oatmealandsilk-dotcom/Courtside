@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
+import { goBack } from '@/lib/goBack';
 import { ProfilePhotoPicker } from '@/components/ProfilePhotoPicker';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { Button, Field, Screen, SegmentedControl } from '@/components/ui';
@@ -34,6 +35,12 @@ export default function EditProfile() {
     setName(currentUser.name);
     setBio(currentUser.bio);
     setLocation(currentUser.location);
+    // The rating too: its boxes were set up before the account was here, empty.
+    const p = currentUser.profile;
+    if (p) {
+      setSystem(p.skillSystem === 'UTR' ? 'UTR' : 'NTRP');
+      setRatingText(p.rating && p.skillSystem !== 'ITF' ? p.rating.toFixed(1) : '');
+    }
   }, [currentUser]);
   // The rating step (the Rating row below) also has your name and city. Changed
   // there, they show here on the way back, so Save changes never puts the old
@@ -77,7 +84,8 @@ export default function EditProfile() {
       }
       actions.updateIdentity({ name: name.trim(), bio: bio.trim(), location: location.trim(), cityAt: location.trim() ? cityAt : null });
       saveRating();
-      router.back();
+      // Opened from a link or after a reload there is no page behind it: the profile, then.
+      goBack('/profile');
     });
   };
   const saveRating = () => {
@@ -87,7 +95,7 @@ export default function EditProfile() {
   };
 
   return (
-    <Screen title="Edit Profile" onBack={() => router.back()}>
+    <Screen title="Edit Profile" onBack={() => goBack('/profile')}>
       {!currentUser ? (
         <View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View>
       ) : (

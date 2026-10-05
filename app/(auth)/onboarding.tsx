@@ -5,6 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { useAndroidBack } from '@/lib/androidBack';
 
+import { CourtSpinner } from '@/components/CourtSpinner';
 import { LocationField } from '@/components/LocationField';
 import { PermissionRows } from '@/components/PermissionRows';
 import { Button, Collapse, Field, SegmentedControl, Toggle } from '@/components/ui';
@@ -95,7 +96,25 @@ const COACH_STEPS = [3, 4];
 
 const round = (n: number, decimals: number) => Number(n.toFixed(decimals));
 
+/**
+ * Changing answers already saved (Game details, the AI coach's setup, the
+ * profile's "finish setting up"): opened before the app has the account (a
+ * reload, a link), the page waits for it, so every box starts from what is
+ * saved. Drawn straight away, the boxes kept their defaults (no name, no
+ * town, NTRP 3.5) and Save put those over the real ones.
+ */
 export default function Onboarding() {
+  const styles = useThemedStyles(styleDefinitions);
+  const { currentUser } = useApp();
+  const { from } = useLocalSearchParams<{ from?: string }>();
+  const fromSaved = from === 'edit' || from === 'coach' || from === 'profile';
+  if (fromSaved && !currentUser) {
+    return <View style={[styles.root, styles.waiting]}><CourtSpinner size={28} /></View>;
+  }
+  return <OnboardingSteps key={fromSaved ? currentUser?.id : undefined} />;
+}
+
+function OnboardingSteps() {
   const styles = useThemedStyles(styleDefinitions);
   const { currentUser, currentUserId, posts, questions, answers, actions } = useApp();
   // The progress bar sits a calm step below the status bar; the buttons clear the home bar.
@@ -304,10 +323,15 @@ export default function Onboarding() {
     else router.replace('/first-move');
   };
 
+  // Skip moves on along this page's own steps, the same as Continue. The
+  // AI coach's setup skipping its last step (Calendar) finishes it, rather
+  // than landing on a Review page that is not one of its steps and loops back.
   const skipStep = () => {
     const key = STEPS[step].skip;
     if (key) skipped.current.add(key);
-    setStep((s) => s + 1);
+    const nextStep = order[position + 1];
+    if (nextStep === undefined) { finish(); return; }
+    setStep(nextStep);
   };
   const next = async () => {
     if (step === 0 && asksInviter && !(await claimCode())) return;
@@ -528,7 +552,8 @@ export default function Onboarding() {
                   ['Surface', SURFACES.find((s) => s.value === surface)?.label ?? ''],
                   ['Fitness', FITNESS.find((f) => f.value === fitnessLevel)?.label ?? ''],
                   ['Sessions', sessionsPerWeek === undefined ? 'Not set' : `${sessionsPerWeek} per week`],
-                  ['Goal', goalOne.trim() || 'Play more consistently'],
+                  // No goal given means none is saved (see profile above), so none is shown.
+                  ['Goal', goalOne.trim() || 'Not set'],
                   tournamentName.trim() ? ['Tournament', `${tournamentName.trim()} · ${tournamentDays} days`] : null,
                 ].filter((r): r is [string, string] => r !== null).map(([label, value], i) => (
                   <View key={label} style={[styles.row, i > 0 && styles.rowBorder]}>
@@ -606,6 +631,7 @@ const styleDefinitions = StyleSheet.create({
   privacyTitle: { ...typography.bodyStrong, color: colors.text },
   privacyNote: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   root: { flex: 1, backgroundColor: colors.bg },
+  waiting: { alignItems: 'center', justifyContent: 'center' },
   head: { paddingHorizontal: spacing.xl, gap: spacing.xs, paddingBottom: spacing.sm, maxWidth: 560, width: '100%', alignSelf: 'center' },
   track: { height: 2, backgroundColor: colors.surfaceAlt, marginBottom: spacing.md },
   fill: { height: '100%', backgroundColor: colors.brand },

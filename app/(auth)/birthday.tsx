@@ -36,6 +36,12 @@ export default function Birthday() {
   const { from } = useLocalSearchParams<{ from?: string }>();
   useAndroidBack(() => { BackHandler.exitApp(); return true; }, from !== 'group');
   useEffect(() => { void isDeviceBlocked().then((b) => { if (b) setBlocked(true); }); }, []);
+  // An account that opened on a phone after its under-13 answer, with no age
+  // on file (a new Apple or Google sign-in takes no birthday first): one made
+  // just now is removed, the same as an under-13 answer removes one, so
+  // nothing of it is kept. Any other can sign out with the button below.
+  const noAge = !!currentUser && !currentUser.ageGroup;
+  useEffect(() => { if (blocked && currentUserId && noAge) void actions.removeNewAccountOnBlockedPhone(); }, [blocked, currentUserId, noAge, actions]);
   // The age is on file after all (the sign-up form's birthday was saved a
   // moment after this page opened): carry on into the app rather than ask again.
   useEffect(() => { if (currentUser?.ageGroup && !blocked) leave(() => router.replace('/')); }, [currentUser?.ageGroup, blocked, leave]);
@@ -63,7 +69,11 @@ export default function Birthday() {
         <BrandMark size={56} />
         <Text style={styles.title}>CourtSide isn't available to you yet</Text>
         <Text style={styles.lead}>You need to be a bit older to have an account. Nothing you entered has been kept.</Text>
-        {currentUserId ? null : <Button label="Back to sign in" variant="ghost" onPress={() => router.replace('/sign-in')} />}
+        {/* Signed in, there was no way off this page: the account signs out here. */}
+        {currentUserId
+          ? <Button label="Sign out" variant="ghost" onPress={() => leave(() => { actions.signOut(); router.replace('/sign-in'); })} />
+          : <Button label="Back to sign in" variant="ghost" onPress={() => router.replace('/sign-in')} />}
+        {curtain}
       </View>
     );
   }

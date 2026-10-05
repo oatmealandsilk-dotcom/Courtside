@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { useApp } from '@/store/AppContext';
 import { domainOf, openLink, splitLinks } from '@/lib/links';
 import { colors, font } from '@/theme';
+import { openPlayer } from '@/features/navigation/openPlayer';
 
 const MENTION = /(@[a-z0-9_.]{2,30})/gi;
 /** Mentions and, when asked for, #hashtags: what a reel's caption lights up. */
@@ -48,7 +49,7 @@ export function RichText({ children, mentionStyle, hashtagStyle, links, after, .
       }
       const user = users.find((u) => u.handle.toLowerCase() === part.slice(1).toLowerCase());
       if (!user) return part;
-      return <Mention key={`${key}-${i}-${part}`} label={part} name={user.name} mentionStyle={mentionStyle} onPress={() => router.push(user.id === currentUserId ? '/profile' : `/user/${user.id}`)} />;
+      return <Mention key={`${key}-${i}-${part}`} label={part} name={user.name} mentionStyle={mentionStyle} onPress={() => openPlayer(user.id, currentUserId)} />;
     });
   };
   if (links && runs) {
