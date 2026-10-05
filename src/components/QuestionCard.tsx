@@ -70,7 +70,7 @@ function QuestionCardInner({
             <Ionicons name={question.source.name === 'reddit' ? 'logo-reddit' : 'globe-outline'} size={12} color={colors.textMuted} />
             <Text style={styles.sourceText}>{question.source.label}</Text>
           </View>
-        ) : author ? <LevelPill profile={author.profile} small /> : null}
+        ) : author ? <LevelPill profile={author.profile} small style={styles.levelPill} /> : null}
         {brandCorner ? null : <Text style={[styles.footerText, { marginLeft: 'auto' }]}>{relativeTime(question.createdAt)}{question.editedAt ? ' · Edited' : ''}</Text>}
       </View>
       <Text style={styles.title}>{question.title}</Text>
@@ -141,6 +141,8 @@ const styleDefinitions = StyleSheet.create({
   footer: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingTop: spacing.xs },
   footerText: { ...typography.small, color: colors.textFaint },
   footerName: { ...typography.smallStrong, color: colors.text },
+  // LevelPill is top-aligned by default (it sits in columns elsewhere); in this row it centres on the name and date.
+  levelPill: { alignSelf: 'center' },
   // Bigger targets and full-strength ink: these were competing with body text
   // at 16px and textFaint, which read as decoration rather than buttons.
   action: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7 },
