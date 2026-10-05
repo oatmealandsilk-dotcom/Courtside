@@ -236,11 +236,13 @@ export default function CommentsSheet() {
   // Opened from "Reply" on the post page: already replying as the sheet lands.
   const replyStarted = useRef(false);
   const replyTarget = comments.find((c) => c.id === replyParam && c.postId === id);
+  // Not on something taken down, or under a comment that was (migration 108): the server would refuse it.
+  const replyClosed = takenDown || !!(replyTarget && comments.find((c) => c.id === (replyTarget.parentId ?? replyTarget.id))?.removed);
   useEffect(() => {
-    if (!replyTarget || replyStarted.current) return;
+    if (!replyTarget || replyClosed || replyStarted.current) return;
     const t = setTimeout(() => { replyStarted.current = true; replyTo(replyTarget); }, 380);
     return () => clearTimeout(t);
-  }, [replyTarget]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [replyTarget, replyClosed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The right-hand button: a photo button while the box is empty, send once there is something to send.
   const sendOn = useSharedValue(canSend ? 1 : 0);

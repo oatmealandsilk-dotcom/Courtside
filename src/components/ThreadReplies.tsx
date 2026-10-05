@@ -26,10 +26,12 @@ export function ThreadReplies({questionId, preview = false}:{questionId:string; 
   const question=questions.find(q=>q.id===questionId);
   const thread=answers.filter(a=>a.questionId===questionId).sort((a,b)=>Number(b.id===question?.acceptedAnswerId)-Number(a.id===question?.acceptedAnswerId)||b.votes-a.votes);
   const canAccept = !!question && question.authorId === currentUserId && !preview;
-  return <View>{thread.filter(a=>!a.parentAnswerId||!thread.some(p=>p.id===a.parentAnswerId)).map(a=><ThreadReply key={a.id} answer={a} thread={thread} acceptedId={question?.acceptedAnswerId} askerId={question?.authorId} preview={preview} onAccept={canAccept ? (id) => actions.acceptAnswer(questionId, id) : undefined}/>)}</View>;
+  return <View>{thread.filter(a=>!a.parentAnswerId||!thread.some(p=>p.id===a.parentAnswerId)).map(a=><ThreadReply key={a.id} answer={a} thread={thread} acceptedId={question?.acceptedAnswerId} askerId={question?.authorId} preview={preview} closed={!!question?.removed} onAccept={canAccept ? (id) => actions.acceptAnswer(questionId, id) : undefined}/>)}</View>;
 }
-export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, preview = false, onAccept }: {
-  answer: Answer; thread: Answer[]; acceptedId?: string; /** Who started the thread: their replies carry OP, Reddit's mark. */ askerId?: string; depth?: number; preview?:boolean; /** The asker's: marks this as the answer that solved it. */ onAccept?: (answerId: string) => void;
+export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, preview = false, closed = false, onAccept }: {
+  answer: Answer; thread: Answer[]; acceptedId?: string; /** Who started the thread: their replies carry OP, Reddit's mark. */ askerId?: string; depth?: number; preview?:boolean;
+  /** The thread was taken down (migration 108): nobody can reply anywhere in it, so no Reply buttons. */ closed?: boolean;
+  /** The asker's: marks this as the answer that solved it. */ onAccept?: (answerId: string) => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { users, currentUserId, currentUser, actions } = useApp();
@@ -81,14 +83,14 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
         {!preview && <View style={styles.replyActions}>
           <Pressable accessibilityRole="button" accessibilityLabel={`Collapse reply by ${responder?.name ?? 'player'}`} onPress={()=>setCollapsed(true)} style={styles.collapse}><Ionicons name="remove-circle-outline" size={20} color={colors.textMuted}/></Pressable>
           <VoteControls item={answer} userId={currentUserId} onVote={direction => actions.voteAnswer(answer.id, direction)}/>
-          {answer.removed ? null : <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} onPress={() => setReplying(true)} style={styles.replyButton}>
+          {answer.removed || closed ? null : <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} onPress={() => setReplying(true)} style={styles.replyButton}>
             <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted}/><Text style={styles.time}>Reply</Text>
           </Pressable>}
           {onAccept ? <Pressable accessibilityRole="button" accessibilityLabel={acceptedId === answer.id ? 'Unmark as the answer' : 'Mark as the answer'} onPress={() => onAccept(answer.id)} style={styles.replyButton}>
             <Ionicons name={acceptedId === answer.id ? 'checkmark-circle' : 'checkmark-circle-outline'} size={16} color={acceptedId === answer.id ? colors.success : colors.textMuted}/><Text style={styles.time}>{acceptedId === answer.id ? 'Accepted' : 'Accept'}</Text>
           </Pressable> : null}
         </View>}
-        {replying && <View style={styles.inlineComposer}>
+        {replying && !closed && !answer.removed && <View style={styles.inlineComposer}>
           <MentionSuggestions candidates={tag.rows} onPick={tag.pick} maxHeight={176} />
           <View style={styles.composer}>
             <TextInput ref={lineRef} autoFocus onFocus={() => reveal(lineRef.current)} accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} placeholder={`Reply to ${responder?.name?.split(' ')[0] ?? 'this'}… (@ to tag)`} placeholderTextColor={colors.textFaint} multiline value={draft} onChangeText={setDraft} onSelectionChange={tag.onSelectionChange} style={styles.replyInput}
@@ -112,7 +114,7 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
             ending at the last child's elbow, never at a grandchild. */}
         <View pointerEvents="none" style={[styles.rail, index === children.length - 1 ? {height:16} : {bottom:0}]} />
         <View pointerEvents="none" style={styles.elbow}/>
-        <ThreadReply answer={child} thread={thread} acceptedId={acceptedId} askerId={askerId} depth={depth + 1} preview={preview} onAccept={onAccept}/>
+        <ThreadReply answer={child} thread={thread} acceptedId={acceptedId} askerId={askerId} depth={depth + 1} preview={preview} closed={closed} onAccept={onAccept}/>
       </View>
     ))}
   </View>;

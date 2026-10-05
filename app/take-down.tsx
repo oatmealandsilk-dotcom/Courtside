@@ -6,7 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { TileCover } from '@/components/TileCover';
 import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
-import type { ID, TakedownReason } from '@/data/types';
+import type { ID, TakedownKind, TakedownReason } from '@/data/types';
 import { KIND_WORD, TAKEDOWN_REASONS, asKind, noticeFor, reasonLabel } from '@/features/moderation/reasons';
 import { confirm } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
@@ -15,6 +15,18 @@ import { colors, radius, spacing, typography } from '@/theme';
 
 /** The longest note an admin can leave with "Something else" (the database keeps 200 characters). */
 const NOTE_MAX = 200;
+
+/** Where an admin puts each kind back from the thing itself (besides Settings → Admin → Removed). */
+const RESTORE_FROM: Record<TakedownKind, string> = {
+  post: 'from its … menu',
+  hit: 'with the eye button at the top of its page',
+  comment: 'by holding it',
+  'hit-comment': 'by holding it',
+  question: 'with the eye button at the top of the thread',
+  answer: 'by holding it',
+  'coach-question': 'from its … menu',
+  'coach-reply': 'by holding it',
+};
 
 /**
  * Take down, for admins only (migration 108): opened from the "…" menu of a
@@ -113,7 +125,7 @@ export default function TakeDown() {
       {item.down && !sent ? (
         <View style={styles.already}>
           <Ionicons name="eye-off-outline" size={18} color={colors.danger} />
-          <Text style={[styles.body, { flex: 1 }]}>This {word} is already taken down. You can put it back from its menu or from Settings → Admin → Removed.</Text>
+          <Text style={[styles.body, { flex: 1 }]}>This {word} is already taken down. You can put it back {RESTORE_FROM[kind]} or from Settings → Admin → Removed.</Text>
         </View>
       ) : (
         <>

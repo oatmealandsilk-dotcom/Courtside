@@ -23,13 +23,14 @@ import { colors, radius, spacing, typography, font } from '@/theme';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
+import { confirm } from '@/lib/confirm';
 
 /** One hit with its likes and comments — the same page a post gets. */
 export default function HitThread() {
   const focused = useIsFocused();
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { stories, users, comments, currentUserId, actions } = useApp();
+  const { stories, users, comments, currentUserId, currentUser, actions } = useApp();
   const loading = useStillLoading();
   const story = stories.find((st) => st.id === id);
   const author = users.find((u) => u.id === story?.authorId);
@@ -59,6 +60,18 @@ export default function HitThread() {
     );
   }
 
+  // Admins: take this Instant down (the reason is picked on the next page), or
+  // put it back, the way a thread's header does it (migration 108). Here
+  // because a removed Instant is no longer live, so the feed (and its menu)
+  // never shows it again; this page is where Removed → Open lands.
+  const moderate = currentUser?.isAdmin ? () => {
+    haptics.tap();
+    if (story.removed) {
+      confirm({ title: 'Restore this instant?', message: 'Everyone who could see it before sees it again, with its comments.', confirmLabel: 'Restore', onConfirm: () => { void actions.restoreContent('hit', story.id); } });
+    } else {
+      router.push({ pathname: '/take-down', params: { kind: 'hit', id: story.id } });
+    }
+  } : undefined;
   const liked = !!currentUserId && story.likedBy.includes(currentUserId);
   const count = comments.filter((c) => c.postId === story.id).length;
   const thread = threadsOf(comments, story.id, 'oldest');
@@ -73,7 +86,16 @@ export default function HitThread() {
   };
 
   return (
-    <Screen title="Instant" compactTitle onBack={() => goBack()}>
+    <Screen
+      title="Instant"
+      compactTitle
+      onBack={() => goBack()}
+      right={moderate ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={story.removed ? 'Restore this instant' : 'Take down this instant'} hitSlop={10} onPress={moderate}>
+          <Ionicons name={story.removed ? 'eye-outline' : 'eye-off-outline'} size={23} color={story.removed ? colors.text : colors.danger} />
+        </Pressable>
+      ) : undefined}
+    >
       <Pressable accessibilityRole="button" accessibilityLabel="Open this hit full screen" onPress={() => router.push({ pathname: `/story/${author.id}`, params: { story: story.id } })} style={styles.frame}>
         {story.videoUrl ? (
           <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={focused} preload />
@@ -108,7 +130,7 @@ export default function HitThread() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{count} {count === 1 ? 'comment' : 'comments'}</Text>
         {thread.map((t) => (
-          <CommentThread key={t.top.id} thread={t} open={openThreads.has(t.top.id)} onToggle={() => toggleThread(t.top.id)} onReply={startReply} />
+          <CommentThread key={t.top.id} thread={t} open={openThreads.has(t.top.id)} onToggle={() => toggleThread(t.top.id)} onReply={story.removed ? undefined : startReply} />
         ))}
         {story.removed ? null : <View style={styles.composer}>
           {replyingTo ? (

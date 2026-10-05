@@ -139,7 +139,7 @@ function QuestionDetail() {
             <Text style={styles.replyLabel}>Reply</Text>
           </Pressable>}
         </View>
-        {replying ? (
+        {replying && !removed ? (
           <View style={{ gap: 8 }}>
           <MentionSuggestions candidates={tag.rows} onPick={tag.pick} maxHeight={176} />
           <View style={styles.composer}>
@@ -183,7 +183,7 @@ function QuestionDetail() {
         ) : null}
 
         {thread.filter(answer => !answer.parentAnswerId || !thread.some(parent => parent.id === answer.parentAnswerId)).map(answer => (
-          <ThreadReply key={answer.id} answer={answer} thread={thread} acceptedId={question.acceptedAnswerId} askerId={question.authorId} onAccept={question.authorId === currentUserId ? (aid) => actions.acceptAnswer(question.id, aid) : undefined} />
+          <ThreadReply key={answer.id} answer={answer} thread={thread} acceptedId={question.acceptedAnswerId} askerId={question.authorId} closed={!!removed} onAccept={question.authorId === currentUserId ? (aid) => actions.acceptAnswer(question.id, aid) : undefined} />
         ))}
 
       </View>

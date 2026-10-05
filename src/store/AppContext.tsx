@@ -889,8 +889,13 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    * working in between.
    */
   takeDown: (kind: TakedownKind, id: ID, reason: TakedownReason, options?: { note?: string; quiet?: boolean; reportId?: ID }) => Promise<ModerationResult>;
-  /** Admins only: puts something taken down back exactly as it was. The same marking, rollback and toasts as takeDown. */
-  restoreContent: (kind: TakedownKind, id: ID, quiet?: boolean) => Promise<ModerationResult>;
+  /**
+   * Admins only: puts something taken down back exactly as it was. The same
+   * marking, rollback and toasts as takeDown. `quiet`: no toast on success.
+   * `reportId`: put back from that report; on a database without migration
+   * 108 yet it goes back the Reports screen's old way (moderate_report).
+   */
+  restoreContent: (kind: TakedownKind, id: ID, options?: { quiet?: boolean; reportId?: ID }) => Promise<ModerationResult>;
   /** Admins only: Settings → Admin → Removed. 'not_ready' before migration 108; null when it could not load. */
   loadRemoved: () => Promise<RemovedItem[] | 'not_ready' | null>;
 
@@ -1507,7 +1512,7 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
 }
 
 /** The thing a take-down is about, wherever the app holds it (a comment on an Instant sits with the post comments). */
-function heldItem(s: Pick<AppState, 'posts' | 'stories' | 'comments' | 'questions' | 'answers' | 'coachQuestions' | 'coachReplies'>, kind: TakedownKind, id: ID): { removed?: Removed } | undefined {
+function heldItem(s: Pick<AppState, 'posts' | 'stories' | 'comments' | 'questions' | 'answers' | 'coachQuestions' | 'coachReplies'>, kind: TakedownKind, id: ID): { removed?: Removed; authorId?: ID; coachUserId?: ID } | undefined {
   switch (kind) {
     case 'post': return s.posts.find((x) => x.id === id);
     case 'hit': return s.stories.find((x) => x.id === id);
@@ -4341,7 +4346,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // the server; if it says no, the mark goes back to what it was, unless
   // something else has changed it meanwhile.
   const amAdmin = () => !!stateRef.current.users.find((u) => u.id === stateRef.current.currentUserId)?.isAdmin;
-  const restoreRef = useRef<(kind: TakedownKind, id: ID, quiet?: boolean) => Promise<ModerationResult>>(async () => 'failed');
+  const restoreRef = useRef<(kind: TakedownKind, id: ID, options?: { quiet?: boolean; reportId?: ID }) => Promise<ModerationResult>>(async () => 'failed');
   const takeDown = useCallback(async (kind: TakedownKind, id: ID, reason: TakedownReason, options: { note?: string; quiet?: boolean; reportId?: ID } = {}): Promise<ModerationResult> => {
     const { note, quiet = false, reportId } = options;
     const me = stateRef.current.currentUserId;
@@ -4364,21 +4369,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // The old way has no Restore of its own here: its report card has one.
     if (!quiet && oldWay) showToast({ title, body: 'Restore it from its report if you need to.', icon: 'eye-off-outline' });
     else if (!quiet) {
+      // Its author has already been told (the notice and the phone alert go out
+      // with the take-down), so the toast says so: Undo takes the notice back
+      // out of their list, but an alert that reached their phone stays seen.
+      const held = heldItem(stateRef.current, kind, id);
+      const authorId = held?.authorId ?? held?.coachUserId;
+      const body = authorId === me ? 'Only admins can see it now.' : 'Its author has been told why. Undo puts it back and clears that notice from their list.';
       offerUndo(title, () => {
         // Still down (or never here to see): Undo puts it back.
         const now = heldItem(stateRef.current, kind, id);
         return !now || !!now.removed;
-      }, () => { void restoreRef.current(kind, id, true); }, { body: 'Only its author and admins can see it now.', icon: 'eye-off-outline' });
+      }, () => { void restoreRef.current(kind, id, { quiet: true, reportId }); }, { body, icon: 'eye-off-outline' });
     }
     return result;
   }, []);
-  const restoreContent = useCallback(async (kind: TakedownKind, id: ID, quiet = false): Promise<ModerationResult> => {
+  const restoreContent = useCallback(async (kind: TakedownKind, id: ID, options: { quiet?: boolean; reportId?: ID } = {}): Promise<ModerationResult> => {
+    const { quiet = false, reportId } = options;
     const me = stateRef.current.currentUserId;
     if (!me || !amAdmin()) return 'refused';
     const before = heldItem(stateRef.current, kind, id)?.removed;
     haptics.commit();
     setState((prev) => markRemoved(prev, kind, id, undefined));
-    const result: ModerationResult = live(me, id) ? await remote.restoreContent(kind, id) : 'done';
+    let result: ModerationResult = live(me, id) ? await remote.restoreContent(kind, id) : 'done';
+    // Before migration 108, a reported post or Instant still goes back the old way (its report opens again).
+    if (result === 'not_ready' && !!reportId && (kind === 'post' || kind === 'hit') && live(reportId)) {
+      result = (await remote.moderateReport(reportId, 'restore')) ? 'done' : 'failed';
+    }
     if (result !== 'done') {
       setState((prev) => (before && !heldItem(prev, kind, id)?.removed ? markRemoved(prev, kind, id, before) : prev));
       showToast({ ...moderationRefusal(result, true), icon: 'alert-circle-outline', long: true });

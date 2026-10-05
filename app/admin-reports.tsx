@@ -82,6 +82,17 @@ export default function AdminReports() {
     },
   });
 
+  // Restore goes the same way as Restore everywhere else (actions.restoreContent):
+  // the app's own copy loses its "Removed" mark at once, a failure puts it back
+  // and says why, and the server opens the report again (migration 108).
+  const restore = async (report: AdminReport) => {
+    if ((report.kind !== 'post' && report.kind !== 'hit') || !report.targetId) return;
+    setBusy(`${report.id}:restore`);
+    await actions.restoreContent(report.kind, report.targetId, { reportId: report.id });
+    await load();
+    setBusy(null);
+  };
+
   const decide = async (report: AdminReport, decision: Decision) => {
     setBusy(`${report.id}:${decision}`);
     const ok = await actions.decideReport(report.id, decision);
@@ -187,7 +198,7 @@ export default function AdminReports() {
               <View style={styles.actions}>
                 {report.kind !== 'profile' && item ? (
                   item.removed
-                    ? <Button label="Restore" variant="secondary" loading={waiting('restore')} onPress={() => void decide(report, 'restore')} />
+                    ? <Button label="Restore" variant="secondary" loading={waiting('restore')} onPress={() => void restore(report)} />
                     // The reason is picked on the Take down page; the report is marked done there too (migration 108).
                     : <Button label="Take down" variant="danger" onPress={() => router.push({ pathname: '/take-down', params: { kind: report.kind, id: report.targetId!, report: report.id, ...(report.userId ? { who: report.userId } : {}) } })} />
                 ) : null}

@@ -32,15 +32,31 @@
 -- pages, marked "Removed" with the reason (never the note, never which
 -- admin). They are told once, in the app and on their phone, from
 -- CourtSide: "Your post was removed for breaking CourtSide's rules:
--- Violence or weapons." They can still delete or archive it; editing it
--- never brings it back.
+-- Violence or weapons." They can still delete or archive it, but not edit
+-- it: an edit from the app changes nothing while it is down, so it can
+-- never be used to send new words or tags to anyone, and Restore puts back
+-- exactly what was taken down. If it is restored, that notice leaves their
+-- list again (a phone alert that already arrived cannot be called back).
+--
+-- Other people's notifications about it: a notification keeps up to 80
+-- characters of what was written ("Sam commented: ..."; a tag or @mention
+-- quotes the post or reply). While something is down, the words of every
+-- notification its author's words caused about it are held back (the row
+-- stays, without the words), and Restore puts them back.
 --
 -- What changes, by name:
 --   posts, stories, comments, story_comments, questions, answers,
 --     coach_questions, coach_replies: + removed_at (posts and stories had
 --     it since 23) and + removed_reason. Only the steps below can change
 --     either: guard_removed (23) now covers all eight tables, on a new row
---     as well as an edit.
+--     as well as an edit; and an edit from the app to something removed
+--     keeps everything but "archived" (and a post's "pinned", a coach
+--     question's "resolved") as it was.
+--   notify_post_tags (67): the same, plus nothing at all from a removed
+--     post (no tag or @mention alerts).
+--   notification_held_words (new): the words held back from notifications
+--     while something is down, so Restore can put them back. Nobody reads
+--     or writes it except the steps below.
 --   Their reading rules: "read live posts" (67), "read live stories" (23),
 --     "comments are public" and "hit comments are public" (56), "threads
 --     are public" and "answers are public" (21), "coach questions are
@@ -61,14 +77,12 @@
 --     through the same steps (reason "something else"), so a phone with the
 --     older app is logged and the author is told too. Suspend, unsuspend
 --     and dismiss are exactly as before.
---   share_preview (76): a removed thread is locked like a private one, and
---     removed comments and replies are left out of the counts it shows.
+--   share_preview (76): a removed thread is locked like a private one,
+--     removed comments and replies are left out of the counts it shows, and
+--     a court's name is never taken from a removed, archived or hidden post.
 --
 -- Who took something down is kept only in the admins' log. The removed row
 -- itself says when and why but not who, because its author can read it.
---
--- Earlier notifications about a removed item (say "Sam commented: ...")
--- stay in people's lists; deleting them could not be undone by Restore.
 --
 -- Needs 23, 40, 41, 52, 56, 67 and 76. Stops without changing anything if
 -- share_preview has changed since 76 (or 76 has not run yet). After this
@@ -104,7 +118,7 @@ begin
   end if;
   select md5(p.prosrc) into now_is from pg_proc p
     where p.pronamespace = 'public'::regnamespace and p.proname = 'share_preview';
-  if now_is is null or now_is not in ('b7fb9a8d65fde56d5b046f95fe5f94f2', '6af1c2ad7c16d4a903a64cccaccf2fb5') then
+  if now_is is null or now_is not in ('b7fb9a8d65fde56d5b046f95fe5f94f2', '3ba2420e7575cb9989382040f4c67c3f') then
     raise exception 'Migration 108 stopped before changing anything: share_preview is not the version migration 76 left. Run 76 first, or bring this file up to date with whatever changed it.';
   end if;
 end $$;
@@ -180,12 +194,158 @@ grant select on public.moderation_actions to authenticated;
 drop policy if exists "admins read the moderation log" on public.moderation_actions;
 create policy "admins read the moderation log" on public.moderation_actions for select using (public.is_admin());
 
+-- ------------------------------------- 2b. words held back from notifications
+-- A notification keeps up to 80 characters of what was written ("Sam
+-- commented: ..."), and stays in the list of whoever was told. While what
+-- it quotes is down, those words wait here instead of in the notification,
+-- and Restore puts them back. A table of its own, not a column, because the
+-- app reads whole notification rows. Nobody reads or writes it from the app.
+create table if not exists public.notification_held_words (
+  notification_id uuid primary key references public.notifications (id) on delete cascade,
+  preview text not null,
+  held_at timestamptz not null default now()
+);
+alter table public.notification_held_words enable row level security;
+revoke all on public.notification_held_words from public, anon, authenticated;
+
+-- Some words as a notification keeps them (file_notification, 98): spaces
+-- run together, cut to 80 characters with "…" (chr(8230)) at the end.
+create or replace function public.takedown_words(words text)
+returns text language plpgsql immutable set search_path = public as $$
+declare
+  flat text := nullif(btrim(regexp_replace(coalesce(words, ''), '\s+', ' ', 'g')), '');
+begin
+  if flat is not null and char_length(flat) > 80 then flat := left(flat, 79) || chr(8230); end if;
+  return flat;
+end $$;
+revoke all on function public.takedown_words(text) from public, anon, authenticated;
+
+-- Holds back (p_hold) or puts back the words of the notifications that
+-- something's author caused about it: comment, comment-reply, tag (tags
+-- and @mentions), answer and coach-reply, which are "from" the one who
+-- wrote and quote what they wrote. For a post, Instant, thread or coach
+-- question, every one of those its author caused about it (their own
+-- replies under it go with it); for a comment or reply, the ones with its
+-- own words, so the author's other comments there stay as they are. Never
+-- the author's own list (they can still read it). Called only by
+-- moderation_apply.
+create or replace function public.moderation_hold_words(p_kind text, p_id uuid, p_hold boolean)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_author uuid;
+  v_open_kind text;
+  v_open_id uuid;
+  v_whole boolean := p_kind in ('post', 'hit', 'question', 'coach-question');
+  v_words text;
+  -- A comment or reply under something of its author's own that is still
+  -- down: those words stay held until that comes back too.
+  v_under_own_removed boolean := false;
+begin
+  if p_kind = 'post' then
+    select author_id into v_author from public.posts where id = p_id;
+    v_open_kind := 'post'; v_open_id := p_id;
+  elsif p_kind = 'hit' then
+    select author_id into v_author from public.stories where id = p_id;
+    v_open_kind := 'hit'; v_open_id := p_id;
+  elsif p_kind = 'question' then
+    select author_id into v_author from public.questions where id = p_id;
+    v_open_kind := 'question'; v_open_id := p_id;
+  elsif p_kind = 'coach-question' then
+    select author_id into v_author from public.coach_questions where id = p_id;
+    v_open_kind := 'coach-question'; v_open_id := p_id;
+  elsif p_kind = 'comment' then
+    select c.author_id, c.post_id, c.body, coalesce(x.removed_at is not null and x.author_id = c.author_id, false)
+      into v_author, v_open_id, v_words, v_under_own_removed
+      from public.comments c left join public.posts x on x.id = c.post_id where c.id = p_id;
+    v_open_kind := 'post';
+  elsif p_kind = 'hit-comment' then
+    select c.author_id, c.story_id, c.body, coalesce(x.removed_at is not null and x.author_id = c.author_id, false)
+      into v_author, v_open_id, v_words, v_under_own_removed
+      from public.story_comments c left join public.stories x on x.id = c.story_id where c.id = p_id;
+    v_open_kind := 'hit';
+  elsif p_kind = 'answer' then
+    select a.author_id, a.question_id, a.body, coalesce(x.removed_at is not null and x.author_id = a.author_id, false)
+      into v_author, v_open_id, v_words, v_under_own_removed
+      from public.answers a left join public.questions x on x.id = a.question_id where a.id = p_id;
+    v_open_kind := 'question';
+  elsif p_kind = 'coach-reply' then
+    select r.coach_user_id, r.question_id, r.body, coalesce(x.removed_at is not null and x.author_id = r.coach_user_id, false)
+      into v_author, v_open_id, v_words, v_under_own_removed
+      from public.coach_replies r left join public.coach_questions x on x.id = r.question_id where r.id = p_id;
+    v_open_kind := 'coach-question';
+  else
+    return;
+  end if;
+  if v_author is null or v_open_id is null then return; end if;
+  if not v_whole then
+    v_words := public.takedown_words(v_words);
+    -- No words (a photo on its own): its notifications showed none either.
+    if v_words is null then return; end if;
+  end if;
+
+  if p_hold then
+    with held as (
+      insert into public.notification_held_words (notification_id, preview)
+      select n.id, n.preview from public.notifications n
+      where n.actor_id = v_author and n.user_id <> v_author
+        and n.target_id = v_open_id::text and n.target_kind = v_open_kind
+        and n.kind in ('comment', 'comment-reply', 'tag', 'answer', 'coach-reply')
+        and n.preview is not null
+        and (v_whole or n.preview = v_words)
+      on conflict (notification_id) do nothing
+      returning notification_id
+    )
+    update public.notifications n set preview = null from held where n.id = held.notification_id;
+    return;
+  end if;
+
+  -- Putting back. A comment or reply under its author's own post, Instant,
+  -- thread or question that is still down stays held with it.
+  if v_under_own_removed then return; end if;
+  with back as (
+    delete from public.notification_held_words h
+    using public.notifications n
+    where h.notification_id = n.id
+      and n.actor_id = v_author and n.user_id <> v_author
+      and n.target_id = v_open_id::text and n.target_kind = v_open_kind
+      and n.kind in ('comment', 'comment-reply', 'tag', 'answer', 'coach-reply')
+      and (v_whole or h.preview = v_words)
+      -- A whole thing coming back leaves held the words of its author's own
+      -- comments or replies under it that are still down themselves.
+      and not (v_whole and exists (
+        select 1 from public.comments c
+          where p_kind = 'post' and c.post_id = v_open_id and c.author_id = v_author and c.removed_at is not null and public.takedown_words(c.body) = h.preview
+        union all
+        select 1 from public.story_comments c
+          where p_kind = 'hit' and c.story_id = v_open_id and c.author_id = v_author and c.removed_at is not null and public.takedown_words(c.body) = h.preview
+        union all
+        select 1 from public.answers a
+          where p_kind = 'question' and a.question_id = v_open_id and a.author_id = v_author and a.removed_at is not null and public.takedown_words(a.body) = h.preview
+        union all
+        select 1 from public.coach_replies r
+          where p_kind = 'coach-question' and r.question_id = v_open_id and r.coach_user_id = v_author and r.removed_at is not null and public.takedown_words(r.body) = h.preview))
+    returning h.notification_id, h.preview
+  )
+  update public.notifications n set preview = back.preview from back where n.id = back.notification_id;
+end $$;
+revoke all on function public.moderation_hold_words(text, uuid, boolean) from public, anon, authenticated;
+
 -- ------------------------------------------------- 3. only a take-down moves it
 -- As in 23: an edit never changes removed_at (or now removed_reason) unless
--- a take-down or restore is under way. New here: all eight tables, and a
--- new row from the app always starts not removed.
+-- a take-down or restore is under way. New here: all eight tables, a new
+-- row from the app always starts not removed, and something removed cannot
+-- be edited from the app. Its author can still read it, and the edit rules
+-- would otherwise let them change its words or tags, and a change of tags
+-- or words alerts people; so an edit sent straight from the app (the
+-- "authenticated" role) keeps every field as it was except archived, a
+-- post's pinned and a coach question's resolved. CourtSide's own steps run
+-- as the database owner and still work on it (votes, view counts, taking a
+-- disconnected tracker's numbers off a post).
 create or replace function public.guard_removed()
 returns trigger language plpgsql as $$
+declare
+  v_new jsonb;
+  v_keep jsonb;
 begin
   if coalesce(current_setting('courtside.moderating', true), '') <> 'on' then
     if tg_op = 'INSERT' then
@@ -196,6 +356,13 @@ begin
     else
       new.removed_at := old.removed_at;
       new.removed_reason := old.removed_reason;
+      if old.removed_at is not null and current_user in ('authenticated', 'anon') then
+        v_new := to_jsonb(new);
+        select coalesce(jsonb_object_agg(k, v_new -> k), '{}'::jsonb) into v_keep
+          from unnest(array['archived', 'pinned', 'resolved']) as k
+          where v_new ? k;
+        new := jsonb_populate_record(old, v_keep);
+      end if;
     end if;
   end if;
   return new;
@@ -209,6 +376,36 @@ begin
     execute format('drop trigger if exists guard_removed on public.%I', t);
     execute format('create trigger guard_removed before insert or update on public.%I for each row execute function public.guard_removed()', t);
   end loop;
+end $$;
+
+-- Migration 67's notify_post_tags word for word, with one line added at the
+-- top: a removed post tells nobody anything (no tag, no @mention), however
+-- it is changed. (guard_removed above already keeps an edit from the app
+-- from changing its words or tags; this is the second lock.)
+create or replace function public.notify_post_tags()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  tagged uuid;
+  words text := coalesce(nullif(btrim(new.body), ''), 'a post');
+  before_tags uuid[] := '{}';
+  body_changed boolean := true;
+begin
+  if new.removed_at is not null then return new; end if;
+  -- The earlier version exists only on an edit; a new post has none to compare with.
+  if tg_op = 'UPDATE' then
+    before_tags := coalesce(old.tagged_user_ids, '{}');
+    body_changed := new.body is distinct from old.body;
+  end if;
+  for tagged in select unnest(coalesce(new.tagged_user_ids, '{}')) except select unnest(before_tags) loop
+    if new.group_id is null
+       or exists (select 1 from public.feed_group_members m where m.group_id = new.group_id and m.user_id = tagged) then
+      perform public.file_notification(tagged, new.author_id, 'tag', new.id::text, 'post', words);
+    end if;
+  end loop;
+  if body_changed and new.group_id is null then
+    perform public.file_mentions(new.body, new.author_id, new.id::text, 'post', null);
+  end if;
+  return new;
 end $$;
 
 -- No new comment or reply on something removed (its author included: they
@@ -414,6 +611,9 @@ begin
   end if;
   perform set_config('courtside.moderating', 'off', true);
 
+  -- Other people's notifications quoting it: words held back, or put back.
+  perform public.moderation_hold_words(p_kind, p_id, p_remove);
+
   -- The log: who, what, whose, why.
   insert into public.moderation_actions (admin_id, target_kind, target_id, author_id, action, reason, note)
     values (auth.uid(), p_kind, p_id, v_author,
@@ -444,6 +644,18 @@ begin
       values (v_author, v_author, 'removed', v_open_id::text, v_open_kind, v_words);
     perform public.send_push(v_author, 'CourtSide', v_words,
       case v_open_kind when 'post' then '/post/' when 'hit' then '/hits/' when 'question' then '/question/' else '/coach-question/' end || v_open_id::text);
+  end if;
+
+  -- Put back (an Undo a moment later, say): the notice about this take-down
+  -- leaves the author's list. It is the one written in the same step as the
+  -- take-down, so its time is the item's removed_at to the microsecond
+  -- (now() is fixed for a whole step), which tells it apart from a notice
+  -- about another comment on the same post. A phone alert that already
+  -- arrived cannot be called back.
+  if not p_remove and v_author is not null then
+    delete from public.notifications
+      where user_id = v_author and actor_id = v_author and kind = 'removed'
+        and target_id = v_open_id::text and target_kind = v_open_kind and created_at = v_was;
   end if;
   return 'done';
 end $$;
@@ -570,9 +782,12 @@ end $$;
 grant execute on function public.moderate_report(uuid, text) to authenticated;
 
 -- ------------------------------------------------------------ 6. shared links
--- Migration 76's share_preview, with two changes: a removed thread is
--- locked (as a private one is), and the comment and reply counts leave out
--- removed ones. A removed post was already locked.
+-- Migration 76's share_preview, with three changes: a removed thread is
+-- locked (as a private one is), the comment and reply counts leave out
+-- removed ones, and a court's name (typed by whoever posted there) is taken
+-- only from a post a stranger could see, as the court's counts already
+-- were: not removed, not archived, not in a group, and from someone a
+-- stranger may see (share_open_to_me). A removed post was already locked.
 create or replace function public.share_preview(p_kind text, p_id text)
 returns jsonb language plpgsql stable security definer set search_path = public as $$
 declare
@@ -660,7 +875,7 @@ begin
     if coalesce(p_id, '') !~ '^(node|way|relation)[0-9]{1,15}$' then return locked; end if;
     return jsonb_build_object('kind', 'court', 'open', true,
       'court', jsonb_strip_nulls(jsonb_build_object(
-        'name', (select x.court_name from public.posts x where x.court_id = p_id and x.court_name is not null and not public.share_in_group(x) order by x.created_at desc limit 1),
+        'name', (select x.court_name from public.posts x where x.court_id = p_id and x.court_name is not null and not x.archived and x.removed_at is null and not public.share_in_group(x) and public.share_open_to_me(x.author_id) order by x.created_at desc limit 1),
         'openHits', (select count(*) from public.hit_requests y where y.place->>'id' = p_id and not y.cancelled and y.starts_at > now() and public.share_open_to_me(y.author_id) and public.hit_is_open(y.id)),
         'posts', (select count(*) from public.posts x where x.court_id = p_id and not x.archived and x.removed_at is null and not public.share_in_group(x) and public.share_open_to_me(x.author_id)),
         'players', (select count(distinct x.author_id) from public.posts x where x.court_id = p_id and not x.archived and x.removed_at is null and not public.share_in_group(x) and public.share_open_to_me(x.author_id)),
@@ -716,3 +931,8 @@ commit;
 --        (select count(*) from public.comments where removed_at is not null) as comments,
 --        (select count(*) from public.questions where removed_at is not null) as threads,
 --        (select count(*) from public.moderation_actions) as logged;
+--
+-- (e) The held-back notification words are out of the app's reach (expect true, false, false):
+-- select (select relrowsecurity from pg_class where oid = 'public.notification_held_words'::regclass) as held_rls,
+--        has_table_privilege('authenticated', 'public.notification_held_words', 'select') as app_reads_held,
+--        has_function_privilege('authenticated', 'public.moderation_hold_words(text, uuid, boolean)', 'execute') as app_holds;
