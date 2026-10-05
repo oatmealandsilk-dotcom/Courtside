@@ -30,6 +30,8 @@ import { Chips } from '@/components/sheet/SheetForm';
 import { trackerName } from '@/features/activity/lengths';
 import { TrackedLength } from '@/components/session/TrackedLength';
 import { LogComposerTop, LogDock, DOCK_ROOM } from '@/components/session/LogComposer';
+import { ScoreField } from '@/components/session/ScoreField';
+import { readScore, setsWinner } from '@/features/activity/score';
 import { ZoneGlyph } from '@/components/session/ZoneGlyph';
 import { HealthShareRow } from '@/components/session/HealthShareRow';
 import { availableShare, chosenShare } from '@/features/activity/healthShare';
@@ -342,6 +344,12 @@ export default function Compose() {
   const openedLog = opened?.type === 'tracker' ? opened.session : undefined;
   const [kind, setKind] = useState<PracticeSession['kind']>(fromHit?.kind ?? 'practice');
   const [won, setWon] = useState<'won' | 'lost' | null>(null);
+  // A match's score (Oct 4, migration 91), your games first: when one side took more sets it decides the result.
+  const [score, setScore] = useState('');
+  const scored = readScore(score);
+  const scoreSets = kind === 'match' ? scored.sets : undefined;
+  const decided = setsWinner(scoreSets);
+  const pickedWon = decided !== undefined ? decided : kind === 'match' && won ? won === 'won' : undefined;
   // How long, in your log (Oct 3): simply the tracker's time, shown as one
   // line; a small Edit opens hours and minutes steppers, for a break taken off.
   // The post keeps the tracker's own time (the server writes it, migration 65).
@@ -354,12 +362,14 @@ export default function Compose() {
   const [logError, setLogError] = useState('');
   const keysUp = useKeysUp();
   const shownKind = openedLog?.kind ?? kind;
-  const shownWon = openedLog ? (openedLog.kind === 'match' ? openedLog.won : undefined) : kind === 'match' && won ? won === 'won' : undefined;
+  const shownWon = openedLog ? (openedLog.kind === 'match' ? openedLog.won : undefined) : pickedWon;
+  const shownSets = openedLog ? (openedLog.kind === 'match' ? openedLog.sets : undefined) : scoreSets;
   const sessionFor = (logId?: string): SessionDetail | null => (opened?.type === 'tracker' ? {
     ...statsOf(opened, shareFor(opened)),
     kind: shownKind,
     focus: loggedLabel({ kind: shownKind, won: shownWon }),
     ...(shownWon !== undefined ? { won: shownWon } : {}),
+    ...(shownSets?.length ? { sets: shownSets } : {}),
     ...(logId ? { sessionId: logId } : {}),
   } : null);
   const cardSession = logMode ? sessionFor() : null;
@@ -371,7 +381,8 @@ export default function Compose() {
     : '';
   const logInput = () => ({
     kind,
-    won: kind === 'match' && won ? won === 'won' : undefined,
+    won: pickedWon,
+    ...(scoreSets ? { sets: scoreSets } : {}),
     players: canTagKind(kind) ? players : [],
     // From a hit with nobody tagged and nothing typed, its people's names are kept as private words, as before.
     opponent: canTagKind(kind) ? (opponentText.trim() || (fromHit && !players.length ? fromHit.who : '')) : '',
@@ -507,6 +518,8 @@ export default function Compose() {
   // Just log it: into your log and your streak, nothing posted. A tick, a buzz, and the page sinks away.
   const runJustLog = async () => {
     if (acting.current || ticked || opened?.type !== 'tracker') return;
+    // A score that isn't one yet says why, and nothing is logged.
+    if (!openedLog && kind === 'match' && scored.problem) { setLogError(scored.problem); return; }
     acting.current = true;
     const activity = opened.activity;
     setBusy('log');
@@ -525,7 +538,7 @@ export default function Compose() {
         haptics.reward();
         closeMenu();
         // With an Instagram button on it: the session as a story picture.
-        showLogged(input.minutes ?? activity.minutes, { kind: input.kind, won: input.won }, streak, logId);
+        showLogged(input.minutes ?? activity.minutes, { kind: input.kind, won: input.won, sets: input.sets }, streak, logId);
       }, 300);
     } catch {
       acting.current = false;
@@ -642,6 +655,7 @@ export default function Compose() {
   // kind and result for the first draw; the server writes them again from the log (migration 65).
   const shareFromLog = async () => {
     if (opened?.type !== 'tracker' || acting.current) { sent.current = false; return; }
+    if (!openedLog && !tracker.logged && kind === 'match' && scored.problem) { setLogError(scored.problem); sent.current = false; return; }
     acting.current = true;
     const activity = opened.activity;
     setBusy('share');
@@ -970,7 +984,11 @@ export default function Compose() {
                 <Chips value={kind} onChange={(k) => { if (!k) return; setKind(k); if (k !== 'match') setWon(null); }} options={KINDS} />
                 {kind === 'match' ? (
                   <Reanimated.View entering={FadeInDown.duration(220).easing(Easing.bezier(0.32, 0.72, 0, 1))} exiting={FadeOut.duration(160)}>
-                    <Chips brand clearable value={won ?? undefined} onChange={(v) => setWon(v ?? null)} options={[{ value: 'won', label: 'Won' }, { value: 'lost', label: 'Lost' }]} />
+                    {/* A score that says who won decides it; the chips are for a match with no score, or one level on sets. */}
+                    {decided === undefined ? (
+                      <Chips brand clearable value={won ?? undefined} onChange={(v) => setWon(v ?? null)} options={[{ value: 'won', label: 'Won' }, { value: 'lost', label: 'Lost' }]} />
+                    ) : null}
+                    <View style={styles.scoreBox}><ScoreField value={score} onChange={setScore} /></View>
                   </Reanimated.View>
                 ) : null}
               </Reanimated.View>
@@ -1237,6 +1255,7 @@ const styleDefinitions = StyleSheet.create({
   logAvatar: { marginTop: 6 },
   flex: { flex: 1 },
   logChips: { gap: spacing.md, marginTop: spacing.lg },
+  scoreBox: { marginTop: spacing.md },
   who: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 170 },
   whoName: { ...font('600'), fontSize: 15, color: colors.text, flexShrink: 1 },
   whoAsked: { ...typography.small, color: colors.textFaint },

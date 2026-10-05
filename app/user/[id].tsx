@@ -19,6 +19,7 @@ import { compactNumber, experienceLabel } from '@/lib/format';
 import { TileViews } from '@/components/TileViews';
 import { TilePin } from '@/components/TilePin';
 import { SuggestedPlayers } from '@/components/SuggestedPlayers';
+import { HeadToHeadCard } from '@/components/HeadToHeadCard';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font, lift } from '@/theme';
 import { useStillLoading } from '@/lib/useStillLoading';
@@ -178,6 +179,9 @@ function UserProfile() {
       </View>
 
       {!!notice && <Text accessibilityLiveRegion="polite" style={styles.notice}>{notice}</Text>}
+
+      {/* Your record against them, from scored matches you are both confirmed on (migration 91); nothing with none, or with a block. */}
+      {!isMe && !blocked ? <HeadToHeadCard userId={user.id} name={user.name} /> : null}
 
       {blocked ? null : locked ? (
         <>

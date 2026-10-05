@@ -12,6 +12,8 @@ import { showLogged } from '@/features/activity/useTrackerSession';
 import { Duration } from '@/components/session/Duration';
 import { LENGTHS, lengthTile, trackerName } from '@/features/activity/lengths';
 import { TrackedLength } from '@/components/session/TrackedLength';
+import { ScoreField } from '@/components/session/ScoreField';
+import { readScore, scoreText, setsWinner } from '@/features/activity/score';
 import { computeStats } from '@/features/practice/stats';
 import { andList, canTagKind, firstName as firstOfName, isActive, tagsOnSession } from '@/features/activity/sessionTags';
 import { pickSource, postOf, postedIndex, sourceOn } from '@/features/activity/recent';
@@ -53,6 +55,10 @@ const KINDS: { value: PracticeSession['kind']; label: string }[] = [
  * game, the prompt sends both (?activity=&hit=): the tracker's session is
  * the one logged, with its own day and length, and the hit fills in the
  * rest, so one game is never logged twice.
+ *
+ * A match can carry its score (Oct 4, migration 91), typed as "6-4 3-6
+ * 10-7", your games first; the result then follows the sets. Editing a
+ * logged match (?edit=) can add or change it too.
  *
  * "Who was there" (a match or a practice) tags CourtSide players, up to
  * 3 on a match or 8 on a practice, each asked to accept before their name shows on a post; a name
@@ -147,6 +153,11 @@ function LogSession() {
   const [preset, setPreset] = useState(fresh?.id);
   if (fresh && preset !== fresh.id) { setPreset(fresh.id); setMinutes(fresh.minutes); }
   const [won, setWon] = useState<'won' | 'lost' | null>(null);
+  // A match's score, as typed; when one side took more sets it decides the result, and the Won/Lost chips step aside.
+  const [score, setScore] = useState('');
+  const scored = readScore(score);
+  const decided = setsWinner(scored.sets);
+  const shownWon: 'won' | 'lost' | null = decided === undefined ? won : decided ? 'won' : 'lost';
   // Who you played: CourtSide players to tag, and any name typed that isn't on CourtSide.
   // From a hit, its people are offered to tag; with no tagging yet, their names start in the box.
   const [players, setPlayers] = useState<SessionPlayer[]>([]);
@@ -188,6 +199,14 @@ function LogSession() {
   const [editStart, setEditStart] = useState<{ players: SessionPlayer[]; text: string }>({ players: activeOn, text: editing?.opponent ?? '' });
   const [editPlayers, setEditPlayers] = useState<SessionPlayer[]>(editStart.players);
   const [editText, setEditText] = useState(editStart.text);
+  // A logged match's score, as it is in your log (migration 91), to add or change here.
+  const [editScore, setEditScore] = useState(scoreText(editing?.sets, true));
+  const editScored = readScore(editScore);
+  const scoreTouched = useRef(false);
+  useEffect(() => {
+    if (!editing || scoreTouched.current) return;
+    setEditScore(scoreText(editing.sets, true));
+  }, [editing?.id, scoreText(editing?.sets)]); // eslint-disable-line react-hooks/exhaustive-deps
   const touched = useRef(false);
   const seedKey = `${editing?.id ?? ''}|${editing?.opponent ?? ''}|${activeOn.map((p) => `${p.id}:${p.role}`).join(',')}`;
   useEffect(() => {
@@ -205,10 +224,16 @@ function LogSession() {
   const fromName = fromTag ? firstOfName(users.find((u) => u.id === fromTag.taggerId)?.name ?? '') : '';
   const saveEdit = async () => {
     if (!editing || saving) return;
+    // A score that isn't one yet says why, and nothing is saved.
+    if (editing.kind === 'match' && !editing.fromSessionId && editScored.problem) { setError(editScored.problem); return; }
     setSaving(true);
     setError('');
     try {
       await actions.setSessionOpponent(editing.id, editText);
+      // The score, only when it changed: anyone who accepted is asked again (migration 91).
+      if (editing.kind === 'match' && !editing.fromSessionId && scoreText(editScored.sets) !== scoreText(editing.sets)) {
+        await actions.setSessionScore(editing.id, editScored.sets ?? null);
+      }
       // A no taken off your log: off it (the server keeps it, so they are not asked again).
       for (const id of drops) {
         const t = editTags.find((x) => x.taggedId === id && !isActive(x));
@@ -239,6 +264,7 @@ function LogSession() {
 
   const save = async (post = false) => {
     if (!minutes || saving) return;
+    if (kind === 'match' && scored.problem) { setError(scored.problem); return; }
     setSaving(true);
     setAndPost(post);
     setError('');
@@ -249,8 +275,9 @@ function LogSession() {
     // From a hit with nobody tagged and nothing typed, its people's names are kept as private words, as before.
     const typed = canTagKind(kind) ? (opponent.trim() || (fromHit && !tagging.length ? fromHit.who : '')) : '';
     try {
+      const sets = kind === 'match' ? scored.sets : undefined;
       const id = await actions.logSession({
-        minutes, kind, won: won === 'won' ? true : won === 'lost' ? false : undefined, opponent: typed, day,
+        minutes, kind, won: shownWon === 'won' ? true : shownWon === 'lost' ? false : undefined, ...(sets ? { sets } : {}), opponent: typed, day,
         ...(fresh ? { activityId: fresh.id } : {}),
         // From a hit: where it was, as the note.
         ...(fromHit ? { note: `At ${fromHit.place}` } : {}),
@@ -270,7 +297,7 @@ function LogSession() {
       else {
         // "Logged · 1h 30m · Match · Won", and the streak once it is two days or more.
         const streak = currentUserId ? computeStats(currentUserId, [{ id: id, userId: currentUserId, day, minutes, kind, createdAt: new Date().toISOString() }, ...sessions], posts, stories).currentStreakDays : 0;
-        showLogged(minutes, { kind, won: kind === 'match' && won ? won === 'won' : undefined }, streak, id);
+        showLogged(minutes, { kind, won: kind === 'match' && shownWon ? shownWon === 'won' : undefined, sets: kind === 'match' ? scored.sets : undefined }, streak, id);
       }
       close();
     } catch (e) {
@@ -293,7 +320,7 @@ function LogSession() {
   });
 
   const header = editing ? (
-    <SheetTitle title="Who was there" line={`${loggedLabel(editing)} · ${dayWords(editing.day)} · ${duration(editing.minutes)}`} onClose={close} />
+    <SheetTitle title={editing.kind === 'match' && !editing.fromSessionId ? 'Edit match' : 'Who was there'} line={`${loggedLabel(editing)} · ${dayWords(editing.day)} · ${duration(editing.minutes)}`} onClose={close} />
   ) : edit ? (
     <SheetTitle title="Who was there" onClose={close} />
   ) : waiting ? (
@@ -337,6 +364,11 @@ function LogSession() {
             </>
           ) : (
             <>
+              {editing.kind === 'match' ? (
+                <Section title="Score" hint={editTags.some((t) => t.status === 'accepted') ? 'Changing it asks the players who accepted to confirm again.' : undefined}>
+                  <ScoreField value={editScore} onChange={(next) => { scoreTouched.current = true; setEditScore(next); }} />
+                </Section>
+              ) : null}
               <WhoYouPlayed
                 kind={editing.kind}
                 players={editPlayers}
@@ -408,9 +440,9 @@ function LogSession() {
               <Text style={styles.heroEyebrow}>{sessionEyebrow({ kind, day: heroDay })}</Text>
               <View style={styles.heroRow}>
                 <Duration minutes={minutes} size={56} color={colors.text} unitColor={colors.textMuted} />
-                {kind === 'match' && won ? (
-                  <View style={[styles.result, won === 'won' ? styles.resultWon : styles.resultLost]}>
-                    <Text style={[styles.resultText, { color: won === 'won' ? colors.brandInk : colors.textMuted }]}>{won === 'won' ? 'Won' : 'Lost'}</Text>
+                {kind === 'match' && shownWon ? (
+                  <View style={[styles.result, shownWon === 'won' ? styles.resultWon : styles.resultLost]}>
+                    <Text style={[styles.resultText, { color: shownWon === 'won' ? colors.brandInk : colors.textMuted }]}>{shownWon === 'won' ? 'Won' : 'Lost'}</Text>
                   </View>
                 ) : null}
               </View>
@@ -436,7 +468,11 @@ function LogSession() {
           </Section>
           {kind === 'match' ? (
             <Section title="Result">
-              <Chips clearable value={won ?? undefined} onChange={(v) => setWon(v ?? null)} options={[{ value: 'won', label: 'Won' }, { value: 'lost', label: 'Lost' }]} />
+              {/* A score that says who won decides it; the chips are for a match with no score, or one level on sets. */}
+              {decided === undefined ? (
+                <Chips clearable value={won ?? undefined} onChange={(v) => setWon(v ?? null)} options={[{ value: 'won', label: 'Won' }, { value: 'lost', label: 'Lost' }]} />
+              ) : null}
+              <ScoreField value={score} onChange={setScore} />
             </Section>
           ) : null}
           {canTagKind(kind) ? (

@@ -20,7 +20,8 @@ import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Story, Tip, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch } from './types';
+import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Story, Tip, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet } from './types';
+import { validSets } from '@/features/activity/score';
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
 import { isMapCourtId } from '@/features/places/courtName';
@@ -351,17 +352,23 @@ export interface RemoteData {
   contactsFindableReady?: boolean;
 }
 
-interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null }
-const toSession = (r: SessionRow): PracticeSession => ({
-  id: r.id, userId: r.user_id, day: r.day, minutes: r.minutes, kind: r.kind, won: r.won ?? undefined, opponent: r.opponent ?? undefined, note: r.note ?? undefined,
-  activityId: r.activity_id ?? undefined, fromSessionId: r.from_session_id ?? undefined, createdAt: r.created_at,
-});
+interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null; sets?: unknown }
+const toSession = (r: SessionRow): PracticeSession => {
+  // A match's score (migration 91; absent before it runs), kept only when it is a good one.
+  const sets = r.kind === 'match' ? validSets(r.sets) : undefined;
+  return {
+    id: r.id, userId: r.user_id, day: r.day, minutes: r.minutes, kind: r.kind, won: r.won ?? undefined, opponent: r.opponent ?? undefined, note: r.note ?? undefined,
+    activityId: r.activity_id ?? undefined, fromSessionId: r.from_session_id ?? undefined, ...(sets ? { sets } : {}), createdAt: r.created_at,
+  };
+};
 
 /** A row of my_session_tags() (migration 62): a tag and what the tagged person may see of the session. */
 interface SessionTagRow {
   id: string; session_id: string; tagger_id: string; tagged_id: string; role: SessionTagRole; status: SessionTag['status']; dropped?: boolean | null;
   mirrored_session_id: string | null; created_at: string; responded_at: string | null;
   kind: PracticeSession['kind']; day: string; minutes: number; won: boolean | null;
+  /** The score from your side (migration 91; absent before it runs). */
+  sets?: unknown;
 }
 const toSessionTag = (r: SessionTagRow): SessionTag => ({
   id: r.id, sessionId: r.session_id, taggerId: r.tagger_id, taggedId: r.tagged_id, role: r.role, status: r.status,
@@ -369,6 +376,7 @@ const toSessionTag = (r: SessionTagRow): SessionTag => ({
   mirroredSessionId: r.mirrored_session_id ?? undefined, createdAt: r.created_at, respondedAt: r.responded_at ?? undefined,
   // A date column arrives as "2026-09-29"; anything longer is cut to the day.
   kind: r.kind, day: String(r.day).slice(0, 10), minutes: r.minutes, won: r.won ?? undefined,
+  ...(r.kind === 'match' && validSets(r.sets) ? { sets: validSets(r.sets) } : {}),
 });
 /** The exact word a session-tag function raised ('teen_closed', 'too_many'…), or the message as it came. */
 const tagRefusal = (error: { message?: string }) => (error.message ?? '').trim();
@@ -2257,9 +2265,16 @@ export const remote = {
   async insertSession(s: PracticeSession) {
     const db = need();
     const row: Record<string, unknown> = { id: s.id, user_id: s.userId, day: s.day, minutes: s.minutes, kind: s.kind, won: s.won ?? null, opponent: s.opponent ?? null, note: s.note ?? null, created_at: s.createdAt };
+    // A match's score only when there is one (migration 91), so a session with none saves on a database without it.
+    if (s.sets?.length) row.sets = s.sets;
     let { error } = await db.from('practice_sessions').insert(s.activityId ? { ...row, activity_id: s.activityId } : row);
     // A database before migration 58 has no activity_id: the session still counts, just without the link.
     if (error && s.activityId && /activity_id/.test(error.message)) ({ error } = await db.from('practice_sessions').insert(row));
+    // A database before migration 91 has no sets: the match still counts, with its result, and the score is dropped.
+    if (error && row.sets && /\bsets\b/.test(error.message)) {
+      delete row.sets;
+      ({ error } = await db.from('practice_sessions').insert(s.activityId ? { ...row, activity_id: s.activityId } : row));
+    }
     if (error) {
       fail('session')(error);
       // Each tracker session can be logged once (a unique index on activity_id).
@@ -2270,6 +2285,36 @@ export const remote = {
   async deleteSession(id: ID) {
     const { error } = await need().from('practice_sessions').delete().eq('id', id);
     if (error) fail('session delete')(error);
+  },
+  /**
+   * A match's score, set, changed or cleared on a session already in your log
+   * (migration 91), with the result it gives. The server works the result out
+   * again from the sets, so the two never disagree. Throws a plain sentence.
+   */
+  async updateSessionScore(id: ID, sets: MatchSet[] | null, won: boolean | null) {
+    const { error } = await need().from('practice_sessions').update({ sets, won }).eq('id', id);
+    if (error) {
+      fail('session score')(error);
+      if (/\bsets\b/.test(error.message) && /column|schema/i.test(error.message)) throw new Error('Scores aren’t ready yet. Try again later.');
+      throw new Error(/bad_score/.test(error.message) ? 'That score doesn’t look right.' : 'That didn’t save. Try again.');
+    }
+  },
+  /**
+   * Your record against one player (head_to_head, migration 91): only scored
+   * matches you were both confirmed on. Null when it could not be asked (or
+   * the database has no head-to-head yet).
+   */
+  async headToHead(other: ID): Promise<HeadToHead | null> {
+    if (!UUID_RE.test(other)) return null;
+    const { data, error } = await need().rpc('head_to_head', { other });
+    if (error) { if (!missingFunction(error)) fail('head to head')(error); return null; }
+    if (!data || typeof data !== 'object') return null;
+    const r = data as { wins?: number; losses?: number; last?: { sessionId?: string; day?: string; won?: boolean; sets?: unknown } };
+    const sets = validSets(r.last?.sets);
+    return {
+      userId: other, wins: Number(r.wins) || 0, losses: Number(r.losses) || 0,
+      ...(r.last && sets && typeof r.last.won === 'boolean' && r.last.sessionId ? { last: { sessionId: r.last.sessionId, day: String(r.last.day ?? '').slice(0, 10), won: r.last.won, sets } } : {}),
+    };
   },
   /** The private name you typed for who you played, changed on a session already in your log. */
   async updateSessionOpponent(id: ID, opponent: string | null) {

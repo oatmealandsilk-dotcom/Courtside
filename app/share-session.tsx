@@ -11,6 +11,7 @@ import { EmptyState, Screen } from '@/components/ui';
 import { postedIndex, sourceOn } from '@/features/activity/recent';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { storyFromLog, storyFromPost, type SessionStory } from '@/features/share/sessionStory';
+import { scoreText } from '@/features/activity/score';
 import { canSaveStory, exportStory, stageSize, warmStory, type StoryAction } from '@/features/share/storyImage';
 import { goBack } from '@/lib/goBack';
 import * as haptics from '@/lib/haptics';
@@ -69,7 +70,11 @@ export default function ShareSession() {
   const cardH = Math.round((cardW * 16) / 9);
 
   const [picked, setPicked] = useState<string | undefined>();
-  const [score, setScore] = useState('');
+  // A match with a score saved in your log (migration 91) starts with it here; typing over it changes only the picture.
+  const saved = story?.session.kind === 'match' ? scoreText(story.session.sets, true) : '';
+  const [score, setScore] = useState(saved);
+  const scoreTyped = useRef(false);
+  useEffect(() => { if (!scoreTyped.current && saved) setScore(saved); }, [saved]);
   // "6-4 6-3" reads as a score with proper dashes and single spaces.
   const shownScore = score.trim() ? score.trim().replace(/\s*[-–]\s*/g, '–').replace(/\s+/g, ' ') : undefined;
   const photo = picked ?? story?.photo;
@@ -205,7 +210,7 @@ export default function ShareSession() {
                 <Text style={styles.scoreLabel}>Score</Text>
                 <TextInput
                   value={score}
-                  onChangeText={(t) => setScore(t.slice(0, 24))}
+                  onChangeText={(t) => { scoreTyped.current = true; setScore(t.slice(0, 24)); }}
                   placeholder="Optional, e.g. 6-4 6-3"
                   placeholderTextColor={colors.textFaint}
                   style={styles.scoreInput}

@@ -57,7 +57,8 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
     return (
       <View collapsable={false} style={{ width, height }}>
         {/* Instagram's own buttons cover roughly the top 13% and the bottom 17%: the numbers keep clear of both. */}
-        <SessionCard {...common} width={width} aspect={9 / 16} radius={0} scale={1.14} inset={{ top: Math.round(height * 0.12), bottom: Math.round(height * 0.11) }} />
+        {/* The score as the Score box has it (prefilled from the log, migration 91): cleared there, gone here too. */}
+        <SessionCard {...common} score={score ?? ''} width={width} aspect={9 / 16} radius={0} scale={1.14} inset={{ top: Math.round(height * 0.12), bottom: Math.round(height * 0.11) }} />
       </View>
     );
   }

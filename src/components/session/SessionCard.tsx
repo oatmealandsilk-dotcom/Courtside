@@ -7,7 +7,8 @@ import Svg, { Line } from 'react-native-svg';
 import { BrandMark } from '@/components/BrandMark';
 import { Avatar, BrandWash } from '@/components/ui';
 import type { ID, SessionDetail } from '@/data/types';
-import { onCourtWord, resultWord, sessionEyebrow, sourceLabel, spokenDuration } from '@/features/activity/format';
+import { onCourtWord, resultWord, scoreLine, sessionEyebrow, sourceLabel, spokenDuration } from '@/features/activity/format';
+import { spokenScore } from '@/features/activity/score';
 import { sessionPeople } from '@/features/activity/sessionTags';
 import { postZones, zoneColors } from '@/features/activity/zones';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -67,7 +68,7 @@ export function cardLook() {
  * from. `width` sets the scale: 358 is the feed's size, the composer's is
  * about two thirds of it.
  */
-export function SessionCard({ session, width, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false }: {
+export function SessionCard({ session, width, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false, score: typedScore }: {
   session: SessionDetail;
   width: number;
   /**
@@ -91,6 +92,12 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
    * browser's copy for the picture would catch it part way).
    */
   picture?: boolean;
+  /**
+   * The score as typed on the Share page, drawn in place of the log's own
+   * (an empty one draws none), so the Card design follows the Score box as
+   * the other designs do (Oct 5). Left out everywhere else: the log's score.
+   */
+  score?: string;
   /** Count the numbers up (once, when the card comes into view). */
   play?: boolean;
   /** The author's own preview: the players picked, waiting ones faded. Otherwise only those who accepted (session.with). */
@@ -120,6 +127,8 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
   const kcal = session.kcal ? session.kcal : null;
   const health = hr || !!zones || strain != null || !!kcal;
   const result = resultWord(session);
+  // A match's score from the author's log (migration 91), under the time; on a share picture, the one typed there.
+  const score = typedScore !== undefined ? typedScore.trim() || null : scoreLine(session);
   const list: CardPerson[] = people ?? (() => { const p = sessionPeople(session, hidden); return [...p.opponents, ...p.partners]; })();
   const lead = list[0];
   const vs = lead ? (lead.role === 'opponent' && session.kind !== 'practice' ? 'vs' : 'with') : '';
@@ -128,6 +137,7 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
     shownTop.toLowerCase(),
     `${spokenDuration(session.minutes)} ${onCourtWord(session)}`,
     result,
+    score ? (typedScore !== undefined ? score : spokenScore(session.sets)) : null,
     hr ? `max heart rate ${session.maxHr}${session.avgHr ? `, average ${session.avgHr}` : ''}` : null,
     strain != null ? `Strain ${strain.toFixed(1)}` : null,
     kcal ? `${kcal} calories` : null,
@@ -152,6 +162,9 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
       <Reanimated.View layout={picture ? undefined : LinearTransition.duration(220)} style={[styles.middle, { justifyContent: health && !tall ? 'flex-start' : 'center', paddingTop: health && !tall ? 18 * k : 0 }]}>
         <Duration minutes={session.minutes} size={96 * k} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={700} />
         <Text style={{ ...font('500'), fontSize: small(14, 10), color: look.muted, marginTop: 2 * k }} maxFontSizeMultiplier={1.2}>{onCourtWord(session)}</Text>
+        {score ? (
+          <Text style={{ ...font('700'), fontSize: 26 * k, letterSpacing: -0.4 * k, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 8 * k }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
+        ) : null}
         {place ? (
           <View style={[styles.place, { gap: 4 * k, marginTop: 8 * k }]}>
             <Ionicons name="location-outline" size={small(13, 10)} color={look.muted} />

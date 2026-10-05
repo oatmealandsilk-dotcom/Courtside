@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 
-import type { DetectedActivity, ID, PracticeSession, SessionPlayer } from '@/data/types';
+import type { DetectedActivity, ID, MatchSet, PracticeSession, SessionPlayer } from '@/data/types';
 import { activityDay } from '@/features/activity/format';
 import { andList, canTagKind } from '@/features/activity/sessionTags';
 import { sourceOn } from '@/features/activity/recent';
@@ -17,6 +17,8 @@ import { loggedLabel } from './format';
 export interface LogInput {
   kind: PracticeSession['kind'];
   won?: boolean;
+  /** A match's score, your side first (migration 91). */
+  sets?: MatchSet[];
   players?: SessionPlayer[];
   opponent?: string;
   note?: string;
@@ -83,6 +85,7 @@ export function useTrackerSession(activityId: ID | undefined) {
         minutes: input.minutes && input.minutes > 0 ? input.minutes : activity.minutes,
         kind: input.kind,
         won: input.kind === 'match' ? input.won : undefined,
+        ...(input.kind === 'match' && input.sets?.length ? { sets: input.sets } : {}),
         opponent: canTagKind(input.kind) ? input.opponent ?? '' : '',
         day: activityDay(activity),
         activityId: activity.id,
@@ -116,7 +119,7 @@ export function useTrackerSession(activityId: ID | undefined) {
  * session's id, it carries an "Instagram" button: the session as a story
  * picture (share-session), the way Strava offers it once you save.
  */
-export function showLogged(minutes: number, s: Pick<PracticeSession, 'kind' | 'won'>, streak: number, sessionId?: string) {
+export function showLogged(minutes: number, s: Pick<PracticeSession, 'kind' | 'won' | 'sets'>, streak: number, sessionId?: string) {
   showToast({
     title: 'Logged',
     body: `${duration(minutes)} · ${loggedLabel(s)}`,
