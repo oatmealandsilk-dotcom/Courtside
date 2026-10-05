@@ -730,6 +730,8 @@ const STEPS = [
     name: 'settings',
     title: 'Settings',
     async run(page) {
+      // The ☰ button opens a small menu (Groups, Settings) since the Tennis profile redesign.
+      await page.tap({ label: /^Menu: groups and settings/ });
       await page.tap({ label: 'Settings' });
     },
     expect: [{ label: 'Account center' }, { label: 'Privacy center' }],
@@ -739,7 +741,9 @@ const STEPS = [
     name: 'your-sessions',
     title: 'Your sessions',
     async run(page) {
-      await page.tap({ label: /^Your sessions/ });
+      // Your sessions lives inside the Tennis profile since the redesign.
+      await page.tap({ label: /tennis profile\./ });
+      await page.tap({ label: 'See all your sessions' });
     },
     expect: [{ label: /^Share to Instagram: / }],
   },
