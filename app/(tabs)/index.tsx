@@ -323,7 +323,6 @@ function Home({ scope, topRow, paused, onChrome }: {
   // growing to 28 and lifting the words into the picture. Phones only.
   const follow = barInset > 0 ? BAR_TUCK : 0;
   const tuckStyle = useAnimatedStyle(() => ({ transform: [{ translateY: follow * barCompact.value }] }));
-  useEffect(() => { const k = orderRef.current[active]; if (k) seenNow.current.add(k); setQuick(connectionIsQuick()); }, [active]);
 
   // Pinch out on a clip or hit and everything but the picture goes away —
   // caption, buttons, wordmark, sound disc; pinch in brings it all back.
@@ -559,7 +558,9 @@ function Home({ scope, topRow, paused, onChrome }: {
       const last = made(prev[prev.length - 1]);
       const older = add.filter((k) => made(k) <= last);
       const newer = add.filter((k) => made(k) > last);
-      const at = Math.min(prev.length, activeRef.current + 1);
+      // Just after the page on screen, found by its key: `active` counts `feed`, which leaves out hidden players.
+      const on = prev.indexOf(activeKeyRef.current ?? '');
+      const at = on >= 0 ? on + 1 : Math.min(prev.length, activeRef.current + 1);
       return [...prev.slice(0, at), ...newer, ...prev.slice(at), ...older];
     });
   }, [groupKeys]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -645,7 +646,9 @@ function Home({ scope, topRow, paused, onChrome }: {
     const made = madeAt(data);
     const dealt = NEWEST_FIRST ? [...fresh].sort((a, b) => made(b) - made(a)) : fresh;
     setOrder((prev) => {
-      const at = Math.min(prev.length, activeRef.current + (NEWEST_FIRST ? 1 : 2));
+      // Placed from the page on screen's key: `active` counts `feed`, which has the tip and challenge pages in it and hidden players out.
+      const on = prev.indexOf(activeKeyRef.current ?? '');
+      const at = Math.min(prev.length, (on >= 0 ? on : activeRef.current) + (NEWEST_FIRST ? 1 : 2));
       return [...prev.slice(0, at), ...dealt.filter((k) => !prev.includes(k)), ...prev.slice(at)];
     });
   };
@@ -818,12 +821,18 @@ function Home({ scope, topRow, paused, onChrome }: {
   // opened over the comments). Read by the page's key in `feed`, which is
   // what `active` counts: `order` has no tip or challenge page.
   const activeKey = feed[active] ? keyOf(feed[active]) : undefined;
+  const activeKeyRef = useRef(activeKey);
+  activeKeyRef.current = activeKey;
+  // The post, Instant or question on screen; the tip and challenge pages are none of them.
+  const realKey = activeKey && signalKind(activeKey) ? activeKey : undefined;
+  // Every page you rest on goes into this visit's seen set (a refresh sends them to the back).
+  useEffect(() => { if (realKey) seenNow.current.add(realKey); setQuick(connectionIsQuick()); }, [active, realKey]);
   const held = !!myStage && myStage.key === activeKey && !myStage.covered && !(PAUSE_AT_FULL && myStage.full);
   const playing = (focused || held) && !touring && !paused;
   // A new page on screen (or the feed coming back to the front): the last one
   // is closed off and the new one's clock starts. Reading the comments under
   // a clip that is still playing counts as watching it.
-  const viewedKey = playing && appActive ? order[active] : undefined;
+  const viewedKey = playing && appActive ? realKey : undefined;
   useEffect(() => {
     endViewing.current();
     if (viewedKey) viewing.current = { key: viewedKey, since: Date.now() };
