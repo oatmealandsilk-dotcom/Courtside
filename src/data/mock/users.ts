@@ -1,5 +1,6 @@
 import { isoDaysAgo, isoDaysAhead } from '@/lib/format';
 import { endOfToday } from '@/features/players/openToHit';
+import { DIEGO_TILL, LENA_TILL, NOOR_TILL } from './openTimes';
 import type { User } from '../types';
 
 export const CURRENT_USER_ID = 'u-you';
@@ -450,7 +451,7 @@ export const users: User[] = [
     joinedAt: isoDaysAgo(75),
     avatarSeed: 'noor-haddad',
     ageGroup: 'adult',
-    openToHitUntil: endOfToday(),
+    openToHitUntil: NOOR_TILL,
     isCoach: false,
     followers: 45,
     following: 27,
@@ -489,7 +490,7 @@ export const users: User[] = [
     joinedAt: isoDaysAgo(260),
     avatarSeed: 'lena-vogel',
     ageGroup: 'adult',
-    openToHitUntil: endOfToday(),
+    openToHitUntil: LENA_TILL,
     isCoach: false,
     followers: 30,
     following: 32,
@@ -586,6 +587,10 @@ export const users: User[] = [
     joinedAt: isoDaysAgo(95),
     avatarSeed: 'diego-ruiz',
     ageGroup: 'adult',
+    // Open to hit till 7pm from Pasadena, and would rather stay within 5 miles (migration 120):
+    // seen from downtown his card says so, kindly ("Suggest a court that works for you both").
+    openToHitUntil: DIEGO_TILL,
+    openToHitMiles: 5,
     isCoach: false,
     followers: 25,
     following: 17,

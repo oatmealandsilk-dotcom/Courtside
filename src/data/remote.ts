@@ -28,6 +28,7 @@ import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
 import { isMapCourtId } from '@/features/places/courtName';
 import type { Openness } from '@/features/players/age';
+import { asHitMiles } from '@/features/players/openToHit';
 import { lookFrom } from '@/features/groups/look';
 import { asKind, asReason } from '@/features/moderation/reasons';
 
@@ -110,6 +111,8 @@ interface ProfileRow {
   is_private?: boolean | null;
   /** Migration 31. */
   open_to_hit_until?: string | null;
+  /** Never a profile column: your own, laid on from your settings row (migration 120). */
+  open_to_hit_miles?: number | null;
   /** Migration 34. */
   handle_changed_at?: string | null;
   /** Kept by the database (migration 22); missing on a database without it. */
@@ -180,6 +183,7 @@ const toUser = (row: ProfileRow, followers: number, following: number): User => 
   avatarUrl: row.avatar_url ?? undefined,
   isPrivate: row.is_private || undefined,
   openToHitUntil: row.open_to_hit_until ?? undefined,
+  openToHitMiles: asHitMiles(row.open_to_hit_miles),
   handleChangedAt: row.handle_changed_at ?? undefined,
   ageGroup: row.age_group === 'teen' || row.age_group === 'adult' ? row.age_group : undefined,
   // Off only when its owner turned it off; a database without the setting yet reads as on.
@@ -570,7 +574,9 @@ interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_quest
   /** Your birthday, readable only by you (migration 13). */
   birth_date?: string | null;
   /** When you (not a known adult) answered who can see you on the map, and your private ring (migration 78). Absent before it. */
-  map_answered_at?: string | null; open_to_hit_until?: string | null }
+  map_answered_at?: string | null; open_to_hit_until?: string | null;
+  /** How far you'd like to go for a hit (migration 120): 5, 10 or 25; null for any. Absent before it. */
+  open_to_hit_miles?: number | null }
 
 interface PollRow { question_id: string; options: string[]; counts: number[] | null }
 /** Each thread's poll, with the totals and your own vote, laid onto the threads. */
@@ -998,7 +1004,8 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     agesOnProfiles,
     ...(contactsFindableReady ? { contactsFindableReady: true } : {}),
     // Your own "up for a hit" when it is kept privately (migration 78: not a known adult) comes from your settings row.
-    users: profileRows.map((row) => toUser(row.id === me ? { ...row, age_group: ownAge, open_to_hit_until: row.open_to_hit_until ?? ownState?.open_to_hit_until ?? null } : row, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
+    // And how far you'd like to go for a hit (migration 120), kept only in that row too.
+    users: profileRows.map((row) => toUser(row.id === me ? { ...row, age_group: ownAge, open_to_hit_until: row.open_to_hit_until ?? ownState?.open_to_hit_until ?? null, open_to_hit_miles: ownState?.open_to_hit_miles ?? null } : row, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
     posts: postRows.map(toPost),
     comments: [
       ...postRows.flatMap((row) => (row.comments ?? []).map(toComment)),
@@ -1131,6 +1138,8 @@ let userStateLacksPushActivity = false;
 let userStateLacksMapAlerts = false;
 /** Set once a settings save finds no contacts_findable column (a database before migration 89). */
 let userStateLacksContactsFindable = false;
+/** A database without "Open to hit" distances (migration 120): not asked again this session. */
+let lacksOpenToHitMiles = false;
 
 /** A note for whoever reads the logs: this needs the group chat update in Supabase first. */
 const needs75 = (what: string) => console.warn(`[remote] ${what} needs the messaging update. Open Supabase → SQL Editor → New query, paste the file supabase/migrations/20261003000075_messaging.sql and press Run. It is safe to run more than once.`);
@@ -2947,12 +2956,44 @@ export const remote = {
     const area = view ? { min_lat: view.minLat, min_lng: view.minLng, max_lat: view.maxLat, max_lng: view.maxLng } : {};
     const { data, error } = await need().rpc('map_players', area);
     if (error) { if (missingFunction(error)) return 'missing'; fail('map players')(error); return null; }
-    return ((data ?? []) as MapPlayerRow[]).map((r) => ({
+    const rows = (data ?? []) as MapPlayerRow[];
+    // How far each person up for a hit would like to go (migration 120), asked only about them.
+    const now = Date.now();
+    const miles = await remote.fetchOpenToHitMiles(rows.filter((r) => !!r.open_until && Date.parse(r.open_until) > now).map((r) => r.user_id));
+    return rows.map((r) => ({
       userId: r.user_id, lat: r.lat, lng: r.lng, city: r.city ?? undefined, seenAt: r.seen_at ?? undefined,
       place: r.place === 'court' || r.place === 'exact' ? r.place : 'approx',
       courtId: r.court_id ?? undefined, courtName: r.court_name ?? undefined, openUntil: r.open_until ?? undefined,
+      ...(miles[r.user_id] ? { openMiles: miles[r.user_id] } : {}),
       ...(r.mutual ? { mutual: true } : {}),
     }));
+  },
+  /**
+   * How far each of these people would like to go for a hit (migration 120),
+   * for those whose ring is on and whose "open until" you may already read
+   * (on your map, or on their profile). Nobody else comes back, the same as
+   * someone who chose any distance. Empty on a database without it, or when
+   * the ask fails: then everyone reads as any distance.
+   */
+  async fetchOpenToHitMiles(ids: ID[]): Promise<Record<ID, number>> {
+    const unique = [...new Set(ids)].slice(0, 200);
+    if (!unique.length || lacksOpenToHitMiles) return {};
+    const { data, error } = await need().rpc('open_to_hit_miles', { ids: unique });
+    if (error) { if (missingFunction(error)) lacksOpenToHitMiles = true; else fail('open to hit distance')(error); return {}; }
+    const out: Record<ID, number> = {};
+    for (const r of (data ?? []) as { user_id: ID; miles: number | null }[]) { const m = asHitMiles(r.miles); if (m) out[r.user_id] = m; }
+    return out;
+  },
+  /**
+   * Saves how far you'd like to go for a hit (migration 120): 5, 10 or 25
+   * miles, or null for any distance. 'missing' on a database without it
+   * (the choice then stays on this phone, and others read any distance).
+   */
+  async setOpenToHitMiles(miles: number | null): Promise<boolean | 'missing'> {
+    if (lacksOpenToHitMiles) return 'missing';
+    const { error } = await need().rpc('set_open_to_hit_miles', { miles: asHitMiles(miles) ?? null });
+    if (error) { if (missingFunction(error)) { lacksOpenToHitMiles = true; return 'missing'; } fail('open to hit distance')(error); return false; }
+    return true;
   },
   /** "Who can see you on the map?" (migration 63). Resolves false when it could not be saved. */
   async setMapVisibility(v: MapVisibility): Promise<boolean> {

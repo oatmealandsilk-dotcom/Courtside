@@ -286,7 +286,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       .filter((u) => followingIds.includes(u.id) || (viewerAdult && ageSaysAdult(u)))
       .sort((a, b) => b.joinedAt.localeCompare(a.joinedAt));
   }, [users, currentUser, currentUserId, blockedIds, followingIds, nearPlayers, newOnCourtside, ageSaysAdult]);
-  // "Who's up today": from the map's own pins only, measured from where you
+  // "Open to hit" (was "Who's up today"): from the map's own pins only, measured from where you
   // are (the phone's fix, or your own last spot), never from a profile's city.
   const ownSpot = detectedCoords ?? (currentUserId && lastSeen[currentUserId] ? { lat: lastSeen[currentUserId].lat, lng: lastSeen[currentUserId].lng } : null);
   const upToday = useUpToday({ users, lastSeen, me: currentUserId, from: ownSpot, blockedIds });
@@ -399,7 +399,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           ? <NearbyMap me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} />
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : <View style={styles.mapStandIn} />) : null}
-        {/* Who's up today: you first (one tap, never Location), then who near you is up for a hit. */}
+        {/* Open to hit: you first (one tap, never Location; hold to pick until when and how far), then who near you is open. */}
         {currentUser && !search && showUpToday ? <UpToday me={currentUser} people={upToday} teen={teen} locationOn={location.locationOn} onLocation={ownSpot ? undefined : location.toggle} onToggle={(on) => { void toggleOpen(on); }} /> : null}
         {/* Nobody sharing a spot within 30 miles: the way to fill the map, right under it. */}
         {!search && early ? <EarlyInvite city={myCityName} court={inviteCourt} /> : null}

@@ -37,7 +37,7 @@ import { postShare, reshare, sameShare } from '@/features/activity/healthShare';
 import { REFUSALS, maxTagsFor, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
 import { duration } from '@/lib/format';
 import { takeReferrer } from '@/features/invite/referral';
-import { endOfToday } from '@/features/players/openToHit';
+import { asHitMiles, endOfToday } from '@/features/players/openToHit';
 import { pickNutritionExport } from '@/features/health/cronometer';
 import { nearestPlace } from '@/data/locations';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -556,6 +556,12 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   setPrivateAccount: (enabled: boolean) => void;
   /** Up for a hit today: a green ring around you on the map until midnight. */
   setOpenToHit: (on: boolean) => void;
+  /**
+   * Holding your own ring (Oct 5, owner): open until a time you picked, and
+   * how far you'd like to go for a hit (5, 10 or 25 miles; null: any). The
+   * distance is shown to others, never a filter.
+   */
+  editOpenToHit: (until: string, miles: number | null) => void;
   /** Live check while typing a new handle: ok, yours, invalid, taken or held. Null if the check is not available. */
   checkHandle: (handle: string) => Promise<HandleStatus | null>;
   /** Changes your handle. Throws with a plain-English reason when it cannot. */
@@ -1233,16 +1239,20 @@ const cleanTitle = (title?: string) => (title ?? '').replace(/\s+/g, ' ').trim()
 function withMapRings(users: User[], seen: Record<ID, LastSeen>, me: ID | null, fresh: Record<ID, LastSeen> | null = null): User[] {
   let changed = false;
   const next = users.map((u) => {
+    // How far they'd like to go for a hit (migration 120) comes with the ring, and goes with it.
     const now = u.id === me ? undefined : fresh?.[u.id];
     if (now) {
-      if (u.openToHitUntil === now.openUntil) return u;
+      if (u.openToHitUntil === now.openUntil && u.openToHitMiles === now.openMiles) return u;
       changed = true;
-      return { ...u, openToHitUntil: now.openUntil };
+      return { ...u, openToHitUntil: now.openUntil, openToHitMiles: now.openMiles };
     }
-    const until = u.id === me ? undefined : seen[u.id]?.openUntil;
-    if (!until || (u.openToHitUntil && u.openToHitUntil >= until)) return u;
+    const row = u.id === me ? undefined : seen[u.id];
+    const until = row?.openUntil;
+    if (!until) return u;
+    if (u.openToHitUntil && u.openToHitUntil > until) return u;
+    if (u.openToHitUntil === until && (row?.openMiles === undefined || u.openToHitMiles === row.openMiles)) return u;
     changed = true;
-    return { ...u, openToHitUntil: until };
+    return { ...u, openToHitUntil: until, openToHitMiles: row?.openMiles ?? u.openToHitMiles };
   });
   return changed ? next : users;
 }
@@ -6309,6 +6319,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, [requireUser, patchCurrentUser]);
 
+  const editOpenToHit = useCallback((until: string, miles: number | null) => {
+    const me = requireUser();
+    const before = stateRef.current.users.find((u) => u.id === me);
+    const wasUntil = before?.openToHitUntil;
+    const wasMiles = before?.openToHitMiles;
+    const nextMiles = asHitMiles(miles);
+    haptics.commit();
+    patchCurrentUser((u) => ({ ...u, openToHitUntil: until, openToHitMiles: nextMiles }));
+    if (!live(me)) return;
+    const untilSaved = remote.updateProfile(me, { openToHitUntil: until }).catch(() => false);
+    // The distance only when it changed. Before migration 120 ('missing') it stays on this phone, and others read any distance.
+    const milesSaved: Promise<boolean | 'missing'> = nextMiles === wasMiles ? Promise.resolve(true) : remote.setOpenToHitMiles(nextMiles ?? null).catch(() => false);
+    void Promise.all([untilSaved, milesSaved]).then(([okUntil, okMiles]) => {
+      if ((okUntil && okMiles !== false) || stateRef.current.currentUserId !== me) return;
+      // Not saved: put back what the server still has (unless a later change has replaced it since), and say so.
+      const now = stateRef.current.users.find((u) => u.id === me);
+      patchCurrentUser((u) => ({
+        ...u,
+        ...(!okUntil && now?.openToHitUntil === until ? { openToHitUntil: wasUntil } : {}),
+        ...(okMiles === false && now?.openToHitMiles === nextMiles ? { openToHitMiles: wasMiles } : {}),
+      }));
+      haptics.untap();
+      showToast({ title: 'Couldn’t save Open to hit', body: 'Check your connection and try again.', icon: 'cloud-offline-outline' });
+    });
+  }, [requireUser, patchCurrentUser]);
+
   const toggleMute = useCallback((userId: ID, quiet?: boolean) => {
     const muting = !stateRef.current.mutedIds.includes(userId);
     // You can't mute yourself (unmuting stays open, so a self-mute saved before this can be undone).
@@ -6914,6 +6950,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       declineFollowRequest,
       setPrivateAccount,
       setOpenToHit,
+      editOpenToHit,
       checkHandle,
       changeHandle,
       toggleMute,
@@ -7120,6 +7157,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       declineFollowRequest,
       setPrivateAccount,
       setOpenToHit,
+      editOpenToHit,
       checkHandle,
       changeHandle,
       toggleMute,

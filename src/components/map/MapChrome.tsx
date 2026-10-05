@@ -27,7 +27,7 @@ import { router } from 'expo-router';
 import { Image as ExpoImage } from 'expo-image';
 import { formatMiles } from '@/features/players/geo';
 import { relativeTime } from '@/lib/format';
-import { isOpenToHit } from '@/features/players/openToHit';
+import { hitsWithinLine, isOpenToHit, tillLabel } from '@/features/players/openToHit';
 import { LevelPill as Level } from '@/components/LevelPill';
 import type { User } from '@/data/types';
 import { countLabel } from '@/features/places/court';
@@ -622,6 +622,9 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
   const styles = useThemedStyles(styleDefinitions);
   const pull = useDragToClose(onClose);
   const { user, miles, seenAt, seenCity, rough, court } = placed;
+  // Farther than they'd like to go for a hit (migration 120): one friendly line, never a warning, and Ask to hit stays as it is.
+  const farLine = hitsWithinLine(user, miles, seenCity || user.location);
+  const till = isOpenToHit(user) ? tillLabel(user.openToHitUntil) : null;
   return (
     <GestureDetector gesture={pull.gesture}>
     <Animated.View style={[styles.sheet, pull.style]}>
@@ -641,12 +644,13 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
           <Text style={styles.personMeta} numberOfLines={1}>{[`@${user.handle}`, court ? null : seenCity || user.location || null, formatSpotMiles(miles, rough)].filter(Boolean).join(' · ')}</Text>
           {court ? <View style={styles.openRow}><CourtGlyph size={13} color={colors.court} /><Text style={styles.atCourt} numberOfLines={1}>At {court.name}{seenAt ? ` · ${agoLabel(seenAt)}` : ''}</Text></View>
             : seenAt ? <Text style={styles.personMeta} numberOfLines={1}>{activeLabel(seenAt)}</Text> : null}
-          {isOpenToHit(user) ? <View style={styles.openRow}><View style={styles.openDot} /><Text style={styles.openText}>Open to hit today</Text></View> : null}
+          {isOpenToHit(user) ? <View style={styles.openRow}><View style={styles.openDot} /><Text style={styles.openText}>{till ? `Open to hit ${till}` : 'Open to hit today'}</Text></View> : null}
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
           <Ionicons name="close" size={18} color={colors.textMuted} />
         </Pressable>
       </View>
+      {farLine ? <Text style={styles.farLine}>{farLine}</Text> : null}
       {onAskToHit ? (
         // Tennis first: Ask to hit leads (a normal open hit, also sent to your chat with them), then Message and Follow.
         <View style={styles.personActions}>
@@ -709,6 +713,8 @@ export function YouSheet({ me, open, teen = false, onToggle, onProfile, onClose,
   }), [quiet, warm, edgeOff, edgeOn]);
   // The words under it hand over as it flips, one fading out as the other fades in, rather than cutting.
   const noteOff = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - lit.value * 2) }));
+  // Until the time you picked (holding your ring in the Open to hit row), or midnight.
+  const till = (open ? tillLabel(me.openToHitUntil) : null) ?? 'until midnight';
   const noteOn = useAnimatedStyle(() => ({ opacity: Math.max(0, lit.value * 2 - 1) }));
   return (
     <GestureDetector gesture={pull.gesture}>
@@ -734,7 +740,7 @@ export function YouSheet({ me, open, teen = false, onToggle, onProfile, onClose,
           <Text style={styles.openTitle}>Open to hit today</Text>
           {/* Both sentences hold the same place (the longer one keeps the room), so the card never changes height as they hand over. */}
           <View>
-            <Animated.Text style={[styles.openNote, noteOn]} aria-hidden={!open} accessibilityElementsHidden={!open} importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}>{teen ? 'Friends who follow you back see your green ring until midnight.' : 'Players nearby see your green ring until midnight.'}</Animated.Text>
+            <Animated.Text style={[styles.openNote, noteOn]} aria-hidden={!open} accessibilityElementsHidden={!open} importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}>{teen ? `Friends who follow you back see your green ring ${till}.` : `Players nearby see your green ring ${till}.`}</Animated.Text>
             <Animated.Text style={[styles.openNote, styles.noteOver, noteOff]} aria-hidden={open} accessibilityElementsHidden={open} importantForAccessibility={open ? 'no-hide-descendants' : 'auto'}>Wear a green ring on the map until midnight.</Animated.Text>
           </View>
         </View>
@@ -1217,6 +1223,8 @@ const styleDefinitions = StyleSheet.create({
   // Open to hit, on a player's card: the map's green, never the brand (New York's is yellow).
   openDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.open },
   openText: { ...typography.smallStrong, color: colors.text },
+  // Their distance, seen from farther away: quiet words under who they are, before what to do.
+  farLine: { ...typography.small, color: colors.textMuted, lineHeight: 18, paddingHorizontal: spacing.lg },
   atCourt: { ...typography.smallStrong, color: colors.text, flexShrink: 1 },
   // A face that may wear the open ring: the ring's room is kept either way, so nothing shifts when it comes on.
   faceSlot: { marginVertical: -4, marginHorizontal: -4 },
