@@ -226,7 +226,7 @@ export default function ShareSession() {
               })}
             </View>
 
-                        {/* Any session can carry a score (Oct 4): practice sets and tiebreaks are scored too. */}
+            {/* Any session can carry a score (Oct 4): practice sets and tiebreaks are scored too. */}
             {true ? (
               <View style={styles.scoreRow}>
                 <Text style={styles.scoreLabel}>Score</Text>
@@ -283,7 +283,8 @@ const styleDefinitions = StyleSheet.create({
   designTextOn: { color: colors.text },
   scoreRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.xl, paddingHorizontal: 14, height: 44, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   scoreLabel: { ...font('600'), fontSize: 14, color: colors.textMuted },
-  scoreInput: { flex: 1, ...font('600'), fontSize: 16, color: colors.text, paddingVertical: 0 },
+  // The box fills the row's height and centres its own line: sized to the text alone, a phone clipped the bottom of the letters (Oct 5).
+  scoreInput: { flex: 1, alignSelf: 'stretch', ...font('600'), fontSize: 16, color: colors.text, paddingVertical: 0, paddingHorizontal: 0, textAlignVertical: 'center' },
   actions: { flexDirection: 'row', justifyContent: 'center', gap: spacing.lg, paddingHorizontal: spacing.lg, marginTop: spacing.xs },
   action: { alignItems: 'center', gap: 6, width: 64 },
   actionCircle: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
