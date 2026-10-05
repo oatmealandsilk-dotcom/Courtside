@@ -1,14 +1,14 @@
 import { themes, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
-import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlaceSheet, PlayerSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
-import { CourtSpinner } from '@/components/CourtSpinner';
 import { CardStage } from '@/components/map/CardStage';
-import { MapCanvas, type CanvasMarker, type MapCanvasHandle } from '@/components/map/MapCanvas';
+import { MapCanvas, type CanvasMarker, type MapCanvasHandle, type MapLoadStatus } from '@/components/map/MapCanvas';
+import { MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
 import { cardLook, lookFor } from '@/components/map/look';
 import { clusterTemplates, courtLift, youLift } from '@/components/map/markers';
 import { mapMarkers } from '@/components/map/pinList';
@@ -43,7 +43,7 @@ export type { NearbyMapProps };
 /**
  * The browser fetches its map engine separately and starts it early (see
  * NearbyMap.web). On the phone each map's web view fetches it itself, from a
- * public file host with a second to fall back on (engineLoader), and keeps a
+ * public file host with two more to fall back on (engineLoader), and keeps a
  * copy after the first time; there is nothing to start early here.
  */
 export function preloadNearbyMap() {}
@@ -94,11 +94,24 @@ export function NearbyMap(props: NearbyMapProps) {
   const painted = useStartMapHold(!expanded && (!!model.city || model.cityPending));
   // The still card fades in whole once its map has drawn (Oct 4, owner): the
   // city's name and the map arrive together instead of the words first and
-  // the map popping in behind. Never waits more than 2.5 s.
+  // the map popping in behind. Until then, however long that takes, the card
+  // shows only its loading look, and if the map never comes after every
+  // retry, only "Map didn't load · Tap to try again" (Oct 5, owner: the city
+  // and its players over a blank map looked unprofessional).
+  // The loading look is a cover over the map rather than the map being see-through: the
+  // map's web view keeps drawing at full strength underneath (a phone may hold back
+  // a web view it cannot see), and the cover fades off it as it used to fade in.
+  const [mapStatus, setMapStatus] = useState<MapLoadStatus>('loading');
+  // The map has drawn: it takes taps; and, once the cover has faded, the cover is gone.
+  const [cardUp, setCardUp] = useState(false);
+  const [loaderGone, setLoaderGone] = useState(false);
   const cardIn = useSharedValue(0);
-  const showCard = () => { cardIn.value = withTiming(1, { duration: 420, easing: Easing.out(Easing.cubic) }); };
-  useEffect(() => { const t = setTimeout(showCard, 2500); return () => clearTimeout(t); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const cardFade = useAnimatedStyle(() => ({ opacity: cardIn.value, transform: [{ scale: 0.985 + 0.015 * cardIn.value }] }));
+  const showCard = () => {
+    setCardUp(true);
+    cardIn.value = withTiming(1, { duration: 420, easing: Easing.out(Easing.cubic) }, (done) => { if (done) runOnJS(setLoaderGone)(true); });
+  };
+  const cardGrow = useAnimatedStyle(() => ({ transform: [{ scale: 0.985 + 0.015 * cardIn.value }] }));
+  const coverFade = useAnimatedStyle(() => ({ opacity: 1 - cardIn.value }));
   // Anything else picked (a search result, a pin) takes the place of your own card.
   useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit]);
   const { home, start } = model;
@@ -156,6 +169,8 @@ export function NearbyMap(props: NearbyMapProps) {
       // The full map's first pins come in as one wave (once any sheet over it has gone); a tap on "+N" zooms in clear of the bars and the tray.
       popIn={expanded}
       onPainted={expanded ? undefined : () => { painted?.(); showCard(); }}
+      // Given up on: the opening curtain stops waiting for it, and the card (or the full map's pill) says so.
+      onStatus={(status) => { setMapStatus(status); if (!expanded && status === 'failed') painted?.(); }}
       holdPins={expanded && holdPins}
       pad={{ top: insets.top + 120, bottom: 250, left: 50, right: 50 }}
       onTap={(id) => {
@@ -187,17 +202,32 @@ export function NearbyMap(props: NearbyMapProps) {
   }, expanded);
 
   if (!expanded && !model.city) {
-    // A city still being looked up holds the card's place; no city at all asks for one.
-    return model.cityPending ? <View style={[styles.card, styles.waiting]}><CourtSpinner size={24} /></View> : <CitylessCard onOpenMap={onExpand} />;
+    // A city still being looked up holds the card's place, looking as the map will while it loads; no city at all asks for one.
+    return model.cityPending ? <View style={styles.card}><MapCardLoading /></View> : <CitylessCard onOpenMap={onExpand} />;
   }
   if (!expanded) {
+    // Given up on, the card is one button that tries again; otherwise it opens the full map.
+    const failed = mapStatus === 'failed' && !cardUp;
     return (
-      <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of players, courts and hits near you" onPress={onExpand} disabled={!onExpand} style={styles.card}>
-        <Reanimated.View style={[StyleSheet.absoluteFill, cardFade]}>
+      <Pressable
+        accessibilityRole={failed || onExpand ? 'button' : undefined}
+        accessibilityLabel={failed ? "The map didn't load. Tap to try again" : 'Map of players, courts and hits near you'}
+        onPress={failed ? () => canvas.current?.retry() : onExpand}
+        disabled={!failed && !onExpand}
+        style={styles.card}
+      >
+        {/* Not yet drawn: covered, not tappable, and not read out (the city and its players come with the map). */}
+        <Reanimated.View pointerEvents={cardUp ? 'auto' : 'none'} accessibilityElementsHidden={!cardUp} importantForAccessibility={cardUp ? 'auto' : 'no-hide-descendants'} style={[StyleSheet.absoluteFill, cardGrow]}>
           {mapView}
           <PreviewOverlay cityName={cityName} count={model.inCity.length} placeCount={model.cardCourts.length} hitCount={model.cardHits.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} lock={lock} />
           <MapCredit align="right" style={{ position: 'absolute', right: 10, bottom: 10 }} />
         </Reanimated.View>
+        {/* Over the map until it has drawn, then fading off it. */}
+        {!loaderGone ? (
+          <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.cover, coverFade]}>
+            {failed ? <MapCardFailed /> : <MapCardLoading />}
+          </Reanimated.View>
+        ) : null}
       </Pressable>
     );
   }
@@ -224,6 +254,8 @@ export function NearbyMap(props: NearbyMapProps) {
         <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} locationMenu={choosing} />
         <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
         {model.courtsOn && far && !model.selectedCourt && !model.query.trim() ? <CourtsZoomNote /> : null}
+        {/* Slow to come, or didn't: a small pill under the chips, clear of the pins around you. */}
+        <MapLoadPill status={mapStatus} onRetry={() => canvas.current?.retry()} />
       </View>
       <View pointerEvents="box-none" style={styles.bottom}>
         {/* What is up along the bottom (the tray or a card) glides in and out, the map's buttons riding on top of it: CardStage. */}
@@ -257,7 +289,8 @@ export function NearbyMap(props: NearbyMapProps) {
 
 const styleDefinitions = StyleSheet.create({
   card: { height: HEIGHT, borderRadius: radius.xl, overflow: 'hidden', backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.border },
-  waiting: { alignItems: 'center', justifyContent: 'center' },
+  // The card's own colour, solid, over the map while it loads.
+  cover: { backgroundColor: colors.bgElevated },
   fill: { flex: 1, backgroundColor: colors.bgElevated, overflow: 'hidden' },
   top: { position: 'absolute', left: 0, right: 0, top: 0, gap: 2 },
   // The map's buttons, riding on whatever is up along the bottom.
