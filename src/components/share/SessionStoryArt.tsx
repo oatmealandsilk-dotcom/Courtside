@@ -24,7 +24,8 @@ export const STORY_DESIGNS: { key: StoryDesign; label: string }[] = [
 /**
  * A session as an Instagram story, 9:16, drawn at any width (everything
  * scales with it). All three are the session card the composer shows (the
- * brand's colour on this court, its wash and faint court lines, the time as
+ * brand's colour on this court, or the shirt's cream on the CourtSide court
+ * itself, see cardLook; its wash and faint court lines, the time as
  * the headline), with the CourtSide lockup and courtsidebase.com on it:
  *
  * - 'photo': your post's photo (or clip's cover, or one you choose) edge to

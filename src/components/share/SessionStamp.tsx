@@ -3,14 +3,15 @@ import { StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandMark } from '@/components/BrandMark';
-import { Avatar, BrandWash } from '@/components/ui';
-import { cardLook } from '@/components/session/SessionCard';
+import { Avatar } from '@/components/ui';
+import { CardWash, cardLook } from '@/components/session/SessionCard';
 import { Duration, Figure } from '@/components/session/Duration';
 import type { ID, SessionDetail } from '@/data/types';
 import { resultWord } from '@/features/activity/format';
 import { sessionPeople } from '@/features/activity/sessionTags';
 import { distanceFigure } from '@/features/activity/workouts';
 import { font } from '@/theme';
+import { useTheme } from '@/theme/ThemeProvider';
 
 /*
  * The session as a stamp for a story (Oct 4, owner: "make it our own"): the
@@ -30,7 +31,8 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [], scor
   place?: string;
   hidden?: ID[];
 }) {
-  const look = cardLook();
+  const { theme } = useTheme();
+  const look = cardLook(theme);
   const u = width / 300;
   const result = resultWord(session);
   // A workout's distance (migration 107) goes under the time, as on the post's card, so the
@@ -47,7 +49,7 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [], scor
   const rule = { height: StyleSheet.hairlineWidth * 2, backgroundColor: look.lines, marginVertical: 14 * u };
   return (
     <View style={[styles.card, { width, borderRadius: 20 * u, padding: 18 * u, backgroundColor: look.fill }]}>
-      {look.dark ? null : <BrandWash radius={20 * u} />}
+      <CardWash look={look} radius={20 * u} />
       <View style={styles.row}>
         <Text numberOfLines={1} style={[styles.eyebrow, { fontSize: 10.5 * u, letterSpacing: 1.2 * u, color: look.eyebrow }]}>{eyebrow}</Text>
         {result ? (
