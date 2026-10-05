@@ -29,7 +29,7 @@ import { takeInviteCourt } from '@/features/invite/referral';
 import { notKnownAdult } from '@/features/players/age';
 import { askWhoSeesYouOnLaunch, canChooseVisibility, onTeenMap } from '@/features/players/mapPrivacy';
 import { isTourOpen, useTourOpen } from '@/features/tour/tourStore';
-import { IN_TOWN_MILES } from '@/features/players/mapModel';
+import { IN_TOWN_MILES, liveCentre } from '@/features/players/mapModel';
 import { isClosedCourt } from '@/features/players/courts';
 import { agoLabel } from '@/components/map/markers';
 import { confirmUnfollow } from '@/lib/confirm';
@@ -202,9 +202,13 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const [sort, setSort] = useState<'new' | 'hot' | 'top' | 'unanswered'>('new');
   // One centre for everything on Find Players (the map card's dots and count,
   // Courts near you, which hits are near, the court search), so their numbers
-  // agree and courts load once: your profile's city, else where the phone is.
+  // agree and courts load once: the card's own (liveCentre) with Location on,
+  // else your profile's city, else where the phone is.
   const { city: myCityAt } = useMyCity(currentUser);
-  const firstCentre = myCityAt ?? detectedCoords ?? null;
+  const liveLat = location.locationOn ? detectedCoords?.lat : undefined;
+  const liveLng = location.locationOn ? detectedCoords?.lng : undefined;
+  const liveAt = useMemo(() => (liveLat === undefined || liveLng === undefined ? null : liveCentre({ lat: liveLat, lng: liveLng })), [liveLat, liveLng]);
+  const firstCentre = liveAt ?? myCityAt ?? detectedCoords ?? null;
   const nearCourts = useNearCourts(firstCentre);
   // Hits still ahead (or just started), not called off, not from anyone blocked
   // or muted, and only those the teen rule lets you see (as on court pages and the map).
