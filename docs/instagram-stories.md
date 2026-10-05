@@ -12,8 +12,9 @@ mark in white, see-through).
   Instagram installed**: Instagram opens on its story editor with the picture already
   in it, the way Strava does. Photo and Card go in as the whole story. Sticker
   goes in as a sticker you can move and resize, over the court's brand and
-  page colours; Overlay as a sticker over the court colour, deepened so the
-  white numbers read.
+  page colours; Overlay as a sticker over the court's darkest colour (a hint
+  of the court colour at the top), so the white numbers and the CourtSide
+  mark in the brand colour both read.
 - **Same build, no Instagram on the phone**: the phone's share sheet opens
   with the picture (the app checks first, so the button never does nothing).
 - **Older iPhone builds** (no react-native-share): the picture goes on the

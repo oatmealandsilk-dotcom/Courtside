@@ -44,14 +44,19 @@ const ACTIONS: { key: StoryAction; label: string; spoken: string; icon: React.Co
  * How Instagram's story editor gets each design: Photo and Card as the whole
  * story; Sticker and Overlay as a sticker over two colours. The stamp sits on
  * the court's own brand and page colours. The Overlay is white numbers, so it
- * goes over the court colour deepened toward the court's darkest (Oct 4
- * audit): on brand-to-page it faded into the cream at the bottom on the
- * default court. Read when tapped, so a court changed meanwhile is used.
+ * goes over the court's darkest colour, faintly tinted with the court at the
+ * top (Oct 4 audit): on brand-to-page it faded into the cream at the bottom on
+ * the default court. Darkest rather than a deepened court colour, because the
+ * CourtSide mark under the numbers is in the brand colour, the court's own
+ * hue: on deep green it all but vanished (about 1.1-1.4:1 on the cream and
+ * London courts); here white reads at 12:1 or better and the mark at about
+ * 2.2:1 or better where it sits, plus its light edge. Read when tapped, so a
+ * court changed meanwhile is used.
  */
 function storyLook(design: StoryDesign): StoryLook {
   if (design === 'overlay') {
-    const deep = pageIsDark() ? colors.bg : colors.text;
-    return { sticker: true, top: mixHex(colors.court, deep, 0.3), bottom: mixHex(colors.court, deep, 0.6) };
+    const deep = (pageIsDark() ? colors.bg : colors.text).slice(0, 7);
+    return { sticker: true, top: mixHex(deep, colors.court.slice(0, 7), 0.15), bottom: deep };
   }
   return { sticker: design === 'sticker', top: colors.brand.slice(0, 7), bottom: colors.bg.slice(0, 7) };
 }
