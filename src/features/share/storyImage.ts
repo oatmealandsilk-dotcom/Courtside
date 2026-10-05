@@ -57,11 +57,11 @@ export const INSTAGRAM_NOTE = 'In Instagram, pick your photo or video first, the
 /** What Copy says once the picture is on the clipboard: Instagram pastes it as a sticker. */
 export const COPIED_NOTE = 'Copied. In Instagram, pick your photo or video for the story, then tap Add sticker (or tap and hold, then Paste).';
 
-/** CourtSide's app at Meta (Oct 4): Instagram's own "Share to Stories" handoff needs it. Public, not a secret. */
-const FACEBOOK_APP_ID = '1407829631564079';
+/** CourtSide's app at Meta (Oct 4): Instagram's own "Share to Stories" handoff needs it. Public, not a secret. Also used by mediaStory.ts. */
+export const FACEBOOK_APP_ID = '1407829631564079';
 
 /** The address Instagram's story editor answers to (react-native-share opens it with ?source_application=FACEBOOK_APP_ID). */
-const STORIES_URL = 'instagram-stories://share';
+export const STORIES_URL = 'instagram-stories://share';
 
 /**
  * Where the picture went: into Instagram ('sent'), nowhere because this phone

@@ -17,6 +17,9 @@ import { confirm, confirmBlock } from '@/lib/confirm';
 import { notKnownAdult } from '@/features/players/age';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { removedLine } from '@/features/moderation/reasons';
+import { canShareMediaStory, shareMediaToStory, type StoryMediaKind } from '@/features/share/mediaStory';
+import { HandleSticker } from '@/components/share/HandleSticker';
+import { CourtSpinner } from '@/components/CourtSpinner';
 import type { Post, Story } from '@/data/types';
 
 type Row = {
@@ -52,6 +55,16 @@ export default function PostMenu() {
   const mine = !!item && item.authorId === currentUserId;
   const isSaved = saved.postIds.includes(id);
   const [done, setDone] = useState('');
+  // Share to Instagram Story: on its way (the file coming down), and the sticker photographed for it.
+  const [working, setWorking] = useState(false);
+  const sticker = useRef<View>(null);
+  // Gone: the menu has left the screen (the back button or a swipe, not only close()), so a share
+  // still on its way stops before it opens Instagram. Set false again on mount for React's dev double-mount.
+  const gone = useRef(false);
+  useEffect(() => {
+    gone.current = false;
+    return () => { gone.current = true; };
+  }, []);
 
   // The same rise and fall as the comments and Send-to sheets.
   const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
@@ -83,14 +96,56 @@ export default function PostMenu() {
   // archiving still work.
   const removed = item.removed;
   const admin = !!currentUser?.isAdmin;
+  // Your own clip or photo, straight into Instagram's story editor with a CourtSide sticker (Oct 5;
+  // builds with react-native-share only, never in a browser: see mediaStory.ts). A session post with
+  // a photo already goes there as the session's picture (its Photo design), so there it is the clip only.
+  const storyMedia: { url: string; kind: StoryMediaKind } | null = post && mine && !removed && currentUser && canShareMediaStory()
+    ? (post.videoUrl ? { url: post.videoUrl, kind: 'video' } : post.imageUrl && !post.session ? { url: post.imageUrl, kind: 'photo' } : null)
+    : null;
+  // Closing the menu (a tap above it, Done, the back button) while the file is still coming down
+  // cancels the share: Instagram does not open on its own a moment later.
+  const cancelled = () => closing.current || gone.current;
+  const toStory = async () => {
+    if (!post || !storyMedia || working) return;
+    setWorking(true);
+    try {
+      const said = await shareMediaToStory({ url: storyMedia.url, kind: storyMedia.kind, id: post.id, sticker: sticker.current, cancelled });
+      if (cancelled()) return;
+      if (said) setDone(said);
+      else close();
+    } catch (err) {
+      if (cancelled()) return;
+      setDone(err instanceof Error && err.message ? err.message : 'Instagram could not be opened. Try again.');
+    } finally {
+      if (!gone.current) setWorking(false);
+    }
+  };
+  // What Instagram gets is the file as uploaded (mediaStory.ts): "posted without sound" and a trim
+  // are applied by CourtSide's player, not cut into it, so the note says so rather than surprise anyone.
+  const trimmed = !!post && (post.trimStart != null || post.trimEnd != null);
+  const asIs = !!post && storyMedia?.kind === 'video' && (!!post.muted || trimmed);
+  const storyNote = !storyMedia ? undefined
+    : working ? (storyMedia.kind === 'video' ? 'Getting your clip ready…' : 'Getting your photo ready…')
+    : asIs && post?.muted ? (trimmed ? 'The full original clip, with its sound. Trim and mute it in Instagram.' : 'The original clip, with its sound. Mute it in Instagram.')
+    : asIs ? 'The full original clip, before your trim. Trim it in Instagram.'
+    : storyMedia.kind === 'video' ? 'Your clip in your story, with your @handle.' : 'Your photo in your story, with your @handle.';
+  const storyRow: Row | null = post && storyMedia ? {
+    key: 'ig-story', icon: 'logo-instagram',
+    label: post.session ? 'Share clip to Instagram Story' : 'Share to Instagram Story',
+    note: storyNote,
+    onPress: toStory,
+  } : null;
   // A hit is a moment, not a keepsake: nothing to save or send on.
   const rows: Row[] = post && !removed ? [
     { key: 'save', icon: isSaved ? 'bookmark' : 'bookmark-outline', label: isSaved ? 'Remove from saved' : 'Save', onPress: () => { actions.toggleSavePost(post.id); close(); } },
     { key: 'send', icon: 'paper-plane-outline', label: 'Send to…', onPress: () => router.replace({ pathname: '/share', params: { kind: 'post', id: post.id } }) },
+    // Your own clip or photo straight into a story leads; on a session post it follows the session's picture.
+    ...(storyRow && !post.session ? [storyRow] : []),
     // Your own post with a session on it shares as the session's story picture (share-session), the way Strava does; any other post as its own card.
     mine && post.session
       ? { key: 'story', icon: 'logo-instagram', label: 'Share to Instagram', note: 'Your session as a story picture.', onPress: () => router.replace({ pathname: '/share-session', params: { post: post.id } }) }
       : { key: 'card', icon: 'image-outline', label: 'Share as image', onPress: () => router.replace({ pathname: '/share-card', params: { id: post.id } }) },
+    ...(storyRow && post.session ? [storyRow] : []),
     { key: 'link', icon: 'link-outline', label: 'Share link', onPress: async () => { try { const note = await shareOutside(postShareText(post, users.find((u) => u.id === post.authorId), currentUserId), url); if (note) setDone(note); else close(); } catch { setDone(`Share this link: ${url}`); } } },
   ] : [];
   if (mine && story) {
@@ -145,6 +200,15 @@ export default function PostMenu() {
       <SheetBackdrop leaving={leaving} />
       <Pressable accessibilityRole="button" accessibilityLabel="Close menu" onPressIn={close} style={StyleSheet.absoluteFill} />
       <Animated.View onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); if (h > 0) setSheetH(h + 24); }} style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md, transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [0, sheetH] }) }] }]}>
+        {storyMedia && currentUser ? (
+          <>
+            {/* The sticker for Share to Instagram Story, drawn out of sight under the sheet's own colour and photographed when tapped (mediaStory.ts). */}
+            <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.stickerStage}>
+              <View ref={sticker} collapsable={false}><HandleSticker handle={currentUser.handle} /></View>
+            </View>
+            <View pointerEvents="none" style={styles.stickerCover} />
+          </>
+        ) : null}
         <View style={styles.grabber} />
         {done ? (
           <View style={styles.doneBox}>
@@ -165,8 +229,10 @@ export default function PostMenu() {
               </View>
             ) : null}
             {rows.map((row) => (
-              <Pressable key={row.key} accessibilityRole="button" accessibilityLabel={row.label} onPress={() => { void row.onPress(); }} style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
-                {row.icon === 'court'
+              <Pressable key={row.key} accessibilityRole="button" accessibilityLabel={row.label} disabled={working} onPress={() => { void row.onPress(); }} style={({ pressed }) => [styles.row, pressed && styles.rowPressed, working && row.key !== 'ig-story' && styles.rowDimmed]}>
+                {working && row.key === 'ig-story'
+                  ? <View style={styles.glyph}><CourtSpinner size={20} ink={colors.text} /></View>
+                  : row.icon === 'court'
                   ? <View style={styles.glyph}><CourtGlyph size={17} color={row.danger ? colors.danger : colors.text} /></View>
                   : <Ionicons name={row.icon} size={22} color={row.danger ? colors.danger : colors.text} />}
                 <View style={{ flex: 1 }}>
@@ -190,6 +256,10 @@ const styleDefinitions = StyleSheet.create({
   // The court glyph is narrower than an icon: as wide as one, so the labels line up.
   glyph: { width: 22, alignItems: 'center' },
   rowPressed: { backgroundColor: colors.surface },
+  rowDimmed: { opacity: 0.45 },
+  // The Instagram sticker's hidden copy, and the sheet-coloured cover over it (the rows draw on top).
+  stickerStage: { position: 'absolute', left: 0, top: 0 },
+  stickerCover: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
   label: { ...typography.body, fontWeight: '600', color: colors.text },
   note: { ...typography.small, color: colors.textMuted, marginTop: 2 },
   removedBox: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, paddingHorizontal: spacing.md, marginBottom: 4, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
