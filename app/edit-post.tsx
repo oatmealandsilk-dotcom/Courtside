@@ -12,6 +12,9 @@ import { availableShare, chosenShare, choiceFromTicks, postShare, type HealthCho
 import { openPlacePicker } from '@/features/places/picker';
 import { TagPlayers } from '@/components/TagPlayers';
 import { Button, Field } from '@/components/ui';
+import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
+import * as haptics from '@/lib/haptics';
+import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
 
@@ -82,11 +85,24 @@ export default function EditPost() {
   const healthShown = health ?? choiceFromTicks(postShare(post?.session), available);
 
   const canSave = filled && mine && (isQuestion ? title.trim().length >= 3 : true);
+  // A quick second tap on Save would ask twice.
+  const [checking, setChecking] = useState(false);
   const save = () => {
-    if (!canSave) return;
-    if (post) actions.editPost(post.id, { body: body.trim(), taggedUserIds: tagged, location, court, ...(health && available.length ? { share: chosenShare(health, available) } : {}) });
-    if (question) actions.editQuestion(question.id, { title: title.trim(), body: body.trim() });
-    setCloseSignal((n) => n + 1);
+    if (!canSave || checking) return;
+    setChecking(true);
+    // Words CourtSide refuses (migration 117) are said here, and the sheet
+    // stays open with what you wrote, to change and save again.
+    void actions.wordsRefused(isQuestion ? [title, body] : [body, location]).then((refused) => {
+      setChecking(false);
+      if (refused) {
+        haptics.reject();
+        showToast({ title: BLOCKED_WORDS_NOTE, body: 'Change them and save again.', icon: 'alert-circle-outline', long: true });
+        return;
+      }
+      if (post) actions.editPost(post.id, { body: body.trim(), taggedUserIds: tagged, location, court, ...(health && available.length ? { share: chosenShare(health, available) } : {}) });
+      if (question) actions.editQuestion(question.id, { title: title.trim(), body: body.trim() });
+      setCloseSignal((n) => n + 1);
+    });
   };
 
   return (
@@ -118,7 +134,7 @@ export default function EditPost() {
             {tracker && available.length ? <HealthShareRow activity={tracker} choice={healthShown} onChoice={setHealth} /> : null}
           </>
         )}
-        {mine ? <Button label="Save" onPress={save} disabled={!canSave} full /> : null}
+        {mine ? <Button label="Save" onPress={save} disabled={!canSave} loading={checking} full /> : null}
         <Text style={styles.note}>It will say “Edited” next to the date.</Text>
       </ScrollView>
     </DragSheet>

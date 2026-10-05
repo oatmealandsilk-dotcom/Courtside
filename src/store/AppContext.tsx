@@ -586,10 +586,11 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   changeHandle: (handle: string) => Promise<void>;
   setPref: (key: PrefKey, value: boolean) => void;
   /**
-   * Whether a post's or Instant's words (caption, place) would be refused
-   * for slurs, sexual words about children or threats (migration 117), asked
-   * before its photo or clip goes up so the draft stays. False in the demo,
-   * or when it cannot be asked (the post is still checked when saved).
+   * Whether some words (a caption, a place, a thread, an edit) would be
+   * refused for slurs, sexual words about children, telling someone to kill
+   * themselves or the gravest threats (migration 117), asked before anything
+   * goes up so the draft stays. False in the demo, or when it cannot be
+   * asked (the words are still checked when saved).
    */
   wordsRefused: (texts: string[]) => Promise<boolean>;
   /** Your Hidden words, asked for (migration 117). 'not_ready' on a database without them. */
@@ -744,12 +745,14 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    * A comment on a post; `photo` is a picture picked on this device, shrunk and uploaded here.
    * `replyTo` makes it a reply to that comment: it goes under the thread's top comment
    * (one level, as on Instagram) and tells that comment's writer.
+   * Resolves 'blocked' when its words were refused (migration 117): it comes
+   * off the list again, so the box can have the words back.
    */
-  addComment: (postId: ID, body: string, photo?: string, replyTo?: ID) => void;
+  addComment: (postId: ID, body: string, photo?: string, replyTo?: ID) => Promise<'blocked' | undefined>;
   toggleLikeStory: (storyId: ID) => void;
   toggleLikeComment: (commentId: ID) => void;
-  /** A comment on an Instant; `replyTo` as for addComment. */
-  addStoryComment: (storyId: ID, body: string, replyTo?: ID) => void;
+  /** A comment on an Instant; `replyTo` and what it resolves as for addComment. */
+  addStoryComment: (storyId: ID, body: string, replyTo?: ID) => Promise<'blocked' | undefined>;
   /** New and deleted comments on one post or Instant arrive live while its comments are open. Returns the way to stop. */
   watchComments: (targetId: ID, kind: 'post' | 'hit') => () => void;
 
@@ -762,8 +765,11 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   voteQuestion: (questionId: ID, direction: 1 | -1) => void;
   /** Pick an option in a thread's poll (again to change it). */
   votePoll: (questionId: ID, option: number) => void;
-  /** A reply to a thread, or to a reply in it; `media` is a photo or clip picked on this device, uploaded here. */
-  addAnswer: (questionId: ID, body: string, parentAnswerId?: ID, media?: Answer['media']) => void;
+  /**
+   * A reply to a thread, or to a reply in it; `media` is a photo or clip picked on this device, uploaded here.
+   * Resolves 'blocked' when its words were refused (migration 117), as addComment does.
+   */
+  addAnswer: (questionId: ID, body: string, parentAnswerId?: ID, media?: Answer['media']) => Promise<'blocked' | undefined>;
   voteAnswer: (answerId: ID, direction: 1 | -1) => void;
 
   submitCoachingRequest: (coachId: ID, serviceId: ID, question: string, videoLabel?: string) => ID;
@@ -840,7 +846,8 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
 
   /* Ask a coach */
   askCoach: (input: NewCoachQuestionInput) => ID;
-  replyToCoachQuestion: (questionId: ID, body: string) => void;
+  /** Resolves 'blocked' when its words were refused (migration 117), as addComment does. */
+  replyToCoachQuestion: (questionId: ID, body: string) => Promise<'blocked' | undefined>;
   toggleReplyHelpful: (replyId: ID) => void;
   /** The asker deletes their question, and the coaches' answers with it. Puts it back with a toast if the server refuses. */
   deleteCoachQuestion: (questionId: ID) => void;
@@ -1047,9 +1054,11 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    * Send photos from the camera roll in a chat (up to 10), with an optional
    * caption. They show at once; each is shrunk on the phone and put on the
    * chat's private shelf, then the message is saved. One that fails offers a
-   * retry, which sends only what has not gone up yet.
+   * retry, which sends only what has not gone up yet. Resolves 'blocked'
+   * when the caption's words were refused (migration 117): the message comes
+   * out of the chat, so the chat can put the photos and the words back.
    */
-  sendPhotos: (conversationId: ID, photos: { uri: string; width: number; height: number }[], caption?: string, replyToId?: ID) => void;
+  sendPhotos: (conversationId: ID, photos: { uri: string; width: number; height: number }[], caption?: string, replyToId?: ID) => Promise<'blocked' | undefined>;
   /**
    * The age check: records a date of birth ("2009-04-17") once. Under 13 the
    * account is removed and this phone will not ask again; 13 to 17 becomes a
@@ -1102,8 +1111,12 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    * otherwise why not, naming them, ready to show in a long note.
    */
   messageLock: (userId: ID) => Promise<string | null>;
-  /** New words for a message of yours; it then shows as edited. */
-  editMessage: (messageId: ID, body: string) => void;
+  /**
+   * New words for a message of yours; it then shows as edited. Resolves
+   * 'blocked' when they were refused (migration 117): the message goes back
+   * to what it said, so the chat can put the new words back in the box.
+   */
+  editMessage: (messageId: ID, body: string) => Promise<'blocked' | undefined>;
   /** Sends a message that did not go through, again. */
   retryMessage: (messageId: ID) => void;
   /** Takes a message of yours back, for everyone in the chat. */
@@ -4025,8 +4038,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [requireUser],
   );
 
+  /** A comment refused for its words (migration 117) comes off the list again; says 'blocked' so the box can have the words back. */
+  const takeBackComment = (commentId: ID, result: 'blocked' | undefined): 'blocked' | undefined => {
+    if (result !== 'blocked') return undefined;
+    setState((prev) => dropComment(prev, commentId));
+    return 'blocked';
+  };
+
   const addStoryComment = useCallback(
-    (storyId: ID, body: string, replyTo?: ID) => {
+    (storyId: ID, body: string, replyTo?: ID): Promise<'blocked' | undefined> => {
       const me = requireUser();
       const comment: Comment = {
         id: nextId('c'), postId: storyId, authorId: me, body, createdAt: new Date().toISOString(), likedBy: [],
@@ -4034,8 +4054,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       };
       haptics.commit();
       // A plain comment has no parent; only a reply needs its parent to be a saved row.
-      // Refused for its words (migration 117): it comes off the list again (the toast says why).
-      if (live(me, storyId) && (!comment.parentId || live(comment.parentId))) void remote.insertStoryComment(comment).then((r) => { if (r === 'blocked') setState((prev) => dropComment(prev, comment.id)); });
+      // Refused for its words (migration 117): it comes off the list again (the toast says why), and the box gets the words back.
+      const saved = live(me, storyId) && (!comment.parentId || live(comment.parentId))
+        ? remote.insertStoryComment(comment).then((r) => takeBackComment(comment.id, r), () => undefined)
+        : Promise.resolve(undefined);
       setState((prev) => {
         const story = prev.stories.find((st) => st.id === storyId);
         const next: AppState = {
@@ -4045,12 +4067,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         };
         return notifyComment(next, comment, story?.authorId, 'hit', false);
       });
+      return saved;
     },
     [requireUser],
   );
 
   const addComment = useCallback(
-    (postId: ID, body: string, photo?: string, replyTo?: ID) => {
+    (postId: ID, body: string, photo?: string, replyTo?: ID): Promise<'blocked' | undefined> => {
       const me = requireUser();
       const comment: Comment = {
         id: nextId('c'),
@@ -4065,11 +4088,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...replyFields(stateRef.current.comments, replyTo, postId),
       };
       haptics.commit();
+      let saved: Promise<'blocked' | undefined> = Promise.resolve(undefined);
       // A plain comment has no parent; only a reply needs its parent to be a saved row.
       if (live(me, postId) && (!comment.parentId || live(comment.parentId))) {
-        // Refused for its words (migration 117): it comes off the list again (the toast says why).
-        if (!photo) void remote.insertComment(comment).then((r) => { if (r === 'blocked') setState((prev) => dropComment(prev, comment.id)); });
-        else void (async () => {
+        // Refused for its words (migration 117): it comes off the list again (the toast says why), and the box gets the words back.
+        if (!photo) saved = remote.insertComment(comment).then((r) => takeBackComment(comment.id, r), () => undefined);
+        else saved = (async (): Promise<'blocked' | undefined> => {
           // Shrunk first (about 1080 px, a couple of hundred KB), then uploaded, then saved with its address.
           let imageUrl: string | undefined;
           // The words beyond the "@them" a reply starts with: a reply that was only a photo has none.
@@ -4078,10 +4102,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           catch { showToast({ title: 'The photo didn’t upload', body: said ? 'Your comment was posted without it.' : 'Your comment wasn’t posted. Try again in a moment.', icon: 'alert-circle-outline' }); }
           // A comment that was only a photo, which did not upload, is not saved
           // empty, and leaves the thread rather than staying as a blank row.
-          if (!imageUrl && !said) { setState((prev) => dropComment(prev, comment.id)); return; }
+          if (!imageUrl && !said) { setState((prev) => dropComment(prev, comment.id)); return undefined; }
           setState((prev) => ({ ...prev, comments: imageUrl ? prev.comments.map((c) => (c.id === comment.id ? { ...c, imageUrl } : c)) : prev.comments.map((c) => (c.id === comment.id ? { ...c, imageUrl: undefined } : c)) }));
-          if ((await remote.insertComment({ ...comment, imageUrl })) === 'blocked') setState((prev) => dropComment(prev, comment.id));
-        })();
+          return takeBackComment(comment.id, await remote.insertComment({ ...comment, imageUrl }));
+        })().catch(() => undefined);
       }
       setState((prev) => {
         const post = prev.posts.find((p) => p.id === postId);
@@ -4094,6 +4118,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         };
         return notifyComment(next, comment, post?.authorId, 'post', true);
       });
+      return saved;
     },
     [requireUser],
   );
@@ -4197,7 +4222,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const answersDeleted = useRef(new Set<ID>());
 
   const addAnswer = useCallback(
-    (questionId: ID, body: string, parentAnswerId?: ID, media?: Answer['media']) => {
+    (questionId: ID, body: string, parentAnswerId?: ID, media?: Answer['media']): Promise<'blocked' | undefined> => {
       haptics.commit();
       const me = requireUser();
       let made: Answer | null = null;
@@ -4248,9 +4273,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         return next;
       });
+      let result: Promise<'blocked' | undefined> = Promise.resolve(undefined);
       if (made && live(me, questionId)) {
         const answer: Answer = made;
         const deleted = () => answersDeleted.current.has(answer.id);
+        let refused = false;
         const saving = (async () => {
           // A picture or clip from this device goes up first; the reply is saved with its web address.
           let hosted = answer.media;
@@ -4271,7 +4298,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           // A reply that was only a picture, which did not upload, is not saved empty.
           if (!hosted && !answer.body.trim()) return false;
           if ((await remote.upsertAnswer({ ...answer, media: hosted })) === 'blocked') {
-            // Refused for its words (migration 117): it comes off the thread again (the toast says why).
+            // Refused for its words (migration 117): it comes off the thread again (the toast says why), and the box gets the words back.
+            refused = true;
             setState((prev) => ({
               ...prev,
               answers: prev.answers.filter((a) => a.id !== answer.id),
@@ -4283,8 +4311,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         })().catch(() => false);
         answerSaves.current.set(answer.id, saving);
         void saving.then(() => answerSaves.current.delete(answer.id));
+        result = saving.then(() => (refused ? 'blocked' : undefined));
       }
       setState((prev) => notifyMentions(prev, body, me, questionId, 'question', prev.questions.find((q) => q.id === questionId)?.authorId));
+      return result;
     },
     [requireUser],
   );
@@ -4371,7 +4401,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const replyToCoachQuestion = useCallback(
-    (questionId: ID, body: string, parentAnswerId?: ID) => {
+    (questionId: ID, body: string, parentAnswerId?: ID): Promise<'blocked' | undefined> => {
       const me = requireUser();
       const reply: CoachReply = {
         id: nextId('cr'),
@@ -4382,15 +4412,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         helpfulBy: [],
       };
       haptics.commit();
-      if (live(me, questionId)) void remote.insertCoachReply(reply).then((r) => {
-        if (r !== 'blocked') return;
-        // Refused for its words (migration 117): it comes off the question again (the toast says why).
+      const saved = live(me, questionId) ? remote.insertCoachReply(reply).then((r): 'blocked' | undefined => {
+        if (r !== 'blocked') return undefined;
+        // Refused for its words (migration 117): it comes off the question again (the toast says why), and the box gets the words back.
         setState((prev) => ({
           ...prev,
           coachReplies: prev.coachReplies.filter((x) => x.id !== reply.id),
           coachQuestions: prev.coachQuestions.map((q) => (q.id === questionId ? { ...q, replyIds: q.replyIds.filter((id) => id !== reply.id) } : q)),
         }));
-      });
+        return 'blocked';
+      }, () => undefined) : Promise.resolve(undefined);
       setState((prev) => {
         const question = prev.coachQuestions.find((q) => q.id === questionId);
         const next: AppState = {
@@ -4411,6 +4442,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             })
           : next;
       });
+      return saved;
     },
     [requireUser],
   );
@@ -5198,12 +5230,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * fills as they go), then saves the message. Photos already up (a retry
    * after a failure part way) are not sent again. If the message was
    * unsent while its photos were still going up, they are taken back down
-   * and nothing is saved.
+   * and nothing is saved. Resolves 'blocked' when the caption's words were
+   * refused (migration 117).
    */
-  const deliverPhotos = useCallback(async (message: Message) => {
+  const deliverPhotos = useCallback(async (message: Message): Promise<'blocked' | undefined> => {
     const me = stateRef.current.currentUserId;
     const photos = message.photos ?? [];
-    if (!me || !photos.length) return;
+    if (!me || !photos.length) return undefined;
     const setFailed = () => patchMessage(message.id, { sending: undefined, failed: true });
     const stillThere = () => stateRef.current.messages.some((m) => m.id === message.id);
     const sent: ChatPhoto[] = [];
@@ -5226,35 +5259,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setFailed();
       // A photo the phone could not re-draw will not go on a retry either: say so.
       if (error instanceof Error && error.message === CHAT_PHOTO_UNREADABLE) showToast({ title: 'Couldn’t send that photo', body: 'This photo couldn’t be prepared. Try another one.', icon: 'image-outline' });
-      return;
+      return undefined;
     }
     if (!stillThere()) {
       withdrawn.current.delete(message.id);
       clearSendProgress(message.id);
       const hosted = sent.map((p) => p.path).filter((path) => !isLocalMedia(path));
       if (hosted.length) void remote.removeChatPhotos(hosted);
-      return;
+      return undefined;
     }
     const hosted: Message = { ...message, photos: sent, failed: undefined, sending: undefined };
     const result = await remote.insertMessage(hosted).catch(() => 'failed' as const);
     clearSendProgress(message.id);
-    if (calledBack(message.id, result, sent)) return;
-    if (result === 'blocked') { takeBackRefused(message, sent); return; }
+    if (calledBack(message.id, result, sent)) return undefined;
+    if (result === 'blocked') { takeBackRefused(message, sent); return 'blocked'; }
     if (result === 'failed' || result === 'refused') setFailed();
     else patchMessage(message.id, { sending: undefined });
     if (result === 'refused') void refreshChat(message.conversationId);
+    return undefined;
   }, [refreshChat, patchMessage]);
 
-  const sendPhotos = useCallback((conversationId: ID, picked: { uri: string; width: number; height: number }[], caption = '', replyToId?: ID) => {
+  const sendPhotos = useCallback((conversationId: ID, picked: { uri: string; width: number; height: number }[], caption = '', replyToId?: ID): Promise<'blocked' | undefined> => {
     const photos: ChatPhoto[] = picked.slice(0, MAX_CHAT_PHOTOS).map((p) => ({ path: p.uri, w: Math.max(1, p.width), h: Math.max(1, p.height) }));
-    if (!photos.length) return;
+    if (!photos.length) return Promise.resolve(undefined);
     haptics.commit();
     const me = requireUser();
     const sending = live(me, conversationId);
     const message: Message = { ...makeMessage(conversationId, me, caption.trim(), 'photo'), photos, ...(replyToId ? { replyToId } : null), ...(sending ? { sending: true } : null) };
     setState((prev) => appendMessage(prev, message));
     // The demo has nowhere to put them: they stay as they are, on this device.
-    if (sending) void deliverPhotos(message);
+    return sending ? deliverPhotos(message).catch(() => undefined) : Promise.resolve(undefined);
   }, [requireUser, appendMessage, makeMessage, deliverPhotos]);
 
   /* Group chats. Most changes show at once and are saved afterwards; when the
@@ -5616,22 +5650,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, [requireUser, deliverPhotos, deliverVoice, patchMessage]);
 
-  const editMessage = useCallback((messageId: ID, body: string) => {
+  const editMessage = useCallback((messageId: ID, body: string): Promise<'blocked' | undefined> => {
     const me = requireUser();
     const words = body.trim();
     const message = stateRef.current.messages.find((m) => m.id === messageId);
-    if (!words || !message || message.senderId !== me || message.body === words) return;
+    if (!words || !message || message.senderId !== me || message.body === words) return Promise.resolve(undefined);
     haptics.tap();
     const editedAt = new Date().toISOString();
     setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, body: words, editedAt } : m)) }));
-    if (!live(me, messageId)) return;
-    void remote.editMessage(messageId, words).catch(() => false).then((saved) => {
-      if (saved === true) return;
+    if (!live(me, messageId)) return Promise.resolve(undefined);
+    return remote.editMessage(messageId, words).catch(() => false).then((saved): 'blocked' | undefined => {
+      if (saved === true) return undefined;
       // Not saved: the words go back to what they were, unless they have been changed again since.
       setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === messageId && m.body === words && m.editedAt === editedAt ? { ...m, body: message.body, editedAt: message.editedAt } : m)) }));
-      // Refused for its words (migration 117): saying so is the whole message.
-      if (saved === 'blocked') showToast({ title: BLOCKED_WORDS_NOTE, icon: 'alert-circle-outline', long: true });
-      else showToast({ title: 'Your edit didn’t save', body: 'Try again in a moment.', icon: 'alert-circle-outline' });
+      // Refused for its words (migration 117): the toast says why, and the chat puts the new words back in the box.
+      if (saved === 'blocked') { showToast({ title: BLOCKED_WORDS_NOTE, icon: 'alert-circle-outline', long: true }); return 'blocked'; }
+      showToast({ title: 'Your edit didn’t save', body: 'Try again in a moment.', icon: 'alert-circle-outline' });
+      return undefined;
     });
   }, [requireUser]);
 

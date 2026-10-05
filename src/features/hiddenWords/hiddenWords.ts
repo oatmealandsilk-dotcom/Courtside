@@ -18,8 +18,11 @@ import type { Answer, CoachReply, Comment, HiddenWords, ID } from '@/data/types'
 
 /**
  * What the app says when the database refuses words (migration 117's
- * 'blocked_words'): slurs, sexual words about children and threats are
- * refused wherever anyone writes, edits included.
+ * 'blocked_words'): slurs, sexual words about children, telling someone to
+ * kill themselves and the gravest threats (rape, shooting) are refused
+ * wherever anyone writes, edits included. Banter like "I'm gonna kill you"
+ * is not: it is hidden like any offensive words. Whatever was refused goes
+ * back in its box, so nothing written is lost.
  */
 export const BLOCKED_WORDS_NOTE = 'This includes words that break CourtSide’s rules.';
 

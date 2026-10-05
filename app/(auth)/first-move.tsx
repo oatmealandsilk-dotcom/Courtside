@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, KeyboardAvoidingView, Platform } from 'react-native';
 import { router } from 'expo-router';
 import Animated, { Easing, FadeIn, FadeInDown } from 'react-native-reanimated';
@@ -10,6 +10,7 @@ import { LevelPill } from '@/components/LevelPill';
 import { Avatar } from '@/components/ui';
 import { Wash } from '@/components/Wash';
 import type { FirstMove } from '@/data/remote';
+import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import { levelBadge } from '@/lib/badges';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
@@ -57,20 +58,37 @@ export default function FirstMove() {
     actions.noteFirstMove(move);
     leave(() => { replaceWithStart(); if (then) setTimeout(then, 380); });
   };
+  // Words CourtSide refuses (migration 117) are said before leaving, and
+  // what you wrote stays here to change. A second tap meanwhile does nothing.
+  const checking = useRef(false);
+  const unlessRefused = (texts: string[], go: () => void) => {
+    if (checking.current) return;
+    checking.current = true;
+    void actions.wordsRefused(texts).then((refused) => {
+      checking.current = false;
+      if (!refused) { go(); return; }
+      haptics.reject();
+      showToast({ title: BLOCKED_WORDS_NOTE, body: 'Change them and post again.', icon: 'alert-circle-outline', long: true });
+    });
+  };
   const sendAnswer = () => {
     if (!question || answer.trim().length < 3) return;
-    haptics.commit();
-    actions.addAnswer(question.q.id, answer.trim());
-    showToast({ title: 'Answer posted', body: `${question.asker?.name.split(' ')[0] ?? 'They'} will see it.`, icon: 'chatbubble-outline', href: `/question/${question.q.id}` });
-    done('answer');
+    unlessRefused([answer], () => {
+      haptics.commit();
+      actions.addAnswer(question.q.id, answer.trim());
+      showToast({ title: 'Answer posted', body: `${question.asker?.name.split(' ')[0] ?? 'They'} will see it.`, icon: 'chatbubble-outline', href: `/question/${question.q.id}` });
+      done('answer');
+    });
   };
   const sendAsk = () => {
     const title = ask.trim();
     if (title.length < 8) return;
-    haptics.commit();
-    const id = actions.addQuestion({ title, body: '', topic: 'technique', tags: [] });
-    showToast({ title: 'Question posted', body: 'Players and coaches can answer it now.', icon: 'help-circle-outline', href: `/question/${id}` });
-    done('ask');
+    unlessRefused([title], () => {
+      haptics.commit();
+      const id = actions.addQuestion({ title, body: '', topic: 'technique', tags: [] });
+      showToast({ title: 'Question posted', body: 'Players and coaches can answer it now.', icon: 'help-circle-outline', href: `/question/${id}` });
+      done('ask');
+    });
   };
 
   return (

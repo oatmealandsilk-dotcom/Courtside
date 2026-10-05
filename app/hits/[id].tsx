@@ -47,9 +47,12 @@ export default function HitThread() {
   // "Replying to @them ×" line above it; each thread stays folded until opened.
   const input = useRef<TextInput>(null);
   const [openThreads, setOpenThreads] = useState<Set<ID>>(() => new Set());
-  const { replyingTo, start: startReply, change: changeDraft, stop: stopReplying, done: doneReplying, words } = useReplyDraft(setDraft, () => input.current?.focus());
+  const { replyingTo, start: startReply, change: changeDraft, stop: stopReplying, done: doneReplying, resume: resumeDraft, words } = useReplyDraft(setDraft, () => input.current?.focus());
   // Words of your own, beyond the "@them " Reply put in: a bare "@them" is not sent.
   const hasWords = !!words(draft).trim();
+  // What is in the box now, for words sent and then refused (see submit).
+  const latestDraft = useRef(draft);
+  latestDraft.current = draft;
   const toggleThread = (topId: ID) => {
     haptics.tap();
     setOpenThreads((s) => { const next = new Set(s); if (next.has(topId)) next.delete(topId); else next.add(topId); return next; });
@@ -85,8 +88,13 @@ export default function HitThread() {
     const text = draft.trim();
     if (!hasWords) return;
     const answering = replyingTo?.id;
+    const was = replyingTo;
     if (answering) { const top = threadOf(comments, answering); if (top) setOpenThreads((s) => new Set(s).add(top)); }
-    actions.addStoryComment(story.id, text, answering);
+    // Refused for its words (migration 117): the toast says why, and what you
+    // wrote comes back into the box (if you haven't started something else there).
+    void actions.addStoryComment(story.id, text, answering).then((result) => {
+      if (result === 'blocked' && !latestDraft.current.trim()) resumeDraft(text, was);
+    });
     setDraft('');
     doneReplying();
   };

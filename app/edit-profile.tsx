@@ -6,7 +6,9 @@ import { ProfilePhotoPicker } from '@/components/ProfilePhotoPicker';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { Button, Field, Screen, SegmentedControl } from '@/components/ui';
 import { SCALES, ratingBand, roundRating } from '@/features/players/ratingScales';
+import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import * as haptics from '@/lib/haptics';
+import { show as showToast } from '@/lib/toast';
 import { LocationField } from '@/components/LocationField';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -21,6 +23,8 @@ export default function EditProfile() {
   const [bio, setBio] = useState(currentUser?.bio ?? '');
   const [location, setLocation] = useState(currentUser?.location ?? '');
   const [cityAt, setCityAt] = useState(currentUser?.cityAt ?? null);
+  // Words CourtSide refuses (migration 117) are said before leaving, and what you wrote stays to change.
+  const [checking, setChecking] = useState(false);
   // The first time your account is here, its details fill the fields — once, so typing is never overwritten.
   const filled = useRef(!!currentUser);
   useEffect(() => {
@@ -60,6 +64,21 @@ export default function EditProfile() {
     setSystem(next);
     // A number on one scale means nothing on the other: start from the middle of the new one.
     setRatingText((next === 'UTR' ? 6 : 3.5).toFixed(1));
+  };
+  const saveAll = () => {
+    if (checking) return;
+    setChecking(true);
+    void actions.wordsRefused([name, bio, location]).then((refused) => {
+      setChecking(false);
+      if (refused) {
+        haptics.reject();
+        showToast({ title: BLOCKED_WORDS_NOTE, body: 'Change them and save again.', icon: 'alert-circle-outline', long: true });
+        return;
+      }
+      actions.updateIdentity({ name: name.trim(), bio: bio.trim(), location: location.trim(), cityAt: location.trim() ? cityAt : null });
+      saveRating();
+      router.back();
+    });
   };
   const saveRating = () => {
     if (!prof || !ratingOk) return;
@@ -107,7 +126,7 @@ export default function EditProfile() {
           ) : null}
           <Field label="Bio" value={bio} onChangeText={setBio} multiline />
           <LocationField value={location} onChange={(next, at) => { setLocation(next); setCityAt(at); }} />
-          <Button label="Save changes" disabled={!name.trim() || (!ratingEmpty && !ratingOk)} onPress={() => { actions.updateIdentity({ name: name.trim(), bio: bio.trim(), location: location.trim(), cityAt: location.trim() ? cityAt : null }); saveRating(); router.back(); }} />
+          <Button label="Save changes" disabled={!name.trim() || (!ratingEmpty && !ratingOk)} loading={checking} onPress={saveAll} />
         </View>
       )}
     </Screen>

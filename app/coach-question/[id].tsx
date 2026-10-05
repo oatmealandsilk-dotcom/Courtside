@@ -35,6 +35,9 @@ export default function CoachQuestionDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { coachQuestions, coachReplies, users, coaches, currentUser, currentUserId, error, actions } = useApp();
   const [draft, setDraft] = useState('');
+  // What is in the box now, for an answer sent and then refused (see postAnswer).
+  const latestDraft = useRef(draft);
+  latestDraft.current = draft;
   const [menuOpen, setMenuOpen] = useState(false);
   // A link opened cold waits for the data before saying the question is gone;
   // a load that failed stops the wait, so it never spins for ever.
@@ -75,6 +78,16 @@ export default function CoachQuestionDetail() {
   const admin = Boolean(currentUser?.isAdmin);
   // Taken down by an admin: only its asker and admins can open it, and coaches can no longer answer.
   const removed = question.removed;
+  const postAnswer = () => {
+    const text = draft.trim();
+    if (text.length < 20) return;
+    // Refused for its words (migration 117): the toast says why, and your
+    // answer comes back into the box (if you haven't started another since).
+    void actions.replyToCoachQuestion(question.id, text).then((result) => {
+      if (result === 'blocked' && !latestDraft.current.trim()) setDraft(text);
+    });
+    setDraft('');
+  };
   const moderateQuestion = () => {
     if (removed) {
       confirmAfterMenu({ title: 'Restore this question?', message: 'Everyone sees it again, with its coach replies.', confirmLabel: 'Restore', onConfirm: () => { void actions.restoreContent('coach-question', question.id); } });
@@ -269,19 +282,11 @@ export default function CoachQuestionDetail() {
             value={draft}
             onChangeText={setDraft}
             multiline
-            onSubmitEditing={() => {
-              if (draft.trim().length < 20) return;
-              actions.replyToCoachQuestion(question.id, draft.trim());
-              setDraft('');
-            }}
+            onSubmitEditing={postAnswer}
           />
           <Button
             label="Post answer"
-            onPress={() => {
-              if (draft.trim().length < 20) return;
-              actions.replyToCoachQuestion(question.id, draft.trim());
-              setDraft('');
-            }}
+            onPress={postAnswer}
             disabled={draft.trim().length < 20}
             full
           />

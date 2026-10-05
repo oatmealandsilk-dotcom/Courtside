@@ -13,6 +13,7 @@ import { money, relativeTime } from '@/lib/format';
 import { openLegal } from '@/lib/legal';
 import { useApp } from '@/store/AppContext';
 import { show as showToast } from '@/lib/toast';
+import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import { colors, font, radius, spacing, typography, lift } from '@/theme';
 
 /**
@@ -114,8 +115,13 @@ export default function CoachDetail() {
   };
   const postReview = () => {
     if (!reviewStars || !reviewBody.trim()) return;
-    actions.addCoachReview(coach.id, reviewStars, reviewBody);
-    setReviewBody('');
+    const words = reviewBody;
+    // Words CourtSide refuses (migration 117) are said here, and your review stays to change.
+    void actions.wordsRefused([words]).then((refused) => {
+      if (refused) { showToast({ title: BLOCKED_WORDS_NOTE, body: 'Change them and post again.', icon: 'alert-circle-outline', long: true }); return; }
+      actions.addCoachReview(coach.id, reviewStars, words);
+      setReviewBody((now) => (now === words ? '' : now));
+    });
   };
 
   return (

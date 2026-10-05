@@ -195,6 +195,11 @@ export default function Thread() {
   const [editing, setEditing] = useState<Message | null>(null);
   // What was in the box when Edit filled it with a message's words: it comes back when the edit ends.
   const draftBeforeEdit = useRef<string | null>(null);
+  // The same, and the photos picked, read the moment words sent from here are refused (see send).
+  const editingNow = useRef(editing);
+  editingNow.current = editing;
+  const pickedNow = useRef(picked);
+  pickedNow.current = picked;
   // The message being answered: "Replying to …" over the box, and quoted above what is sent.
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   // The sheets a held message or a reaction chip opens.
@@ -240,6 +245,9 @@ export default function Thread() {
   const removedFrom = !liveConversation && id ? actions.removedChat(id) : undefined;
   const removed = !!removedFrom;
   const conversation = liveConversation ?? removedFrom?.conversation;
+  // Which chat is open now: refused words only come back to the chat they were written in.
+  const chatNow = useRef(conversation?.id);
+  chatNow.current = conversation?.id;
   const other = users.find(
     (u) => u.id === conversation?.participantIds.find((p) => p !== currentUserId),
   );
@@ -640,7 +648,7 @@ export default function Thread() {
   // Editing a message of yours: its words go in the box, and whatever you were writing waits for the edit to end.
   const startEditing = (message: Message) => {
     setReplyTo(null);
-    if (!editing) draftBeforeEdit.current = composer.current?.getText() ?? '';
+    if (!editingNow.current) draftBeforeEdit.current = composer.current?.getText() ?? '';
     setEditing(message);
     composer.current?.setText(message.body);
     setTimeout(() => composer.current?.focus(), 60);
@@ -666,9 +674,18 @@ export default function Thread() {
     if (draftNow.current.trim()) { draftNow.current = ''; lastPing.current = 0; typingLink.current?.stop(); }
     const body = text.trim();
     const answering = replyTo?.id;
+    const chatId = conversation.id;
+    const stillHere = () => chatNow.current === chatId;
     // Picked photos go with whatever is in the box as their caption.
     if (picked.length && !editing) {
-      actions.sendPhotos(conversation.id, picked, body, answering);
+      const photos = picked;
+      // Caption refused for its words (migration 117): the toast says why, and
+      // the photos and the words come back, unless something else is in the box.
+      void actions.sendPhotos(chatId, photos, body, answering).then((result) => {
+        if (result !== 'blocked' || !stillHere() || composer.current?.getText().trim() || pickedNow.current.length || editingNow.current) return;
+        setPicked(photos);
+        composer.current?.setText(body);
+      });
       setPicked([]);
       composer.current?.setText('');
       setReplyTo(null);
@@ -677,13 +694,21 @@ export default function Thread() {
     }
     if (!body) return;
     if (editing) {
-      actions.editMessage(editing.id, body);
+      const edited = editing;
+      // Refused for its words (migration 117): the message goes back to what
+      // it said, the toast says why, and the edit opens again with your new
+      // words (what you were writing waits, as for any edit).
+      void actions.editMessage(edited.id, body).then((result) => {
+        if (result !== 'blocked' || !stillHere() || editingNow.current) return;
+        startEditing(edited);
+        composer.current?.setText(body);
+      });
       endEditing();
       return;
     }
     // Refused for its words (migration 117): it comes back out of the chat, and the words back into an empty box.
-    void actions.sendMessage(conversation.id, body, answering).then((result) => {
-      if (result === 'blocked' && !composer.current?.getText().trim()) composer.current?.setText(body);
+    void actions.sendMessage(chatId, body, answering).then((result) => {
+      if (result === 'blocked' && stillHere() && !composer.current?.getText().trim()) composer.current?.setText(body);
     });
     composer.current?.setText('');
     setReplyTo(null);

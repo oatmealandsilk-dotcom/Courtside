@@ -1314,7 +1314,7 @@ const fail = (what: string) => (error: unknown) => {
 /* ----------------------------------------------------------- hidden words */
 
 export { BLOCKED_WORDS_NOTE };
-/** Whether an error is that refusal: slurs, sexual words about children, threats. */
+/** Whether an error is that refusal: slurs, sexual words about children, telling someone to kill themselves, the gravest threats. */
 export function isBlockedWords(error: unknown): boolean {
   const message = typeof error === 'string' ? error : (error as { message?: unknown } | null | undefined)?.message;
   return typeof message === 'string' && /blocked_words/.test(message);
@@ -1472,9 +1472,10 @@ export const remote = {
   },
   /**
    * Whether these words (a caption, a place) would be refused for slurs,
-   * sexual words about children or threats (migration 117), asked before a
-   * photo or clip goes up so the draft can stay. False when it cannot be
-   * asked: the post itself is still checked when it is saved.
+   * sexual words about children, telling someone to kill themselves or the
+   * gravest threats (migration 117), asked before a photo or clip goes up so
+   * the draft can stay. False when it cannot be asked: the post itself is
+   * still checked when it is saved.
    */
   async wordsRefused(texts: string[]): Promise<boolean> {
     const asked = texts.map((t) => t.trim()).filter(Boolean).slice(0, 10);

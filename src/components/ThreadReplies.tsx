@@ -42,7 +42,26 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
   const [draft, setDraft] = useState('');
   const [media, setMedia] = useState<ReplyAttachment | null>(null);
   const canSend = !!draft.trim() || !!media;
-  const post = () => { if (!canSend) return; actions.addAnswer(answer.questionId, draft.trim(), answer.id, media ?? undefined); setDraft(''); setMedia(null); setReplying(false); };
+  // What is in the reply box now, for words sent and then refused (see post).
+  const latest = useRef({ draft, media });
+  latest.current = { draft, media };
+  const post = () => {
+    if (!canSend) return;
+    const text = draft.trim();
+    const attached = media;
+    // Refused for its words (migration 117): the toast says why, and the reply
+    // box opens again with what you wrote (and its photo or clip), unless you
+    // have started another reply here since.
+    void actions.addAnswer(answer.questionId, text, answer.id, attached ?? undefined).then((result) => {
+      if (result !== 'blocked' || latest.current.draft.trim() || latest.current.media) return;
+      setDraft(text);
+      setMedia(attached);
+      setReplying(true);
+    });
+    setDraft('');
+    setMedia(null);
+    setReplying(false);
+  };
   const [collapsed, setCollapsed] = useState(false);
   const reveal = useRevealOnFocus();
   const lineRef = useRef<TextInput>(null);

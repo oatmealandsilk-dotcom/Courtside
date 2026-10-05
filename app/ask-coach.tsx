@@ -9,6 +9,9 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { MediaPicker, type PickedMedia } from '@/components/MediaPicker';
 import { Screen } from '@/components/ui';
+import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
+import * as haptics from '@/lib/haptics';
+import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import type { CoachSpecialty } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -136,12 +139,25 @@ export default function AskCoach() {
   // Android's Back closes it the same way, shrinking back into the box it grew from.
   useAndroidBack(() => { close(); return true; });
   const canSubmit = title.trim().length > 10 && body.trim().length > 25;
+  // A quick second tap would post it twice.
+  const sent = useRef(false);
   const submit = () => {
-    if (!canSubmit) return;
-    // Only a video goes with the question (coaches see clips, not photos), and its name only with it.
-    const clip = media?.kind === 'video' ? media : null;
-    const id = actions.askCoach({ title: title.trim(), body: body.trim(), specialty, videoUrl: clip?.uri, mediaLabel: clip?.label });
-    router.replace(`/coach-question/${id}`);
+    if (!canSubmit || sent.current) return;
+    sent.current = true;
+    // Words CourtSide refuses (migration 117) are said here, before a clip
+    // starts going up, and the question stays as you wrote it.
+    void actions.wordsRefused([title, body]).then((refused) => {
+      if (refused) {
+        sent.current = false;
+        haptics.reject();
+        showToast({ title: BLOCKED_WORDS_NOTE, body: 'Change them and post again.', icon: 'alert-circle-outline', long: true });
+        return;
+      }
+      // Only a video goes with the question (coaches see clips, not photos), and its name only with it.
+      const clip = media?.kind === 'video' ? media : null;
+      const id = actions.askCoach({ title: title.trim(), body: body.trim(), specialty, videoUrl: clip?.uri, mediaLabel: clip?.label });
+      router.replace(`/coach-question/${id}`);
+    });
   };
   const watching = coaches.length;
 

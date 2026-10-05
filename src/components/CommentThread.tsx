@@ -82,8 +82,13 @@ export function useReplyDraft(setDraft: React.Dispatch<React.SetStateAction<stri
   };
   /** After sending: the box is empty again and answers nobody. */
   const done = () => set(null);
+  /** Sent words refused (migration 117): back in the box, answering whoever they answered. */
+  const resume = (text: string, was: Replying | null) => {
+    setDraft(text);
+    set(was);
+  };
   const words = (text: string) => (replyingTo?.prefixed ? without(text, replyingTo.handle) : text);
-  return { replyingTo, start, change, stop, done, words };
+  return { replyingTo, start, change, stop, done, resume, words };
 }
 
 /**

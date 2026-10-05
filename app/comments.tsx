@@ -206,7 +206,7 @@ export default function CommentsSheet() {
   useEffect(() => { openThread(atParent); }, [atParent]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Replying: "@them " in the box and a "Replying to @them ×" strip above it.
-  const { replyingTo, start: startReply, change: changeDraft, stop: stopReplying, done: doneReplying, words } = useReplyDraft(setDraft, () => input.current?.focus());
+  const { replyingTo, start: startReply, change: changeDraft, stop: stopReplying, done: doneReplying, resume: resumeDraft, words } = useReplyDraft(setDraft, () => input.current?.focus());
   // Something of your own to send: words beyond the "@them " Reply put in, or a photo.
   const canSend = exists && !takenDown && (!!words(draft).trim() || !!photo);
   // Kept for next time only if there is something of your own in it.
@@ -216,6 +216,11 @@ export default function CommentsSheet() {
     const text = latestDraft.current;
     if (latestWords.current(text).trim()) drafts.set(key, text); else drafts.delete(key);
   }, [key]);
+  // Whether the sheet is still open, and the photo in the box now (see send).
+  const sheetOpen = useRef(true);
+  useEffect(() => { sheetOpen.current = true; return () => { sheetOpen.current = false; }; }, []);
+  const latestPhoto = useRef(photo);
+  latestPhoto.current = photo;
 
   // The comment being answered stays in sight just above the box, as on
   // Instagram, rather than sliding under the keyboard as it comes up. Measured
@@ -267,14 +272,25 @@ export default function CommentsSheet() {
     if (!canSend || takenDown) return;
     const picked = photo;
     const answering = replyingTo?.id;
+    const was = replyingTo;
     setDraft('');
     setPhoto(null);
     doneReplying();
     justSent.current = new Set(all.map((c) => c.id));
     sendPop.value = withSequence(withTiming(0.8, { duration: 80 }), withSpring(1, { damping: 10, stiffness: 320 }));
     if (answering) openThread(threadOf(comments, answering));
-    if (kind === 'hit') actions.addStoryComment(id, text, answering);
-    else actions.addComment(id, text, picked ?? undefined, answering);
+    const saving = kind === 'hit' ? actions.addStoryComment(id, text, answering) : actions.addComment(id, text, picked ?? undefined, answering);
+    // Refused for its words (migration 117): the toast says why, and what you
+    // wrote comes back into the box (if you haven't started something else
+    // there), answering whoever it answered, its photo too. The sheet already
+    // closed: it waits there for next time.
+    void saving.then((result) => {
+      if (result !== 'blocked') return;
+      if (!sheetOpen.current) { if (!drafts.get(key)?.trim()) drafts.set(key, text); return; }
+      if (latestDraft.current.trim() || latestPhoto.current) return;
+      resumeDraft(text, was);
+      if (picked) setPhoto(picked);
+    });
     input.current?.focus();
   };
   useEffect(() => {

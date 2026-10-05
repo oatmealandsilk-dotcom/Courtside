@@ -8,6 +8,9 @@ import { DragSheet } from '@/components/DragSheet';
 import { Field } from '@/components/ui';
 import { Chips, Section, SheetTitle, Submit, formBody } from '@/components/sheet/SheetForm';
 import { TOPIC_META } from '@/components/QuestionCard';
+import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
+import * as haptics from '@/lib/haptics';
+import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import type { QuestionTopic } from '@/data/types';
 import { colors, spacing, typography } from '@/theme';
@@ -33,17 +36,30 @@ export default function Ask() {
 
   const canSubmit = title.trim().length >= 3 && pollOk;
 
+  // A quick second tap would post it twice.
+  const [checking, setChecking] = useState(false);
   const submit = () => {
-    if (!canSubmit) return;
-    const id = actions.addQuestion({
-      title: title.trim(),
-      body: body.trim(),
-      topic,
-      tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map((tag) => tag.slice(1).toLowerCase()))),
-      poll: poll ?? undefined,
+    if (!canSubmit || checking || posted) return;
+    setChecking(true);
+    // Words CourtSide refuses (migration 117) are said here, and the card
+    // stays open with what you wrote, to change and post again.
+    void actions.wordsRefused([title, body, ...(poll ?? [])]).then((refused) => {
+      setChecking(false);
+      if (refused) {
+        haptics.reject();
+        showToast({ title: BLOCKED_WORDS_NOTE, body: 'Change them and post again.', icon: 'alert-circle-outline', long: true });
+        return;
+      }
+      const id = actions.addQuestion({
+        title: title.trim(),
+        body: body.trim(),
+        topic,
+        tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map((tag) => tag.slice(1).toLowerCase()))),
+        poll: poll ?? undefined,
+      });
+      setPosted(id);
+      setCloseSignal((n) => n + 1);
     });
-    setPosted(id);
-    setCloseSignal((n) => n + 1);
   };
 
   return (
@@ -81,7 +97,7 @@ export default function Ask() {
               <Text style={styles.linkText}>Add a poll</Text>
             </Pressable>
           )}
-          <Submit label="Post to the room" onPress={submit} disabled={!canSubmit} waiting={title.trim().length < 3 ? 'Write your question first' : 'Fill in two poll options'} />
+          <Submit label="Post to the room" onPress={submit} disabled={!canSubmit} busy={checking} waiting={title.trim().length < 3 ? 'Write your question first' : 'Fill in two poll options'} />
         </ScrollView>
       </KeyboardAvoidingView>
     </DragSheet>

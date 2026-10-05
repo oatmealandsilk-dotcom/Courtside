@@ -10,8 +10,10 @@
 --
 -- 1. A built-in list of offensive words, phrases and emojis lives in the
 --    database. The app can never read it. It has three levels:
---      severe     slurs, sexual words about children, and threats ("I will
---                 kill you", "kill yourself"). These are refused wherever
+--      severe     slurs, sexual words about children, telling someone to
+--                 kill themselves ("kill yourself", "kys", "hope you die"),
+--                 and threats to rape, to shoot someone or a school, or to
+--                 hunt someone down. These are refused wherever
 --                 anyone writes: posts and captions, Instants, comments,
 --                 threads and replies, questions to coaches (paid ones too)
 --                 and coaches' replies and answers, coach pages (headline,
@@ -20,8 +22,14 @@
 --                 notes and reviews, tips and coach reviews. Edits too. The
 --                 app says "This includes words that break CourtSide's rules."
 --      offensive  the severe ones plus insults, swearing aimed at someone
---                 ("fuck you", "you're an idiot"), explicit sexual words and
---                 harassment ("nobody likes you"). Hidden, never refused.
+--                 ("fuck you", "you're an idiot"), explicit sexual words,
+--                 harassment ("nobody likes you") and "I'm gonna kill you"
+--                 (or murder, stab, strangle, behead you), which tennis
+--                 players say to each other all the time ("Rematch Saturday?
+--                 I'm gonna kill you lol"). Hidden, never refused (Oct 5,
+--                 owner: "many times ppl can arrange stuff. Trust me"), the
+--                 way Instagram does it: a message from someone you follow
+--                 always shows as normal.
 --      teen       more that are only hidden for under-18 accounts: plain
 --                 swearing that isn't aimed at anyone ("holy shit what a
 --                 shot"), "how old are you", "send pics", "sexy".
@@ -1162,6 +1170,8 @@ end $function$;
 -- you", "you're a fucking idiot", "piece of shit") it is offensive.
 -- Moved off the list or out of the severe tier (Oct 5 review): "kike" and
 -- "fag" (a Spanish name, British for a cigarette: hidden, never refused);
+-- "I'm gonna kill you" and the like (banter between players: hidden,
+-- never refused, Oct 5 owner);
 -- none of wetback, towelhead, raghead or lolicon is looked for inside a
 -- longer name any more ("sweetbackhand", "towelheadband", "Craghead",
 -- "loliconic"); "rape" without endings ("rapper").
@@ -1410,7 +1420,7 @@ insert into public.word_list (term, tier, spaced, endings, in_names, unless_befo
   ('ass', 'teen', false, false, false, '{}', '{}', null, null),
   ('wtf', 'teen', false, false, false, '{}', '{}', null, null),
   ('hookup', 'teen', false, true, false, '{}', '{}', null, null),
-  ('threat: i will kill you', 'severe', false, false, false, '{}', '{}', '(?<![a-z0-9])(?:i[^a-z0-9]+will|ill|i[^a-z0-9]+shall|im[^a-z0-9]+(?:going[^a-z0-9]+to|gonna|about[^a-z0-9]+to|finna)|i[^a-z0-9]+am[^a-z0-9]+(?:going[^a-z0-9]+to|gonna)|imma|ima|i[^a-z0-9]+(?:wanna|want[^a-z0-9]+to))(?:[^a-z0-9]+(?:fucking|fuckin|literally|actually|really|seriously|just))?[^a-z0-9]+(?:k+i+l+l+|m+u+r+d+e+r+|s+t+a+b+|s+t+r+a+n+g+l+e+|b+e+h+e+a+d+)[^a-z0-9]+(?:you|u|ya|yall|you[^a-z0-9]+all|your[^a-z0-9]+(?:family|mom|mum|kids|whole[^a-z0-9]+family))(?![a-z0-9])(?![^a-z0-9]+(?:on[^a-z0-9]+(?:the[^a-z0-9]+)?(?:court|courts|clay|grass|hard[^a-z0-9]+courts?|carpet|scoreboard)|at[^a-z0-9]+(?:practice|training|tennis|padel|pickleball|squash|badminton|table[^a-z0-9]+tennis|ping[^a-z0-9]*pong|golf|chess|fifa|cards|league|the[^a-z0-9]+(?:club|courts?|park|net|baseline|tournament|league|ladder))|in[^a-z0-9]+(?:practice|training|tennis|padel|pickleball|squash|doubles|singles|straight[^a-z0-9]+sets|(?:a|our|the|this|that|your|my|next|tomorrows|saturdays|sundays)[^a-z0-9]+(?:(?:league|ladder|club|practice|final|semi|semis|quarter|quarters|first|second|third|fifth|next|deciding|rematch|tiebreak|doubles|singles|mixed|big|friendly)[^a-z0-9]+){0,3}(?:match|matches|game|games|set|sets|final|finals|semis|semi|semifinal|rematch|tiebreak|tiebreaker|breaker|league|ladder|draw|round|tournament|third|decider|practice|session|drill|drills|rally|rallies|doubles|singles))|next[^a-z0-9]+(?:set|match|game|week|weekend|time|round|season|year|month|practice|session)(?![^a-z0-9]+(?:in|at|outside|near|when|after|while)[^a-z0-9]+(?:your|ur|ya|you|school|home|work|sleep)(?![a-z0-9]))|this[^a-z0-9]+(?:weekend|week|time|season|year|morning|afternoon|evening|match|game|set|(?:mon|tues|wednes|thurs|fri|satur|sun)day)(?![^a-z0-9]+(?:in|at|outside|near|when|after|while)[^a-z0-9]+(?:your|ur|ya|you|school|home|work|sleep)(?![a-z0-9]))|(?:tomorrow|tonight|today|later|tmrw|tmr|tomoz|(?:on|at)[^a-z0-9]+(?:mon|tues|wednes|thurs|fri|satur|sun)day)(?![^a-z0-9]+(?:in|at|outside|near|when|after|while)[^a-z0-9]+(?:your|ur|ya|you|school|home|work|sleep)(?![a-z0-9]))|(?:6|six)[^a-z0-9]*(?:0|o|love))(?![a-z0-9]))', null),
+  ('threat: i will kill you', 'offensive', false, false, false, '{}', '{}', '(?<![a-z0-9])(?:i[^a-z0-9]+will|ill|i[^a-z0-9]+shall|im[^a-z0-9]+(?:going[^a-z0-9]+to|gonna|about[^a-z0-9]+to|finna)|i[^a-z0-9]+am[^a-z0-9]+(?:going[^a-z0-9]+to|gonna)|imma|ima|i[^a-z0-9]+(?:wanna|want[^a-z0-9]+to))(?:[^a-z0-9]+(?:fucking|fuckin|literally|actually|really|seriously|just))?[^a-z0-9]+(?:k+i+l+l+|m+u+r+d+e+r+|s+t+a+b+|s+t+r+a+n+g+l+e+|b+e+h+e+a+d+)[^a-z0-9]+(?:you|u|ya|yall|you[^a-z0-9]+all|your[^a-z0-9]+(?:family|mom|mum|kids|whole[^a-z0-9]+family))(?![a-z0-9])(?![^a-z0-9]+(?:on[^a-z0-9]+(?:the[^a-z0-9]+)?(?:court|courts|clay|grass|hard[^a-z0-9]+courts?|carpet|scoreboard)|at[^a-z0-9]+(?:practice|training|tennis|padel|pickleball|squash|badminton|table[^a-z0-9]+tennis|ping[^a-z0-9]*pong|golf|chess|fifa|cards|league|the[^a-z0-9]+(?:club|courts?|park|net|baseline|tournament|league|ladder))|in[^a-z0-9]+(?:practice|training|tennis|padel|pickleball|squash|doubles|singles|straight[^a-z0-9]+sets|(?:a|our|the|this|that|your|my|next|tomorrows|saturdays|sundays)[^a-z0-9]+(?:(?:league|ladder|club|practice|final|semi|semis|quarter|quarters|first|second|third|fifth|next|deciding|rematch|tiebreak|doubles|singles|mixed|big|friendly)[^a-z0-9]+){0,3}(?:match|matches|game|games|set|sets|final|finals|semis|semi|semifinal|rematch|tiebreak|tiebreaker|breaker|league|ladder|draw|round|tournament|third|decider|practice|session|drill|drills|rally|rallies|doubles|singles))|next[^a-z0-9]+(?:set|match|game|week|weekend|time|round|season|year|month|practice|session)(?![^a-z0-9]+(?:in|at|outside|near|when|after|while)[^a-z0-9]+(?:your|ur|ya|you|school|home|work|sleep)(?![a-z0-9]))|this[^a-z0-9]+(?:weekend|week|time|season|year|morning|afternoon|evening|match|game|set|(?:mon|tues|wednes|thurs|fri|satur|sun)day)(?![^a-z0-9]+(?:in|at|outside|near|when|after|while)[^a-z0-9]+(?:your|ur|ya|you|school|home|work|sleep)(?![a-z0-9]))|(?:tomorrow|tonight|today|later|tmrw|tmr|tomoz|(?:on|at)[^a-z0-9]+(?:mon|tues|wednes|thurs|fri|satur|sun)day)(?![^a-z0-9]+(?:in|at|outside|near|when|after|while)[^a-z0-9]+(?:your|ur|ya|you|school|home|work|sleep)(?![a-z0-9]))|(?:6|six)[^a-z0-9]*(?:0|o|love))(?![a-z0-9]))', null),
   ('threat: i will shoot you', 'severe', false, false, false, '{}', '{}', '(?<![a-z0-9])(?:i[^a-z0-9]+will|ill|i[^a-z0-9]+shall|im[^a-z0-9]+(?:going[^a-z0-9]+to|gonna|about[^a-z0-9]+to|finna)|i[^a-z0-9]+am[^a-z0-9]+(?:going[^a-z0-9]+to|gonna)|imma|ima|i[^a-z0-9]+(?:wanna|want[^a-z0-9]+to))(?:[^a-z0-9]+(?:fucking|fuckin|literally|actually|really|seriously|just))?[^a-z0-9]+s+h+o+o+t+[^a-z0-9]+(?:you|u|ya|yall|you[^a-z0-9]+all|your[^a-z0-9]+(?:family|mom|mum|kids))(?![a-z0-9])(?![^a-z0-9]+(?:a|an|the|some|my|this|that|these|those|it|over|guys|both|all|back|down|another|one|quick|text|message|dm|email|note|line|pic|pics|picture|video|link|details|info|invite|update|call|ball|serve|lob|from[^a-z0-9]+(?:the[^a-z0-9]+)?(?:side|sides|front|back|baseline|net|fence|stands|other[^a-z0-9]+side|courtside|bleachers|above|behind[^a-z0-9]+the[^a-z0-9]+(?:baseline|court|fence|net)|a[^a-z0-9]+(?:distance|drone)|different[^a-z0-9]+angles?|an[^a-z0-9]+angle|every[^a-z0-9]+angle|my[^a-z0-9]+phone)|during[^a-z0-9]+(?:(?:your|the|our|my|a|this|next)[^a-z0-9]+)?(?:match|lesson|practice|session|warm[^a-z0-9]*up|warmup|game|set|final|drill|drills|training|serve|serves|rally|rallies|point|points|tournament|clinic|hit)|while[^a-z0-9]+(?:you[^a-z0-9]+(?:(?:are|re)[^a-z0-9]+)?)?(?:play|playing|hit|hitting|serve|serving|practice|practicing|practising|train|training|rally|rallying|warm|warming|drill|drilling)|playing|hitting|serving|practicing|practising|training|warming[^a-z0-9]+up|rallying|competing|volleying|returning|in[^a-z0-9]+(?:slow?[^a-z0-9]*mo(?:tion)?|4k|hd|action|portrait|landscape|black[^a-z0-9]+and[^a-z0-9]+white|your[^a-z0-9]+(?:kit|whites|match|lesson|next[^a-z0-9]+match)|the[^a-z0-9]+(?:final|match|golden[^a-z0-9]+hour))|on[^a-z0-9]+(?:video|camera|film|my[^a-z0-9]+(?:phone|camera|iphone)|the[^a-z0-9]+(?:court|baseline|grass|clay)|court|tape|iphone|gopro)|for[^a-z0-9]+(?:my|the|your|our|a)[^a-z0-9]+(?:portfolio|channel|page|reel|reels|video|instagram|insta|tiktok|youtube|account|profile|coach|club|feed|story|magazine|article|newsletter|website|site|highlight|highlights|promo)|with[^a-z0-9]+(?:my|the|a)[^a-z0-9]+(?:camera|phone|gopro|iphone|drone|lens|tripod|new[^a-z0-9]+camera)|at[^a-z0-9]+(?:practice|training|the[^a-z0-9]+(?:club|courts?|tournament|match|game|park|final|net)))(?![a-z0-9]))', null),
   ('threat: i will rape you', 'severe', false, false, false, '{}', '{}', '(?<![a-z0-9])(?:i[^a-z0-9]+will|ill|im[^a-z0-9]+(?:going[^a-z0-9]+to|gonna)|i[^a-z0-9]+am[^a-z0-9]+(?:going[^a-z0-9]+to|gonna)|imma|ima|i[^a-z0-9]+(?:wanna|want[^a-z0-9]+to)|gonna|will|wanna)[^a-z0-9]+r+a+p+e+[^a-z0-9]+(?:you|u|ya|her|him|them)(?![a-z0-9])', null),
   ('threat: hunt you down', 'severe', false, false, false, '{}', '{}', '(?<![a-z0-9])(?:ill|i[^a-z0-9]+will|im[^a-z0-9]+(?:going[^a-z0-9]+to|gonna)|imma)[^a-z0-9]+(?:hunt|track)[^a-z0-9]+(?:you|u)[^a-z0-9]+down(?![a-z0-9])', null),
@@ -1462,10 +1472,11 @@ commit;
 -- (a) The list is there (expect three rows: offensive, severe, teen, with a count each):
 -- select tier, count(*) from public.word_list group by tier order by tier;
 --
--- (b) The matching (expect true, false, false, true, false, true):
+-- (b) The matching (expect true, false, false, true, false, true, false, true):
 -- select public.words_found('you f4gg0t', 'severe'), public.words_found('what a kill shot', 'offensive'),
 --        public.words_found('Scunthorpe class assassin', 'offensive'), public.words_found('fuck you', 'offensive'),
---        public.words_found('holy shit what a shot', 'offensive'), public.words_found('holy shit what a shot', 'teen');
+--        public.words_found('holy shit what a shot', 'offensive'), public.words_found('holy shit what a shot', 'teen'),
+--        public.words_found('I''m gonna kill you lol', 'severe'), public.words_found('I''m gonna kill you lol', 'offensive');
 --
 -- (c) The new reading rules (expect 4 rows):
 -- select tablename from pg_policies where policyname = 'hidden words stay between two' order by 1;

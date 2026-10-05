@@ -54,6 +54,9 @@ function QuestionDetail() {
   const replyInput = useRef<TextInput>(null);
   const reveal = useRevealOnFocus();
   const tag = useMentionDraft(draft, setDraft, replyInput);
+  // What is in the reply box now, for words sent and then refused (see submit).
+  const latest = useRef({ draft, media });
+  latest.current = { draft, media };
 
   const question = questions.find((q) => q.id === id);
   const asker = users.find((u) => u.id === question?.authorId);
@@ -103,7 +106,16 @@ function QuestionDetail() {
   const submit = () => {
     const text = draft.trim();
     if (!text && !media) return;
-    actions.addAnswer(question.id, text, undefined, media ?? undefined);
+    const attached = media;
+    // Refused for its words (migration 117): the toast says why, and the reply
+    // box opens again with what you wrote (and its photo or clip), unless
+    // you have started another reply since.
+    void actions.addAnswer(question.id, text, undefined, attached ?? undefined).then((result) => {
+      if (result !== 'blocked' || latest.current.draft.trim() || latest.current.media) return;
+      setDraft(text);
+      setMedia(attached);
+      setReplying(true);
+    });
     setDraft('');
     setMedia(null);
     setReplying(false);
