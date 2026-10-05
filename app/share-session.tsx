@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -33,6 +33,8 @@ import { colors, font, pageIsDark, radius, spacing, typography, withAlpha } from
  */
 /** Room above and below the preview for its shadow, which the swiping row would otherwise cut off. */
 const SHADOW_ROOM = 16;
+/** Space between the designs as they sit side by side. */
+const CARD_GAP = 14;
 
 const ACTIONS: { key: StoryAction; label: string; spoken: string; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
   { key: 'instagram', label: 'Stories', spoken: 'Share to Instagram Stories', icon: 'logo-instagram' },
@@ -88,8 +90,12 @@ export default function ShareSession() {
 
   const { height: windowH } = useWindowDimensions();
   const [pageW, setPageW] = useState(0);
-  const cardW = Math.floor(Math.max(150, Math.min(300, pageW - spacing.xl * 2, ((windowH - 400) * 9) / 16)));
+  // Narrow enough that the designs either side peek in, the way Strava's share screen shows there is more to swipe (Oct 5, owner).
+  const cardW = Math.floor(Math.max(150, Math.min(290, pageW - 96, ((windowH - 400) * 9) / 16)));
   const cardH = Math.round((cardW * 16) / 9);
+  const step = cardW + CARD_GAP;
+  const sidePad = Math.max(0, (pageW - cardW) / 2 - CARD_GAP / 2);
+  const scrollX = useRef(new Animated.Value(0)).current;
 
   const [picked, setPicked] = useState<string | undefined>();
   // A match with a score saved in your log (migration 91) starts with it here; typing over it changes only the picture.
@@ -111,17 +117,17 @@ export default function ShareSession() {
   useEffect(() => {
     if (!pageW || placed.current || !story) return;
     placed.current = true;
-    pager.current?.scrollTo({ x: shownIndex * pageW, y: 0, animated: false });
-  }, [pageW, story, shownIndex]);
+    pager.current?.scrollTo({ x: shownIndex * step, y: 0, animated: false });
+  }, [pageW, story, shownIndex, step]);
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (!pageW) return;
-    const i = Math.max(0, Math.min(STORY_DESIGNS.length - 1, Math.round(e.nativeEvent.contentOffset.x / pageW)));
+    const i = Math.max(0, Math.min(STORY_DESIGNS.length - 1, Math.round(e.nativeEvent.contentOffset.x / step)));
     if (i !== shownIndex) { setIndex(i); setNote(''); }
   };
   const goTo = (i: number) => {
     setIndex(i);
     setNote('');
-    pager.current?.scrollTo({ x: i * pageW, y: 0, animated: true });
+    pager.current?.scrollTo({ x: i * step, y: 0, animated: true });
   };
 
   // The out-of-sight copy that is photographed, and whether its photo has drawn.
@@ -188,17 +194,28 @@ export default function ShareSession() {
         <Screen title="Share" compactTitle onBack={() => goBack('/your-sessions')} bar={false} padded={false}>
           <View style={styles.body} onLayout={(e) => setPageW(Math.round(e.nativeEvent.layout.width))}>
             {pageW ? (
-              <ScrollView
-                ref={pager}
+              <Animated.ScrollView
+                ref={pager as never}
                 horizontal
-                pagingEnabled
+                snapToInterval={step}
+                decelerationRate="fast"
+                disableIntervalMomentum
                 showsHorizontalScrollIndicator={false}
-                onScroll={onScroll}
+                onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], { useNativeDriver: true, listener: onScroll })}
                 scrollEventThrottle={16}
+                contentContainerStyle={{ paddingHorizontal: sidePad }}
                 style={{ width: pageW, height: cardH + SHADOW_ROOM * 2 }}
               >
-                {STORY_DESIGNS.map((d) => (
-                  <View key={d.key} style={[styles.pageSlot, { width: pageW, height: cardH + SHADOW_ROOM * 2 }]}>
+                {STORY_DESIGNS.map((d, i) => {
+                  // The one in the middle full size; its neighbours a touch smaller and quieter, easing as you swipe.
+                  const range = [(i - 1) * step, i * step, (i + 1) * step];
+                  const look = {
+                    opacity: scrollX.interpolate({ inputRange: range, outputRange: [0.55, 1, 0.55], extrapolate: 'clamp' }),
+                    transform: [{ scale: scrollX.interpolate({ inputRange: range, outputRange: [0.92, 1, 0.92], extrapolate: 'clamp' }) }],
+                  };
+                  return (
+                  <Animated.View key={d.key} style={[styles.pageSlot, { width: step, height: cardH + SHADOW_ROOM * 2 }, look]}>
+                    <Pressable disabled={i === shownIndex} onPress={() => goTo(i)} accessible={false}>
                     <View style={[styles.frame, { width: cardW, height: cardH }]} accessible accessibilityLabel={`${d.label} design`}>
                       {/* A see-through sticker is shown over a quiet backdrop, the way it will sit over a story. */}
                       {d.key === 'sticker' || d.key === 'overlay' ? <LinearGradient colors={[withAlpha(colors.text, 0.16), withAlpha(colors.text, 0.38)]} style={StyleSheet.absoluteFill} /> : null}
@@ -210,17 +227,21 @@ export default function ShareSession() {
                         </Pressable>
                       ) : null}
                     </View>
-                  </View>
-                ))}
-              </ScrollView>
+                    </Pressable>
+                  </Animated.View>
+                  );
+                })}
+              </Animated.ScrollView>
             ) : <View style={{ height: cardH + SHADOW_ROOM * 2 }} />}
 
+            {/* The designs' names under the cards, the one showing marked with a dot; a tap goes to it. */}
             <View style={styles.designs} accessibilityRole="tablist">
               {STORY_DESIGNS.map((d, i) => {
                 const on = i === shownIndex;
                 return (
-                  <Pressable key={d.key} accessibilityRole="tab" accessibilityState={{ selected: on }} onPress={() => goTo(i)} hitSlop={6} style={[styles.design, on && styles.designOn]}>
+                  <Pressable key={d.key} accessibilityRole="tab" accessibilityState={{ selected: on }} onPress={() => goTo(i)} hitSlop={8} style={styles.design}>
                     <Text style={[styles.designText, on && styles.designTextOn]}>{d.label}</Text>
+                    <View style={[styles.designDot, on && styles.designDotOn]} />
                   </Pressable>
                 );
               })}
@@ -276,11 +297,12 @@ const styleDefinitions = StyleSheet.create({
   photoButton: { position: 'absolute', top: 12, right: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.overlay },
   photoButtonText: { ...font('600'), fontSize: 12, color: colors.onMedia },
   pressed: { opacity: 0.7 },
-  designs: { flexDirection: 'row', alignSelf: 'center', gap: 4, padding: 3, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt },
-  design: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: radius.pill },
-  designOn: { backgroundColor: colors.surface },
-  designText: { ...typography.smallStrong, color: colors.textMuted },
+  designs: { flexDirection: 'row', alignSelf: 'center', gap: spacing.lg },
+  design: { alignItems: 'center', gap: 5, paddingVertical: 2 },
+  designText: { ...typography.smallStrong, color: colors.textFaint },
   designTextOn: { color: colors.text },
+  designDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: 'transparent' },
+  designDotOn: { backgroundColor: colors.brand },
   scoreRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.xl, paddingHorizontal: 14, height: 44, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   scoreLabel: { ...font('600'), fontSize: 14, color: colors.textMuted },
   // The box fills the row's height and centres its own line: sized to the text alone, a phone clipped the bottom of the letters (Oct 5).
