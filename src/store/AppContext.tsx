@@ -761,6 +761,8 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   setDefaultReaction: (emoji: string) => void;
 
   /* Notifications */
+  /** Fetches what came into Notifications since the newest one held (a like, a follow, "Tennis detected" filed by the server). */
+  catchUpNotifications: () => Promise<void>;
   markNotificationsRead: () => void;
   markNotificationRead: (notificationId: ID) => void;
 
@@ -1857,6 +1859,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }).catch(() => undefined);
     return () => { on = false; };
   }, [remoteLoaded, currentUserForLive, liveEpoch]);
+
+  // Notifications filed while the app was in the background (a like, a
+  // follow, "Tennis detected" from WHOOP's own alert), in one small ask:
+  // every one newer than the newest held. Asked whenever the app comes back
+  // to the front, and when Notifications opens.
+  const catchUpNotifications = useCallback(async () => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me) || !stateRef.current.remoteLoaded) return;
+    const newest = stateRef.current.notifications.reduce((t, n) => (n.userId === me && UUID.test(n.id) && n.createdAt > t ? n.createdAt : t), '');
+    const since = new Date((newest ? Date.parse(newest) : Date.now() - 31 * 86_400_000) - 5000).toISOString();
+    const fresh = await remote.fetchNotificationsSince(me!, since).catch(() => [] as Notification[]);
+    if (!fresh.length || stateRef.current.currentUserId !== me) return;
+    setState((prev) => {
+      const add = fresh.filter((n) => !prev.notifications.some((x) => x.id === n.id));
+      return add.length ? { ...prev, notifications: [...add, ...prev.notifications] } : prev;
+    });
+  }, []);
+  useEffect(() => {
+    if (!liveEpoch || !isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive)) return;
+    void catchUpNotifications();
+  }, [remoteLoaded, currentUserForLive, liveEpoch, catchUpNotifications]);
 
   // What the saved copy put on screen, so the fresh load can take back off anything the server no longer has.
   const snapshotIds = React.useRef<Set<string> | null>(null);
@@ -6018,11 +6041,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const list = await remote.fetchActivities(me!);
     if (stateRef.current.currentUserId !== me) return;
     if (list) setState((prev) => ({ ...prev, detectedActivities: list }));
-    if (!filed.length) return;
-    // The "Tennis detected" rows the server just filed, into Notifications.
+    // The "Tennis detected" rows the server filed, into Notifications: after
+    // every check, as some are filed quietly (WHOOP's own alert, or while
+    // WHOOP was being connected) and never come back from the check itself.
     const notes = await remote.fetchActivityNotes(me!);
     if (stateRef.current.currentUserId !== me) return;
     if (notes.length) setState((prev) => ({ ...prev, notifications: [...notes.filter((n) => !prev.notifications.some((x) => x.id === n.id)), ...prev.notifications] }));
+    if (!filed.length) return;
     // The newest one gets a banner; the rest wait in Notifications.
     const a = (list ?? stateRef.current.detectedActivities).filter((x) => filed.includes(x.id)).sort((x, y) => (x.startedAt < y.startedAt ? 1 : -1))[0];
     // Your own numbers, for you only: the lock-screen push never carries them (migration 58).
@@ -6302,6 +6327,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleSaveQuestion,
       reactToMessage,
       setDefaultReaction,
+      catchUpNotifications,
       markNotificationsRead,
       markNotificationRead,
       recordView,
@@ -6493,6 +6519,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleSaveQuestion,
       reactToMessage,
       setDefaultReaction,
+      catchUpNotifications,
       markNotificationsRead,
       markNotificationRead,
       recordView,

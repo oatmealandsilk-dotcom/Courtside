@@ -2602,6 +2602,12 @@ export const remote = {
     const { error } = await need().rpc('dismiss_activity', { a: id });
     if (error) fail('dismiss activity')(error);
   },
+  /** Your notifications newer than `since`, newest first: what came in while the app was in the background. Empty when they could not be read. */
+  async fetchNotificationsSince(me: ID, since: string): Promise<Notification[]> {
+    const { data, error } = await need().from('notifications').select('*').eq('user_id', me).gt('created_at', since).order('created_at', { ascending: false }).limit(200);
+    if (error) return [];
+    return ((data ?? []) as NotificationRow[]).map(toNotification);
+  },
   /** The "Tennis detected" rows from the last two weeks, for a check that just filed some. */
   async fetchActivityNotes(me: ID): Promise<Notification[]> {
     const { data, error } = await need().from('notifications').select('*').eq('user_id', me).eq('kind', 'activity')
