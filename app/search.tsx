@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Reanimated from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtGlyph } from '@/components/map/CourtGlyph';
@@ -27,6 +28,7 @@ import { highlightParts, matchCourts, matchPeople, matchPosts, matchThreads, par
 import { readRecents, withRecent, withoutRecent, writeRecents, type Recent } from '@/features/search/recents';
 import { relativeTime } from '@/lib/format';
 import { goBack } from '@/lib/goBack';
+import { KEYBOARD_ROOM, useKeyboardRoom } from '@/lib/keyboardRoom';
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -73,6 +75,7 @@ function topicTint(topic: Question['topic']): string {
 export default function Search() {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
+  const keyboardRoom = useKeyboardRoom();
   const { isPhone, width: windowWidth } = useResponsive();
   const barInset = useBarInset();
   const { posts, questions, users, coaches, currentUserId, followingIds, followEdges, blockedIds, detectedLocation, detectedCoords, actions } = useApp();
@@ -584,7 +587,7 @@ export default function Search() {
   };
 
   return (
-    <View style={[styles.root, { paddingTop: isPhone ? insets.top : spacing.sm }]}>
+    <View style={[styles.root, { paddingTop: isPhone ? insets.top : Platform.OS !== 'web' ? Math.max(insets.top, spacing.sm) : spacing.sm }]}>
       <View
         style={[styles.column, !isPhone && { maxWidth: LAYOUT.soloColumn }]}
         onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== columnW) setColumnW(w); }}
@@ -619,6 +622,8 @@ export default function Search() {
         ) : null}
         {!typing ? beforeTyping() : q.mode === 'people' && !q.text ? followedBody() : pickingTag ? tagBody() : tab === 'all' ? allTab() : oneTab()}
       </View>
+      {/* Android: the results end at the keyboard's top, not under it (see keyboardRoom). */}
+      {KEYBOARD_ROOM ? <Reanimated.View pointerEvents="none" style={keyboardRoom} /> : null}
     </View>
   );
 }

@@ -190,7 +190,7 @@ export default function CoachApply() {
   const error = (key: string) => (now[key] ? <Text style={styles.fieldError}>{now[key]}</Text> : null);
 
   return (
-    <KeyboardAvoidingView style={[styles.root, { paddingTop: insets.top + spacing.sm }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={[styles.root, { paddingTop: insets.top + spacing.sm }]} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
       <View style={styles.head}>
         <View style={styles.topRow}>
           <Pressable accessibilityRole="button" accessibilityLabel={step === 0 ? 'Close' : 'Back'} onPress={back} hitSlop={10}>

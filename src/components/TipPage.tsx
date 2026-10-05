@@ -25,7 +25,7 @@ export function TipPage({ onSubmit }: { onSubmit: (body: string) => Promise<void
   return (
     <View style={styles.page}>
       <Wash height={460} />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.center}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'web' ? undefined : 'padding'} style={styles.center}>
         <View style={styles.column}>
           <View style={styles.head}>
             <Text style={styles.title}>Submit a tip</Text>

@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useRef } from 'react';
 import { Dimensions, Keyboard, Platform, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView } from 'react-native';
+import { initialWindowMetrics } from 'react-native-safe-area-context';
 
 /** Something that can be measured on screen — a TextInput, a View. */
 export interface Measurable {
@@ -29,11 +30,30 @@ export function useRevealOnFocus() {
 
 /** The keyboard's height once it is up, or 0 if it is not — read at call time. */
 let keyboardHeight = 0;
+/** Android: where the keyboard's top edge is, in the window's points (0 when down or unknown). */
+let keyboardTop = 0;
 if (Platform.OS !== 'web') {
-  Keyboard.addListener('keyboardDidShow', (e) => { keyboardHeight = e.endCoordinates.height; });
-  Keyboard.addListener('keyboardDidHide', () => { keyboardHeight = 0; });
+  Keyboard.addListener('keyboardDidShow', (e) => { keyboardHeight = e.endCoordinates.height; keyboardTop = e.endCoordinates.screenY; });
+  Keyboard.addListener('keyboardDidHide', () => { keyboardHeight = 0; keyboardTop = 0; });
 }
 export const currentKeyboardHeight = () => keyboardHeight;
+
+/**
+ * How far down the window you can still see past the keyboard, in the same
+ * points a box's measureInWindow gives. On an iPhone, the window's height
+ * less the keyboard's. Android draws the app edge to edge, under the
+ * navigation bar and the keyboard, and the height it gives for the keyboard
+ * leaves out the navigation bar beneath it; so there it is the keyboard's
+ * top edge (or, should a phone not say, the screen less the keyboard and the
+ * bar). Read at call time.
+ */
+export function visibleAboveKeyboard(): number {
+  if (Platform.OS === 'android' && keyboardHeight > 0) {
+    if (keyboardTop > 0) return keyboardTop;
+    return Dimensions.get('screen').height - keyboardHeight - (initialWindowMetrics?.insets.bottom ?? 0);
+  }
+  return Dimensions.get('window').height - keyboardHeight;
+}
 
 /** Runs `work` once the keyboard has finished rising, or straight away if it is already up. */
 export function afterKeyboard(work: () => void) {
@@ -60,7 +80,7 @@ export function useKeyboardReveal() {
     if (!node?.measureInWindow || !scroller.current) return;
     afterKeyboard(() => {
       node.measureInWindow?.((_x, y, _w, h) => {
-        const visibleBottom = Dimensions.get('window').height - keyboardHeight - 24;
+        const visibleBottom = visibleAboveKeyboard() - 24;
         const overflow = y + h - visibleBottom;
         if (overflow <= 0) return;
         scroller.current?.scrollTo({ y: offset.current + overflow, animated: true });

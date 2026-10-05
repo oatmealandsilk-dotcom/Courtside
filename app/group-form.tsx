@@ -18,7 +18,7 @@ import { plainLook } from '@/features/groups/look';
 import { openGroupFeed } from '@/features/groups/openGroupFeed';
 import { confirm } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
-import { KeyboardScrollContext, afterKeyboard, currentKeyboardHeight, type Measurable } from '@/lib/keyboardScroll';
+import { KeyboardScrollContext, afterKeyboard, visibleAboveKeyboard, type Measurable } from '@/lib/keyboardScroll';
 import { show as showToast } from '@/lib/toast';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useApp } from '@/store/AppContext';
@@ -217,7 +217,7 @@ export default function GroupForm() {
     if (!node?.measureInWindow) { node?.scrollIntoView?.({ block: 'center', behavior: 'smooth' }); return; }
     afterKeyboard(() => {
       node.measureInWindow?.((_x, y, _w, h) => {
-        const visibleBottom = Dimensions.get('window').height - currentKeyboardHeight() - 96;
+        const visibleBottom = visibleAboveKeyboard() - 96;
         const overflow = y + h - visibleBottom;
         if (overflow > 0) scroller.current?.scrollTo({ y: offset.current + overflow, animated: true });
       });

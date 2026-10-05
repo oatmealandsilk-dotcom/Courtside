@@ -142,7 +142,7 @@ export default function Hit() {
 
   if (shot) {
     return (
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.root}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'web' ? undefined : 'padding'} style={styles.root}>
         <Image source={{ uri: shot }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel="Your instant" />
         <View pointerEvents="none" style={styles.scrimTop} />
         <View pointerEvents="none" style={styles.scrimBottom} />

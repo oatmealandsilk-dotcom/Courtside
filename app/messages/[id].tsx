@@ -208,7 +208,9 @@ export default function Thread() {
   useEffect(() => {
     if (Platform.OS === 'web') return;
     const sub = Keyboard.addListener('keyboardDidShow', (e) => {
-      keyboardHeight.current = Math.max(220, e.endCoordinates.height - insets.bottom);
+      // An iPhone's keyboard height takes in the home-indicator strip; Android's
+      // already leaves out the navigation bar under it, so nothing comes off there.
+      keyboardHeight.current = Math.max(220, e.endCoordinates.height - (Platform.OS === 'ios' ? insets.bottom : 0));
     });
     return () => sub.remove();
   }, [insets.bottom]);

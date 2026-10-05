@@ -7,7 +7,8 @@ import { PULL_DISARM, PULL_DISC, PULL_GAP, PULL_LAND_SLACK, PULL_LINE, PULL_MIN_
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname } from 'expo-router';
 import { isPageDragging, subscribePageDragging } from '@/features/navigation/swipeLock';
-import { KeyboardScrollContext, afterKeyboard, currentKeyboardHeight, type Measurable } from '@/lib/keyboardScroll';
+import { KeyboardScrollContext, afterKeyboard, visibleAboveKeyboard, type Measurable } from '@/lib/keyboardScroll';
+import { KEYBOARD_ROOM, useKeyboardRoom } from '@/lib/keyboardRoom';
 import { TAB_FOR_KEY, subscribeScrollToTop } from '@/features/navigation/scrollToTop';
 import { barCompact } from '@/features/navigation/barShrink';
 import Reanimated, { type SharedValue, cancelAnimation, runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
@@ -145,7 +146,8 @@ export function Screen({
   const [keysCover, setKeysCover] = useState<{ truly: number; avoided: number } | null>(null);
   // The avoider's place in its parent: the same layout it does its own sum with.
   const avoiderFrame = useRef<{ y: number; height: number } | null>(null);
-  const watchKeys = Platform.OS !== 'web' && (!scroll || (IOS && strip > 0));
+  // Android has no need: there the keyboard's room is an empty box that follows the keys (useKeyboardRoom, below).
+  const watchKeys = IOS && (!scroll || strip > 0);
   useEffect(() => {
     if (!watchKeys) return;
     setKeysUp(Keyboard.isVisible());
@@ -174,16 +176,19 @@ export function Screen({
   // What it keeps instead is what the avoider misses: measuring against its
   // parent, it comes up short on a page in a sheet (the location picker) by
   // the sheet's distance from the top. Keys shorter than the room (a hardware
-  // keyboard's slim strip) leave the rest of it kept. On Android the window
-  // itself shrinks above the keys and lifts the bar with it, so only a page
-  // that shows the bar keeps room, for the bar.
-  const barRoom = !isPhone ? 0 : bar ? barInset : insets.bottom;
+  // keyboard's slim strip) leave the rest of it kept. Android (Oct 5) is
+  // drawn edge to edge: the window does not shrink for the keys, which cover
+  // the bottom of the page, so there the room stays and an empty box as tall
+  // as the keys, less this room, goes under the page (keyboardRoom, below).
+  // A tablet or an unfolded foldable on Android takes the wide layout, still
+  // edge to edge, so it keeps clear of the navigation bar; a computer has none.
+  const wideNative = !isPhone && Platform.OS !== 'web';
+  const barRoom = !isPhone ? (wideNative ? insets.bottom : 0) : bar ? barInset : insets.bottom;
   let room = barRoom;
-  if (!scroll && isPhone) {
-    if (IOS && keysCover) room = Math.max(keysCover.truly, barRoom) - keysCover.avoided;
-    else if (!IOS && keysUp) room = bar ? barInset : 0;
-  }
+  if (!scroll && isPhone && IOS && keysCover) room = Math.max(keysCover.truly, barRoom) - keysCover.avoided;
   if (!scroll && scrollsInside) room = 0;
+  // Android only (0 everywhere else): the keyboard's room, past what the page already keeps.
+  const keyboardRoom = useKeyboardRoom(room);
   // Pull-to-refresh: the disc while it runs, then a small note that
   // slides in under the header and fades — enough to know it happened.
   const updated = useRef(new Animated.Value(0)).current;
@@ -416,7 +421,7 @@ export function Screen({
     if (!node?.measureInWindow || !scroller.current) return;
     afterKeyboard(() => {
       node.measureInWindow?.((_x, y, _w, h) => {
-        const visibleBottom = Dimensions.get('window').height - currentKeyboardHeight() - 24;
+        const visibleBottom = visibleAboveKeyboard() - 24;
         const overflow = y + h - visibleBottom;
         if (overflow <= 0) return;
         const current = scrollMemory.get(key) ?? 0;
@@ -497,7 +502,7 @@ export function Screen({
   return (
     <KeyboardScrollContext.Provider value={scroll ? reveal : null}>
     <KeyboardAvoidingView
-      style={[styles.root, { paddingTop: isPhone ? insets.top : spacing.sm }]}
+      style={[styles.root, { paddingTop: isPhone ? insets.top : wideNative ? Math.max(insets.top, spacing.sm) : spacing.sm }]}
       // A scrolling page moves the box itself; a fixed page lifts everything.
       behavior={Platform.OS === 'ios' && !scroll ? 'padding' : undefined}
       enabled={Platform.OS === 'ios' && !scroll}
@@ -515,9 +520,10 @@ export function Screen({
           scrollEnabled={!swiping}
           directionalLockEnabled
           keyboardShouldPersistTaps="handled"
-          // Keeps whatever box you are typing in above the keyboard.
+          // Keeps whatever box you are typing in above the keyboard (on Android, the keyboard's room at the end does).
           automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-          keyboardDismissMode="interactive"
+          // Android has no keyboard that follows the finger down: a drag on the page puts it away.
+          keyboardDismissMode={Platform.OS === 'android' ? 'on-drag' : 'interactive'}
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={16}
           // A fling up the page stops exactly at its top, never coasting on
@@ -547,6 +553,7 @@ export function Screen({
         >
           {strip > 0 ? <View pointerEvents="none" style={{ height: strip }} /> : null}
           {body}
+          {KEYBOARD_ROOM ? <Reanimated.View pointerEvents="none" style={keyboardRoom} /> : null}
         </Reanimated.ScrollView>
         {/* In front of the page, in the gap the pull opens: the disc, which draws round as you
             pull, closes at the line and turns while it fetches. In front, so it is never seen
@@ -559,7 +566,11 @@ export function Screen({
         {updatedNote}
         </View>
       ) : (
-        <View style={styles.flex}>{body}{updatedNote}</View>
+        <View style={styles.flex}>
+          {body}
+          {KEYBOARD_ROOM ? <Reanimated.View pointerEvents="none" style={keyboardRoom} /> : null}
+          {updatedNote}
+        </View>
       )}
       {onRefresh && Platform.OS === 'web' ? (
         <Reanimated.View pointerEvents="none" style={[styles.webRefresh, webDiscStyle]}>

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Keyboard, Platform } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { Platform } from 'react-native';
 import { useAnimatedKeyboard, useAnimatedReaction, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 
 import type { DragDismiss, KeyboardLift, KeyboardLiftOptions } from './keyboardLiftTypes';
@@ -9,17 +9,23 @@ export type { DragDismiss, KeyboardLift, KeyboardLiftOptions } from './keyboardL
 /*
  * The room under a chat's typing bar. With the keyboard down, the bar rests a
  * little above the home indicator; with it up, the bar sits right on the
- * keyboard. On an iPhone the room follows the keyboard frame by frame (read
- * on the animation thread, so nothing in React draws while it moves): the
- * bar rides up with the keyboard and, when the messages are dragged down
+ * keyboard. The room follows the keyboard frame by frame (read on the
+ * animation thread, so nothing in React draws while it moves): the bar rides
+ * up with the keyboard and, on an iPhone, when the messages are dragged down
  * (iMessage's way of putting the keyboard away), back down under the
  * finger. The chat's list is upside down (its newest message is its start),
  * so as the room grows the newest message rides up with the bar by itself,
  * with no scrolling to do. The browser's version is keyboardLift.web.ts.
+ *
+ * Android works the same way (Oct 5). The app there is always drawn edge to
+ * edge, under the status bar, the navigation bar and the keyboard: Android
+ * no longer shrinks the window when the keyboard opens, so without this room
+ * the bar would sit under the keys. The keyboard's height read here is the
+ * whole of it from the bottom of the screen, the navigation bar included.
  */
 
-/** On an iPhone: the keyboard's own position, every frame. */
-function useIosLift({ rest, focused, typing, emojiRoom }: KeyboardLiftOptions): KeyboardLift {
+/** On a phone (iPhone and Android): the keyboard's own position, every frame. */
+function useNativeLift({ rest, focused, typing, emojiRoom }: KeyboardLiftOptions): KeyboardLift {
   const keyboard = useAnimatedKeyboard();
   const restRoom = useSharedValue(rest);
   const front = useSharedValue(focused);
@@ -59,24 +65,8 @@ function useIosLift({ rest, focused, typing, emojiRoom }: KeyboardLiftOptions): 
   return { spacer, holdUntilKeyboard };
 }
 
-/**
- * On Android the window itself shrinks above the keyboard, so the room is
- * the rest room, taken away while the keyboard is up (left there, it was a
- * band between the bar and the keyboard).
- */
-function useAndroidLift({ rest, emojiRoom }: KeyboardLiftOptions): KeyboardLift {
-  const [up, setUp] = useState(false);
-  useEffect(() => {
-    const shown = Keyboard.addListener('keyboardDidShow', () => setUp(true));
-    const hidden = Keyboard.addListener('keyboardDidHide', () => setUp(false));
-    return () => { shown.remove(); hidden.remove(); };
-  }, []);
-  const holdUntilKeyboard = useCallback((_height: number) => undefined, []);
-  return { spacer: { height: emojiRoom || (up ? 0 : rest) }, holdUntilKeyboard };
-}
-
-/** The room under the bar (see above). Which version is fixed per platform, so the hooks inside never change between draws. */
-export const useKeyboardLift: (options: KeyboardLiftOptions) => KeyboardLift = Platform.OS === 'ios' ? useIosLift : useAndroidLift;
+/** The room under the bar (see above). The browser has its own version (keyboardLift.web.ts). */
+export const useKeyboardLift: (options: KeyboardLiftOptions) => KeyboardLift = useNativeLift;
 
 /**
  * A drag down the messages puts the keyboard away. On an iPhone the list

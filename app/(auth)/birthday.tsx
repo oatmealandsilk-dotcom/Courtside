@@ -62,7 +62,7 @@ export default function Birthday() {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
       <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: space.top, paddingBottom: space.bottom }]} keyboardShouldPersistTaps="handled">
         <BrandMark size={44} />
         <Text style={styles.title}>When's your birthday?</Text>
