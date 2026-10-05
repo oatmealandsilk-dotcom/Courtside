@@ -17,6 +17,7 @@ import { supabase } from '@/lib/supabase';
 import { shrinkCover, shrinkPhoto, shrinkPhotoSized } from '@/lib/shrinkPhoto';
 import { COVER_MARK, smallName } from '@/lib/smallCover';
 import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
+import { blankVideoLocation } from '@/lib/videoLocation';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
@@ -3291,9 +3292,17 @@ export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'vid
     // A cover that gets a small copy says so in its name, which is how tiles know to ask for it.
     const withSmall = kind === 'photo' && !!options?.smallCover;
     const path = `${me}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}${withSmall ? COVER_MARK : ''}.${ext}`;
+    // Where a video was filmed is blanked before any of it goes up (see
+    // videoLocation.ts): phones write the spot into the file, often a
+    // player's home, and every video the app uploads comes through here.
+    // The compressor's new file is blanked where it is; a picked file that
+    // went up unshrunk is never changed, and a blanked copy goes instead
+    // (same kind of file, so the type worked out above still holds).
+    const blanked = kind === 'video' ? await blankVideoLocation(sent, { inPlace: sent !== uri }) : null;
+    const file = blanked?.uri ?? sent;
     await noteStep(`sending a ${megabytes(size)} ${kind}${shrinking && sent === uri ? ' that could not be shrunk' : ''}`);
     try {
-      await uploadWithProgress(path, sent, contentType, upload);
+      await uploadWithProgress(path, file, contentType, upload);
     } catch (direct) {
       console.warn('[remote] direct upload fell back', direct);
       // The plain upload needs the whole file in memory. On a phone that is
@@ -3301,10 +3310,13 @@ export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'vid
       // could not be read is never loaded blind (see sizeOf above).
       if (Platform.OS !== 'web' && !size) throw direct;
       await noteStep(`sending a ${megabytes(size)} ${kind} from memory (the direct send failed)`);
-      const response = await fetch(sent);
+      const response = await fetch(file);
       const bytes = await response.arrayBuffer();
       const { error } = await db.storage.from('media').upload(path, bytes, { contentType, upsert: false, cacheControl: String(YEAR_SECONDS) });
       if (error) throw error;
+    } finally {
+      // The blanked copy, if one was made, is not needed once the upload is over, sent or not.
+      blanked?.release();
     }
     // The bar is full once the post's own file is up; the small copy is extra.
     onProgress?.(1);
