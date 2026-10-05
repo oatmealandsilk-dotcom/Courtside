@@ -82,6 +82,10 @@ export interface AchievementProgress {
   unlocked: boolean;
   /** 0-1 toward the threshold, for locked achievements. */
   progress: number;
+  /** Where the player is against the threshold, in `unit`s ("21 of 30 days"); `current` never passes `target`. */
+  current: number;
+  target: number;
+  unit: string;
 }
 
 /**
@@ -94,26 +98,30 @@ export function evaluateAchievements(user: User): AchievementProgress[] {
   const tournamentsRegistered = user.profile.tournaments.filter((t) => t.registered).length;
   const unlockedIds = new Set(user.achievementIds);
 
-  const thresholds: Record<string, { current: number; target: number }> = {
-    'ach-first-serve': { current: s.sessionsLogged, target: 1 },
-    'ach-ten-sessions': { current: s.sessionsLogged, target: 10 },
-    'ach-fifty-sessions': { current: s.sessionsLogged, target: 50 },
-    'ach-streak-7': { current: s.currentStreakDays, target: 7 },
-    'ach-streak-30': { current: s.longestStreakDays, target: 30 },
-    'ach-first-win': { current: s.matchesWon, target: 1 },
-    'ach-ten-wins': { current: s.matchesWon, target: 10 },
-    'ach-hundred-hours': { current: s.hoursOnCourt, target: 100 },
-    'ach-helper': { current: unlockedIds.has('ach-helper') ? 1 : 0, target: 1 },
-    'ach-tournament': { current: tournamentsRegistered, target: 1 },
+  const thresholds: Record<string, { current: number; target: number; unit: string }> = {
+    'ach-first-serve': { current: s.sessionsLogged, target: 1, unit: 'sessions' },
+    'ach-ten-sessions': { current: s.sessionsLogged, target: 10, unit: 'sessions' },
+    'ach-fifty-sessions': { current: s.sessionsLogged, target: 50, unit: 'sessions' },
+    'ach-streak-7': { current: s.currentStreakDays, target: 7, unit: 'days' },
+    'ach-streak-30': { current: s.longestStreakDays, target: 30, unit: 'days' },
+    'ach-first-win': { current: s.matchesWon, target: 1, unit: 'wins' },
+    'ach-ten-wins': { current: s.matchesWon, target: 10, unit: 'wins' },
+    'ach-hundred-hours': { current: s.hoursOnCourt, target: 100, unit: 'hours' },
+    'ach-helper': { current: unlockedIds.has('ach-helper') ? 1 : 0, target: 1, unit: 'answers' },
+    'ach-tournament': { current: tournamentsRegistered, target: 1, unit: 'tournaments' },
   };
 
+
   return achievements.map((achievement) => {
-    const t = thresholds[achievement.id] ?? { current: 0, target: 1 };
+    const t = thresholds[achievement.id] ?? { current: 0, target: 1, unit: '' };
     const progress = clamp01(t.current / t.target);
     return {
       achievement,
       unlocked: unlockedIds.has(achievement.id) || progress >= 1,
       progress,
+      current: Math.min(Math.max(0, Math.floor(t.current)), t.target),
+      target: t.target,
+      unit: t.unit,
     };
   });
 }

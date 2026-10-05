@@ -19,6 +19,8 @@ SHEETS.add('/court-report');
 SHEETS.add('/court-now');
 // "Who can see you on the map?" sits over the map or Find Players the same way.
 SHEETS.add('/map-visibility');
+// The Tennis profile's sheets (an injury or limit, a goal, every achievement) sit over the page the same way.
+SHEETS.add('/tennis-sheet');
 
 /**
  * Animate the content without remounting the router or moving navigation.

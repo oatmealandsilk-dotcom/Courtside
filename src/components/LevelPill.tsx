@@ -15,7 +15,7 @@ import { colors, font, pageIsDark, radius } from '@/theme';
  * the colour is a light tint on a dark frosted chip, so it holds up on a blue
  * court or green grass alike.
  */
-const SYSTEM_INK: Record<string, { light: string; dark: string; media: string }> = {
+export const SYSTEM_INK: Record<string, { light: string; dark: string; media: string }> = {
   // A clear, saturated blue (not steel): UTR's own colour should read at a glance.
   UTR: { light: '#2370C2', dark: '#7DBEF5', media: '#6EC1FF' },
   NTRP: { light: '#3D7A4B', dark: '#88C697', media: '#A3DFAE' },

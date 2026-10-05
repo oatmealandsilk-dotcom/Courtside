@@ -474,7 +474,7 @@ function Logged({ session: s, people, onOpen, hideNote = false, source, postId, 
 }
 
 const styleDefinitions = StyleSheet.create({
-  // The grouped lists of "Your game" (profile-details): white cards on a soft shadow, rows parted by a hairline.
+  // The grouped lists the Tennis profile used to have (profile-details): white cards on a soft shadow, rows parted by a hairline.
   group: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden', paddingHorizontal: spacing.lg },
   sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingTop: spacing.xl, paddingBottom: spacing.sm },
   weekHead: { flexDirection: 'row', alignItems: 'flex-end' },

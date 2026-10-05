@@ -4,7 +4,7 @@ import { PlayerName } from '@/components/PlayerName';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { onSkippedSaved, readSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
-import { Image, Pressable, Share, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
@@ -19,20 +19,17 @@ import { reportSection, requestSection, subscribeSectionRequest, swipeDestinatio
 import { LevelPill } from '@/components/LevelPill';
 import { useApp } from '@/store/AppContext';
 import { InboxButton, UnreadBadge } from '@/components/InboxButton';
-import { playStyleLabel, surfaceLabel } from '@/lib/badges';
+import { PlayerCard } from '@/components/tennis/PlayerCard';
 import { compactNumber } from '@/lib/format';
 import { TileViews } from '@/components/TileViews';
 import { TilePin } from '@/components/TilePin';
 import { TileRemoved } from '@/features/moderation/RemovedNote';
 import { colors, spacing, typography, font, lift } from '@/theme';
-import { wrappedYear } from '@/features/wrapped/yearInTennis';
 import { useTourTarget } from '@/features/tour/tourStore';
 import { isTaggedIn } from '@/features/activity/sessionTags';
 import { studioLine } from '@/features/coaching/studioSummary';
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
- // December to mid-January: the year's recap sits at the top of your links.
- const wrapped = wrappedYear();
   const styles = useThemedStyles(styleDefinitions);
  const { currentUser: user, posts, questions, answers, saved, notifications, currentUserId, savedAccounts, coaches, coachingRequests, coachQuestions, actions, feedGroups } = useApp();
  // A coach's studio, first of your links: what is waiting there, or how far setup has got.
@@ -151,7 +148,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
        <View style={styles.identityWords}>
          <PlayerName userId={user.id} style={styles.name}>{user.name}</PlayerName>
          {/* The streak opens your sessions (only you see them); Log beside it opens the log sheet, two taps from here to a logged session. */}
-         <View style={styles.nameRow}><LevelPill profile={profile}/>{user.stats.currentStreakDays >= 2 ? <Pressable accessibilityRole="link" accessibilityLabel={`${user.stats.currentStreakDays}-day streak. See your sessions`} hitSlop={6} onPress={() => router.push('/your-sessions')} style={({ pressed }) => [styles.streak, pressed && styles.pillPressed]}><Ionicons name="flame" size={12} color={colors.clay}/><Text style={styles.streakText}>{user.stats.currentStreakDays}-day streak</Text></Pressable> : null}<Pressable accessibilityRole="button" accessibilityLabel="Log a session" hitSlop={6} onPress={() => router.push('/log-session')} style={({ pressed }) => [styles.logPill, pressed && styles.pillPressed]}><Ionicons name="add" size={13} color={colors.textMuted}/><Text style={styles.logPillText}>Log</Text></Pressable>{profile.constraints.filter(c => c.active && c.kind === 'injury').map(c => <Text key={c.id} style={styles.injury}>⚕ {c.label}</Text>)}</View>
+         <View style={styles.nameRow}><LevelPill profile={profile}/>{user.stats.currentStreakDays >= 2 ? <Pressable accessibilityRole="link" accessibilityLabel={`${user.stats.currentStreakDays}-day streak. See your sessions`} hitSlop={6} onPress={() => router.push('/your-sessions')} style={({ pressed }) => [styles.streak, pressed && styles.pillPressed]}><Ionicons name="flame" size={12} color={colors.clay}/><Text style={styles.streakText}>{user.stats.currentStreakDays}-day streak</Text></Pressable> : null}<Pressable accessibilityRole="button" accessibilityLabel="Log a session" hitSlop={6} onPress={() => router.push('/log-session')} style={({ pressed }) => [styles.logPill, pressed && styles.pillPressed]}><Ionicons name="add" size={13} color={colors.textMuted}/><Text style={styles.logPillText}>Log</Text></Pressable></View>
        </View>
      </View>
      {!!user.bio && <Text style={styles.bio}>{user.bio}</Text>}
@@ -166,21 +163,12 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
      <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit Profile" variant="secondary" onPress={() => router.push('/edit-profile')} full/></View><View style={{ flex: 1 }}><Button label="Share" variant="secondary" onPress={share} full/></View></View>
      {!!shareError && <Text style={styles.meta}>{shareError}</Text>}
    </View>
-   <Pressable accessibilityRole="link" onPress={() => router.push('/profile-details')} style={styles.tennis}>
-     <View style={styles.eyebrowRow}><Text style={styles.eyebrow}>Tennis profile</Text><Ionicons name="chevron-forward" size={15} color={colors.textFaint}/></View>
-     <View style={styles.details}>{[['Style',playStyleLabel[profile.playStyle]],['Surface',surfaceLabel[profile.preferredSurface]],...(profile.sessionsPerWeek !== undefined ? [['Availability',`${profile.sessionsPerWeek} sessions / week`]] : []),['Goal',profile.goals[0]?.label ?? 'Set your next goal'],...(profile.gear?.racket ? [['Racket',profile.gear.racket]] : [])].map(([label,value]) => <View key={label} style={styles.detail}><Text style={styles.meta}>{label}</Text><Text style={styles.value}>{value}</Text></View>)}</View>
-   </Pressable>
+   {/* Your tennis, as the player card's banner: the whole of it opens the Tennis profile, your tennis hub. */}
+   <PlayerCard user={user} variant="banner" isMe onPress={() => router.push('/profile-details')} />
    {/* One grouped list, the way Settings reads, instead of three boxes. */}
    <View style={styles.links}>
      {studio ? <Pressable accessibilityRole="link" accessibilityLabel={`Coach studio. ${studio.line}`} onPress={() => router.push('/coach-studio')} style={({ pressed }) => [styles.linkRow, pressed && styles.linkPressed]}><Ionicons name="ribbon-outline" size={20} color={colors.brand}/><Text style={styles.linkText}>Coach studio</Text>{studio.waiting ? <Text style={styles.linkValue}>{studio.waiting} waiting</Text> : studio.doneCount < 4 ? <Text style={styles.linkValue}>{studio.doneCount} of 4</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable> : null}
      <Pressable accessibilityRole="link" accessibilityLabel="Saved videos and discussions" onPress={() => router.push('/saved')} style={({ pressed }) => [styles.linkRow, studio && styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="bookmark-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Saved</Text>{savedCount ? <Text style={styles.linkValue}>{savedCount}</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
-     {/* Your groups (migration 67): start one, see who is asking to join. */}
-     <Pressable accessibilityRole="link" accessibilityLabel={groupsAsking ? `Groups, ${groupsAsking} asking to join` : 'Groups'} onPress={() => router.push('/groups')} style={({ pressed }) => [styles.linkRow, styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="people-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Groups</Text>{groupsAsking ? <Text style={styles.linkValue}>{groupsAsking} asking</Text> : feedGroups.length ? <Text style={styles.linkValue}>{feedGroups.length}</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
-     {wrapped ? <Pressable accessibilityRole="link" accessibilityLabel={`Your ${wrapped} in tennis`} onPress={() => router.push('/wrapped')} style={({ pressed }) => [styles.linkRow, styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="sparkles-outline" size={20} color={colors.brand}/><Text style={styles.linkText}>Your {wrapped} in tennis</Text><Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable> : null}
-     {/* Always here, streak or not: the way to every session you logged, and to post one. Only you see it. */}
-     <Pressable accessibilityRole="link" accessibilityLabel="Your sessions. Only you see them" onPress={() => router.push('/your-sessions')} style={({ pressed }) => [styles.linkRow, styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="stopwatch-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Your sessions</Text><Ionicons name="lock-closed-outline" size={13} color={colors.textFaint}/><Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
-     <Pressable accessibilityRole="link" accessibilityLabel="Invite your hitting partners" onPress={() => router.push('/invite')} style={({ pressed }) => [styles.linkRow, styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="person-add-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Invite your hitting partners</Text><Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
-     <Pressable accessibilityRole="link" accessibilityLabel="Health and nutrition" onPress={() => router.push('/health')} style={({ pressed }) => [styles.linkRow, styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="pulse-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Health and nutrition</Text><Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
    </View>
    <View style={styles.tabs} onLayout={e => setTabWidth(e.nativeEvent.layout.width / TABS.length)}>{TABS.map(t => <Pressable key={t} accessibilityRole="tab" accessibilityState={{selected:selected===t}} accessibilityLabel={`${LABEL[t]}, ${counts[t]}`} onPress={() => setTab(t)} style={styles.tab}><Text style={[typography.body, selected===t ? { ...font('600'), color: colors.text } : { color: colors.textMuted }]}>{LABEL[t]}<Text style={[styles.tabCount, selected===t && { color: colors.brand }]}>  {compactNumber(counts[t])}</Text></Text></Pressable>)}
      {tabWidth > 0 && (live
@@ -206,12 +194,49 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
      </Tappable>
      <InboxButton size={27} />
    </View>
-   <Tappable accessibilityRole="link" accessibilityLabel="Settings" onPress={() => router.push('/settings')} hitSlop={10} style={styles.headerButton}>
-     <Ionicons name="menu-outline" size={30} color={colors.text}/>
-   </Tappable>
+   <ProfileMenu groupsAsking={groupsAsking} groupCount={feedGroups.length} />
  </View>}>
    {page(tab, previewSection === undefined)}
  </Screen>;
+}
+/**
+ * ☰ at the top of your profile: a small menu under it with Groups (and how
+ * many are asking to join the ones you run) and Settings. A brand dot on the
+ * ☰ while someone is asking. A see-through Modal holding a card placed under
+ * the button, so it opens the same on a phone and in a browser; a tap outside
+ * (or Escape, or the phone's Back) closes it.
+ */
+function ProfileMenu({ groupsAsking, groupCount }: { groupsAsking: number; groupCount: number }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const anchor = useRef<View>(null);
+  const { width } = useWindowDimensions();
+  const [at, setAt] = useState<{ top: number; right: number } | null>(null);
+  const open = () => anchor.current?.measureInWindow((x, y, w, h) => setAt({ top: y + h + 6, right: Math.max(8, width - (x + w)) }));
+  const close = () => setAt(null);
+  const go = (path: '/groups' | '/settings') => { close(); router.push(path); };
+  return <>
+    <View ref={anchor} collapsable={false}>
+      <Tappable accessibilityRole="button" accessibilityLabel={groupsAsking ? `Menu: groups and settings. ${groupsAsking} asking to join your groups` : 'Menu: groups and settings'} onPress={open} hitSlop={10} style={styles.headerButton}>
+        <Ionicons name="menu-outline" size={30} color={colors.text}/>
+        {groupsAsking ? <View style={styles.menuDot} /> : null}
+      </Tappable>
+    </View>
+    <Modal visible={!!at} transparent animationType="fade" statusBarTranslucent onRequestClose={close}>
+      {/* The backdrop beside the menu, not around it: a button may not hold buttons in a browser. */}
+      <Pressable accessibilityRole="button" accessibilityLabel="Close menu" onPress={close} style={StyleSheet.absoluteFill} />
+      {at ? <View style={[styles.menu, { top: at.top, right: at.right }]} accessibilityRole="menu">
+        <Pressable accessibilityRole="menuitem" accessibilityLabel={groupsAsking ? `Groups, ${groupsAsking} asking to join` : 'Groups'} onPress={() => go('/groups')} style={({ pressed }) => [styles.menuRow, pressed && styles.linkPressed]}>
+          <Ionicons name="people-outline" size={20} color={colors.text}/>
+          <Text style={styles.menuText}>Groups</Text>
+          {groupsAsking ? <View style={styles.menuTag}><Text style={styles.menuTagText}>{groupsAsking} asking</Text></View> : groupCount ? <Text style={styles.linkValue}>{groupCount}</Text> : null}
+        </Pressable>
+        <Pressable accessibilityRole="menuitem" accessibilityLabel="Settings" onPress={() => go('/settings')} style={({ pressed }) => [styles.menuRow, styles.linkLine, pressed && styles.linkPressed]}>
+          <Ionicons name="settings-outline" size={20} color={colors.text}/>
+          <Text style={styles.menuText}>Settings</Text>
+        </Pressable>
+      </View> : null}
+    </Modal>
+  </>;
 }
 /**
  * The profile page before the account has come down: your picture (kept on
@@ -229,20 +254,25 @@ function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?:
   const Blank = ({ w, h = 12 }: { w: number; h?: number }) => <Reanimated.View style={[{ width: w, height: h, borderRadius: h / 2, backgroundColor: colors.surfaceAlt }, pulse]} />;
   return <>
    <View style={styles.identity}>
-     <Avatar name={name ?? ''} seed={seed} uri={avatarUrl} size={92} style={{ backgroundColor: colors.brand, alignSelf: 'center' }}/>
-     <View style={styles.nameRow}>{name ? <Text style={styles.name}>{name}</Text> : <Blank w={120} h={20} />}</View>
+     <View style={styles.identityRow}>
+       <Avatar name={name ?? ''} seed={seed} uri={avatarUrl} size={80} style={{ backgroundColor: colors.brand }}/>
+       <View style={styles.identityWords}>
+         {name ? <Text style={styles.name}>{name}</Text> : <Blank w={140} h={20} />}
+         <Blank w={110} h={16} />
+       </View>
+     </View>
      <View style={styles.followRow}><Blank w={64} /><Text style={styles.followDot}>·</Text><Blank w={64} /></View>
      <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit Profile" variant="secondary" disabled onPress={() => undefined} full/></View><View style={{ flex: 1 }}><Button label="Share" variant="secondary" disabled onPress={() => undefined} full/></View></View>
    </View>
-   <View style={styles.tennis}>
-     <Text style={styles.eyebrow}>Tennis profile</Text>
-     <View style={styles.details}>{['Style', 'Surface', 'Availability', 'Goal'].map((label) => <View key={label} style={styles.detail}><Text style={styles.meta}>{label}</Text><View style={{ paddingVertical: 3 }}><Blank w={90} /></View></View>)}</View>
+   {/* The Tennis profile banner's shape: its heading, the rating, the line under it and three numbers. */}
+   <View style={styles.bannerBlank}>
+     <Blank w={120} h={17} />
+     <View style={styles.bannerBlankHero}><Blank w={64} h={36} /></View>
+     <Blank w={140} h={14} />
+     <View style={styles.bannerBlankStrip}>{[0, 1, 2].map((i) => <View key={i} style={{ flex: 1 }}><Blank w={48} h={20} /></View>)}</View>
    </View>
    <View style={styles.links}>
      <View style={styles.linkRow}><Ionicons name="bookmark-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Saved</Text></View>
-     <View style={[styles.linkRow, styles.linkLine]}><Ionicons name="stopwatch-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Your sessions</Text></View>
-     <View style={[styles.linkRow, styles.linkLine]}><Ionicons name="person-add-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Invite your hitting partners</Text></View>
-     <View style={[styles.linkRow, styles.linkLine]}><Ionicons name="pulse-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Health and nutrition</Text></View>
    </View>
    <View style={styles.tabs}>{['All', 'Clips', 'Tagged'].map((t, i) => <View key={t} style={styles.tab}><Text style={[typography.body, i === 0 ? { ...font('600'), color: colors.text } : { color: colors.textMuted }]}>{t}</Text></View>)}</View>
    <View style={styles.grid}>{[0, 1, 2].map((i) => <Reanimated.View key={i} style={[styles.tile, pulse]} />)}</View>
@@ -250,10 +280,21 @@ function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?:
 }
 
 const styleDefinitions = StyleSheet.create({
- setup:{marginTop:16,marginHorizontal:0,padding:14,borderRadius:16,backgroundColor:colors.brandDim,flexDirection:'row',alignItems:'center',gap:12},setupTitle:{...typography.smallStrong,fontSize:14,color:colors.text},identity:{gap:12,paddingTop:16,paddingBottom:20,alignItems:'stretch'},identityRow:{flexDirection:'row',alignItems:'center',gap:16},identityWords:{flex:1,gap:6,minWidth:0},meta:{fontSize:12,color:colors.textMuted,lineHeight:19},nameRow:{flexDirection:'row',gap:10,alignItems:'center',flexWrap:'wrap'},name:{...typography.title,fontSize:22,color:colors.text},bio:{...typography.body,lineHeight:22,color:colors.text},followRow:{flexDirection:'row',alignItems:'center',gap:10},follow:{flexDirection:'row',alignItems:'baseline'},followCount:{...typography.bodyStrong,color:colors.text},followDot:{color:colors.textFaint,fontSize:14},tabCount:{...typography.smallStrong,fontSize:12,color:colors.textFaint},injury:{...typography.small,color:colors.danger},buttons:{flexDirection:'row',gap:8,alignSelf:'stretch',marginTop:6},settings:{borderWidth:1,borderColor:colors.border,borderRadius:10,padding:10,justifyContent:'center'},streak:{flexDirection:'row',alignItems:'center',gap:3,paddingHorizontal:8,paddingVertical:2,borderRadius:999,backgroundColor:colors.bgElevated},streakText:{...typography.caption,letterSpacing:0,fontWeight:'600',color:colors.clay},
+ // The ☰ menu: a small card on the overlay's shadow (it floats over the page), rows 48 tall.
+ menu:{position:'absolute',minWidth:220,borderRadius:16,backgroundColor:colors.surface,borderWidth:StyleSheet.hairlineWidth,borderColor:colors.border,overflow:'hidden',boxShadow:'0px 6px 16px rgba(0, 0, 0, 0.18)'},
+ menuRow:{flexDirection:'row',alignItems:'center',gap:12,minHeight:48,paddingHorizontal:16},
+ menuText:{...typography.body,color:colors.text,flex:1},
+ menuTag:{paddingHorizontal:7,paddingVertical:3,borderRadius:6,backgroundColor:colors.brandDim},
+ menuTagText:{...typography.caption,letterSpacing:0.2,color:colors.brand},
+ menuDot:{position:'absolute',top:5,right:3,width:9,height:9,borderRadius:5,backgroundColor:colors.brand,borderWidth:1.5,borderColor:colors.bg},
+ // The banner's shape while the account loads.
+ bannerBlank:{padding:16,borderRadius:16,backgroundColor:colors.surface,gap:10},
+ bannerBlankHero:{paddingVertical:2},
+ bannerBlankStrip:{flexDirection:'row',marginTop:6},
+ setup:{marginTop:16,marginHorizontal:0,padding:14,borderRadius:16,backgroundColor:colors.brandDim,flexDirection:'row',alignItems:'center',gap:12},setupTitle:{...typography.smallStrong,fontSize:14,color:colors.text},identity:{gap:12,paddingTop:16,paddingBottom:20,alignItems:'stretch'},identityRow:{flexDirection:'row',alignItems:'center',gap:16},identityWords:{flex:1,gap:6,minWidth:0},meta:{fontSize:12,color:colors.textMuted,lineHeight:19},nameRow:{flexDirection:'row',gap:10,alignItems:'center',flexWrap:'wrap'},name:{...typography.title,fontSize:22,color:colors.text},bio:{...typography.body,lineHeight:22,color:colors.text},followRow:{flexDirection:'row',alignItems:'center',gap:10},follow:{flexDirection:'row',alignItems:'baseline'},followCount:{...typography.bodyStrong,color:colors.text},followDot:{color:colors.textFaint,fontSize:14},tabCount:{...typography.smallStrong,fontSize:12,color:colors.textFaint},buttons:{flexDirection:'row',gap:8,alignSelf:'stretch',marginTop:6},settings:{borderWidth:1,borderColor:colors.border,borderRadius:10,padding:10,justifyContent:'center'},streak:{flexDirection:'row',alignItems:'center',gap:3,paddingHorizontal:8,paddingVertical:2,borderRadius:999,backgroundColor:colors.bgElevated},streakText:{...typography.caption,letterSpacing:0,fontWeight:'600',color:colors.clay},
  // "Log" beside the streak: the streak pill's size, in plain ink, so the streak stays the louder of the two.
  logPill:{flexDirection:'row',alignItems:'center',gap:2,paddingLeft:6,paddingRight:9,paddingVertical:2,borderRadius:999,borderWidth:StyleSheet.hairlineWidth,borderColor:colors.borderStrong},logPillText:{...typography.caption,letterSpacing:0,fontWeight:'600',color:colors.textMuted},pillPressed:{opacity:0.6},
- tennis:{...lift,padding:16,borderRadius:20,backgroundColor:colors.surface,gap:10},eyebrowRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},eyebrow:{...typography.smallStrong,color:colors.textMuted},links:{...lift,marginTop:12,borderRadius:20,backgroundColor:colors.surface,overflow:'hidden'},linkRow:{flexDirection:'row',alignItems:'center',gap:12,minHeight:52,paddingVertical:11,paddingHorizontal:16},linkLine:{borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:colors.border},linkPressed:{backgroundColor:colors.surfaceAlt},linkText:{...typography.body,color:colors.text,flex:1},linkValue:{...typography.body,color:colors.textMuted},details:{flexDirection:'row',flexWrap:'wrap',gap:8},detail:{width:'46%',gap:2},value:{fontSize:13,color:colors.text,lineHeight:19},health:{padding:15,marginTop:12,borderWidth:1,borderColor:colors.border,borderRadius:12,flexDirection:'row',alignItems:'center',gap:10},headerActions:{flexDirection:'row',alignItems:'center',gap:14},headerButton:{padding:4},tabs:{flexDirection:'row',marginTop:16,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},tab:{flex:1,alignItems:'center',paddingVertical:18},tabIndicator:{position:'absolute',left:0,bottom:-2,height:2,backgroundColor:colors.brand,borderRadius:1},grid:{flexDirection:'row',flexWrap:'wrap',marginHorizontal:0},
+ links:{...lift,marginTop:12,borderRadius:20,backgroundColor:colors.surface,overflow:'hidden'},linkRow:{flexDirection:'row',alignItems:'center',gap:12,minHeight:52,paddingVertical:11,paddingHorizontal:16},linkLine:{borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:colors.border},linkPressed:{backgroundColor:colors.surfaceAlt},linkText:{...typography.body,color:colors.text,flex:1},linkValue:{...typography.body,color:colors.textMuted},headerActions:{flexDirection:'row',alignItems:'center',gap:14},headerButton:{padding:4},tabs:{flexDirection:'row',marginTop:16,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.border},tab:{flex:1,alignItems:'center',paddingVertical:18},tabIndicator:{position:'absolute',left:0,bottom:-2,height:2,backgroundColor:colors.brand,borderRadius:1},grid:{flexDirection:'row',flexWrap:'wrap',marginHorizontal:0},
  // Instagram's grid: tall tiles, the thumbnail and nothing else on it.
  tile:{borderWidth:1,borderColor:colors.bg,backgroundColor:colors.surfaceAlt,overflow:'hidden'},
  tileBlank:{padding:10,justifyContent:'center'},

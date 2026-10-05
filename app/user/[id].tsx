@@ -14,15 +14,15 @@ import { hasSessionStats } from '@/features/activity/format';
 import { PlayerName } from '@/components/PlayerName';
 import { Tappable } from '@/components/Tappable';
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
-import { evaluateAchievements, playStyleLabel, surfaceLabel, tierColor } from '@/lib/badges';
-import { compactNumber, experienceLabel } from '@/lib/format';
+import { PlayerCard } from '@/components/tennis/PlayerCard';
+import { compactNumber } from '@/lib/format';
 import { TileViews } from '@/components/TileViews';
 import { TilePin } from '@/components/TilePin';
 import { TileRemoved } from '@/features/moderation/RemovedNote';
 import { SuggestedPlayers } from '@/components/SuggestedPlayers';
 import { HeadToHeadCard } from '@/components/HeadToHeadCard';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography, font, lift } from '@/theme';
+import { colors, radius, spacing, typography, font } from '@/theme';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { afterMenu, confirmBlock, confirmUnfollow } from '@/lib/confirm';
 import { CourtSpinner } from '@/components/CourtSpinner';
@@ -88,7 +88,6 @@ function UserProfile() {
   const itemsFor = (section: (typeof TABS)[number]) => (section === 'Tagged' ? posts.filter((p) => isTaggedIn(p, user.id) && !p.archived && !p.groupId) : own.filter((p) => section !== 'Clips' || p.kind === 'clip'))
     .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
   const counts = { Posts: own.length, Clips: own.filter((p) => p.kind === 'clip').length, Tagged: posts.filter((p) => isTaggedIn(p, user.id) && !p.archived && !p.groupId).length };
-  const unlocked = evaluateAchievements(user).filter((a) => a.unlocked);
   const profile = user.profile;
 
   const grid = (section: (typeof TABS)[number]) => (
@@ -207,32 +206,8 @@ function UserProfile() {
         </>
       ) : (
         <>
-          <Pressable accessibilityRole="link" accessibilityLabel={`${user.name}'s tennis profile`} onPress={() => router.push({ pathname: '/profile-details', params: { userId: user.id } })} style={styles.tennis}>
-            <View style={styles.eyebrowRow}><Text style={styles.eyebrow}>Tennis profile</Text><Ionicons name="chevron-forward" size={14} color={colors.textFaint} /></View>
-            <View style={styles.details}>
-              {([['Style', playStyleLabel[profile.playStyle]], ['Surface', surfaceLabel[profile.preferredSurface]], profile.sessionsPerWeek !== undefined ? ['Plays', `${profile.sessionsPerWeek}× a week`] : null, profile.yearsPlaying !== undefined ? ['Experience', experienceLabel(profile.yearsPlaying)] : null, profile.gear?.racket ? ['Racket', profile.gear.racket] : null].filter(Boolean) as string[][]).map(([label, value]) => (
-                <View key={label} style={styles.detail}><Text style={styles.meta}>{label}</Text><Text style={styles.value}>{value}</Text></View>
-              ))}
-            </View>
-            {unlocked.length > 0 ? (
-              <View style={styles.achievements}>
-                <View style={styles.badgeRow}>
-                  {unlocked.slice(0, 6).map(({ achievement }) => {
-                    const tint = tierColor(achievement.tier);
-                    return (
-                      <View key={achievement.id} style={[styles.badge, { backgroundColor: `${tint}22`, borderColor: `${tint}66` }]}>
-                        <Ionicons name={achievement.icon as keyof typeof Ionicons.glyphMap} size={14} color={tint} />
-                      </View>
-                    );
-                  })}
-                </View>
-                <Text style={styles.achievementText}>
-                  {unlocked.length} {unlocked.length === 1 ? 'achievement' : 'achievements'}
-                  {unlocked[0] ? ` · latest: ${unlocked[0].achievement.name}` : ''}
-                </Text>
-              </View>
-            ) : null}
-          </Pressable>
+          {/* Their tennis, as the player card's banner: the whole of it opens their Tennis profile. */}
+          <PlayerCard user={user} variant="banner" isMe={isMe} onPress={() => router.push(isMe ? { pathname: '/profile-details' } : { pathname: '/profile-details', params: { userId: user.id } })} />
 
           <View style={styles.tabs}>
             {TABS.map((t) => (
@@ -293,16 +268,6 @@ const styleDefinitions = StyleSheet.create({
   lockedBox: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xxl, paddingHorizontal: spacing.xl },
   lockedTitle: { ...typography.heading, color: colors.text },
   lockedBody: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
-  tennis: { ...lift, padding: 16, borderRadius: 20, backgroundColor: colors.surface, gap: 10 },
-  eyebrow: { ...typography.smallStrong, color: colors.textMuted },
-  eyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  details: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  detail: { width: '46%', gap: 2 },
-  value: { fontSize: 13, color: colors.text, lineHeight: 19 },
-  achievements: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingTop: spacing.xs },
-  badgeRow: { flexDirection: 'row', gap: 4 },
-  badge: { width: 26, height: 26, borderRadius: 13, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  achievementText: { ...typography.small, color: colors.textMuted, flex: 1 },
   tabs: { flexDirection: 'row', marginTop: 16, borderBottomWidth: 2, borderBottomColor: colors.border },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 18, marginBottom: -2, borderBottomWidth: 2, borderBottomColor: 'transparent' },
   tabOn: { borderBottomColor: colors.brand },
