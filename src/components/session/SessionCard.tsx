@@ -49,12 +49,13 @@ export type CardLook = {
  *
  * On the CourtSide court itself it is cream, not green (Oct 5, owner: "more
  * like our banner and our shirt"): the Classic shirt's cream with its soft
- * sage and clay fade, the figures, the eyebrow and the CourtSide lockup in
- * the brand green as on the banner, the small words in the page's muted ink
- * (the banner's "Growing the game"), and the result pill green with cream
+ * sage and clay fade, the figures and the CourtSide mark in the brand green
+ * as on the banner, the eyebrow and other small green words a shade deeper so
+ * they stay easy to read over the fade, the grey words in the page's muted
+ * ink (the banner's "Growing the game"), and the result pill green with cream
  * words. The cream is the page's raised ground warmed with a touch of gold
- * (about #EAE3D2): as deep as it goes while the green still reads at 4.5:1
- * on it, so it holds as a box on the page with only a hairline round it.
+ * (about #EAE3D2), so it holds as a box on the page with only a hairline
+ * round it.
  */
 export function cardLook(theme: ThemeName): CardLook {
   if (pageIsDark()) {
@@ -76,6 +77,11 @@ export function cardLook(theme: ThemeName): CardLook {
     };
   }
   if (theme === 'default') {
+    // The small green words (the eyebrow, "vs @handle", the CourtSide word) a
+    // fifth of the way toward the text colour: still the shirt's green, and
+    // 4.5:1 or more even where the fade is strongest under them (the brand
+    // green itself drops to about 3.8:1 there, fine only for the big numbers).
+    const smallGreen = mixHex(colors.brand, colors.text, 0.2);
     return {
       dark: false,
       wash: 'cream',
@@ -83,15 +89,18 @@ export function cardLook(theme: ThemeName): CardLook {
       border: 'transparent',
       rim: withAlpha(colors.brand, 0.2),
       figure: colors.brand,
-      ink: colors.brand,
+      ink: smallGreen,
       muted: colors.textMuted,
-      faint: colors.textFaint,
-      eyebrow: colors.brand,
+      // The page's faint ink is under 4.5:1 on the cream, so the source line and the address take the muted one.
+      faint: colors.textMuted,
+      eyebrow: smallGreen,
       pillFill: colors.brand,
       pillInk: colors.brandInk,
       lines: withAlpha(colors.brand, 0.14),
-      // A light box, so the page's zone colours: faint ink for the easy ones, rising to the full green.
-      zones: zoneColors('page'),
+      // Faint ink for the easy zones rising to the full green, in even steps on
+      // the cream (the page's own set has Light and Moderate almost the same
+      // here; the page and the stats sheet keep theirs).
+      zones: [withAlpha(colors.text, 0.13), withAlpha(colors.text, 0.24), withAlpha(colors.brand, 0.6), withAlpha(colors.brand, 0.8), colors.brand],
     };
   }
   return {
