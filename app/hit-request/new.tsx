@@ -117,6 +117,8 @@ export default function NewHit() {
   const ready = !!where && !past && !saving && !needsInvite;
   // When an invite-first hit goes out to everyone, said as it will be.
   const opensAt = audience === 'invite_first' ? new Date(opensAtFor(start.toISOString())) : null;
+  // Starting within 3 hours, that time has already passed: it is on Find Players straight away (as the server opens it).
+  const opensNow = !!opensAt && opensAt.getTime() <= Date.now() + 60_000;
   // "at 5:30 PM" today, "Sat at 5:30 PM" another day.
   const opensText = opensAt ? `${opensAt.toDateString() === new Date().toDateString() ? '' : `${opensAt.toLocaleDateString([], { weekday: 'short' })} `}at ${opensAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '';
   // The invite as it will read, updated as you choose.
@@ -156,7 +158,7 @@ export default function NewHit() {
       showToast({
         title: to.length ? `Sent to ${namesOf(to)}` : 'Your hit is up',
         body: audience === 'invite_only' ? 'Only the people you invited can see it'
-          : audience === 'invite_first' ? `It opens to everyone ${opensText}`
+          : audience === 'invite_first' ? (opensNow ? 'It’s on Find Players too' : `It opens to everyone ${opensText}`)
           : 'It’s on Find Players too',
         icon: 'paper-plane-outline',
         ...(one ? { action: { label: 'Open chat', onPress: () => router.push(`/messages/${actions.openConversationWith(one.id)}`) } } : {}),
@@ -229,7 +231,7 @@ export default function NewHit() {
             {audience === 'invite_first' ? (
               <View style={styles.openNote}>
                 <Ionicons name="time-outline" size={16} color={colors.brand} />
-                <Text style={styles.openNoteText}>Opens to everyone {opensText}, unless it’s full by then.</Text>
+                <Text style={styles.openNoteText}>{opensNow ? 'It starts within 3 hours, so it goes on Find Players straight away.' : `Opens to everyone ${opensText}, unless it’s full by then.`}</Text>
               </View>
             ) : null}
           </Section>
@@ -241,6 +243,8 @@ export default function NewHit() {
         <Submit label="Post" onPress={post} disabled={!ready} busy={saving} waiting={past ? 'Pick a later time' : !where ? 'Choose where to play' : 'Pick who to invite'} />
         <Fine>{audience === 'invite_only'
           ? `Only ${recipients.length ? recipientNames : 'the people you invite'}${groupsOn ? ' and your groups' : ''} can see it. It never shows on Find Players.`
+          : audience === 'invite_first' && opensNow
+            ? `It starts within 3 hours, so it goes on Find Players straight away.${recipients.length ? ` ${recipientNames} still ${recipients.length === 1 ? 'gets' : 'get'} it in your chat.` : ''}`
           : audience === 'invite_first'
             ? `${recipients.length ? recipientNames : 'Your groups'} ${recipients.length === 1 && !groupsOn ? 'gets' : 'get'} the first go${groupsOn && recipients.length ? ', with your groups' : ''}. If there’s still a spot ${opensText}, it goes on Find Players.`
             : asked.length
